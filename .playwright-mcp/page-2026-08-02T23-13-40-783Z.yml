@@ -1,0 +1,182 @@
+- generic [ref=f114e3]:
+  - link "Skip to main content" [ref=f114e440] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f114e6]:
+    - generic [ref=f114e7]:
+      - navigation "Firebase Console products" [ref=f114e441]:
+        - heading [level=2] [ref=f114e442]:
+          - link "Firebase console (Go to project list)" [ref=f114e443] [cursor=pointer]:
+            - /url: "#"
+            - img "Firebase logo" [ref=f114e444]
+        - generic [ref=f114e18]:
+          - img [ref=f114e19]: search
+          - combobox "Search products and features" [ref=f114e445]
+        - link "Project Overview" [ref=f114e446] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=f114e23]: gmp_nav20_overview
+        - menu [ref=f114e25]:
+          - menuitem "Settings" [ref=f114e447]:
+            - generic [ref=f114e27] [cursor=pointer]:
+              - img [ref=f114e28]: settings
+              - generic [ref=f114e29]: Settings
+              - img [ref=f114e30]: chevron_right
+      - separator [ref=f114e31]
+      - generic [ref=f114e32]:
+        - generic [ref=f114e33]: Project shortcuts
+        - group "Project shortcuts" [ref=f114e448]:
+          - link "Firestore" [ref=f114e449] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f114e37]: gmp_firestore
+            - generic [ref=f114e39]:
+              - button "Hide Firestore" [ref=f114e450]
+              - button "Pin Firestore" [ref=f114e451]
+          - link "Realtime Database" [ref=f114e452] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f114e44]: gmp_nav20_database
+            - generic [ref=f114e46]:
+              - button "Hide Realtime Database" [ref=f114e453]
+              - button "Pin Realtime Database" [ref=f114e454]
+          - link "Authentication" [ref=f114e455] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f114e51]: gmp_nav20_auth
+            - generic [ref=f114e53]:
+              - button "Hide Authentication" [ref=f114e456]
+              - button "Pin Authentication" [ref=f114e457]
+      - separator [ref=f114e56]
+      - generic [ref=f114e57]:
+        - generic [ref=f114e58]: Product categories
+        - menu "Product categories" [ref=f114e458]:
+          - menuitem "Databases & Storage" [ref=f114e459]:
+            - generic [ref=f114e61] [cursor=pointer]:
+              - generic [ref=f114e62]: Databases & Storage
+              - img [ref=f114e63]: chevron_right
+          - menuitem "Security" [ref=f114e460]:
+            - generic [ref=f114e65] [cursor=pointer]:
+              - generic [ref=f114e66]: Security
+              - img [ref=f114e67]: chevron_right
+          - menuitem "AI services" [ref=f114e461]:
+            - generic [ref=f114e69] [cursor=pointer]:
+              - generic [ref=f114e70]: AI services
+              - img [ref=f114e71]: chevron_right
+          - menuitem "Hosting & Serverless" [ref=f114e462]:
+            - generic [ref=f114e73] [cursor=pointer]:
+              - generic [ref=f114e74]: Hosting & Serverless
+              - img [ref=f114e75]: chevron_right
+          - menuitem "DevOps & Engagement" [ref=f114e463]:
+            - generic [ref=f114e77] [cursor=pointer]:
+              - generic [ref=f114e78]: DevOps & Engagement
+              - img [ref=f114e79]: chevron_right
+          - menuitem "Analytics" [ref=f114e464]:
+            - generic [ref=f114e81] [cursor=pointer]:
+              - generic [ref=f114e82]: Analytics
+              - img [ref=f114e83]: chevron_right
+    - generic [ref=f114e84]:
+      - separator [ref=f114e85]
+      - 'group "Billing plan: Spark" [ref=f114e465]':
+        - generic [ref=f114e241]:
+          - generic "Billing plan name" [ref=f114e466]:
+            - generic [ref=f114e243]: "Billing plan:"
+            - text: Spark
+          - generic "Billing plan description" [ref=f114e467]: No-cost ($0/month)
+        - button "Upgrade billing plan" [ref=f114e468]:
+          - generic [ref=f114e247]: Upgrade
+      - separator [ref=f114e87]
+      - button "Toggle navigation sidebar" [expanded] [ref=f114e469] [cursor=pointer]:
+        - img [ref=f114e90]: chevron_left
+  - banner:
+    - button "chatyuk (Open select project menu)" [ref=f114e470] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f114e97]: arrow_drop_down
+  - main [ref=f114e100]:
+    - generic [ref=f114e104]:
+      - region "Product header" [ref=f114e471]:
+        - generic [ref=f114e107]:
+          - heading "Project settings" [level=2] [ref=f114e472]
+          - tablist "Product features" [ref=f114e473]:
+            - generic [ref=f114e118]:
+              - tab "General" [ref=f114e474] [cursor=pointer]
+              - tab "Cloud Messaging" [ref=f114e475] [cursor=pointer]
+              - tab "Integrations" [ref=f114e476] [cursor=pointer]
+              - 'tab "Selected Tab: Service accounts" [selected] [ref=f114e477] [cursor=pointer]':
+                - generic [ref=f114e139]: Service accounts
+              - tab "Data privacy" [ref=f114e478] [cursor=pointer]
+              - tab "Users and permissions" [ref=f114e479] [cursor=pointer]
+              - tab "Alerts" [ref=f114e480] [cursor=pointer]
+      - generic [ref=f114e161]:
+        - link "Manage service account permissions (opens Google Cloud console in new tab)" [ref=f114e481] [cursor=pointer]:
+          - /url: https://console.cloud.google.com/iam-admin/serviceaccounts/project?authuser=0&project=chatyuk-8470e&hl=en-US
+          - text: Manage service account permissions open_in_new
+        - generic [ref=f114e252]:
+          - navigation "Service accounts settings" [ref=f114e482]:
+            - tablist [ref=f114e255]:
+              - tab "Firebase Admin SDK" [selected] [ref=f114e483] [cursor=pointer]:
+                - generic [ref=f114e257]:
+                  - img [ref=f114e259]: vpn_key
+                  - generic [ref=f114e260]: Firebase Admin SDK
+              - generic [ref=f114e262]: Legacy credentials
+              - tab "Database secrets" [ref=f114e484] [cursor=pointer]:
+                - generic [ref=f114e264]:
+                  - img [ref=f114e266]: gmp_database
+                  - generic [ref=f114e267]: Database secrets
+            - generic [ref=f114e269]: All service accounts
+            - link "4 service accounts. Go to Permissions page in Google Cloud console (opens in new tab)" [ref=f114e485] [cursor=pointer]:
+              - /url: https://console.cloud.google.com/iam-admin/iam?authuser=0&project=chatyuk-8470e&hl=en-US
+              - text: 4 service accounts open_in_new
+          - tabpanel [ref=f114e278]:
+            - generic [ref=f114e280]:
+              - generic [ref=f114e281]:
+                - heading "Firebase Admin SDK" [level=2] [ref=f114e486]
+                - paragraph [ref=f114e283]:
+                  - text: Your Firebase service account can be used to authenticate multiple Firebase features, such as Database, Storage and Auth, programmatically via the unified Admin SDK.
+                  - link "Learn more about Admin SDK (opens in new tab)" [ref=f114e487] [cursor=pointer]:
+                    - /url: https://firebase.google.com/docs/admin/setup?hl=en-US&authuser=0
+                    - text: Learn more open_in_new
+                - generic [ref=f114e285]:
+                  - generic [ref=f114e286]: Firebase service account
+                  - generic [ref=f114e287]: firebase-adminsdk-fbsvc@chatyuk-8470e.iam.gserviceaccount.com
+              - separator [ref=f114e288]
+              - generic [ref=f114e289]:
+                - generic [ref=f114e290]: Admin SDK configuration snippet
+                - radiogroup "Choose a snippet type" [ref=f114e488]:
+                  - generic [ref=f114e293] [cursor=pointer]:
+                    - radio "Configuration with Node.js" [checked] [ref=f114e489]
+                    - generic [ref=f114e300]: Node.js
+                  - generic [ref=f114e302] [cursor=pointer]:
+                    - radio "Configuration with Java" [ref=f114e490]
+                    - generic [ref=f114e308]: Java
+                  - generic [ref=f114e310] [cursor=pointer]:
+                    - radio "Configuration with Python" [ref=f114e491]
+                    - generic [ref=f114e316]: Python
+                  - generic [ref=f114e318] [cursor=pointer]:
+                    - radio "Configuration with Go" [ref=f114e492]
+                    - generic [ref=f114e324]: Go
+                - region "Code snippet for Node.js" [ref=f114e493]:
+                  - generic [ref=f114e329]:
+                    - generic [ref=f114e330]:
+                      - text: var admin = require("firebase-admin");var serviceAccount = require("path/to/serviceAccountKey.json");
+                      - generic [ref=f114e331]: admin
+                      - text: ".initializeApp({"
+                      - generic [ref=f114e332]: credential
+                      - text: ": admin.credential.cert(serviceAccount),"
+                      - generic [ref=f114e333]: databaseURL
+                      - text: ": \"https://chatyuk-8470e-default-rtdb.firebaseio.com\"});"
+                    - button "Copy Code snippet for Node.js" [ref=f114e494] [cursor=pointer]:
+                      - img [ref=f114e335]: content_copy
+              - button "Generate new private key" [active] [ref=f114e495]
+  - generic "Gemini in Firebase" [ref=f114e496]:
+    - generic [ref=f114e187]:
+      - generic [ref=f114e188]:
+        - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f114e497] [cursor=pointer]'
+        - button "Open alerts" [ref=f114e498] [cursor=pointer]:
+          - img [ref=f114e201]: notifications
+        - button "Chat with Gemini (Option+G)" [ref=f114e499] [cursor=pointer]:
+          - img [ref=f114e211]: spark
+        - button "Help" [ref=f114e500] [cursor=pointer]:
+          - img [ref=f114e215]: contact_support
+        - separator [ref=f114e218]
+        - button "Activate Cloud Shell" [ref=f114e501] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f114e225]
+        - button "Toggle Learn Panel" [ref=f114e502] [cursor=pointer]:
+          - img [ref=f114e229]: school
+      - 'button "Current theme: Light, adjust theme" [ref=f114e503] [cursor=pointer]':
+        - img [ref=f114e234]: dark_mode

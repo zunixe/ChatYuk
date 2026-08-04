@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "990163663226",
+    "project_id": "chatyuk-8470e",
+    "storage_bucket": "chatyuk-8470e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:990163663226:android:5c55da1eb791d5a244bec3",
+        "android_client_info": {
+          "package_name": "com.chatyuk.chatyuk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB56XbvTTbYrhUZHnrlHUlJTd2bRxG9Vsk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

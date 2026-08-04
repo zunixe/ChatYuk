@@ -1,0 +1,223 @@
+- generic [ref=f12e1]:
+  - generic [ref=f12e3]:
+    - link "Skip to main content" [ref=f12e4] [cursor=pointer]:
+      - /url: "#main"
+    - generic [ref=f12e259]:
+      - generic [ref=f12e260]:
+        - navigation "Firebase Console products" [ref=f12e262]:
+          - heading [level=2] [ref=f12e263]:
+            - link "Firebase console (Go to project list)" [ref=f12e264] [cursor=pointer]:
+              - /url: "#"
+              - img "Firebase logo" [ref=f12e267]
+          - generic [ref=f12e271]:
+            - img [ref=f12e272]: search
+            - combobox "Search products and features" [ref=f12e273]
+          - link "Project Overview" [ref=f12e275] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f12e276]: gmp_nav20_overview
+          - menu [ref=f12e278]:
+            - menuitem "Settings" [ref=f12e279]:
+              - generic [ref=f12e280] [cursor=pointer]:
+                - img [ref=f12e281]: settings
+                - generic [ref=f12e282]: Settings
+                - img [ref=f12e283]: chevron_right
+        - separator [ref=f12e284]
+        - generic [ref=f12e285]:
+          - generic [ref=f12e286]: Product categories
+          - menu "Product categories" [ref=f12e287]:
+            - menuitem "Databases & Storage" [ref=f12e288]:
+              - generic [ref=f12e289] [cursor=pointer]:
+                - generic [ref=f12e290]: Databases & Storage
+                - img [ref=f12e291]: chevron_right
+            - menuitem "Security" [ref=f12e292]:
+              - generic [ref=f12e293] [cursor=pointer]:
+                - generic [ref=f12e294]: Security
+                - img [ref=f12e295]: chevron_right
+            - menuitem "AI services" [ref=f12e296]:
+              - generic [ref=f12e297] [cursor=pointer]:
+                - generic [ref=f12e298]: AI services
+                - img [ref=f12e299]: chevron_right
+            - menuitem "Hosting & Serverless" [ref=f12e300]:
+              - generic [ref=f12e301] [cursor=pointer]:
+                - generic [ref=f12e302]: Hosting & Serverless
+                - img [ref=f12e303]: chevron_right
+            - menuitem "DevOps & Engagement" [ref=f12e304]:
+              - generic [ref=f12e305] [cursor=pointer]:
+                - generic [ref=f12e306]: DevOps & Engagement
+                - img [ref=f12e307]: chevron_right
+            - menuitem "Analytics" [ref=f12e308]:
+              - generic [ref=f12e309] [cursor=pointer]:
+                - generic [ref=f12e310]: Analytics
+                - img [ref=f12e311]: chevron_right
+      - generic [ref=f12e312]:
+        - separator [ref=f12e313]
+        - 'group "Billing plan: Spark" [ref=f12e314]':
+          - generic [ref=f12e315]:
+            - generic "Billing plan name" [ref=f12e316]:
+              - generic [ref=f12e317]: "Billing plan:"
+              - text: Spark
+            - generic "Billing plan description" [ref=f12e318]: No-cost ($0/month)
+          - button "Upgrade billing plan" [ref=f12e320]:
+            - generic [ref=f12e321]: Upgrade
+        - separator [ref=f12e325]
+        - button "Toggle navigation sidebar" [expanded] [ref=f12e327] [cursor=pointer]:
+          - img [ref=f12e328]: chevron_left
+    - banner:
+      - button "chatyuk (Open select project menu)" [ref=f12e332] [cursor=pointer]:
+        - text: chatyuk
+        - img [ref=f12e333]: arrow_drop_down
+    - main [ref=f12e13]:
+      - generic [ref=f12e336]:
+        - generic [ref=f12e340]:
+          - generic [ref=f12e342]:
+            - img [ref=f12e343]: info_spark
+            - generic [ref=f12e344]: Try agent skills to help your AI coding assistants get started with Firebase quickly
+            - link "Learn more (opens Firebase documentation in new tab)" [ref=f12e346] [cursor=pointer]:
+              - /url: https://firebase.google.com/docs/ai-assistance/agent-skills?hl=en-US&authuser=0
+              - generic [ref=f12e347]: Learn more
+              - text: open_in_new
+          - button "Dismiss" [ref=f12e351] [cursor=pointer]:
+            - img [ref=f12e352]: close
+        - generic [ref=f12e356]:
+          - generic [ref=f12e357]:
+            - generic [ref=f12e358]: chatyuk
+            - button "Spark plan" [ref=f12e360] [cursor=pointer]
+          - button "Add app" [ref=f12e552]:
+            - generic [ref=f12e554]:
+              - generic [ref=f12e555]: add
+              - generic [ref=f12e556]: Add app
+        - generic [ref=f12e474]: Hello, H
+        - generic [ref=f12e475]: Welcome to your Firebase project!
+        - generic [ref=f12e476]: Gemini can give you suggestions for Firebase services and solutions for your app
+        - generic [ref=f12e477]:
+          - generic [ref=f12e478]:
+            - generic [ref=f12e479]: Next steps with Gemini
+            - link "View docs (opens Firebase documentation in new tab)" [ref=f12e480] [cursor=pointer]:
+              - /url: https://firebase.google.com/docs?hl=en-US&authuser=0
+              - text: View docs open_in_new
+          - generic [ref=f12e481]:
+            - button "Tell us about your app" [ref=f12e484] [cursor=pointer]:
+              - generic [ref=f12e487]: Describe your app, and Gemini will suggest products to help you get started
+            - button "Add Analytics and monitoring" [ref=f12e490] [cursor=pointer]:
+              - generic [ref=f12e493]: Learn more about Google Analytics and Firebase monitoring products
+            - button "Build a backend" [ref=f12e496] [cursor=pointer]:
+              - generic [ref=f12e499]: Firebase offers many backend services, including both SQL and NoSQL database options. Learn more about which services might be right for your app.
+            - button "Add AI to your app" [ref=f12e502] [cursor=pointer]:
+              - generic [ref=f12e505]: Learn more about integrating AI into your app
+            - button "Monetize your app" [ref=f12e508] [cursor=pointer]:
+              - generic [ref=f12e511]: Learn more about AdMob, personalizing user experience, and increasing revenue
+            - button "Host a web app" [ref=f12e514] [cursor=pointer]:
+              - generic [ref=f12e517]: Build and deploy modern, full-stack web apps
+    - dialog [ref=f12e390]:
+      - generic [ref=f12e74]:
+        - generic [ref=f12e75]:
+          - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f12e83] [cursor=pointer]'
+          - button "Open alerts" [ref=f12e87] [cursor=pointer]:
+            - img [ref=f12e88]: notifications
+          - button "Chat with Gemini (Option+G)" [ref=f12e391] [cursor=pointer]:
+            - img [ref=f12e393]: spark
+            - alert [ref=f12e396]:
+              - button "Dismiss" [ref=f12e397]:
+                - img [ref=f12e398]: close
+              - generic [ref=f12e401]:
+                - text: Gemini in Firebase
+                - paragraph [ref=f12e402]: Get answers to questions about Firebase products, use cases, and features. Generate code for development and shorten your troubleshooting process with new insights--with the assistance of a natural language chat interface directly in the Firebase console.
+          - button "Help" [ref=f12e105] [cursor=pointer]:
+            - img [ref=f12e106]: contact_support
+          - separator [ref=f12e109]
+          - button "Activate Cloud Shell" [ref=f12e110] [cursor=pointer]:
+            - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f12e116]
+          - button "Toggle Learn Panel" [ref=f12e405] [cursor=pointer]:
+            - img [ref=f12e406]: school
+        - 'button "Current theme: Light, adjust theme" [ref=f12e120] [cursor=pointer]':
+          - img [ref=f12e121]: dark_mode
+      - generic [ref=f12e409]:
+        - generic [ref=f12e411]:
+          - heading "Gemini in Firebase" [level=2] [ref=f12e412]:
+            - generic [ref=f12e414]:
+              - generic [ref=f12e415]: Gemini
+              - generic [ref=f12e416]: in Firebase
+          - generic [ref=f12e417]:
+            - generic [ref=f12e418]:
+              - button "Start new conversation" [disabled]:
+                - img: add
+                - alert [ref=f12e419]:
+                  - button "Dismiss" [ref=f12e420] [cursor=pointer]:
+                    - img [ref=f12e421]: close
+                  - generic [ref=f12e424]: Now you can create new conversations with Gemini
+              - button "Open chat history" [ref=f12e427] [cursor=pointer]:
+                - img [ref=f12e428]: history
+              - button "Maximize" [ref=f12e431] [cursor=pointer]:
+                - img [ref=f12e432]: fullscreen
+              - button "Report an issue" [ref=f12e435] [cursor=pointer]:
+                - img [ref=f12e436]: bug_report
+            - button "Close panel" [ref=f12e439] [cursor=pointer]:
+              - img [ref=f12e440]: close
+        - generic [ref=f12e443]:
+          - generic [ref=f12e446]:
+            - generic [ref=f12e447]:
+              - img "Gemini logo" [ref=f12e448]
+              - generic [ref=f12e449]: Want to do more with Gemini? Try Gemini Code Assist open_in_new
+            - generic [ref=f12e450]:
+              - generic [ref=f12e451]: Hello, H
+              - generic [ref=f12e452]: How can I help you?
+              - generic [ref=f12e454]:
+                - generic [ref=f12e456]:
+                  - img "Gemini in Firebase logo"
+                - generic [ref=f12e457]: Hey, there! What are you building today? How can I help?
+          - generic [ref=f12e460]:
+            - generic [ref=f12e461]: Message input
+            - generic [ref=f12e462]:
+              - textbox "Message input" [ref=f12e463]:
+                - /placeholder: Ask Gemini
+              - button "Send message" [disabled]:
+                - img: send
+            - generic [ref=f12e464]:
+              - text: Gemini can make mistakes, so double-check it
+              - button "Gemini in Firebase disclaimer" [ref=f12e466]:
+                - img [ref=f12e467]: help
+  - generic [ref=f12e124]: Finishing up…
+  - dialog [ref=f12e562]:
+    - generic [ref=f12e564]:
+      - link "Go to docs (opens Firebase documentation in new tab)" [ref=f12e566] [cursor=pointer]:
+        - /url: https://firebase.google.com/docs/android/setup?hl=en-US&authuser=0
+        - text: Go to docs open_in_new
+      - generic [ref=f12e567]:
+        - generic [ref=f12e568]:
+          - heading "Add Firebase to your Android app" [active] [level=1] [ref=f12e570]
+          - button "Close" [ref=f12e571] [cursor=pointer]:
+            - img [ref=f12e572]: close
+        - generic [ref=f12e578]:
+          - img [ref=f12e579]: bolt
+          - generic [ref=f12e580]: You can also register an Android app with an AI coding agent
+          - button "Try it" [ref=f12e582]
+        - generic [ref=f12e589]:
+          - generic [ref=f12e590]:
+            - button "Register app" [expanded] [ref=f12e591] [cursor=pointer]:
+              - generic [ref=f12e592]: "1"
+            - region "Register app" [ref=f12e599]:
+              - generic [ref=f12e605]:
+                - generic [ref=f12e606]:
+                  - generic [ref=f12e608]:
+                    - generic [ref=f12e609]:
+                      - generic [ref=f12e610]: Android package name
+                      - button "Learn more about package names" [ref=f12e612]:
+                        - img [ref=f12e613]: help
+                    - textbox "Android package name" [ref=f12e614]:
+                      - /placeholder: com.company.appname
+                  - generic [ref=f12e616]:
+                    - generic [ref=f12e617]:
+                      - generic [ref=f12e618]: App nickname (optional)
+                      - button "Learn more about app nicknames" [ref=f12e620]:
+                        - img [ref=f12e621]: help
+                    - textbox "App nickname (optional)" [ref=f12e622]:
+                      - /placeholder: My Android App
+                - generic [ref=f12e623]:
+                  - button "Register app" [disabled]
+          - button "Download and then add config file" [disabled] [ref=f12e625] [cursor=pointer]:
+            - generic [ref=f12e626]: "2"
+          - button "Add Firebase SDK" [disabled] [ref=f12e633] [cursor=pointer]:
+            - generic [ref=f12e634]: "3"
+          - button "Next steps" [disabled] [ref=f12e641] [cursor=pointer]:
+            - generic [ref=f12e642]: "4"
+  - generic [ref=f12e650]: "tip: Are you still using the buildscript syntax to manage plugins? Learn how to add Firebase plugins using that syntax."

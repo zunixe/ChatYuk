@@ -1,0 +1,207 @@
+- generic [ref=f114e1]:
+  - generic [ref=f114e3]:
+    - link [ref=f114e343] [cursor=pointer]:
+      - /url: "#main"
+      - text: Skip to main content
+    - generic [ref=f114e6]:
+      - generic [ref=f114e7]:
+        - navigation [ref=f114e344]:
+          - heading [level=2] [ref=f114e345]:
+            - link [ref=f114e346] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=f114e18]:
+            - img [ref=f114e19]: search
+            - combobox [ref=f114e348]
+          - link [ref=f114e349] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f114e23]: gmp_nav20_overview
+            - generic [ref=f114e24]: Project Overview
+          - menu [ref=f114e25]:
+            - menuitem [ref=f114e350]:
+              - generic [ref=f114e27] [cursor=pointer]:
+                - img [ref=f114e28]: settings
+                - generic [ref=f114e29]: Settings
+                - img [ref=f114e30]: chevron_right
+        - separator [ref=f114e31]
+        - generic [ref=f114e32]:
+          - generic [ref=f114e33]: Project shortcuts
+          - group [ref=f114e351]:
+            - link [ref=f114e352] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=f114e37]: gmp_firestore
+              - generic [ref=f114e38]: Firestore
+              - generic [ref=f114e39]:
+                - button [ref=f114e353]
+                - button [ref=f114e354]
+            - link [ref=f114e355] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=f114e44]: gmp_nav20_database
+              - generic [ref=f114e45]: Realtime Database
+              - generic [ref=f114e46]:
+                - button [ref=f114e356]
+                - button [ref=f114e357]
+            - link [ref=f114e358] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=f114e51]: gmp_nav20_auth
+              - generic [ref=f114e52]: Authentication
+              - generic [ref=f114e53]:
+                - button [ref=f114e359]
+                - button [ref=f114e360]
+        - separator [ref=f114e56]
+        - generic [ref=f114e57]:
+          - generic [ref=f114e58]: Product categories
+          - menu [ref=f114e361]:
+            - menuitem [ref=f114e362]:
+              - generic [ref=f114e61] [cursor=pointer]:
+                - generic [ref=f114e62]: Databases & Storage
+                - img [ref=f114e63]: chevron_right
+            - menuitem [ref=f114e363]:
+              - generic [ref=f114e65] [cursor=pointer]:
+                - generic [ref=f114e66]: Security
+                - img [ref=f114e67]: chevron_right
+            - menuitem [ref=f114e364]:
+              - generic [ref=f114e69] [cursor=pointer]:
+                - generic [ref=f114e70]: AI services
+                - img [ref=f114e71]: chevron_right
+            - menuitem [ref=f114e365]:
+              - generic [ref=f114e73] [cursor=pointer]:
+                - generic [ref=f114e74]: Hosting & Serverless
+                - img [ref=f114e75]: chevron_right
+            - menuitem [ref=f114e366]:
+              - generic [ref=f114e77] [cursor=pointer]:
+                - generic [ref=f114e78]: DevOps & Engagement
+                - img [ref=f114e79]: chevron_right
+            - menuitem [ref=f114e367]:
+              - generic [ref=f114e81] [cursor=pointer]:
+                - generic [ref=f114e82]: Analytics
+                - img [ref=f114e83]: chevron_right
+      - generic [ref=f114e84]:
+        - separator [ref=f114e85]
+        - group [ref=f114e368]:
+          - generic [ref=f114e241]:
+            - generic [ref=f114e369]:
+              - generic [ref=f114e243]: "Billing plan:"
+              - text: Spark
+            - generic [ref=f114e370]: No-cost ($0/month)
+          - button [ref=f114e371]:
+            - generic [ref=f114e247]: Upgrade
+        - separator [ref=f114e87]
+        - button [expanded] [ref=f114e372] [cursor=pointer]:
+          - img [ref=f114e90]: chevron_left
+    - button [ref=f114e373] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f114e97]: arrow_drop_down
+    - main [ref=f114e100]:
+      - generic [ref=f114e104]:
+        - region [ref=f114e374]:
+          - generic [ref=f114e107]:
+            - heading [level=2] [ref=f114e375]: Project settings
+            - tablist [ref=f114e376]:
+              - generic [ref=f114e118]:
+                - tab [ref=f114e377] [cursor=pointer]:
+                  - generic [ref=f114e121]: General
+                - tab [ref=f114e378] [cursor=pointer]:
+                  - generic [ref=f114e127]: Cloud Messaging
+                - tab [ref=f114e379] [cursor=pointer]:
+                  - generic [ref=f114e133]: Integrations
+                - tab [selected] [ref=f114e380] [cursor=pointer]:
+                  - generic [ref=f114e139]: Service accounts
+                - tab [ref=f114e381] [cursor=pointer]:
+                  - generic [ref=f114e145]: Data privacy
+                - tab [ref=f114e382] [cursor=pointer]:
+                  - generic [ref=f114e151]: Users and permissions
+                - tab [ref=f114e383] [cursor=pointer]:
+                  - generic [ref=f114e157]: Alerts
+        - generic [ref=f114e161]:
+          - link [ref=f114e384] [cursor=pointer]:
+            - /url: https://console.cloud.google.com/iam-admin/serviceaccounts/project?authuser=0&project=chatyuk-8470e&hl=en-US
+            - text: Manage service account permissions open_in_new
+          - generic [ref=f114e252]:
+            - navigation [ref=f114e385]:
+              - tablist [ref=f114e255]:
+                - tab [selected] [ref=f114e386] [cursor=pointer]:
+                  - generic [ref=f114e257]:
+                    - img [ref=f114e259]: vpn_key
+                    - generic [ref=f114e260]: Firebase Admin SDK
+                - generic [ref=f114e262]: Legacy credentials
+                - tab [ref=f114e387] [cursor=pointer]:
+                  - generic [ref=f114e264]:
+                    - img [ref=f114e266]: gmp_database
+                    - generic [ref=f114e267]: Database secrets
+              - generic [ref=f114e269]: All service accounts
+              - link [ref=f114e388] [cursor=pointer]:
+                - /url: https://console.cloud.google.com/iam-admin/iam?authuser=0&project=chatyuk-8470e&hl=en-US
+                - text: 4 service accounts open_in_new
+            - tabpanel [ref=f114e278]:
+              - generic [ref=f114e280]:
+                - generic [ref=f114e281]:
+                  - heading [level=2] [ref=f114e389]: Firebase Admin SDK
+                  - paragraph [ref=f114e283]:
+                    - text: Your Firebase service account can be used to authenticate multiple Firebase features, such as Database, Storage and Auth, programmatically via the unified Admin SDK.
+                    - link [ref=f114e390] [cursor=pointer]:
+                      - /url: https://firebase.google.com/docs/admin/setup?hl=en-US&authuser=0
+                      - text: Learn more open_in_new
+                  - generic [ref=f114e285]:
+                    - generic [ref=f114e286]: Firebase service account
+                    - generic [ref=f114e287]: firebase-adminsdk-fbsvc@chatyuk-8470e.iam.gserviceaccount.com
+                - separator [ref=f114e288]
+                - generic [ref=f114e289]:
+                  - generic [ref=f114e290]: Admin SDK configuration snippet
+                  - radiogroup [ref=f114e391]:
+                    - generic [ref=f114e293] [cursor=pointer]:
+                      - radio [checked] [ref=f114e392]
+                      - generic [ref=f114e300]: Node.js
+                    - generic [ref=f114e302] [cursor=pointer]:
+                      - radio [ref=f114e393]
+                      - generic [ref=f114e308]: Java
+                    - generic [ref=f114e310] [cursor=pointer]:
+                      - radio [ref=f114e394]
+                      - generic [ref=f114e316]: Python
+                    - generic [ref=f114e318] [cursor=pointer]:
+                      - radio [ref=f114e395]
+                      - generic [ref=f114e324]: Go
+                  - region [ref=f114e396]:
+                    - generic [ref=f114e329]:
+                      - generic [ref=f114e330]:
+                        - text: var admin = require("firebase-admin"); var serviceAccount = require("path/to/serviceAccountKey.json");
+                        - generic [ref=f114e331]: admin
+                        - text: ".initializeApp({"
+                        - generic [ref=f114e332]: credential
+                        - text: ": admin.credential.cert(serviceAccount),"
+                        - generic [ref=f114e333]: databaseURL
+                        - text: ": \"https://chatyuk-8470e-default-rtdb.firebaseio.com\" });"
+                      - button [ref=f114e397] [cursor=pointer]:
+                        - img [ref=f114e335]: content_copy
+                - button [ref=f114e398]:
+                  - generic [ref=f114e340]: Generate new private key
+    - generic [ref=f114e187]:
+      - generic [ref=f114e188]:
+        - button [ref=f114e400] [cursor=pointer]
+        - button [ref=f114e401] [cursor=pointer]:
+          - img [ref=f114e201]: notifications
+        - button [ref=f114e402] [cursor=pointer]:
+          - img [ref=f114e211]: spark
+        - button [ref=f114e403] [cursor=pointer]:
+          - img [ref=f114e215]: contact_support
+        - separator [ref=f114e218]
+        - button [ref=f114e404] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f114e225]
+        - button [ref=f114e405] [cursor=pointer]:
+          - img [ref=f114e229]: school
+      - button [ref=f114e406] [cursor=pointer]:
+        - img [ref=f114e234]: dark_mode
+  - dialog [ref=f114e410]:
+    - generic [ref=f114e414]:
+      - generic [ref=f114e415]:
+        - heading "Generate new private key" [active] [level=2] [ref=f114e416]
+        - button "Close dialog" [ref=f114e417] [cursor=pointer]:
+          - img [ref=f114e418]: close
+      - generic [ref=f114e422]:
+        - alert [ref=f114e425]:
+          - img [ref=f114e426]: warning
+          - generic [ref=f114e427]: "warning:"
+          - generic [ref=f114e428]: Your private key gives access to your project's Firebase services. Keep it confidential and never store it in a public repository.
+        - text: Store this file securely, because your new key can't be recovered if lost.
+      - generic [ref=f114e430]:
+        - button "Cancel" [ref=f114e431]
+        - button "Generate key" [ref=f114e435]

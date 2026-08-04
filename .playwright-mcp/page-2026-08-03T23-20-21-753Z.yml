@@ -1,0 +1,22 @@
+- generic [ref=f122e3]:
+  - banner [ref=f122e4]:
+    - generic [ref=f122e5]:
+      - heading "ChatYuk Admin" [level=1] [ref=f122e6]
+      - generic [ref=f122e7]: "Firebase: chatyuk-8470e · terhubung langsung ke database aplikasi"
+    - navigation [ref=f122e8]:
+      - button "Dashboard" [ref=f122e9] [cursor=pointer]
+      - button "Users (13)" [ref=f122e35] [cursor=pointer]
+      - button "Private Chats" [active] [ref=f122e11] [cursor=pointer]
+      - button "Rooms" [ref=f122e12] [cursor=pointer]
+  - table [ref=f122e182]:
+    - rowgroup [ref=f122e183]:
+      - row [ref=f122e184]:
+        - columnheader "Chat ID" [ref=f122e185]
+        - columnheader "Peserta" [ref=f122e186]
+        - columnheader "Pesan Terakhir" [ref=f122e187]
+        - columnheader "Jumlah Pesan" [ref=f122e188]
+        - columnheader "Waktu" [ref=f122e189]
+        - columnheader [ref=f122e190]
+    - rowgroup [ref=f122e191]:
+      - row [ref=f122e192]:
+        - cell "Belum ada private chat" [ref=f122e193]

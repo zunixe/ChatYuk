@@ -1,0 +1,33 @@
+- generic [active] [ref=f108e1]:
+  - img "Loading" [ref=f108e3]
+  - generic [ref=f108e6]:
+    - link "Skip to main content" [ref=f108e7] [cursor=pointer]:
+      - /url: "#main"
+    - banner:
+      - heading [level=1] [ref=f108e10]:
+        - link "Firebase Console" [ref=f108e11] [cursor=pointer]:
+          - /url: "#"
+          - img "Firebase logo" [ref=f108e14]
+    - main [ref=f108e16]:
+      - progressbar [ref=f108e20]
+    - generic "Gemini in Firebase" [ref=f108e35]:
+      - generic [ref=f108e36]:
+        - generic [ref=f108e37]:
+          - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f108e45] [cursor=pointer]'
+          - button "Open alerts" [ref=f108e49] [cursor=pointer]:
+            - img [ref=f108e50]: notifications
+          - button "Chat with Gemini (Option+G)" [disabled] [ref=f108e58]:
+            - img [ref=f108e60]: spark
+            - tooltip "Gemini in Firebase Select a project to use Gemini in Firebase" [ref=f108e63]:
+              - generic:
+                - text: Gemini in Firebase
+                - generic [ref=f108e64]: Select a project to use Gemini in Firebase
+          - button "Help" [ref=f108e67] [cursor=pointer]:
+            - img [ref=f108e68]: contact_support
+          - separator [ref=f108e71]
+          - button "Activate Cloud Shell" [ref=f108e72] [cursor=pointer]:
+            - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f108e78]
+          - button "Toggle Learn Panel" [disabled]:
+            - img: school
+        - 'button "Current theme: Light, adjust theme" [ref=f108e82] [cursor=pointer]':
+          - img [ref=f108e83]: dark_mode

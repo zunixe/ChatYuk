@@ -1,0 +1,331 @@
+- generic [ref=f123e6]:
+  - link "Skip to main content" [ref=f123e7] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f123e92]:
+    - generic [ref=f123e93]:
+      - navigation "Firebase Console products" [ref=f123e95]:
+        - heading [level=2] [ref=f123e96]:
+          - link "Firebase console (Go to project list)" [ref=f123e97] [cursor=pointer]:
+            - /url: "#"
+            - img "Firebase logo" [ref=f123e100]
+        - generic [ref=f123e104]:
+          - img [ref=f123e105]: search
+          - combobox "Search products and features" [ref=f123e106]
+        - link "Project Overview" [ref=f123e108] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=f123e109]: gmp_nav20_overview
+        - menu [ref=f123e111]:
+          - menuitem "Settings" [ref=f123e112]:
+            - generic [ref=f123e113] [cursor=pointer]:
+              - img [ref=f123e114]: settings
+              - generic [ref=f123e115]: Settings
+              - img [ref=f123e116]: chevron_right
+      - separator [ref=f123e117]
+      - generic [ref=f123e118]:
+        - generic [ref=f123e119]: Project shortcuts
+        - group "Project shortcuts" [ref=f123e120]:
+          - link "Firestore" [active] [ref=f123e122] [cursor=pointer]:
+            - /url: /project/chatyuk-8470e/firestore
+            - img [ref=f123e123]: gmp_firestore
+            - generic [ref=f123e125]:
+              - button "Hide Firestore" [ref=f123e126]:
+                - img [ref=f123e558]: visibility
+              - button "Pin Firestore" [ref=f123e127]:
+                - img [ref=f123e559]: keep
+          - link "Realtime Database" [ref=f123e129] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f123e130]: gmp_nav20_database
+            - generic [ref=f123e132]:
+              - button "Hide Realtime Database" [ref=f123e133]
+              - button "Pin Realtime Database" [ref=f123e134]
+          - link "Authentication" [ref=f123e136] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f123e137]: gmp_nav20_auth
+            - generic [ref=f123e139]:
+              - button "Hide Authentication" [ref=f123e140]
+              - button "Pin Authentication" [ref=f123e141]
+      - separator [ref=f123e142]
+      - generic [ref=f123e143]:
+        - generic [ref=f123e144]: Product categories
+        - menu "Product categories" [ref=f123e145]:
+          - menuitem "Databases & Storage" [ref=f123e146]:
+            - generic [ref=f123e147] [cursor=pointer]:
+              - generic [ref=f123e148]: Databases & Storage
+              - img [ref=f123e149]: chevron_right
+          - menuitem "Security" [ref=f123e150]:
+            - generic [ref=f123e151] [cursor=pointer]:
+              - generic [ref=f123e152]: Security
+              - img [ref=f123e153]: chevron_right
+          - menuitem "AI services" [ref=f123e154]:
+            - generic [ref=f123e155] [cursor=pointer]:
+              - generic [ref=f123e156]: AI services
+              - img [ref=f123e157]: chevron_right
+          - menuitem "Hosting & Serverless" [ref=f123e158]:
+            - generic [ref=f123e159] [cursor=pointer]:
+              - generic [ref=f123e160]: Hosting & Serverless
+              - img [ref=f123e161]: chevron_right
+          - menuitem "DevOps & Engagement" [ref=f123e162]:
+            - generic [ref=f123e163] [cursor=pointer]:
+              - generic [ref=f123e164]: DevOps & Engagement
+              - img [ref=f123e165]: chevron_right
+          - menuitem "Analytics" [ref=f123e166]:
+            - generic [ref=f123e167] [cursor=pointer]:
+              - generic [ref=f123e168]: Analytics
+              - img [ref=f123e169]: chevron_right
+    - generic [ref=f123e170]:
+      - separator [ref=f123e171]
+      - 'group "Billing plan: Spark" [ref=f123e172]':
+        - generic [ref=f123e173]:
+          - generic "Billing plan name" [ref=f123e174]:
+            - generic [ref=f123e175]: "Billing plan:"
+            - text: Spark
+          - generic "Billing plan description" [ref=f123e176]: No-cost ($0/month)
+        - button "Upgrade billing plan" [ref=f123e178]:
+          - generic [ref=f123e179]: Upgrade
+      - separator [ref=f123e183]
+      - button "Toggle navigation sidebar" [expanded] [ref=f123e185] [cursor=pointer]:
+        - img [ref=f123e186]: chevron_left
+  - banner:
+    - button "chatyuk (Open select project menu)" [ref=f123e190] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f123e191]: arrow_drop_down
+  - main [ref=f123e16]:
+    - generic [ref=f123e561]:
+      - region "Product header" [ref=f123e562]:
+        - generic [ref=f123e563]:
+          - navigation "Breadcrumbs" [ref=f123e565]:
+            - generic [ref=f123e566] [cursor=pointer]:
+              - link "Cloud Firestore" [ref=f123e567]
+              - text: chevron_right
+          - generic [ref=f123e568]:
+            - generic [ref=f123e569]:
+              - heading "Database" [level=2] [ref=f123e572]
+              - generic [ref=f123e573]:
+                - button "Undefined parameter - DATABASE_ID select a database" [ref=f123e576] [cursor=pointer]:
+                  - generic [ref=f123e577]: (default)
+                  - img [ref=f123e578]: arrow_drop_down
+                - button [ref=f123e580]:
+                  - generic [ref=f123e582]:
+                    - img [ref=f123e583]: spark
+                    - text: Ask Gemini about the core concepts to use Firestore
+            - generic [ref=f123e586]:
+              - tablist "Product features" [ref=f123e589]:
+                - generic [ref=f123e592]:
+                  - 'tab "Selected Tab: Data" [selected] [ref=f123e593] [cursor=pointer]':
+                    - generic [ref=f123e595]: Data
+                  - tab "Rules" [ref=f123e599] [cursor=pointer]
+                  - tab "Indexes" [ref=f123e605] [cursor=pointer]
+                  - tab "Disaster Recovery" [ref=f123e611] [cursor=pointer]
+                  - tab "Usage" [ref=f123e617] [cursor=pointer]
+                  - tab "Query Insights" [ref=f123e623] [cursor=pointer]:
+                    - alert [ref=f123e630]:
+                      - button "Dismiss" [ref=f123e631]:
+                        - img [ref=f123e632]: close
+                      - generic [ref=f123e636]:
+                        - img [ref=f123e637]: gmp_firestore
+                        - generic [ref=f123e638]:
+                          - generic [ref=f123e639]: Understand query performance
+                          - generic [ref=f123e640]: Identify and troubleshoot queries that require the most time or resources to execute.
+                          - link "Learn more (opens Firebase documentation in new tab)" [ref=f123e641]:
+                            - /url: https://firebase.google.com/docs/firestore/enterprise/query-insights?hl=en-US&authuser=0
+                            - text: Learn more open_in_new
+                  - tab [ref=f123e644] [cursor=pointer]:
+                    - generic [ref=f123e647]:
+                      - generic [ref=f123e648]: gmp_nav20_mods
+                      - text: Extensions
+              - button "New in Cloud Firestore" [ref=f123e654]:
+                - img [ref=f123e655]: campaign
+      - generic [ref=f123e663]:
+        - generic [ref=f123e667]:
+          - generic [ref=f123e669]:
+            - img [ref=f123e670]: security
+            - generic [ref=f123e671]: Protect your Cloud Firestore resources from abuse, such as billing fraud or phishing
+            - link "Configure App Check" [ref=f123e673] [cursor=pointer]:
+              - /url: "#"
+          - button "Dismiss" [ref=f123e678] [cursor=pointer]:
+            - img [ref=f123e679]: close
+        - generic [ref=f123e683]:
+          - button "Link out menu to features in Google Cloud" [ref=f123e686]:
+            - generic [ref=f123e688]:
+              - img [ref=f123e689]: filter_drama
+              - generic [ref=f123e690]: More in Google Cloud
+              - img [ref=f123e691]: keyboard_arrow_down
+          - generic [ref=f123e694]:
+            - radiogroup "Choose how to view your data" [ref=f123e695]:
+              - radio "Panel view" [checked] [ref=f123e696] [cursor=pointer]
+              - radio "Query builder" [ref=f123e698] [cursor=pointer]
+            - button "actions for Firestore database" [ref=f123e700] [cursor=pointer]:
+              - img [ref=f123e701]: more_vert
+        - generic [ref=f123e704]:
+          - generic [ref=f123e709] [cursor=pointer]:
+            - generic [ref=f123e711]:
+              - link "root navigation" [ref=f123e713]:
+                - /url: "#"
+                - img [ref=f123e715]: home
+              - img [ref=f123e717]: keyboard_arrow_right
+            - generic [ref=f123e718]:
+              - link "privateChats navigation" [ref=f123e720]:
+                - /url: "#"
+                - text: privateChats
+              - img [ref=f123e722]: keyboard_arrow_right
+            - link "22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23 navigation" [ref=f123e725]:
+              - /url: "#"
+              - text: 22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23
+            - button "Edit path" [ref=f123e726]:
+              - img [ref=f123e727]: mode_edit
+          - generic [ref=f123e730]:
+            - generic [ref=f123e733]:
+              - generic [ref=f123e736] [cursor=pointer]:
+                - img [ref=f123e738]: gmp_firestore
+                - generic [ref=f123e739]: (default)
+                - button "View database details" [ref=f123e742]:
+                  - img [ref=f123e743]: info
+              - button "Start collection" [ref=f123e745]:
+                - img [ref=f123e746]: add
+              - generic [ref=f123e752]:
+                - generic [ref=f123e754] [cursor=pointer]:
+                  - generic [ref=f123e755]:
+                    - button "actions for privateChats" [ref=f123e756]:
+                      - img [ref=f123e757]: more_vert
+                    - button "privateChats navigation" [ref=f123e759]: privateChats
+                  - img [ref=f123e760]: chevron_right
+                - generic [ref=f123e762] [cursor=pointer]:
+                  - generic [ref=f123e763]:
+                    - button "actions for rooms" [ref=f123e764]:
+                      - img [ref=f123e765]: more_vert
+                    - button "rooms navigation" [ref=f123e767]: rooms
+                  - img [ref=f123e768]: chevron_right
+                - generic [ref=f123e770] [cursor=pointer]:
+                  - generic [ref=f123e771]:
+                    - button "actions for users" [ref=f123e772]:
+                      - img [ref=f123e773]: more_vert
+                    - button "users navigation" [ref=f123e775]: users
+                  - img [ref=f123e776]: chevron_right
+            - generic [ref=f123e780]:
+              - generic [ref=f123e782] [cursor=pointer]:
+                - generic [ref=f123e783]:
+                  - img [ref=f123e785]: collections_bookmark
+                  - generic [ref=f123e786]: privateChats
+                - generic [ref=f123e787]:
+                  - button "open document filter" [ref=f123e789]:
+                    - generic [ref=f123e790]: filter_list
+                  - button "actions for collection" [ref=f123e792]:
+                    - img [ref=f123e793]: more_vert
+              - button "Add document" [ref=f123e796]:
+                - img [ref=f123e797]: add
+              - generic [ref=f123e803]:
+                - generic [ref=f123e806] [cursor=pointer]:
+                  - generic [ref=f123e807]:
+                    - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23" [ref=f123e808]:
+                      - img [ref=f123e809]: more_vert
+                    - button "22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23 navigation" [ref=f123e811]: 22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23
+                  - img [ref=f123e812]: chevron_right
+                - generic [ref=f123e815] [cursor=pointer]:
+                  - generic [ref=f123e816]:
+                    - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_KbIml1qJShSQUWOrPGaj3g6vUCx1" [ref=f123e817]:
+                      - img [ref=f123e818]: more_vert
+                    - button "22Wuj03CDASjtljuo34OJF8E8uo2_KbIml1qJShSQUWOrPGaj3g6vUCx1 navigation" [ref=f123e820]: 22Wuj03CDASjtljuo34OJF8E8uo2_KbIml1qJShSQUWOrPGaj3g6vUCx1
+                  - img [ref=f123e821]: chevron_right
+                - generic [ref=f123e824] [cursor=pointer]:
+                  - generic [ref=f123e825]:
+                    - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_gCXI1LHE4zSlkNwST6xOmqA0A1m2" [ref=f123e826]:
+                      - img [ref=f123e827]: more_vert
+                    - button "22Wuj03CDASjtljuo34OJF8E8uo2_gCXI1LHE4zSlkNwST6xOmqA0A1m2 navigation" [ref=f123e829]: 22Wuj03CDASjtljuo34OJF8E8uo2_gCXI1LHE4zSlkNwST6xOmqA0A1m2
+                  - img [ref=f123e830]: chevron_right
+                - generic [ref=f123e833] [cursor=pointer]:
+                  - generic [ref=f123e834]:
+                    - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_r1HhCRGbXOcNglKTOUYyPabPhQs2" [ref=f123e835]:
+                      - img [ref=f123e836]: more_vert
+                    - button "22Wuj03CDASjtljuo34OJF8E8uo2_r1HhCRGbXOcNglKTOUYyPabPhQs2 navigation" [ref=f123e838]: 22Wuj03CDASjtljuo34OJF8E8uo2_r1HhCRGbXOcNglKTOUYyPabPhQs2
+                  - img [ref=f123e839]: chevron_right
+                - generic [ref=f123e842] [cursor=pointer]:
+                  - generic [ref=f123e843]:
+                    - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_r3VS4Rs6FyPUvYfOdZsAWgOh7xt2" [ref=f123e844]:
+                      - img [ref=f123e845]: more_vert
+                    - button "22Wuj03CDASjtljuo34OJF8E8uo2_r3VS4Rs6FyPUvYfOdZsAWgOh7xt2 navigation" [ref=f123e847]: 22Wuj03CDASjtljuo34OJF8E8uo2_r3VS4Rs6FyPUvYfOdZsAWgOh7xt2
+                  - img [ref=f123e848]: chevron_right
+                - generic [ref=f123e851] [cursor=pointer]:
+                  - generic [ref=f123e852]:
+                    - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_tuchQ4932YSYyHP9klWTDux3Ivm2" [ref=f123e853]:
+                      - img [ref=f123e854]: more_vert
+                    - button "22Wuj03CDASjtljuo34OJF8E8uo2_tuchQ4932YSYyHP9klWTDux3Ivm2 navigation" [ref=f123e856]: 22Wuj03CDASjtljuo34OJF8E8uo2_tuchQ4932YSYyHP9klWTDux3Ivm2
+                  - img [ref=f123e857]: chevron_right
+                - generic [ref=f123e860] [cursor=pointer]:
+                  - generic [ref=f123e861]:
+                    - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_zRZwoGNJRKUVF8jksePVQUlnEfe2" [ref=f123e862]:
+                      - img [ref=f123e863]: more_vert
+                    - button "22Wuj03CDASjtljuo34OJF8E8uo2_zRZwoGNJRKUVF8jksePVQUlnEfe2 navigation" [ref=f123e865]: 22Wuj03CDASjtljuo34OJF8E8uo2_zRZwoGNJRKUVF8jksePVQUlnEfe2
+                  - img [ref=f123e866]: chevron_right
+                - generic [ref=f123e869] [cursor=pointer]:
+                  - generic [ref=f123e870]:
+                    - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_zobpQRGig2ZtrT0I4BKmiQ9KmDJ2" [ref=f123e871]:
+                      - img [ref=f123e872]: more_vert
+                    - button "22Wuj03CDASjtljuo34OJF8E8uo2_zobpQRGig2ZtrT0I4BKmiQ9KmDJ2 navigation" [ref=f123e874]: 22Wuj03CDASjtljuo34OJF8E8uo2_zobpQRGig2ZtrT0I4BKmiQ9KmDJ2
+                  - img [ref=f123e875]: chevron_right
+                - generic [ref=f123e878] [cursor=pointer]:
+                  - generic [ref=f123e879]:
+                    - button "actions for D8yXFYVTGJZshn4BZb4Rm87dqEh2_KbIml1qJShSQUWOrPGaj3g6vUCx1" [ref=f123e880]:
+                      - img [ref=f123e881]: more_vert
+                    - button "D8yXFYVTGJZshn4BZb4Rm87dqEh2_KbIml1qJShSQUWOrPGaj3g6vUCx1 navigation" [ref=f123e883]: D8yXFYVTGJZshn4BZb4Rm87dqEh2_KbIml1qJShSQUWOrPGaj3g6vUCx1
+                  - img [ref=f123e884]: chevron_right
+                - generic [ref=f123e887] [cursor=pointer]:
+                  - generic [ref=f123e888]:
+                    - button "actions for gCXI1LHE4zSlkNwST6xOmqA0A1m2_z3wy7mldzYhXgpBNEJDBh5ZfGQn1" [ref=f123e889]:
+                      - img [ref=f123e890]: more_vert
+                    - button "gCXI1LHE4zSlkNwST6xOmqA0A1m2_z3wy7mldzYhXgpBNEJDBh5ZfGQn1 navigation" [ref=f123e892]: gCXI1LHE4zSlkNwST6xOmqA0A1m2_z3wy7mldzYhXgpBNEJDBh5ZfGQn1
+                  - img [ref=f123e893]: chevron_right
+                - generic [ref=f123e896] [cursor=pointer]:
+                  - generic [ref=f123e897]:
+                    - button "actions for r1HhCRGbXOcNglKTOUYyPabPhQs2_z3wy7mldzYhXgpBNEJDBh5ZfGQn1" [ref=f123e898]:
+                      - img [ref=f123e899]: more_vert
+                    - button "r1HhCRGbXOcNglKTOUYyPabPhQs2_z3wy7mldzYhXgpBNEJDBh5ZfGQn1 navigation" [ref=f123e901]: r1HhCRGbXOcNglKTOUYyPabPhQs2_z3wy7mldzYhXgpBNEJDBh5ZfGQn1
+                  - img [ref=f123e902]: chevron_right
+                - generic [ref=f123e905] [cursor=pointer]:
+                  - generic [ref=f123e906]:
+                    - button "actions for z3wy7mldzYhXgpBNEJDBh5ZfGQn1_zRZwoGNJRKUVF8jksePVQUlnEfe2" [ref=f123e907]:
+                      - img [ref=f123e908]: more_vert
+                    - button "z3wy7mldzYhXgpBNEJDBh5ZfGQn1_zRZwoGNJRKUVF8jksePVQUlnEfe2 navigation" [ref=f123e910]: z3wy7mldzYhXgpBNEJDBh5ZfGQn1_zRZwoGNJRKUVF8jksePVQUlnEfe2
+                  - img [ref=f123e911]: chevron_right
+                - generic [ref=f123e914] [cursor=pointer]:
+                  - generic [ref=f123e915]:
+                    - button "actions for z3wy7mldzYhXgpBNEJDBh5ZfGQn1_zobpQRGig2ZtrT0I4BKmiQ9KmDJ2" [ref=f123e916]:
+                      - img [ref=f123e917]: more_vert
+                    - button "z3wy7mldzYhXgpBNEJDBh5ZfGQn1_zobpQRGig2ZtrT0I4BKmiQ9KmDJ2 navigation" [ref=f123e919]: z3wy7mldzYhXgpBNEJDBh5ZfGQn1_zobpQRGig2ZtrT0I4BKmiQ9KmDJ2
+                  - img [ref=f123e920]: chevron_right
+            - generic [ref=f123e923]:
+              - generic [ref=f123e924]:
+                - generic [ref=f123e926] [cursor=pointer]:
+                  - generic [ref=f123e927]:
+                    - img [ref=f123e929]: drive_document
+                    - generic [ref=f123e930]: 22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23
+                  - button "actions for document" [ref=f123e932]:
+                    - img [ref=f123e933]: more_vert
+                - button "Start collection" [ref=f123e936]:
+                  - img [ref=f123e937]: add
+                - generic [ref=f123e945] [cursor=pointer]:
+                  - generic [ref=f123e946]:
+                    - button "actions for messages" [ref=f123e947]:
+                      - img [ref=f123e948]: more_vert
+                    - button "messages navigation" [ref=f123e950]: messages
+                  - img [ref=f123e951]: chevron_right
+              - progressbar [ref=f123e957]
+        - generic [ref=f123e972]:
+          - img [ref=f123e973]: place
+          - generic [ref=f123e974]: "Database location: nam5"
+  - generic "Gemini in Firebase" [ref=f123e35]:
+    - generic [ref=f123e36]:
+      - generic [ref=f123e37]:
+        - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f123e45] [cursor=pointer]'
+        - button "Open alerts" [ref=f123e49] [cursor=pointer]:
+          - img [ref=f123e50]: notifications
+        - button "Chat with Gemini (Option+G)" [ref=f123e58] [cursor=pointer]:
+          - img [ref=f123e60]: spark
+        - button "Help" [ref=f123e67] [cursor=pointer]:
+          - img [ref=f123e68]: contact_support
+        - separator [ref=f123e71]
+        - button "Activate Cloud Shell" [ref=f123e72] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f123e78]
+        - button "Toggle Learn Panel" [ref=f123e554] [cursor=pointer]:
+          - img [ref=f123e555]: school
+      - 'button "Current theme: Light, adjust theme" [ref=f123e82] [cursor=pointer]':
+        - img [ref=f123e83]: dark_mode

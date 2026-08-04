@@ -1,0 +1,167 @@
+- generic [ref=f37e6]:
+  - link "Skip to main content" [ref=f37e472] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f37e92]:
+    - generic [ref=f37e93]:
+      - navigation "Firebase Console products" [ref=f37e473]:
+        - heading [level=2] [ref=f37e474]:
+          - link "Firebase console (Go to project list)" [ref=f37e475] [cursor=pointer]:
+            - /url: "#"
+            - img "Firebase logo" [ref=f37e476]
+        - generic [ref=f37e104]:
+          - img [ref=f37e105]: search
+          - combobox "Search products and features" [ref=f37e477]
+        - link "Project Overview" [ref=f37e478] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=f37e109]: gmp_nav20_overview
+        - menu [ref=f37e111]:
+          - menuitem "Settings" [ref=f37e479]:
+            - generic [ref=f37e113] [cursor=pointer]:
+              - img [ref=f37e114]: settings
+              - generic [ref=f37e115]: Settings
+              - img [ref=f37e116]: chevron_right
+      - separator [ref=f37e117]
+      - generic [ref=f37e118]:
+        - generic [ref=f37e119]: Project shortcuts
+        - group "Project shortcuts" [ref=f37e480]:
+          - link "Realtime Database" [ref=f37e519] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f37e520]: gmp_nav20_database
+            - generic [ref=f37e522]:
+              - button "Hide Realtime Database" [ref=f37e523]
+              - button "Pin Realtime Database" [ref=f37e524]
+          - link "Firestore" [ref=f37e481] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f37e123]: gmp_firestore
+            - generic [ref=f37e125]:
+              - button "Hide Firestore" [ref=f37e482]
+              - button "Pin Firestore" [ref=f37e483]
+      - separator [ref=f37e128]
+      - generic [ref=f37e129]:
+        - generic [ref=f37e130]: Product categories
+        - menu "Product categories" [ref=f37e484]:
+          - menuitem "Databases & Storage" [ref=f37e485]:
+            - generic [ref=f37e133] [cursor=pointer]:
+              - generic [ref=f37e134]: Databases & Storage
+              - img [ref=f37e135]: chevron_right
+          - menuitem "Security" [ref=f37e486]:
+            - generic [ref=f37e137] [cursor=pointer]:
+              - generic [ref=f37e138]: Security
+              - img [ref=f37e139]: chevron_right
+          - menuitem "AI services" [ref=f37e487]:
+            - generic [ref=f37e141] [cursor=pointer]:
+              - generic [ref=f37e142]: AI services
+              - img [ref=f37e143]: chevron_right
+          - menuitem "Hosting & Serverless" [ref=f37e488]:
+            - generic [ref=f37e145] [cursor=pointer]:
+              - generic [ref=f37e146]: Hosting & Serverless
+              - img [ref=f37e147]: chevron_right
+          - menuitem "DevOps & Engagement" [ref=f37e489]:
+            - generic [ref=f37e149] [cursor=pointer]:
+              - generic [ref=f37e150]: DevOps & Engagement
+              - img [ref=f37e151]: chevron_right
+          - menuitem "Analytics" [ref=f37e490]:
+            - generic [ref=f37e153] [cursor=pointer]:
+              - generic [ref=f37e154]: Analytics
+              - img [ref=f37e155]: chevron_right
+    - generic [ref=f37e156]:
+      - separator [ref=f37e157]
+      - 'group "Billing plan: Spark" [ref=f37e491]':
+        - generic [ref=f37e159]:
+          - generic "Billing plan name" [ref=f37e492]:
+            - generic [ref=f37e161]: "Billing plan:"
+            - text: Spark
+          - generic "Billing plan description" [ref=f37e493]: No-cost ($0/month)
+        - button "Upgrade billing plan" [ref=f37e494]:
+          - generic [ref=f37e165]: Upgrade
+      - separator [ref=f37e169]
+      - button "Toggle navigation sidebar" [expanded] [ref=f37e495] [cursor=pointer]:
+        - img [ref=f37e172]: chevron_left
+  - banner:
+    - button "chatyuk (Open select project menu)" [ref=f37e496] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f37e177]: arrow_drop_down
+  - main [ref=f37e16]:
+    - generic [ref=f37e525]:
+      - region "Product header" [ref=f37e527]:
+        - generic [ref=f37e529]:
+          - generic [ref=f37e532]:
+            - heading "Realtime Database" [level=2] [ref=f37e533]
+            - button [ref=f37e536]:
+              - generic [ref=f37e538]:
+                - img [ref=f37e539]: spark
+                - text: Need help with Realtime Database? Ask Gemini
+          - tablist "Product features" [ref=f37e545]:
+            - generic [ref=f37e548]:
+              - 'tab "Selected Tab: Data" [selected] [ref=f37e549] [cursor=pointer]':
+                - generic [ref=f37e551]: Data
+              - tab "Rules" [ref=f37e555] [cursor=pointer]
+              - tab "Backups" [ref=f37e561] [cursor=pointer]
+              - tab "Usage" [ref=f37e567] [cursor=pointer]
+              - tab [ref=f37e573] [cursor=pointer]:
+                - generic [ref=f37e576]:
+                  - generic [ref=f37e577]: gmp_nav20_mods
+                  - text: Extensions
+      - generic [ref=f37e584]:
+        - generic [ref=f37e586]:
+          - img [ref=f37e587]: security
+          - generic [ref=f37e588]: Protect your Realtime Database resources from abuse, such as billing fraud or phishing
+          - link "Configure App Check" [ref=f37e590] [cursor=pointer]:
+            - /url: "#"
+        - button "Dismiss" [ref=f37e595] [cursor=pointer]:
+          - img [ref=f37e596]: close
+      - generic [ref=f37e600]:
+        - tabpanel "Database viewer" [ref=f37e605]:
+          - generic [ref=f37e608]:
+            - generic [ref=f37e611]:
+              - button "Copy reference url" [ref=f37e612] [cursor=pointer]:
+                - img [ref=f37e613]: link
+              - generic [ref=f37e617] [cursor=pointer]:
+                - link "https://chatyuk-8470e-default-rtdb.firebaseio.com navigation" [ref=f37e621]:
+                  - /url: "#"
+                  - text: https://chatyuk-8470e-default-rtdb.firebaseio.com
+                - button "Edit path" [ref=f37e622]:
+                  - img [ref=f37e623]: mode_edit
+              - generic [ref=f37e626]:
+                - button "Expand all nodes" [ref=f37e627] [cursor=pointer]:
+                  - img [ref=f37e628]: expand_all
+                - button "Collapse all nodes" [ref=f37e631] [cursor=pointer]:
+                  - img [ref=f37e632]: collapse_all
+                - button "Menu for database actions" [ref=f37e636] [cursor=pointer]:
+                  - img [ref=f37e637]: more_vert
+            - generic [ref=f37e649]:
+              - generic [ref=f37e650]:
+                - link "https://chatyuk-8470e-default-rtdb.firebaseio.com/" [ref=f37e651] [cursor=pointer]:
+                  - /url: "#"
+                - generic [ref=f37e652]: ":"
+                - generic [ref=f37e653] [cursor=pointer]: "null"
+              - button "Add a child node" [ref=f37e654] [cursor=pointer]:
+                - img [ref=f37e655]: add
+              - button "Remove this node" [ref=f37e658] [cursor=pointer]:
+                - img [ref=f37e659]: delete
+        - generic [ref=f37e665]:
+          - img [ref=f37e666]: place
+          - generic [ref=f37e667]: "Database location: United States (us-central1)"
+  - generic "Gemini in Firebase" [ref=f37e510]:
+    - generic [ref=f37e36]:
+      - generic [ref=f37e37]:
+        - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f37e511] [cursor=pointer]'
+        - button "Open alerts" [ref=f37e512] [cursor=pointer]:
+          - img [ref=f37e50]: notifications
+        - button "Chat with Gemini (Option+G)" [ref=f37e513] [cursor=pointer]:
+          - img [ref=f37e273]: spark
+          - alert [ref=f37e276]:
+            - button "Dismiss" [ref=f37e277]:
+              - img [ref=f37e278]: close
+            - generic [ref=f37e281]:
+              - text: Gemini in Firebase
+              - paragraph [ref=f37e282]: Get answers to questions about Firebase products, use cases, and features. Generate code for development and shorten your troubleshooting process with new insights--with the assistance of a natural language chat interface directly in the Firebase console.
+        - button "Help" [ref=f37e514] [cursor=pointer]:
+          - img [ref=f37e68]: contact_support
+        - separator [ref=f37e71]
+        - button "Activate Cloud Shell" [ref=f37e515] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f37e78]
+        - button "Toggle Learn Panel" [ref=f37e516] [cursor=pointer]:
+          - img [ref=f37e286]: school
+      - 'button "Current theme: Light, adjust theme" [ref=f37e517] [cursor=pointer]':
+        - img [ref=f37e83]: dark_mode

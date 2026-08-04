@@ -1,0 +1,214 @@
+- generic [ref=f92e3]:
+  - link "Skip to main content" [ref=f92e445] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f92e6]:
+    - generic [ref=f92e7]:
+      - navigation "Firebase Console products" [ref=f92e446]:
+        - heading [level=2] [ref=f92e447]:
+          - link "Firebase console (Go to project list)" [ref=f92e448] [cursor=pointer]:
+            - /url: "#"
+            - img "Firebase logo" [ref=f92e449]
+        - generic [ref=f92e18]:
+          - img [ref=f92e19]: search
+          - combobox "Search products and features" [ref=f92e450]
+        - link "Project Overview" [ref=f92e451] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=f92e23]: gmp_nav20_overview
+        - menu [ref=f92e25]:
+          - menuitem "Settings" [ref=f92e452]:
+            - generic [ref=f92e27] [cursor=pointer]:
+              - img [ref=f92e28]: settings
+              - generic [ref=f92e29]: Settings
+              - img [ref=f92e30]: chevron_right
+      - separator [ref=f92e31]
+      - generic [ref=f92e32]:
+        - generic [ref=f92e33]: Project shortcuts
+        - group "Project shortcuts" [ref=f92e453]:
+          - link "Firestore" [ref=f92e454] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f92e37]: gmp_firestore
+            - generic [ref=f92e39]:
+              - button "Hide Firestore" [ref=f92e455]
+              - button "Pin Firestore" [ref=f92e456]
+          - link "Realtime Database" [ref=f92e457] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f92e44]: gmp_nav20_database
+            - generic [ref=f92e46]:
+              - button "Hide Realtime Database" [ref=f92e458]
+              - button "Pin Realtime Database" [ref=f92e459]
+          - link "Authentication" [ref=f92e460] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f92e51]: gmp_nav20_auth
+            - generic [ref=f92e53]:
+              - button "Hide Authentication" [ref=f92e461]
+              - button "Pin Authentication" [ref=f92e462]
+      - separator [ref=f92e56]
+      - generic [ref=f92e57]:
+        - generic [ref=f92e58]: Product categories
+        - menu "Product categories" [ref=f92e463]:
+          - menuitem "Databases & Storage" [ref=f92e464]:
+            - generic [ref=f92e61] [cursor=pointer]:
+              - generic [ref=f92e62]: Databases & Storage
+              - img [ref=f92e63]: chevron_right
+          - menuitem "Security" [ref=f92e465]:
+            - generic [ref=f92e65] [cursor=pointer]:
+              - generic [ref=f92e66]: Security
+              - img [ref=f92e67]: chevron_right
+          - menuitem "AI services" [ref=f92e466]:
+            - generic [ref=f92e69] [cursor=pointer]:
+              - generic [ref=f92e70]: AI services
+              - img [ref=f92e71]: chevron_right
+          - menuitem "Hosting & Serverless" [ref=f92e467]:
+            - generic [ref=f92e73] [cursor=pointer]:
+              - generic [ref=f92e74]: Hosting & Serverless
+              - img [ref=f92e75]: chevron_right
+          - menuitem "DevOps & Engagement" [ref=f92e468]:
+            - generic [ref=f92e77] [cursor=pointer]:
+              - generic [ref=f92e78]: DevOps & Engagement
+              - img [ref=f92e79]: chevron_right
+          - menuitem "Analytics" [ref=f92e469]:
+            - generic [ref=f92e81] [cursor=pointer]:
+              - generic [ref=f92e82]: Analytics
+              - img [ref=f92e83]: chevron_right
+    - generic [ref=f92e84]:
+      - separator [ref=f92e85]
+      - 'group "Billing plan: Spark" [ref=f92e470]':
+        - generic [ref=f92e87]:
+          - generic "Billing plan name" [ref=f92e471]:
+            - generic [ref=f92e89]: "Billing plan:"
+            - text: Spark
+          - generic "Billing plan description" [ref=f92e472]: No-cost ($0/month)
+        - button "Upgrade billing plan" [ref=f92e473]:
+          - generic [ref=f92e93]: Upgrade
+      - separator [ref=f92e97]
+      - button "Toggle navigation sidebar" [expanded] [ref=f92e474] [cursor=pointer]:
+        - img [ref=f92e100]: chevron_left
+  - banner:
+    - button "chatyuk (Open select project menu)" [ref=f92e475] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f92e107]: arrow_drop_down
+  - main [active] [ref=f92e109]:
+    - generic [ref=f92e214]:
+      - region "Product header" [ref=f92e476]:
+        - generic [ref=f92e216]:
+          - navigation "Breadcrumbs" [ref=f92e477]:
+            - generic [ref=f92e219] [cursor=pointer]:
+              - link "Cloud Firestore" [ref=f92e478]
+              - text: chevron_right
+          - generic [ref=f92e221]:
+            - generic [ref=f92e222]:
+              - heading "Database" [level=2] [ref=f92e479]
+              - generic [ref=f92e226]:
+                - button "Undefined parameter - DATABASE_ID select a database" [ref=f92e480] [cursor=pointer]:
+                  - generic [ref=f92e230]: (default)
+                  - img [ref=f92e231]: arrow_drop_down
+                - button [ref=f92e481]:
+                  - generic [ref=f92e235]:
+                    - img [ref=f92e236]: spark
+                    - text: Ask Gemini about the core concepts to use Firestore
+            - generic [ref=f92e239]:
+              - tablist "Product features" [ref=f92e482]:
+                - generic [ref=f92e245]:
+                  - tab "Data" [ref=f92e483] [cursor=pointer]
+                  - tab "Rules" [ref=f92e484] [cursor=pointer]
+                  - 'tab "Selected Tab: Indexes" [selected] [ref=f92e485] [cursor=pointer]':
+                    - generic [ref=f92e260]: Indexes
+                  - tab "Disaster Recovery" [ref=f92e486] [cursor=pointer]
+                  - tab "Usage" [ref=f92e487] [cursor=pointer]
+                  - tab "Query Insights" [ref=f92e488] [cursor=pointer]:
+                    - alert [ref=f92e283]:
+                      - button "Dismiss" [ref=f92e284]:
+                        - img [ref=f92e285]: close
+                      - generic [ref=f92e289]:
+                        - img [ref=f92e290]: gmp_firestore
+                        - generic [ref=f92e291]:
+                          - generic [ref=f92e292]: Understand query performance
+                          - generic [ref=f92e293]: Identify and troubleshoot queries that require the most time or resources to execute.
+                          - link "Learn more (opens Firebase documentation in new tab)" [ref=f92e294]:
+                            - /url: https://firebase.google.com/docs/firestore/enterprise/query-insights?hl=en-US&authuser=0
+                            - text: Learn more open_in_new
+                  - tab [ref=f92e489] [cursor=pointer]:
+                    - generic [ref=f92e300]:
+                      - generic [ref=f92e301]: gmp_nav20_mods
+                      - text: Extensions
+              - button "New in Cloud Firestore" [ref=f92e490]:
+                - img [ref=f92e308]: campaign
+      - generic [ref=f92e315]:
+        - radiogroup [ref=f92e320]:
+          - radio "Manual" [checked] [ref=f92e491] [cursor=pointer]
+          - radio "Automatic" [ref=f92e492] [cursor=pointer]
+          - alert [ref=f92e325]:
+            - button "Dismiss" [ref=f92e326] [cursor=pointer]:
+              - img [ref=f92e327]: close
+            - generic [ref=f92e331]:
+              - img [ref=f92e332]: gmp_firestore
+              - generic [ref=f92e333]:
+                - generic [ref=f92e334]: Index tab names have changed
+                - generic [ref=f92e335]: We've updated tab names to more accurately reflect index categories. The 'Composite' tab is now 'Manual' and the 'Single field' tab is now 'Automatic'.
+        - generic [ref=f92e493]:
+          - button "Add index" [ref=f92e496]
+          - table [ref=f92e500]:
+            - rowgroup [ref=f92e501]:
+              - row [ref=f92e502]:
+                - columnheader "Collection ID" [ref=f92e503]
+                - columnheader "Fields indexed Learn more about the document ID/path field" [ref=f92e504]:
+                  - generic [ref=f92e505]:
+                    - generic [ref=f92e506]: Fields indexed
+                    - button "Learn more about the document ID/path field" [ref=f92e508]:
+                      - img [ref=f92e509]: help
+                - columnheader "Query scope" [ref=f92e510]
+                - columnheader "Index ID" [ref=f92e511]
+                - columnheader [ref=f92e512]
+                - columnheader "Status" [ref=f92e513]
+                - columnheader [ref=f92e514]
+            - rowgroup [ref=f92e515]:
+              - row [ref=f92e516]:
+                - cell "privateChats" [ref=f92e517]
+                - cell "participants lastMessageAt __name__" [ref=f92e518]:
+                  - generic [ref=f92e520]:
+                    - generic [ref=f92e521]:
+                      - img [ref=f92e523]: data_array
+                      - generic [ref=f92e524]: participants
+                    - generic [ref=f92e525]:
+                      - img [ref=f92e527]: arrow_downward
+                      - generic [ref=f92e528]: lastMessageAt
+                    - generic [ref=f92e529]:
+                      - img [ref=f92e531]: arrow_downward
+                      - generic [ref=f92e532]: __name__
+                - cell "Collection" [ref=f92e533]
+                - cell "CICAgOjXh4EK" [ref=f92e534]
+                - cell [ref=f92e535]:
+                  - progressbar
+                - cell "Building..." [ref=f92e536]
+                - cell [ref=f92e538]:
+                  - button "Menu" [ref=f92e539] [cursor=pointer]:
+                    - img [ref=f92e540]: more_vert
+          - group [ref=f92e543]:
+            - generic [ref=f92e545]:
+              - generic [ref=f92e546]:
+                - generic [ref=f92e547]: "Items per page:"
+                - combobox "Items per page:" [ref=f92e552] [cursor=pointer]:
+                  - generic [ref=f92e553]: "10"
+              - generic [ref=f92e561]:
+                - status [ref=f92e562]: 1 – 1 of 1
+                - button "First page" [disabled] [ref=f92e563]
+                - button "Previous page" [disabled] [ref=f92e568]
+                - button "Next page" [disabled] [ref=f92e573]
+                - button "Last page" [disabled] [ref=f92e578]
+  - generic "Gemini in Firebase" [ref=f92e583]:
+    - generic [ref=f92e127]:
+      - generic [ref=f92e128]:
+        - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f92e584] [cursor=pointer]'
+        - button "Open alerts" [ref=f92e585] [cursor=pointer]:
+          - img [ref=f92e141]: notifications
+        - button "Chat with Gemini (Option+G)" [ref=f92e586] [cursor=pointer]:
+          - img [ref=f92e151]: spark
+        - button "Help" [ref=f92e587] [cursor=pointer]:
+          - img [ref=f92e155]: contact_support
+        - separator [ref=f92e158]
+        - button "Activate Cloud Shell" [ref=f92e588] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f92e165]
+        - button "Toggle Learn Panel" [ref=f92e589] [cursor=pointer]:
+          - img [ref=f92e169]: school
+      - 'button "Current theme: Light, adjust theme" [ref=f92e590] [cursor=pointer]':
+        - img [ref=f92e174]: dark_mode

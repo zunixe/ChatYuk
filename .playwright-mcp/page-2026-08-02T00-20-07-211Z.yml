@@ -1,0 +1,199 @@
+- generic [ref=f45e6]:
+  - link "Skip to main content" [ref=f45e7] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f45e100]:
+    - generic [ref=f45e101]:
+      - navigation "Firebase Console products" [ref=f45e103]:
+        - heading [level=2] [ref=f45e104]:
+          - link "Firebase console (Go to project list)" [ref=f45e105] [cursor=pointer]:
+            - /url: "#"
+            - img "Firebase logo" [ref=f45e108]
+        - generic [ref=f45e112]:
+          - img [ref=f45e113]: search
+          - combobox "Search products and features" [ref=f45e114]
+        - link "Project Overview" [ref=f45e116] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=f45e117]: gmp_nav20_overview
+        - menu [ref=f45e119]:
+          - menuitem "Settings" [ref=f45e120]:
+            - generic [ref=f45e121] [cursor=pointer]:
+              - img [ref=f45e122]: settings
+              - generic [ref=f45e123]: Settings
+              - img [ref=f45e124]: chevron_right
+      - separator [ref=f45e125]
+      - generic [ref=f45e126]:
+        - generic [ref=f45e127]: Project shortcuts
+        - group "Project shortcuts" [ref=f45e128]:
+          - link "Realtime Database" [ref=f45e130] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f45e131]: gmp_nav20_database
+            - generic [ref=f45e133]:
+              - button "Hide Realtime Database" [ref=f45e134]
+              - button "Pin Realtime Database" [ref=f45e135]
+          - link "Firestore" [ref=f45e137] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f45e138]: gmp_firestore
+            - generic [ref=f45e140]:
+              - button "Hide Firestore" [ref=f45e141]
+              - button "Pin Firestore" [ref=f45e142]
+      - separator [ref=f45e143]
+      - generic [ref=f45e144]:
+        - generic [ref=f45e145]: Product categories
+        - menu "Product categories" [ref=f45e146]:
+          - menuitem "Databases & Storage" [ref=f45e147]:
+            - generic [ref=f45e148] [cursor=pointer]:
+              - generic [ref=f45e149]: Databases & Storage
+              - img [ref=f45e150]: chevron_right
+          - menuitem "Security" [ref=f45e151]:
+            - generic [ref=f45e152] [cursor=pointer]:
+              - generic [ref=f45e153]: Security
+              - img [ref=f45e154]: chevron_right
+          - menuitem "AI services" [ref=f45e155]:
+            - generic [ref=f45e156] [cursor=pointer]:
+              - generic [ref=f45e157]: AI services
+              - img [ref=f45e158]: chevron_right
+          - menuitem "Hosting & Serverless" [ref=f45e159]:
+            - generic [ref=f45e160] [cursor=pointer]:
+              - generic [ref=f45e161]: Hosting & Serverless
+              - img [ref=f45e162]: chevron_right
+          - menuitem "DevOps & Engagement" [ref=f45e163]:
+            - generic [ref=f45e164] [cursor=pointer]:
+              - generic [ref=f45e165]: DevOps & Engagement
+              - img [ref=f45e166]: chevron_right
+          - menuitem "Analytics" [ref=f45e167]:
+            - generic [ref=f45e168] [cursor=pointer]:
+              - generic [ref=f45e169]: Analytics
+              - img [ref=f45e170]: chevron_right
+    - generic [ref=f45e171]:
+      - separator [ref=f45e172]
+      - 'group "Billing plan: Spark" [ref=f45e173]':
+        - generic [ref=f45e174]:
+          - generic "Billing plan name" [ref=f45e175]:
+            - generic [ref=f45e176]: "Billing plan:"
+            - text: Spark
+          - generic "Billing plan description" [ref=f45e177]: No-cost ($0/month)
+        - button "Upgrade billing plan" [ref=f45e179]:
+          - generic [ref=f45e180]: Upgrade
+      - separator [ref=f45e184]
+      - button "Toggle navigation sidebar" [expanded] [ref=f45e186] [cursor=pointer]:
+        - img [ref=f45e187]: chevron_left
+  - banner:
+    - button "chatyuk (Open select project menu)" [ref=f45e191] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f45e192]: arrow_drop_down
+  - main [ref=f45e16]:
+    - generic [ref=f45e196]:
+      - region "Product header" [ref=f45e198]:
+        - generic [ref=f45e200]:
+          - generic [ref=f45e203]:
+            - heading "Realtime Database" [level=2] [ref=f45e204]
+            - button [ref=f45e207]:
+              - generic [ref=f45e209]:
+                - img [ref=f45e210]: spark
+                - text: Need help with Realtime Database? Ask Gemini
+          - tablist "Product features" [ref=f45e216]:
+            - generic [ref=f45e219]:
+              - tab "Data" [ref=f45e220] [cursor=pointer]
+              - 'tab "Selected Tab: Rules" [selected] [ref=f45e226] [cursor=pointer]':
+                - generic [ref=f45e228]: Rules
+              - tab "Backups" [ref=f45e232] [cursor=pointer]
+              - tab "Usage" [ref=f45e238] [cursor=pointer]
+              - tab [ref=f45e244] [cursor=pointer]:
+                - generic [ref=f45e247]:
+                  - generic [ref=f45e248]: gmp_nav20_mods
+                  - text: Extensions
+      - generic [ref=f45e252]:
+        - tabpanel "Rules editor" [ref=f45e257]:
+          - generic [ref=f45e261]:
+            - button "Rules playground" [ref=f45e264]
+            - 'form "Code editor: press the enter key to edit text" [ref=f45e289]':
+              - generic "Press the escape key to exit the text area" [ref=f45e291]:
+                - textbox [ref=f45e292]
+                - generic [ref=f45e295]:
+                  - generic [ref=f45e337]:
+                    - generic [ref=f45e340]: "1"
+                    - generic [ref=f45e341]: ▾
+                    - text: "{"
+                  - generic [ref=f45e343]:
+                    - generic [ref=f45e344]: "2"
+                    - generic [ref=f45e345]: ▾
+                    - text: "\"rules\": {"
+                  - generic [ref=f45e347]:
+                    - generic [ref=f45e348]: "3"
+                    - generic [ref=f45e349]: ▾
+                    - text: "\"presence\": {"
+                  - generic [ref=f45e351]:
+                    - generic [ref=f45e352]: "4"
+                    - generic [ref=f45e353]: ▾
+                    - text: "\"$uid\": {"
+                  - generic [ref=f45e355]:
+                    - generic [ref=f45e356]: "5"
+                    - text: "\".read\": \"auth != null\","
+                  - generic [ref=f45e357]:
+                    - generic [ref=f45e358]: "6"
+                    - text: "\".write\": \"auth != null && auth.uid === $uid\""
+                  - generic [ref=f45e359]:
+                    - generic [ref=f45e360]: "7"
+                    - text: "}"
+                  - generic [ref=f45e361]:
+                    - generic [ref=f45e362]: "8"
+                    - text: "},"
+                  - generic [ref=f45e363]:
+                    - generic [ref=f45e364]: "9"
+                    - generic [ref=f45e365]: ▾
+                    - text: "\"roomPresence\": {"
+                  - generic [ref=f45e367]:
+                    - generic [ref=f45e368]: "10"
+                    - generic [ref=f45e369]: ▾
+                    - text: "\"$roomId\": {"
+                  - generic [ref=f45e371]:
+                    - generic [ref=f45e372]: "11"
+                    - generic [ref=f45e373]: ▾
+                    - text: "\"$uid\": {"
+                  - generic [ref=f45e375]:
+                    - generic [ref=f45e376]: "12"
+                    - text: "\".read\": \"auth != null\","
+                  - generic [ref=f45e377]:
+                    - generic [ref=f45e378]: "13"
+                    - text: "\".write\": \"auth != null && auth.uid === $uid\""
+                  - generic [ref=f45e379]:
+                    - generic [ref=f45e380]: "14"
+                    - text: "}"
+                  - generic [ref=f45e381]:
+                    - generic [ref=f45e382]: "15"
+                    - text: "}"
+                  - generic [ref=f45e383]:
+                    - generic [ref=f45e384]: "16"
+                    - text: "}"
+                  - generic [ref=f45e385]:
+                    - generic [ref=f45e386]: "17"
+                    - text: "}"
+                  - generic [ref=f45e387]:
+                    - generic [ref=f45e388]: "18"
+                    - text: "}"
+        - generic [ref=f45e322]:
+          - img [ref=f45e323]: place
+          - generic [ref=f45e324]: "Database location: United States (us-central1)"
+  - generic "Gemini in Firebase" [ref=f45e35]:
+    - generic [ref=f45e36]:
+      - generic [ref=f45e37]:
+        - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f45e45] [cursor=pointer]'
+        - button "Open alerts" [ref=f45e49] [cursor=pointer]:
+          - img [ref=f45e50]: notifications
+        - button "Chat with Gemini (Option+G)" [ref=f45e58] [cursor=pointer]:
+          - img [ref=f45e60]: spark
+          - alert [ref=f45e63]:
+            - button "Dismiss" [ref=f45e64]:
+              - img [ref=f45e65]: close
+            - generic [ref=f45e325]:
+              - text: Gemini in Firebase
+              - paragraph [ref=f45e68]: Get answers to questions about Firebase products, use cases, and features. Generate code for development and shorten your troubleshooting process with new insights--with the assistance of a natural language chat interface directly in the Firebase console.
+        - button "Help" [ref=f45e71] [cursor=pointer]:
+          - img [ref=f45e72]: contact_support
+        - separator [ref=f45e75]
+        - button "Activate Cloud Shell" [ref=f45e76] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f45e82]
+        - button "Toggle Learn Panel" [ref=f45e85] [cursor=pointer]:
+          - img [ref=f45e86]: school
+      - 'button "Current theme: Light, adjust theme" [ref=f45e90] [cursor=pointer]':
+        - img [ref=f45e91]: dark_mode

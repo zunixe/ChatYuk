@@ -1,0 +1,182 @@
+- generic [ref=f70e6]:
+  - link "Skip to main content" [ref=f70e7] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f70e92]:
+    - generic [ref=f70e93]:
+      - navigation "Firebase Console products" [ref=f70e95]:
+        - heading [level=2] [ref=f70e96]:
+          - link "Firebase console (Go to project list)" [ref=f70e97] [cursor=pointer]:
+            - /url: /
+            - img "Firebase logo" [ref=f70e100]
+        - generic [ref=f70e104]:
+          - img [ref=f70e105]: search
+          - combobox "Search products and features" [ref=f70e106]
+        - link "Project Overview" [ref=f70e108] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=f70e109]: gmp_nav20_overview
+        - menu [ref=f70e111]:
+          - menuitem "Settings" [ref=f70e112]:
+            - generic [ref=f70e113] [cursor=pointer]:
+              - img [ref=f70e114]: settings
+              - generic [ref=f70e115]: Settings
+              - img [ref=f70e116]: chevron_right
+      - separator [ref=f70e117]
+      - generic [ref=f70e118]:
+        - generic [ref=f70e119]: Project shortcuts
+        - group "Project shortcuts" [ref=f70e120]:
+          - link "Firestore" [ref=f70e122] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f70e123]: gmp_firestore
+            - generic [ref=f70e125]:
+              - button "Hide Firestore" [ref=f70e126]
+              - button "Pin Firestore" [ref=f70e127]
+          - link "Authentication" [ref=f70e129] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f70e130]: gmp_nav20_auth
+            - generic [ref=f70e132]:
+              - button "Hide Authentication" [ref=f70e133]
+              - button "Pin Authentication" [ref=f70e134]
+          - link "Realtime Database" [ref=f70e136] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f70e137]: gmp_nav20_database
+            - generic [ref=f70e139]:
+              - button "Hide Realtime Database" [ref=f70e140]
+              - button "Pin Realtime Database" [ref=f70e141]
+      - separator [ref=f70e142]
+      - generic [ref=f70e143]:
+        - generic [ref=f70e144]: Product categories
+        - menu "Product categories" [ref=f70e145]:
+          - menuitem "Databases & Storage" [ref=f70e146]:
+            - generic [ref=f70e147] [cursor=pointer]:
+              - generic [ref=f70e148]: Databases & Storage
+              - img [ref=f70e149]: chevron_right
+          - menuitem "Security" [ref=f70e150]:
+            - generic [ref=f70e151] [cursor=pointer]:
+              - generic [ref=f70e152]: Security
+              - img [ref=f70e153]: chevron_right
+          - menuitem "AI services" [ref=f70e154]:
+            - generic [ref=f70e155] [cursor=pointer]:
+              - generic [ref=f70e156]: AI services
+              - img [ref=f70e157]: chevron_right
+          - menuitem "Hosting & Serverless" [ref=f70e158]:
+            - generic [ref=f70e159] [cursor=pointer]:
+              - generic [ref=f70e160]: Hosting & Serverless
+              - img [ref=f70e161]: chevron_right
+          - menuitem "DevOps & Engagement" [ref=f70e162]:
+            - generic [ref=f70e163] [cursor=pointer]:
+              - generic [ref=f70e164]: DevOps & Engagement
+              - img [ref=f70e165]: chevron_right
+          - menuitem "Analytics" [ref=f70e166]:
+            - generic [ref=f70e167] [cursor=pointer]:
+              - generic [ref=f70e168]: Analytics
+              - img [ref=f70e169]: chevron_right
+    - generic [ref=f70e170]:
+      - separator [ref=f70e171]
+      - 'group "Billing plan: Spark" [ref=f70e172]':
+        - generic [ref=f70e173]:
+          - generic "Billing plan name" [ref=f70e174]:
+            - generic [ref=f70e175]: "Billing plan:"
+            - text: Spark
+          - generic "Billing plan description" [ref=f70e176]: No-cost ($0/month)
+        - button "Upgrade billing plan" [ref=f70e178]:
+          - generic [ref=f70e179]: Upgrade
+      - separator [ref=f70e183]
+      - button "Toggle navigation sidebar" [expanded] [ref=f70e185] [cursor=pointer]:
+        - img [ref=f70e186]: chevron_left
+  - banner:
+    - button "chatyuk (Open select project menu)" [ref=f70e190] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f70e191]: arrow_drop_down
+  - main [ref=f70e16]:
+    - generic [ref=f70e194]:
+      - region "Product header" [ref=f70e196]:
+        - generic [ref=f70e198]:
+          - heading "Authentication" [level=2] [ref=f70e202]
+          - tablist "Authentication features" [ref=f70e206]:
+            - generic [ref=f70e209]:
+              - tab "Users" [ref=f70e210] [cursor=pointer]
+              - 'tab "Selected Tab: Sign-in method" [selected] [ref=f70e216] [cursor=pointer]':
+                - generic [ref=f70e218]: Sign-in method
+              - tab "Templates" [ref=f70e222] [cursor=pointer]
+              - tab "Usage" [ref=f70e228] [cursor=pointer]
+              - tab "Settings" [ref=f70e234] [cursor=pointer]
+              - tab [ref=f70e240] [cursor=pointer]:
+                - generic [ref=f70e243]:
+                  - generic [ref=f70e244]: gmp_nav20_mods
+                  - text: Extensions
+      - generic [ref=f70e249]:
+        - heading "Sign-in providers" [level=3] [ref=f70e254]
+        - generic [ref=f70e259]:
+          - tooltip "Upgrade to Firebase Auth with Identity Platform to access this feature. Learn more (opens Firebase documentation in new tab) Upgrade" [ref=f70e399]:
+            - generic [ref=f70e401]:
+              - generic [ref=f70e402]:
+                - text: Upgrade to Firebase Auth with Identity Platform to access this feature.
+                - link "Learn more (opens Firebase documentation in new tab)" [ref=f70e403] [cursor=pointer]:
+                  - /url: https://firebase.google.com/docs/auth?hl=en-US&authuser=0#identity-platform
+                  - text: Learn more open_in_new
+              - button "Upgrade" [ref=f70e404]
+          - tooltip "Upgrade to Firebase Auth with Identity Platform to access this feature. Learn more (opens Firebase documentation in new tab) Upgrade" [ref=f70e417]:
+            - generic [ref=f70e419]:
+              - generic [ref=f70e420]:
+                - text: Upgrade to Firebase Auth with Identity Platform to access this feature.
+                - link "Learn more (opens Firebase documentation in new tab)" [ref=f70e421] [cursor=pointer]:
+                  - /url: https://firebase.google.com/docs/auth?hl=en-US&authuser=0#identity-platform
+                  - text: Learn more open_in_new
+              - button "Upgrade" [ref=f70e422]
+          - generic [ref=f70e469]:
+            - generic [ref=f70e470]:
+              - generic [ref=f70e471]:
+                - generic [ref=f70e472]: Anonymous
+                - generic [ref=f70e478]:
+                  - switch "Enable anonymous sign-in" [active] [ref=f70e479] [cursor=pointer]
+                  - generic [ref=f70e490] [cursor=pointer]: Enable
+              - paragraph [ref=f70e491]:
+                - text: Enable anonymous guest accounts in your application, which lets you enforce user-specific Security and Firebase Rules without requiring credentials from your users.
+                - link "Learn more about anonymous guest authentication (opens in new tab)" [ref=f70e492] [cursor=pointer]:
+                  - /url: https://firebase.google.com/docs/auth?hl=en-US&authuser=0
+                  - text: Learn more open_in_new
+              - generic [ref=f70e493]:
+                - generic [ref=f70e495] [cursor=pointer]:
+                  - checkbox "Enable Auto clean-up" [ref=f70e498]
+                  - generic [ref=f70e499]: Enable Auto clean-up
+                - paragraph [ref=f70e500]:
+                  - text: Auto clean-up deletes anonymous accounts that are older than 30 days. When this setting is enabled, anonymous usage will no longer count toward usage or billing quotas.
+                  - link "Learn more about anonymous users auto cleanup (opens in new tab)" [ref=f70e501] [cursor=pointer]:
+                    - /url: https://firebase.google.com/docs/auth/web/anonymous-auth?hl=en-US&authuser=0#auto-cleanup
+                    - text: Learn more open_in_new
+            - generic [ref=f70e502]:
+              - button "Cancel" [ref=f70e503]
+              - button "Save" [disabled]
+        - heading "Advanced" [level=3] [ref=f70e432]
+        - generic [ref=f70e435]:
+          - heading "SMS Multi-factor Authentication" [level=4] [ref=f70e436]:
+            - img [ref=f70e438]: lock
+          - paragraph [ref=f70e440]:
+            - text: Allow your users to add an extra layer of security to their account. Once enabled, integrated and configured, users can sign in to their account in two steps, using SMS.
+            - link "Learn more about SMS multi-factor authentication (opens in new tab)" [ref=f70e441] [cursor=pointer]:
+              - /url: https://firebase.google.com/docs/auth?hl=en-US&authuser=0#multi-factor
+              - text: Learn more open_in_new
+          - status [ref=f70e445]:
+            - img [ref=f70e446]: star
+            - generic [ref=f70e447]: "tip:"
+            - generic [ref=f70e449]:
+              - generic [ref=f70e450]: MFA and other advanced features are available with Identity Platform, Google Cloud's complete customer identity solution built in partnership with Firebase. This upgrade is available on both the Spark and Blaze plans.
+              - button "Upgrade to Firebase Auth with Identity Platform" [ref=f70e452]:
+                - generic [ref=f70e453]: Upgrade to enable
+  - generic "Gemini in Firebase" [ref=f70e35]:
+    - generic [ref=f70e36]:
+      - generic [ref=f70e37]:
+        - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f70e45] [cursor=pointer]'
+        - button "Open alerts" [ref=f70e49] [cursor=pointer]:
+          - img [ref=f70e50]: notifications
+        - button "Chat with Gemini (Option+G)" [ref=f70e58] [cursor=pointer]:
+          - img [ref=f70e60]: spark
+        - button "Help" [ref=f70e67] [cursor=pointer]:
+          - img [ref=f70e68]: contact_support
+        - separator [ref=f70e71]
+        - button "Activate Cloud Shell" [ref=f70e72] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f70e78]
+        - button "Toggle Learn Panel" [ref=f70e456] [cursor=pointer]:
+          - img [ref=f70e457]: school
+      - 'button "Current theme: Light, adjust theme" [ref=f70e82] [cursor=pointer]':
+        - img [ref=f70e83]: dark_mode

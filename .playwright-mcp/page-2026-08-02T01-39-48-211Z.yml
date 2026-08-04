@@ -1,0 +1,205 @@
+- generic [active] [ref=f81e1]:
+  - generic [ref=f81e3]:
+    - link "Skip to main content" [ref=f81e4] [cursor=pointer]:
+      - /url: "#main"
+    - generic [ref=f81e87]:
+      - generic [ref=f81e88]:
+        - navigation "Firebase Console products" [ref=f81e90]:
+          - heading [level=2] [ref=f81e91]:
+            - link "Firebase console (Go to project list)" [ref=f81e92] [cursor=pointer]:
+              - /url: "#"
+              - img "Firebase logo" [ref=f81e95]
+          - generic [ref=f81e99]:
+            - img [ref=f81e100]: search
+            - combobox "Search products and features" [ref=f81e101]
+          - link "Project Overview" [ref=f81e103] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f81e104]: gmp_nav20_overview
+          - menu [ref=f81e106]:
+            - menuitem "Settings" [ref=f81e107]:
+              - generic [ref=f81e108] [cursor=pointer]:
+                - img [ref=f81e109]: settings
+                - generic [ref=f81e110]: Settings
+                - img [ref=f81e111]: chevron_right
+        - separator [ref=f81e112]
+        - generic [ref=f81e113]:
+          - generic [ref=f81e114]: Project shortcuts
+          - group "Project shortcuts" [ref=f81e115]:
+            - link "Authentication" [ref=f81e117] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=f81e118]: gmp_nav20_auth
+              - generic [ref=f81e120]:
+                - button "Hide Authentication" [ref=f81e121]
+                - button "Pin Authentication" [ref=f81e122]
+            - link "Firestore" [ref=f81e124] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=f81e125]: gmp_firestore
+              - generic [ref=f81e127]:
+                - button "Hide Firestore" [ref=f81e128]
+                - button "Pin Firestore" [ref=f81e129]
+            - link "Realtime Database" [ref=f81e131] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=f81e132]: gmp_nav20_database
+              - generic [ref=f81e134]:
+                - button "Hide Realtime Database" [ref=f81e135]
+                - button "Pin Realtime Database" [ref=f81e136]
+        - separator [ref=f81e137]
+        - generic [ref=f81e138]:
+          - generic [ref=f81e139]: Product categories
+          - menu "Product categories" [ref=f81e140]:
+            - menuitem "Databases & Storage" [ref=f81e141]:
+              - generic [ref=f81e142] [cursor=pointer]:
+                - generic [ref=f81e143]: Databases & Storage
+                - img [ref=f81e144]: chevron_right
+            - menuitem "Security" [ref=f81e145]:
+              - generic [ref=f81e146] [cursor=pointer]:
+                - generic [ref=f81e147]: Security
+                - img [ref=f81e148]: chevron_right
+            - menuitem "AI services" [ref=f81e149]:
+              - generic [ref=f81e150] [cursor=pointer]:
+                - generic [ref=f81e151]: AI services
+                - img [ref=f81e152]: chevron_right
+            - menuitem "Hosting & Serverless" [ref=f81e153]:
+              - generic [ref=f81e154] [cursor=pointer]:
+                - generic [ref=f81e155]: Hosting & Serverless
+                - img [ref=f81e156]: chevron_right
+            - menuitem "DevOps & Engagement" [ref=f81e157]:
+              - generic [ref=f81e158] [cursor=pointer]:
+                - generic [ref=f81e159]: DevOps & Engagement
+                - img [ref=f81e160]: chevron_right
+            - menuitem "Analytics" [ref=f81e161]:
+              - generic [ref=f81e162] [cursor=pointer]:
+                - generic [ref=f81e163]: Analytics
+                - img [ref=f81e164]: chevron_right
+      - generic [ref=f81e165]:
+        - separator [ref=f81e166]
+        - 'group "Billing plan: Spark" [ref=f81e167]':
+          - generic [ref=f81e168]:
+            - generic "Billing plan name" [ref=f81e169]:
+              - generic [ref=f81e170]: "Billing plan:"
+              - text: Spark
+            - generic "Billing plan description" [ref=f81e171]: No-cost ($0/month)
+          - button "Upgrade billing plan" [ref=f81e173]:
+            - generic [ref=f81e174]: Upgrade
+        - separator [ref=f81e178]
+        - button "Toggle navigation sidebar" [expanded] [ref=f81e180] [cursor=pointer]:
+          - img [ref=f81e181]: chevron_left
+    - banner:
+      - button "chatyuk (Open select project menu)" [ref=f81e185] [cursor=pointer]:
+        - text: chatyuk
+        - img [ref=f81e186]: arrow_drop_down
+    - main [ref=f81e13]:
+      - generic [ref=f81e190]:
+        - region "Product header" [ref=f81e192]:
+          - generic [ref=f81e194]:
+            - generic [ref=f81e197]:
+              - heading "Realtime Database" [level=2] [ref=f81e198]
+              - button [ref=f81e201]:
+                - generic [ref=f81e203]:
+                  - img [ref=f81e204]: spark
+                  - text: Need help with Realtime Database? Ask Gemini
+            - tablist "Product features" [ref=f81e210]:
+              - generic [ref=f81e213]:
+                - tab "Data" [ref=f81e214] [cursor=pointer]
+                - 'tab "Selected Tab: Rules" [selected] [ref=f81e220] [cursor=pointer]':
+                  - generic [ref=f81e222]: Rules
+                - tab "Backups" [ref=f81e226] [cursor=pointer]
+                - tab "Usage" [ref=f81e232] [cursor=pointer]
+                - tab [ref=f81e238] [cursor=pointer]:
+                  - generic [ref=f81e241]:
+                    - generic [ref=f81e242]: gmp_nav20_mods
+                    - text: Extensions
+        - generic [ref=f81e246]:
+          - tabpanel "Rules editor" [ref=f81e251]:
+            - generic [ref=f81e255]:
+              - button "Rules playground" [ref=f81e258]
+              - 'form "Code editor: press the enter key to edit text" [ref=f81e265]':
+                - generic "Press the escape key to exit the text area" [ref=f81e267]:
+                  - textbox [ref=f81e268]
+                  - generic [ref=f81e271]:
+                    - generic [ref=f81e345]:
+                      - generic [ref=f81e348]: "1"
+                      - generic [ref=f81e349]: ▾
+                      - text: "{"
+                    - generic [ref=f81e351]:
+                      - generic [ref=f81e352]: "2"
+                      - generic [ref=f81e353]: ▾
+                      - text: "\"rules\": {"
+                    - generic [ref=f81e355]:
+                      - generic [ref=f81e356]: "3"
+                      - generic [ref=f81e357]: ▾
+                      - text: "\"presence\": {"
+                    - generic [ref=f81e359]:
+                      - generic [ref=f81e360]: "4"
+                      - text: "\".read\": \"auth != null\","
+                    - generic [ref=f81e361]:
+                      - generic [ref=f81e362]: "5"
+                      - generic [ref=f81e363]: ▾
+                      - text: "\"$uid\": {"
+                    - generic [ref=f81e365]:
+                      - generic [ref=f81e366]: "6"
+                      - text: "\".write\": \"auth != null && auth.uid === $uid\""
+                    - generic [ref=f81e367]:
+                      - generic [ref=f81e368]: "7"
+                      - text: "}"
+                    - generic [ref=f81e369]:
+                      - generic [ref=f81e370]: "8"
+                      - text: "},"
+                    - generic [ref=f81e371]:
+                      - generic [ref=f81e372]: "9"
+                      - generic [ref=f81e373]: ▾
+                      - text: "\"roomPresence\": {"
+                    - generic [ref=f81e375]:
+                      - generic [ref=f81e376]: "10"
+                      - text: "\".read\": \"auth != null\","
+                    - generic [ref=f81e377]:
+                      - generic [ref=f81e378]: "11"
+                      - generic [ref=f81e379]: ▾
+                      - text: "\"$roomId\": {"
+                    - generic [ref=f81e381]:
+                      - generic [ref=f81e382]: "12"
+                      - generic [ref=f81e383]: ▾
+                      - text: "\"$uid\": {"
+                    - generic [ref=f81e385]:
+                      - generic [ref=f81e386]: "13"
+                      - text: "\".write\": \"auth != null && auth.uid === $uid\""
+                    - generic [ref=f81e387]:
+                      - generic [ref=f81e388]: "14"
+                      - text: "}"
+                    - generic [ref=f81e389]:
+                      - generic [ref=f81e390]: "15"
+                      - text: "}"
+                    - generic [ref=f81e391]:
+                      - generic [ref=f81e392]: "16"
+                      - text: "}"
+                    - generic [ref=f81e393]:
+                      - generic [ref=f81e394]: "17"
+                      - text: "}"
+                    - generic [ref=f81e395]:
+                      - generic [ref=f81e396]: "18"
+                      - text: "}"
+          - generic [ref=f81e332]:
+            - img [ref=f81e333]: place
+            - generic [ref=f81e334]: "Database location: United States (us-central1)"
+    - generic "Gemini in Firebase" [ref=f81e32]:
+      - generic [ref=f81e33]:
+        - generic [ref=f81e34]:
+          - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f81e42] [cursor=pointer]'
+          - button "Open alerts" [ref=f81e46] [cursor=pointer]:
+            - img [ref=f81e47]: notifications
+          - button "Chat with Gemini (Option+G)" [ref=f81e55] [cursor=pointer]:
+            - img [ref=f81e57]: spark
+          - button "Help" [ref=f81e60] [cursor=pointer]:
+            - img [ref=f81e61]: contact_support
+          - separator [ref=f81e64]
+          - button "Activate Cloud Shell" [ref=f81e65] [cursor=pointer]:
+            - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f81e71]
+          - button "Toggle Learn Panel" [ref=f81e74] [cursor=pointer]:
+            - img [ref=f81e75]: school
+        - 'button "Current theme: Light, adjust theme" [ref=f81e79] [cursor=pointer]':
+          - img [ref=f81e80]: dark_mode
+  - generic [ref=f81e404]:
+    - generic [ref=f81e405]: check_circle
+    - generic [ref=f81e406]:
+      - generic [ref=f81e407]: "Success:"
+      - text: Rules published

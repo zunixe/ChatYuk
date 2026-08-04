@@ -1,0 +1,345 @@
+- generic [ref=f86e6]:
+  - link "Skip to main content" [ref=f86e7] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f86e90]:
+    - generic [ref=f86e91]:
+      - navigation "Firebase Console products" [ref=f86e93]:
+        - heading [level=2] [ref=f86e94]:
+          - link "Firebase console (Go to project list)" [ref=f86e95] [cursor=pointer]:
+            - /url: "#"
+            - img "Firebase logo" [ref=f86e98]
+        - generic [ref=f86e102]:
+          - img [ref=f86e103]: search
+          - combobox "Search products and features" [ref=f86e104]
+        - link "Project Overview" [ref=f86e106] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=f86e107]: gmp_nav20_overview
+        - menu [ref=f86e109]:
+          - menuitem "Settings" [ref=f86e110]:
+            - generic [ref=f86e111] [cursor=pointer]:
+              - img [ref=f86e112]: settings
+              - generic [ref=f86e113]: Settings
+              - img [ref=f86e114]: chevron_right
+      - separator [ref=f86e115]
+      - generic [ref=f86e116]:
+        - generic [ref=f86e117]: Project shortcuts
+        - group "Project shortcuts" [ref=f86e118]:
+          - link "Firestore" [ref=f86e120] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f86e121]: gmp_firestore
+            - generic [ref=f86e123]:
+              - button "Hide Firestore" [ref=f86e124]
+              - button "Pin Firestore" [ref=f86e125]
+          - link "Realtime Database" [ref=f86e127] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f86e128]: gmp_nav20_database
+            - generic [ref=f86e130]:
+              - button "Hide Realtime Database" [ref=f86e131]
+              - button "Pin Realtime Database" [ref=f86e132]
+          - link "Authentication" [ref=f86e134] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f86e135]: gmp_nav20_auth
+            - generic [ref=f86e137]:
+              - button "Hide Authentication" [ref=f86e138]
+              - button "Pin Authentication" [ref=f86e139]
+      - separator [ref=f86e140]
+      - generic [ref=f86e141]:
+        - generic [ref=f86e142]: Product categories
+        - menu "Product categories" [ref=f86e143]:
+          - menuitem "Databases & Storage" [ref=f86e144]:
+            - generic [ref=f86e145] [cursor=pointer]:
+              - generic [ref=f86e146]: Databases & Storage
+              - img [ref=f86e147]: chevron_right
+          - menuitem "Security" [ref=f86e148]:
+            - generic [ref=f86e149] [cursor=pointer]:
+              - generic [ref=f86e150]: Security
+              - img [ref=f86e151]: chevron_right
+          - menuitem "AI services" [ref=f86e152]:
+            - generic [ref=f86e153] [cursor=pointer]:
+              - generic [ref=f86e154]: AI services
+              - img [ref=f86e155]: chevron_right
+          - menuitem "Hosting & Serverless" [ref=f86e156]:
+            - generic [ref=f86e157] [cursor=pointer]:
+              - generic [ref=f86e158]: Hosting & Serverless
+              - img [ref=f86e159]: chevron_right
+          - menuitem "DevOps & Engagement" [ref=f86e160]:
+            - generic [ref=f86e161] [cursor=pointer]:
+              - generic [ref=f86e162]: DevOps & Engagement
+              - img [ref=f86e163]: chevron_right
+          - menuitem "Analytics" [ref=f86e164]:
+            - generic [ref=f86e165] [cursor=pointer]:
+              - generic [ref=f86e166]: Analytics
+              - img [ref=f86e167]: chevron_right
+    - generic [ref=f86e168]:
+      - separator [ref=f86e169]
+      - 'group "Billing plan: Spark" [ref=f86e170]':
+        - generic [ref=f86e171]:
+          - generic "Billing plan name" [ref=f86e172]:
+            - generic [ref=f86e173]: "Billing plan:"
+            - text: Spark
+          - generic "Billing plan description" [ref=f86e174]: No-cost ($0/month)
+        - button "Upgrade billing plan" [ref=f86e176]:
+          - generic [ref=f86e177]: Upgrade
+      - separator [ref=f86e181]
+      - button "Toggle navigation sidebar" [expanded] [ref=f86e183] [cursor=pointer]:
+        - img [ref=f86e184]: chevron_left
+  - banner:
+    - button "chatyuk (Open select project menu)" [ref=f86e188] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f86e189]: arrow_drop_down
+  - main [active] [ref=f86e16]:
+    - generic [ref=f86e192]:
+      - region "Product header" [ref=f86e193]:
+        - generic [ref=f86e194]:
+          - navigation "Breadcrumbs" [ref=f86e196]:
+            - generic [ref=f86e197] [cursor=pointer]:
+              - link "Cloud Firestore" [ref=f86e198]
+              - text: chevron_right
+          - generic [ref=f86e199]:
+            - generic [ref=f86e200]:
+              - heading "Database" [level=2] [ref=f86e203]
+              - generic [ref=f86e204]:
+                - button "Undefined parameter - DATABASE_ID select a database" [ref=f86e207] [cursor=pointer]:
+                  - generic [ref=f86e208]: (default)
+                  - img [ref=f86e209]: arrow_drop_down
+                - button [ref=f86e211]:
+                  - generic [ref=f86e213]:
+                    - img [ref=f86e214]: spark
+                    - text: Ask Gemini about the core concepts to use Firestore
+            - generic [ref=f86e217]:
+              - tablist "Product features" [ref=f86e220]:
+                - generic [ref=f86e223]:
+                  - 'tab "Selected Tab: Data" [selected] [ref=f86e224] [cursor=pointer]':
+                    - generic [ref=f86e226]: Data
+                  - tab "Rules" [ref=f86e230] [cursor=pointer]
+                  - tab "Indexes" [ref=f86e236] [cursor=pointer]
+                  - tab "Disaster Recovery" [ref=f86e242] [cursor=pointer]
+                  - tab "Usage" [ref=f86e248] [cursor=pointer]
+                  - tab "Query Insights" [ref=f86e254] [cursor=pointer]:
+                    - alert [ref=f86e261]:
+                      - button "Dismiss" [ref=f86e262]:
+                        - img [ref=f86e263]: close
+                      - generic [ref=f86e267]:
+                        - img [ref=f86e268]: gmp_firestore
+                        - generic [ref=f86e269]:
+                          - generic [ref=f86e270]: Understand query performance
+                          - generic [ref=f86e271]: Identify and troubleshoot queries that require the most time or resources to execute.
+                          - link "Learn more (opens Firebase documentation in new tab)" [ref=f86e272]:
+                            - /url: https://firebase.google.com/docs/firestore/enterprise/query-insights?hl=en-US&authuser=0
+                            - text: Learn more open_in_new
+                  - tab [ref=f86e275] [cursor=pointer]:
+                    - generic [ref=f86e278]:
+                      - generic [ref=f86e279]: gmp_nav20_mods
+                      - text: Extensions
+              - button "New in Cloud Firestore" [ref=f86e285]:
+                - img [ref=f86e286]: campaign
+      - generic [ref=f86e294]:
+        - generic [ref=f86e298]:
+          - generic [ref=f86e300]:
+            - img [ref=f86e301]: security
+            - generic [ref=f86e302]: Protect your Cloud Firestore resources from abuse, such as billing fraud or phishing
+            - link "Configure App Check" [ref=f86e304] [cursor=pointer]:
+              - /url: "#"
+          - button "Dismiss" [ref=f86e309] [cursor=pointer]:
+            - img [ref=f86e310]: close
+        - generic [ref=f86e314]:
+          - button "Link out menu to features in Google Cloud" [ref=f86e317]:
+            - generic [ref=f86e319]:
+              - img [ref=f86e320]: filter_drama
+              - generic [ref=f86e321]: More in Google Cloud
+              - img [ref=f86e322]: keyboard_arrow_down
+          - generic [ref=f86e325]:
+            - radiogroup "Choose how to view your data" [ref=f86e326]:
+              - radio "Panel view" [checked] [ref=f86e327] [cursor=pointer]
+              - radio "Query builder" [ref=f86e329] [cursor=pointer]
+            - button "actions for Firestore database" [ref=f86e331] [cursor=pointer]:
+              - img [ref=f86e332]: more_vert
+        - generic [ref=f86e335]:
+          - generic [ref=f86e340] [cursor=pointer]:
+            - generic [ref=f86e342]:
+              - link "root navigation" [ref=f86e344]:
+                - /url: "#"
+                - img [ref=f86e346]: home
+              - img [ref=f86e348]: keyboard_arrow_right
+            - generic [ref=f86e349]:
+              - link "privateChats navigation" [ref=f86e351]:
+                - /url: "#"
+                - text: privateChats
+              - img [ref=f86e353]: keyboard_arrow_right
+            - link "22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23 navigation" [ref=f86e356]:
+              - /url: "#"
+              - text: 22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23
+            - button "Edit path" [ref=f86e357]:
+              - img [ref=f86e358]: mode_edit
+          - generic [ref=f86e361]:
+            - generic [ref=f86e364]:
+              - generic [ref=f86e367] [cursor=pointer]:
+                - img [ref=f86e369]: gmp_firestore
+                - generic [ref=f86e370]: (default)
+                - button "View database details" [ref=f86e373]:
+                  - img [ref=f86e374]: info
+              - button "Start collection" [ref=f86e376]:
+                - img [ref=f86e377]: add
+              - generic [ref=f86e383]:
+                - generic [ref=f86e385] [cursor=pointer]:
+                  - generic [ref=f86e386]:
+                    - button "actions for privateChats" [ref=f86e387]:
+                      - img [ref=f86e388]: more_vert
+                    - button "privateChats navigation" [ref=f86e390]: privateChats
+                  - img [ref=f86e391]: chevron_right
+                - generic [ref=f86e393] [cursor=pointer]:
+                  - generic [ref=f86e394]:
+                    - button "actions for rooms" [ref=f86e395]:
+                      - img [ref=f86e396]: more_vert
+                    - button "rooms navigation" [ref=f86e398]: rooms
+                  - img [ref=f86e399]: chevron_right
+                - generic [ref=f86e401] [cursor=pointer]:
+                  - generic [ref=f86e402]:
+                    - button "actions for users" [ref=f86e403]:
+                      - img [ref=f86e404]: more_vert
+                    - button "users navigation" [ref=f86e406]: users
+                  - img [ref=f86e407]: chevron_right
+            - generic [ref=f86e411]:
+              - generic [ref=f86e413] [cursor=pointer]:
+                - generic [ref=f86e414]:
+                  - img [ref=f86e416]: collections_bookmark
+                  - generic [ref=f86e417]: privateChats
+                - generic [ref=f86e418]:
+                  - button "open document filter" [ref=f86e420]:
+                    - generic [ref=f86e421]: filter_list
+                  - button "actions for collection" [ref=f86e423]:
+                    - img [ref=f86e424]: more_vert
+              - button "Add document" [ref=f86e427]:
+                - img [ref=f86e428]: add
+              - generic [ref=f86e437] [cursor=pointer]:
+                - generic [ref=f86e438]:
+                  - button "actions for 22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23" [ref=f86e439]:
+                    - img [ref=f86e440]: more_vert
+                  - button "22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23 navigation" [ref=f86e442]: 22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23
+                - img [ref=f86e443]: chevron_right
+            - generic [ref=f86e446]:
+              - generic [ref=f86e447]:
+                - generic [ref=f86e449] [cursor=pointer]:
+                  - generic [ref=f86e450]:
+                    - img [ref=f86e452]: drive_document
+                    - generic [ref=f86e453]: 22Wuj03CDASjtljuo34OJF8E8uo2_ArmgWE9Q8oWH4Qcm23KwkkdG5g23
+                  - button "actions for document" [ref=f86e455]:
+                    - img [ref=f86e456]: more_vert
+                - button "Start collection" [ref=f86e459]:
+                  - img [ref=f86e460]: add
+                - generic [ref=f86e468] [cursor=pointer]:
+                  - generic [ref=f86e469]:
+                    - button "actions for messages" [ref=f86e470]:
+                      - img [ref=f86e471]: more_vert
+                    - button "messages navigation" [ref=f86e473]: messages
+                  - img [ref=f86e474]: chevron_right
+              - generic [ref=f86e477]:
+                - button "Add field" [ref=f86e479]:
+                  - img [ref=f86e480]: add
+                - generic [ref=f86e484]:
+                  - generic [ref=f86e488]:
+                    - generic [ref=f86e489]:
+                      - generic: "lastMessage:"
+                      - generic: "\"hi\""
+                    - generic [ref=f86e491]:
+                      - generic [ref=f86e492]: (string)
+                      - button "Edit lastMessage field" [ref=f86e493]:
+                        - img [ref=f86e494]: edit
+                      - button "Delete lastMessage field" [ref=f86e495]:
+                        - img [ref=f86e496]: delete
+                  - generic [ref=f86e500]:
+                    - generic [ref=f86e501]:
+                      - generic: "lastMessageAt:"
+                      - generic: August 2, 2026 at 8:40:52 AM UTC+7
+                    - generic [ref=f86e503]:
+                      - generic [ref=f86e504]: (timestamp)
+                      - button "Edit lastMessageAt field" [ref=f86e505]:
+                        - img [ref=f86e506]: edit
+                      - button "Delete lastMessageAt field" [ref=f86e507]:
+                        - img [ref=f86e508]: delete
+                  - generic [ref=f86e511]:
+                    - generic [ref=f86e512]:
+                      - generic [ref=f86e513]:
+                        - button "Collapse participantNames" [ref=f86e515] [cursor=pointer]:
+                          - img [ref=f86e516]: arrow_drop_down
+                        - generic: participantNames
+                      - generic [ref=f86e518]:
+                        - generic [ref=f86e519]: (map)
+                        - button "Add to participantNames field" [ref=f86e520]:
+                          - img [ref=f86e521]: add
+                        - button "Delete participantNames field" [ref=f86e522]:
+                          - img [ref=f86e523]: delete
+                    - generic [ref=f86e524]:
+                      - generic [ref=f86e527]:
+                        - generic [ref=f86e528]:
+                          - generic: "22Wuj03CDASjtljuo34OJF8E8uo2:"
+                          - generic: "\"testing123\""
+                        - generic [ref=f86e530]:
+                          - generic [ref=f86e531]: (string)
+                          - button "Edit 22Wuj03CDASjtljuo34OJF8E8uo2 field" [ref=f86e532]:
+                            - img [ref=f86e533]: edit
+                          - button "Delete 22Wuj03CDASjtljuo34OJF8E8uo2 field" [ref=f86e534]:
+                            - img [ref=f86e535]: delete
+                      - generic [ref=f86e538]:
+                        - generic [ref=f86e539]:
+                          - generic: "ArmgWE9Q8oWH4Qcm23KwkkdG5g23:"
+                          - generic: "\"RinaDummy\""
+                        - generic [ref=f86e541]:
+                          - generic [ref=f86e542]: (string)
+                          - button "Edit ArmgWE9Q8oWH4Qcm23KwkkdG5g23 field" [ref=f86e543]:
+                            - img [ref=f86e544]: edit
+                          - button "Delete ArmgWE9Q8oWH4Qcm23KwkkdG5g23 field" [ref=f86e545]:
+                            - img [ref=f86e546]: delete
+                  - generic [ref=f86e549]:
+                    - generic [ref=f86e550]:
+                      - generic [ref=f86e551]:
+                        - button "Collapse participants" [ref=f86e553] [cursor=pointer]:
+                          - img [ref=f86e554]: arrow_drop_down
+                        - generic: participants
+                      - generic [ref=f86e556]:
+                        - generic [ref=f86e557]: (array)
+                        - button "Add to participants field" [ref=f86e558]:
+                          - img [ref=f86e559]: add
+                        - button "Delete participants field" [ref=f86e560]:
+                          - img [ref=f86e561]: delete
+                    - generic [ref=f86e562]:
+                      - generic [ref=f86e565]:
+                        - generic [ref=f86e566]:
+                          - generic: "0"
+                          - generic: "\"22Wuj03CDASjtljuo34OJF8E8uo2\""
+                        - generic [ref=f86e568]:
+                          - generic [ref=f86e569]: (string)
+                          - button "Edit 0 field" [ref=f86e570]:
+                            - img [ref=f86e571]: edit
+                          - button "Delete 0 field" [ref=f86e572]:
+                            - img [ref=f86e573]: delete
+                      - generic [ref=f86e576]:
+                        - generic [ref=f86e577]:
+                          - generic: "1"
+                          - generic: "\"ArmgWE9Q8oWH4Qcm23KwkkdG5g23\""
+                        - generic [ref=f86e579]:
+                          - generic [ref=f86e580]: (string)
+                          - button "Edit 1 field" [ref=f86e581]:
+                            - img [ref=f86e582]: edit
+                          - button "Delete 1 field" [ref=f86e583]:
+                            - img [ref=f86e584]: delete
+        - generic [ref=f86e585]:
+          - img [ref=f86e586]: place
+          - generic [ref=f86e587]: "Database location: nam5"
+  - generic "Gemini in Firebase" [ref=f86e35]:
+    - generic [ref=f86e36]:
+      - generic [ref=f86e37]:
+        - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f86e45] [cursor=pointer]'
+        - button "Open alerts" [ref=f86e49] [cursor=pointer]:
+          - img [ref=f86e50]: notifications
+        - button "Chat with Gemini (Option+G)" [ref=f86e58] [cursor=pointer]:
+          - img [ref=f86e60]: spark
+        - button "Help" [ref=f86e63] [cursor=pointer]:
+          - img [ref=f86e64]: contact_support
+        - separator [ref=f86e67]
+        - button "Activate Cloud Shell" [ref=f86e68] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f86e74]
+        - button "Toggle Learn Panel" [ref=f86e77] [cursor=pointer]:
+          - img [ref=f86e78]: school
+      - 'button "Current theme: Light, adjust theme" [ref=f86e82] [cursor=pointer]':
+        - img [ref=f86e83]: dark_mode

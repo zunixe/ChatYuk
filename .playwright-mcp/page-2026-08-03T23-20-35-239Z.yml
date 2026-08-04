@@ -1,0 +1,127 @@
+- generic [ref=f122e3]:
+  - banner [ref=f122e4]:
+    - generic [ref=f122e5]:
+      - heading "ChatYuk Admin" [level=1] [ref=f122e6]
+      - generic [ref=f122e7]: "Firebase: chatyuk-8470e · terhubung langsung ke database aplikasi"
+    - navigation [ref=f122e8]:
+      - button "Dashboard" [ref=f122e9] [cursor=pointer]
+      - button "Users (13)" [ref=f122e35] [cursor=pointer]
+      - button "Private Chats" [ref=f122e11] [cursor=pointer]
+      - button "Rooms" [ref=f122e12] [cursor=pointer]
+  - table [ref=f122e182]:
+    - rowgroup [ref=f122e183]:
+      - row [ref=f122e184]:
+        - columnheader "Chat ID" [ref=f122e185]
+        - columnheader "Peserta" [ref=f122e186]
+        - columnheader "Pesan Terakhir" [ref=f122e187]
+        - columnheader "Jumlah Pesan" [ref=f122e188]
+        - columnheader "Waktu" [ref=f122e189]
+        - columnheader [ref=f122e190]
+    - rowgroup [ref=f122e191]:
+      - row [ref=f122e194]:
+        - cell "gCXI1LHE4zSlkNwST6xOmqA0A1m2_z..." [ref=f122e195]
+        - cell "teating123 ↔ AliMalay" [ref=f122e196]
+        - cell "tes" [ref=f122e197]
+        - cell "2" [ref=f122e198]
+        - cell "03 Agu 2026, 06.14" [ref=f122e199]
+        - cell [ref=f122e200]:
+          - button "Lihat" [active] [ref=f122e201] [cursor=pointer]
+      - row [ref=f122e202]:
+        - cell "z3wy7mldzYhXgpBNEJDBh5ZfGQn1_z..." [ref=f122e203]
+        - cell "teating123 ↔ SitiSing" [ref=f122e204]
+        - cell "-" [ref=f122e205]
+        - cell "0" [ref=f122e206]
+        - cell "02 Agu 2026, 21.22" [ref=f122e207]
+        - cell [ref=f122e208]:
+          - button "Lihat" [ref=f122e209] [cursor=pointer]
+      - row [ref=f122e210]:
+        - cell "r1HhCRGbXOcNglKTOUYyPabPhQs2_z..." [ref=f122e211]
+        - cell "teating123 ↔ SomchaiTH" [ref=f122e212]
+        - cell "-" [ref=f122e213]
+        - cell "0" [ref=f122e214]
+        - cell "02 Agu 2026, 12.21" [ref=f122e215]
+        - cell [ref=f122e216]:
+          - button "Lihat" [ref=f122e217] [cursor=pointer]
+      - row [ref=f122e218]:
+        - cell "D8yXFYVTGJZshn4BZb4Rm87dqEh2_K..." [ref=f122e219]
+        - cell "ZakiIdle ↔ testing123" [ref=f122e220]
+        - cell "hi" [ref=f122e221]
+        - cell "1" [ref=f122e222]
+        - cell "02 Agu 2026, 09.08" [ref=f122e223]
+        - cell [ref=f122e224]:
+          - button "Lihat" [ref=f122e225] [cursor=pointer]
+      - row [ref=f122e226]:
+        - cell "22Wuj03CDASjtljuo34OJF8E8uo2_r..." [ref=f122e227]
+        - cell "SomchaiTH ↔ testing123" [ref=f122e228]
+        - cell "-" [ref=f122e229]
+        - cell "1" [ref=f122e230]
+        - cell "02 Agu 2026, 09.01" [ref=f122e231]
+        - cell [ref=f122e232]:
+          - button "Lihat" [ref=f122e233] [cursor=pointer]
+      - row [ref=f122e234]:
+        - cell "22Wuj03CDASjtljuo34OJF8E8uo2_z..." [ref=f122e235]
+        - cell "MayaFil ↔ testing123" [ref=f122e236]
+        - cell "-" [ref=f122e237]
+        - cell "0" [ref=f122e238]
+        - cell "02 Agu 2026, 09.01" [ref=f122e239]
+        - cell [ref=f122e240]:
+          - button "Lihat" [ref=f122e241] [cursor=pointer]
+      - row [ref=f122e242]:
+        - cell "22Wuj03CDASjtljuo34OJF8E8uo2_g..." [ref=f122e243]
+        - cell "AliMalay ↔ testing123" [ref=f122e244]
+        - cell "-" [ref=f122e245]
+        - cell "0" [ref=f122e246]
+        - cell "02 Agu 2026, 09.00" [ref=f122e247]
+        - cell [ref=f122e248]:
+          - button "Lihat" [ref=f122e249] [cursor=pointer]
+      - row [ref=f122e250]:
+        - cell "22Wuj03CDASjtljuo34OJF8E8uo2_K..." [ref=f122e251]
+        - cell "ZakiIdle ↔ testing123" [ref=f122e252]
+        - cell "hi" [ref=f122e253]
+        - cell "1" [ref=f122e254]
+        - cell "02 Agu 2026, 08.57" [ref=f122e255]
+        - cell [ref=f122e256]:
+          - button "Lihat" [ref=f122e257] [cursor=pointer]
+      - row [ref=f122e258]:
+        - cell "22Wuj03CDASjtljuo34OJF8E8uo2_r..." [ref=f122e259]
+        - cell "DucVN ↔ testing123" [ref=f122e260]
+        - cell "-" [ref=f122e261]
+        - cell "0" [ref=f122e262]
+        - cell "02 Agu 2026, 08.54" [ref=f122e263]
+        - cell [ref=f122e264]:
+          - button "Lihat" [ref=f122e265] [cursor=pointer]
+      - row [ref=f122e266]:
+        - cell "22Wuj03CDASjtljuo34OJF8E8uo2_z..." [ref=f122e267]
+        - cell "SitiSing ↔ testing123" [ref=f122e268]
+        - cell "-" [ref=f122e269]
+        - cell "0" [ref=f122e270]
+        - cell "02 Agu 2026, 08.51" [ref=f122e271]
+        - cell [ref=f122e272]:
+          - button "Lihat" [ref=f122e273] [cursor=pointer]
+      - row [ref=f122e274]:
+        - cell "22Wuj03CDASjtljuo34OJF8E8uo2_t..." [ref=f122e275]
+        - cell "testing123 ↔ NanaID" [ref=f122e276]
+        - cell "-" [ref=f122e277]
+        - cell "0" [ref=f122e278]
+        - cell "02 Agu 2026, 08.49" [ref=f122e279]
+        - cell [ref=f122e280]:
+          - button "Lihat" [ref=f122e281] [cursor=pointer]
+      - row [ref=f122e282]:
+        - cell "22Wuj03CDASjtljuo34OJF8E8uo2_A..." [ref=f122e283]
+        - cell "testing123 ↔ RinaDummy" [ref=f122e284]
+        - cell "-" [ref=f122e285]
+        - cell "4" [ref=f122e286]
+        - cell "02 Agu 2026, 08.49" [ref=f122e287]
+        - cell [ref=f122e288]:
+          - button "Lihat" [ref=f122e289] [cursor=pointer]
+  - generic [ref=f122e291]:
+    - generic [ref=f122e292]:
+      - generic [ref=f122e293]: "Chat: teating123 ↔ AliMalay"
+      - button "✕" [ref=f122e294] [cursor=pointer]
+    - generic [ref=f122e295]:
+      - generic [ref=f122e297]:
+        - img "foto" [ref=f122e298]
+        - generic [ref=f122e299]: teating123 · 02 Agu 2026, 12.22
+      - generic [ref=f122e301]:
+        - generic [ref=f122e302]: tes
+        - generic [ref=f122e303]: teating123 · 03 Agu 2026, 06.14

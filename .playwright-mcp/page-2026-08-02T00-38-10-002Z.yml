@@ -1,0 +1,87 @@
+- generic [active] [ref=f57e1]:
+  - region "console.cloud.google.com uses cookies from Google to deliver and enhance the quality of its services and to analyze traffic." [ref=f57e2]:
+    - paragraph [ref=f57e3]:
+      - text: console.cloud.google.com uses cookies from Google to deliver and enhance the quality of its services and to analyze traffic.
+      - link "Learn more about how Google uses cookies. Opens in a new tab." [ref=f57e4] [cursor=pointer]:
+        - /url: https://policies.google.com/technologies/cookies?hl=en
+        - text: Learn more
+    - button "OK, got it" [ref=f57e5] [cursor=pointer]
+  - generic [ref=f57e7]:
+    - generic [ref=f57e8]:
+      - complementary "Skip links" [ref=f57e9]:
+        - link "Skip to main content" [ref=f57e10] [cursor=pointer]:
+          - /url: /
+        - button "Keyboard shortcuts" [ref=f57e12]
+        - link [ref=f57e14] [cursor=pointer]:
+          - /url: https://cloud.google.com/docs/accessibility?hl=en_US
+          - generic [ref=f57e15]:
+            - text: Accessibility Help
+            - generic "external, opens new window" [ref=f57e16]:
+              - img "external, opens new window" [ref=f57e17]
+        - link [ref=f57e20] [cursor=pointer]:
+          - /url: https://support.google.com/accessibility/contact/feedback?hl=en_US
+          - generic [ref=f57e21]:
+            - text: Accessibility Feedback
+            - generic "external, opens new window" [ref=f57e22]:
+              - img "external, opens new window" [ref=f57e23]
+      - banner [ref=f57e27]:
+        - generic [ref=f57e28]:
+          - navigation [ref=f57e31]:
+            - button "Navigation menu (.)" [ref=f57e32] [cursor=pointer]
+          - link "Google Cloud Platform Home" [ref=f57e36] [cursor=pointer]:
+            - /url: /
+          - button "No project selected. Hit enter to select a project, folder, or organization." [ref=f57e44]
+        - search "Google Cloud Platform" [ref=f57e50]:
+          - combobox [ref=f57e51]:
+            - searchbox "Enter query to search for resources, docs, products, and more" [ref=f57e52]
+          - button "See all search results" [disabled]:
+            - generic: Search
+        - generic [ref=f57e54]:
+          - generic [ref=f57e57]:
+            - button "Activate Cloud Shell (G then S)" [disabled]
+          - button "Open notifications" [ref=f57e61] [cursor=pointer]
+          - button "Settings and utilities" [ref=f57e69] [cursor=pointer]
+    - generic [ref=f57e95]:
+      - navigation "APIs & Services" [ref=f57e102]:
+        - generic [ref=f57e103]:
+          - heading [level=2] [ref=f57e105]:
+            - link "APIs & Services" [ref=f57e106] [cursor=pointer]:
+              - /url: /apis
+          - list "Enabled APIs & services, 1 of 5 More options Library, 2 of 5 More options Credentials, 3 of 5 More options OAuth consent screen, 4 of 5 More options Page usage agreements, 5 of 5 More options" [ref=f57e117]:
+            - listitem [ref=f57e118]:
+              - generic [ref=f57e121]:
+                - link "Enabled APIs & services, 1 of 5" [ref=f57e122] [cursor=pointer]:
+                  - /url: /apis/dashboard
+                  - generic [ref=f57e123]: Enabled APIs & services
+                - button "More options" [ref=f57e130] [cursor=pointer]
+            - listitem [ref=f57e134]:
+              - generic [ref=f57e137]:
+                - link "Library, 2 of 5" [ref=f57e138] [cursor=pointer]:
+                  - /url: /apis/library
+                  - generic [ref=f57e139]: Library
+                - button "More options" [ref=f57e146] [cursor=pointer]
+            - listitem [ref=f57e150]:
+              - generic [ref=f57e153]:
+                - link "Credentials, 3 of 5" [ref=f57e154] [cursor=pointer]:
+                  - /url: /apis/credentials
+                  - generic [ref=f57e155]: Credentials
+                - button "More options" [ref=f57e162] [cursor=pointer]
+            - listitem [ref=f57e166]:
+              - generic [ref=f57e169]:
+                - link "OAuth consent screen, 4 of 5" [ref=f57e170] [cursor=pointer]:
+                  - /url: /apis/credentials/consent
+                  - generic [ref=f57e171]: OAuth consent screen
+                - button "More options" [ref=f57e178] [cursor=pointer]
+            - listitem [ref=f57e182]:
+              - generic [ref=f57e185]:
+                - link "Page usage agreements, 5 of 5" [ref=f57e186] [cursor=pointer]:
+                  - /url: /apis/agreements
+                  - generic [ref=f57e187]: Page usage agreements
+                - button "More options" [ref=f57e195] [cursor=pointer]
+          - button "Toggle APIs & Services navigation menu" [expanded] [ref=f57e200] [cursor=pointer]
+      - main [ref=f57e206]:
+        - progressbar [ref=f57e214]
+  - iframe [ref=f57e230]:
+    
+  - iframe [ref=f57e232]:
+    

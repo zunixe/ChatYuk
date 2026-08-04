@@ -1,0 +1,181 @@
+- generic [ref=f31e6]:
+  - link "Skip to main content" [ref=f31e7] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f31e92]:
+    - generic [ref=f31e93]:
+      - navigation "Firebase Console products" [ref=f31e95]:
+        - heading [level=2] [ref=f31e96]:
+          - link "Firebase console (Go to project list)" [ref=f31e97] [cursor=pointer]:
+            - /url: "#"
+            - img "Firebase logo" [ref=f31e100]
+        - generic [ref=f31e104]:
+          - img [ref=f31e105]: search
+          - combobox "Search products and features" [ref=f31e106]
+        - link "Project Overview" [ref=f31e108] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=f31e109]: gmp_nav20_overview
+        - menu [ref=f31e111]:
+          - menuitem "Settings" [ref=f31e112]:
+            - generic [ref=f31e113] [cursor=pointer]:
+              - img [ref=f31e114]: settings
+              - generic [ref=f31e115]: Settings
+              - img [ref=f31e116]: chevron_right
+      - separator [ref=f31e117]
+      - generic [ref=f31e118]:
+        - generic [ref=f31e119]: Project shortcuts
+        - group "Project shortcuts" [ref=f31e120]:
+          - link "Firestore" [ref=f31e122] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=f31e123]: gmp_firestore
+            - generic [ref=f31e125]:
+              - button "Hide Firestore" [ref=f31e126]
+              - button "Pin Firestore" [ref=f31e127]
+      - separator [ref=f31e128]
+      - generic [ref=f31e129]:
+        - generic [ref=f31e130]: Product categories
+        - menu "Product categories" [ref=f31e131]:
+          - menuitem "Databases & Storage" [ref=f31e132]:
+            - generic [ref=f31e133] [cursor=pointer]:
+              - generic [ref=f31e134]: Databases & Storage
+              - img [ref=f31e135]: chevron_right
+          - menuitem "Security" [ref=f31e136]:
+            - generic [ref=f31e137] [cursor=pointer]:
+              - generic [ref=f31e138]: Security
+              - img [ref=f31e139]: chevron_right
+          - menuitem "AI services" [ref=f31e140]:
+            - generic [ref=f31e141] [cursor=pointer]:
+              - generic [ref=f31e142]: AI services
+              - img [ref=f31e143]: chevron_right
+          - menuitem "Hosting & Serverless" [ref=f31e144]:
+            - generic [ref=f31e145] [cursor=pointer]:
+              - generic [ref=f31e146]: Hosting & Serverless
+              - img [ref=f31e147]: chevron_right
+          - menuitem "DevOps & Engagement" [ref=f31e148]:
+            - generic [ref=f31e149] [cursor=pointer]:
+              - generic [ref=f31e150]: DevOps & Engagement
+              - img [ref=f31e151]: chevron_right
+          - menuitem "Analytics" [ref=f31e152]:
+            - generic [ref=f31e153] [cursor=pointer]:
+              - generic [ref=f31e154]: Analytics
+              - img [ref=f31e155]: chevron_right
+    - generic [ref=f31e156]:
+      - separator [ref=f31e157]
+      - 'group "Billing plan: Spark" [ref=f31e158]':
+        - generic [ref=f31e159]:
+          - generic "Billing plan name" [ref=f31e160]:
+            - generic [ref=f31e161]: "Billing plan:"
+            - text: Spark
+          - generic "Billing plan description" [ref=f31e162]: No-cost ($0/month)
+        - button "Upgrade billing plan" [ref=f31e164]:
+          - generic [ref=f31e165]: Upgrade
+      - separator [ref=f31e169]
+      - button "Toggle navigation sidebar" [expanded] [ref=f31e171] [cursor=pointer]:
+        - img [ref=f31e172]: chevron_left
+  - banner:
+    - button "chatyuk (Open select project menu)" [ref=f31e176] [cursor=pointer]:
+      - text: chatyuk
+      - img [ref=f31e177]: arrow_drop_down
+  - main [active] [ref=f31e16]:
+    - generic [ref=f31e180]:
+      - generic [ref=f31e184]:
+        - generic [ref=f31e186]:
+          - img [ref=f31e187]: info_spark
+          - generic [ref=f31e188]: Try agent skills to help your AI coding assistants get started with Firebase quickly
+          - link "Learn more (opens Firebase documentation in new tab)" [ref=f31e190] [cursor=pointer]:
+            - /url: https://firebase.google.com/docs/ai-assistance/agent-skills?hl=en-US&authuser=0
+            - generic [ref=f31e191]: Learn more
+            - text: open_in_new
+        - button "Dismiss" [ref=f31e195] [cursor=pointer]:
+          - img [ref=f31e196]: close
+      - generic [ref=f31e200]:
+        - generic [ref=f31e201]:
+          - generic [ref=f31e202]: chatyuk
+          - button "Spark plan" [ref=f31e204] [cursor=pointer]
+        - generic [ref=f31e210]:
+          - button "Android ChatYuk" [ref=f31e211]:
+            - generic [ref=f31e214]:
+              - img "Android" [ref=f31e216]:
+                - generic [ref=f31e217]: plat_android
+              - generic [ref=f31e218]: ChatYuk
+          - button "Add app" [ref=f31e221]:
+            - generic [ref=f31e223]:
+              - generic [ref=f31e224]: add
+              - generic [ref=f31e225]: Add app
+      - generic [ref=f31e230]:
+        - heading "Analytics" [level=2] [ref=f31e231]
+        - img [ref=f31e232]: drag_handle
+        - generic [ref=f31e236]:
+          - link "Analytics (Go to page)" [ref=f31e237] [cursor=pointer]:
+            - generic [ref=f31e238]: gmp_analytics
+            - heading "Analytics" [level=2] [ref=f31e239]
+          - generic [ref=f31e241]:
+            - button "Open menu to toggle visibility for revenue chart" [ref=f31e242] [cursor=pointer]:
+              - img [ref=f31e243]: more_vert
+            - generic [ref=f31e246]:
+              - generic [ref=f31e247]:
+                - generic [ref=f31e248]:
+                  - heading "Daily active users" [level=3] [ref=f31e251]
+                  - generic [ref=f31e252]: "- - -"
+                - generic "Daily active users" [ref=f31e254]:
+                  - generic [ref=f31e260]:
+                    - generic [ref=f31e261]: No data
+                    - generic [ref=f31e262]: for the last 14 days
+              - generic [ref=f31e264]:
+                - generic [ref=f31e265]:
+                  - heading "Day 1 retention" [level=3] [ref=f31e268]
+                  - generic [ref=f31e269]: "- - -"
+                - generic "Day 1 retention" [ref=f31e271]:
+                  - generic [ref=f31e277]:
+                    - generic [ref=f31e278]: No data
+                    - generic [ref=f31e279]: for the last 14 days
+              - generic [ref=f31e284]:
+                - generic [ref=f31e285]: Track your revenue!
+                - link "Link to AdMob" [ref=f31e286] [cursor=pointer]:
+                  - /url: "#"
+                - link "Link to Google Play" [ref=f31e287] [cursor=pointer]:
+                  - /url: "#"
+            - generic [ref=f31e288]:
+              - generic [ref=f31e289]: This week
+              - generic [ref=f31e292]: Last week
+      - generic [ref=f31e295]:
+        - generic [ref=f31e296]:
+          - generic [ref=f31e297]: Next steps with Gemini
+          - link "View docs (opens Firebase documentation in new tab)" [ref=f31e298] [cursor=pointer]:
+            - /url: https://firebase.google.com/docs?hl=en-US&authuser=0
+            - text: View docs open_in_new
+        - generic [ref=f31e299]:
+          - button "Tell us more about your app" [ref=f31e302] [cursor=pointer]:
+            - generic [ref=f31e305]: Describe your app, and Gemini will suggest additional products to help you refine your app
+          - button "Add Analytics and monitoring" [ref=f31e308] [cursor=pointer]:
+            - generic [ref=f31e311]: Learn more about Google Analytics and Firebase monitoring products
+          - button "Add AI to your app" [ref=f31e314] [cursor=pointer]:
+            - generic [ref=f31e317]: Learn more about integrating AI into your app
+          - button "Monetize your app" [ref=f31e320] [cursor=pointer]:
+            - generic [ref=f31e323]: Learn more about AdMob, personalizing user experience, and increasing revenue
+          - button "Test and roll out features" [ref=f31e326] [cursor=pointer]:
+            - generic [ref=f31e329]: Ensure stable and delightful features before launch
+          - button "Engage end users" [ref=f31e332] [cursor=pointer]:
+            - generic [ref=f31e335]: Deliver targeted and customized messaging campaigns
+  - generic "Gemini in Firebase" [ref=f31e35]:
+    - generic [ref=f31e36]:
+      - generic [ref=f31e37]:
+        - 'button "Google Account: H Z (zymanq@gmail.com)" [ref=f31e45] [cursor=pointer]'
+        - button "Open alerts" [ref=f31e49] [cursor=pointer]:
+          - img [ref=f31e50]: notifications
+        - button "Chat with Gemini (Option+G)" [ref=f31e336] [cursor=pointer]:
+          - img [ref=f31e338]: spark
+          - alert [ref=f31e341]:
+            - button "Dismiss" [ref=f31e342]:
+              - img [ref=f31e343]: close
+            - generic [ref=f31e346]:
+              - text: Gemini in Firebase
+              - paragraph [ref=f31e347]: Get answers to questions about Firebase products, use cases, and features. Generate code for development and shorten your troubleshooting process with new insights--with the assistance of a natural language chat interface directly in the Firebase console.
+        - button "Help" [ref=f31e67] [cursor=pointer]:
+          - img [ref=f31e68]: contact_support
+        - separator [ref=f31e71]
+        - button "Activate Cloud Shell" [ref=f31e72] [cursor=pointer]:
+          - tooltip "Supercharge your development! Try Cloud Shell to access the built-in Firebase CLI and run Firebase emulators directly in a virtual machine." [ref=f31e78]
+        - button "Toggle Learn Panel" [ref=f31e350] [cursor=pointer]:
+          - img [ref=f31e351]: school
+      - 'button "Current theme: Light, adjust theme" [ref=f31e82] [cursor=pointer]':
+        - img [ref=f31e83]: dark_mode
