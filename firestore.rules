@@ -12,7 +12,7 @@ service cloud.firestore {
         && request.resource.data.text.size() <= max;
     }
 
-    // users: hanya pemilik yang bisa baca/tulis. avatar & fcmToken hanya di sini.
+    // users: hanya pemilik yang bisa baca/tulis.
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId)
@@ -20,8 +20,14 @@ service cloud.firestore {
         && request.resource.data.nickname.size() >= 1
         && request.resource.data.nickname.size() <= 30;
       allow update: if isOwner(userId)
-        && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['avatar', 'fcmToken', 'status', 'lastSeen']);
+        && (
+          // Update profil lengkap (re-login / overwrite)
+          (request.resource.data.nickname is string && request.resource.data.nickname.size() >= 1)
+          ||
+          // Update field terbatas
+          request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['avatar', 'fcmToken', 'status', 'lastSeen'])
+        );
       allow delete: if false;
     }
 
@@ -67,7 +73,7 @@ service cloud.firestore {
       allow read: if isParticipant();
       allow update: if isParticipant()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['lastMessage', 'lastMessageAt']);
+             .hasOnly(['lastMessage', 'lastMessageAt', 'unreadCounts', 'lastReadAt']);
       allow delete: if false;
 
       match /messages/{msgId} {

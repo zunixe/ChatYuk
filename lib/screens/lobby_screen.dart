@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../models/room_model.dart';
 import '../providers/room_provider.dart';
+import '../providers/locale_provider.dart';
 import 'room_chat_screen.dart';
 
 class LobbyScreen extends StatelessWidget {
@@ -10,25 +11,23 @@ class LobbyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(title: const Text('ChatYuk')),
       body: Consumer<RoomProvider>(
-        builder: (_, provider, _) {
+        builder: (_, provider, __) {
           if (provider.rooms.isEmpty) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('🏠', style: TextStyle(fontSize: 48)),
-                  SizedBox(height: 12),
-                  Text('Belum ada room', style: TextStyle(color: AppTheme.textSecondary)),
-                  SizedBox(height: 8),
-                  Text('Tap + di atas untuk seed room default', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  const Text('🏠', style: TextStyle(fontSize: 48)),
+                  const SizedBox(height: 12),
+                  Text(s.noRooms, style: const TextStyle(color: AppTheme.textSecondary)),
                 ],
               ),
             );
           }
-
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: provider.rooms.length,
@@ -46,6 +45,7 @@ class _RoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -55,46 +55,31 @@ class _RoomCard extends StatelessWidget {
           MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Row(
             children: [
-              // Icon
               Container(
-                width: 48,
-                height: 48,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
-                  child: Text(room.icon, style: const TextStyle(fontSize: 24)),
+                  child: Text(room.icon, style: const TextStyle(fontSize: 20)),
                 ),
               ),
-              const SizedBox(width: 14),
-              // Info
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      room.name,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text(room.name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
-                    Text(
-                      room.description,
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(room.description, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
-              // Online count
               Flexible(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -105,19 +90,9 @@ class _RoomCard extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppTheme.online,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.online, shape: BoxShape.circle)),
                       const SizedBox(width: 5),
-                      Text(
-                        '${room.onlineCount}',
-                        style: const TextStyle(color: AppTheme.online, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
+                      Text('${room.onlineCount} ${s.roomOnlineCount}', style: const TextStyle(color: AppTheme.online, fontSize: 12, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),

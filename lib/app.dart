@@ -5,6 +5,7 @@ import 'providers/auth_provider.dart';
 import 'providers/room_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/online_users_provider.dart';
+import 'providers/locale_provider.dart';
 import 'main.dart';
 import 'screens/entry_screen.dart';
 import 'screens/lobby_screen.dart';
@@ -23,13 +24,16 @@ class ChatYukApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => RoomProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => OnlineUsersProvider()),
+        ChangeNotifierProvider(create: (_) => localeProvider),
       ],
-      child: MaterialApp(
-        title: 'ChatYuk',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        navigatorKey: navigatorKey,
-        home: const _AuthGate(),
+      child: Consumer<LocaleProvider>(
+        builder: (_, locale, __) => MaterialApp(
+          title: 'ChatYuk',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          navigatorKey: navigatorKey,
+          home: const _AuthGate(),
+        ),
       ),
     );
   }
@@ -41,16 +45,17 @@ class _AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final s = context.watch<LocaleProvider>().s;
 
     if (auth.loading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: AppTheme.primary),
-              SizedBox(height: 16),
-              Text('Menghubungkan...', style: TextStyle(color: AppTheme.textSecondary)),
+              const CircularProgressIndicator(color: AppTheme.primary),
+              const SizedBox(height: 16),
+              Text(s.loading, style: const TextStyle(color: AppTheme.textSecondary)),
             ],
           ),
         ),
@@ -109,8 +114,8 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   int _tab = 0;
   final _pages = const [
     OnlineUsersScreen(),
-    LobbyScreen(),
     PrivateChatsScreen(),
+    LobbyScreen(),
     ProfileScreen(),
   ];
 
@@ -125,6 +130,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       context.read<ChatProvider>().loadBlockedUids(uid);
     }
   }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -143,23 +149,42 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       body: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: (_) => context.read<AuthProvider>().notifyActivity(),
         onPointerMove: (_) => context.read<AuthProvider>().notifyActivity(),
-        child: _pages[_tab],
+        child: IndexedStack(
+          index: _tab,
+          children: _pages,
+        ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
+      bottomNavigationBar: _BottomNav(
         currentIndex: _tab,
         onTap: (i) => setState(() => _tab = i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.wifi_tethering), label: 'Online'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Rooms'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Private'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
-        ],
       ),
+    );
+  }
+}
+
+class _BottomNav extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  const _BottomNav({required this.currentIndex, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    return BottomNavigationBar(
+      currentIndex: currentIndex,
+      onTap: onTap,
+      items: [
+        BottomNavigationBarItem(icon: const Icon(Icons.wifi_tethering), label: s.navOnline),
+        BottomNavigationBarItem(icon: const Icon(Icons.chat_bubble), label: s.navChats),
+        BottomNavigationBarItem(icon: const Icon(Icons.chat), label: s.navRooms),
+        BottomNavigationBarItem(icon: const Icon(Icons.person), label: s.navProfile),
+      ],
     );
   }
 }

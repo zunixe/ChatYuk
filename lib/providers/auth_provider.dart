@@ -67,10 +67,10 @@ class AuthProvider extends ChangeNotifier {
       city: city,
       ipAddress: ipAddress,
     );
-    // Daftarkan FCM token supaya user BARU langsung dapat notifikasi
-    await updateFcmToken();
     notifyListeners();
     resetIdleTimer();
+    // update FCM token di background — tidak perlu await agar navigasi langsung
+    updateFcmToken();
   }
 
   Future<void> updateAvatar(String base64) async {

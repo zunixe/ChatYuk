@@ -63,11 +63,20 @@ class ChatService {
     required String otherUid,
     required String myName,
     required String otherName,
+    String myGender = '',
+    String otherGender = '',
+    String myCountry = '',
+    String otherCountry = '',
+    int myAge = 0,
+    int otherAge = 0,
   }) async {
     final chatId = _chatId(myUid, otherUid);
     await _db.collection('privateChats').doc(chatId).set({
       'participants': [myUid, otherUid],
       'participantNames': {myUid: myName, otherUid: otherName},
+      'participantGenders': {myUid: myGender, otherUid: otherGender},
+      'participantLocations': {myUid: myCountry, otherUid: otherCountry},
+      'participantAges': {myUid: myAge, otherUid: otherAge},
       'lastMessage': '',
       'lastMessageAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -82,6 +91,7 @@ class ChatService {
     required String text,
     String type = 'text',
     String imageData = '',
+    String receiverId = '',
   }) async {
     await _db.collection('privateChats').doc(chatId).collection('messages').add({
       'senderId': senderId,
@@ -93,10 +103,24 @@ class ChatService {
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    await _db.collection('privateChats').doc(chatId).update({
+    final Map<String, dynamic> update = {
       'lastMessage': type == 'image' ? '[Foto]' : text,
       'lastMessageAt': FieldValue.serverTimestamp(),
-    });
+    };
+    // increment unread count untuk penerima
+    if (receiverId.isNotEmpty) {
+      update['unreadCounts.$receiverId'] = FieldValue.increment(1);
+    }
+    await _db.collection('privateChats').doc(chatId).update(update);
+  }
+
+  Future<void> markAsRead(String chatId, String uid) async {
+    try {
+      await _db.collection('privateChats').doc(chatId).update({
+        'unreadCounts.$uid': 0,
+        'lastReadAt.$uid': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
   }
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
@@ -111,8 +135,25 @@ class ChatService {
                 chatId: doc.id,
                 participants: List<String>.from(data['participants']),
                 participantNames: Map<String, String>.from(data['participantNames'] ?? {}),
+                participantGenders: Map<String, String>.from(data['participantGenders'] ?? {}),
+                participantLocations: Map<String, String>.from(data['participantLocations'] ?? {}),
+                participantAges: Map<String, int>.from(
+                  (data['participantAges'] as Map<dynamic, dynamic>? ?? {}).map(
+                    (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+                  ),
+                ),
                 lastMessage: data['lastMessage'] ?? '',
                 lastMessageAt: (data['lastMessageAt'] as dynamic)?.toDate() ?? DateTime.now(),
+                unreadCounts: Map<String, int>.from(
+                  (data['unreadCounts'] as Map<dynamic, dynamic>? ?? {}).map(
+                    (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+                  ),
+                ),
+                lastReadAt: Map<String, DateTime>.from(
+                  (data['lastReadAt'] as Map<dynamic, dynamic>? ?? {}).map(
+                    (k, v) => MapEntry(k.toString(), (v as dynamic)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0)),
+                  ),
+                ),
               );
             }).toList());
   }
@@ -216,14 +257,24 @@ class PrivateChatInfo {
   final String chatId;
   final List<String> participants;
   final Map<String, String> participantNames;
+  final Map<String, String> participantGenders;
+  final Map<String, String> participantLocations;
+  final Map<String, int> participantAges;
   final String lastMessage;
   final DateTime lastMessageAt;
+  final Map<String, int> unreadCounts;
+  final Map<String, DateTime> lastReadAt;
 
   PrivateChatInfo({
     required this.chatId,
     required this.participants,
     required this.participantNames,
+    this.participantGenders = const {},
+    this.participantLocations = const {},
+    this.participantAges = const {},
     required this.lastMessage,
     required this.lastMessageAt,
+    this.unreadCounts = const {},
+    this.lastReadAt = const {},
   });
 }

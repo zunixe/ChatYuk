@@ -6,6 +6,7 @@ import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/locale_provider.dart';
 import '../main.dart';
 import 'private_chat_screen.dart';
 
@@ -24,6 +25,10 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   AuthProvider? _auth;
   ChatProvider? _chat;
 
+  // Hoisted streams — bukan dibuat di build method
+  late Stream<List<MessageModel>> _msgsStream;
+  late Stream<List<UserModel>> _usersStream;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -35,6 +40,9 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   void initState() {
     super.initState();
     activeChatId.value = widget.room.id;
+    final chat = context.read<ChatProvider>();
+    _msgsStream = chat.getRoomMessages(widget.room.id);
+    _usersStream = chat.getOnlineUsersInRoom(widget.room.id);
     _joinRoom();
   }
 
@@ -93,6 +101,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   Widget build(BuildContext context) {
     final chat = context.read<ChatProvider>();
     final auth = context.read<AuthProvider>();
+    final s = context.watch<LocaleProvider>().s;
 
     return Scaffold(
       appBar: AppBar(
@@ -119,12 +128,12 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
               height: 120,
               color: AppTheme.bgCard,
               child: StreamBuilder<List<UserModel>>(
-                stream: chat.getOnlineUsersInRoom(widget.room.id),
+              stream: _usersStream,
                 builder: (_, snap) {
                   final users = snap.data ?? [];
                   if (users.isEmpty) {
-                    return const Center(
-                      child: Text('Belum ada user online', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                    return Center(
+                      child: Text(s.noOnlineUsers, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                     );
                   }
                   return ListView.builder(
@@ -140,7 +149,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
           // Messages
           Expanded(
             child: StreamBuilder<List<MessageModel>>(
-              stream: chat.getRoomMessages(widget.room.id),
+              stream: _msgsStream,
               builder: (_, snap) {
                 final msgs = snap.data ?? [];
                 if (msgs.isEmpty) {
@@ -155,7 +164,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                     ),
                   );
                 }
-                _scrollToBottom();
+                if (snap.hasData) _scrollToBottom();
                 return ListView.builder(
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.all(12),
@@ -180,11 +189,13 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   void _onTapUser(MessageModel msg, AuthProvider auth) {
     if (msg.senderId == auth.uid) return;
     if (context.read<ChatProvider>().isBlocked(msg.senderId)) {
+      final s = context.read<LocaleProvider>().s;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User ini diblokir')),
+        SnackBar(content: Text(s.msgBlocked)),
       );
       return;
     }
+    final s = context.read<LocaleProvider>().s;
 
     showModalBottomSheet(
       context: context,
@@ -208,7 +219,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(msg.senderName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-                        Text(msg.senderGender == 'male' ? '👨 Laki-laki' : msg.senderGender == 'female' ? '👩 Perempuan' : '🧑 Lainnya',
+                        Text(msg.senderGender == 'male' ? s.genderMale : msg.senderGender == 'female' ? s.genderFemale : s.genderOther,
                             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                       ],
                     ),
@@ -218,7 +229,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.chat_bubble, color: AppTheme.primary),
-              title: const Text('Private Chat', style: TextStyle(color: AppTheme.textPrimary)),
+              title: Text(s.titlePrivateChat, style: const TextStyle(color: AppTheme.textPrimary)),
               onTap: () async {
                 Navigator.of(context).pop();
                 final chatId = await context.read<ChatProvider>().startPrivateChat(
@@ -226,11 +237,14 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                   otherUid: msg.senderId,
                   myName: auth.profile!.nickname,
                   otherName: msg.senderName,
+                  myGender: auth.profile!.gender,
+                  otherGender: msg.senderGender,
+                  myAge: auth.profile!.age,
                 );
                 if (mounted) {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: msg.senderName, otherUid: msg.senderId)),
+                    MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: msg.senderName, otherUid: msg.senderId, otherGender: msg.senderGender, otherCountry: '')),
                   );
                 }
               },
@@ -264,14 +278,15 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
 
   void _showReportDialog(String reportedId, String reportedName) {
     String reason = '';
+    final s = context.read<LocaleProvider>().s;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
-        title: Text('Report $reportedName', style: const TextStyle(color: AppTheme.textPrimary)),
+        title: Text('${s.btnReport} $reportedName', style: const TextStyle(color: AppTheme.textPrimary)),
         content: TextField(
           style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: const InputDecoration(hintText: 'Alasan report...'),
+          decoration: InputDecoration(hintText: s.reportHint),
           onChanged: (v) => reason = v,
         ),
         actions: [
@@ -280,9 +295,9 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
             onPressed: () {
               context.read<ChatProvider>().reportUser(reporterId: context.read<AuthProvider>().uid!, reportedId: reportedId, reason: reason);
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Terima kasih, report diterima')));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.reportSuccess)));
             },
-            child: const Text('Report', style: TextStyle(color: AppTheme.danger)),
+            child: Text(s.btnReport, style: const TextStyle(color: AppTheme.danger)),
           ),
         ],
       ),
@@ -415,6 +430,7 @@ class _ChatInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: const BoxDecoration(
@@ -428,8 +444,8 @@ class _ChatInput extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-                decoration: const InputDecoration(
-                  hintText: 'Ketik pesan...',
+                decoration: InputDecoration(
+                  hintText: s.hintTypeMessage,
                   isDense: true,
                 ),
                 textInputAction: TextInputAction.send,

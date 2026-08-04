@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
+import '../config/strings.dart';
 import '../providers/auth_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/geo_service.dart';
 
 class EntryScreen extends StatefulWidget {
@@ -40,6 +42,10 @@ class _EntryScreenState extends State<EntryScreen> {
       _kota = kotaList.contains(info.city) ? info.city : kotaList.first;
       _ipAddress = info.ipAddress;
     });
+    // Auto-set bahasa dari IP — hanya jika belum pernah disimpan
+    if (mounted) {
+      await context.read<LocaleProvider>().setLangFromCountry(info.country);
+    }
   }
 
   @override
@@ -49,16 +55,23 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Future<void> _enter() async {
+    final s = context.read<LocaleProvider>().s;
     final nick = _nicknameCtrl.text.trim();
     if (nick.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Masukkan nickname dulu')),
+        SnackBar(content: Text(s.errNicknameEmpty)),
       );
       return;
     }
     if (nick.length < 3) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nickname minimal 3 karakter')),
+        SnackBar(content: Text(s.errNicknameShort)),
+      );
+      return;
+    }
+    if (nick.length > 20) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.errNicknameLong)),
       );
       return;
     }
@@ -76,7 +89,7 @@ class _EntryScreenState extends State<EntryScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal: $e')),
+          SnackBar(content: Text('${s.errGeneric}$e')),
         );
       }
     }
@@ -85,6 +98,7 @@ class _EntryScreenState extends State<EntryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -124,10 +138,10 @@ class _EntryScreenState extends State<EntryScreen> {
                 shaderCallback: (bounds) => const LinearGradient(
                   colors: [AppTheme.primary, AppTheme.accent],
                 ).createShader(bounds),
-                child: const Text(
-                  'Chat Tanpa Registrasi',
+                child: Text(
+                  s.appTagline,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
@@ -137,9 +151,9 @@ class _EntryScreenState extends State<EntryScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Langsung ngobrol, tanpa ribet!',
+                s.appSubtagline,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 14,
                 ),
@@ -150,37 +164,37 @@ class _EntryScreenState extends State<EntryScreen> {
               TextField(
                 controller: _nicknameCtrl,
                 style: const TextStyle(color: AppTheme.textPrimary),
-                decoration: const InputDecoration(
-                  hintText: 'Pilih nickname kamu...',
-                  labelText: 'Username',
+                decoration: InputDecoration(
+                  hintText: s.hintNickname,
+                  labelText: s.labelUsername,
                 ),
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _enter(),
               ),
               const SizedBox(height: 20),
 
-              // Gender - Radio buttons in cards
+              // Gender
               Row(
                 children: [
-                  Expanded(child: _genderCard('female', '👩', AppTheme.female)),
+                  Expanded(child: _genderCard('female', '👩', AppTheme.female, s.labelGenderFemale)),
                   const SizedBox(width: 12),
-                  Expanded(child: _genderCard('male', '👨', AppTheme.male)),
+                  Expanded(child: _genderCard('male', '👨', AppTheme.male, s.labelGenderMale)),
                 ],
               ),
               const SizedBox(height: 20),
 
-              // Age & Country row
+              // Age & Country
               Row(
                 children: [
-                  Expanded(child: _ageDropdown()),
+                  Expanded(child: _ageDropdown(s)),
                   const SizedBox(width: 12),
-                  Expanded(child: _countryDropdown()),
+                  Expanded(child: _countryDropdown(s)),
                 ],
               ),
               const SizedBox(height: 20),
 
               // City
-              _cityDropdown(),
+              _cityDropdown(s),
               const SizedBox(height: 28),
 
               // Button
@@ -197,9 +211,9 @@ class _EntryScreenState extends State<EntryScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text(
-                          'MULAI CHAT SEKARANG',
-                          style: TextStyle(
+                      : Text(
+                          s.btnStartChat,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1,
@@ -214,7 +228,7 @@ class _EntryScreenState extends State<EntryScreen> {
     );
   }
 
-  Widget _genderCard(String value, String emoji, Color color) {
+  Widget _genderCard(String value, String emoji, Color color, String label) {
     final selected = _gender == value;
     return GestureDetector(
       onTap: () => setState(() => _gender = value),
@@ -231,7 +245,6 @@ class _EntryScreenState extends State<EntryScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Radio circle
             Container(
               width: 18,
               height: 18,
@@ -256,10 +269,9 @@ class _EntryScreenState extends State<EntryScreen> {
                   : null,
             ),
             const SizedBox(width: 6),
-            // Label
             Flexible(
               child: Text(
-                value == 'male' ? 'Laki-laki' : 'Perempuan',
+                label,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
@@ -269,7 +281,6 @@ class _EntryScreenState extends State<EntryScreen> {
               ),
             ),
             const SizedBox(width: 6),
-            // Avatar circle
             Container(
               width: 30,
               height: 30,
@@ -278,10 +289,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 color: color.withValues(alpha: 0.15),
               ),
               child: Center(
-                child: Text(
-                  emoji,
-                  style: const TextStyle(fontSize: 15),
-                ),
+                child: Text(emoji, style: const TextStyle(fontSize: 15)),
               ),
             ),
           ],
@@ -290,12 +298,10 @@ class _EntryScreenState extends State<EntryScreen> {
     );
   }
 
-  Widget _ageDropdown() {
+  Widget _ageDropdown(S s) {
     return DropdownButtonFormField<int>(
-      initialValue: _age,
-      decoration: const InputDecoration(
-        labelText: 'Umur',
-      ),
+      value: _age,
+      decoration: InputDecoration(labelText: s.labelAge),
       items: [
         for (int i = 13; i <= 60; i++)
           DropdownMenuItem(value: i, child: Text('$i')),
@@ -306,15 +312,14 @@ class _EntryScreenState extends State<EntryScreen> {
     );
   }
 
-  Widget _countryDropdown() {
+  Widget _countryDropdown(S s) {
+    final isId = s.isId;
     return DropdownButtonFormField<String>(
-      initialValue: _negara,
-      decoration: const InputDecoration(
-        labelText: 'Negara',
-      ),
+      value: _negara,
+      decoration: InputDecoration(labelText: s.labelCountry),
       items: [
         for (final n in kotaByNegara.keys)
-          DropdownMenuItem(value: n, child: Text(n)),
+          DropdownMenuItem(value: n, child: Text(negaraLabel(n, isId))),
       ],
       onChanged: (v) {
         if (v == null) return;
@@ -326,12 +331,10 @@ class _EntryScreenState extends State<EntryScreen> {
     );
   }
 
-  Widget _cityDropdown() {
+  Widget _cityDropdown(S s) {
     return DropdownButtonFormField<String>(
-      initialValue: _kota,
-      decoration: const InputDecoration(
-        labelText: 'Kota',
-      ),
+      value: _kota,
+      decoration: InputDecoration(labelText: s.labelCity),
       items: [
         for (final k in kotaByNegara[_negara]!)
           DropdownMenuItem(value: k, child: Text(k)),

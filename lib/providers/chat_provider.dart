@@ -7,11 +7,18 @@ class ChatProvider extends ChangeNotifier {
   final ChatService _service = ChatService();
   List<String> _blockedUids = [];
 
+  // Stream cache — mencegah StreamBuilder resubscribe setiap build
+  // Pakai ShareReplay-like pattern: stream di-share tapi tidak di-close saat 0 subscriber
+  final _roomMsgCache = <String, Stream<List<MessageModel>>>{};
+  final _privateMsgCache = <String, Stream<List<MessageModel>>>{};
+  final _privateChatsCache = <String, Stream<List<PrivateChatInfo>>>{};
+  final _roomUsersCache = <String, Stream<List<UserModel>>>{};
+
   List<String> get blockedUids => _blockedUids;
 
   // Room chat
   Stream<List<MessageModel>> getRoomMessages(String roomId) {
-    return _service.getRoomMessages(roomId);
+    return _roomMsgCache.putIfAbsent(roomId, () => _service.getRoomMessages(roomId));
   }
 
   Future<void> sendRoomMessage({
@@ -36,17 +43,29 @@ class ChatProvider extends ChangeNotifier {
     required String otherUid,
     required String myName,
     required String otherName,
+    String myGender = '',
+    String otherGender = '',
+    String myCountry = '',
+    String otherCountry = '',
+    int myAge = 0,
+    int otherAge = 0,
   }) async {
     return _service.startPrivateChat(
       myUid: myUid,
       otherUid: otherUid,
       myName: myName,
       otherName: otherName,
+      myGender: myGender,
+      otherGender: otherGender,
+      myCountry: myCountry,
+      otherCountry: otherCountry,
+      myAge: myAge,
+      otherAge: otherAge,
     );
   }
 
   Stream<List<MessageModel>> getPrivateChatMessages(String chatId) {
-    return _service.getPrivateChatMessages(chatId);
+    return _privateMsgCache.putIfAbsent(chatId, () => _service.getPrivateChatMessages(chatId));
   }
 
   Future<void> sendPrivateMessage({
@@ -57,6 +76,7 @@ class ChatProvider extends ChangeNotifier {
     required String text,
     String type = 'text',
     String imageData = '',
+    String receiverId = '',
   }) async {
     await _service.sendPrivateMessage(
       chatId: chatId,
@@ -66,16 +86,21 @@ class ChatProvider extends ChangeNotifier {
       text: text,
       type: type,
       imageData: imageData,
+      receiverId: receiverId,
     );
   }
 
+  Future<void> markAsRead(String chatId, String uid) async {
+    await _service.markAsRead(chatId, uid);
+  }
+
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
-    return _service.getMyPrivateChats(myUid);
+    return _privateChatsCache.putIfAbsent(myUid, () => _service.getMyPrivateChats(myUid));
   }
 
   // Online users
   Stream<List<UserModel>> getOnlineUsersInRoom(String roomId) {
-    return _service.getOnlineUsersInRoom(roomId);
+    return _roomUsersCache.putIfAbsent(roomId, () => _service.getOnlineUsersInRoom(roomId));
   }
 
   Future<void> joinRoom(String roomId, UserModel user) async {
@@ -113,6 +138,10 @@ class ChatProvider extends ChangeNotifier {
 
   void reset() {
     _blockedUids = [];
+    _roomMsgCache.clear();
+    _privateMsgCache.clear();
+    _privateChatsCache.clear();
+    _roomUsersCache.clear();
     notifyListeners();
   }
 }
