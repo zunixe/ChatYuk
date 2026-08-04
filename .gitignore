@@ -38,6 +38,10 @@ app.*.symbols
 
 # Obfuscation related
 app.*.map.json
+.playwright-mcp/
+*serviceAccountKey*
+*firebase-adminsdk*
+google-services.json
 
 # Android Studio will place build artifacts here
 /android/app/debug
