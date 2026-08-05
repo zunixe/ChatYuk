@@ -81,6 +81,17 @@ class AuthService {
     return UserModel.fromMap(uid!, doc.data()!);
   }
 
+  Future<void> updateProfile({int? age, String? country, String? city}) async {
+    if (uid == null) return;
+    final data = <String, dynamic>{
+      if (age != null) 'age': age,
+      if (country != null) 'country': country,
+      if (city != null) 'city': city,
+    };
+    await _db.collection('users').doc(uid).update(data);
+    await _rtdb.ref('presence/$uid').update(data);
+  }
+
   Future<void> updateAvatar(String base64) async {
     if (uid == null) return;
     await _db.collection('users').doc(uid).update({'avatar': base64});
@@ -136,15 +147,6 @@ class AuthService {
   Future<void> signOut() async {
     await goOffline();
     await _auth.signOut();
-    // Hapus cache lokal Firestore agar history chat tidak tampil
-    // untuk user berikutnya di perangkat yang sama.
-    // Data di server TIDAK dihapus.
-    try {
-      await _db.clearPersistence();
-    } catch (_) {
-      // listener masih aktif / platform tidak mendukung: abaikan,
-      // query participants tetap memfilter history per user.
-    }
   }
 
   Stream<bool> get authState => _auth.authStateChanges().map((u) => u != null);

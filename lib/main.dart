@@ -10,11 +10,11 @@ import 'models/room_model.dart';
 import 'providers/locale_provider.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
+import 'utils.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final LocaleProvider localeProvider = LocaleProvider();
 
-/// Chat yang sedang dibuka di layar (null jika tidak ada).
 final ValueNotifier<String?> activeChatId = ValueNotifier(null);
 
 final lpn.FlutterLocalNotificationsPlugin localNotifications =
@@ -22,7 +22,35 @@ final lpn.FlutterLocalNotificationsPlugin localNotifications =
 
 const String _channelId = 'chatyuk_chat';
 
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {}
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  final data = message.data;
+  final title = message.notification?.title ??
+      (data['type'] == 'room' ? data['roomName'] ?? 'Room' : 'New message');
+  final body = message.notification?.body ?? 'You have a new message';
+
+  final androidInit = const lpn.AndroidInitializationSettings('@mipmap/ic_launcher');
+  final settings = lpn.InitializationSettings(android: androidInit);
+  final plugin = lpn.FlutterLocalNotificationsPlugin();
+  await plugin.initialize(settings: settings);
+
+  await plugin.show(
+    id: notifIdForKey(data['chatId'] ?? data['roomId'] ?? 'bg'),
+    title: title,
+    body: body,
+    notificationDetails: lpn.NotificationDetails(
+      android: lpn.AndroidNotificationDetails(
+        _channelId,
+        'Chat Notifications',
+        channelDescription: 'New message notifications from chat',
+        importance: lpn.Importance.high,
+        priority: lpn.Priority.high,
+      ),
+    ),
+    payload: jsonEncode(data),
+  );
+}
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
@@ -35,7 +63,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   final body = message.notification?.body ?? s.notifNewMessageBody;
 
   await localNotifications.show(
-    id: (data['chatId'] ?? data['roomId'] ?? 'chatyuk').hashCode,
+    id: notifIdForKey(data['chatId'] ?? data['roomId'] ?? 'local'),
     title: title,
     body: body,
     notificationDetails: lpn.NotificationDetails(
@@ -83,7 +111,6 @@ void _openFromMessage(RemoteMessage? message) {
 }
 
 Future<void> _initNotifications() async {
-  // Init locale dulu agar string notif sudah benar
   await localeProvider.init();
 
   final androidInit = const lpn.AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -133,12 +160,12 @@ void main() async {
     print('[PLATFORM-ERROR] $error\n$stack');
     return true;
   };
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } on FirebaseException catch (e) {
     if (e.code != 'duplicate-app') rethrow;
   }
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await _initNotifications();
   runApp(const ChatYukApp());
 }

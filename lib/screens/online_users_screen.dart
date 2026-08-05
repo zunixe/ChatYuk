@@ -21,9 +21,32 @@ class OnlineUsersScreen extends StatefulWidget {
 class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKeepAliveClientMixin {
   String _negara = 'all';
   String _gender = 'all';
+  int _page = 1;
+  static const int _pageSize = 20;
+  final ScrollController _scrollCtrl = ScrollController();
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 100) {
+      _page++;
+      setState(() {});
+    }
+  }
 
   Future<void> _startChat(BuildContext context, UserModel user) async {
     final auth = context.read<AuthProvider>();
@@ -87,6 +110,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                 }
               }
 
+              final paged = users.take(_page * _pageSize).toList();
+              final hasMore = paged.length < users.length;
+
               return Column(
                 children: [
                   Padding(
@@ -130,13 +156,24 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                             ),
                           )
                         : ListView.builder(
+                            controller: _scrollCtrl,
                             padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                            itemCount: users.length,
-                            itemBuilder: (_, i) => _UserCard(
-                              user: users[i],
-                              onTap: () => _startChat(context, users[i]),
-                              unreadCount: unreadMap[users[i].uid] ?? 0,
-                            ),
+                            itemCount: paged.length + (hasMore ? 1 : 0),
+                            itemBuilder: (_, i) {
+                              if (i >= paged.length) {
+                                return const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2),
+                                  ),
+                                );
+                              }
+                              return _UserCard(
+                                user: paged[i],
+                                onTap: () => _startChat(context, paged[i]),
+                                unreadCount: unreadMap[paged[i].uid] ?? 0,
+                              );
+                            },
                           ),
                   ),
                 ],

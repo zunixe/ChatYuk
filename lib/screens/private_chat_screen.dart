@@ -12,6 +12,7 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/chat_service.dart';
 import '../main.dart';
+import '../utils.dart';
 
 class PrivateChatScreen extends StatefulWidget {
   final String chatId;
@@ -37,12 +38,11 @@ class PrivateChatScreen extends StatefulWidget {
 class _PrivateChatScreenState extends State<PrivateChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  final _imagePicker = ImagePicker();
 
-  // Hoisted streams
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<PrivateChatInfo>> _chatInfoStream;
 
-  // Read receipt — updated dari single subscription
   DateTime? _otherLastRead;
   StreamSubscription<List<PrivateChatInfo>>? _chatInfoSub;
 
@@ -54,11 +54,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final chat = context.read<ChatProvider>();
     final auth = context.read<AuthProvider>();
 
-    // Hoist stream ke initState — bukan di build
     _msgsStream = chat.getPrivateChatMessages(widget.chatId);
     _chatInfoStream = chat.getMyPrivateChats(auth.uid ?? '');
 
-    // Subscribe sekali untuk lastReadAt — bukan per bubble
     _chatInfoSub = _chatInfoStream.listen((chats) {
       final info = chats.cast<PrivateChatInfo?>().firstWhere(
         (c) => c?.chatId == widget.chatId,
@@ -70,7 +68,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       }
     });
 
-    // reset unread count saat buka chat
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (auth.uid != null) chat.markAsRead(widget.chatId, auth.uid!);
     });
@@ -104,15 +101,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final chat = context.read<ChatProvider>();
     if (chat.isBlocked(widget.otherUid)) {
       final s = context.read<LocaleProvider>().s;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgBlocked)));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgBlocked)));
       return;
     }
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
     try {
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
-        senderId: auth.uid!,
-        senderName: auth.profile!.nickname,
-        senderGender: auth.profile!.gender,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
         text: text,
         receiverId: widget.otherUid,
       );
@@ -126,7 +126,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   Future<void> _sendPhoto() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 70);
+    final picked = await _imagePicker.pickImage(source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 70);
     if (picked == null) return;
 
     final bytes = await picked.readAsBytes();
@@ -146,12 +146,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
     try {
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
-        senderId: auth.uid!,
-        senderName: auth.profile!.nickname,
-        senderGender: auth.profile!.gender,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
         text: '',
         type: 'image',
         imageData: base64,
@@ -255,7 +258,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               },
             ),
           ),
-          // Input
           Container(
             padding: const EdgeInsets.all(12),
             decoration: const BoxDecoration(
@@ -328,7 +330,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 }
 
-// Bubble pesan — StatelessWidget, isRead diterima sebagai param (bukan StreamBuilder per bubble)
 class _MessageBubble extends StatelessWidget {
   final MessageModel msg;
   final bool isMe;
@@ -337,8 +338,7 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final h = msg.timestamp.hour.toString().padLeft(2, '0');
-    final m = msg.timestamp.minute.toString().padLeft(2, '0');
+    final timeStr = formatTime(msg.timestamp);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -362,7 +362,7 @@ class _MessageBubble extends StatelessWidget {
                   if (msg.type == 'image' && msg.imageData.isNotEmpty)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: _MessageImage(imageData: msg.imageData, timestamp: msg.timestamp),
+                      child: _MessageImage(imageData: msg.imageData),
                     )
                   else
                     Text(msg.text, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
@@ -370,7 +370,7 @@ class _MessageBubble extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('$h:$m', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                      Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
                       if (isMe) ...[
                         const SizedBox(width: 3),
                         Icon(
@@ -391,11 +391,9 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-// StatefulWidget — decode base64 sekali di initState, bukan setiap build
 class _MessageImage extends StatefulWidget {
   final String imageData;
-  final DateTime? timestamp;
-  const _MessageImage({required this.imageData, this.timestamp});
+  const _MessageImage({required this.imageData});
 
   @override
   State<_MessageImage> createState() => _MessageImageState();
@@ -403,41 +401,17 @@ class _MessageImage extends StatefulWidget {
 
 class _MessageImageState extends State<_MessageImage> {
   Uint8List? _bytes;
-  bool _expired = false;
-  Timer? _expireTimer;
 
   @override
   void initState() {
     super.initState();
-    if (widget.timestamp != null) {
-      final expireAt = widget.timestamp!.add(const Duration(seconds: 10));
-      final now = DateTime.now();
-      if (expireAt.isBefore(now)) {
-        _expired = true;
-      } else {
-        // Decode bytes saat belum expired
-        try { _bytes = base64Decode(widget.imageData); } catch (_) { _bytes = null; }
-        // Timer untuk auto-expire tepat saat waktunya habis
-        final remaining = expireAt.difference(now);
-        _expireTimer = Timer(remaining, () {
-          if (mounted) setState(() { _expired = true; _bytes = null; });
-        });
-      }
-    } else {
-      try { _bytes = base64Decode(widget.imageData); } catch (_) { _bytes = null; }
-    }
-  }
-
-  @override
-  void dispose() {
-    _expireTimer?.cancel();
-    super.dispose();
+    try { _bytes = base64Decode(widget.imageData); } catch (_) { _bytes = null; }
   }
 
   @override
   Widget build(BuildContext context) {
     final s = context.read<LocaleProvider>().s;
-    if (_expired || _bytes == null) {
+    if (_bytes == null) {
       return Container(
         width: 200, height: 120,
         color: AppTheme.bgInput,

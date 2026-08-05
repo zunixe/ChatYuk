@@ -18,6 +18,10 @@ class PrivateChatsScreen extends StatefulWidget {
 
 class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   Stream<List<PrivateChatInfo>>? _stream;
+  int _page = 1;
+  static const int _pageSize = 20;
+  final ScrollController _scrollCtrl = ScrollController();
+  int _lastTotal = 0;
 
   @override
   void initState() {
@@ -25,6 +29,21 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     final auth = context.read<AuthProvider>();
     if (auth.uid != null) {
       _stream = context.read<ChatProvider>().getMyPrivateChats(auth.uid!);
+    }
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 100) {
+      _page++;
+      setState(() {});
     }
   }
 
@@ -44,10 +63,17 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
             return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
           }
           final chats = snap.data ?? [];
+          // Reset page jika data berubah total
+          if (chats.length != _lastTotal) {
+            _lastTotal = chats.length;
+            _page = 1;
+          }
           final visible = chats.where((c) {
             final otherUid = c.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
             return !blocked.contains(otherUid);
           }).toList();
+          final paged = visible.take(_page * _pageSize).toList();
+          final hasMore = paged.length < visible.length;
           if (visible.isEmpty) {
             return Center(
               child: Column(
@@ -63,10 +89,19 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
             );
           }
           return ListView.builder(
+            controller: _scrollCtrl,
             padding: const EdgeInsets.all(16),
-            itemCount: visible.length,
+            itemCount: paged.length + (hasMore ? 1 : 0),
             itemBuilder: (_, i) {
-              final chat = visible[i];
+              if (i >= paged.length) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2),
+                  ),
+                );
+              }
+              final chat = paged[i];
               final otherUid = chat.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
               final otherName = chat.participantNames[otherUid] ?? 'Anon';
               final unread = chat.unreadCounts[auth.uid] ?? 0;

@@ -7,6 +7,7 @@ import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../utils.dart';
 import '../main.dart';
 import 'private_chat_screen.dart';
 
@@ -22,11 +23,11 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _showUsers = false;
+  bool _sheetOpen = false;
   AuthProvider? _auth;
   ChatProvider? _chat;
   int _lastMsgCount = 0;
 
-  // Hoisted streams — bukan dibuat di build method
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<UserModel>> _usersStream;
 
@@ -81,6 +82,13 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     });
   }
 
+  bool get _isNearBottom {
+    if (!_scrollCtrl.hasClients) return true;
+    final max = _scrollCtrl.position.maxScrollExtent;
+    final pixels = _scrollCtrl.position.pixels;
+    return max - pixels < 100;
+  }
+
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty) return;
@@ -88,11 +96,14 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
 
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
     await chat.sendRoomMessage(
       roomId: widget.room.id,
-      senderId: auth.uid!,
-      senderName: auth.profile!.nickname,
-      senderGender: auth.profile!.gender,
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
       text: text,
     );
     _scrollToBottom();
@@ -122,7 +133,6 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
       ),
       body: Column(
         children: [
-          // Online users panel
           if (_showUsers)
             Container(
               height: 120,
@@ -140,13 +150,16 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.all(12),
                     itemCount: users.length,
-                    itemBuilder: (_, i) => _UserChip(user: users[i], myUid: auth.uid),
+                    itemBuilder: (_, i) => _UserChip(
+                      user: users[i],
+                      myUid: auth.uid,
+                      color: Color(userColorPalette[colorHashForUid(users[i].uid) % userColorPalette.length]),
+                    ),
                   );
                 },
               ),
             ),
 
-          // Messages
           Expanded(
             child: StreamBuilder<List<MessageModel>>(
               stream: _msgsStream,
@@ -164,10 +177,11 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                     ),
                   );
                 }
-                // Scroll ke bawah hanya saat ada pesan baru
-                if (msgs.length > _lastMsgCount) {
+                if (msgs.length > _lastMsgCount && _isNearBottom) {
                   _lastMsgCount = msgs.length;
                   _scrollToBottom();
+                } else {
+                  _lastMsgCount = msgs.length;
                 }
                 return ListView.builder(
                   controller: _scrollCtrl,
@@ -176,6 +190,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                   itemBuilder: (_, i) => _MessageBubble(
                     msg: msgs[i],
                     isMe: msgs[i].senderId == auth.uid,
+                    color: Color(userColorPalette[colorHashForUid(msgs[i].senderId) % userColorPalette.length]),
                     onTapUser: () => _onTapUser(msgs[i], auth),
                   ),
                 );
@@ -183,7 +198,6 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
             ),
           ),
 
-          // Input
           _ChatInput(controller: _msgCtrl, onSend: _send),
         ],
       ),
@@ -192,6 +206,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
 
   void _onTapUser(MessageModel msg, AuthProvider auth) {
     if (msg.senderId == auth.uid) return;
+    if (_sheetOpen) return;
     if (context.read<ChatProvider>().isBlocked(msg.senderId)) {
       final s = context.read<LocaleProvider>().s;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -199,6 +214,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
       );
       return;
     }
+    _sheetOpen = true;
     final s = context.read<LocaleProvider>().s;
 
     showModalBottomSheet(
@@ -214,7 +230,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: _genderColor(msg.senderGender),
+                    backgroundColor: Color(userColorPalette[colorHashForUid(msg.senderId) % userColorPalette.length]),
                     child: Text(msg.senderName[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                   ),
                   const SizedBox(width: 12),
@@ -277,7 +293,9 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      _sheetOpen = false;
+    });
   }
 
   void _showReportDialog(String reportedId, String reportedName) {
@@ -307,23 +325,13 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
       ),
     );
   }
-
-  Color _genderColor(String gender) {
-    switch (gender) {
-      case 'male':
-        return AppTheme.male;
-      case 'female':
-        return AppTheme.female;
-      default:
-        return AppTheme.accent;
-    }
-  }
 }
 
 class _UserChip extends StatelessWidget {
   final UserModel user;
   final String? myUid;
-  const _UserChip({required this.user, this.myUid});
+  final Color color;
+  const _UserChip({required this.user, this.myUid, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -335,7 +343,7 @@ class _UserChip extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: isMe ? AppTheme.primary : _genderColor(user.gender),
+            backgroundColor: isMe ? AppTheme.primary : color,
             child: Text(
               user.initial,
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
@@ -351,33 +359,17 @@ class _UserChip extends StatelessWidget {
       ),
     );
   }
-
-  Color _genderColor(String gender) {
-    switch (gender) {
-      case 'male':
-        return AppTheme.male;
-      case 'female':
-        return AppTheme.female;
-      default:
-        return AppTheme.accent;
-    }
-  }
 }
 
 class _MessageBubble extends StatelessWidget {
   final MessageModel msg;
   final bool isMe;
+  final Color color;
   final VoidCallback onTapUser;
-  const _MessageBubble({required this.msg, required this.isMe, required this.onTapUser});
+  const _MessageBubble({required this.msg, required this.isMe, required this.color, required this.onTapUser});
 
   @override
   Widget build(BuildContext context) {
-    final color = msg.senderGender == 'male'
-        ? AppTheme.male
-        : msg.senderGender == 'female'
-            ? AppTheme.female
-            : AppTheme.accent;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(

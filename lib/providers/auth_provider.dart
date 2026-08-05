@@ -83,6 +83,16 @@ class AuthProvider extends ChangeNotifier {
     updateFcmToken();
   }
 
+  Future<void> updateProfile({int? age, String? country, String? city}) async {
+    await _auth.updateProfile(age: age, country: country, city: city);
+    _profile = _profile?.copyWith(
+      age: age ?? _profile?.age,
+      country: country ?? _profile?.country,
+      city: city ?? _profile?.city,
+    );
+    notifyListeners();
+  }
+
   Future<void> updateAvatar(String base64) async {
     await _auth.updateAvatar(base64);
     _profile = _profile?.copyWith(avatar: base64);

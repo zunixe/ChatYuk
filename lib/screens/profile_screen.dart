@@ -4,10 +4,11 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../config/regions.dart';
+import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import 'entry_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -90,6 +91,93 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _editProfile() async {
+    final s = context.read<LocaleProvider>().s;
+    final profile = context.read<AuthProvider>().profile;
+    if (profile == null) return;
+    int age = profile.age;
+    String negara = profile.country;
+    String kota = profile.city;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      isScrollControlled: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(sheetCtx).viewInsets.bottom),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 16),
+                Text(s.btnEditProfile, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  value: age,
+                  decoration: InputDecoration(labelText: s.labelAge),
+                  items: [
+                    for (int i = 13; i <= 60; i++)
+                      DropdownMenuItem(value: i, child: Text('$i')),
+                  ],
+                  onChanged: (v) => setSheet(() => age = v ?? age),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: negara,
+                  decoration: InputDecoration(labelText: s.labelCountry),
+                  items: [
+                    for (final n in kotaByNegara.keys)
+                      DropdownMenuItem(value: n, child: Text(negaraLabel(n, s.isId))),
+                  ],
+                  onChanged: (v) => setSheet(() {
+                    if (v == null) return;
+                    negara = v;
+                    kota = kotaByNegara[v]!.first;
+                  }),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: kota,
+                  decoration: InputDecoration(labelText: s.labelCity),
+                  items: [
+                    for (final k in kotaByNegara[negara]!)
+                      DropdownMenuItem(value: k, child: Text(k)),
+                  ],
+                  onChanged: (v) => setSheet(() => kota = v ?? kota),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(sheetCtx);
+                      try {
+                        await context.read<AuthProvider>().updateProfile(age: age, country: negara, city: kota);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgProfileSaved)));
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errProfileSave}$e')));
+                        }
+                      }
+                    },
+                    child: Text(s.btnSave),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthProvider>();
@@ -98,7 +186,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final s = locale.s;
 
     return Scaffold(
-      appBar: AppBar(title: Text(s.titleProfile)),
+      appBar: AppBar(
+        title: Text(s.titleProfile),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: s.btnEditProfile,
+            onPressed: _editProfile,
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -160,7 +257,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _infoRow(s.labelStatus, _statusLabel(profile?.status ?? 'offline')),
+                     _infoRow(s.labelStatus, _statusLabel(profile?.status ?? 'offline', s)),
+                    const Divider(color: AppTheme.divider),
+                    _infoRow(s.labelCountry, profile?.country ?? '-'),
+                    const Divider(color: AppTheme.divider),
+                    _infoRow(s.labelCity, profile?.city ?? '-'),
                     const Divider(color: AppTheme.divider),
                     _infoRow(s.labelUserId, auth.uid?.substring(0, 8) ?? '-'),
                   ],
@@ -211,12 +312,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   final chat = context.read<ChatProvider>();
                   await auth.signOut();
                   chat.reset();
-                  if (context.mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const EntryScreen()),
-                      (route) => false,
-                    );
-                  }
                 },
                 icon: const Icon(Icons.logout),
                 label: Text(s.btnLogout),
@@ -247,11 +342,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  String _statusLabel(String status) {
+  String _statusLabel(String status, S s) {
     switch (status) {
-      case 'idle': return '🟡 Idle';
-      case 'offline': return '⚪ Offline';
-      default: return '🟢 Online';
+      case 'idle': return '�� ${s.statusIdle}';
+      case 'offline': return '⚪ ${s.statusOffline}';
+      default: return '🟢 ${s.statusOnline}';
     }
   }
 }

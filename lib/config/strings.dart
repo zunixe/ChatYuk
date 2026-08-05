@@ -81,6 +81,10 @@ class S {
   String get genderLabelMale  => isId ? '👨 Laki-laki'                 : '👨 Male';
   String get genderLabelFemale => isId ? '👩 Perempuan'                : '👩 Female';
   String get genderLabelOther => isId ? '🧑 Lainnya'                   : '🧑 Other';
+  String get btnEditProfile  => isId ? 'Edit Profil'                   : 'Edit Profile';
+  String get btnSave         => isId ? 'Simpan'                        : 'Save';
+  String get errProfileSave  => isId ? 'Gagal simpan profil: '         : 'Failed to save profile: ';
+  String get msgProfileSaved => isId ? 'Profil berhasil disimpan'      : 'Profile saved';
 
   // ── Avatar Options ──
   String get avatarCamera     => isId ? 'Ambil Foto'                  : 'Take Photo';

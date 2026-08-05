@@ -198,10 +198,10 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
         ChangeNotifierProvider.value(value: _onlineUsersProvider),
       ],
       child: Scaffold(
-        body: Listener(
+        body: GestureDetector(
           behavior: HitTestBehavior.translucent,
-          onPointerDown: (_) => context.read<AuthProvider>().notifyActivity(),
-          onPointerMove: (_) => context.read<AuthProvider>().notifyActivity(),
+          onTap: () => context.read<AuthProvider>().notifyActivity(),
+          onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
           child: IndexedStack(
             index: _tab,
             children: _pages,

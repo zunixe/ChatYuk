@@ -1,3 +1,5 @@
+import '../utils.dart';
+
 class MessageModel {
   final String id;
   final String senderId;
@@ -28,7 +30,7 @@ class MessageModel {
       text: map['text'] ?? '',
       type: map['type'] ?? 'text',
       imageData: map['imageData'] ?? '',
-      timestamp: (map['timestamp'] as dynamic)?.toDate() ?? DateTime.now(),
+      timestamp: parseDate(map['timestamp']),
     );
   }
 

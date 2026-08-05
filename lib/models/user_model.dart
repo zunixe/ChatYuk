@@ -1,12 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-DateTime _parseDate(dynamic v) {
-  if (v == null) return DateTime.now();
-  if (v is DateTime) return v;
-  if (v is Timestamp) return v.toDate();
-  if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
-  return DateTime.now();
-}
+import '../utils.dart';
 
 class UserModel {
   final String uid;
@@ -48,9 +40,9 @@ class UserModel {
       ipAddress: map['ipAddress'] ?? '',
       status: map['status'] ?? (map['online'] == true ? 'online' : 'offline'),
       avatar: map['avatar'] ?? '',
-      loginAt: _parseDate(map['loginAt']),
-      createdAt: _parseDate(map['createdAt']),
-      lastSeen: _parseDate(map['lastSeen']),
+      loginAt: parseDate(map['loginAt']),
+      createdAt: parseDate(map['createdAt']),
+      lastSeen: parseDate(map['lastSeen']),
     );
   }
 

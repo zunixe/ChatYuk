@@ -12,8 +12,10 @@ class RoomProvider extends ChangeNotifier {
   bool _seeded = false;
   StreamSubscription? _roomsSub;
   StreamSubscription? _countsSub;
+  String? _error;
 
   List<RoomModel> get rooms => _rooms;
+  String? get error => _error;
 
   RoomProvider() {
     _roomsSub = _service.getRooms().listen((rooms) {
@@ -23,8 +25,13 @@ class RoomProvider extends ChangeNotifier {
         _seeded = true;
         seedRooms();
       }
+      _error = null;
       notifyListeners();
-    }, onError: (_) {});
+    }, onError: (e) {
+      debugPrint('[RoomProvider] rooms stream error: $e');
+      _error = e.toString();
+      notifyListeners();
+    });
 
     _countsSub = _chat.getRoomOnlineCounts().listen((counts) {
       bool changed = false;
@@ -37,7 +44,9 @@ class RoomProvider extends ChangeNotifier {
         _applyCounts();
         notifyListeners();
       }
-    }, onError: (_) {});
+    }, onError: (e) {
+      debugPrint('[RoomProvider] counts stream error: $e');
+    });
   }
 
   void _applyCounts() {
