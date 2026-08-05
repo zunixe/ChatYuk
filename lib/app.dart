@@ -21,13 +21,11 @@ class ChatYukApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => RoomProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ChangeNotifierProvider(create: (_) => OnlineUsersProvider()),
         ChangeNotifierProvider(create: (_) => localeProvider),
       ],
       child: Consumer<LocaleProvider>(
-        builder: (_, locale, __) => MaterialApp(
+        builder: (_, __, ___) => MaterialApp(
           title: 'ChatYuk',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
@@ -39,13 +37,37 @@ class ChatYukApp extends StatelessWidget {
   }
 }
 
-class _AuthGate extends StatelessWidget {
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
+
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  @override
+  void initState() {
+    super.initState();
+    final auth = context.read<AuthProvider>();
+    print('[GATE-STATE] initState inst=${auth.instanceId}');
+    auth.addListener(_onAuthChanged);
+  }
+
+  void _onAuthChanged() {
+    print('[GATE-STATE] LISTENER FIRED inst=${context.read<AuthProvider>().instanceId} profile=${context.read<AuthProvider>().profile?.uid}');
+  }
+
+  @override
+  void dispose() {
+    context.read<AuthProvider>().removeListener(_onAuthChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
+    print('[GATE] loading=${auth.loading} profile=${auth.profile?.uid} error=${auth.error} inst=${auth.instanceId}');
 
     if (auth.loading) {
       return Scaffold(
@@ -99,7 +121,12 @@ class _AuthGate extends StatelessWidget {
       return const EntryScreen();
     }
 
-    return const _MainNav();
+    try {
+      return const _MainNav();
+    } catch (e, st) {
+      print('[GATE] _MainNav BUILD ERROR: $e\n$st');
+      rethrow;
+    }
   }
 }
 
@@ -119,21 +146,37 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     ProfileScreen(),
   ];
 
+  // Provider dibuat sekali sebagai field — bukan di build()
+  final _roomProvider = RoomProvider();
+  final _onlineUsersProvider = OnlineUsersProvider();
+
   @override
   void initState() {
     super.initState();
+    print('[MAINNAV] initState');
     WidgetsBinding.instance.addObserver(this);
     final auth = context.read<AuthProvider>();
-    auth.goOnline();
+    try {
+      auth.goOnline();
+    } catch (e) {
+      print('[MAINNAV] goOnline ERROR: $e');
+    }
     final uid = auth.uid;
     if (uid != null) {
-      context.read<ChatProvider>().loadBlockedUids(uid);
+      try {
+        context.read<ChatProvider>().loadBlockedUids(uid);
+      } catch (e) {
+        print('[MAINNAV] loadBlockedUids ERROR: $e');
+      }
     }
   }
 
   @override
   void dispose() {
+    print('[MAINNAV] dispose');
     WidgetsBinding.instance.removeObserver(this);
+    _roomProvider.dispose();
+    _onlineUsersProvider.dispose();
     super.dispose();
   }
 
@@ -149,20 +192,25 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    return Scaffold(
-      body: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => context.read<AuthProvider>().notifyActivity(),
-        onPointerMove: (_) => context.read<AuthProvider>().notifyActivity(),
-        child: IndexedStack(
-          index: _tab,
-          children: _pages,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: _roomProvider),
+        ChangeNotifierProvider.value(value: _onlineUsersProvider),
+      ],
+      child: Scaffold(
+        body: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => context.read<AuthProvider>().notifyActivity(),
+          onPointerMove: (_) => context.read<AuthProvider>().notifyActivity(),
+          child: IndexedStack(
+            index: _tab,
+            children: _pages,
+          ),
         ),
-      ),
-      bottomNavigationBar: _BottomNav(
-        currentIndex: _tab,
-        onTap: (i) => setState(() => _tab = i),
+        bottomNavigationBar: _BottomNav(
+          currentIndex: _tab,
+          onTap: (i) => setState(() => _tab = i),
+        ),
       ),
     );
   }

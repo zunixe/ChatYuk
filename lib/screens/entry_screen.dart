@@ -23,6 +23,7 @@ class _EntryScreenState extends State<EntryScreen> {
   late String _kota;
   String _ipAddress = '';
   bool _loading = false;
+  bool _entered = false; // guard: cegah double submit
 
   @override
   void initState() {
@@ -55,28 +56,24 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Future<void> _enter() async {
+    if (_entered) return; // guard double submit
     final s = context.read<LocaleProvider>().s;
     final nick = _nicknameCtrl.text.trim();
     if (nick.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.errNicknameEmpty)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errNicknameEmpty)));
       return;
     }
     if (nick.length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.errNicknameShort)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errNicknameShort)));
       return;
     }
     if (nick.length > 20) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.errNicknameLong)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errNicknameLong)));
       return;
     }
-
+    _entered = true;
     setState(() => _loading = true);
+    print('[ENTRY] _enter start nick=$nick');
     try {
       await context.read<AuthProvider>().registerProfile(
             nickname: nick,
@@ -86,14 +83,18 @@ class _EntryScreenState extends State<EntryScreen> {
             city: _kota,
             ipAddress: _ipAddress,
           );
+      print('[ENTRY] registerProfile returned OK');
     } catch (e) {
+      print('[ENTRY] registerProfile ERROR: $e');
+      _entered = false; // allow retry on error
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${s.errGeneric}$e')),
-        );
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
       }
+      return;
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
+    print('[ENTRY] _enter done, loading=false');
   }
 
   @override

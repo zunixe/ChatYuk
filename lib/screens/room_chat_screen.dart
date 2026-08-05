@@ -24,6 +24,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   bool _showUsers = false;
   AuthProvider? _auth;
   ChatProvider? _chat;
+  int _lastMsgCount = 0;
 
   // Hoisted streams — bukan dibuat di build method
   late Stream<List<MessageModel>> _msgsStream;
@@ -99,7 +100,6 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final chat = context.read<ChatProvider>();
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
 
@@ -164,7 +164,11 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                     ),
                   );
                 }
-                if (snap.hasData) _scrollToBottom();
+                // Scroll ke bawah hanya saat ada pesan baru
+                if (msgs.length > _lastMsgCount) {
+                  _lastMsgCount = msgs.length;
+                  _scrollToBottom();
+                }
                 return ListView.builder(
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.all(12),

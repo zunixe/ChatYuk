@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -124,6 +125,14 @@ Future<void> _initNotifications() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) {
+    print('[FLUTTER-ERROR] ${details.exception}');
+    print('[FLUTTER-ERROR] ${details.stack}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    print('[PLATFORM-ERROR] $error\n$stack');
+    return true;
+  };
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);

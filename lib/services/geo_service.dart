@@ -28,7 +28,7 @@ class GeoService {
     try {
       final res = await http
           .get(Uri.parse('https://ipapi.co/json/'))
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 3));
       if (res.statusCode != 200) return null;
 
       final data = jsonDecode(res.body) as Map<String, dynamic>;

@@ -295,12 +295,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
-  String _formatTime(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '$h:$m';
-  }
-
   void _showReportDialog() {
     String reason = '';
     final s = context.read<LocaleProvider>().s;
@@ -410,19 +404,34 @@ class _MessageImage extends StatefulWidget {
 class _MessageImageState extends State<_MessageImage> {
   Uint8List? _bytes;
   bool _expired = false;
+  Timer? _expireTimer;
 
   @override
   void initState() {
     super.initState();
-    _expired = widget.timestamp != null &&
-        widget.timestamp!.add(const Duration(seconds: 10)).isBefore(DateTime.now());
-    if (!_expired) {
-      try {
-        _bytes = base64Decode(widget.imageData);
-      } catch (_) {
-        _bytes = null;
+    if (widget.timestamp != null) {
+      final expireAt = widget.timestamp!.add(const Duration(seconds: 10));
+      final now = DateTime.now();
+      if (expireAt.isBefore(now)) {
+        _expired = true;
+      } else {
+        // Decode bytes saat belum expired
+        try { _bytes = base64Decode(widget.imageData); } catch (_) { _bytes = null; }
+        // Timer untuk auto-expire tepat saat waktunya habis
+        final remaining = expireAt.difference(now);
+        _expireTimer = Timer(remaining, () {
+          if (mounted) setState(() { _expired = true; _bytes = null; });
+        });
       }
+    } else {
+      try { _bytes = base64Decode(widget.imageData); } catch (_) { _bytes = null; }
     }
+  }
+
+  @override
+  void dispose() {
+    _expireTimer?.cancel();
+    super.dispose();
   }
 
   @override

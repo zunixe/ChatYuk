@@ -45,6 +45,7 @@ class AuthService {
       lastSeen: now,
     );
 
+    // Tulis ke Firestore — ini yang critical, perlu await
     await _db.collection('users').doc(user.uid).set({
       ...profile.toMap(),
       'createdAt': FieldValue.serverTimestamp(),
@@ -52,10 +53,9 @@ class AuthService {
       'loginAt': FieldValue.serverTimestamp(),
     });
 
-    // Set online in RTDB (tanpa data sensitif: ipAddress & fcmToken
-    // hanya disimpan di Firestore users yang owner-only read)
+    // Set presence di RTDB — jalankan di background, tidak perlu await
     final presenceRef = _rtdb.ref('presence/${user.uid}');
-    await presenceRef.set({
+    presenceRef.set({
       'nickname': nickname,
       'gender': gender,
       'age': age,
@@ -65,8 +65,6 @@ class AuthService {
       'online': true,
       'lastSeen': ServerValue.timestamp,
     });
-    // Jika app di-kill / koneksi putus tanpa sempat goOffline,
-    // status otomatis jadi offline di server.
     presenceRef.onDisconnect().update({
       'status': 'offline',
       'online': false,
@@ -103,7 +101,8 @@ class AuthService {
 
   Future<void> goOffline() async {
     if (uid == null) return;
-    await _rtdb.ref('presence/$uid').update({
+    // Fire-and-forget — tidak perlu await
+    _rtdb.ref('presence/$uid').update({
       'status': 'offline',
       'online': false,
       'lastSeen': ServerValue.timestamp,
@@ -112,7 +111,7 @@ class AuthService {
 
   Future<void> goIdle() async {
     if (uid == null) return;
-    await _rtdb.ref('presence/$uid').update({
+    _rtdb.ref('presence/$uid').update({
       'status': 'idle',
       'online': true,
     });
@@ -121,12 +120,12 @@ class AuthService {
   Future<void> goOnline() async {
     if (uid == null) return;
     final ref = _rtdb.ref('presence/$uid');
-    await ref.update({
+    // Fire-and-forget — tidak perlu await
+    ref.update({
       'status': 'online',
       'online': true,
       'lastSeen': ServerValue.timestamp,
     });
-    // Set ulang onDisconnect tiap kali koneksi aktif
     ref.onDisconnect().update({
       'status': 'offline',
       'online': false,

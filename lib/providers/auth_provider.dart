@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _auth = AuthService();
+  final String instanceId = 'AP-${DateTime.now().microsecondsSinceEpoch.toString().substring(8)}';
   UserModel? _profile;
   bool _loading = true;
 
@@ -22,22 +23,29 @@ class AuthProvider extends ChangeNotifier {
   String? get uid => _auth.uid;
 
   AuthProvider() {
+    print('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
     _init();
   }
 
   Future<void> _init() async {
+    print('[AUTH] _init start');
     _loading = true;
     _error = null;
     notifyListeners();
     try {
+      print('[AUTH] signInAnonymously...');
       await _auth.signInAnonymously();
+      print('[AUTH] signInAnonymously OK');
       _profile = await _auth.getProfile();
+      print('[AUTH] getProfile -> ${_profile?.uid}');
       if (_profile != null) await updateFcmToken();
     } catch (e) {
+      print('[AUTH] _init ERROR: $e');
       _error = e.toString();
     }
     _loading = false;
     notifyListeners();
+    print('[AUTH] _init done loading=false');
   }
 
   Future<void> updateFcmToken() async {
@@ -59,6 +67,7 @@ class AuthProvider extends ChangeNotifier {
     required String city,
     String ipAddress = '',
   }) async {
+    print('[AUTH] registerProfile START: $nickname inst=$instanceId');
     _profile = await _auth.registerProfile(
       nickname: nickname,
       gender: gender,
@@ -67,9 +76,10 @@ class AuthProvider extends ChangeNotifier {
       city: city,
       ipAddress: ipAddress,
     );
+    print('[AUTH] registerProfile DONE: ${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
     notifyListeners();
+    print('[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
     resetIdleTimer();
-    // update FCM token di background — tidak perlu await agar navigasi langsung
     updateFcmToken();
   }
 

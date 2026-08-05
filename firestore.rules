@@ -73,7 +73,8 @@ service cloud.firestore {
       allow read: if isParticipant();
       allow update: if isParticipant()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['lastMessage', 'lastMessageAt', 'unreadCounts', 'lastReadAt']);
+             .hasOnly(['lastMessage', 'lastMessageAt', 'unreadCounts', 'lastReadAt',
+                       'participantNames', 'participantGenders', 'participantLocations', 'participantAges']);
       allow delete: if false;
 
       match /messages/{msgId} {
