@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/chat_service.dart';
+import '../utils.dart';
 import 'private_chat_screen.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   static const int _pageSize = 20;
   final ScrollController _scrollCtrl = ScrollController();
   int _lastTotal = 0;
+  Set<String> _hiddenChats = {};
 
   @override
   void initState() {
@@ -29,8 +31,19 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     final auth = context.read<AuthProvider>();
     if (auth.uid != null) {
       _stream = context.read<ChatProvider>().getMyPrivateChats(auth.uid!);
+      _loadHidden(auth.uid!);
     }
     _scrollCtrl.addListener(_onScroll);
+  }
+
+  Future<void> _loadHidden(String uid) async {
+    final hidden = await context.read<ChatProvider>().getHiddenChats(uid);
+    if (mounted) setState(() => _hiddenChats = hidden);
+  }
+
+  Future<void> _deleteChat(String uid, String chatId) async {
+    await context.read<ChatProvider>().hideChat(uid, chatId);
+    if (mounted) setState(() => _hiddenChats = {..._hiddenChats, chatId});
   }
 
   @override
@@ -62,19 +75,15 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
           }
-          final chats = snap.data ?? [];
+          final chats = (snap.data ?? [])
+              .where((c) => !_hiddenChats.contains(c.chatId))
+              .toList();
           // Reset page jika data berubah total
           if (chats.length != _lastTotal) {
             _lastTotal = chats.length;
             _page = 1;
           }
-          final visible = chats.where((c) {
-            final otherUid = c.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-            return !blocked.contains(otherUid);
-          }).toList();
-          final paged = visible.take(_page * _pageSize).toList();
-          final hasMore = paged.length < visible.length;
-          if (visible.isEmpty) {
+          if (chats.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -88,6 +97,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
               ),
             );
           }
+          // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus
+          final paged = chats.take(_page * _pageSize).toList();
+          final hasMore = paged.length < chats.length;
           return ListView.builder(
             controller: _scrollCtrl,
             padding: const EdgeInsets.all(16),
@@ -105,72 +117,211 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
               final otherUid = chat.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
               final otherName = chat.participantNames[otherUid] ?? 'Anon';
               final unread = chat.unreadCounts[auth.uid] ?? 0;
+              final isBlocked = blocked.contains(otherUid);
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PrivateChatScreen(
-                        chatId: chat.chatId,
-                        otherName: otherName,
-                        otherUid: otherUid,
-                        otherGender: chat.participantGenders[otherUid] ?? '',
-                        otherCountry: chat.participantLocations[otherUid] ?? '',
-                        otherAge: chat.participantAges[otherUid] ?? 0,
-                      ),
-                    ),
+              return Dismissible(
+                key: ValueKey(chat.chatId),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.danger,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40, height: 40,
-                          decoration: BoxDecoration(
-                            color: AppTheme.accent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Center(
-                            child: Text(otherName[0].toUpperCase(),
-                              style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 16)),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(otherName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 2),
-                              Text(
-                                _chatSubtitle(chat, auth.uid!, s),
-                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(_formatTime(chat.lastMessageAt, s), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            if (unread > 0) ...[
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(color: AppTheme.primary, borderRadius: BorderRadius.circular(10)),
-                                child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-                              ),
-                            ],
-                          ],
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.delete_outline, color: Colors.white, size: 24),
+                      SizedBox(height: 4),
+                      Text('Hapus', style: TextStyle(color: Colors.white, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                confirmDismiss: (_) async {
+                  return await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: AppTheme.bgCard,
+                      title: Text(s.btnDeleteChat, style: const TextStyle(color: AppTheme.textPrimary)),
+                      content: Text(s.deleteChatConfirm, style: const TextStyle(color: AppTheme.textSecondary)),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(context.read<LocaleProvider>().s.btnCancel)),
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: Text(s.btnDeleteChat, style: const TextStyle(color: AppTheme.danger)),
                         ),
                       ],
                     ),
+                  ) ?? false;
+                },
+                onDismissed: (_) async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  await _deleteChat(auth.uid!, chat.chatId);
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(s.deleteChatSuccess)));
+                  }
+                },
+                child: Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  color: isBlocked ? AppTheme.bgCard.withValues(alpha: 0.5) : null,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PrivateChatScreen(
+                          chatId: chat.chatId,
+                          otherName: otherName,
+                          otherUid: otherUid,
+                          otherGender: chat.participantGenders[otherUid] ?? '',
+                          otherCountry: chat.participantLocations[otherUid] ?? '',
+                          otherAge: chat.participantAges[otherUid] ?? 0,
+                        ),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Row(
+                        children: [
+                          Stack(
+                            children: [
+                              Container(
+                                width: 44, height: 44,
+                                decoration: BoxDecoration(
+                                  color: isBlocked
+                                      ? AppTheme.textSecondary.withValues(alpha: 0.15)
+                                      : AppTheme.accent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Center(
+                                  child: Text(otherName[0].toUpperCase(),
+                                    style: TextStyle(
+                                      color: isBlocked ? AppTheme.textSecondary : AppTheme.textPrimary,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 18,
+                                    )),
+                                ),
+                              ),
+                              if (isBlocked)
+                                Positioned(
+                                  right: -2, bottom: -2,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.danger,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(Icons.block, size: 10, color: Colors.white),
+                                  ),
+                                )
+                              else
+                                Positioned(
+                                  right: -1, bottom: -1,
+                                  child: StreamBuilder<String>(
+                                    stream: context.read<ChatProvider>().getUserStatus(otherUid),
+                                    builder: (_, snap) {
+                                      final status = snap.data ?? 'offline';
+                                      final color = status == 'online'
+                                          ? const Color(0xFF4CAF50)
+                                          : status == 'idle'
+                                              ? const Color(0xFFFFC107)
+                                              : const Color(0xFF9E9E9E);
+                                      return Container(
+                                        width: 12, height: 12,
+                                        decoration: BoxDecoration(
+                                          color: color,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(otherName,
+                                        style: TextStyle(
+                                          color: isBlocked ? AppTheme.textSecondary : AppTheme.textPrimary,
+                                          fontWeight: FontWeight.w600,
+                                        )),
+                                    ),
+                                    if (isBlocked)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.danger.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(s.msgBlocked.split(',').first,
+                                          style: const TextStyle(color: AppTheme.danger, fontSize: 10, fontWeight: FontWeight.w600)),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _chatSubtitle(chat, auth.uid!, s),
+                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        if (isBlocked)
+                          GestureDetector(
+                            onTap: () async {
+                              await context.read<ChatProvider>().unblockUser(auth.uid!, otherUid);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(s.unblockSuccess)));
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppTheme.primary),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(s.btnUnblock,
+                                style: const TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+                            ),
+                          )
+                        else
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(_formatTime(chat.lastMessageAt, s),
+                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                              if (unread > 0) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text('$unread',
+                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                                ),
+                              ],
+                            ],
+                          ),
+                      ],
+                    ),
                   ),
+                ),
                 ),
               );
             },
@@ -193,11 +344,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   }
 
   String _formatTime(DateTime dt, S s) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return s.timeJustNow;
-    if (diff.inHours < 1) return '${diff.inMinutes}m';
-    if (diff.inDays < 1) return '${diff.inHours}${s.isId ? "j" : "h"}';
-    return '${diff.inDays}d';
+    return formatRelativeTime(dt, isId: s.isId);
   }
 }

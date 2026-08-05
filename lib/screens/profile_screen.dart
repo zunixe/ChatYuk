@@ -9,6 +9,7 @@ import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import 'link_email_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -298,6 +299,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Keamanan Akun
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s.titleAccountSecurity, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 12),
+                    if (auth.isAnonymous) ...[
+                      // Warning anonim
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_outlined, color: Colors.orange, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(s.msgAnonymousWarning, style: const TextStyle(color: Colors.orange, fontSize: 12))),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LinkEmailScreen())),
+                          icon: const Icon(Icons.security, size: 18),
+                          label: Text(s.btnSecureAccount),
+                        ),
+                      ),
+                    ] else ...[
+                      // Sudah punya email
+                      Row(
+                        children: [
+                          const Icon(Icons.verified_user, color: Colors.green, size: 20),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(s.labelSecuredAccount, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                              Text(
+                                auth.userEmail ?? '-',
+                                style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

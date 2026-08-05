@@ -12,26 +12,15 @@ class RoomProvider extends ChangeNotifier {
   bool _seeded = false;
   StreamSubscription? _roomsSub;
   StreamSubscription? _countsSub;
+  Timer? _pollTimer;
   String? _error;
 
   List<RoomModel> get rooms => _rooms;
   String? get error => _error;
 
   RoomProvider() {
-    _roomsSub = _service.getRooms().listen((rooms) {
-      _rooms = rooms;
-      _applyCounts();
-      if (!_seeded && rooms.isEmpty) {
-        _seeded = true;
-        seedRooms();
-      }
-      _error = null;
-      notifyListeners();
-    }, onError: (e) {
-      debugPrint('[RoomProvider] rooms stream error: $e');
-      _error = e.toString();
-      notifyListeners();
-    });
+    _pollTimer = Timer.periodic(const Duration(minutes: 5), (_) => reload());
+    reload();
 
     _countsSub = _chat.getRoomOnlineCounts().listen((counts) {
       bool changed = false;
@@ -47,6 +36,24 @@ class RoomProvider extends ChangeNotifier {
     }, onError: (e) {
       debugPrint('[RoomProvider] counts stream error: $e');
     });
+  }
+
+  Future<void> reload() async {
+    try {
+      final rooms = await _service.fetchRooms();
+      _rooms = rooms;
+      _applyCounts();
+      if (!_seeded && rooms.isEmpty) {
+        _seeded = true;
+        seedRooms();
+      }
+      _error = null;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[RoomProvider] fetch rooms error: $e');
+      _error = e.toString();
+      notifyListeners();
+    }
   }
 
   void _applyCounts() {
@@ -65,6 +72,7 @@ class RoomProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _roomsSub?.cancel();
     _countsSub?.cancel();
     super.dispose();

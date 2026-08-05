@@ -6,6 +6,9 @@ import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/geo_service.dart';
+import '../utils.dart';
+import 'register_screen.dart';
+import 'login_screen.dart';
 
 class EntryScreen extends StatefulWidget {
   const EntryScreen({super.key});
@@ -71,9 +74,13 @@ class _EntryScreenState extends State<EntryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errNicknameLong)));
       return;
     }
+    if (!isValidNickname(nick)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errNicknameInvalid)));
+      return;
+    }
     _entered = true;
     setState(() => _loading = true);
-    print('[ENTRY] _enter start nick=$nick');
+    debugPrint('[ENTRY] _enter start nick=$nick');
     try {
       await context.read<AuthProvider>().registerProfile(
             nickname: nick,
@@ -83,9 +90,9 @@ class _EntryScreenState extends State<EntryScreen> {
             city: _kota,
             ipAddress: _ipAddress,
           );
-      print('[ENTRY] registerProfile returned OK');
+      debugPrint('[ENTRY] registerProfile returned OK');
     } catch (e) {
-      print('[ENTRY] registerProfile ERROR: $e');
+      debugPrint('[ENTRY] registerProfile ERROR: $e');
       _entered = false; // allow retry on error
       if (mounted) {
         setState(() => _loading = false);
@@ -94,45 +101,32 @@ class _EntryScreenState extends State<EntryScreen> {
       return;
     }
     if (mounted) setState(() => _loading = false);
-    print('[ENTRY] _enter done, loading=false');
+    debugPrint('[ENTRY] _enter done, loading=false');
   }
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
 
-              // Logo
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppTheme.primary, AppTheme.accent],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.35),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Text('💬', style: TextStyle(fontSize: 30)),
+              // Logo — sama dengan icon aplikasi
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset(
+                  'assets/app_icon.png',
+                  width: 72,
+                  height: 72,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
 
               // Title
               ShaderMask(
@@ -143,23 +137,23 @@ class _EntryScreenState extends State<EntryScreen> {
                   s.appTagline,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 26,
+                    fontSize: 22,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
                     letterSpacing: 0.5,
                   ),
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 s.appSubtagline,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 14,
+                  fontSize: 13,
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 12),
 
               // Nickname
               TextField(
@@ -172,7 +166,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _enter(),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
 
               // Gender
               Row(
@@ -182,7 +176,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   Expanded(child: _genderCard('male', '👨', AppTheme.male, s.labelGenderMale)),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
 
               // Age & Country
               Row(
@@ -192,11 +186,11 @@ class _EntryScreenState extends State<EntryScreen> {
                   Expanded(child: _countryDropdown(s)),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
 
               // City
               _cityDropdown(s),
-              const SizedBox(height: 28),
+              const SizedBox(height: 12),
 
               // Button
               SizedBox(
@@ -222,6 +216,43 @@ class _EntryScreenState extends State<EntryScreen> {
                         ),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // Divider
+              Row(children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('atau', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                ),
+                const Expanded(child: Divider()),
+              ]),
+              const SizedBox(height: 12),
+
+              // Daftar dengan Email
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RegisterScreen())),
+                  icon: const Icon(Icons.email_outlined, size: 18),
+                  label: Text(s.btnRegisterEmail),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primary,
+                    side: const BorderSide(color: AppTheme.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Sudah punya akun
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen())),
+                  child: Text(s.btnLoginEmail, style: const TextStyle(color: AppTheme.primary)),
+                ),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -314,31 +345,39 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Widget _countryDropdown(S s) {
-    final isId = s.isId;
     return DropdownButtonFormField<String>(
       value: _negara,
       decoration: InputDecoration(labelText: s.labelCountry),
+      isExpanded: true,
+      menuMaxHeight: 350,
       items: [
         for (final n in kotaByNegara.keys)
-          DropdownMenuItem(value: n, child: Text(negaraLabel(n, isId))),
+          DropdownMenuItem(value: n, child: Text(n, overflow: TextOverflow.ellipsis)),
       ],
       onChanged: (v) {
         if (v == null) return;
+        final cities = getCitiesForCountry(v);
         setState(() {
           _negara = v;
-          _kota = kotaByNegara[v]!.first;
+          _kota = cities.isNotEmpty ? cities.first : '';
         });
       },
     );
   }
 
   Widget _cityDropdown(S s) {
+    final cities = getCitiesForCountry(_negara);
+    if (cities.isEmpty) return const SizedBox.shrink();
+    // Ensure _kota is valid for current country
+    final validKota = cities.contains(_kota) ? _kota : cities.first;
     return DropdownButtonFormField<String>(
-      value: _kota,
+      value: validKota,
       decoration: InputDecoration(labelText: s.labelCity),
+      isExpanded: true,
+      menuMaxHeight: 350,
       items: [
-        for (final k in kotaByNegara[_negara]!)
-          DropdownMenuItem(value: k, child: Text(k)),
+        for (final k in cities)
+          DropdownMenuItem(value: k, child: Text(k, overflow: TextOverflow.ellipsis)),
       ],
       onChanged: (v) {
         if (v != null) setState(() => _kota = v);

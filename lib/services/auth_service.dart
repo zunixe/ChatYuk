@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../config/supabase_config.dart';
@@ -11,10 +12,53 @@ class AuthService {
   String? get uid => _sb.auth.currentUser?.id;
   bool get isSignedIn => _sb.auth.currentUser != null;
 
+  bool get isAnonymous => _sb.auth.currentUser?.isAnonymous ?? true;
+  String? get userEmail => _sb.auth.currentUser?.email;
+
   Future<void> signInAnonymously() async {
     if (_sb.auth.currentUser != null) return;
     final res = await _sb.auth.signInAnonymously();
-    print('[AUTH] signInAnonymously -> ${res.user?.id}');
+    debugPrint('[AUTH] signInAnonymously -> ${res.user?.id}');
+  }
+
+  /// Daftar akun baru dengan email + password.
+  /// Mengembalikan userId — caller harus panggil registerProfile() setelahnya.
+  Future<String> signUpWithEmail(String email, String password) async {
+    final res = await _sb.auth.signUp(
+      email: email,
+      password: password,
+      emailRedirectTo: 'chatyuk://login-callback',
+    );
+    final user = res.user;
+    if (user == null) throw Exception('Sign up failed: no user returned');
+    return user.id;
+  }
+
+  /// Login dengan email + password.
+  /// Setelah ini, getProfile() akan mengembalikan profile user.
+  Future<void> signInWithEmail(String email, String password) async {
+    final res = await _sb.auth.signInWithPassword(email: email, password: password);
+    if (res.user == null) throw Exception('Login failed');
+  }
+
+  /// Upgrade anonymous account ke email account.
+  /// UID tidak berubah — semua data (chat, profile) dipertahankan.
+  Future<void> linkEmailToAccount(String email, String password) async {
+    await _sb.auth.updateUser(UserAttributes(email: email, password: password));
+  }
+
+  /// Kirim email reset password.
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _sb.auth.resetPasswordForEmail(email);
+  }
+
+  /// Cek apakah nickname sudah dipakai oleh user lain.
+  Future<bool> isNicknameAvailable(String nickname) async {
+    final id = uid;
+    var query = _sb.from('profiles').select('id').eq('nickname', nickname);
+    if (id != null) query = query.neq('id', id);
+    final res = await query.maybeSingle();
+    return res == null; // null = tidak ada yang pakai
   }
 
   Future<UserModel> registerProfile({
@@ -23,7 +67,7 @@ class AuthService {
     required int age,
     required String country,
     required String city,
-    String ipAddress = '',
+    String ipAddress = '', // disimpan di model lokal saja, tidak dikirim ke DB
   }) async {
     if (_sb.auth.currentUser == null) {
       await signInAnonymously();
@@ -37,7 +81,7 @@ class AuthService {
       age: age,
       country: country,
       city: city,
-      ipAddress: ipAddress,
+      ipAddress: '', // tidak disimpan untuk privacy
       status: 'online',
       avatar: '',
       loginAt: now,
@@ -52,7 +96,7 @@ class AuthService {
       'age': age,
       'country': country,
       'city': city,
-      'ip_address': ipAddress,
+      // ip_address tidak dikirim ke DB — privacy (GDPR/CCPA)
       'status': 'online',
       'avatar': '',
       'fcm_token': '',
@@ -67,7 +111,9 @@ class AuthService {
   Future<UserModel?> getProfile() async {
     final id = uid;
     if (id == null) return null;
-    final res = await _sb.from('profiles').select().eq('id', id).maybeSingle();
+    // Exclude fcm_token dan ip_address — tidak dibutuhkan di model
+    const cols = 'id,nickname,gender,age,country,city,status,avatar,login_at,created_at,last_seen';
+    final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
     if (res == null) return null;
     return UserModel.fromMap(id, snakeToCamel(res));
   }
@@ -86,6 +132,14 @@ class AuthService {
   Future<void> updateAvatar(String base64) async {
     final id = uid;
     if (id == null) return;
+    // Validasi base64 adalah JPEG atau PNG yang valid
+    if (base64.isNotEmpty && !isValidImageBase64(base64)) {
+      throw Exception('Invalid image format');
+    }
+    // Limit ukuran: max 512KB base64 (~384KB file)
+    if (base64.length > 524288) {
+      throw Exception('Image too large (max 384KB)');
+    }
     await _sb.from('profiles').update({'avatar': base64}).eq('id', id);
   }
 

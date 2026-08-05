@@ -114,10 +114,16 @@ alter table public.private_messages enable row level security;
 
 create policy "private_messages_select" on public.private_messages
   for select using (
+    -- Peserta chat bisa lihat pesan, KECUALI pesan dari orang yang diblokir
     exists (
       select 1 from public.private_chats pc
       where pc.chat_id = private_messages.chat_id
         and auth.uid() = any (pc.participants)
+    )
+    and not exists (
+      select 1 from public.blocks b
+      where b.blocker_id = auth.uid()
+        and b.blocked_id = private_messages.sender_id
     )
   );
 
@@ -128,6 +134,17 @@ create policy "private_messages_insert" on public.private_messages
       select 1 from public.private_chats pc
       where pc.chat_id = private_messages.chat_id
         and auth.uid() = any (pc.participants)
+    )
+    -- Tidak bisa kirim pesan jika diblokir oleh penerima
+    and not exists (
+      select 1 from public.blocks b
+      where b.blocked_id = auth.uid()
+        and b.blocker_id = (
+          select unnest(participants) from public.private_chats
+          where chat_id = private_messages.chat_id
+            and unnest(participants) != auth.uid()
+          limit 1
+        )
     )
   );
 

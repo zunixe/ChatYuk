@@ -30,7 +30,7 @@ class MessageModel {
       text: map['text'] ?? '',
       type: map['type'] ?? 'text',
       imageData: map['imageData'] ?? '',
-      timestamp: parseDate(map['timestamp']),
+      timestamp: parseDate(map['timestamp'] ?? map['createdAt']),
     );
   }
 

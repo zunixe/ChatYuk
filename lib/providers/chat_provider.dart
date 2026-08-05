@@ -66,8 +66,13 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Stream<List<MessageModel>> getPrivateChatMessages(String chatId) {
-    return _privateMsgCache.putIfAbsent(chatId, () => _service.getPrivateChatMessages(chatId));
+    // Jangan cache stream private chat — controller.onCancel di _cachedMessagesStream
+    // memanggil removeChannel saat screen ditutup, sehingga stream lama tidak emit lagi.
+    // Setiap buka chat harus dapat stream baru yang fresh.
+    return _service.getPrivateChatMessages(chatId);
   }
+
+  Stream<String> getUserStatus(String uid) => _service.getUserStatus(uid);
 
   Future<void> sendPrivateMessage({
     required String chatId,
@@ -116,6 +121,20 @@ class ChatProvider extends ChangeNotifier {
   Future<void> blockUser(String myUid, String otherUid) async {
     await _service.blockUser(myUid, otherUid);
     await loadBlockedUids(myUid);
+  }
+
+  Future<void> unblockUser(String myUid, String otherUid) async {
+    await _service.unblockUser(myUid, otherUid);
+    await loadBlockedUids(myUid);
+  }
+
+  // Hide Chat (client-side delete)
+  Future<void> hideChat(String myUid, String chatId) async {
+    await _service.hideChat(myUid, chatId);
+  }
+
+  Future<Set<String>> getHiddenChats(String myUid) {
+    return _service.getHiddenChats(myUid);
   }
 
   Future<void> reportUser({
