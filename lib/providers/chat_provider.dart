@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
+import '../services/message_cache.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatService _service = ChatService();
@@ -18,7 +19,7 @@ class ChatProvider extends ChangeNotifier {
 
   // Room chat
   Stream<List<MessageModel>> getRoomMessages(String roomId) {
-    return _roomMsgCache.putIfAbsent(roomId, () => _service.getRoomMessages(roomId));
+    return _roomMsgCache.putIfAbsent(roomId, () => _service.getRoomMessagesCached(roomId));
   }
 
   Future<void> sendRoomMessage({
@@ -142,6 +143,8 @@ class ChatProvider extends ChangeNotifier {
     _privateMsgCache.clear();
     _privateChatsCache.clear();
     _roomUsersCache.clear();
+    _service.clearCachedStreams();
+    MessageCache.instance.clearAll();
     notifyListeners();
   }
 }

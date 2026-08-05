@@ -45,6 +45,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   DateTime? _otherLastRead;
   StreamSubscription<List<PrivateChatInfo>>? _chatInfoSub;
+  final List<MessageModel> _pending = [];
 
   @override
   void initState() {
@@ -107,6 +108,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
+    final pending = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      text: text,
+      type: 'text',
+      imageData: '',
+      timestamp: DateTime.now(),
+    );
+    setState(() => _pending.add(pending));
     try {
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
@@ -116,8 +128,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         text: text,
         receiverId: widget.otherUid,
       );
+      // Pending tetap tampil sampai stream server mengkonfirmasi (dedupe di builder).
     } catch (e) {
       if (mounted) {
+        setState(() => _pending.remove(pending));
         final s = context.read<LocaleProvider>().s;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errSendFailed}$e')));
       }
@@ -227,7 +241,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               stream: _msgsStream,
               builder: (_, snap) {
                 final msgs = snap.data ?? [];
-                if (msgs.isEmpty) {
+                // Pending yang sudah dikonfirmasi server (muncul di stream) tidak perlu ditampilkan lagi.
+                final confirmedText = msgs.where((m) => m.type == 'text').map((m) => m.text).toSet();
+                if (_pending.isNotEmpty) {
+                  final toRemove = _pending.where((p) => p.type == 'text' && confirmedText.contains(p.text)).toList();
+                  if (toRemove.isNotEmpty) {
+                    for (final p in toRemove) { _pending.remove(p); }
+                    // Hapus pending via setState tidak aman di build; gunakan callback.
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) setState(() {});
+                    });
+                  }
+                }
+                final all = [...msgs, ..._pending];
+                if (all.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -243,15 +270,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   controller: _scrollCtrl,
                   reverse: true,
                   padding: const EdgeInsets.all(12),
-                  itemCount: msgs.length,
+                  itemCount: all.length,
                   itemBuilder: (_, i) {
-                    final msg = msgs[msgs.length - 1 - i];
+                    final msg = all[all.length - 1 - i];
                     final isMe = msg.senderId == auth.uid;
-                    final isRead = isMe && _otherLastRead != null && msg.timestamp.isBefore(_otherLastRead!);
+                    final isPending = msg.id.startsWith('pending-');
+                    final isRead = isMe && !isPending && _otherLastRead != null && msg.timestamp.isBefore(_otherLastRead!);
                     return _MessageBubble(
                       msg: msg,
                       isMe: isMe,
                       isRead: isRead,
+                      isPending: isPending,
                     );
                   },
                 );
@@ -334,7 +363,8 @@ class _MessageBubble extends StatelessWidget {
   final MessageModel msg;
   final bool isMe;
   final bool isRead;
-  const _MessageBubble({required this.msg, required this.isMe, required this.isRead});
+  final bool isPending;
+  const _MessageBubble({required this.msg, required this.isMe, required this.isRead, this.isPending = false});
 
   @override
   Widget build(BuildContext context) {
@@ -373,11 +403,14 @@ class _MessageBubble extends StatelessWidget {
                       Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
                       if (isMe) ...[
                         const SizedBox(width: 3),
-                        Icon(
-                          isRead ? Icons.done_all : Icons.done,
-                          size: 12,
-                          color: isRead ? AppTheme.primary : AppTheme.textSecondary,
-                        ),
+                        if (isPending)
+                          Icon(Icons.done, size: 12, color: AppTheme.textSecondary)
+                        else
+                          Icon(
+                            isRead ? Icons.done_all : Icons.done_all,
+                            size: 12,
+                            color: isRead ? AppTheme.primary : AppTheme.textSecondary,
+                          ),
                       ],
                     ],
                   ),

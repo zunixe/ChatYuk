@@ -1,25 +1,32 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
+import '../config/supabase_config.dart';
+import '../services/message_cache.dart';
+import '../utils.dart';
 
 class ChatService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseDatabase _rtdb = FirebaseDatabase.instance;
+  final SupabaseClient _sb = SupabaseConfig.client;
 
   // ── Room Chat ──
 
   Stream<List<MessageModel>> getRoomMessages(String roomId) {
-    return _db
-        .collection('rooms')
-        .doc(roomId)
-        .collection('messages')
-        .orderBy('timestamp', descending: false)
-        .limitToLast(100)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => MessageModel.fromMap(doc.id, doc.data()))
+    return _sb
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('room_id', roomId)
+        .order('created_at', ascending: true)
+        .limit(100)
+        .map((rows) => rows
+            .map((row) => MessageModel.fromMap('${row['id']}', snakeToCamel(row)))
             .toList());
+  }
+
+  /// Stream pesan room dengan cache lokal (instan) + realtime server.
+  Stream<List<MessageModel>> getRoomMessagesCached(String roomId) {
+    return _cachedMessagesStream(cacheKey: 'room_$roomId');
   }
 
   Future<void> sendRoomMessage({
@@ -29,12 +36,14 @@ class ChatService {
     required String senderGender,
     required String text,
   }) async {
-    await _db.collection('rooms').doc(roomId).collection('messages').add({
-      'senderId': senderId,
-      'senderName': senderName,
-      'senderGender': senderGender,
+    await _sb.from('messages').insert({
+      'room_id': roomId,
+      'sender_id': senderId,
+      'sender_name': senderName,
+      'sender_gender': senderGender,
       'text': text,
-      'timestamp': FieldValue.serverTimestamp(),
+      'type': 'text',
+      'image_data': '',
     });
   }
 
@@ -46,16 +55,68 @@ class ChatService {
   }
 
   Stream<List<MessageModel>> getPrivateChatMessages(String chatId) {
-    return _db
-        .collection('privateChats')
-        .doc(chatId)
-        .collection('messages')
-        .orderBy('timestamp', descending: false)
-        .limitToLast(100)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => MessageModel.fromMap(doc.id, doc.data()))
-            .toList());
+    return _cachedMessagesStream(cacheKey: 'private_$chatId');
+  }
+
+  /// Gabungan cache lokal (dulu, instan) + realtime server (setelahnya).
+  /// Menggunakan explicit fetch + postgres changes channel (lebih reliable dari .stream()).
+  Stream<List<MessageModel>> _cachedMessagesStream({
+    required String cacheKey,
+  }) {
+    final controller = StreamController<List<MessageModel>>.broadcast();
+
+    // Fetch langsung dari server (bukan .stream() realtime yang bermasalah)
+    Future<List<MessageModel>> fetchServer() async {
+      final rows = await _sb
+          .from(cacheKey.startsWith('private_') ? 'private_messages' : 'messages')
+          .select()
+          .eq(cacheKey.startsWith('private_') ? 'chat_id' : 'room_id',
+              cacheKey.split('_').skip(1).join('_'))
+          .order('created_at', ascending: true)
+          .limit(100);
+      return rows
+          .map((row) => MessageModel.fromMap('${row['id']}', snakeToCamel(row)))
+          .toList();
+    }
+
+    Future<void> reload() async {
+      try {
+        final server = await fetchServer();
+        if (controller.isClosed) return;
+        controller.add(server);
+        MessageCache.instance.saveMessages(cacheKey, server);
+      } catch (e) {
+        debugPrint('[_cachedMessagesStream] fetch error: $e');
+      }
+    }
+
+    Future<void> loadCache() async {
+      final cached = await MessageCache.instance.loadMessages(cacheKey);
+      if (cached.isNotEmpty && !controller.isClosed) {
+        controller.add(cached);
+      }
+      reload();
+    }
+
+    // Subscribe postgres changes ke table yang relevan
+    final table = cacheKey.startsWith('private_') ? 'private_messages' : 'messages';
+    final channelName = 'msg-${cacheKey.hashCode}';
+    final channel = _sb.channel(channelName);
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: table,
+      callback: (_) => reload(),
+    );
+    channel.subscribe();
+
+    loadCache();
+
+    controller.onCancel = () {
+      _sb.removeChannel(channel);
+    };
+
+    return controller.stream;
   }
 
   Future<String> startPrivateChat({
@@ -71,15 +132,16 @@ class ChatService {
     int otherAge = 0,
   }) async {
     final chatId = _chatId(myUid, otherUid);
-    await _db.collection('privateChats').doc(chatId).set({
+    await _sb.from('private_chats').upsert({
+      'chat_id': chatId,
       'participants': [myUid, otherUid],
-      'participantNames': {myUid: myName, otherUid: otherName},
-      'participantGenders': {myUid: myGender, otherUid: otherGender},
-      'participantLocations': {myUid: myCountry, otherUid: otherCountry},
-      'participantAges': {myUid: myAge, otherUid: otherAge},
-      'lastMessage': '',
-      'lastMessageAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'participant_names': {myUid: myName, otherUid: otherName},
+      'participant_genders': {myUid: myGender, otherUid: otherGender},
+      'participant_locations': {myUid: myCountry, otherUid: otherCountry},
+      'participant_ages': {myUid: myAge, otherUid: otherAge},
+      'last_message': '',
+      'last_message_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'chat_id');
     return chatId;
   }
 
@@ -93,140 +155,188 @@ class ChatService {
     String imageData = '',
     String receiverId = '',
   }) async {
-    await _db.collection('privateChats').doc(chatId).collection('messages').add({
-      'senderId': senderId,
-      'senderName': senderName,
-      'senderGender': senderGender,
+    await _sb.from('private_messages').insert({
+      'chat_id': chatId,
+      'sender_id': senderId,
+      'sender_name': senderName,
+      'sender_gender': senderGender,
       'text': text,
       'type': type,
-      'imageData': imageData,
-      'timestamp': FieldValue.serverTimestamp(),
+      'image_data': imageData,
     });
 
-    final Map<String, dynamic> update = {
-      'lastMessage': type == 'image' ? '[Foto]' : text,
-      'lastMessageAt': FieldValue.serverTimestamp(),
+    final update = <String, dynamic>{
+      'last_message': type == 'image' ? '[Foto]' : text,
+      'last_message_at': DateTime.now().toUtc().toIso8601String(),
     };
-    // increment unread count untuk penerima
-    if (receiverId.isNotEmpty) {
-      update['unreadCounts.$receiverId'] = FieldValue.increment(1);
-    }
-    await _db.collection('privateChats').doc(chatId).update(update);
+    await _sb.from('private_chats').update(update).eq('chat_id', chatId);
   }
+
+  // Map: userId -> list of reload callbacks untuk getMyPrivateChats streams
+  final Map<String, List<void Function()>> _chatReloaders = {};
 
   Future<void> markAsRead(String chatId, String uid) async {
     try {
-      await _db.collection('privateChats').doc(chatId).update({
-        'unreadCounts.$uid': 0,
-        'lastReadAt.$uid': FieldValue.serverTimestamp(),
-      });
+      final chat = await _sb.from('private_chats').select('unread_counts,last_read_at')
+          .eq('chat_id', chatId).maybeSingle();
+      if (chat == null) return;
+      final unread = Map<String, dynamic>.from(chat['unread_counts'] ?? {});
+      unread[uid] = 0;
+      final lastRead = Map<String, dynamic>.from(chat['last_read_at'] ?? {});
+      lastRead[uid] = DateTime.now().toUtc().toIso8601String();
+      await _sb.from('private_chats').update({
+        'unread_counts': unread,
+        'last_read_at': lastRead,
+      }).eq('chat_id', chatId);
+      _refreshChatStreams(uid);
     } catch (_) {}
   }
 
+  void _refreshChatStreams(String myUid) {
+    final callbacks = _chatReloaders[myUid];
+    if (callbacks == null) return;
+    for (final cb in List.of(callbacks)) {
+      cb();
+    }
+  }
+
+  void clearCachedStreams() {
+    _chatReloaders.clear();
+  }
+
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
-    return _db
-        .collection('privateChats')
-        .where('participants', arrayContains: myUid)
-        .orderBy('lastMessageAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map((doc) {
-              final data = doc.data();
-              return PrivateChatInfo(
-                chatId: doc.id,
-                participants: List<String>.from(data['participants']),
-                participantNames: Map<String, String>.from(data['participantNames'] ?? {}),
-                participantGenders: Map<String, String>.from(data['participantGenders'] ?? {}),
-                participantLocations: Map<String, String>.from(data['participantLocations'] ?? {}),
-                participantAges: Map<String, int>.from(
-                  (data['participantAges'] as Map<dynamic, dynamic>? ?? {}).map(
-                    (k, v) => MapEntry(k.toString(), (v as num).toInt()),
-                  ),
-                ),
-                lastMessage: data['lastMessage'] ?? '',
-                lastMessageAt: (data['lastMessageAt'] as dynamic)?.toDate() ?? DateTime.now(),
-                unreadCounts: Map<String, int>.from(
-                  (data['unreadCounts'] as Map<dynamic, dynamic>? ?? {}).map(
-                    (k, v) => MapEntry(k.toString(), (v as num).toInt()),
-                  ),
-                ),
-                lastReadAt: Map<String, DateTime>.from(
-                  (data['lastReadAt'] as Map<dynamic, dynamic>? ?? {}).map(
-                    (k, v) => MapEntry(k.toString(), (v as dynamic)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0)),
-                  ),
-                ),
+    final controller = StreamController<List<PrivateChatInfo>>.broadcast();
+
+    Future<List<PrivateChatInfo>> fetch() async {
+      final rows = await _sb
+          .from('private_chats')
+          .select()
+          .contains('participants', [myUid])
+          .order('last_message_at', ascending: false);
+      return rows.map((row) {
+        final d = snakeToCamel(row);
+        return PrivateChatInfo(
+          chatId: d['chatId'] ?? '',
+          participants: List<String>.from(d['participants'] ?? []),
+          participantNames: Map<String, String>.from(d['participantNames'] ?? {}),
+          participantGenders: Map<String, String>.from(d['participantGenders'] ?? {}),
+          participantLocations: Map<String, String>.from(d['participantLocations'] ?? {}),
+          participantAges: (d['participantAges'] as Map<dynamic, dynamic>? ?? {})
+              .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
+          lastMessage: d['lastMessage'] ?? '',
+          lastMessageAt: parseDate(d['lastMessageAt']),
+          unreadCounts: (d['unreadCounts'] as Map<dynamic, dynamic>? ?? {})
+              .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
+          lastReadAt: (d['lastReadAt'] as Map<dynamic, dynamic>? ?? {})
+              .map((k, v) => MapEntry(k.toString(), parseDate(v))),
+        );
+      }).toList();
+    }
+
+    Future<void> reload() async {
+      try {
+        final rows = await fetch();
+        if (!controller.isClosed) controller.add(rows);
+      } catch (e) {
+        debugPrint('[getMyPrivateChats] fetch error: $e');
+      }
+    }
+
+    _chatReloaders.putIfAbsent(myUid, () => []).add(reload);
+
+    final channel = _sb.channel('private-chats-$myUid');
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'private_chats',
+      callback: (_) => reload(),
+    );
+    channel.subscribe();
+
+    reload();
+
+    controller.onCancel = () {
+      _chatReloaders[myUid]?.remove(reload);
+      _sb.removeChannel(channel);
+    };
+
+    return controller.stream;
+  }
+
+  Stream<List<UserModel>> getOnlineUsers() {
+    return _sb
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .neq('status', 'offline')
+        .order('last_seen', ascending: false)
+        .limit(200)
+        .map((rows) => rows
+            .map((row) => UserModel.fromMap('${row['id']}', snakeToCamel(row)))
+            .toList());
+  }
+
+  Stream<List<UserModel>> getOnlineUsersInRoom(String roomId) {
+    return _sb
+        .from('room_presence')
+        .stream(primaryKey: ['room_id', 'user_id'])
+        .eq('room_id', roomId)
+        .map((rows) => rows.map((row) {
+              final d = snakeToCamel(row);
+              return UserModel(
+                uid: d['userId'] ?? '',
+                nickname: d['nickname'] ?? 'Anon',
+                gender: d['gender'] ?? 'other',
+                age: (d['age'] as num?)?.toInt() ?? 0,
+                country: d['country'] ?? '',
+                city: d['city'] ?? '',
+                ipAddress: '',
+                status: 'online',
+                avatar: '',
+                loginAt: DateTime.now(),
+                createdAt: DateTime.now(),
+                lastSeen: parseDate(d['joinedAt']),
               );
             }).toList());
   }
 
-  // ── Online Users ──
-
-  Stream<List<UserModel>> getOnlineUsers() {
-    return _rtdb.ref('presence').onValue.map((event) {
-      final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return <UserModel>[];
-      return data.entries
-          .where((e) {
-            final val = Map<String, dynamic>.from(e.value as Map);
-            return val['online'] == true;
-          })
-          .map((e) {
-            final val = Map<String, dynamic>.from(e.value as Map);
-            return UserModel.fromMap(e.key as String, val);
-          })
-          .toList();
-    });
-  }
-
-  // ── Online Users in Room ──
-
-  Stream<List<UserModel>> getOnlineUsersInRoom(String roomId) {
-    return _rtdb.ref('roomPresence/$roomId').onValue.map((event) {
-      final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return <UserModel>[];
-      return data.entries.map((e) {
-        final val = Map<String, dynamic>.from(e.value as Map);
-        return UserModel.fromMap(e.key as String, val);
-      }).toList();
-    });
-  }
-
   Future<void> joinRoom(String roomId, UserModel user) async {
-    // Tandai membership (dipakai pusher untuk notif pesan room)
-    await _db.collection('roomMemberships').doc('${roomId}_${user.uid}').set({
-      'roomId': roomId,
-      'uid': user.uid,
-      'joinedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    final ref = _rtdb.ref('roomPresence/$roomId/${user.uid}');
-    await ref.set({
+    await _sb.from('room_presence').upsert({
+      'room_id': roomId,
+      'user_id': user.uid,
       'nickname': user.nickname,
       'gender': user.gender,
       'age': user.age,
-    });
-    // Bersihkan otomatis jika koneksi putus tanpa leaveRoom
-    ref.onDisconnect().remove();
+    }, onConflict: 'room_id,user_id');
   }
 
   Future<void> leaveRoom(String roomId, String uid) async {
-    await _rtdb.ref('roomPresence/$roomId/$uid').remove();
+    await _sb.from('room_presence')
+        .delete()
+        .eq('room_id', roomId)
+        .eq('user_id', uid);
   }
 
   Stream<Map<String, int>> getRoomOnlineCounts() {
-    return _rtdb.ref('roomPresence').onValue.map((event) {
-      final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return <String, int>{};
-      return data.map((roomId, users) =>
-          MapEntry(roomId as String, (users as Map).length));
-    });
+    return _sb
+        .from('room_presence')
+        .stream(primaryKey: ['room_id', 'user_id'])
+        .map((rows) {
+          final counts = <String, int>{};
+          for (final row in rows) {
+            final roomId = '${row['room_id']}';
+            counts[roomId] = (counts[roomId] ?? 0) + 1;
+          }
+          return counts;
+        });
   }
 
   // ── Block / Report ──
 
   Future<void> blockUser(String myUid, String blockedUid) async {
-    await _db.collection('blocks').doc(myUid).collection('blocked').doc(blockedUid).set({
-      'blockedAt': FieldValue.serverTimestamp(),
-    });
+    await _sb.from('blocks').upsert({
+      'blocker_id': myUid,
+      'blocked_id': blockedUid,
+    }, onConflict: 'blocker_id,blocked_id');
   }
 
   Future<void> reportUser({
@@ -234,22 +344,25 @@ class ChatService {
     required String reportedId,
     required String reason,
   }) async {
-    await _db.collection('reports').add({
-      'reporterId': reporterId,
-      'reportedId': reportedId,
+    await _sb.from('reports').insert({
+      'reporter_id': reporterId,
+      'reported_id': reportedId,
       'reason': reason,
-      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
   Future<bool> isUserBlocked(String myUid, String otherUid) async {
-    final doc = await _db.collection('blocks').doc(myUid).collection('blocked').doc(otherUid).get();
-    return doc.exists;
+    final res = await _sb.from('blocks').select('blocker_id')
+        .eq('blocker_id', myUid)
+        .eq('blocked_id', otherUid)
+        .maybeSingle();
+    return res != null;
   }
 
   Future<List<String>> getBlockedUids(String myUid) async {
-    final snap = await _db.collection('blocks').doc(myUid).collection('blocked').get();
-    return snap.docs.map((d) => d.id).toList();
+    final res = await _sb.from('blocks').select('blocked_id')
+        .eq('blocker_id', myUid);
+    return res.map((r) => '${r['blocked_id']}').toList();
   }
 }
 

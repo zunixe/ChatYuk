@@ -1,9 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 DateTime parseDate(dynamic v) {
   if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
   if (v is DateTime) return v;
-  if (v is Timestamp) return v.toDate();
+  if (v is String) {
+    final dt = DateTime.tryParse(v);
+    if (dt != null) return dt.toLocal();
+  }
   if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
   return DateTime.fromMillisecondsSinceEpoch(0);
 }
@@ -34,4 +35,16 @@ int notifIdForKey(String key) {
     hash = key.codeUnitAt(i) + ((hash << 5) - hash);
   }
   return hash.abs() & 0x7FFFFFFF;
+}
+
+/// Konversi key snake_case (dari Postgres) → camelCase (untuk model Dart).
+Map<String, dynamic> snakeToCamel(Map<String, dynamic> map) {
+  return map.map((k, v) {
+    final parts = k.split('_');
+    if (parts.length <= 1) return MapEntry(k, v);
+  final camel = parts.first +
+      parts.skip(1).where((p) => p.isNotEmpty)
+          .map((p) => p[0].toUpperCase() + p.substring(1)).join();
+    return MapEntry(camel, v);
+  });
 }
