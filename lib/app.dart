@@ -6,6 +6,7 @@ import 'providers/room_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/online_users_provider.dart';
 import 'providers/locale_provider.dart';
+import 'services/chat_service.dart';
 import 'main.dart';
 import 'screens/entry_screen.dart';
 import 'screens/lobby_screen.dart';
@@ -49,13 +50,10 @@ class _AuthGateState extends State<_AuthGate> {
   void initState() {
     super.initState();
     final auth = context.read<AuthProvider>();
-    print('[GATE-STATE] initState inst=${auth.instanceId}');
     auth.addListener(_onAuthChanged);
   }
 
-  void _onAuthChanged() {
-    print('[GATE-STATE] LISTENER FIRED inst=${context.read<AuthProvider>().instanceId} profile=${context.read<AuthProvider>().profile?.uid}');
-  }
+  void _onAuthChanged() {}
 
   @override
   void dispose() {
@@ -67,7 +65,6 @@ class _AuthGateState extends State<_AuthGate> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
-    print('[GATE] loading=${auth.loading} profile=${auth.profile?.uid} error=${auth.error} inst=${auth.instanceId}');
 
     if (auth.loading) {
       return Scaffold(
@@ -121,12 +118,7 @@ class _AuthGateState extends State<_AuthGate> {
       return const EntryScreen();
     }
 
-    try {
-      return const _MainNav();
-    } catch (e, st) {
-      print('[GATE] _MainNav BUILD ERROR: $e\n$st');
-      rethrow;
-    }
+    return const _MainNav();
   }
 }
 
@@ -153,27 +145,18 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    print('[MAINNAV] initState');
     WidgetsBinding.instance.addObserver(this);
     final auth = context.read<AuthProvider>();
-    try {
-      auth.goOnline();
-    } catch (e) {
-      print('[MAINNAV] goOnline ERROR: $e');
-    }
+    auth.goOnline();
+    auth.resetIdleTimer();
     final uid = auth.uid;
     if (uid != null) {
-      try {
-        context.read<ChatProvider>().loadBlockedUids(uid);
-      } catch (e) {
-        print('[MAINNAV] loadBlockedUids ERROR: $e');
-      }
+      context.read<ChatProvider>().loadBlockedUids(uid);
     }
   }
 
   @override
   void dispose() {
-    print('[MAINNAV] dispose');
     WidgetsBinding.instance.removeObserver(this);
     _roomProvider.dispose();
     _onlineUsersProvider.dispose();
@@ -224,14 +207,64 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    return BottomNavigationBar(
-      currentIndex: currentIndex,
-      onTap: onTap,
-      items: [
-        BottomNavigationBarItem(icon: const Icon(Icons.wifi_tethering), label: s.navOnline),
-        BottomNavigationBarItem(icon: const Icon(Icons.chat_bubble), label: s.navChats),
-        BottomNavigationBarItem(icon: const Icon(Icons.chat), label: s.navRooms),
-        BottomNavigationBarItem(icon: const Icon(Icons.person), label: s.navProfile),
+    final auth = context.watch<AuthProvider>();
+    final chat = context.watch<ChatProvider>();
+    final uid = auth.uid;
+
+    return StreamBuilder<List<PrivateChatInfo>>(
+      stream: uid != null ? chat.getMyPrivateChats(uid) : const Stream.empty(),
+      builder: (_, snap) {
+        final totalUnread = (snap.data ?? []).fold<int>(0, (sum, c) {
+          return sum + ((c.unreadCounts[uid] ?? 0));
+        });
+        return BottomNavigationBar(
+          currentIndex: currentIndex,
+          onTap: onTap,
+          items: [
+            BottomNavigationBarItem(icon: const Icon(Icons.wifi_tethering), label: s.navOnline),
+            BottomNavigationBarItem(
+              icon: _BadgedIcon(icon: Icons.chat_bubble, count: totalUnread),
+              label: s.navChats,
+            ),
+            BottomNavigationBarItem(icon: const Icon(Icons.chat), label: s.navRooms),
+            BottomNavigationBarItem(icon: const Icon(Icons.person), label: s.navProfile),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _BadgedIcon extends StatelessWidget {
+  final IconData icon;
+  final int count;
+  const _BadgedIcon({required this.icon, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) return Icon(icon);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon),
+        Positioned(
+          right: -8,
+          top: -4,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            constraints: const BoxConstraints(minWidth: 14),
+            decoration: BoxDecoration(
+              color: AppTheme.danger,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white, width: 1),
+            ),
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
       ],
     );
   }

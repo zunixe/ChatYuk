@@ -1,20 +1,20 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
+import '../config/supabase_config.dart';
+import '../utils.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseDatabase _rtdb = FirebaseDatabase.instance;
+  final SupabaseClient _sb = SupabaseConfig.client;
 
-  User? get currentUser => _auth.currentUser;
-  String? get uid => _auth.currentUser?.uid;
-  bool get isSignedIn => _auth.currentUser != null;
+  User? get currentUser => _sb.auth.currentUser;
+  String? get uid => _sb.auth.currentUser?.id;
+  bool get isSignedIn => _sb.auth.currentUser != null;
 
   Future<void> signInAnonymously() async {
-    if (_auth.currentUser != null) return;
-    await _auth.signInAnonymously();
+    if (_sb.auth.currentUser != null) return;
+    final res = await _sb.auth.signInAnonymously();
+    print('[AUTH] signInAnonymously -> ${res.user?.id}');
   }
 
   Future<UserModel> registerProfile({
@@ -25,13 +25,13 @@ class AuthService {
     required String city,
     String ipAddress = '',
   }) async {
-    if (_auth.currentUser == null) {
+    if (_sb.auth.currentUser == null) {
       await signInAnonymously();
     }
-    final user = _auth.currentUser!;
-    final now = DateTime.now();
+    final user = _sb.auth.currentUser!;
+    final now = DateTime.now().toUtc();
     final profile = UserModel(
-      uid: user.uid,
+      uid: user.id,
       nickname: nickname,
       gender: gender,
       age: age,
@@ -45,109 +45,94 @@ class AuthService {
       lastSeen: now,
     );
 
-    // Tulis ke Firestore — ini yang critical, perlu await
-    await _db.collection('users').doc(user.uid).set({
-      ...profile.toMap(),
-      'createdAt': FieldValue.serverTimestamp(),
-      'lastSeen': FieldValue.serverTimestamp(),
-      'loginAt': FieldValue.serverTimestamp(),
-    });
-
-    // Set presence di RTDB — jalankan di background, tidak perlu await
-    final presenceRef = _rtdb.ref('presence/${user.uid}');
-    presenceRef.set({
+    await _sb.from('profiles').upsert({
+      'id': user.id,
       'nickname': nickname,
       'gender': gender,
       'age': age,
       'country': country,
       'city': city,
+      'ip_address': ipAddress,
       'status': 'online',
-      'online': true,
-      'lastSeen': ServerValue.timestamp,
-    });
-    presenceRef.onDisconnect().update({
-      'status': 'offline',
-      'online': false,
-      'lastSeen': ServerValue.timestamp,
-    });
+      'avatar': '',
+      'fcm_token': '',
+      'login_at': now.toUtc().toIso8601String(),
+      'created_at': now.toUtc().toIso8601String(),
+      'last_seen': now.toUtc().toIso8601String(),
+    }, onConflict: 'id');
 
     return profile;
   }
 
   Future<UserModel?> getProfile() async {
-    if (uid == null) return null;
-    final doc = await _db.collection('users').doc(uid).get();
-    if (!doc.exists) return null;
-    return UserModel.fromMap(uid!, doc.data()!);
+    final id = uid;
+    if (id == null) return null;
+    final res = await _sb.from('profiles').select().eq('id', id).maybeSingle();
+    if (res == null) return null;
+    return UserModel.fromMap(id, snakeToCamel(res));
   }
 
   Future<void> updateProfile({int? age, String? country, String? city}) async {
-    if (uid == null) return;
+    final id = uid;
+    if (id == null) return;
     final data = <String, dynamic>{
       if (age != null) 'age': age,
       if (country != null) 'country': country,
       if (city != null) 'city': city,
     };
-    await _db.collection('users').doc(uid).update(data);
-    await _rtdb.ref('presence/$uid').update(data);
+    await _sb.from('profiles').update(data).eq('id', id);
   }
 
   Future<void> updateAvatar(String base64) async {
-    if (uid == null) return;
-    await _db.collection('users').doc(uid).update({'avatar': base64});
-    await _rtdb.ref('presence/$uid').update({'avatar': base64});
+    final id = uid;
+    if (id == null) return;
+    await _sb.from('profiles').update({'avatar': base64}).eq('id', id);
   }
 
   Future<void> removeAvatar() async {
-    if (uid == null) return;
-    await _db.collection('users').doc(uid).update({'avatar': ''});
-    await _rtdb.ref('presence/$uid').update({'avatar': ''});
+    final id = uid;
+    if (id == null) return;
+    await _sb.from('profiles').update({'avatar': ''}).eq('id', id);
   }
 
   Future<void> updateFcmToken(String? token) async {
-    if (uid == null) return;
-    // fcmToken hanya di Firestore (owner-only read), TIDAK di RTDB publik
-    await _db.collection('users').doc(uid!).update({'fcmToken': token ?? ''});
+    final id = uid;
+    if (id == null) return;
+    await _sb.from('profiles').update({'fcm_token': token ?? ''}).eq('id', id);
   }
 
   Future<void> goOffline() async {
-    if (uid == null) return;
-    // Fire-and-forget — tidak perlu await
-    _rtdb.ref('presence/$uid').update({
-      'status': 'offline',
-      'online': false,
-      'lastSeen': ServerValue.timestamp,
-    });
+    final id = uid;
+    if (id == null) return;
+    try {
+      await _sb.from('profiles').update({'status': 'offline', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
+    } catch (_) {}
   }
 
   Future<void> goIdle() async {
-    if (uid == null) return;
-    _rtdb.ref('presence/$uid').update({
-      'status': 'idle',
-      'online': true,
-    });
+    final id = uid;
+    if (id == null) return;
+    try {
+      await _sb.from('profiles').update({'status': 'idle'}).eq('id', id);
+    } catch (_) {}
   }
 
   Future<void> goOnline() async {
-    if (uid == null) return;
-    final ref = _rtdb.ref('presence/$uid');
-    // Fire-and-forget — tidak perlu await
-    ref.update({
-      'status': 'online',
-      'online': true,
-      'lastSeen': ServerValue.timestamp,
-    });
-    ref.onDisconnect().update({
-      'status': 'offline',
-      'online': false,
-      'lastSeen': ServerValue.timestamp,
-    });
+    final id = uid;
+    if (id == null) return;
+    try {
+      await _sb.from('profiles').update({'status': 'online', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
+    } catch (_) {}
   }
 
   Future<void> signOut() async {
-    await goOffline();
-    await _auth.signOut();
+    await _sb.auth.signOut();
   }
 
-  Stream<bool> get authState => _auth.authStateChanges().map((u) => u != null);
+  Stream<bool> get authState {
+    return _sb.auth.onAuthStateChange.map((data) {
+      final session = data.session;
+      return session != null;
+    });
+  }
 }

@@ -10,6 +10,7 @@ import 'models/room_model.dart';
 import 'providers/locale_provider.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
+import 'config/supabase_config.dart';
 import 'utils.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -25,8 +26,7 @@ const String _channelId = 'chatyuk_chat';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  final data = message.data;
-  final title = message.notification?.title ??
+  final data = message.data;  final title = message.notification?.title ??
       (data['type'] == 'room' ? data['roomName'] ?? 'Room' : 'New message');
   final body = message.notification?.body ?? 'You have a new message';
 
@@ -165,6 +165,7 @@ void main() async {
   } on FirebaseException catch (e) {
     if (e.code != 'duplicate-app') rethrow;
   }
+  await SupabaseConfig.init();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await _initNotifications();
   runApp(const ChatYukApp());

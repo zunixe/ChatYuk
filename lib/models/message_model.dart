@@ -42,7 +42,7 @@ class MessageModel {
       'text': text,
       'type': type,
       'imageData': imageData,
-      'timestamp': timestamp,
+      'timestamp': timestamp.toUtc().toIso8601String(),
     };
   }
 }

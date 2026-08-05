@@ -33,11 +33,10 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-  # Firebase
-  firebase_core: ^3.13.0
-  firebase_auth: ^5.5.2
-  cloud_firestore: ^5.6.7
-  firebase_database: ^11.3.6
+  # Supabase
+  supabase_flutter: ^2.8.4
+
+  # FCM (push notification)
   firebase_messaging: ^15.2.10
 
   # State management
@@ -51,6 +50,8 @@ dependencies:
   image: ^4.3.0
   flutter_local_notifications: ^22.2.0
   shared_preferences: ^2.5.5
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.4
 
 dev_dependencies:
   flutter_test:

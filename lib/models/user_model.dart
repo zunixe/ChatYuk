@@ -56,9 +56,9 @@ class UserModel {
       'ipAddress': ipAddress,
       'status': status,
       'avatar': avatar,
-      'loginAt': loginAt,
-      'createdAt': createdAt,
-      'lastSeen': lastSeen,
+      'loginAt': loginAt.toUtc().toIso8601String(),
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'lastSeen': lastSeen.toUtc().toIso8601String(),
     };
   }
 
