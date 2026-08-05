@@ -5,14 +5,13 @@ import '../config/supabase_config.dart';
 class RoomService {
   final SupabaseClient _sb = SupabaseConfig.client;
 
-  Stream<List<RoomModel>> getRooms() {
-    return _sb
-        .from('rooms')
-        .stream(primaryKey: ['id'])
-        .order('order')
-        .map((rows) => rows
-            .map((row) => RoomModel.fromMap('${row['id']}', row))
-            .toList());
+  // rooms TIDAK di-enable realtime di DB (error RealtimeSubscribeException),
+  // jadi pakai fetch langsung, bukan .stream().
+  Future<List<RoomModel>> fetchRooms() async {
+    final rows = await _sb.from('rooms').select().order('order');
+    return rows
+        .map((row) => RoomModel.fromMap('${row['id']}', row))
+        .toList();
   }
 
   Future<void> seedDefaultRooms() async {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
@@ -36,6 +37,8 @@ class ChatService {
     required String senderGender,
     required String text,
   }) async {
+    // Batasi panjang teks
+    if (text.isEmpty || text.length > 2000) return;
     await _sb.from('messages').insert({
       'room_id': roomId,
       'sender_id': senderId,
@@ -58,20 +61,26 @@ class ChatService {
     return _cachedMessagesStream(cacheKey: 'private_$chatId');
   }
 
-  /// Gabungan cache lokal (dulu, instan) + realtime server (setelahnya).
-  /// Menggunakan explicit fetch + postgres changes channel (lebih reliable dari .stream()).
+  /// Gabungan cache lokal (instan) + realtime server.
+  /// - loadCache dan fetchServer jalan PARALEL untuk tampilan secepat mungkin.
+  /// - INSERT event langsung di-append ke list tanpa refetch (0 network round-trip).
+  /// - UPDATE/DELETE tetap refetch karena perlu reorder.
   Stream<List<MessageModel>> _cachedMessagesStream({
     required String cacheKey,
   }) {
-    final controller = StreamController<List<MessageModel>>.broadcast();
+    final isPrivate = cacheKey.startsWith('private_');
+    final table = isPrivate ? 'private_messages' : 'messages';
+    final filterKey = isPrivate ? 'chat_id' : 'room_id';
+    final filterVal = cacheKey.split('_').skip(1).join('_');
 
-    // Fetch langsung dari server (bukan .stream() realtime yang bermasalah)
+    final controller = StreamController<List<MessageModel>>.broadcast();
+    var _current = <MessageModel>[];
+
     Future<List<MessageModel>> fetchServer() async {
       final rows = await _sb
-          .from(cacheKey.startsWith('private_') ? 'private_messages' : 'messages')
+          .from(table)
           .select()
-          .eq(cacheKey.startsWith('private_') ? 'chat_id' : 'room_id',
-              cacheKey.split('_').skip(1).join('_'))
+          .eq(filterKey, filterVal)
           .order('created_at', ascending: true)
           .limit(100);
       return rows
@@ -83,38 +92,62 @@ class ChatService {
       try {
         final server = await fetchServer();
         if (controller.isClosed) return;
-        controller.add(server);
-        MessageCache.instance.saveMessages(cacheKey, server);
+        _current = server;
+        controller.add(_current);
+        MessageCache.instance.saveMessages(cacheKey, _current);
       } catch (e) {
         debugPrint('[_cachedMessagesStream] fetch error: $e');
       }
     }
 
-    Future<void> loadCache() async {
-      final cached = await MessageCache.instance.loadMessages(cacheKey);
-      if (cached.isNotEmpty && !controller.isClosed) {
-        controller.add(cached);
-      }
-      reload();
-    }
-
-    // Subscribe postgres changes ke table yang relevan
-    final table = cacheKey.startsWith('private_') ? 'private_messages' : 'messages';
     final channelName = 'msg-${cacheKey.hashCode}';
     final channel = _sb.channel(channelName);
+
+    // INSERT: append langsung dari payload — tidak perlu round-trip ke server
     channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: table,
+      callback: (payload) {
+        if (controller.isClosed) return;
+        try {
+          final row = payload.newRecord;
+          if (row[filterKey]?.toString() != filterVal) return;
+          final msg = MessageModel.fromMap('${row['id']}', snakeToCamel(row));
+          if (_current.any((m) => m.id == msg.id)) return; // dedupe
+          _current = [..._current, msg];
+          controller.add(_current);
+          MessageCache.instance.saveMessages(cacheKey, _current);
+        } catch (_) {
+          reload();
+        }
+      },
+    );
+    // UPDATE/DELETE: refetch karena perlu reorder
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: table,
+      callback: (_) => reload(),
+    );
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.delete,
       schema: 'public',
       table: table,
       callback: (_) => reload(),
     );
     channel.subscribe();
 
-    loadCache();
+    // loadCache dan reload jalan paralel
+    MessageCache.instance.loadMessages(cacheKey).then((cached) {
+      if (cached.isNotEmpty && !controller.isClosed && _current.isEmpty) {
+        _current = cached;
+        controller.add(_current);
+      }
+    });
+    reload();
 
-    controller.onCancel = () {
-      _sb.removeChannel(channel);
-    };
+    controller.onCancel = () => _sb.removeChannel(channel);
 
     return controller.stream;
   }
@@ -155,6 +188,19 @@ class ChatService {
     String imageData = '',
     String receiverId = '',
   }) async {
+    // Validasi tipe pesan
+    if (!['text', 'image', 'view_once'].contains(type)) {
+      throw Exception('Invalid message type');
+    }
+    // Validasi image data jika ada
+    if (imageData.isNotEmpty && !isValidImageBase64(imageData)) {
+      throw Exception('Invalid image data');
+    }
+    // Batasi panjang teks pesan
+    if (text.length > 2000) {
+      throw Exception('Message too long (max 2000 chars)');
+    }
+
     await _sb.from('private_messages').insert({
       'chat_id': chatId,
       'sender_id': senderId,
@@ -166,10 +212,20 @@ class ChatService {
     });
 
     final update = <String, dynamic>{
-      'last_message': type == 'image' ? '[Foto]' : text,
+      'last_message': type == 'image' || type == 'view_once' ? '[Foto]' : text,
       'last_message_at': DateTime.now().toUtc().toIso8601String(),
     };
     await _sb.from('private_chats').update(update).eq('chat_id', chatId);
+  }
+
+  /// Hapus image_data dari view_once message setelah dilihat.
+  /// Data foto dihapus dari DB — hanya metadata yang tersisa.
+  Future<void> clearViewOnceImage(int messageId) async {
+    try {
+      await _sb.from('private_messages')
+          .update({'image_data': '', 'type': 'view_once_expired'})
+          .eq('id', messageId);
+    } catch (_) {}
   }
 
   // Map: userId -> list of reload callbacks untuk getMyPrivateChats streams
@@ -263,16 +319,75 @@ class ChatService {
     return controller.stream;
   }
 
+  /// Stream status realtime satu user (online/idle/offline).
+  /// Pakai channel postgres changes pada profiles — ringan, hanya 1 row.
+  Stream<String> getUserStatus(String uid) {
+    final controller = StreamController<String>.broadcast();
+    String _current = 'offline';
+
+    Future<void> fetchStatus() async {
+      try {
+        final row = await _sb.from('profiles').select('status').eq('id', uid).maybeSingle();
+        if (row == null || controller.isClosed) return;
+        final s = row['status'] as String? ?? 'offline';
+        if (s != _current) {
+          _current = s;
+          controller.add(_current);
+        }
+      } catch (_) {}
+    }
+
+    final channel = _sb.channel('user-status-$uid');
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'profiles',
+      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: uid),
+      callback: (payload) {
+        if (controller.isClosed) return;
+        final s = payload.newRecord['status'] as String? ?? 'offline';
+        if (s != _current) {
+          _current = s;
+          controller.add(_current);
+        }
+      },
+    );
+    channel.subscribe();
+    fetchStatus();
+
+    controller.onCancel = () => _sb.removeChannel(channel);
+    return controller.stream;
+  }
+
   Stream<List<UserModel>> getOnlineUsers() {
-    return _sb
-        .from('profiles')
-        .stream(primaryKey: ['id'])
-        .neq('status', 'offline')
-        .order('last_seen', ascending: false)
-        .limit(200)
-        .map((rows) => rows
-            .map((row) => UserModel.fromMap('${row['id']}', snakeToCamel(row)))
-            .toList());
+    final controller = StreamController<List<UserModel>>.broadcast();
+
+    Future<void> fetchOnline() async {
+      try {
+        // Exclude kolom sensitif: fcm_token, ip_address
+        const cols = 'id,nickname,gender,age,country,city,status,avatar,last_seen';
+        final rows = await _sb
+            .from('profiles')
+            .select(cols)
+            .neq('status', 'offline')
+            .order('last_seen', ascending: false)
+            .limit(200);
+        if (!controller.isClosed) {
+          controller.add(rows
+              .map((row) => UserModel.fromMap('${row['id']}', snakeToCamel(row)))
+              .toList());
+        }
+      } catch (e) {
+        debugPrint('[getOnlineUsers] fetch error: $e');
+      }
+    }
+
+    // Poll setiap 30 detik — cukup responsif untuk status online/idle/offline
+    final timer = Timer.periodic(const Duration(seconds: 30), (_) => fetchOnline());
+    fetchOnline();
+
+    controller.onCancel = () => timer.cancel();
+    return controller.stream;
   }
 
   Stream<List<UserModel>> getOnlineUsersInRoom(String roomId) {
@@ -300,12 +415,11 @@ class ChatService {
   }
 
   Future<void> joinRoom(String roomId, UserModel user) async {
+    // nickname, gender, age di-set oleh trigger DB dari profiles
+    // tidak dikirim dari client untuk mencegah impersonasi
     await _sb.from('room_presence').upsert({
       'room_id': roomId,
       'user_id': user.uid,
-      'nickname': user.nickname,
-      'gender': user.gender,
-      'age': user.age,
     }, onConflict: 'room_id,user_id');
   }
 
@@ -314,6 +428,28 @@ class ChatService {
         .delete()
         .eq('room_id', roomId)
         .eq('user_id', uid);
+  }
+
+  // ── Hide Chat (client-side, hanya untuk user yang menghapus) ──
+  // Chat tidak dihapus dari DB, hanya disembunyikan di device ini.
+  // Lawan bicara tetap melihat chat normal.
+
+  Future<Set<String>> getHiddenChats(String myUid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('hidden_chats_$myUid') ?? [];
+    return list.toSet();
+  }
+
+  Future<void> hideChat(String myUid, String chatId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'hidden_chats_$myUid';
+    final list = prefs.getStringList(key) ?? [];
+    if (!list.contains(chatId)) {
+      list.add(chatId);
+      await prefs.setStringList(key, list);
+    }
+    // Hapus cache pesan lokal untuk chat ini
+    await MessageCache.instance.saveMessages('private_$chatId', []);
   }
 
   Stream<Map<String, int>> getRoomOnlineCounts() {
@@ -337,6 +473,13 @@ class ChatService {
       'blocker_id': myUid,
       'blocked_id': blockedUid,
     }, onConflict: 'blocker_id,blocked_id');
+  }
+
+  Future<void> unblockUser(String myUid, String blockedUid) async {
+    await _sb.from('blocks')
+        .delete()
+        .eq('blocker_id', myUid)
+        .eq('blocked_id', blockedUid);
   }
 
   Future<void> reportUser({

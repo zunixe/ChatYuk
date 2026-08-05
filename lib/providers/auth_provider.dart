@@ -21,31 +21,33 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isSignedIn => _auth.isSignedIn;
   String? get uid => _auth.uid;
+  bool get isAnonymous => _auth.isAnonymous;
+  String? get userEmail => _auth.userEmail;
 
   AuthProvider() {
-    print('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
+    debugPrint('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
     _init();
   }
 
   Future<void> _init() async {
-    print('[AUTH] _init start');
+    debugPrint('[AUTH] _init start');
     _loading = true;
     _error = null;
     notifyListeners();
     try {
-      print('[AUTH] signInAnonymously...');
+      debugPrint('[AUTH] signInAnonymously...');
       await _auth.signInAnonymously();
-      print('[AUTH] signInAnonymously OK');
+      debugPrint('[AUTH] signInAnonymously OK');
       _profile = await _auth.getProfile();
-      print('[AUTH] getProfile -> ${_profile?.uid}');
+      debugPrint('[AUTH] getProfile -> ${_profile?.uid}');
       if (_profile != null) await updateFcmToken();
     } catch (e) {
-      print('[AUTH] _init ERROR: $e');
+      debugPrint('[AUTH] _init ERROR: $e');
       _error = e.toString();
     }
     _loading = false;
     notifyListeners();
-    print('[AUTH] _init done loading=false');
+    debugPrint('[AUTH] _init done loading=false');
   }
 
   Future<void> updateFcmToken() async {
@@ -59,6 +61,45 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> retry() => _init();
 
+  /// Sign up dengan email — membuat akun Supabase baru.
+  /// Setelah ini user perlu verifikasi email, lalu registerProfile().
+  Future<void> signUpWithEmail({
+    required String email,
+    required String password,
+    required String nickname,
+    required String gender,
+    required int age,
+    required String country,
+    required String city,
+  }) async {
+    await _auth.signUpWithEmail(email, password);
+    // Profile akan di-save setelah verifikasi email + login
+  }
+
+  /// Login dengan email + password.
+  Future<void> signInWithEmail(String email, String password) async {
+    await _auth.signInWithEmail(email, password);
+    _profile = await _auth.getProfile();
+    if (_profile != null) await updateFcmToken();
+    notifyListeners();
+  }
+
+  /// Upgrade anonymous account ke email account. UID tetap sama.
+  Future<void> linkEmailToAccount(String email, String password) async {
+    await _auth.linkEmailToAccount(email, password);
+    notifyListeners();
+  }
+
+  /// Kirim email reset password.
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email);
+  }
+
+  /// Cek apakah nickname tersedia.
+  Future<bool> isNicknameAvailable(String nickname) {
+    return _auth.isNicknameAvailable(nickname);
+  }
+
   Future<void> registerProfile({
     required String nickname,
     required String gender,
@@ -67,7 +108,7 @@ class AuthProvider extends ChangeNotifier {
     required String city,
     String ipAddress = '',
   }) async {
-    print('[AUTH] registerProfile START: $nickname inst=$instanceId');
+    debugPrint('[AUTH] registerProfile START: $nickname inst=$instanceId');
     _profile = await _auth.registerProfile(
       nickname: nickname,
       gender: gender,
@@ -76,9 +117,9 @@ class AuthProvider extends ChangeNotifier {
       city: city,
       ipAddress: ipAddress,
     );
-    print('[AUTH] registerProfile DONE: ${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
+    debugPrint('[AUTH] registerProfile DONE: ${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
     notifyListeners();
-    print('[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
+    debugPrint('[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
     resetIdleTimer();
     updateFcmToken();
   }
@@ -108,6 +149,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> signOut() async {
     _idleTimer?.cancel();
     _isIdle = false;
+    await _auth.goOffline(); // set status offline di DB sebelum sign out
     await _auth.signOut();
     _profile = null;
     notifyListeners();

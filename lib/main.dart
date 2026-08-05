@@ -153,11 +153,11 @@ Future<void> _initNotifications() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
-    print('[FLUTTER-ERROR] ${details.exception}');
-    print('[FLUTTER-ERROR] ${details.stack}');
+    debugPrint('[FLUTTER-ERROR] ${details.exception}');
+    debugPrint('[FLUTTER-ERROR] ${details.stack}');
   };
   PlatformDispatcher.instance.onError = (error, stack) {
-    print('[PLATFORM-ERROR] $error\n$stack');
+    debugPrint('[PLATFORM-ERROR] $error\n$stack');
     return true;
   };
   try {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../models/user_model.dart';
@@ -23,6 +24,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
   String _gender = 'all';
   int _page = 1;
   static const int _pageSize = 20;
+  static const _prefKeyNegara = 'filter_negara';
+  static const _prefKeyGender = 'filter_gender';
   final ScrollController _scrollCtrl = ScrollController();
 
   @override
@@ -32,6 +35,21 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
+    _loadFilter();
+  }
+
+  Future<void> _loadFilter() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _negara = prefs.getString(_prefKeyNegara) ?? 'all';
+      _gender = prefs.getString(_prefKeyGender) ?? 'all';
+    });
+  }
+
+  Future<void> _saveFilter() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKeyNegara, _negara);
+    await prefs.setString(_prefKeyGender, _gender);
   }
 
   @override
@@ -124,9 +142,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                             value: _negara,
                             label: s.labelCountry,
                             icon: Icons.public,
-                            items: ['all', ...kotaByNegara.keys],
-                            labels: [s.filterAll, ...kotaByNegara.keys.map((k) => negaraLabel(k, isId))],
-                            onChanged: (v) => setState(() { _negara = v; _page = 1; }),
+                            items: ['all', ...allCountries],
+                            labels: [s.filterAll, ...allCountries],
+                            onChanged: (v) {
+                              setState(() { _negara = v; _page = 1; });
+                              _saveFilter();
+                            },
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -137,7 +158,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                             icon: Icons.person_outline,
                             items: const ['all', 'male', 'female'],
                             labels: [s.filterAll, s.filterMale, s.filterFemale],
-                            onChanged: (v) => setState(() { _gender = v; _page = 1; }),
+                            onChanged: (v) {
+                              setState(() { _gender = v; _page = 1; });
+                              _saveFilter();
+                            },
                           ),
                         ),
                       ],
@@ -206,15 +230,29 @@ class _FilterDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InputDecorator(
-      decoration: InputDecoration(isDense: true, prefixIcon: Icon(icon, size: 20, color: AppTheme.textSecondary), labelText: label),
+      decoration: InputDecoration(
+        isDense: true,
+        prefixIcon: Icon(icon, size: 20, color: AppTheme.textSecondary),
+        labelText: label,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
           isDense: true,
+          menuMaxHeight: 400,
           items: [
             for (int i = 0; i < items.length; i++)
-              DropdownMenuItem(value: items[i], child: Text(labels[i], overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                value: items[i],
+                child: Text(
+                  labels[i],
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
           ],
           onChanged: (v) { if (v != null) onChanged(v); },
         ),

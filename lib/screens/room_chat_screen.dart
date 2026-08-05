@@ -73,11 +73,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
-        _scrollCtrl.animateTo(
-          _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
       }
     });
   }
@@ -89,24 +85,32 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     return max - pixels < 100;
   }
 
+  bool _isSending = false;
+
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _isSending) return;
     _msgCtrl.clear();
+    _isSending = true;
 
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
     final uid = auth.uid;
     final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    await chat.sendRoomMessage(
-      roomId: widget.room.id,
-      senderId: uid,
-      senderName: profile.nickname,
-      senderGender: profile.gender,
-      text: text,
-    );
-    _scrollToBottom();
+    if (uid == null || profile == null) { _isSending = false; return; }
+    try {
+      await chat.sendRoomMessage(
+        roomId: widget.room.id,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: text,
+      );
+      _scrollToBottom();
+    } finally {
+      await Future.delayed(const Duration(milliseconds: 500));
+      _isSending = false;
+    }
   }
 
   @override
@@ -166,15 +170,18 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
               builder: (_, snap) {
                 final msgs = snap.data ?? [];
                 if (msgs.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('👋', style: TextStyle(fontSize: 40)),
-                        SizedBox(height: 8),
-                        Text('Mulai percakapan!', style: TextStyle(color: AppTheme.textSecondary)),
-                      ],
-                    ),
+                  return Center(
+                    child: Builder(builder: (ctx) {
+                      final s = ctx.read<LocaleProvider>().s;
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('👋', style: TextStyle(fontSize: 40)),
+                          const SizedBox(height: 8),
+                          Text(s.msgStartConversation, style: const TextStyle(color: AppTheme.textSecondary)),
+                        ],
+                      );
+                    }),
                   );
                 }
                 if (msgs.length > _lastMsgCount && _isNearBottom) {
@@ -188,6 +195,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                   padding: const EdgeInsets.all(12),
                   itemCount: msgs.length,
                   itemBuilder: (_, i) => _MessageBubble(
+                    key: ValueKey(msgs[i].id),
                     msg: msgs[i],
                     isMe: msgs[i].senderId == auth.uid,
                     color: Color(userColorPalette[colorHashForUid(msgs[i].senderId) % userColorPalette.length]),
@@ -312,7 +320,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
           onChanged: (v) => reason = v,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Batal')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(context.read<LocaleProvider>().s.btnCancel)),
           TextButton(
             onPressed: () {
               context.read<ChatProvider>().reportUser(reporterId: context.read<AuthProvider>().uid!, reportedId: reportedId, reason: reason);
@@ -366,7 +374,7 @@ class _MessageBubble extends StatelessWidget {
   final bool isMe;
   final Color color;
   final VoidCallback onTapUser;
-  const _MessageBubble({required this.msg, required this.isMe, required this.color, required this.onTapUser});
+  const _MessageBubble({super.key, required this.msg, required this.isMe, required this.color, required this.onTapUser});
 
   @override
   Widget build(BuildContext context) {

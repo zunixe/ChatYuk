@@ -6,7 +6,7 @@ class S {
   S({required this.isId});
 
   // ── Entry Screen ──
-  String get appTagline      => isId ? 'Chat Tanpa Registrasi'        : 'Chat Without Registration';
+  String get appTagline      => isId ? 'Chat Bebas, Dimana Saja'       : 'Chat Freely, Anywhere';
   String get appSubtagline   => isId ? 'Langsung ngobrol, tanpa ribet!' : 'Start chatting, no hassle!';
   String get labelUsername   => isId ? 'Username'                     : 'Username';
   String get hintNickname    => isId ? 'Pilih nickname kamu...'       : 'Choose your nickname...';
@@ -19,6 +19,7 @@ class S {
   String get errNicknameEmpty => isId ? 'Masukkan nickname dulu'      : 'Please enter a nickname';
   String get errNicknameShort => isId ? 'Nickname minimal 3 karakter' : 'Nickname must be at least 3 characters';
   String get errNicknameLong  => isId ? 'Nickname maksimal 20 karakter' : 'Nickname must be at most 20 characters';
+  String get errNicknameInvalid => isId ? 'Nickname hanya boleh huruf, angka, spasi, _ atau -' : 'Nickname may only contain letters, numbers, spaces, _ or -';
 
   // ── Navigation / Bottom Bar ──
   String get navRooms        => isId ? 'Rooms'                        : 'Rooms';
@@ -30,6 +31,61 @@ class S {
   String get titleRooms      => isId ? 'Pilih Room'                   : 'Choose a Room';
   String get roomOnlineCount => isId ? 'online'                       : 'online';
   String get noRooms         => isId ? 'Belum ada room tersedia'      : 'No rooms available';
+
+  /// Nama room berdasarkan id (fallback ke nama DB jika tidak ada translasi)
+  String roomName(String id) {
+    if (isId) return const {
+      'general':    'General',
+      'curhat':     'Curhat',
+      'pertemanan': 'Pertemanan',
+      'teknologi':  'Teknologi',
+      'gaming':     'Gaming',
+      'musik':      'Musik',
+      'film':       'Film & TV',
+      'joke':       'Joke & Meme',
+      'belajar':    'Belajar',
+      'flirt':      'Flirt',
+    }[id] ?? id;
+    return const {
+      'general':    'General',
+      'curhat':     'Confessions',
+      'pertemanan': 'Friendship',
+      'teknologi':  'Technology',
+      'gaming':     'Gaming',
+      'musik':      'Music',
+      'film':       'Film & TV',
+      'joke':       'Jokes & Memes',
+      'belajar':    'Study',
+      'flirt':      'Flirt',
+    }[id] ?? id;
+  }
+
+  String roomDesc(String id) {
+    if (isId) return const {
+      'general':    'Obrolan umum untuk semua',
+      'curhat':     'Cerita dan curhat bareng',
+      'pertemanan': 'Cari temen baru di sini',
+      'teknologi':  'Diskusi tech & gadget',
+      'gaming':     'Main bareng & diskusi game',
+      'musik':      'Sharing musik & lagu',
+      'film':       'Rekomendasi & review film',
+      'joke':       'Yang bikin ngakak',
+      'belajar':    'Diskusi belajar & kuliah',
+      'flirt':      'Ngobrol santai & asyik',
+    }[id] ?? '';
+    return const {
+      'general':    'General chat for everyone',
+      'curhat':     'Share your stories & feelings',
+      'pertemanan': 'Find new friends here',
+      'teknologi':  'Discuss tech & gadgets',
+      'gaming':     'Play together & talk games',
+      'musik':      'Share music & songs',
+      'film':       'Movie & TV recommendations',
+      'joke':       'All the funny stuff',
+      'belajar':    'Study & college discussions',
+      'flirt':      'Casual & fun conversations',
+    }[id] ?? '';
+  }
 
   // ── Online Users ──
   String get titleOnline     => isId ? 'Pengguna Online'              : 'Online Users';
@@ -58,7 +114,12 @@ class S {
   String get errPhotoRead     => isId ? 'Gagal membaca gambar'        : 'Failed to read image';
   String get errSendPhoto     => isId ? 'Gagal kirim foto: '          : 'Failed to send photo: ';
   String get msgPhoto         => isId ? '[Foto]'                      : '[Photo]';
+  String get msgViewOnce      => isId ? '[Foto Sekali Lihat]'          : '[View Once Photo]';
+  String get viewOnceTap      => isId ? 'Tekan untuk melihat (10 detik)' : 'Tap to view (10 seconds)';
+  String get viewOnceExpired  => isId ? 'Foto sudah kadaluarsa'        : 'Photo expired';
+  String get viewOnceViewing  => isId ? 'Menutup dalam'                : 'Closing in';
   String get msgBlocked       => isId ? 'User ini diblokir, tidak bisa kirim pesan' : 'This user is blocked, cannot send message';
+  String get msgBlockedByOther => isId ? 'Kamu diblokir oleh pengguna ini' : 'You have been blocked by this user';
   String get btnBlock         => isId ? 'Blokir'                      : 'Block';
   String get btnReport        => isId ? 'Laporkan'                    : 'Report';
   String get btnUnblock       => isId ? 'Buka Blokir'                 : 'Unblock';
@@ -69,6 +130,9 @@ class S {
   String get reportSuccess    => isId ? 'Laporan terkirim'            : 'Report submitted';
   String get blockSuccess     => isId ? 'Pengguna diblokir'           : 'User blocked';
   String get unblockSuccess   => isId ? 'Blokir dibuka'               : 'User unblocked';
+  String get btnDeleteChat    => isId ? 'Hapus Chat'                  : 'Delete Chat';
+  String get deleteChatSuccess => isId ? 'Chat dihapus'               : 'Chat deleted';
+  String get deleteChatConfirm => isId ? 'Hapus percakapan ini? Pesan tidak bisa dipulihkan.' : 'Delete this conversation? Messages cannot be recovered.';
 
   // ── Profile ──
   String get titleProfile     => isId ? 'Profil'                      : 'Profile';
@@ -107,7 +171,41 @@ class S {
   String get notifNewMessageBody => isId ? 'Pesan baru masuk'         : 'You have a new message';
 
   // ── Errors / Generic ──
+  String get btnCancel       => isId ? 'Batal'                        : 'Cancel';
+  String get msgStartConversation => isId ? 'Mulai percakapan!'       : 'Start the conversation!';
   String get errGeneric       => isId ? 'Gagal: '                     : 'Failed: ';
   String get loading          => isId ? 'Memuat...'                   : 'Loading...';
   String get unknownUser      => isId ? 'Pengguna'                    : 'User';
+
+  // ── Auth Email / Register / Login ──
+  String get labelEmail          => isId ? 'Email'                          : 'Email';
+  String get labelPassword       => isId ? 'Password'                       : 'Password';
+  String get labelConfirmPassword => isId ? 'Konfirmasi Password'           : 'Confirm Password';
+  String get hintEmail           => isId ? 'Masukkan email kamu...'         : 'Enter your email...';
+  String get hintPassword        => isId ? 'Minimal 8 karakter'             : 'At least 8 characters';
+  String get btnRegister         => isId ? 'DAFTAR'                         : 'REGISTER';
+  String get btnLogin            => isId ? 'MASUK'                          : 'LOGIN';
+  String get btnRegisterEmail    => isId ? 'Daftar dengan Email'            : 'Register with Email';
+  String get btnLoginEmail       => isId ? 'Sudah punya akun? Login'        : 'Already have an account? Login';
+  String get btnForgotPassword   => isId ? 'Lupa Password?'                 : 'Forgot Password?';
+  String get btnSendReset        => isId ? 'Kirim Link Reset'               : 'Send Reset Link';
+  String get titleRegister       => isId ? 'Buat Akun'                      : 'Create Account';
+  String get titleLogin          => isId ? 'Masuk'                          : 'Login';
+  String get titleForgotPassword => isId ? 'Reset Password'                 : 'Reset Password';
+  String get titleLinkEmail      => isId ? 'Amankan Akun'                   : 'Secure Account';
+  String get titleAccountSecurity => isId ? 'Keamanan Akun'                 : 'Account Security';
+  String get msgVerifyEmail      => isId ? 'Link verifikasi dikirim ke email kamu. Cek inbox dan klik link untuk mengaktifkan akun.' : 'Verification link sent to your email. Check your inbox and click the link to activate your account.';
+  String get msgPasswordResetSent => isId ? 'Link reset password dikirim ke email kamu.' : 'Password reset link sent to your email.';
+  String get msgAccountLinked    => isId ? 'Email berhasil didaftarkan. Akun kamu sekarang aman.' : 'Email registered successfully. Your account is now secured.';
+  String get msgAnonymousWarning => isId ? 'Akun anonim tidak bisa dipulihkan jika logout. Daftarkan email untuk mengamankan data kamu.' : 'Anonymous accounts cannot be recovered after logout. Register your email to secure your data.';
+  String get labelSecuredAccount => isId ? 'Akun Email'                     : 'Email Account';
+  String get btnSecureAccount    => isId ? 'Daftarkan Email'                : 'Register Email';
+  String get errEmailEmpty       => isId ? 'Masukkan email dulu'            : 'Please enter your email';
+  String get errEmailInvalid     => isId ? 'Format email tidak valid'       : 'Invalid email format';
+  String get errPasswordShort    => isId ? 'Password minimal 8 karakter'   : 'Password must be at least 8 characters';
+  String get errPasswordMismatch => isId ? 'Password tidak cocok'           : 'Passwords do not match';
+  String get errEmailAlreadyUsed => isId ? 'Email sudah digunakan'          : 'Email already in use';
+  String get errInvalidCredentials => isId ? 'Email atau password salah'    : 'Invalid email or password';
+  String get errNicknameTaken    => isId ? 'Nickname sudah digunakan, pilih yang lain' : 'Nickname already taken, choose another';
+  String get errEmailNotVerified => isId ? 'Email belum diverifikasi. Cek inbox kamu.' : 'Email not verified. Check your inbox.';
 }
