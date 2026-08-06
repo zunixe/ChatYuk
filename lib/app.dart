@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/room_provider.dart';
@@ -13,6 +15,7 @@ import 'screens/lobby_screen.dart';
 import 'screens/private_chats_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/online_users_screen.dart';
+import 'screens/reset_password_screen.dart';
 
 class ChatYukApp extends StatelessWidget {
   const ChatYukApp({super.key});
@@ -46,17 +49,28 @@ class _AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<_AuthGate> {
+  StreamSubscription<AuthState>? _authSub;
+
   @override
   void initState() {
     super.initState();
     final auth = context.read<AuthProvider>();
     auth.addListener(_onAuthChanged);
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
+        );
+      }
+    });
   }
 
   void _onAuthChanged() {}
 
   @override
   void dispose() {
+    _authSub?.cancel();
     context.read<AuthProvider>().removeListener(_onAuthChanged);
     super.dispose();
   }
