@@ -9,6 +9,7 @@ import '../services/geo_service.dart';
 import '../utils.dart';
 import 'register_screen.dart';
 import 'login_screen.dart';
+import 'donate_screen.dart';
 
 class EntryScreen extends StatefulWidget {
   const EntryScreen({super.key});
@@ -253,6 +254,22 @@ class _EntryScreenState extends State<EntryScreen> {
                 ),
               ),
               const SizedBox(height: 8),
+
+              // Donasi
+              Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonateScreen())),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.favorite, size: 16, color: AppTheme.danger),
+                      SizedBox(width: 4),
+                      Text('Donasi', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
             ],
           ),
         ),

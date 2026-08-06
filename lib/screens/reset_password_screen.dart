@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../utils.dart';
 import 'login_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
@@ -18,6 +17,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _confirmCtrl = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
+  bool _obscureConfirm = true;
 
   @override
   void dispose() {
@@ -102,12 +102,16 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
             TextField(
               controller: _confirmCtrl,
-              obscureText: _obscure,
+              obscureText: _obscureConfirm,
               style: const TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.labelConfirmPassword,
                 hintText: s.hintPassword,
                 prefixIcon: const Icon(Icons.lock_outlined),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
               ),
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _submit(),
