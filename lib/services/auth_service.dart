@@ -49,7 +49,18 @@ class AuthService {
 
   /// Kirim email reset password.
   Future<void> sendPasswordResetEmail(String email) async {
-    await _sb.auth.resetPasswordForEmail(email);
+    await _sb.auth.resetPasswordForEmail(
+      email,
+      redirectTo: 'chatyuk://login-callback',
+    );
+  }
+
+  /// Set password baru. Dipanggil dari screen reset password
+  /// setelah user membuka link recovery di email.
+  Future<void> resetPassword(String newPassword) async {
+    await _sb.auth.updateUser(UserAttributes(password: newPassword));
+    // Logout agar user login ulang dengan password baru
+    await _sb.auth.signOut();
   }
 
   /// Cek apakah nickname sudah dipakai oleh user lain.

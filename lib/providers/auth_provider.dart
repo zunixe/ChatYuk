@@ -95,6 +95,15 @@ class AuthProvider extends ChangeNotifier {
     await _auth.sendPasswordResetEmail(email);
   }
 
+  /// Set password baru setelah recovery. Logout otomatis agar login ulang.
+  Future<void> resetPassword(String newPassword) async {
+    _idleTimer?.cancel();
+    _isIdle = false;
+    await _auth.resetPassword(newPassword);
+    _profile = null;
+    notifyListeners();
+  }
+
   /// Cek apakah nickname tersedia.
   Future<bool> isNicknameAvailable(String nickname) {
     return _auth.isNicknameAvailable(nickname);

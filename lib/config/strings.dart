@@ -196,6 +196,11 @@ class S {
   String get titleAccountSecurity => isId ? 'Keamanan Akun'                 : 'Account Security';
   String get msgVerifyEmail      => isId ? 'Link verifikasi dikirim ke email kamu. Cek inbox dan klik link untuk mengaktifkan akun.' : 'Verification link sent to your email. Check your inbox and click the link to activate your account.';
   String get msgPasswordResetSent => isId ? 'Link reset password dikirim ke email kamu.' : 'Password reset link sent to your email.';
+  String get titleSetNewPassword => isId ? 'Buat Password Baru'              : 'Set New Password';
+  String get msgSetNewPasswordHint => isId ? 'Masukkan password baru untuk akun kamu' : 'Enter a new password for your account';
+  String get btnSavePassword  => isId ? 'Simpan Password'                    : 'Save Password';
+  String get msgPasswordChanged => isId ? 'Password berhasil diubah. Silakan login ulang.' : 'Password changed. Please log in again.';
+  String get errChangePassword => isId ? 'Gagal mengubah password: '         : 'Failed to change password: ';
   String get msgAccountLinked    => isId ? 'Email berhasil didaftarkan. Akun kamu sekarang aman.' : 'Email registered successfully. Your account is now secured.';
   String get msgAnonymousWarning => isId ? 'Akun anonim tidak bisa dipulihkan jika logout. Daftarkan email untuk mengamankan data kamu.' : 'Anonymous accounts cannot be recovered after logout. Register your email to secure your data.';
   String get labelSecuredAccount => isId ? 'Akun Email'                     : 'Email Account';
