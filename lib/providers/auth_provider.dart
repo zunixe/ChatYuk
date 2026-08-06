@@ -4,6 +4,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
+// Shortcut untuk fire-and-forget
+void unawaited(Future<void> future) => future.catchError((_) {});
+
 class AuthProvider extends ChangeNotifier {
   final AuthService _auth = AuthService();
   final String instanceId = 'AP-${DateTime.now().microsecondsSinceEpoch.toString().substring(8)}';
@@ -90,8 +93,16 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Kirim ulang email verifikasi untuk user yang sudah signup tapi belum verify.
+  Future<void> resendVerificationEmail(String email) async {
+    await _auth.resendVerificationEmail(email);
+  }
+
   /// Kirim email reset password.
+  /// Lempar [EmailNotRegisteredException] jika email belum terdaftar.
   Future<void> sendPasswordResetEmail(String email) async {
+    final registered = await _auth.checkEmailRegistered(email);
+    if (!registered) throw EmailNotRegisteredException();
     await _auth.sendPasswordResetEmail(email);
   }
 
@@ -101,7 +112,10 @@ class AuthProvider extends ChangeNotifier {
     _isIdle = false;
     await _auth.resetPassword(newPassword);
     _profile = null;
+    _loading = false;
     notifyListeners();
+    // Jangan panggil _init() di sini — biarkan user login ulang manual.
+    // _init() secara unawaited akan race condition dengan signInWithEmail.
   }
 
   /// Cek apakah nickname tersedia.

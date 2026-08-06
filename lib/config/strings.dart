@@ -196,6 +196,8 @@ class S {
   String get titleAccountSecurity => isId ? 'Keamanan Akun'                 : 'Account Security';
   String get msgVerifyEmail      => isId ? 'Link verifikasi dikirim ke email kamu. Cek inbox dan klik link untuk mengaktifkan akun.' : 'Verification link sent to your email. Check your inbox and click the link to activate your account.';
   String get msgPasswordResetSent => isId ? 'Link reset password dikirim ke email kamu.' : 'Password reset link sent to your email.';
+  String get msgEmailNotRegistered => isId ? 'Email belum terdaftar. Daftar dulu untuk membuat akun.' : 'Email is not registered. Register first to create an account.';
+  String get msgPasswordResetFailed => isId ? 'Gagal mengirim link reset. Coba lagi nanti.' : 'Failed to send reset link. Please try again later.';
   String get titleSetNewPassword => isId ? 'Buat Password Baru'              : 'Set New Password';
   String get msgSetNewPasswordHint => isId ? 'Masukkan password baru untuk akun kamu' : 'Enter a new password for your account';
   String get btnSavePassword  => isId ? 'Simpan Password'                    : 'Save Password';
@@ -213,4 +215,6 @@ class S {
   String get errInvalidCredentials => isId ? 'Email atau password salah'    : 'Invalid email or password';
   String get errNicknameTaken    => isId ? 'Nickname sudah digunakan, pilih yang lain' : 'Nickname already taken, choose another';
   String get errEmailNotVerified => isId ? 'Email belum diverifikasi. Cek inbox kamu.' : 'Email not verified. Check your inbox.';
+  String get msgEmailAlreadyRegisteredResend => isId ? 'Email sudah terdaftar tapi belum diverifikasi. Link verifikasi dikirim ulang ke inbox kamu.' : 'Email registered but not verified. Verification link resent to your inbox.';
+  String get msgCompleteProfile  => isId ? 'Lengkapi profil untuk melanjutkan'     : 'Complete your profile to continue';
 }

@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import 'link_email_screen.dart';
+import 'donate_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -381,6 +382,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   side: const BorderSide(color: AppTheme.danger),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Donasi
+            Center(
+              child: GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonateScreen())),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.favorite, size: 16, color: AppTheme.danger),
+                    SizedBox(width: 4),
+                    Text('Donasi', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                  ],
                 ),
               ),
             ),

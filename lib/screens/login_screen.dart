@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
+import '../services/auth_service.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -66,30 +69,82 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // Jika ada pending profile (baru daftar, baru verifikasi), register profile-nya
-      if (widget.pendingNickname != null && auth.profile == null) {
-        await auth.registerProfile(
-          nickname: widget.pendingNickname!,
-          gender: widget.pendingGender ?? 'male',
-          age: widget.pendingAge ?? 18,
-          country: widget.pendingCountry ?? 'Indonesia',
-          city: widget.pendingCity ?? 'Jakarta',
-          ipAddress: widget.pendingIp ?? '',
-        );
+      // B1: Cek pending profile dari widget param ATAU SharedPreferences
+      // (fallback jika app di-kill setelah signup sebelum registerProfile)
+      String? nickname = widget.pendingNickname;
+      String? gender   = widget.pendingGender;
+      int?    age      = widget.pendingAge;
+      String? country  = widget.pendingCountry;
+      String? city     = widget.pendingCity;
+      String? ip       = widget.pendingIp;
+
+      if (nickname == null && auth.profile == null) {
+        final prefs = await SharedPreferences.getInstance();
+        final savedEmail = prefs.getString('pending_email');
+        if (savedEmail == email) {
+          nickname = prefs.getString('pending_nickname');
+          gender   = prefs.getString('pending_gender');
+          age      = prefs.getInt('pending_age');
+          country  = prefs.getString('pending_country');
+          city     = prefs.getString('pending_city');
+          ip       = prefs.getString('pending_ip');
+        }
       }
 
-      // _AuthGate akan otomatis routing ke _MainNav karena profile sudah ada
+      // Register profile jika ada data pending dan profile belum ada
+      if (nickname != null && auth.profile == null) {
+        await auth.registerProfile(
+          nickname: nickname,
+          gender: gender ?? 'male',
+          age: age ?? 18,
+          country: country ?? 'Indonesia',
+          city: city ?? 'Jakarta',
+          ipAddress: ip ?? '',
+        );
+        // Hapus pending setelah berhasil
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('pending_email');
+        await prefs.remove('pending_nickname');
+        await prefs.remove('pending_gender');
+        await prefs.remove('pending_age');
+        await prefs.remove('pending_country');
+        await prefs.remove('pending_city');
+        await prefs.remove('pending_ip');
+      }
+
+      if (!mounted) return;
+
+      // E2: Login sukses tapi masih belum ada profile → arahkan ke form profil
+      if (auth.profile == null) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => RegisterScreen(
+            prefillEmail: email,
+            mode: RegisterMode.profileOnly,
+          )),
+        );
+        return;
+      }
+
+      // B2: postFrameCallback untuk hindari race condition _AuthGate rebuild
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+      });
+    } on AuthException catch (e) {
+      // B6: Gunakan AuthException bukan string matching
+      if (!mounted) return;
+      final s2 = context.read<LocaleProvider>().s;
+      final code = e.code ?? e.message.toLowerCase();
+      if (code.contains('invalid') || code.contains('credentials') || code.contains('wrong')) {
+        _snack(s2.errInvalidCredentials);
+      } else if (code.contains('verified') || code.contains('confirm')) {
+        _snack(s2.errEmailNotVerified);
+      } else {
+        _snack('${s2.errGeneric}${e.message}');
+      }
     } on Exception catch (e) {
       if (!mounted) return;
       final s2 = context.read<LocaleProvider>().s;
-      final msg = e.toString().toLowerCase();
-      if (msg.contains('invalid') || msg.contains('wrong') || msg.contains('credentials')) {
-        _snack(s2.errInvalidCredentials);
-      } else if (msg.contains('verified') || msg.contains('confirm')) {
-        _snack(s2.errEmailNotVerified);
-      } else {
-        _snack('${s2.errGeneric}$e');
-      }
+      _snack('${s2.errGeneric}$e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -97,38 +152,52 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _forgotPassword() async {
     final s = context.read<LocaleProvider>().s;
+    // B5: dispose ctrl setelah dialog ditutup
     final ctrl = TextEditingController(text: _emailCtrl.text);
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        title: Text(s.titleForgotPassword, style: const TextStyle(color: AppTheme.textPrimary)),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.emailAddress,
-          style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: InputDecoration(labelText: s.labelEmail, hintText: s.hintEmail),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(context.read<LocaleProvider>().s.btnCancel)),
-          ElevatedButton(
-            onPressed: () async {
-              final email = ctrl.text.trim();
-              if (email.isEmpty) return;
-              Navigator.of(ctx).pop();
-              try {
-                await context.read<AuthProvider>().sendPasswordResetEmail(email);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(s.msgPasswordResetSent)));
-                }
-              } catch (_) {}
-            },
-            child: Text(s.btnSendReset),
+    try {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.bgCard,
+          title: Text(s.titleForgotPassword, style: const TextStyle(color: AppTheme.textPrimary)),
+          content: TextField(
+            controller: ctrl,
+            keyboardType: TextInputType.emailAddress,
+            autofocus: true,
+            style: const TextStyle(color: AppTheme.textPrimary),
+            decoration: InputDecoration(labelText: s.labelEmail, hintText: s.hintEmail),
           ),
-        ],
-      ),
-    );
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(s.btnCancel)),
+            ElevatedButton(
+              onPressed: () async {
+                final email = ctrl.text.trim();
+                if (email.isEmpty) return;
+                Navigator.of(ctx).pop();
+                try {
+                  await context.read<AuthProvider>().sendPasswordResetEmail(email);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(s.msgPasswordResetSent)));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(
+                        e is EmailNotRegisteredException
+                            ? s.msgEmailNotRegistered
+                            : s.msgPasswordResetFailed)));
+                  }
+                }
+              },
+              child: Text(s.btnSendReset),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      ctrl.dispose();
+    }
   }
 
   void _snack(String msg) {

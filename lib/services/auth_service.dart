@@ -5,6 +5,18 @@ import '../models/user_model.dart';
 import '../config/supabase_config.dart';
 import '../utils.dart';
 
+/// Dilempar saat email tidak terdaftar di Auth (cek via RPC sebelum kirim reset).
+class EmailNotRegisteredException implements Exception {
+  @override
+  String toString() => 'EmailNotRegisteredException';
+}
+
+/// Dilempar saat email sudah terdaftar — cegah register berulang.
+class EmailAlreadyRegisteredException implements Exception {
+  @override
+  String toString() => 'EmailAlreadyRegisteredException';
+}
+
 class AuthService {
   final SupabaseClient _sb = SupabaseConfig.client;
 
@@ -21,19 +33,6 @@ class AuthService {
     debugPrint('[AUTH] signInAnonymously -> ${res.user?.id}');
   }
 
-  /// Daftar akun baru dengan email + password.
-  /// Mengembalikan userId — caller harus panggil registerProfile() setelahnya.
-  Future<String> signUpWithEmail(String email, String password) async {
-    final res = await _sb.auth.signUp(
-      email: email,
-      password: password,
-      emailRedirectTo: 'chatyuk://login-callback',
-    );
-    final user = res.user;
-    if (user == null) throw Exception('Sign up failed: no user returned');
-    return user.id;
-  }
-
   /// Login dengan email + password.
   /// Setelah ini, getProfile() akan mengembalikan profile user.
   Future<void> signInWithEmail(String email, String password) async {
@@ -45,6 +44,41 @@ class AuthService {
   /// UID tidak berubah — semua data (chat, profile) dipertahankan.
   Future<void> linkEmailToAccount(String email, String password) async {
     await _sb.auth.updateUser(UserAttributes(email: email, password: password));
+  }
+
+  /// Cek apakah email sudah terdaftar di Auth (RPC security definer).
+  /// Kalau RPC belum dibuat di DB, fallback ke [fallback]
+  /// (reset: true = lanjut kirim seperti lama; signup: false = lanjut daftar).
+  Future<bool> checkEmailRegistered(String email, {bool fallback = true}) async {
+    try {
+      final res = await _sb.rpc('check_email_registered', params: {'p_email': email});
+      return res == true;
+    } catch (e) {
+      debugPrint('[AUTH] checkEmailRegistered error, fallback=$fallback: $e');
+      return fallback;
+    }
+  }
+
+  /// Daftar akun baru dengan email + password.
+  /// Mengembalikan userId — caller harus panggil registerProfile() setelahnya.
+  /// Lempar [EmailAlreadyRegisteredException] jika email sudah terdaftar.
+  Future<String> signUpWithEmail(String email, String password) async {
+    if (await checkEmailRegistered(email, fallback: false)) {
+      throw EmailAlreadyRegisteredException();
+    }
+    final res = await _sb.auth.signUp(
+      email: email,
+      password: password,
+      emailRedirectTo: 'chatyuk://login-callback',
+    );
+    final user = res.user;
+    if (user == null) throw Exception('Sign up failed: no user returned');
+    return user.id;
+  }
+
+  /// Kirim ulang email verifikasi (untuk user yang sudah signup tapi belum verify).
+  Future<void> resendVerificationEmail(String email) async {
+    await _sb.auth.resend(type: OtpType.signup, email: email);
   }
 
   /// Kirim email reset password.
@@ -80,10 +114,9 @@ class AuthService {
     required String city,
     String ipAddress = '', // disimpan di model lokal saja, tidak dikirim ke DB
   }) async {
-    if (_sb.auth.currentUser == null) {
-      await signInAnonymously();
-    }
-    final user = _sb.auth.currentUser!;
+    // Jangan fallback ke anonymous — kalau tidak ada user, lempar error
+    final user = _sb.auth.currentUser;
+    if (user == null) throw Exception('registerProfile: no authenticated user');
     final now = DateTime.now().toUtc();
     final profile = UserModel(
       uid: user.id,
