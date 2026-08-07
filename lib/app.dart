@@ -54,24 +54,21 @@ class _AuthGateState extends State<_AuthGate> {
   @override
   void initState() {
     super.initState();
-    final auth = context.read<AuthProvider>();
-    auth.addListener(_onAuthChanged);
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
+          );
+        });
       }
     });
   }
 
-  void _onAuthChanged() {}
-
   @override
   void dispose() {
     _authSub?.cancel();
-    context.read<AuthProvider>().removeListener(_onAuthChanged);
     super.dispose();
   }
 

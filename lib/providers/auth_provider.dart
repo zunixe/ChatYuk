@@ -12,6 +12,8 @@ class AuthProvider extends ChangeNotifier {
   final String instanceId = 'AP-${DateTime.now().microsecondsSinceEpoch.toString().substring(8)}';
   UserModel? _profile;
   bool _loading = true;
+  bool _disposed = false;
+  bool _initInProgress = false;
 
   String? _error;
 
@@ -33,10 +35,12 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
+    if (_initInProgress) return; // guard re-entry
+    _initInProgress = true;
     debugPrint('[AUTH] _init start');
     _loading = true;
     _error = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     try {
       debugPrint('[AUTH] signInAnonymously...');
       await _auth.signInAnonymously();
@@ -49,7 +53,8 @@ class AuthProvider extends ChangeNotifier {
       _error = e.toString();
     }
     _loading = false;
-    notifyListeners();
+    _initInProgress = false;
+    if (!_disposed) notifyListeners();
     debugPrint('[AUTH] _init done loading=false');
   }
 
@@ -199,16 +204,18 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _becomeIdle() async {
+    if (_disposed) return;
     _isIdle = true;
     await _auth.goIdle();
     _profile = _profile?.copyWith(status: 'idle');
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> goOnline() async {
+    if (_disposed) return;
     await _auth.goOnline();
     _profile = _profile?.copyWith(status: 'online');
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     resetIdleTimer();
   }
 
@@ -217,6 +224,13 @@ class AuthProvider extends ChangeNotifier {
     _isIdle = false;
     await _auth.goOffline();
     _profile = _profile?.copyWith(status: 'offline');
-    notifyListeners();
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _idleTimer?.cancel();
+    super.dispose();
   }
 }
