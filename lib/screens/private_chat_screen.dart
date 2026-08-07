@@ -34,6 +34,7 @@ class PrivateChatScreen extends StatefulWidget {
   final String otherGender;
   final String otherCountry;
   final int otherAge;
+  final bool otherRegistered;
   const PrivateChatScreen({
     super.key,
     required this.chatId,
@@ -42,6 +43,7 @@ class PrivateChatScreen extends StatefulWidget {
     this.otherGender = '',
     this.otherCountry = '',
     this.otherAge = 0,
+    this.otherRegistered = false,
   });
 
   @override
@@ -129,7 +131,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
-        _scrollCtrl.jumpTo(0);
+        _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
       }
     });
   }
@@ -145,18 +147,23 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
     if (chat.isBlocked(widget.otherUid)) {
+      _isSending = false;
       final s = context.read<LocaleProvider>().s;
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgBlocked)));
       return;
     }
     final uid = auth.uid;
     final profile = auth.profile;
-    if (uid == null || profile == null) return;
+    if (uid == null || profile == null) {
+      _isSending = false;
+      return;
+    }
     final pending = MessageModel(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
       senderId: uid,
       senderName: profile.nickname,
       senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
       text: text,
       type: 'text',
       imageData: '',
@@ -348,14 +355,25 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    widget.otherName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          widget.otherName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (widget.otherRegistered) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.verified, size: 15, color: Color(0xFF8AB4F8)),
+                      ],
+                    ],
                   ),
                   Row(
                     children: [

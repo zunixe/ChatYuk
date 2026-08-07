@@ -42,9 +42,18 @@ class AuthService {
   }
 
   /// Upgrade anonymous account ke email account.
-  /// UID tidak berubah — semua data (chat, profile) dipertahankan.
+  /// UID tidak berubah - semua data (chat, profile) dipertahankan.
   Future<void> linkEmailToAccount(String email, String password) async {
     await _sb.auth.updateUser(UserAttributes(email: email, password: password));
+  }
+
+  /// Tandai profile sebagai terdaftar (punya email).
+  Future<void> markRegistered() async {
+    final id = uid;
+    if (id == null) return;
+    try {
+      await _sb.from('profiles').update({'is_registered': true}).eq('id', id);
+    } catch (_) {}
   }
 
   /// Cek apakah email sudah terdaftar di Auth (RPC security definer).
@@ -119,6 +128,7 @@ class AuthService {
     final user = _sb.auth.currentUser;
     if (user == null) throw Exception('registerProfile: no authenticated user');
     final now = DateTime.now().toUtc();
+    final hasEmail = (user.email ?? '').isNotEmpty;
     final profile = UserModel(
       uid: user.id,
       nickname: nickname,
@@ -129,6 +139,7 @@ class AuthService {
       ipAddress: '', // tidak disimpan di model lokal — hanya di server
       status: 'online',
       avatar: '',
+      isRegistered: hasEmail,
       loginAt: now,
       createdAt: now,
       lastSeen: now,
@@ -147,6 +158,7 @@ class AuthService {
       'status': 'online',
       'avatar': '',
       'fcm_token': '',
+      'is_registered': hasEmail,
       'login_at': now.toUtc().toIso8601String(),
       'created_at': now.toUtc().toIso8601String(),
       'last_seen': now.toUtc().toIso8601String(),
@@ -159,7 +171,7 @@ class AuthService {
     final id = uid;
     if (id == null) return null;
     // Exclude fcm_token dan ip_address �?" tidak dibutuhkan di model
-    const cols = 'id,nickname,gender,age,country,city,status,avatar,login_at,created_at,last_seen';
+    const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen';
     final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
     if (res == null) return null;
     return UserModel.fromMap(id, snakeToCamel(res));
@@ -168,7 +180,7 @@ class AuthService {
   /// Ambil profil user lain (untuk halaman info pengguna).
   Future<UserModel?> getProfileById(String id) async {
     if (id.isEmpty) return null;
-    const cols = 'id,nickname,gender,age,country,city,status,avatar,login_at,created_at,last_seen';
+    const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen';
     final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
     if (res == null) return null;
     return UserModel.fromMap(id, snakeToCamel(res));

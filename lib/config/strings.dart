@@ -101,6 +101,8 @@ class S {
   String get genderMale      => isId ? '🧑 Laki-laki'                  : '🧑 Male';
   String get genderFemale    => isId ? '👩 Perempuan'                  : '👩 Female';
   String get genderOther     => isId ? '🧑 Lainnya'                    : '🧑 Other';
+  String get labelRegistered => isId ? 'Terdaftar'                     : 'Registered';
+  String get labelUnregistered => isId ? 'Tanpa daftar'                : 'Guest';
 
   // ── Private Chats ──
   String get titlePrivateChat => isId ? 'Private Chat'                : 'Private Chat';

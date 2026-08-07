@@ -10,6 +10,7 @@ class UserModel {
   final String ipAddress;
   final String status;
   final String avatar;
+  final bool isRegistered;
   final DateTime loginAt;
   final DateTime createdAt;
   final DateTime lastSeen;
@@ -24,6 +25,7 @@ class UserModel {
     required this.ipAddress,
     required this.status,
     required this.avatar,
+    required this.isRegistered,
     required this.loginAt,
     required this.createdAt,
     required this.lastSeen,
@@ -40,6 +42,7 @@ class UserModel {
       ipAddress: map['ipAddress'] ?? '',
       status: map['status'] ?? (map['online'] == true ? 'online' : 'offline'),
       avatar: map['avatar'] ?? '',
+      isRegistered: map['isRegistered'] == true,
       loginAt: parseDate(map['loginAt']),
       createdAt: parseDate(map['createdAt']),
       lastSeen: parseDate(map['lastSeen']),
@@ -56,6 +59,7 @@ class UserModel {
       'ipAddress': ipAddress,
       'status': status,
       'avatar': avatar,
+      'isRegistered': isRegistered,
       'loginAt': loginAt.toUtc().toIso8601String(),
       'createdAt': createdAt.toUtc().toIso8601String(),
       'lastSeen': lastSeen.toUtc().toIso8601String(),
@@ -71,6 +75,7 @@ class UserModel {
     String? ipAddress,
     String? status,
     String? avatar,
+    bool? isRegistered,
   }) {
     return UserModel(
       uid: uid,
@@ -82,6 +87,7 @@ class UserModel {
       ipAddress: ipAddress ?? this.ipAddress,
       status: status ?? this.status,
       avatar: avatar ?? this.avatar,
+      isRegistered: isRegistered ?? this.isRegistered,
       loginAt: loginAt,
       createdAt: createdAt,
       lastSeen: lastSeen,

@@ -58,10 +58,14 @@ class MessageCache {
   }
 
   /// Simpan daftar pesan untuk sebuah chat (key = chatId/roomId).
+  /// Kirim list kosong untuk menghapus cache chat tersebut.
   Future<void> saveMessages(String chatKey, List<MessageModel> messages) async {
-    if (messages.isEmpty) return;
-    final key = await _getKey();
     final prefs = await SharedPreferences.getInstance();
+    if (messages.isEmpty) {
+      await prefs.remove('$_keyPrefix$chatKey');
+      return;
+    }
+    final key = await _getKey();
     final data = messages.map((m) => m.toMap()).toList();
     final plain = jsonEncode(data);
     final enc = await _encrypt(plain, key);

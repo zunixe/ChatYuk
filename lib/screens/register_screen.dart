@@ -45,6 +45,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscureConfirm = true;
   String? _nicknameError;
   Timer? _nicknameDebounce;
+  final _nicknameFocus = FocusNode();
 
   @override
   void initState() {
@@ -71,6 +72,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     _nicknameCtrl.dispose();
+    _nicknameFocus.dispose();
     _nicknameDebounce?.cancel();
     super.dispose();
   }
@@ -108,11 +110,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (nickname.isEmpty) { _snack(s.errNicknameEmpty); return; }
     if (nickname.length < 3) { _snack(s.errNicknameShort); return; }
     if (nickname.length > 20) { _snack(s.errNicknameLong); return; }
-    if (_nicknameError != null) { _snack(_nicknameError!); return; }
+    if (_nicknameError != null) {
+      _nicknameFocus.requestFocus();
+      return;
+    }
 
-    // Cek nickname sekali lagi sebelum submit
+    // Cek nickname sekali lagi sebelum submit — set error di field, bukan snackbar
+    setState(() { _nicknameError = null; });
     final available = await context.read<AuthProvider>().isNicknameAvailable(nickname);
-    if (!available) { _snack(s.errNicknameTaken); return; }
+    if (!available) {
+      setState(() => _nicknameError = s.errNicknameTaken);
+      _nicknameFocus.requestFocus();
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -203,8 +213,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
       } else {
         final msg = e.toString().toLowerCase();
-        if (msg.contains('already') || msg.contains('taken') || msg.contains('duplicate')) {
-          _snack(s.errEmailAlreadyUsed);
+        if (msg.contains('no authenticated user')) {
+          // Session hilang saat mode profileOnly — coba login anon lalu ulangi
+          if (profileOnly) {
+            try {
+              await context.read<AuthProvider>().signInAnonymously();
+              await context.read<AuthProvider>().registerProfile(
+                nickname: nickname,
+                gender: _gender,
+                age: _age,
+                country: _negara,
+                city: _kota,
+                ipAddress: _ipAddress,
+              );
+              if (!mounted) return;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+              });
+              return;
+            } catch (_) {
+              if (mounted) {
+                setState(() => _nicknameError = s.errNicknameTaken);
+                _nicknameFocus.requestFocus();
+              }
+            }
+          } else {
+            _snack('${s.errGeneric}$e');
+          }
+        } else if (msg.contains('already') || msg.contains('taken') || msg.contains('duplicate')) {
+          // Jika error mengandung "profiles_nickname_key" → nickname sudah dipakai
+          if (msg.contains('nickname') || msg.contains('profiles_nickname')) {
+            setState(() => _nicknameError = s.errNicknameTaken);
+            _nicknameFocus.requestFocus();
+          } else {
+            _snack(s.errEmailAlreadyUsed);
+          }
         } else {
           _snack('${s.errGeneric}$e');
         }
@@ -280,18 +323,49 @@ class _RegisterScreenState extends State<RegisterScreen> {
             // Nickname
             TextField(
               controller: _nicknameCtrl,
+              focusNode: _nicknameFocus,
               onChanged: _onNicknameChanged,
               style: const TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.labelUsername,
                 hintText: s.hintNickname,
                 prefixIcon: const Icon(Icons.person_outline),
-                errorText: _nicknameError,
-                suffixIcon: _nicknameError == null && _nicknameCtrl.text.length >= 3
-                    ? const Icon(Icons.check_circle, color: Colors.green)
+                errorText: null,
+                suffixIcon: _nicknameError != null
+                    ? const Icon(Icons.cancel, color: AppTheme.danger)
+                    : _nicknameCtrl.text.length >= 3
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : null,
+                enabledBorder: _nicknameError != null
+                    ? const OutlineInputBorder(borderSide: BorderSide(color: AppTheme.danger, width: 1.5))
+                    : null,
+                focusedBorder: _nicknameError != null
+                    ? const OutlineInputBorder(borderSide: BorderSide(color: AppTheme.danger, width: 2))
                     : null,
               ),
             ),
+            if (_nicknameError != null)
+              Container(
+                margin: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.danger.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: AppTheme.danger, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _nicknameError!,
+                        style: const TextStyle(color: AppTheme.danger, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 12),
 
             // Gender

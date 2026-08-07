@@ -6,6 +6,7 @@ import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/online_users_provider.dart';
 import '../services/chat_service.dart';
 import '../utils.dart';
 import 'private_chat_screen.dart';
@@ -65,7 +66,14 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
     final blocked = context.watch<ChatProvider>().blockedUids;
+    final onlineUsers = context.watch<OnlineUsersProvider>().users;
     if (auth.uid == null) return const SizedBox();
+
+    // Map uid → status dari daftar online users
+    final statusMap = <String, String>{};
+    for (final u in onlineUsers) {
+      statusMap[u.uid] = u.status;
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(s.titlePrivateChat)),
@@ -179,6 +187,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                           otherGender: chat.participantGenders[otherUid] ?? '',
                           otherCountry: chat.participantLocations[otherUid] ?? '',
                           otherAge: chat.participantAges[otherUid] ?? 0,
+                          otherRegistered: chat.participantRegistered[otherUid] == true,
                         ),
                       ),
                     ),
@@ -220,25 +229,22 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                               else
                                 Positioned(
                                   right: -1, bottom: -1,
-                                  child: StreamBuilder<String>(
-                                    stream: context.read<ChatProvider>().getUserStatus(otherUid),
-                                    builder: (_, snap) {
-                                      final status = snap.data ?? 'offline';
-                                      final color = status == 'online'
-                                          ? const Color(0xFF4CAF50)
-                                          : status == 'idle'
-                                              ? const Color(0xFFFFC107)
-                                              : const Color(0xFF9E9E9E);
-                                      return Container(
-                                        width: 12, height: 12,
-                                        decoration: BoxDecoration(
-                                          color: color,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 2),
-                                        ),
-                                      );
-                                    },
-                                  ),
+                                  child: () {
+                                    final status = statusMap[otherUid] ?? 'offline';
+                                    final color = status == 'online'
+                                        ? const Color(0xFF4CAF50)
+                                        : status == 'idle'
+                                            ? const Color(0xFFFFC107)
+                                            : const Color(0xFF9E9E9E);
+                                    return Container(
+                                      width: 12, height: 12,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                      ),
+                                    );
+                                  }(),
                                 ),
                             ],
                           ),
@@ -250,11 +256,22 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: Text(otherName,
-                                        style: TextStyle(
-                                          color: isBlocked ? AppTheme.textSecondary : AppTheme.textPrimary,
-                                          fontWeight: FontWeight.w600,
-                                        )),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Flexible(
+                                            child: Text(otherName,
+                                              style: TextStyle(
+                                                color: isBlocked ? AppTheme.textSecondary : AppTheme.textPrimary,
+                                                fontWeight: FontWeight.w600,
+                                              )),
+                                          ),
+                                          if (chat.participantRegistered[otherUid] == true) ...[
+                                            const SizedBox(width: 3),
+                                            const Icon(Icons.verified, size: 14, color: Color(0xFF4A90E2)),
+                                          ],
+                                        ],
+                                      ),
                                     ),
                                     if (isBlocked)
                                       Container(

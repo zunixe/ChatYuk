@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -20,6 +21,7 @@ class EntryScreen extends StatefulWidget {
 
 class _EntryScreenState extends State<EntryScreen> {
   final _nicknameCtrl = TextEditingController();
+  final _nicknameFocus = FocusNode();
   final _geo = GeoService();
   String _gender = 'male';
   int _age = 18;
@@ -28,6 +30,8 @@ class _EntryScreenState extends State<EntryScreen> {
   String _ipAddress = '';
   bool _loading = false;
   bool _entered = false; // guard: cegah double submit
+  String? _nicknameError;
+  Timer? _nicknameDebounce;
 
   @override
   void initState() {
@@ -56,7 +60,24 @@ class _EntryScreenState extends State<EntryScreen> {
   @override
   void dispose() {
     _nicknameCtrl.dispose();
+    _nicknameFocus.dispose();
+    _nicknameDebounce?.cancel();
     super.dispose();
+  }
+
+  void _onNicknameChanged(String val) {
+    _nicknameDebounce?.cancel();
+    if (val.length < 3) {
+      setState(() => _nicknameError = null);
+      return;
+    }
+    _nicknameDebounce = Timer(const Duration(milliseconds: 600), () async {
+      final available = await context.read<AuthProvider>().isNicknameAvailable(val);
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        setState(() => _nicknameError = available ? null : s.errNicknameTaken);
+      }
+    });
   }
 
   Future<void> _enter() async {
@@ -79,6 +100,19 @@ class _EntryScreenState extends State<EntryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errNicknameInvalid)));
       return;
     }
+    if (_nicknameError != null) {
+      _nicknameFocus.requestFocus();
+      return;
+    }
+
+    // Cek duplicate sebelum submit
+    final available = await context.read<AuthProvider>().isNicknameAvailable(nick);
+    if (!available) {
+      setState(() => _nicknameError = s.errNicknameTaken);
+      _nicknameFocus.requestFocus();
+      return;
+    }
+
     _entered = true;
     setState(() => _loading = true);
     debugPrint('[ENTRY] _enter start nick=$nick');
@@ -97,7 +131,13 @@ class _EntryScreenState extends State<EntryScreen> {
       _entered = false; // allow retry on error
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+        final msg = e.toString().toLowerCase();
+        if (msg.contains('duplicate') || msg.contains('nickname') || msg.contains('taken')) {
+          setState(() => _nicknameError = s.errNicknameTaken);
+          _nicknameFocus.requestFocus();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+        }
       }
       return;
     }
@@ -159,14 +199,49 @@ class _EntryScreenState extends State<EntryScreen> {
               // Nickname
               TextField(
                 controller: _nicknameCtrl,
+                focusNode: _nicknameFocus,
+                onChanged: _onNicknameChanged,
                 style: const TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
                   hintText: s.hintNickname,
                   labelText: s.labelUsername,
+                  suffixIcon: _nicknameError != null
+                      ? const Icon(Icons.cancel, color: AppTheme.danger)
+                      : _nicknameCtrl.text.length >= 3
+                          ? const Icon(Icons.check_circle, color: Colors.green)
+                          : null,
+                  enabledBorder: _nicknameError != null
+                      ? const OutlineInputBorder(borderSide: BorderSide(color: AppTheme.danger, width: 1.5))
+                      : null,
+                  focusedBorder: _nicknameError != null
+                      ? const OutlineInputBorder(borderSide: BorderSide(color: AppTheme.danger, width: 2))
+                      : null,
                 ),
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _enter(),
               ),
+              if (_nicknameError != null)
+                Container(
+                  margin: const EdgeInsets.only(top: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.danger.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: AppTheme.danger, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _nicknameError!,
+                          style: const TextStyle(color: AppTheme.danger, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 10),
 
               // Gender

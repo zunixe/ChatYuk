@@ -90,7 +90,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
         otherAge: user.age,
       );
       if (!context.mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: user.nickname, otherUid: user.uid, otherGender: user.gender, otherCountry: user.country, otherAge: user.age)));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: user.nickname, otherUid: user.uid, otherGender: user.gender, otherCountry: user.country, otherAge: user.age, otherRegistered: user.isRegistered)));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
@@ -353,7 +353,20 @@ class _UserCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(user.nickname, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(user.nickname, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                        ),
+                        if (user.isRegistered) ...[
+                          const SizedBox(width: 4),
+                          const Tooltip(
+                            message: 'Verified',
+                            child: Icon(Icons.verified, size: 15, color: Color(0xFF4A90E2)),
+                          ),
+                        ],
+                      ],
+                    ),
                         Text('$genderLabel ${user.age} · ${user.city}, ${user.country}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),

@@ -289,6 +289,8 @@ class ChatService {
           participantLocations: Map<String, String>.from(d['participantLocations'] ?? {}),
           participantAges: (d['participantAges'] as Map<dynamic, dynamic>? ?? {})
               .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
+          participantRegistered: (d['participantRegistered'] as Map<dynamic, dynamic>? ?? {})
+              .map((k, v) => MapEntry(k.toString(), v == true)),
           lastMessage: d['lastMessage'] ?? '',
           lastMessageAt: parseDate(d['lastMessageAt']),
           unreadCounts: (d['unreadCounts'] as Map<dynamic, dynamic>? ?? {})
@@ -375,7 +377,7 @@ class ChatService {
     Future<void> fetchOnline() async {
       try {
         // Exclude kolom sensitif: fcm_token, ip_address
-        const cols = 'id,nickname,gender,age,country,city,status,avatar,last_seen';
+        const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
         final rows = await _sb
             .from('profiles')
             .select(cols)
@@ -417,6 +419,7 @@ class ChatService {
                 ipAddress: '',
                 status: 'online',
                 avatar: '',
+                isRegistered: d['isRegistered'] == true,
                 loginAt: DateTime.now(),
                 createdAt: DateTime.now(),
                 lastSeen: parseDate(d['joinedAt']),
@@ -526,6 +529,7 @@ class PrivateChatInfo {
   final Map<String, String> participantGenders;
   final Map<String, String> participantLocations;
   final Map<String, int> participantAges;
+  final Map<String, bool> participantRegistered;
   final String lastMessage;
   final DateTime lastMessageAt;
   final Map<String, int> unreadCounts;
@@ -538,6 +542,7 @@ class PrivateChatInfo {
     this.participantGenders = const {},
     this.participantLocations = const {},
     this.participantAges = const {},
+    this.participantRegistered = const {},
     required this.lastMessage,
     required this.lastMessageAt,
     this.unreadCounts = const {},
