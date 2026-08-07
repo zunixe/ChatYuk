@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
+import '../models/user_photo.dart';
 import '../config/supabase_config.dart';
 import '../utils.dart';
 
@@ -157,7 +158,16 @@ class AuthService {
   Future<UserModel?> getProfile() async {
     final id = uid;
     if (id == null) return null;
-    // Exclude fcm_token dan ip_address — tidak dibutuhkan di model
+    // Exclude fcm_token dan ip_address �?" tidak dibutuhkan di model
+    const cols = 'id,nickname,gender,age,country,city,status,avatar,login_at,created_at,last_seen';
+    final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
+    if (res == null) return null;
+    return UserModel.fromMap(id, snakeToCamel(res));
+  }
+
+  /// Ambil profil user lain (untuk halaman info pengguna).
+  Future<UserModel?> getProfileById(String id) async {
+    if (id.isEmpty) return null;
     const cols = 'id,nickname,gender,age,country,city,status,avatar,login_at,created_at,last_seen';
     final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
     if (res == null) return null;
@@ -235,6 +245,49 @@ class AuthService {
     try {
       await _sb.from('profiles').update({'status': 'online', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
     } catch (_) {}
+  }
+
+  /// Ambil semua foto galeri milik satu user.
+  Future<List<UserPhoto>> getPhotos(String userId) async {
+    if (userId.isEmpty) return [];
+    final rows = await _sb
+        .from('user_photos')
+        .select('id,user_id,photo,created_at')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    return rows.map((row) => UserPhoto.fromMap('${row['id']}', {
+      'userId': row['user_id'],
+      'photo': row['photo'],
+      'createdAt': row['created_at'],
+    })).toList();
+  }
+
+  /// Upload foto galeri milik sendiri. Max 6 foto per user.
+  Future<void> uploadPhoto(String base64) async {
+    final id = uid;
+    if (id == null) return;
+    if (base64.isNotEmpty && !isValidImageBase64(base64)) {
+      throw Exception('Invalid image format');
+    }
+    // Limit ukuran: max 1MB base64 (~768KB file)
+    if (base64.length > 1048576) {
+      throw Exception('Photo too large (max 768KB)');
+    }
+    // Batasi jumlah foto per user = 6
+    final rows = await _sb
+        .from('user_photos')
+        .select('id')
+        .eq('user_id', id);
+    if (rows.length >= 6) {
+      throw Exception('Max 6 photos');
+    }
+    await _sb.from('user_photos').insert({'user_id': id, 'photo': base64});
+  }
+
+  /// Hapus foto galeri (hanya punya sendiri, RLS menjamin).
+  Future<void> deletePhoto(String photoId) async {
+    if (photoId.isEmpty) return;
+    await _sb.from('user_photos').delete().eq('id', photoId);
   }
 
   Future<void> signOut() async {

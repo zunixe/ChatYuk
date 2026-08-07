@@ -22,11 +22,13 @@ class OnlineUsersScreen extends StatefulWidget {
 class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKeepAliveClientMixin {
   String _negara = 'all';
   String _gender = 'all';
+  String _search = '';
   int _page = 1;
   static const int _pageSize = 20;
   static const _prefKeyNegara = 'filter_negara';
   static const _prefKeyGender = 'filter_gender';
   final ScrollController _scrollCtrl = ScrollController();
+  final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   bool get wantKeepAlive => true;
@@ -56,6 +58,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
   void dispose() {
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -112,6 +115,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
           final users = allUsers.where((u) {
             if (_negara != 'all' && u.country != _negara) return false;
             if (_gender != 'all' && u.gender != _gender) return false;
+            if (_search.isNotEmpty &&
+                !u.nickname.toLowerCase().contains(_search.toLowerCase())) {
+              return false;
+            }
             return true;
           }).toList();
 
@@ -133,6 +140,31 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
 
               return Column(
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (v) => setState(() { _search = v; _page = 1; }),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: s.searchHint,
+                        prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
+                        suffixIcon: _search.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: AppTheme.textSecondary),
+                                onPressed: () { _searchCtrl.clear(); setState(() { _search = ''; _page = 1; }); },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: AppTheme.bgCard,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     child: Row(
@@ -175,7 +207,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                               children: [
                                 const Text('🟢', style: TextStyle(fontSize: 48)),
                                 const SizedBox(height: 12),
-                                Text(s.noOnlineUsers, style: const TextStyle(color: AppTheme.textSecondary)),
+                                Text(_search.isNotEmpty ? s.searchNoResult : s.noOnlineUsers, style: const TextStyle(color: AppTheme.textSecondary)),
                               ],
                             ),
                           )

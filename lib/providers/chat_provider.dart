@@ -17,9 +17,10 @@ class ChatProvider extends ChangeNotifier {
 
   List<String> get blockedUids => _blockedUids;
 
-  // Room chat
+  // Room chat — TIDAK di-cache karena stream mati saat RoomChatScreen dispose.
+  // Setiap kali masuk room, stream baru dibuat agar pesan selalu fresh.
   Stream<List<MessageModel>> getRoomMessages(String roomId) {
-    return _roomMsgCache.putIfAbsent(roomId, () => _service.getRoomMessagesCached(roomId));
+    return _service.getRoomMessagesCached(roomId);
   }
 
   Future<void> sendRoomMessage({
