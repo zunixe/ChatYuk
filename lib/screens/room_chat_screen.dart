@@ -62,8 +62,9 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     if (activeChatId.value == widget.room.id) {
       activeChatId.value = null;
     }
-    if (_auth?.uid != null) {
-      _chat?.leaveRoom(widget.room.id, _auth!.uid!);
+    final uid = _auth?.uid;
+    if (uid != null) {
+      _chat?.leaveRoom(widget.room.id, uid);
     }
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -272,7 +273,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                 if (mounted) {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: msg.senderName, otherUid: msg.senderId, otherGender: msg.senderGender, otherCountry: '')),
+                    MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: msg.senderName, otherUid: msg.senderId, otherGender: msg.senderGender, otherCountry: '', otherRegistered: msg.isRegistered)),
                   );
                 }
               },
@@ -349,13 +350,23 @@ class _UserChip extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: isMe ? AppTheme.primary : color,
-            child: Text(
-              user.initial,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
-            ),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: isMe ? AppTheme.primary : color,
+                child: Text(
+                  user.initial,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+              ),
+              if (user.isRegistered)
+                const Positioned(
+                  right: -2, bottom: -2,
+                  child: Icon(Icons.verified, size: 14, color: Color(0xFF4A90E2)),
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
@@ -401,9 +412,18 @@ class _MessageBubble extends StatelessWidget {
               children: [
                 GestureDetector(
                   onTap: onTapUser,
-                  child: Text(
-                    msg.senderName,
-                    style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        msg.senderName,
+                        style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      if (msg.isRegistered) ...[
+                        const SizedBox(width: 3),
+                        const Icon(Icons.verified, size: 13, color: Color(0xFF4A90E2)),
+                      ],
+                    ],
                   ),
                 ),
                 const SizedBox(height: 2),

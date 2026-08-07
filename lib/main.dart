@@ -15,6 +15,7 @@ import 'screens/private_chat_screen.dart';
 import 'screens/reset_password_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/supabase_config.dart';
+import 'services/screen_secure_service.dart';
 import 'utils.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -237,4 +238,6 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await _initNotifications();
   runApp(const ChatYukApp());
+  // Anti-screenshot untuk seluruh app (chat, foto, dll)
+  await ScreenSecureService.enable();
 }

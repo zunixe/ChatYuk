@@ -64,9 +64,16 @@ class AuthProvider extends ChangeNotifier {
     debugPrint('[AUTH] _init done loading=false');
   }
 
+  /// Login anonim (fallback saat session hilang).
+  /// Setelah login, ambil profile jika sudah ada.
+  Future<void> signInAnonymously() async {
+    await _auth.signInAnonymously();
+    _profile = await _auth.getProfile();
+    if (!_disposed) notifyListeners();
+  }
+
   Future<void> updateFcmToken() async {
-    if (!_notificationsEnabled) return;
-    try {
+    if (!_notificationsEnabled) return;    try {
       final token = await FirebaseMessaging.instance.getToken();
       await _auth.updateFcmToken(token);
     } catch (_) {
@@ -131,6 +138,8 @@ class AuthProvider extends ChangeNotifier {
   /// Upgrade anonymous account ke email account. UID tetap sama.
   Future<void> linkEmailToAccount(String email, String password) async {
     await _auth.linkEmailToAccount(email, password);
+    await _auth.markRegistered();
+    _profile = _profile?.copyWith(isRegistered: true);
     notifyListeners();
   }
 

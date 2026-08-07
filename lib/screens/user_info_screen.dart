@@ -119,7 +119,19 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text(name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 24, fontWeight: FontWeight.w700)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 24, fontWeight: FontWeight.w700)),
+                      ),
+                      if (profile?.isRegistered == true) ...[
+                        const SizedBox(width: 5),
+                        const Icon(Icons.verified, size: 20, color: Color(0xFF4A90E2)),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,

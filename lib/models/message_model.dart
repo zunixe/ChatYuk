@@ -5,6 +5,7 @@ class MessageModel {
   final String senderId;
   final String senderName;
   final String senderGender;
+  final bool isRegistered;
   final String text;
   final String type;
   final String imageData;
@@ -15,6 +16,7 @@ class MessageModel {
     required this.senderId,
     required this.senderName,
     required this.senderGender,
+    required this.isRegistered,
     required this.text,
     required this.type,
     required this.imageData,
@@ -27,6 +29,7 @@ class MessageModel {
       senderId: map['senderId'] ?? '',
       senderName: map['senderName'] ?? 'Anon',
       senderGender: map['senderGender'] ?? 'other',
+      isRegistered: map['isRegistered'] == true,
       text: map['text'] ?? '',
       type: map['type'] ?? 'text',
       imageData: map['imageData'] ?? '',
@@ -39,6 +42,7 @@ class MessageModel {
       'senderId': senderId,
       'senderName': senderName,
       'senderGender': senderGender,
+      'isRegistered': isRegistered,
       'text': text,
       'type': type,
       'imageData': imageData,

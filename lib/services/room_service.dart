@@ -22,19 +22,14 @@ class RoomService {
   // rooms TIDAK di-enable realtime di DB (error RealtimeSubscribeException),
   // jadi pakai fetch langsung, bukan .stream().
   Future<List<RoomModel>> fetchRooms(String country) async {
-    var rows = await _sb
+    // Selalu seed (upsert idempotent) agar semua kategori lengkap
+    // walaupun sebagian room sudah ada (mis. hasil tes/insert manual).
+    await seedCountryRooms(country);
+    final rows = await _sb
         .from('rooms')
         .select()
         .eq('country', country)
         .order('order');
-    if (rows.isEmpty) {
-      await seedCountryRooms(country);
-      rows = await _sb
-          .from('rooms')
-          .select()
-          .eq('country', country)
-          .order('order');
-    }
     return rows
         .map((row) => RoomModel.fromMap('${row['id']}', row))
         .toList();
