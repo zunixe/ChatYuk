@@ -178,7 +178,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final auth = context.read<AuthProvider>();
     if (state == AppLifecycleState.paused) {
-      auth.goOffline();
+      // App di-background/ditutup → set idle, bukan offline.
+      // User tetap tampil di menu online sebagai idle, baru hilang saat logout.
+      auth.goIdle();
     } else if (state == AppLifecycleState.resumed) {
       auth.goOnline();
     }

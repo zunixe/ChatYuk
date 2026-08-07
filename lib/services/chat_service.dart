@@ -165,6 +165,9 @@ class ChatService {
     int otherAge = 0,
   }) async {
     final chatId = _chatId(myUid, otherUid);
+    // ignoreDuplicates: chat yang sudah ada tidak di-update.
+    // Kalau di-upsert, trigger DB 'Cannot modify participants' akan menolak
+    // karena kolom participants tidak boleh berubah setelah chat dibuat.
     await _sb.from('private_chats').upsert({
       'chat_id': chatId,
       'participants': [myUid, otherUid],
@@ -174,7 +177,7 @@ class ChatService {
       'participant_ages': {myUid: myAge, otherUid: otherAge},
       'last_message': '',
       'last_message_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'chat_id');
+    }, onConflict: 'chat_id', ignoreDuplicates: true);
     return chatId;
   }
 

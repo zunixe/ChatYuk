@@ -219,6 +219,17 @@ class AuthProvider extends ChangeNotifier {
     resetIdleTimer();
   }
 
+  /// Set status idle — dipakai saat app di-background/tutup (bukan logout).
+  /// User tetap tampil di menu online sebagai idle, tidak hilang.
+  Future<void> goIdle() async {
+    if (_disposed) return;
+    _idleTimer?.cancel();
+    _isIdle = true;
+    await _auth.goIdle();
+    _profile = _profile?.copyWith(status: 'idle');
+    if (!_disposed) notifyListeners();
+  }
+
   Future<void> goOffline() async {
     _idleTimer?.cancel();
     _isIdle = false;
