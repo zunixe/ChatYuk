@@ -13,29 +13,57 @@ class GeoService {
   static const _countryNames = <String, String>{
     'ID': 'Indonesia',
     'MY': 'Malaysia',
-    'SG': 'Singapura',
+    'SG': 'Singapore',
     'TH': 'Thailand',
-    'PH': 'Filipina',
+    'PH': 'Philippines',
     'VN': 'Vietnam',
     'BN': 'Brunei',
     'MM': 'Myanmar',
-    'KH': 'Kamboja',
+    'KH': 'Cambodia',
     'LA': 'Laos',
-    'TL': 'Timor Leste',
+    'TL': 'Timor-Leste',
   };
 
+  // Fallback chain — kalau satu provider rate-limit/gagal, coba provider lain.
+  static const _providers = <String>[
+    'https://ipwho.is/',
+    'https://ipapi.co/json/',
+    'http://ip-api.com/json/',
+  ];
+
   Future<GeoInfo?> detect() async {
+    for (final url in _providers) {
+      final info = await _tryProvider(url);
+      if (info != null) return info;
+    }
+    return null;
+  }
+
+  Future<GeoInfo?> _tryProvider(String url) async {
     try {
       final res = await http
-          .get(Uri.parse('https://ipapi.co/json/'))
+          .get(Uri.parse(url))
           .timeout(const Duration(seconds: 3));
       if (res.statusCode != 200) return null;
 
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final code = (data['country_code'] as String?) ?? '';
-      final country = _countryNames[code] ?? (data['country_name'] as String?) ?? '';
+      if (data['error'] == true) return null;
+      if (data['status'] == 'fail') return null;
+
+      // ipwho.is -> country_code/country/city/ip
+      // ipapi.co -> country_code/country_name/city/ip
+      // ip-api.com -> countryCode/country/city/query
+      final code = (data['country_code'] as String?) ??
+          (data['countryCode'] as String?) ??
+          '';
+      final country = _countryNames[code] ??
+          (data['country'] as String?) ??
+          (data['country_name'] as String?) ??
+          '';
       final city = (data['city'] as String?) ?? '';
-      final ip = (data['ip'] as String?) ?? '';
+      final ip = (data['ip'] as String?) ??
+          (data['query'] as String?) ??
+          '';
 
       if (country.isEmpty) return null;
       return GeoInfo(country: country, city: city, ipAddress: ip);
