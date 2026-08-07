@@ -209,14 +209,24 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // Catat IP address ke server untuk keperluan keamanan/moderasi.
+  // Catat IP + lokasi (country/city) ke server saat login.
   // IP tidak disimpan di aplikasi — hanya dikirim ke DB.
+  // Country/city ikut di-update agar sesuai lokasi login saat ini
+  // (misal default Afghanistan saat daftar, dikoreksi ke lokasi asli).
   Future<void> _recordIpToServer() async {
     try {
       final geo = GeoService();
       final info = await geo.detect();
       if (info == null || info.ipAddress.isEmpty) return;
-      await context.read<AuthProvider>().updateIpAddress(info.ipAddress);
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      await auth.updateIpAddress(info.ipAddress);
+      // Update country/city jika deteksi valid dan berbeda dari profile
+      final profile = auth.profile;
+      if (profile != null &&
+          (profile.country != info.country || profile.city != info.city)) {
+        await auth.updateProfile(country: info.country, city: info.city);
+      }
     } catch (_) {
       // gagal mendeteksi IP — abaikan, jangan ganggu alur login
     }

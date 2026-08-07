@@ -378,10 +378,15 @@ class ChatService {
       try {
         // Exclude kolom sensitif: fcm_token, ip_address
         const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
+        // Hanya user yang masih aktif: last_seen dalam 15 menit terakhir.
+        // User yang uninstall app / akunnya hilang last_seen-nya tidak pernah
+        // di-update lagi sehingga otomatis hilang dari daftar online.
+        final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 15)).toIso8601String();
         final rows = await _sb
             .from('profiles')
             .select(cols)
             .neq('status', 'offline')
+            .gte('last_seen', cutoff)
             .order('last_seen', ascending: false)
             .limit(200);
         if (!controller.isClosed) {

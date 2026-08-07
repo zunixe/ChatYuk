@@ -36,8 +36,9 @@ class _EntryScreenState extends State<EntryScreen> {
   @override
   void initState() {
     super.initState();
-    _negara = kotaByNegara.keys.first;
-    _kota = kotaByNegara[_negara]!.first;
+    // Default Indonesia (bukan Afghanistan) — fallback jika geo detect gagal
+    _negara = 'Indonesia';
+    _kota = getCitiesForCountry(_negara).first;
     _detectGeo();
   }
 
