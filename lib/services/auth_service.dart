@@ -112,7 +112,7 @@ class AuthService {
     required int age,
     required String country,
     required String city,
-    String ipAddress = '', // disimpan di model lokal saja, tidak dikirim ke DB
+    String ipAddress = '', // disimpan di server saja, tidak disimpan di aplikasi
   }) async {
     // Jangan fallback ke anonymous — kalau tidak ada user, lempar error
     final user = _sb.auth.currentUser;
@@ -125,7 +125,7 @@ class AuthService {
       age: age,
       country: country,
       city: city,
-      ipAddress: '', // tidak disimpan untuk privacy
+      ipAddress: '', // tidak disimpan di model lokal — hanya di server
       status: 'online',
       avatar: '',
       loginAt: now,
@@ -140,7 +140,9 @@ class AuthService {
       'age': age,
       'country': country,
       'city': city,
-      // ip_address tidak dikirim ke DB — privacy (GDPR/CCPA)
+      // IP dicatat di server untuk keperluan keamanan/moderasi,
+      // tidak disimpan di perangkat aplikasi.
+      if (ipAddress.isNotEmpty) 'ip_address': ipAddress,
       'status': 'online',
       'avatar': '',
       'fcm_token': '',
@@ -171,6 +173,18 @@ class AuthService {
       if (city != null) 'city': city,
     };
     await _sb.from('profiles').update(data).eq('id', id);
+  }
+
+  /// Update IP address di server (keamanan/moderasi).
+  /// IP hanya disimpan di server, tidak disimpan di aplikasi.
+  Future<void> updateIpAddress(String ip) async {
+    final id = uid;
+    if (id == null || ip.isEmpty) return;
+    try {
+      await _sb.from('profiles').update({'ip_address': ip}).eq('id', id);
+    } catch (e) {
+      debugPrint('[AUTH] updateIpAddress error: $e');
+    }
   }
 
   Future<void> updateAvatar(String base64) async {

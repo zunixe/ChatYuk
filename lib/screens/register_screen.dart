@@ -146,7 +146,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       // 2. Simpan pending profile ke SharedPreferences
-      //    supaya tidak hilang kalau app di-kill sebelum registerProfile selesai
+      //    supaya tidak hilang kalau app di-kill sebelum registerProfile selesai.
+      //    (IP TIDAK disimpan di aplikasi — hanya di server)
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_email', email);
       await prefs.setString('pending_nickname', nickname);
@@ -154,7 +155,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await prefs.setInt('pending_age', _age);
       await prefs.setString('pending_country', _negara);
       await prefs.setString('pending_city', _kota);
-      await prefs.setString('pending_ip', _ipAddress);
 
       if (!mounted) return;
       // Tampilkan dialog verifikasi email

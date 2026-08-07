@@ -162,6 +162,9 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Update IP address di server (tidak disimpan di aplikasi).
+  Future<void> updateIpAddress(String ip) => _auth.updateIpAddress(ip);
+
   Future<void> updateAvatar(String base64) async {
     await _auth.updateAvatar(base64);
     _profile = _profile?.copyWith(avatar: base64);

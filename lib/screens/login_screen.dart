@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
 import '../services/auth_service.dart';
+import '../services/geo_service.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -69,8 +70,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
+      // Catat IP di server (fire-and-forget, tidak block UI).
+      // IP hanya disimpan di server, tidak disimpan di aplikasi.
+      _recordIpToServer();
+
       // B1: Cek pending profile dari widget param ATAU SharedPreferences
       // (fallback jika app di-kill setelah signup sebelum registerProfile)
+      // IP TIDAK disimpan di aplikasi — hanya dari widget param (memori)
       String? nickname = widget.pendingNickname;
       String? gender   = widget.pendingGender;
       int?    age      = widget.pendingAge;
@@ -87,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
           age      = prefs.getInt('pending_age');
           country  = prefs.getString('pending_country');
           city     = prefs.getString('pending_city');
-          ip       = prefs.getString('pending_ip');
         }
       }
 
@@ -109,7 +114,6 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.remove('pending_age');
         await prefs.remove('pending_country');
         await prefs.remove('pending_city');
-        await prefs.remove('pending_ip');
       }
 
       if (!mounted) return;
@@ -203,6 +207,19 @@ class _LoginScreenState extends State<LoginScreen> {
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // Catat IP address ke server untuk keperluan keamanan/moderasi.
+  // IP tidak disimpan di aplikasi — hanya dikirim ke DB.
+  Future<void> _recordIpToServer() async {
+    try {
+      final geo = GeoService();
+      final info = await geo.detect();
+      if (info == null || info.ipAddress.isEmpty) return;
+      await context.read<AuthProvider>().updateIpAddress(info.ipAddress);
+    } catch (_) {
+      // gagal mendeteksi IP — abaikan, jangan ganggu alur login
+    }
   }
 
   @override
