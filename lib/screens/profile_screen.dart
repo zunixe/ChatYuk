@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +13,15 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import 'link_email_screen.dart';
 import 'donate_screen.dart';
+
+// Top-level function untuk compute() isolate — decode + resize + encode di background
+String? _processAvatar(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final resized = img.copyResize(decoded, width: 300, height: 300);
+  final jpg = img.encodeJpg(resized, quality: 70);
+  return base64Encode(jpg);
+}
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -30,15 +41,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final bytes = await picked.readAsBytes();
     if (!mounted) return;
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errPhotoLoad)));
+
+    // Proses image di background isolate — tidak block UI thread
+    final base64 = await compute(_processAvatar, bytes);
+    if (base64 == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errPhotoLoad)));
       return;
     }
-
-    final resized = img.copyResize(decoded, width: 300, height: 300);
-    final jpg = img.encodeJpg(resized, quality: 70);
-    final base64 = base64Encode(jpg);
 
     setState(() => _uploading = true);
     try {
