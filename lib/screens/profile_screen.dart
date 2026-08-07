@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../config/strings.dart';
@@ -312,6 +313,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: Text(s.titleProfile),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            tooltip: s.btnShareApp,
+            onPressed: () => Share.share(s.msgShareApp),
+          ),
           IconButton(
             icon: const Icon(Icons.edit_outlined),
             tooltip: s.btnEditProfile,
