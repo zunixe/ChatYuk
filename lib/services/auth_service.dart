@@ -34,6 +34,17 @@ class AuthService {
     debugPrint('[AUTH] signInAnonymously -> ${res.user?.id}');
   }
 
+  /// Bersihkan akun anonymous stale (tidak aktif > 7 hari) di server.
+  /// Agar nickname mereka bebas dipakai dan tidak muncul sebagai
+  /// ghost "online". Fire-and-forget dari app saat start.
+  Future<void> cleanupStaleAnonymous({int minAgeDays = 7}) async {
+    try {
+      await _sb.rpc('cleanup_stale_anonymous', params: {'min_age_days': minAgeDays});
+    } catch (e) {
+      debugPrint('[AUTH] cleanupStaleAnonymous error (abaikan): $e');
+    }
+  }
+
   /// Login dengan email + password.
   /// Setelah ini, getProfile() akan mengembalikan profile user.
   Future<void> signInWithEmail(String email, String password) async {

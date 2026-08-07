@@ -17,22 +17,29 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
       label: 'TRC20',
       subtitle: 'Tron Network',
       icon: Icons.toll,
-      address: 'PASTE_USDT_TRC20_ADDRESS_HERE',
+      address: 'TRGo2h1FcFK2X9gcE333ndrkhz2gZTDt3Q',
       color: Color(0xFFE53935),
     ),
     _UsdtNetwork(
       label: 'ERC20',
       subtitle: 'Ethereum Network',
       icon: Icons.hexagon_outlined,
-      address: 'PASTE_USDT_ERC20_ADDRESS_HERE',
+      address: '0x87b2e5bc728c8ff4b96140415bc15989fa2a6504',
       color: Color(0xFF5C6BC0),
     ),
     _UsdtNetwork(
       label: 'BEP20',
       subtitle: 'BNB Smart Chain',
       icon: Icons.currency_exchange,
-      address: 'PASTE_USDT_BEP20_ADDRESS_HERE',
+      address: '0x87b2e5bc728c8ff4b96140415bc15989fa2a6504',
       color: Color(0xFFF9A825),
+    ),
+    _UsdtNetwork(
+      label: 'Morph',
+      subtitle: 'Morph L2',
+      icon: Icons.bolt_outlined,
+      address: '0x87b2e5bc728c8ff4b96140415bc15989fa2a6504',
+      color: Color(0xFF7C4DFF),
     ),
   ];
 

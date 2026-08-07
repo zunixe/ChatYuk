@@ -53,7 +53,11 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('[AUTH] signInAnonymously OK');
       _profile = await _auth.getProfile();
       debugPrint('[AUTH] getProfile -> ${_profile?.uid}');
-      if (_profile != null) await updateFcmToken();
+      // FCM token di-fetch asinkron — jangan block loading screen
+      if (_profile != null) updateFcmToken();
+      // Bersihkan akun anonymous stale (fire-and-forget) supaya nickname
+      // bebas dan tidak ada ghost "online". Tidak block startup.
+      cleanupStaleAnonymous();
     } catch (e) {
       debugPrint('[AUTH] _init ERROR: $e');
       _error = e.toString();
@@ -111,6 +115,11 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> retry() => _init();
+
+  /// Bersihkan akun anonymous stale di server (fire-and-forget).
+  Future<void> cleanupStaleAnonymous({int minAgeDays = 7}) {
+    return _auth.cleanupStaleAnonymous(minAgeDays: minAgeDays);
+  }
 
   /// Sign up dengan email — membuat akun Supabase baru.
   /// Setelah ini user perlu verifikasi email, lalu registerProfile().
