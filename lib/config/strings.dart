@@ -170,6 +170,8 @@ class S {
   String get dialogDeletePhoto => isId ? 'Yakin ingin menghapus foto ini?' : 'Delete this photo?';
   String get msggalleryLimit => isId ? 'Maksimal 6 foto.'             : 'Maximum 6 photos.';
   String get labelOthersGallery => isId ? 'Foto Profil'                : 'Photos';
+  String get btnShareApp       => isId ? 'Ajak Teman'                  : 'Invite Friends';
+  String get msgShareApp       => isId ? 'Ayo chat bareng di ChatYuk! Download sekarang di Google Play: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk' : 'Let\'s chat on ChatYuk! Download now on Google Play: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
 
   // ── Settings ──
   String get titleSettings    => isId ? 'Pengaturan'                  : 'Settings';
