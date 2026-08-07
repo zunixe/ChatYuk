@@ -3,6 +3,8 @@ class RoomModel {
   final String name;
   final String description;
   final String icon;
+  final String country;
+  final String category;
   final int order;
   final int onlineCount;
 
@@ -11,6 +13,8 @@ class RoomModel {
     required this.name,
     required this.description,
     required this.icon,
+    required this.country,
+    required this.category,
     required this.order,
     this.onlineCount = 0,
   });
@@ -21,6 +25,8 @@ class RoomModel {
       name: map['name'] ?? '',
       description: map['description'] ?? '',
       icon: map['icon'] ?? '💬',
+      country: map['country'] ?? '',
+      category: map['category'] ?? '',
       order: map['order'] ?? 0,
       onlineCount: map['onlineCount'] ?? 0,
     );
@@ -31,6 +37,8 @@ class RoomModel {
       'name': name,
       'description': description,
       'icon': icon,
+      'country': country,
+      'category': category,
       'order': order,
       'onlineCount': onlineCount,
     };
@@ -42,6 +50,8 @@ class RoomModel {
       name: name,
       description: description,
       icon: icon,
+      country: country,
+      category: category,
       order: order,
       onlineCount: onlineCount ?? this.onlineCount,
     );

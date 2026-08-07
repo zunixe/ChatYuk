@@ -147,7 +147,14 @@ class ChatService {
     });
     reload();
 
-    controller.onCancel = () => _sb.removeChannel(channel);
+    // Fallback polling: jaga-jaga kalau realtime INSERT gagal tiba.
+    // Pesan baru dipastikan muncul walau tanpa notifikasi realtime.
+    final pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => reload());
+
+    controller.onCancel = () {
+      pollTimer.cancel();
+      _sb.removeChannel(channel);
+    };
 
     return controller.stream;
   }

@@ -96,6 +96,8 @@ void _openFromData(Map<String, dynamic> data) {
                 name: data['roomName'] ?? 'Room',
                 description: '',
                 icon: '💬',
+                country: '',
+                category: data['roomId'] ?? '',
                 order: 0,
               ),
             )

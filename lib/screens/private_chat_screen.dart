@@ -16,6 +16,7 @@ import '../providers/locale_provider.dart';
 import '../services/chat_service.dart';
 import '../main.dart';
 import '../utils.dart';
+import 'user_info_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
 String? _processImage(Uint8List bytes) {
@@ -301,34 +302,45 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         titleSpacing: 0,
         title: Row(
           children: [
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.white.withValues(alpha: 0.25),
-                  child: Text(
-                    widget.otherName[0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+            GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => UserInfoScreen(
+                    userId: widget.otherUid,
+                    fallbackName: widget.otherName,
                   ),
                 ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: displayStatus == 'online'
-                          ? const Color(0xFF69F0AE)
-                          : displayStatus == 'idle'
-                              ? const Color(0xFFFFD740)
-                              : Colors.white38,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.primary, width: 2),
+              ),
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.white.withValues(alpha: 0.25),
+                    child: Text(
+                      widget.otherName[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
                     ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: displayStatus == 'online'
+                            ? const Color(0xFF69F0AE)
+                            : displayStatus == 'idle'
+                                ? const Color(0xFFFFD740)
+                                : Colors.white38,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.primary, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(

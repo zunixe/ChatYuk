@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
@@ -21,6 +22,9 @@ class AuthProvider extends ChangeNotifier {
   bool _isIdle = false;
   static const Duration idleTimeout = Duration(minutes: 3);
 
+  static const String _notifPrefKey = 'notif_enabled';
+  bool _notificationsEnabled = true;
+
   UserModel? get profile => _profile;
   bool get loading => _loading;
   String? get error => _error;
@@ -28,10 +32,12 @@ class AuthProvider extends ChangeNotifier {
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
   String? get userEmail => _auth.userEmail;
+  bool get notificationsEnabled => _notificationsEnabled;
 
   AuthProvider() {
     debugPrint('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
     _init();
+    loadNotificationPref();
   }
 
   Future<void> _init() async {
@@ -59,12 +65,42 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> updateFcmToken() async {
+    if (!_notificationsEnabled) return;
     try {
       final token = await FirebaseMessaging.instance.getToken();
       await _auth.updateFcmToken(token);
     } catch (_) {
       // token tidak tersedia: abaikan
     }
+  }
+
+  /// Muat preferensi notifikasi dari SharedPreferences (saat app start).
+  Future<void> loadNotificationPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool(_notifPrefKey);
+      if (enabled != null) {
+        _notificationsEnabled = enabled;
+        if (!_disposed) notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  /// Toggle notifikasi ON/OFF.
+  /// OFF → kosongkan fcm_token di DB agar push tidak terkirim.
+  /// ON  → set ulang fcm_token.
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    _notificationsEnabled = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_notifPrefKey, enabled);
+    } catch (_) {}
+    if (enabled) {
+      await updateFcmToken();
+    } else {
+      try { await _auth.updateFcmToken(''); } catch (_) {}
+    }
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> retry() => _init();

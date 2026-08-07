@@ -89,10 +89,12 @@ class S {
 
   // ── Online Users ──
   String get titleOnline     => isId ? 'Pengguna Online'              : 'Online Users';
+  String get searchHint      => isId ? 'Cari nama pengguna...'        : 'Search username...';
   String get filterAll       => isId ? 'Semua'                        : 'All';
   String get filterMale      => isId ? 'Laki-laki'                    : 'Male';
   String get filterFemale    => isId ? 'Perempuan'                    : 'Female';
   String get noOnlineUsers   => isId ? 'Tidak ada pengguna online'    : 'No users online';
+  String get searchNoResult   => isId ? 'Tidak ditemukan'               : 'No results found';
   String get statusOnline    => isId ? 'Online'                       : 'Online';
   String get statusIdle      => isId ? 'Idle'                         : 'Idle';
   String get statusOffline   => isId ? 'Offline'                      : 'Offline';
@@ -158,6 +160,15 @@ class S {
   String get errPhotoLoad     => isId ? 'Gagal membaca gambar'        : 'Failed to read image';
   String get msgPhotoExpired  => isId ? '⏰ Foto sudah expired'        : '⏰ Photo expired';
 
+  // ── Galeri Foto Pribadi ──
+  String get labelGallery     => isId ? 'Foto Saya'                    : 'My Photos';
+  String get labelGalleryEmpty => isId ? 'Belum ada foto. Tambahkan foto dirimu.' : 'No photos yet. Add a photo of yourself.';
+  String get btnAddGallery    => isId ? 'Tambah Foto'                  : 'Add Photo';
+  String get btnDeletePhoto   => isId ? 'Hapus Foto'                   : 'Remove Photo';
+  String get dialogDeletePhoto => isId ? 'Yakin ingin menghapus foto ini?' : 'Delete this photo?';
+  String get msggalleryLimit => isId ? 'Maksimal 6 foto.'             : 'Maximum 6 photos.';
+  String get labelOthersGallery => isId ? 'Foto Profil'                : 'Photos';
+
   // ── Settings ──
   String get titleSettings    => isId ? 'Pengaturan'                  : 'Settings';
   String get labelLanguage    => isId ? 'Bahasa / Language'           : 'Language / Bahasa';
@@ -169,6 +180,8 @@ class S {
   String get notifChannelDesc => isId ? 'Notifikasi pesan baru dari chat' : 'New message notifications from chat';
   String get notifNewMessage  => isId ? 'Pesan baru'                  : 'New message';
   String get notifNewMessageBody => isId ? 'Pesan baru masuk'         : 'You have a new message';
+  String get labelNotifications => isId ? 'Notifikasi'                : 'Notifications';
+  String get notifEnabledDesc  => isId ? 'Terima notifikasi pesan baru' : 'Receive new message notifications';
 
   // ── Errors / Generic ──
   String get btnCancel       => isId ? 'Batal'                        : 'Cancel';

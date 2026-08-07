@@ -107,10 +107,10 @@ class _AuthGateState extends State<_AuthGate> {
                   style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  auth.error!,
+                const Text(
+                  'Periksa koneksi internet kamu, lalu coba lagi.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(

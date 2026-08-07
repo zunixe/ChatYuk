@@ -9,6 +9,7 @@ class RoomProvider extends ChangeNotifier {
   final ChatService _chat = ChatService();
   List<RoomModel> _rooms = [];
   Map<String, int> _counts = {};
+  String _country = 'Indonesia';
   bool _seeded = false;
   StreamSubscription? _roomsSub;
   StreamSubscription? _countsSub;
@@ -16,31 +17,31 @@ class RoomProvider extends ChangeNotifier {
   String? _error;
 
   List<RoomModel> get rooms => _rooms;
+  String get country => _country;
   String? get error => _error;
 
   RoomProvider() {
-    _pollTimer = Timer.periodic(const Duration(minutes: 5), (_) => reload());
-    reload();
-
     _countsSub = _chat.getRoomOnlineCounts().listen((counts) {
-      bool changed = false;
-      for (final r in _rooms) {
-        final newCount = counts[r.id] ?? 0;
-        if (r.onlineCount != newCount) { changed = true; break; }
-      }
-      if (changed) {
-        _counts = counts;
-        _applyCounts();
-        notifyListeners();
-      }
+      _counts = counts;
+      _applyCounts();
+      notifyListeners();
     }, onError: (e) {
       debugPrint('[RoomProvider] counts stream error: $e');
     });
+    reload();
+  }
+
+  /// Ganti negara & muat room-nya.
+  Future<void> setCountry(String country) async {
+    if (country == _country) return;
+    _country = country;
+    notifyListeners();
+    await reload();
   }
 
   Future<void> reload() async {
     try {
-      final rooms = await _service.fetchRooms();
+      final rooms = await _service.fetchRooms(_country);
       _rooms = rooms;
       _applyCounts();
       if (!_seeded && rooms.isEmpty) {
@@ -66,7 +67,7 @@ class RoomProvider extends ChangeNotifier {
 
   Future<void> seedRooms() async {
     try {
-      await _service.seedDefaultRooms();
+      await _service.seedCountryRooms(_country);
     } catch (_) {}
   }
 

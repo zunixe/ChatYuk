@@ -8,9 +8,11 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../config/strings.dart';
+import '../models/user_photo.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../services/auth_service.dart';
 import 'link_email_screen.dart';
 import 'donate_screen.dart';
 
@@ -23,6 +25,15 @@ String? _processAvatar(Uint8List bytes) {
   return base64Encode(jpg);
 }
 
+// Galeri foto — resize lebih besar (800px), pertahankan rasio
+String? _processPhoto(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final resized = img.copyResize(decoded, width: 800);
+  final jpg = img.encodeJpg(resized, quality: 80);
+  return base64Encode(jpg);
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -32,6 +43,107 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _uploading = false;
+
+  final AuthService _authService = AuthService();
+  List<UserPhoto> _photos = [];
+  bool _loadingPhotos = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPhotos();
+  }
+
+  Future<void> _loadPhotos() async {
+    final uid = context.read<AuthProvider>().uid;
+    if (uid == null) return;
+    try {
+      final photos = await _authService.getPhotos(uid);
+      if (mounted) setState(() => _photos = photos);
+    } catch (_) {}
+    if (mounted) setState(() => _loadingPhotos = false);
+  }
+
+  void _pickGalleryFromSource() {
+    final s = context.read<LocaleProvider>().s;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.photo_camera, color: AppTheme.primary),
+              title: Text(s.avatarCamera),
+              onTap: () { Navigator.pop(sheetCtx); _addGalleryPhoto(ImageSource.camera); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: AppTheme.primary),
+              title: Text(s.avatarGallery),
+              onTap: () { Navigator.pop(sheetCtx); _addGalleryPhoto(ImageSource.gallery); },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addGalleryPhoto(ImageSource source) async {
+    final s = context.read<LocaleProvider>().s;
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, maxWidth: 1200, imageQuality: 85);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    final base64 = await compute(_processPhoto, bytes);
+    if (base64 == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errPhotoLoad)));
+      return;
+    }
+    setState(() => _uploading = true);
+    try {
+      await _authService.uploadPhoto(base64);
+      await _loadPhotos();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errPhotoSave}$e')));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _confirmDeletePhoto(UserPhoto photo) async {
+    final s = context.read<LocaleProvider>().s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.btnDeletePhoto),
+        content: Text(s.dialogDeletePhoto),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.btnDeletePhoto, style: const TextStyle(color: AppTheme.danger))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _authService.deletePhoto(photo.id);
+      await _loadPhotos();
+    } catch (_) {}
+  }
+
+  void _showPhotoViewer(List<UserPhoto> photos, int index) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _PhotoViewerScreen(photos: photos, initialIndex: index),
+      ),
+    );
+  }
 
   Future<void> _pickAndUpload(ImageSource source) async {
     final s = context.read<LocaleProvider>().s;
@@ -191,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.read<AuthProvider>();
+    final auth = context.watch<AuthProvider>();
     final profile = auth.profile;
     final locale = context.watch<LocaleProvider>();
     final s = locale.s;
@@ -275,6 +387,111 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _infoRow(s.labelCity, profile?.city ?? '-'),
                     const Divider(color: AppTheme.divider),
                     _infoRow(s.labelUserId, auth.uid?.substring(0, 8) ?? '-'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Galeri Foto Pribadi
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(s.labelGallery, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
+                        if (_photos.length < 6)
+                          TextButton.icon(
+                            onPressed: _uploading ? null : _pickGalleryFromSource,
+                            icon: _uploading
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                                : const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                            label: Text(s.btnAddGallery),
+                            style: TextButton.styleFrom(foregroundColor: AppTheme.primary, padding: EdgeInsets.zero),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (_loadingPhotos)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)),
+                      )
+                    else if (_photos.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Center(child: Text(s.labelGalleryEmpty, textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
+                      )
+                    else
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                        ),
+                        itemCount: _photos.length,
+                        itemBuilder: (ctx, i) {
+                          final photo = _photos[i];
+                          return GestureDetector(
+                            onTap: () => _showPhotoViewer(_photos, i),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.memory(base64Decode(photo.photo), fit: BoxFit.cover),
+                                ),
+                                Positioned(
+                                  top: 4, right: 4,
+                                  child: GestureDetector(
+                                    onTap: () => _confirmDeletePhoto(photo),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), shape: BoxShape.circle),
+                                      child: const Icon(Icons.delete_outline, color: Colors.white, size: 14),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Notifikasi ON/OFF
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.notifications_outlined, color: AppTheme.primary, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.labelNotifications, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                          const SizedBox(height: 2),
+                          Text(s.notifEnabledDesc, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: auth.notificationsEnabled,
+                      onChanged: (v) => context.read<AuthProvider>().setNotificationsEnabled(v),
+                      activeColor: AppTheme.primary,
+                    ),
                   ],
                 ),
               ),
@@ -429,9 +646,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  String _statusLabel(String status, S s) {
+String _statusLabel(String status, S s) {
     switch (status) {
-      case 'idle': return '�� ${s.statusIdle}';
+      case 'idle': return '🌙 ${s.statusIdle}';
       case 'offline': return '⚪ ${s.statusOffline}';
       default: return '🟢 ${s.statusOnline}';
     }
@@ -457,6 +674,56 @@ class _LangButton extends StatelessWidget {
         ),
         child: Center(
           child: Text(label, style: TextStyle(color: selected ? AppTheme.primary : AppTheme.textSecondary, fontWeight: selected ? FontWeight.w700 : FontWeight.w500, fontSize: 13)),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoViewerScreen extends StatefulWidget {
+  final List<UserPhoto> photos;
+  final int initialIndex;
+  const _PhotoViewerScreen({required this.photos, required this.initialIndex});
+
+  @override
+  State<_PhotoViewerScreen> createState() => _PhotoViewerScreenState();
+}
+
+class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
+  late final PageController _controller;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _controller = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_index + 1}/${widget.photos.length}'),
+      ),
+      body: PageView.builder(
+        controller: _controller,
+        itemCount: widget.photos.length,
+        onPageChanged: (i) => setState(() => _index = i),
+        itemBuilder: (ctx, i) => Center(
+          child: InteractiveViewer(
+            maxScale: 4,
+            child: Image.memory(base64Decode(widget.photos[i].photo), fit: BoxFit.contain),
+          ),
         ),
       ),
     );
