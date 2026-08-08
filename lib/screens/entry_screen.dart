@@ -45,12 +45,13 @@ class _EntryScreenState extends State<EntryScreen> {
   Future<void> _detectGeo() async {
     final info = await _geo.detect();
     if (info == null || !mounted) return;
+    // IP selalu dicatat, walau negara tidak ada di daftar kota
+    _ipAddress = info.ipAddress;
     final kotaList = kotaByNegara[info.country];
     if (kotaList == null) return;
     setState(() {
       _negara = info.country;
       _kota = kotaList.contains(info.city) ? info.city : kotaList.first;
-      _ipAddress = info.ipAddress;
     });
     // Auto-set bahasa dari IP — hanya jika belum pernah disimpan
     if (mounted) {
