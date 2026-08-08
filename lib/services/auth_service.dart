@@ -238,8 +238,19 @@ class AuthService {
     required String city,
     String ipAddress = '', // disimpan di server saja, tidak disimpan di aplikasi
   }) async {
-    // Jangan fallback ke anonymous — kalau tidak ada user, lempar error
-    final user = _sb.auth.currentUser;
+    // Kalau session hilang (misal habis logout Google), buat session
+    // anonymous baru supaya user baru tetap bisa daftar.
+    var user = _sb.auth.currentUser;
+    if (user == null) {
+      debugPrint('[AUTH] registerProfile: no session, signInAnonymously first');
+      try {
+        final res = await _sb.auth.signInAnonymously();
+        user = res.user;
+      } catch (e) {
+        debugPrint('[AUTH] registerProfile: signInAnonymously error: $e');
+        throw Exception('registerProfile: no authenticated user');
+      }
+    }
     if (user == null) throw Exception('registerProfile: no authenticated user');
     final now = DateTime.now().toUtc();
     final hasEmail = (user.email ?? '').isNotEmpty;
