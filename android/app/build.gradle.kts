@@ -8,6 +8,20 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+
+// Baca kredensial keystore dari key.properties (fallback ke env var).
+val keystoreProps = Properties()
+val keystorePropsFile = rootProject.file("key.properties")
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(keystorePropsFile.inputStream())
+}
+fun envOr(envKey: String, propsKey: String, fallback: String): String {
+    val env = System.getenv(envKey)
+    return if (!env.isNullOrBlank()) env
+        else keystoreProps.getProperty(propsKey, fallback)
+}
+
 android {
     namespace = "com.chatyuk.chatyuk"
     compileSdk = flutter.compileSdkVersion
@@ -36,10 +50,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("KEYSTORE_PATH") ?: "../../android/keystore/chatyuk-release-v2.jks")
-            storePassword = System.getenv("KEYSTORE_PASS") ?: ""
-            keyAlias = System.getenv("KEY_ALIAS") ?: "chatyuk"
-            keyPassword = System.getenv("KEY_PASS") ?: ""
+            storeFile = file(envOr("KEYSTORE_PATH", "storeFile", "../../android/keystore/chatyuk-release-v2.jks"))
+            storePassword = envOr("KEYSTORE_PASS", "storePassword", "")
+            keyAlias = envOr("KEY_ALIAS", "keyAlias", "chatyuk")
+            keyPassword = envOr("KEY_PASS", "keyPassword", "")
         }
     }
 
