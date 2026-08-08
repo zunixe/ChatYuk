@@ -377,6 +377,17 @@ class AuthService {
     } catch (_) {}
   }
 
+  /// Heartbeat: update last_seen tanpa mengubah status.
+  /// Dipanggil berkala supaya kalau app di-kill, last_seen jadi basi
+  /// dan bisa dideteksi sebagai offline.
+  Future<void> updateLastSeen() async {
+    final id = uid;
+    if (id == null) return;
+    try {
+      await _sb.from('profiles').update({'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
+    } catch (_) {}
+  }
+
   /// Ambil semua foto galeri milik satu user.
   Future<List<UserPhoto>> getPhotos(String userId) async {
     if (userId.isEmpty) return [];

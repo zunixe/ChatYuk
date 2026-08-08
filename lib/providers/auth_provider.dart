@@ -20,8 +20,10 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
 
   Timer? _idleTimer;
+  Timer? _heartbeatTimer;
   bool _isIdle = false;
   static const Duration idleTimeout = Duration(minutes: 3);
+  static const Duration heartbeatInterval = Duration(seconds: 60);
 
   static const String _notifPrefKey = 'notif_enabled';
   bool _notificationsEnabled = true;
@@ -64,6 +66,7 @@ class AuthProvider extends ChangeNotifier {
       // Bersihkan akun anonymous stale (fire-and-forget) supaya nickname
       // bebas dan tidak ada ghost "online". Tidak block startup.
       cleanupStaleAnonymous();
+      _startHeartbeat();
     } catch (e) {
       debugPrint('[AUTH] _init ERROR: $e');
       _error = e.toString();
@@ -408,10 +411,22 @@ class AuthProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Heartbeat berkala: update last_seen di server tiap 60 detik.
+  /// Kalau app di-kill/force-stop, heartbeat berhenti dan last_seen
+  /// jadi basi sehingga admin bisa menandai user offline.
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
+      if (_disposed) return;
+      unawaited(_auth.updateLastSeen());
+    });
+  }
+
   @override
   void dispose() {
     _disposed = true;
     _idleTimer?.cancel();
+    _heartbeatTimer?.cancel();
     super.dispose();
   }
 }
