@@ -65,6 +65,8 @@ class ChatService {
   /// - loadCache dan fetchServer jalan PARALEL untuk tampilan secepat mungkin.
   /// - INSERT event langsung di-append ke list tanpa refetch (0 network round-trip).
   /// - UPDATE/DELETE tetap refetch karena perlu reorder.
+  /// - Poll fallback hanya jalan kalau realtime diam > 25s (event terlewat),
+  ///   supaya tidak duplikasi pekerjaan realtime tiap 30 detik.
   Stream<List<MessageModel>> _cachedMessagesStream({
     required String cacheKey,
   }) {
@@ -75,6 +77,28 @@ class ChatService {
 
     final controller = StreamController<List<MessageModel>>.broadcast();
     var _current = <MessageModel>[];
+
+    // Kapan terakhir realtime "hidup" — poll skip kalau masih fresh.
+    DateTime lastRealtime = DateTime.now();
+
+    // Cache write di-debounce (2s) + skip kalau data tidak berubah,
+    // supaya tidak encrypt & tulis SharedPreferences tiap pesan / tiap poll.
+    Timer? saveDebounce;
+    String? lastSavedSig;
+
+    void scheduleCacheSave() {
+      if (controller.isClosed) return;
+      saveDebounce?.cancel();
+      saveDebounce = Timer(const Duration(seconds: 2), () async {
+        if (controller.isClosed) return;
+        final sig = _current.isEmpty ? '' : '${_current.length}:${_current.last.id}';
+        if (sig == lastSavedSig) return;
+        lastSavedSig = sig;
+        try {
+          await MessageCache.instance.saveMessages(cacheKey, _current);
+        } catch (_) {}
+      });
+    }
 
     Future<List<MessageModel>> fetchServer() async {
       final rows = await _sb
@@ -94,7 +118,7 @@ class ChatService {
         if (controller.isClosed) return;
         _current = server;
         controller.add(_current);
-        MessageCache.instance.saveMessages(cacheKey, _current);
+        scheduleCacheSave();
       } catch (e) {
         debugPrint('[_cachedMessagesStream] fetch error: $e');
       }
@@ -116,8 +140,9 @@ class ChatService {
           final msg = MessageModel.fromMap('${row['id']}', snakeToCamel(row));
           if (_current.any((m) => m.id == msg.id)) return; // dedupe
           _current = [..._current, msg];
+          lastRealtime = DateTime.now();
           controller.add(_current);
-          MessageCache.instance.saveMessages(cacheKey, _current);
+          scheduleCacheSave();
         } catch (_) {
           reload();
         }
@@ -128,13 +153,19 @@ class ChatService {
       event: PostgresChangeEvent.update,
       schema: 'public',
       table: table,
-      callback: (_) => reload(),
+      callback: (_) {
+        lastRealtime = DateTime.now();
+        reload();
+      },
     );
     channel.onPostgresChanges(
       event: PostgresChangeEvent.delete,
       schema: 'public',
       table: table,
-      callback: (_) => reload(),
+      callback: (_) {
+        lastRealtime = DateTime.now();
+        reload();
+      },
     );
     channel.subscribe();
 
@@ -147,12 +178,24 @@ class ChatService {
     });
     reload();
 
-    // Fallback polling: jaga-jaga kalau realtime INSERT gagal tiba.
-    // Interval 30s cukup — realtime harusnya tangkap pesan baru lebih dulu.
-    final pollTimer = Timer.periodic(const Duration(seconds: 30), (_) => reload());
+    // Fallback polling: hanya jalan kalau realtime diam > 25s.
+    // Saat realtime sehat (tangkap INSERT/UPDATE/DELETE), tidak ada
+    // fetch redundant tiap 30 detik.
+    final pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (DateTime.now().difference(lastRealtime).inSeconds < 25) return;
+      reload();
+    });
 
     controller.onCancel = () {
       pollTimer.cancel();
+      saveDebounce?.cancel();
+      // Flush cache pending kalau ada data yang belum tersimpan.
+      if (_current.isNotEmpty) {
+        final sig = _current.isEmpty ? '' : '${_current.length}:${_current.last.id}';
+        if (sig != lastSavedSig) {
+          MessageCache.instance.saveMessages(cacheKey, _current).catchError((_) {});
+        }
+      }
       _sb.removeChannel(channel);
     };
 

@@ -6,8 +6,13 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/screen_secure_service.dart';
 
-// Shortcut untuk fire-and-forget
-void unawaited(Future<void> future) => future.catchError((_) {});
+// Shortcut untuk fire-and-forget.
+// Tidak membungkam error: log biar kegagalan tetap terlihat di debug.
+void unawaited(Future<void> future) {
+  future.catchError((Object e, StackTrace st) {
+    debugPrint('[AUTH] unawaited error: $e\n$st');
+  });
+}
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _auth = AuthService();
