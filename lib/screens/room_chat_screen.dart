@@ -280,20 +280,20 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.block, color: AppTheme.danger),
-              title: const Text('Block', style: TextStyle(color: AppTheme.danger)),
+              title: Text(s.btnBlock, style: const TextStyle(color: AppTheme.danger)),
               onTap: () async {
                 Navigator.of(context).pop();
                 await context.read<ChatProvider>().blockUser(auth.uid!, msg.senderId);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('User diblokir')),
+                    SnackBar(content: Text(s.blockSuccess)),
                   );
                 }
               },
             ),
             ListTile(
               leading: const Icon(Icons.flag, color: Colors.orange),
-              title: const Text('Report', style: TextStyle(color: Colors.orange)),
+              title: Text(s.btnReport, style: const TextStyle(color: Colors.orange)),
               onTap: () {
                 Navigator.of(context).pop();
                 _showReportDialog(msg.senderId, msg.senderName);

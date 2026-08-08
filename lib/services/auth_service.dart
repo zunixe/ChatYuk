@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
@@ -28,6 +29,83 @@ class AuthService {
   bool get isAnonymous => _sb.auth.currentUser?.isAnonymous ?? true;
   String? get userEmail => _sb.auth.currentUser?.email;
 
+  /// Sign in dengan Google via Supabase OAuth.
+  /// Native google_sign_in — butuh Android OAuth client (keystore v2)
+  /// dan Web client untuk serverClientId.
+  /// Return AuthResponse + email Google yang digunakan.
+  Future<({AuthResponse response, String? googleEmail})> signInWithGoogle() async {
+    const webClientId = '688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com';
+
+    final googleSignIn = GoogleSignIn(serverClientId: webClientId);
+    print('[GOOGLE] calling signIn()');
+    final googleUser = await googleSignIn.signIn();
+    print('[GOOGLE] signIn() returned: ${googleUser?.email}');
+    if (googleUser == null) throw Exception('Google sign in dibatalkan');
+
+    final googleEmail = googleUser.email;
+    print('[GOOGLE] getting authentication');
+    final googleAuth = await googleUser.authentication;
+    final idToken = googleAuth.idToken;
+    final accessToken = googleAuth.accessToken;
+    print('[GOOGLE] idToken=${idToken != null} accessToken=${accessToken != null}');
+
+    if (idToken == null) throw Exception('Google idToken null');
+
+    print('[GOOGLE] calling signInWithIdToken');
+    final response = await _sb.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: accessToken,
+    );
+    print('[GOOGLE] signInWithIdToken OK, uid=${response.user?.id}');
+
+    // Simpan email ke profile jika belum ada
+    final id = _sb.auth.currentUser?.id;
+    if (id != null) {
+      try {
+        await _sb.from('profiles').update({'email': googleEmail}).eq('id', id);
+      } catch (_) {}
+    }
+
+    return (response: response, googleEmail: googleEmail);
+  }
+
+  /// Cek apakah email sudah terdaftar di akun lain.
+  Future<Map<String, dynamic>?> checkEmailExists(String email) async {
+    try {
+      final res = await _sb.rpc('check_email_exists', params: {'p_email': email});
+      if (res == null) return null;
+      final map = Map<String, dynamic>.from(res as Map);
+      return map['exists'] == true ? map : null;
+    } catch (e) {
+      debugPrint('[AUTH] checkEmailExists error: $e');
+      return null;
+    }
+  }
+
+  /// Pindahkan profile dari akun lama ke akun Google baru.
+  /// Ini "partial linking" — profile lama (nickname, avatar, dll) dipindah ke uid Google.
+  Future<void> linkGoogleProfile(String oldProfileId) async {
+    final newId = uid;
+    if (newId == null) return;
+    try {
+      // Copy profile lama ke uid baru
+      final old = await _sb.from('profiles').select().eq('id', oldProfileId).maybeSingle();
+      if (old == null) return;
+
+      // Upsert profile lama ke uid baru
+      await _sb.from('profiles').upsert({
+        ...old,
+        'id': newId,
+        'email': _sb.auth.currentUser?.email,
+      });
+
+      debugPrint('[AUTH] linkGoogleProfile: linked $oldProfileId -> $newId');
+    } catch (e) {
+      debugPrint('[AUTH] linkGoogleProfile error: $e');
+    }
+  }
+
   Future<void> signInAnonymously() async {
     if (_sb.auth.currentUser != null) return;
     final res = await _sb.auth.signInAnonymously();
@@ -43,6 +121,31 @@ class AuthService {
     } catch (e) {
       debugPrint('[AUTH] cleanupStaleAnonymous error (abaikan): $e');
     }
+  }
+
+  /// Ambil setting admin global: apakah screenshot aplikasi diizinkan.
+  /// Default true (bisa screenshot) jika gagal / belum ada data.
+  Future<bool> fetchScreenshotEnabled() async {
+    try {
+      final res = await _sb
+          .from('app_settings')
+          .select('screenshot_enabled')
+          .eq('id', 'global')
+          .maybeSingle();
+      return res?['screenshot_enabled'] == true;
+    } catch (e) {
+      debugPrint('[AUTH] fetchScreenshotEnabled error: $e');
+      return true;
+    }
+  }
+
+  /// Update setting admin global. RLS membatasi hanya email admin (zunixe@gmail.com).
+  Future<void> updateScreenshotEnabled(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'screenshot_enabled': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
   }
 
   /// Login dengan email + password.
@@ -197,13 +300,14 @@ class AuthService {
     return UserModel.fromMap(id, snakeToCamel(res));
   }
 
-  Future<void> updateProfile({int? age, String? country, String? city}) async {
+  Future<void> updateProfile({int? age, String? country, String? city, String? nickname}) async {
     final id = uid;
     if (id == null) return;
     final data = <String, dynamic>{
       if (age != null) 'age': age,
       if (country != null) 'country': country,
       if (city != null) 'city': city,
+      if (nickname != null) 'nickname': nickname,
     };
     await _sb.from('profiles').update(data).eq('id', id);
   }
@@ -258,7 +362,10 @@ class AuthService {
     final id = uid;
     if (id == null) return;
     try {
-      await _sb.from('profiles').update({'status': 'idle'}).eq('id', id);
+      await _sb.from('profiles').update({
+        'status': 'idle',
+        'last_seen': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', id);
     } catch (_) {}
   }
 
@@ -323,4 +430,8 @@ class AuthService {
       return session != null;
     });
   }
+
+  /// Raw auth state changes (event + session) — dipakai untuk menunggu
+  /// session selesai di-set setelah OAuth web flow redirect balik.
+  Stream<AuthState> get authStateChanges => _sb.auth.onAuthStateChange;
 }

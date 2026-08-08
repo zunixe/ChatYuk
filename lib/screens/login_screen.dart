@@ -39,6 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
   late final TextEditingController _emailCtrl;
   final _passwordCtrl = TextEditingController();
   bool _loading = false;
+  bool _googleLoading = false;
   bool _obscure = true;
 
   @override
@@ -156,57 +157,116 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _forgotPassword() async {
     final s = context.read<LocaleProvider>().s;
-    // B5: dispose ctrl setelah dialog ditutup
+    String? submittedEmail;
+
+    // Ctrl sengaja tidak di-dispose secara eksplisit — biarkan GC mengambil.
+    // Disposal eksplisit berisiko memicu error "TextEditingController used
+    // after being disposed" jika dialog animasi belum selesai saat dispose
+    // dipanggil (terutama saat passwordRecovery event push route lain).
     final ctrl = TextEditingController(text: _emailCtrl.text);
-    try {
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppTheme.bgCard,
-          title: Text(s.titleForgotPassword, style: const TextStyle(color: AppTheme.textPrimary)),
-          content: TextField(
-            controller: ctrl,
-            keyboardType: TextInputType.emailAddress,
-            autofocus: true,
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: InputDecoration(labelText: s.labelEmail, hintText: s.hintEmail),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(s.btnCancel)),
-            ElevatedButton(
-              onPressed: () async {
-                final email = ctrl.text.trim();
-                if (email.isEmpty) return;
-                Navigator.of(ctx).pop();
-                try {
-                  await context.read<AuthProvider>().sendPasswordResetEmail(email);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(s.msgPasswordResetSent)));
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(
-                        e is EmailNotRegisteredException
-                            ? s.msgEmailNotRegistered
-                            : s.msgPasswordResetFailed)));
-                  }
-                }
-              },
-              child: Text(s.btnSendReset),
-            ),
-          ],
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(s.titleForgotPassword, style: const TextStyle(color: AppTheme.textPrimary)),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.emailAddress,
+          style: const TextStyle(color: AppTheme.textPrimary),
+          decoration: InputDecoration(labelText: s.labelEmail, hintText: s.hintEmail),
         ),
-      );
-    } finally {
-      ctrl.dispose();
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(s.btnCancel)),
+          ElevatedButton(
+            onPressed: () {
+              final email = ctrl.text.trim();
+              if (email.isEmpty) return;
+              submittedEmail = email;
+              Navigator.of(ctx).pop();
+            },
+            child: Text(s.btnSendReset),
+          ),
+        ],
+      ),
+    );
+
+    if (submittedEmail != null && mounted) {
+      try {
+        await context.read<AuthProvider>().sendPasswordResetEmail(submittedEmail!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.msgPasswordResetSent)));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(
+              e is EmailNotRegisteredException
+                  ? s.msgEmailNotRegistered
+                  : s.msgPasswordResetFailed)));
+        }
+      }
     }
   }
 
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _signInWithGoogle() async {
+    final s = context.read<LocaleProvider>().s;
+    setState(() => _googleLoading = true);
+    try {
+      final result = await context.read<AuthProvider>().signInWithGoogle();
+      if (!mounted) return;
+      if (result == 'link_prompt') {
+        final auth = context.read<AuthProvider>();
+        final nickname = auth.pendingLinkNickname ?? s.unknownUser;
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(s.btnLinkAccount),
+            content: Text(s.msgLinkPrompt(nickname)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(s.btnCreateNew),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(s.btnUseExisting),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (confirm == true) {
+          await context.read<AuthProvider>().confirmLinkGoogle();
+        } else {
+          context.read<AuthProvider>().cancelLinkGoogle();
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const RegisterScreen()),
+          );
+        }
+      } else if (result == 'new') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+        );
+      } else if (result == 'exists') {
+        // Profile sudah ada — pop LoginScreen yang di-push di atas _AuthGate
+        // supaya halaman utama (dari _AuthGate) terlihat.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } catch (e) {
+      debugPrint('[GOOGLE] login signInWithGoogle error: $e');
+      print('[GOOGLE] login signInWithGoogle error: $e');
+      _snack('Google sign in gagal: $e');
+    }
+    if (mounted) setState(() => _googleLoading = false);
   }
 
   // Catat IP + lokasi (country/city) ke server saat login.
@@ -300,6 +360,43 @@ class _LoginScreenState extends State<LoginScreen> {
                   : Text(s.btnLogin, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             ),
             const SizedBox(height: 16),
+
+            // Divider
+            Row(children: [
+              const Expanded(child: Divider()),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(s.labelOr, style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+              ),
+              const Expanded(child: Divider()),
+            ]),
+            const SizedBox(height: 12),
+
+            // Login dengan Google
+            OutlinedButton(
+              onPressed: _googleLoading ? null : _signInWithGoogle,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppTheme.divider, width: 1.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                backgroundColor: Colors.white,
+              ),
+              child: _googleLoading
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.network(
+                          'https://www.google.com/favicon.ico',
+                          width: 20, height: 20,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 22, color: Colors.red),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(s.btnContinueGoogle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                      ],
+                    ),
+            ),
+            const SizedBox(height: 12),
 
             // Link ke register
             Center(

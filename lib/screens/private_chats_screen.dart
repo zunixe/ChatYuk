@@ -76,6 +76,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     }
 
     return Scaffold(
+      backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.titlePrivateChat)),
       body: StreamBuilder<List<PrivateChatInfo>>(
         stream: _stream,
@@ -138,12 +139,12 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     color: AppTheme.danger,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Column(
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.delete_outline, color: Colors.white, size: 24),
-                      SizedBox(height: 4),
-                      Text('Hapus', style: TextStyle(color: Colors.white, fontSize: 11)),
+                      const Icon(Icons.delete_outline, color: Colors.white, size: 24),
+                      const SizedBox(height: 4),
+                      Text(s.btnDelete, style: const TextStyle(color: Colors.white, fontSize: 11)),
                     ],
                   ),
                 ),
@@ -172,27 +173,33 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                       SnackBar(content: Text(s.deleteChatSuccess)));
                   }
                 },
-                child: Card(
+                child: Container(
                   margin: const EdgeInsets.only(bottom: 12),
-                  color: isBlocked ? AppTheme.bgCard.withValues(alpha: 0.5) : null,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PrivateChatScreen(
-                          chatId: chat.chatId,
-                          otherName: otherName,
-                          otherUid: otherUid,
-                          otherGender: chat.participantGenders[otherUid] ?? '',
-                          otherCountry: chat.participantLocations[otherUid] ?? '',
-                          otherAge: chat.participantAges[otherUid] ?? 0,
-                          otherRegistered: chat.participantRegistered[otherUid] == true,
+                  decoration: BoxDecoration(
+                    color: isBlocked ? AppTheme.bgCard.withValues(alpha: 0.5) : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PrivateChatScreen(
+                            chatId: chat.chatId,
+                            otherName: otherName,
+                            otherUid: otherUid,
+                            otherGender: chat.participantGenders[otherUid] ?? '',
+                            otherCountry: chat.participantLocations[otherUid] ?? '',
+                            otherAge: chat.participantAges[otherUid] ?? 0,
+                            otherRegistered: chat.participantRegistered[otherUid] == true,
+                          ),
                         ),
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       child: Row(
                         children: [
                           Stack(
@@ -335,12 +342,13 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                               ],
                             ],
                           ),
-                      ],
-                    ),
-                  ),
-                ),
-                ),
-              );
+                       ],
+                     ),
+                   ),
+                 ),
+                 ),
+                 ),
+               );
             },
           );
         },

@@ -76,6 +76,7 @@ class UserModel {
     String? status,
     String? avatar,
     bool? isRegistered,
+    DateTime? lastSeen,
   }) {
     return UserModel(
       uid: uid,
@@ -90,7 +91,7 @@ class UserModel {
       isRegistered: isRegistered ?? this.isRegistered,
       loginAt: loginAt,
       createdAt: createdAt,
-      lastSeen: lastSeen,
+      lastSeen: lastSeen ?? this.lastSeen,
     );
   }
 

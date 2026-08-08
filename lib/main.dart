@@ -1,21 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as lpn;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 import 'models/room_model.dart';
 import 'providers/locale_provider.dart';
 import 'screens/private_chat_screen.dart';
-import 'screens/reset_password_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/supabase_config.dart';
-import 'services/screen_secure_service.dart';
 import 'utils.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -143,7 +141,12 @@ Future<void> _initNotifications() async {
     }
   }
 
-  final token = await messaging.getToken();
+  String? token;
+  try {
+    token = await messaging.getToken().timeout(const Duration(seconds: 5));
+  } catch (e) {
+    debugPrint('FCM getToken failed: $e');
+  }
   if (token != null) {
     debugPrint('FCM token: ${token.substring(0, 20)}...');
   }
@@ -183,40 +186,48 @@ void _initDeepLinks() {
   });
 }
 
+Future<void> _setRecoverySession(String accessToken, String refreshToken) async {
+  try {
+    await Supabase.instance.client.auth.setSession(
+      refreshToken,
+      accessToken: accessToken,
+    );
+  } catch (e) {
+    if (kDebugMode) debugPrint('[DEEPLINK] setSession error: $e');
+  }
+}
+
 void _handleDeepLink(Uri uri) {
   if (uri.scheme != 'chatyuk') return;
 
-  // chatyuk://login-callback — Supabase password recovery / email confirm
-  if (uri.host == 'login-callback') {
-    final type = uri.queryParameters['type'];
-    if (kDebugMode) debugPrint('[DEEPLINK] login-callback type=$type');
-    // Supabase SDK menangani session via onAuthStateChange — tidak perlu
-    // extract token manual di sini. Navigator ke ResetPasswordScreen dipicu
-    // oleh passwordRecovery event di _AuthGate (app.dart).
-    // Untuk email confirmation, SDK langsung update session.
-    //
-    // Jika ada fragment (#access_token=...), parse manual:
-    final fragment = uri.fragment;
-    if (fragment.isNotEmpty) {
-      final params = Uri.splitQueryString(fragment);
-      final accessToken = params['access_token'];
-      final refreshToken = params['refresh_token'];
-      final linkType = params['type'];
-      if (accessToken != null && refreshToken != null) {
-        if (kDebugMode) debugPrint('[DEEPLINK] setting session type=$linkType');
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final nav = navigatorKey.currentState;
-          if (nav == null) return;
-          if (linkType == 'recovery') {
-            nav.pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
-              (route) => route.isFirst,
-            );
-          }
-        });
+    // chatyuk://login-callback — Supabase password recovery / email confirm
+    if (uri.host == 'login-callback') {
+      final type = uri.queryParameters['type'];
+      if (kDebugMode) debugPrint('[DEEPLINK] login-callback type=$type');
+      // Supabase SDK menangani session via onAuthStateChange — tidak perlu
+      // extract token manual di sini. Navigator ke ResetPasswordScreen dipicu
+      // oleh passwordRecovery event di _AuthGate (app.dart).
+      // Untuk email confirmation, SDK langsung update session.
+      //
+      // Jika ada fragment (#access_token=...), parse manual:
+      final fragment = uri.fragment;
+      if (fragment.isNotEmpty) {
+        final params = Uri.splitQueryString(fragment);
+        final accessToken = params['access_token'];
+        final refreshToken = params['refresh_token'];
+        final linkType = params['type'];
+        if (accessToken != null && refreshToken != null) {
+          if (kDebugMode) debugPrint('[DEEPLINK] setting session type=$linkType');
+          // Set session recovery MANUAL. Deep link custom scheme (chatyuk://)
+          // tidak selalu memicu session otomatis di SDK — tanpa session,
+          // updateUser (set password baru) akan gagal.
+          // Navigasi ke ResetPasswordScreen ditangani _AuthGate via event
+          // passwordRecovery (app.dart) — JANGAN push manual di sini,
+          // agar tidak double navigation (error "_dependents.isEmpty").
+          _setRecoverySession(accessToken, refreshToken);
+        }
       }
     }
-  }
 }
 
 void main() async {
@@ -238,6 +249,4 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await _initNotifications();
   runApp(const ChatYukApp());
-  // Anti-screenshot untuk seluruh app (chat, foto, dll)
-  await ScreenSecureService.enable();
 }

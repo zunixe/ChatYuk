@@ -148,8 +148,8 @@ class ChatService {
     reload();
 
     // Fallback polling: jaga-jaga kalau realtime INSERT gagal tiba.
-    // Pesan baru dipastikan muncul walau tanpa notifikasi realtime.
-    final pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => reload());
+    // Interval 30s cukup — realtime harusnya tangkap pesan baru lebih dulu.
+    final pollTimer = Timer.periodic(const Duration(seconds: 30), (_) => reload());
 
     controller.onCancel = () {
       pollTimer.cancel();
@@ -373,6 +373,7 @@ class ChatService {
 
   Stream<List<UserModel>> getOnlineUsers() {
     final controller = StreamController<List<UserModel>>.broadcast();
+    List<UserModel> cached = [];
 
     Future<void> fetchOnline() async {
       try {
@@ -389,21 +390,48 @@ class ChatService {
             .gte('last_seen', cutoff)
             .order('last_seen', ascending: false)
             .limit(200);
-        if (!controller.isClosed) {
-          controller.add(rows
-              .map((row) => UserModel.fromMap('${row['id']}', snakeToCamel(row)))
-              .toList());
-        }
+        cached = rows
+            .map((row) => UserModel.fromMap('${row['id']}', snakeToCamel(row)))
+            .toList();
+        if (!controller.isClosed) controller.add(List.unmodifiable(cached));
       } catch (e) {
         debugPrint('[getOnlineUsers] fetch error: $e');
       }
     }
 
+    // Realtime: update status user yang sudah ada di cache secara instan,
+    // supaya status di list chat sinkron dengan status di private chat.
+    final channel = _sb.channel('online-users-status');
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'profiles',
+      callback: (payload) {
+        final newStatus = payload.newRecord['status'] as String?;
+        final id = payload.newRecord['id'] as String?;
+        final lastSeenStr = payload.newRecord['last_seen'] as String?;
+        if (id == null || newStatus == null || controller.isClosed) return;
+        DateTime? lastSeen;
+        try {
+          lastSeen = DateTime.tryParse(lastSeenStr ?? '');
+        } catch (_) {}
+        final idx = cached.indexWhere((u) => u.uid == id);
+        if (idx >= 0) {
+          cached[idx] = cached[idx].copyWith(status: newStatus, lastSeen: lastSeen);
+          controller.add(List.unmodifiable(cached));
+        }
+      },
+    );
+    channel.subscribe();
+
     // Poll setiap 30 detik — cukup responsif untuk status online/idle/offline
     final timer = Timer.periodic(const Duration(seconds: 30), (_) => fetchOnline());
     fetchOnline();
 
-    controller.onCancel = () => timer.cancel();
+    controller.onCancel = () {
+      timer.cancel();
+      _sb.removeChannel(channel);
+    };
     return controller.stream;
   }
 

@@ -29,6 +29,7 @@ class _EntryScreenState extends State<EntryScreen> {
   late String _kota;
   String _ipAddress = '';
   bool _loading = false;
+  bool _googleLoading = false;
   bool _entered = false; // guard: cegah double submit
   String? _nicknameError;
   Timer? _nicknameDebounce;
@@ -80,6 +81,65 @@ class _EntryScreenState extends State<EntryScreen> {
         setState(() => _nicknameError = available ? null : s.errNicknameTaken);
       }
     });
+  }
+
+  Future<void> _signInWithGoogle() async {
+    final s = context.read<LocaleProvider>().s;
+    setState(() => _googleLoading = true);
+    try {
+      final result = await context.read<AuthProvider>().signInWithGoogle();
+      if (!mounted) return;
+      if (result == 'link_prompt') {
+        // Email sudah ada di akun lain — tanya apakah mau link
+        final auth = context.read<AuthProvider>();
+        final nickname = auth.pendingLinkNickname ?? s.unknownUser;
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(s.btnLinkAccount),
+            content: Text(s.msgLinkPrompt(nickname)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(s.btnCreateNew),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(s.btnUseExisting),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (confirm == true) {
+          await context.read<AuthProvider>().confirmLinkGoogle();
+        } else {
+          context.read<AuthProvider>().cancelLinkGoogle();
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const RegisterScreen()),
+          );
+        }
+      } else if (result == 'new') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+        );
+      } else if (result == 'exists') {
+        // Profile sudah ada — _AuthGate sudah menampilkan halaman utama,
+        // tidak perlu navigasi tambahan (EntryScreen adalah home).
+      }
+      // 'exists' — profile sudah ada, _AuthGate handle navigasi otomatis
+    } catch (e) {
+      debugPrint('[GOOGLE] signInWithGoogle error: $e');
+      print('[GOOGLE] signInWithGoogle error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${s.errGoogleSignIn}$e')),
+        );
+      }
+    }
+    if (mounted) setState(() => _googleLoading = false);
   }
 
   Future<void> _enter() async {
@@ -301,11 +361,40 @@ class _EntryScreenState extends State<EntryScreen> {
                 const Expanded(child: Divider()),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('atau', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  child: Text(s.labelOr, style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                 ),
                 const Expanded(child: Divider()),
               ]),
               const SizedBox(height: 12),
+
+              // Login dengan Google
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _googleLoading ? null : _signInWithGoogle,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.divider, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: Colors.white,
+                  ),
+                  child: _googleLoading
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.network(
+                              'https://www.google.com/favicon.ico',
+                              width: 20, height: 20,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 22, color: Colors.red),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(s.btnContinueGoogle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                          ],
+                        ),
+                ),
+              ),
+              const SizedBox(height: 8),
 
               // Daftar dengan Email
               SizedBox(
@@ -336,12 +425,12 @@ class _EntryScreenState extends State<EntryScreen> {
               Center(
                 child: GestureDetector(
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonateScreen())),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.favorite, size: 16, color: AppTheme.danger),
-                      SizedBox(width: 4),
-                      Text('Donasi', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                      const Icon(Icons.favorite, size: 16, color: AppTheme.danger),
+                      const SizedBox(width: 4),
+                      Text(s.titleDonate, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
                     ],
                   ),
                 ),
@@ -426,7 +515,7 @@ class _EntryScreenState extends State<EntryScreen> {
 
   Widget _ageDropdown(S s) {
     return DropdownButtonFormField<int>(
-      value: _age,
+      initialValue: _age,
       decoration: InputDecoration(labelText: s.labelAge),
       items: [
         for (int i = 13; i <= 60; i++)
@@ -440,7 +529,7 @@ class _EntryScreenState extends State<EntryScreen> {
 
   Widget _countryDropdown(S s) {
     return DropdownButtonFormField<String>(
-      value: _negara,
+      initialValue: _negara,
       decoration: InputDecoration(labelText: s.labelCountry),
       isExpanded: true,
       menuMaxHeight: 350,
@@ -465,7 +554,7 @@ class _EntryScreenState extends State<EntryScreen> {
     // Ensure _kota is valid for current country
     final validKota = cities.contains(_kota) ? _kota : cities.first;
     return DropdownButtonFormField<String>(
-      value: validKota,
+      initialValue: validKota,
       decoration: InputDecoration(labelText: s.labelCity),
       isExpanded: true,
       menuMaxHeight: 350,

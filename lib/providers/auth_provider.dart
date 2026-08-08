@@ -4,6 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/screen_secure_service.dart';
 
 // Shortcut untuk fire-and-forget
 void unawaited(Future<void> future) => future.catchError((_) {});
@@ -25,9 +26,12 @@ class AuthProvider extends ChangeNotifier {
   static const String _notifPrefKey = 'notif_enabled';
   bool _notificationsEnabled = true;
 
+  bool _screenshotEnabled = true;
+
   UserModel? get profile => _profile;
   bool get loading => _loading;
   String? get error => _error;
+  bool get screenshotEnabled => _screenshotEnabled;
   bool get isSignedIn => _auth.isSignedIn;
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
@@ -53,6 +57,8 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('[AUTH] signInAnonymously OK');
       _profile = await _auth.getProfile();
       debugPrint('[AUTH] getProfile -> ${_profile?.uid}');
+      // Terapkan setting admin: izinkan screenshot aplikasi atau tidak
+      await _loadScreenshotSetting();
       // FCM token di-fetch asinkron — jangan block loading screen
       if (_profile != null) updateFcmToken();
       // Bersihkan akun anonymous stale (fire-and-forget) supaya nickname
@@ -74,6 +80,58 @@ class AuthProvider extends ChangeNotifier {
     await _auth.signInAnonymously();
     _profile = await _auth.getProfile();
     if (!_disposed) notifyListeners();
+  }
+
+  /// Login dengan Google SSO via Supabase.
+  /// Return:
+  ///   'linked'  — email sudah ada di akun lain, profile berhasil di-link
+  ///   'linked_existing' — email sudah ada, tapi user menolak linking (tetap pakai akun baru)
+  ///   'new'     — user baru, perlu isi profile
+  ///   'exists'  — profile sudah ada (login ulang)
+  Future<String> signInWithGoogle() async {
+    final result = await _auth.signInWithGoogle();
+    final googleEmail = result.googleEmail;
+    print('[AUTH-PROVIDER] signInWithGoogle result uid=${result.response.user?.id} email=$googleEmail');
+
+    // Cek apakah email ini sudah punya profile di akun lain
+    if (googleEmail != null) {
+      final existing = await _auth.checkEmailExists(googleEmail);
+      print('[AUTH-PROVIDER] checkEmailExists result=$existing');
+      if (existing != null) {
+        _pendingLinkProfileId = existing['profile_id'] as String?;
+        _pendingLinkNickname = existing['nickname'] as String?;
+        _profile = await _auth.getProfile();
+        if (!_disposed) notifyListeners();
+        return 'link_prompt';
+      }
+    }
+
+    _profile = await _auth.getProfile();
+    print('[AUTH-PROVIDER] getProfile after google -> ${_profile?.uid}');
+    if (!_disposed) notifyListeners();
+    if (_profile != null) return 'exists';
+    return 'new';
+  }
+
+  String? _pendingLinkProfileId;
+  String? _pendingLinkNickname;
+
+  String? get pendingLinkNickname => _pendingLinkNickname;
+
+  /// Konfirmasi linking — pindahkan profile lama ke akun Google baru
+  Future<void> confirmLinkGoogle() async {
+    if (_pendingLinkProfileId == null) return;
+    await _auth.linkGoogleProfile(_pendingLinkProfileId!);
+    _profile = await _auth.getProfile();
+    _pendingLinkProfileId = null;
+    _pendingLinkNickname = null;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Tolak linking — tetap pakai akun Google baru (tanpa profile lama)
+  void cancelLinkGoogle() {
+    _pendingLinkProfileId = null;
+    _pendingLinkNickname = null;
   }
 
   Future<void> updateFcmToken() async {
@@ -116,11 +174,32 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> retry() => _init();
 
+  /// Ambil setting admin global (screenshot enabled?) lalu terapkan.
+  Future<void> _loadScreenshotSetting() async {
+    _screenshotEnabled = await _auth.fetchScreenshotEnabled();
+    ScreenSecureService.setScreenshotEnabled(_screenshotEnabled);
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Admin mengubah izin screenshot aplikasi (disimpan di server, semua device kena).
+  Future<void> setScreenshotEnabled(bool enabled) async {
+    _screenshotEnabled = enabled;
+    ScreenSecureService.setScreenshotEnabled(enabled);
+    if (!_disposed) notifyListeners();
+    try {
+      await _auth.updateScreenshotEnabled(enabled);
+    } catch (e) {
+      debugPrint('[AUTH] updateScreenshotEnabled error: $e');
+    }
+  }
+
   /// Bersihkan akun anonymous stale di server (fire-and-forget).
   Future<void> cleanupStaleAnonymous({int minAgeDays = 7}) {
     return _auth.cleanupStaleAnonymous(minAgeDays: minAgeDays);
   }
 
+  /// Ambil profil user lain by UID.
+  Future<UserModel?> getOtherProfile(String uid) => _auth.getProfileById(uid);
   /// Sign up dengan email — membuat akun Supabase baru.
   /// Setelah ini user perlu verifikasi email, lalu registerProfile().
   Future<void> signUpWithEmail({
@@ -191,14 +270,42 @@ class AuthProvider extends ChangeNotifier {
     String ipAddress = '',
   }) async {
     debugPrint('[AUTH] registerProfile START: $nickname inst=$instanceId');
-    _profile = await _auth.registerProfile(
-      nickname: nickname,
-      gender: gender,
-      age: age,
-      country: country,
-      city: city,
-      ipAddress: ipAddress,
-    );
+    try {
+      _profile = await _auth.registerProfile(
+        nickname: nickname,
+        gender: gender,
+        age: age,
+        country: country,
+        city: city,
+        ipAddress: ipAddress,
+      );
+    } catch (e) {
+      // User anon lama bisa dihapus di server oleh cleanup_stale_anonymous
+      // (akun stale > 7 hari). Session masih ada di device tapi user tidak
+      // lagi ada di auth.users → insert profile gagal foreign key.
+      // Deteksi & buat user anon baru, lalu retry sekali.
+      final msg = e.toString().toLowerCase();
+      final userInvalid = msg.contains('23503') ||
+          msg.contains('foreign key') ||
+          msg.contains('violates') ||
+          msg.contains('row-level security') ||
+          msg.contains('42501');
+      if (userInvalid) {
+        debugPrint('[AUTH] registerProfile failed (stale anon), refreshing session: $e');
+        await _auth.signOut();
+        await _auth.signInAnonymously();
+        _profile = await _auth.registerProfile(
+          nickname: nickname,
+          gender: gender,
+          age: age,
+          country: country,
+          city: city,
+          ipAddress: ipAddress,
+        );
+      } else {
+        rethrow;
+      }
+    }
     debugPrint('[AUTH] registerProfile DONE: ${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
     notifyListeners();
     debugPrint('[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
@@ -206,12 +313,18 @@ class AuthProvider extends ChangeNotifier {
     updateFcmToken();
   }
 
-  Future<void> updateProfile({int? age, String? country, String? city}) async {
-    await _auth.updateProfile(age: age, country: country, city: city);
+  Future<void> updateProfile({int? age, String? country, String? city, String? nickname}) async {
+    await _auth.updateProfile(
+      age: age,
+      country: country,
+      city: city,
+      nickname: nickname,
+    );
     _profile = _profile?.copyWith(
       age: age ?? _profile?.age,
       country: country ?? _profile?.country,
       city: city ?? _profile?.city,
+      nickname: nickname ?? _profile?.nickname,
     );
     notifyListeners();
   }

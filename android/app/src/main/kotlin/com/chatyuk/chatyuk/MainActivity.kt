@@ -11,8 +11,9 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Anti-screenshot: seluruh app tidak bisa di-capture / di-record.
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        // Anti-screenshot TIDAK diaktifkan di sini.
+        // Kontrol flag secure dipindah ke per-screen (lobby/entry bisa screenshot,
+        // private chat & view-once diaktifkan via MethodChannel setSecure).
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -24,7 +25,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "clearSecure" -> {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     result.success(null)
                 }
                 else -> result.notImplemented()

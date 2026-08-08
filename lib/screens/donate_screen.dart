@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
+import '../providers/locale_provider.dart';
+import '../services/screen_secure_service.dart';
 
 class DonateScreen extends StatefulWidget {
   const DonateScreen({super.key});
@@ -47,26 +51,31 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
+    // Halaman donasi perlu screenshot untuk share QRIS — selalu diizinkan
+    ScreenSecureService.enterDonation();
   }
 
   @override
   void dispose() {
     _tab.dispose();
+    // Kembalikan setting global setelah keluar halaman donasi
+    ScreenSecureService.exitDonation();
     super.dispose();
   }
 
   void _copy(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label disalin ke clipboard')),
+      SnackBar(content: Text('$label${context.read<LocaleProvider>().s.msgCopied}')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Donasi'),
+        title: Text(s.titleDonate),
         bottom: TabBar(
           controller: _tab,
           labelColor: Colors.white,
@@ -84,7 +93,7 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
         controller: _tab,
         children: [
           _QrisTab(onCopy: _copy),
-          _UsdtTab(networks: _networks, onCopy: _copy),
+          _UsdtTab(networks: _networks, onCopy: _copy, s: s),
         ],
       ),
     );
@@ -103,16 +112,29 @@ class _QrisTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 8),
+          // Nama merchant
           const Text(
-            'Scan QRIS di bawah untuk donasi',
+            'OneHeart',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 4),
+          const Text(
+            'NMID: ID1026566504126A01',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Scan QRIS untuk donasi',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
           Center(
             child: Container(
-              width: 240,
-              height: 240,
+              width: 260,
+              height: 260,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -125,21 +147,21 @@ class _QrisTab extends StatelessWidget {
                   ),
                 ],
               ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.qr_code_2, size: 120, color: AppTheme.textSecondary),
-                  SizedBox(height: 8),
-                  Text(
-                    'QR Code akan segera\nditambahkan',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset(
+                    'assets/qris_crop.png',
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.cover,
                   ),
-                ],
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           _InfoCard(
             icon: Icons.info_outline,
             text: 'QRIS dapat digunakan di semua aplikasi dompet digital dan mobile banking Indonesia (GoPay, OVO, Dana, BCA, Mandiri, dll)',
@@ -155,7 +177,8 @@ class _QrisTab extends StatelessWidget {
 class _UsdtTab extends StatelessWidget {
   final List<_UsdtNetwork> networks;
   final void Function(String text, String label) onCopy;
-  const _UsdtTab({required this.networks, required this.onCopy});
+  final S s;
+  const _UsdtTab({required this.networks, required this.onCopy, required this.s});
 
   @override
   Widget build(BuildContext context) {
@@ -165,17 +188,17 @@ class _UsdtTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 8),
-          const Text(
-            'Pilih network dan salin alamat wallet',
+          Text(
+            s.donateSelectHint,
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 20),
-          ...networks.map((n) => _NetworkCard(network: n, onCopy: onCopy)),
+          ...networks.map((n) => _NetworkCard(network: n, onCopy: onCopy, s: s)),
           const SizedBox(height: 16),
           _InfoCard(
             icon: Icons.warning_amber_rounded,
-            text: 'Pastikan kamu mengirim ke network yang benar. Mengirim ke network yang salah dapat menyebabkan dana hilang.',
+            text: s.donateWrongNetwork,
           ),
           const SizedBox(height: 16),
           _ThankYouNote(),
@@ -188,7 +211,8 @@ class _UsdtTab extends StatelessWidget {
 class _NetworkCard extends StatelessWidget {
   final _UsdtNetwork network;
   final void Function(String, String) onCopy;
-  const _NetworkCard({required this.network, required this.onCopy});
+  final S s;
+  const _NetworkCard({required this.network, required this.onCopy, required this.s});
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +288,7 @@ class _NetworkCard extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: () => onCopy(network.address, 'Alamat ${network.label}'),
                 icon: const Icon(Icons.copy, size: 16),
-                label: Text('Salin Alamat ${network.label}'),
+                label: Text('${s.btnCopyAddress}${network.label}'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: network.color,
                   side: BorderSide(color: network.color),

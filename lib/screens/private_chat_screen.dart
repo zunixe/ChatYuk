@@ -14,6 +14,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/chat_service.dart';
+import '../services/screen_secure_service.dart';
 import '../main.dart';
 import '../utils.dart';
 import 'user_info_screen.dart';
@@ -70,6 +71,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void initState() {
     super.initState();
     activeChatId.value = widget.chatId;
+    // Anti-screenshot dikontrol setting admin global (ScreenSecureService).
+    // Privasi view_once tetap terjaga via enterViewOnce/exitViewOnce.
 
     final chat = context.read<ChatProvider>();
     final auth = context.read<AuthProvider>();
@@ -124,7 +127,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void _subscribeStatus() {
     _statusSub?.cancel();
     _statusSub = context.read<ChatProvider>().getUserStatus(widget.otherUid).listen((status) {
-      if (mounted) setState(() => _otherStatus = status);
+      if (!mounted) return;
+      setState(() => _otherStatus = status);
+      // Fetch last_seen saat status idle agar bisa tampilkan "terakhir dilihat"
+
     });
   }
 
@@ -204,8 +210,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     // Tolak file > 10MB sebelum proses
     if (bytes.length > 10 * 1024 * 1024) {
       if (mounted) {
+        final s = context.read<LocaleProvider>().s;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File terlalu besar. Maksimal 10MB.')));
+          SnackBar(content: Text(s.msgFileTooLarge)));
       }
       return;
     }
@@ -471,7 +478,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     icon: Icons.image_outlined,
                     color: AppTheme.primary,
                     onTap: _sendPhoto,
-                    tooltip: 'Foto',
+                    tooltip: context.read<LocaleProvider>().s.tooltipPhoto,
                   ),
                   const SizedBox(width: 4),
                   // Tombol sekali lihat kecil
@@ -651,7 +658,7 @@ class _MessageImageState extends State<_MessageImage> {
 
 class _StatusIndicator extends StatelessWidget {
   final String status;
-  const _StatusIndicator({super.key, required this.status});
+  const _StatusIndicator({required this.status});
 
   @override
   Widget build(BuildContext context) {
@@ -724,7 +731,7 @@ enum _ViewOnceState { idle, viewing, expired }
 class _ViewOnceImage extends StatefulWidget {
   final String imageData;
   final bool isMe;
-  const _ViewOnceImage({super.key, required this.imageData, required this.isMe});
+  const _ViewOnceImage({required this.imageData, required this.isMe});
 
   @override
   State<_ViewOnceImage> createState() => _ViewOnceImageState();
@@ -742,19 +749,11 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
     try { _bytes = base64Decode(widget.imageData); } catch (_) {}
   }
 
-  static const _windowChannel = MethodChannel('com.chatyuk.chatyuk/window');
-
-  static Future<void> _setSecure(bool secure) async {
-    try {
-      await _windowChannel.invokeMethod(secure ? 'setSecure' : 'clearSecure');
-    } catch (_) {}
-  }
-
   @override
   void dispose() {
     _timer?.cancel();
     if (_state == _ViewOnceState.viewing) {
-      _setSecure(false);
+      ScreenSecureService.exitViewOnce();
     }
     super.dispose();
   }
@@ -765,13 +764,13 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
       _state = _ViewOnceState.viewing;
       _secondsLeft = 10;
     });
-    _setSecure(true);
+    ScreenSecureService.enterViewOnce();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       setState(() { _secondsLeft--; });
       if (_secondsLeft <= 0) {
         t.cancel();
-        _setSecure(false);
+        ScreenSecureService.exitViewOnce();
         setState(() => _state = _ViewOnceState.expired);
       }
     });

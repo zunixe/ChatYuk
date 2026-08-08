@@ -7,6 +7,7 @@ class AppTheme {
   static const Color accent = Color(0xFF00BCD4);
 
   // ── Light background ──
+  static const Color bgScreen = Color(0xFFF0F4F8);
   static const Color bgDark = Color(0xFFF5F5F5);
   static const Color bgCard = Colors.white;
   static const Color bgInput = Color(0xFFF0F0F0);
@@ -27,7 +28,7 @@ class AppTheme {
   static ThemeData get lightTheme => ThemeData(
         brightness: Brightness.light,
         primaryColor: primary,
-        scaffoldBackgroundColor: Colors.white,
+        scaffoldBackgroundColor: bgScreen,
         colorScheme: const ColorScheme.light(
           primary: primary,
           secondary: accent,
