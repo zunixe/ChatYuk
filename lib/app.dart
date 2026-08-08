@@ -50,15 +50,29 @@ class _AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<_AuthGate> {
   StreamSubscription<AuthState>? _authSub;
+  DateTime? _lastRecoveryNav;
 
   @override
   void initState() {
     super.initState();
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
+        // Guard: cegah push ganda jika event ter-trigger berulang
+        // (misal setSession dari deep link + event SDK).
+        final now = DateTime.now();
+        if (_lastRecoveryNav != null &&
+            now.difference(_lastRecoveryNav!) < const Duration(seconds: 2)) {
+          return;
+        }
+        _lastRecoveryNav = now;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          Navigator.of(context).pushReplacement(
+          // Guard: pastikan Navigator masih valid sebelum push.
+          final nav = navigatorKey.currentState;
+          if (nav == null || !mounted) return;
+          // Pakai push (bukan pushReplacement) — pushReplacement men-dispose
+          // route aktif (misal LoginScreen dengan TextEditingController aktif)
+          // saat transition → error "TextEditingController used after being disposed".
+          nav.push(
             MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
           );
         });
@@ -102,21 +116,21 @@ class _AuthGateState extends State<_AuthGate> {
               children: [
                 const Icon(Icons.wifi_off, color: AppTheme.textSecondary, size: 48),
                 const SizedBox(height: 16),
-                const Text(
-                  'Gagal terhubung ke server',
-                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+                Text(
+                  s.msgServerError,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Periksa koneksi internet kamu, lalu coba lagi.',
+                Text(
+                  s.msgServerErrorHint,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
                   onPressed: () => context.read<AuthProvider>().retry(),
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Coba Lagi'),
+                  label: Text(s.btnRetry),
                 ),
               ],
             ),

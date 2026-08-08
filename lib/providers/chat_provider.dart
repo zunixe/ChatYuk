@@ -9,7 +9,6 @@ class ChatProvider extends ChangeNotifier {
   List<String> _blockedUids = [];
 
   // Stream cache untuk private chats — mencegah StreamBuilder resubscribe setiap build
-  final _roomMsgCache = <String, Stream<List<MessageModel>>>{};
   final _privateChatsCache = <String, Stream<List<PrivateChatInfo>>>{};
   final _roomUsersCache = <String, Stream<List<UserModel>>>{};
 
@@ -157,7 +156,6 @@ class ChatProvider extends ChangeNotifier {
 
   void reset() {
     _blockedUids = [];
-    _roomMsgCache.clear();
     _privateChatsCache.clear();
     _service.clearCachedStreams();
     MessageCache.instance.clearAll();

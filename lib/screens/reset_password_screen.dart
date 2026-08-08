@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import 'login_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -42,16 +41,17 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       _snack(s.msgPasswordChanged);
       await Future.delayed(const Duration(milliseconds: 400));
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (_) => false,
-      );
+      // Setelah signOut, _AuthGate menampilkan EntryScreen (profile null).
+      // Cukup pop keluar — JANGAN pushAndRemoveUntil (bisa konflik dengan
+      // rebuild _AuthGate → error TextEditingController disposed / wrong build scope).
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } on Exception catch (e) {
       if (!mounted) return;
       final s2 = context.read<LocaleProvider>().s;
       _snack('${s2.errChangePassword}${e.toString()}');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      // Jangan setState setelah popUntil — route sedang di-animasi keluar.
+      // mounted masih true selama animasi berjalan, tapi rebuild tidak perlu.
     }
   }
 

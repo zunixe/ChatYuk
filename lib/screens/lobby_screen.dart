@@ -31,6 +31,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_prefKey);
     final target = (saved != null && allCountries.contains(saved)) ? saved : profileCountry;
+    if (!mounted) return;
     // arahkan provider ke negara profil (default) / terakhir terpilih
     await context.read<RoomProvider>().setCountry(target);
   }
@@ -46,41 +47,69 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final s = context.watch<LocaleProvider>().s;
     final roomProvider = context.watch<RoomProvider>();
     return Scaffold(
-      appBar: AppBar(title: const Text('ChatYuk')),
+      backgroundColor: AppTheme.bgScreen,
+      appBar: AppBar(
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
+            ),
+          ),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('ChatYuk', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+            Text(s.titleRooms, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ],
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: Column(
         children: [
           // Pilih negara
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.public, color: AppTheme.primary, size: 20),
-                const SizedBox(width: 8),
-                const Text('🌍', style: TextStyle(fontSize: 18)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      labelText: 'Negara / Country',
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
                     ),
+                    child: const Icon(Icons.public, color: AppTheme.primary, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: roomProvider.country,
                         isExpanded: true,
                         isDense: true,
                         menuMaxHeight: 400,
+                        hint: const Text('Negara / Country', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
                         items: [
                           for (final c in allCountries)
-                            DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis, maxLines: 1, style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis, maxLines: 1, style: const TextStyle(fontSize: 14))),
                         ],
                         onChanged: (v) { if (v != null) _onCountryChanged(v); },
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -114,16 +143,23 @@ class _RoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               Container(
@@ -140,7 +176,7 @@ class _RoomCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(s.roomName(room.category), style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
@@ -168,6 +204,7 @@ class _RoomCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

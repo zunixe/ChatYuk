@@ -410,12 +410,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Center(
               child: GestureDetector(
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonateScreen())),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.favorite, size: 16, color: AppTheme.danger),
-                    SizedBox(width: 4),
-                    Text('Donasi', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                    const Icon(Icons.favorite, size: 16, color: AppTheme.danger),
+                    const SizedBox(width: 4),
+                    Text(s.titleDonate, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
                   ],
                 ),
               ),
@@ -451,7 +451,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Widget _ageDropdown(s) {
     return DropdownButtonFormField<int>(
-      value: _age,
+      initialValue: _age,
       decoration: InputDecoration(labelText: s.labelAge),
       isExpanded: true,
       menuMaxHeight: 300,
@@ -462,7 +462,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Widget _countryDropdown(s) {
     return DropdownButtonFormField<String>(
-      value: _negara,
+      initialValue: _negara,
       decoration: InputDecoration(labelText: s.labelCountry),
       isExpanded: true,
       menuMaxHeight: 350,
@@ -483,7 +483,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (cities.isEmpty) return const SizedBox.shrink();
     final validKota = cities.contains(_kota) ? _kota : cities.first;
     return DropdownButtonFormField<String>(
-      value: validKota,
+      initialValue: validKota,
       decoration: InputDecoration(labelText: s.labelCity),
       isExpanded: true,
       menuMaxHeight: 350,

@@ -234,4 +234,41 @@ class S {
   String get errEmailNotVerified => isId ? 'Email belum diverifikasi. Cek inbox kamu.' : 'Email not verified. Check your inbox.';
   String get msgEmailAlreadyRegisteredResend => isId ? 'Email sudah terdaftar tapi belum diverifikasi. Link verifikasi dikirim ulang ke inbox kamu.' : 'Email registered but not verified. Verification link resent to your inbox.';
   String get msgCompleteProfile  => isId ? 'Lengkapi profil untuk melanjutkan'     : 'Complete your profile to continue';
+
+  // ── Google Sign-In / Account Linking ──
+  String get btnLinkAccount     => isId ? 'Hubungkan Akun?'                    : 'Link Account?';
+  String get btnCreateNew       => isId ? 'Buat Baru'                          : 'Create New';
+  String get btnUseExisting     => isId ? 'Pakai Profil Lama'                  : 'Use Existing';
+  String get btnContinueGoogle  => isId ? 'Lanjutkan dengan Google'            : 'Continue with Google';
+  String get errGoogleSignIn    => isId ? 'Google sign in gagal: '             : 'Google sign in failed: ';
+  String get labelOr            => isId ? 'atau'                               : 'or';
+
+  /// Pesan konfirmasi link akun dengan nickname akun lama.
+  String msgLinkPrompt(String nickname) =>
+      isId ? 'Email ini sudah terdaftar sebagai "$nickname". Mau pakai profil yang sudah ada?'
+           : 'This email is already registered as "$nickname". Use the existing profile?';
+
+  // ── Username / Nickname ──
+  String get btnChangeUsername  => isId ? 'Ganti Username'                     : 'Change Username';
+  String get msgUsernameOldReleased => isId ? 'Username lama akan langsung bisa dipakai orang lain.' : 'Your old username will be immediately available for others.';
+
+  // ── Donasi ──
+  String get titleDonate        => isId ? 'Donasi'                             : 'Donate';
+  String get msgCopied          => isId ? ' disalin ke clipboard'              : ' copied to clipboard';
+  String get btnCopyAddress     => isId ? 'Salin Alamat '                      : 'Copy Address ';
+  String get donateSelectHint   => isId ? 'Pilih network dan salin alamat wallet' : 'Choose a network and copy the wallet address';
+  String get donateWrongNetwork => isId ? 'Pastikan kamu mengirim ke network yang benar. Mengirim ke network yang salah dapat menyebabkan dana hilang.' : 'Make sure you send to the correct network. Sending to the wrong network may cause funds to be lost.';
+
+  // ── Screenshot admin ──
+  String get labelScreenshotAllow => isId ? 'Izinkan screenshot aplikasi'      : 'Allow app screenshots';
+  String get descScreenshotAdmin  => isId ? 'Admin — kontrol screenshot untuk semua pengguna' : 'Admin — control screenshots for all users';
+
+  // ── Misc ──
+  String get btnRetry           => isId ? 'Coba Lagi'                          : 'Retry';
+  String get msgServerError     => isId ? 'Gagal terhubung ke server'          : 'Failed to connect to server';
+  String get msgServerErrorHint => isId ? 'Periksa koneksi internet kamu, lalu coba lagi.' : 'Check your internet connection and try again.';
+  String get msgFileTooLarge    => isId ? 'File terlalu besar. Maksimal 10MB.' : 'File too large. Maximum 10MB.';
+  String get tooltipPhoto       => isId ? 'Foto'                               : 'Photo';
+  String get labelGenderFilter  => isId ? 'Gender'                             : 'Gender';
+  String get btnDelete          => isId ? 'Hapus'                              : 'Delete';
 }

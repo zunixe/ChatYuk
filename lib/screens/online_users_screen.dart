@@ -62,10 +62,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
     super.dispose();
   }
 
+  bool _scrollDebounce = false;
+
   void _onScroll() {
+    if (_scrollDebounce) return;
     if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 100) {
+      _scrollDebounce = true;
       _page++;
       setState(() {});
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) _scrollDebounce = false;
+      });
     }
   }
 
@@ -103,10 +110,31 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
     super.build(context);
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final isId = s.isId;
-
     return Scaffold(
-      appBar: AppBar(title: Text(s.titleOnline)),
+      backgroundColor: AppTheme.bgScreen,
+      appBar: AppBar(
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
+            ),
+          ),
+        ),
+        title: Consumer<OnlineUsersProvider>(
+          builder: (_, prov, __) => Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(s.titleOnline, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+              Text('${prov.users.length} ${s.isId ? "pengguna aktif" : "active users"}',
+                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: Consumer<OnlineUsersProvider>(
         builder: (_, provider, __) {
           final chat = context.read<ChatProvider>();
@@ -312,13 +340,20 @@ class _UserCard extends StatelessWidget {
     final genderLabel = user.gender == 'male' ? s.genderMale : user.gender == 'female' ? s.genderFemale : s.genderOther;
     final statusLabel = user.status == 'idle' ? s.statusIdle : user.status == 'offline' ? s.statusOffline : s.statusOnline;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               Stack(
@@ -351,7 +386,7 @@ class _UserCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Row(
                       children: [
@@ -386,6 +421,7 @@ class _UserCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

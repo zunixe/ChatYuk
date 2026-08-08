@@ -12,7 +12,20 @@
           "package_name": "com.chatyuk.chatyuk"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "688425181671-icr5npfba1p6tevd5sm3fqr42ndqctd5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.chatyuk.chatyuk",
+            "certificate_hash": "8ccc42e3fe9337216ce4250e2bfccb22941e50a2"
+          }
+        },
+        {
+          "client_id": "688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB56XbvTTbYrhUZHnrlHUlJTd2bRxG9Vsk"

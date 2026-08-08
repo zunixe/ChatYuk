@@ -48,3 +48,12 @@ google-services.json
 /android/app/profile
 /android/app/release
 .code-graph/
+
+# Keystore — JANGAN pernah commit ke git
+*.jks
+*.keystore
+android/keystore/
+key.properties
+
+# Konfigurasi lokal (berisi secret) — jangan di-push
+CONFIG.md
