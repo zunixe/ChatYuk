@@ -28,6 +28,15 @@ String? _processImage(Uint8List bytes) {
   return base64Encode(jpg);
 }
 
+// Top-level function untuk compute() isolate — decode base64 di background
+Uint8List? _decodeImage(String base64) {
+  try {
+    return base64Decode(base64);
+  } catch (_) {
+    return null;
+  }
+}
+
 class PrivateChatScreen extends StatefulWidget {
   final String chatId;
   final String otherName;
@@ -627,7 +636,14 @@ class _MessageImageState extends State<_MessageImage> {
   @override
   void initState() {
     super.initState();
-    try { _bytes = base64Decode(widget.imageData); } catch (_) { _bytes = null; }
+    _decode();
+  }
+
+  // Decode di isolate agar UI tidak freeze untuk foto besar.
+  Future<void> _decode() async {
+    final bytes = await compute(_decodeImage, widget.imageData);
+    if (!mounted) return;
+    setState(() => _bytes = bytes);
   }
 
   @override
@@ -746,7 +762,14 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
   @override
   void initState() {
     super.initState();
-    try { _bytes = base64Decode(widget.imageData); } catch (_) {}
+    _decode();
+  }
+
+  // Decode di isolate agar UI tidak freeze untuk foto besar.
+  Future<void> _decode() async {
+    final bytes = await compute(_decodeImage, widget.imageData);
+    if (!mounted) return;
+    setState(() => _bytes = bytes);
   }
 
   @override

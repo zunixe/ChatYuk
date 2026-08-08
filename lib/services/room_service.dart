@@ -19,10 +19,14 @@ const List<Map<String, String>> roomCategories = [
 class RoomService {
   final SupabaseClient _sb = SupabaseConfig.client;
 
+  // Sudah di-seed per negara dalam satu sesi app (session-lifetime).
+  // Menghindari upsert berulang tiap kali room list dibuka.
+  static final Set<String> _seededCountries = {};
+
   // rooms TIDAK di-enable realtime di DB (error RealtimeSubscribeException),
   // jadi pakai fetch langsung, bukan .stream().
   Future<List<RoomModel>> fetchRooms(String country) async {
-    // Selalu seed (upsert idempotent) agar semua kategori lengkap
+    // Seed sekali per negara (upsert idempotent) agar semua kategori lengkap
     // walaupun sebagian room sudah ada (mis. hasil tes/insert manual).
     await seedCountryRooms(country);
     final rows = await _sb
@@ -36,8 +40,10 @@ class RoomService {
   }
 
   /// Buat/lengkapi room kategori untuk satu negara (id = '<negara>_<kategori>').
+  /// Hanya dijalankan sekali per negara per sesi app.
   Future<void> seedCountryRooms(String country) async {
     if (country.isEmpty) return;
+    if (_seededCountries.contains(country)) return;
     final rows = [
       for (int i = 0; i < roomCategories.length; i++)
         {
@@ -51,6 +57,7 @@ class RoomService {
         },
     ];
     await _sb.from('rooms').upsert(rows, onConflict: 'id');
+    _seededCountries.add(country);
   }
 
   Future<void> updateOnlineCount(String roomId, int count) async {

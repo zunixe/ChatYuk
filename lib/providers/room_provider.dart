@@ -11,9 +11,7 @@ class RoomProvider extends ChangeNotifier {
   Map<String, int> _counts = {};
   String _country = 'Indonesia';
   bool _seeded = false;
-  StreamSubscription? _roomsSub;
   StreamSubscription? _countsSub;
-  Timer? _pollTimer;
   String? _error;
 
   List<RoomModel> get rooms => _rooms;
@@ -73,8 +71,6 @@ class RoomProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
-    _roomsSub?.cancel();
     _countsSub?.cancel();
     super.dispose();
   }
