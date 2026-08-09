@@ -98,6 +98,10 @@ class ChatProvider extends ChangeNotifier {
     await _service.markAsRead(chatId, uid);
   }
 
+  Future<void> clearViewOnceImage(String messageId) async {
+    await _service.clearViewOnceImage(messageId);
+  }
+
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
     return _privateChatsCache.putIfAbsent(myUid, () => _service.getMyPrivateChats(myUid));
   }

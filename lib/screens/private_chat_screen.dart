@@ -14,6 +14,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/chat_service.dart';
+import '../services/forensic_watermark.dart';
 import '../services/screen_secure_service.dart';
 import '../main.dart';
 import '../utils.dart';
@@ -23,18 +24,46 @@ import 'user_info_screen.dart';
 String? _processImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = img.copyResize(decoded, width: 512, height: 512);
-  final jpg = img.encodeJpg(resized, quality: 70);
+  final resized = _resizeMaxSide(decoded, 1024);
+  final jpg = img.encodeJpg(resized, quality: 85);
   return base64Encode(jpg);
 }
 
-// Top-level function untuk compute() isolate — decode base64 di background
-Uint8List? _decodeImage(String base64) {
+// Top-level function untuk compute() isolate — decode base64 + dimensi di background
+_DecodedImage? _decodeImage(String base64) {
   try {
-    return base64Decode(base64);
+    final bytes = base64Decode(base64);
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return _DecodedImage(bytes, 0, 0);
+    return _DecodedImage(bytes, decoded.width, decoded.height);
   } catch (_) {
     return null;
   }
+}
+
+// Hasil decode: bytes + dimensi asli agar tampilan proporsional.
+class _DecodedImage {
+  final Uint8List bytes;
+  final int width;
+  final int height;
+  const _DecodedImage(this.bytes, this.width, this.height);
+}
+
+// Resize proporsional dengan sisi terpanjang = maxSide.
+img.Image _resizeMaxSide(img.Image src, int maxSide) {
+  final w = src.width;
+  final h = src.height;
+  if (w <= maxSide && h <= maxSide) return src;
+  final scale = maxSide / (w > h ? w : h);
+  final nw = (w * scale).round();
+  final nh = (h * scale).round();
+  return img.copyResize(src, width: nw, height: nh);
+}
+
+// Top-level function untuk compute() isolate — resize 1024 + embed forensic watermark
+String? _processViewOnceImage((Uint8List, String) args) {
+  final (bytes, seed) = args;
+  return ForensicWatermark.embedToBase64(bytes, seed);
 }
 
 class PrivateChatScreen extends StatefulWidget {
@@ -146,7 +175,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
-        _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+        // reverse: true → offset 0 = paling bawah (pesan terbaru)
+        _scrollCtrl.jumpTo(0);
       }
     });
   }
@@ -265,7 +295,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
-    final base64 = await compute(_processImage, bytes);
+    // Resize + embed forensic watermark (seed = UID penerima) di isolate
+    final base64 =
+        await compute(_processViewOnceImage, (bytes, widget.otherUid));
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
@@ -590,8 +622,13 @@ class _MessageBubble extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                       child: _MessageImage(imageData: msg.imageData),
                     )
-                  else if (msg.type == 'view_once')
-                    _ViewOnceImage(imageData: msg.imageData, isMe: isMe)
+                  else if (msg.type == 'view_once' || msg.type == 'view_once_expired')
+                    _ViewOnceImage(
+                      imageData: msg.imageData,
+                      isMe: isMe,
+                      messageId: msg.id,
+                      isExpired: msg.type == 'view_once_expired',
+                    )
                   else
                     Text(msg.text, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
                   const SizedBox(height: 4),
@@ -631,7 +668,7 @@ class _MessageImage extends StatefulWidget {
 }
 
 class _MessageImageState extends State<_MessageImage> {
-  Uint8List? _bytes;
+  _DecodedImage? _decoded;
 
   @override
   void initState() {
@@ -641,15 +678,16 @@ class _MessageImageState extends State<_MessageImage> {
 
   // Decode di isolate agar UI tidak freeze untuk foto besar.
   Future<void> _decode() async {
-    final bytes = await compute(_decodeImage, widget.imageData);
+    final decoded = await compute(_decodeImage, widget.imageData);
     if (!mounted) return;
-    setState(() => _bytes = bytes);
+    setState(() => _decoded = decoded);
   }
 
   @override
   Widget build(BuildContext context) {
     final s = context.read<LocaleProvider>().s;
-    if (_bytes == null) {
+    final decoded = _decoded;
+    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       return Container(
         width: 200, height: 120,
         color: AppTheme.bgInput,
@@ -657,17 +695,40 @@ class _MessageImageState extends State<_MessageImage> {
         child: Text(s.msgPhotoExpired, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
       );
     }
-    return Image.memory(
-      _bytes!,
-      width: 200,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      errorBuilder: (_, _, _) => Container(
-        width: 200, height: 120,
-        color: AppTheme.bgInput,
-        alignment: Alignment.center,
-        child: Text(s.msgPhotoExpired, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+    // Ukuran proporsional: lebar maks 200, tinggi mengikuti rasio asli.
+    final aspect = decoded.width / decoded.height;
+    var width = 200.0;
+    var height = width / aspect;
+    if (height > 280) {
+      height = 280;
+      width = height * aspect;
+    }
+    return GestureDetector(
+      onTap: () => _openFullscreen(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.memory(
+          decoded.bytes,
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => Container(
+            width: 200, height: 120,
+            color: AppTheme.bgInput,
+            alignment: Alignment.center,
+            child: Text(s.msgPhotoExpired, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          ),
+        ),
       ),
+    );
+  }
+
+  void _openFullscreen() {
+    final decoded = _decoded;
+    if (decoded == null || !mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => _PhotoViewerScreen(bytes: decoded.bytes)),
     );
   }
 }
@@ -747,7 +808,14 @@ enum _ViewOnceState { idle, viewing, expired }
 class _ViewOnceImage extends StatefulWidget {
   final String imageData;
   final bool isMe;
-  const _ViewOnceImage({required this.imageData, required this.isMe});
+  final String? messageId;
+  final bool isExpired;
+  const _ViewOnceImage({
+    required this.imageData,
+    required this.isMe,
+    this.messageId,
+    this.isExpired = false,
+  });
 
   @override
   State<_ViewOnceImage> createState() => _ViewOnceImageState();
@@ -757,28 +825,36 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
   _ViewOnceState _state = _ViewOnceState.idle;
   int _secondsLeft = 10;
   Timer? _timer;
-  Uint8List? _bytes;
+  _DecodedImage? _decoded;
+  final ValueNotifier<int> _countdown = ValueNotifier<int>(10);
+  bool _viewerOpen = false;
 
   @override
   void initState() {
     super.initState();
+    // Sudah expired di server (type view_once_expired) — jangan tampilkan tombol lihat.
+    if (widget.isExpired) {
+      _state = _ViewOnceState.expired;
+    }
     _decode();
-  }
-
-  // Decode di isolate agar UI tidak freeze untuk foto besar.
-  Future<void> _decode() async {
-    final bytes = await compute(_decodeImage, widget.imageData);
-    if (!mounted) return;
-    setState(() => _bytes = bytes);
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _countdown.dispose();
     if (_state == _ViewOnceState.viewing) {
       ScreenSecureService.exitViewOnce();
     }
     super.dispose();
+  }
+
+  // Decode di isolate agar UI tidak freeze untuk foto besar.
+  Future<void> _decode() async {
+    if (widget.imageData.isEmpty) return;
+    final decoded = await compute(_decodeImage, widget.imageData);
+    if (!mounted) return;
+    setState(() => _decoded = decoded);
   }
 
   void _startViewing() {
@@ -791,12 +867,39 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       setState(() { _secondsLeft--; });
+      _countdown.value = _secondsLeft;
       if (_secondsLeft <= 0) {
         t.cancel();
         ScreenSecureService.exitViewOnce();
         setState(() => _state = _ViewOnceState.expired);
+        if (_viewerOpen) Navigator.of(context).maybePop();
+        _clearFromServer();
       }
     });
+  }
+
+  // Buka foto fullscreen; timer tetap berjalan (State ini tetap mounted di bawah route).
+  void _openViewer() {
+    final decoded = _decoded;
+    if (decoded == null || _state != _ViewOnceState.viewing || !mounted) return;
+    _viewerOpen = true;
+    Navigator.of(context)
+        .push(MaterialPageRoute(
+          builder: (_) => _PhotoViewerScreen(
+            bytes: decoded.bytes,
+            countdown: _countdown,
+          ),
+        ))
+        .whenComplete(() => _viewerOpen = false);
+  }
+
+  // Hapus foto dari DB agar tidak bisa dilihat lagi setelah keluar-masuk chat.
+  Future<void> _clearFromServer() async {
+    final id = widget.messageId;
+    if (id == null || id.startsWith('pending-')) return;
+    try {
+      await context.read<ChatProvider>().clearViewOnceImage(id);
+    } catch (_) {}
   }
 
   @override
@@ -854,10 +957,14 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: _bytes != null
+            child: _decoded != null
                 ? ImageFiltered(
                     imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: Image.memory(_bytes!, width: 200, fit: BoxFit.cover),
+                    child: Image.memory(
+                        _decoded!.bytes,
+                        width: _viewWidth(_decoded!),
+                        height: _viewHeight(_decoded!),
+                        fit: BoxFit.cover),
                   )
                 : Container(width: 200, height: 120, color: AppTheme.bgInput),
           ),
@@ -883,35 +990,124 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
       );
     }
 
-    // Viewing — tampilkan foto + countdown timer + overlay
-    return Stack(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: _bytes != null
-              ? Image.memory(_bytes!, width: 200, fit: BoxFit.cover, gaplessPlayback: true)
-              : Container(width: 200, height: 120, color: AppTheme.bgInput),
-        ),
-        Positioned(
-          top: 6, right: 6,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.timer, color: Colors.white, size: 12),
-                const SizedBox(width: 3),
-                Text('${_secondsLeft}s',
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-              ],
+    // Viewing — tampilkan foto proporsional + countdown; tap untuk memperbesar
+    final decoded = _decoded;
+    return GestureDetector(
+      onTap: _openViewer,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: decoded != null
+                ? Image.memory(
+                    decoded.bytes,
+                    width: _viewWidth(decoded),
+                    height: _viewHeight(decoded),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true)
+                : Container(width: 200, height: 120, color: AppTheme.bgInput),
+          ),
+          Positioned(
+            top: 6, right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.timer, color: Colors.white, size: 12),
+                  const SizedBox(width: 3),
+                  Text('${_secondsLeft}s',
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                ],
+              ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // Lebar/t tinggi tampilan proporsional (maks 200×280) sesuai rasio asli.
+  static double _viewWidth(_DecodedImage d) {
+    final aspect = d.width / d.height;
+    if (aspect >= 1) return 200;
+    return 200 * aspect;
+  }
+
+  static double _viewHeight(_DecodedImage d) {
+    final aspect = d.width / d.height;
+    if (aspect <= 1) return 200;
+    return 200 / aspect;
+  }
+}
+
+// ── Photo Viewer Fullscreen ─────────────────────────────────────────────────
+// Menampilkan foto fullscreen (hitam) dengan zoom + close. Untuk view-once,
+// countdown diteruskan dari state pemilik sehingga timer terus berjalan.
+class _PhotoViewerScreen extends StatefulWidget {
+  final Uint8List bytes;
+  final ValueNotifier<int>? countdown;
+  const _PhotoViewerScreen({required this.bytes, this.countdown});
+
+  @override
+  State<_PhotoViewerScreen> createState() => _PhotoViewerScreenState();
+}
+
+class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                maxScale: 5,
+                child: Image.memory(widget.bytes, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              left: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Tutup',
+              ),
+            ),
+            if (widget.countdown != null)
+              Positioned(
+                top: 12,
+                right: 16,
+                child: ValueListenableBuilder<int>(
+                  valueListenable: widget.countdown!,
+                  builder: (_, secs, __) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer, color: Colors.white, size: 16),
+                        const SizedBox(width: 4),
+                        Text('${secs}s',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
