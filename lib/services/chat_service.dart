@@ -273,7 +273,7 @@ class ChatService {
 
   /// Hapus image_data dari view_once message setelah dilihat.
   /// Data foto dihapus dari DB — hanya metadata yang tersisa.
-  Future<void> clearViewOnceImage(int messageId) async {
+  Future<void> clearViewOnceImage(String messageId) async {
     try {
       await _sb.from('private_messages')
           .update({'image_data': '', 'type': 'view_once_expired'})
