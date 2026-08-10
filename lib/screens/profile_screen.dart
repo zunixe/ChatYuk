@@ -13,9 +13,11 @@ import '../models/user_photo.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/points_provider.dart';
 import '../services/auth_service.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
+import 'admin_panel_screen.dart';
 import 'donate_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
@@ -50,10 +52,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
 
+  final TextEditingController _hashtagCtrl = TextEditingController();
+  List<String> _hashtags = [];
+  bool _savingHashtags = false;
+  Uint8List? _cachedAvatarBytes;
+  String? _lastAvatarB64;
+
   @override
   void initState() {
     super.initState();
     _loadPhotos();
+    _hashtags = List.of(context.read<AuthProvider>().profile?.hashtags ?? const []);
+    // Onboarding + daily login toast
+    Future.microtask(() {
+      final pp = context.read<PointsProvider>();
+      final s = context.read<LocaleProvider>().s;
+      pp.showOnboardingIfNeeded(context, s.isId);
+    });
+  }
+
+  @override
+  void dispose() {
+    _hashtagCtrl.dispose();
+    super.dispose();
+  }
+
+  void _addHashtag(String raw) {
+    final s = context.read<LocaleProvider>().s;
+    final tag = raw.trim().replaceAll(RegExp(r'^#+'), '').toLowerCase();
+    if (tag.isEmpty) return;
+    if (_hashtags.contains(tag)) return;
+    if (_hashtags.length >= 5) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errHashtagMax)));
+      return;
+    }
+    if (!RegExp(r'^[a-zA-Z0-9_]{1,20}$').hasMatch(tag)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errHashtagFormat)));
+      return;
+    }
+    final tags = List<String>.of(_hashtags)..add(tag);
+    _saveHashtags(tags);
+    _hashtagCtrl.clear();
+  }
+
+  void _removeHashtag(String tag) {
+    final tags = List<String>.of(_hashtags)..remove(tag);
+    _saveHashtags(tags);
+  }
+
+  Future<void> _saveHashtags(List<String> tags) async {
+    final s = context.read<LocaleProvider>().s;
+    final previous = _hashtags;
+    setState(() {
+      _hashtags = tags;
+      _savingHashtags = true;
+    });
+    try {
+      await context.read<AuthProvider>().updateHashtags(tags);
+    } catch (e) {
+      if (mounted) setState(() => _hashtags = previous);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errProfileSave} $e')));
+      }
+    }
+    if (mounted) setState(() => _savingHashtags = false);
   }
 
   Future<void> _loadPhotos() async {
@@ -376,6 +438,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         await context.read<AuthProvider>().updateProfile(age: age, country: negara, city: kota);
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgProfileSaved)));
+                          // Bonus: complete profile
+                          final pp = context.read<PointsProvider>();
+                          pp.oneTimeBonus('completed_profile', 10).then((earned) {
+                            if (earned && mounted) {
+                              pp.showPointsToast(context, s.isId ? '+10 Poin — Profil lengkap!' : '+10 Points — Profile complete!');
+                            }
+                          });
                         }
                       } catch (e) {
                         if (mounted) {
@@ -398,6 +467,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final profile = auth.profile;
+    final avatarB64 = profile?.avatar ?? '';
+    if (avatarB64.isNotEmpty && _lastAvatarB64 != avatarB64) {
+      _lastAvatarB64 = avatarB64;
+      try { _cachedAvatarBytes = base64Decode(avatarB64); } catch (_) {}
+    }
+    final avatarBytes = _cachedAvatarBytes;
     final locale = context.watch<LocaleProvider>();
     final s = locale.s;
     final avatarColor = profile?.gender == 'male' ? AppTheme.male : profile?.gender == 'female' ? AppTheme.female : AppTheme.accent;
@@ -413,7 +488,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             expandedHeight: 220,
             pinned: true,
             actions: [
-              IconButton(icon: const Icon(Icons.share_outlined), tooltip: s.btnShareApp, onPressed: () => Share.share(s.msgShareApp)),
+              IconButton(icon: const Icon(Icons.share_outlined), tooltip: s.btnShareApp, onPressed: () {
+            Share.share(s.msgShareApp);
+            context.read<PointsProvider>().oneTimeBonus('invited_friend', 30).then((earned) {
+              if (earned && context.mounted) {
+                context.read<PointsProvider>().showPointsToast(context, s.isId ? '+30 Poin — Share!' : '+30 Points — Share!');
+              }
+            });
+          }),
               IconButton(icon: const Icon(Icons.edit_outlined), tooltip: s.btnEditProfile, onPressed: _editProfile),
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -442,7 +524,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: CircleAvatar(
                               radius: 46,
                               backgroundColor: avatarColor,
-                              backgroundImage: (profile?.avatar ?? '').isNotEmpty ? MemoryImage(base64Decode(profile!.avatar)) : null,
+                              backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
                               child: (profile?.avatar ?? '').isEmpty
                                   ? Text(profile?.initial ?? '?', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800))
                                   : null,
@@ -598,6 +680,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ]),
                   const SizedBox(height: 12),
 
+                  // Poin
+                  _SectionLabel(label: s.pointsTitle),
+                  const SizedBox(height: 6),
+                  _SectionCard(children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(color: Colors.amber.shade50, shape: BoxShape.circle),
+                            child: Icon(isAnon ? Icons.lock_outlined : Icons.monetization_on_outlined, color: Colors.amber.shade700, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${s.pointsBalance}: ${profile?.points ?? 50}',
+                                  style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
+                                Text('≈ ${profile?.points ?? 50} ${s.isId ? "pesan lagi" : "more messages"}',
+                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                                if (isAnon)
+                                  Text(s.pointsAnonymousLose, style: TextStyle(color: Colors.orange.shade700, fontSize: 11))
+                                else
+                                  Text(s.pointsSafe, style: const TextStyle(color: Colors.green, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isAnon) ...[
+                      const Divider(height: 1, indent: 52),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LinkEmailScreen())),
+                          icon: const Icon(Icons.email_outlined, size: 18, color: Colors.orange),
+                          label: Text(s.pointsRegisterBonusLabel, style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ],
+                  ]),
+                  const SizedBox(height: 12),
+
                   // Pengaturan
                   _SectionLabel(label: s.isId ? 'Pengaturan' : 'Settings'),
                   const SizedBox(height: 6),
@@ -631,6 +759,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const Divider(height: 1, indent: 52),
+                    // Admin Panel entry (hanya untuk zunixe@gmail.com)
+                    if (auth.userEmail == 'zunixe@gmail.com')
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: InkWell(
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36, height: 36,
+                                decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.15), shape: BoxShape.circle),
+                                child: const Icon(Icons.admin_panel_settings, color: AppTheme.primary, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(child: Text('Admin Panel', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600))),
+                              const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const Divider(height: 1, indent: 52),
                     // Admin: izin screenshot aplikasi (hanya untuk zunixe@gmail.com)
                     if (auth.userEmail == 'zunixe@gmail.com')
                       Padding(
@@ -661,6 +810,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     const Divider(height: 1, indent: 52),
+                    // Admin: watermark forensik foto view-once (hanya untuk zunixe@gmail.com)
+                    if (auth.userEmail == 'zunixe@gmail.com')
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36, height: 36,
+                              decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
+                              child: const Icon(Icons.fingerprint, color: AppTheme.primary, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(s.labelWatermarkAdmin, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 14)),
+                                  Text(s.descWatermarkAdmin, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: auth.watermarkEnabled,
+                              onChanged: (v) => context.read<AuthProvider>().setWatermarkEnabled(v),
+                              activeThumbColor: AppTheme.primary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    const Divider(height: 1, indent: 52),
                     // Bahasa
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -685,6 +864,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             value: locale.isId,
                             onChanged: (v) => context.read<LocaleProvider>().setLang(v ? 'id' : 'en'),
                             activeThumbColor: AppTheme.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+
+                  // Hashtag
+                  _SectionLabel(label: s.labelHashtags),
+                  const SizedBox(height: 6),
+                  _SectionCard(children: [
+                    Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _hashtags.map((tag) => InputChip(
+                              label: Text('#$tag'),
+                              onDeleted: _savingHashtags ? null : () => _removeHashtag(tag),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              backgroundColor: AppTheme.accent.withValues(alpha: 0.08),
+                              side: BorderSide(color: AppTheme.accent.withValues(alpha: 0.3)),
+                              labelStyle: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                              visualDensity: VisualDensity.compact,
+                            )).toList(),
+                          ),
+                          if (_hashtags.isEmpty && !_savingHashtags)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(s.hintHashtag, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _hashtagCtrl,
+                            enabled: !_savingHashtags,
+                            onSubmitted: _addHashtag,
+                            textInputAction: TextInputAction.done,
+                            decoration: InputDecoration(
+                              hintText: s.hintHashtag,
+                              isDense: true,
+                              prefixIcon: const Padding(
+                                padding: EdgeInsets.only(bottom: 2),
+                                child: Icon(Icons.tag, size: 18, color: AppTheme.accent),
+                              ),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 40),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.divider)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.divider)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.accent)),
+                            ),
                           ),
                         ],
                       ),

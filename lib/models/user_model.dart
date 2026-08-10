@@ -14,6 +14,8 @@ class UserModel {
   final DateTime loginAt;
   final DateTime createdAt;
   final DateTime lastSeen;
+  final List<String> hashtags;
+  final int points;
 
   UserModel({
     required this.uid,
@@ -29,6 +31,8 @@ class UserModel {
     required this.loginAt,
     required this.createdAt,
     required this.lastSeen,
+    this.hashtags = const [],
+    this.points = 50,
   });
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -46,6 +50,8 @@ class UserModel {
       loginAt: parseDate(map['loginAt']),
       createdAt: parseDate(map['createdAt']),
       lastSeen: parseDate(map['lastSeen']),
+      hashtags: map['hashtags'] is List ? (map['hashtags'] as List).cast<String>() : const [],
+      points: map['points'] ?? 50,
     );
   }
 
@@ -63,6 +69,8 @@ class UserModel {
       'loginAt': loginAt.toUtc().toIso8601String(),
       'createdAt': createdAt.toUtc().toIso8601String(),
       'lastSeen': lastSeen.toUtc().toIso8601String(),
+      'hashtags': hashtags,
+      'points': points,
     };
   }
 
@@ -77,6 +85,8 @@ class UserModel {
     String? avatar,
     bool? isRegistered,
     DateTime? lastSeen,
+    List<String>? hashtags,
+    int? points,
   }) {
     return UserModel(
       uid: uid,
@@ -92,6 +102,8 @@ class UserModel {
       loginAt: loginAt,
       createdAt: createdAt,
       lastSeen: lastSeen ?? this.lastSeen,
+      hashtags: hashtags ?? this.hashtags,
+      points: points ?? this.points,
     );
   }
 

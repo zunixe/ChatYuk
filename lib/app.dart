@@ -7,6 +7,8 @@ import 'providers/auth_provider.dart';
 import 'providers/room_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/online_users_provider.dart';
+import 'providers/points_provider.dart';
+import 'providers/admin_provider.dart';
 import 'providers/locale_provider.dart';
 import 'services/chat_service.dart';
 import 'main.dart';
@@ -26,6 +28,8 @@ class ChatYukApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => PointsProvider()..checkOnboarding()),
+        ChangeNotifierProvider(create: (_) => AdminProvider()),
         ChangeNotifierProvider(create: (_) => localeProvider),
       ],
       child: Consumer<LocaleProvider>(
@@ -51,6 +55,25 @@ class _AuthGate extends StatefulWidget {
 class _AuthGateState extends State<_AuthGate> {
   StreamSubscription<AuthState>? _authSub;
   DateTime? _lastRecoveryNav;
+  Timer? _autoRetryTimer;
+  int _autoRetryCount = 0;
+
+  // Kalau DNS/network down lama, coba login ulang otomatis tiap 8 detik
+  // (maks 3×) — begitu koneksi pulih, app masuk sendiri tanpa sentuhan user.
+  void _maybeScheduleAutoRetry(AuthProvider auth) {
+    if (auth.error == null) {
+      _autoRetryCount = 0;
+      _autoRetryTimer?.cancel();
+      return;
+    }
+    if (_autoRetryCount >= 3 || (_autoRetryTimer?.isActive ?? false)) return;
+    _autoRetryTimer = Timer(const Duration(seconds: 8), () {
+      if (!mounted) return;
+      _autoRetryCount++;
+      debugPrint('[AUTHGATE] auto retry #$_autoRetryCount');
+      context.read<AuthProvider>().retry();
+    });
+  }
 
   @override
   void initState() {
@@ -82,6 +105,7 @@ class _AuthGateState extends State<_AuthGate> {
 
   @override
   void dispose() {
+    _autoRetryTimer?.cancel();
     _authSub?.cancel();
     super.dispose();
   }
@@ -90,6 +114,9 @@ class _AuthGateState extends State<_AuthGate> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
+
+    // Jadwalkan auto-retry saat layar error tampil.
+    _maybeScheduleAutoRetry(auth);
 
     if (auth.loading) {
       return Scaffold(
@@ -234,9 +261,8 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
-    final chat = context.watch<ChatProvider>();
-    final uid = auth.uid;
+    final uid = context.select<AuthProvider, String?>((a) => a.uid);
+    final chat = context.read<ChatProvider>();
 
     return StreamBuilder<List<PrivateChatInfo>>(
       stream: uid != null ? chat.getMyPrivateChats(uid) : const Stream.empty(),

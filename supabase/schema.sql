@@ -80,7 +80,9 @@ create table if not exists public.private_chats (
   last_message text not null default '',
   last_message_at timestamptz not null default now(),
   unread_counts jsonb not null default '{}',
-  last_read_at jsonb not null default '{}'
+  last_read_at jsonb not null default '{}',
+  hidden_by uuid[] not null default '{}',
+  hidden_at jsonb not null default '{}'
 );
 
 alter table public.private_chats enable row level security;

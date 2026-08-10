@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,9 +9,13 @@ import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/points_provider.dart';
+import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../services/chat_service.dart';
 import 'private_chat_screen.dart';
+
+final _avatarCache = <String, Uint8List>{};
 
 class OnlineUsersScreen extends StatefulWidget {
   const OnlineUsersScreen({super.key});
@@ -84,6 +89,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
     final myName = auth.profile?.nickname ?? 'Anon';
     if (myUid == null || user.uid == myUid) return;
     try {
+      // User bisa saja sudah dihapus saat list masih tampil → cek dulu.
+      final active = await chat.isUserActive(user.uid);
+      if (!context.mounted) return;
+      if (!active) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.errUserNotFound)),
+        );
+        return;
+      }
       final chatId = await chat.startPrivateChat(
         myUid: myUid,
         otherUid: user.uid,
@@ -97,6 +111,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
         otherAge: user.age,
       );
       if (!context.mounted) return;
+      // Bonus poin: chat orang baru
+      context.read<PointsProvider>().oneTimeBonus('new_chat_${user.uid}', 5);
       Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: user.nickname, otherUid: user.uid, otherGender: user.gender, otherCountry: user.country, otherAge: user.age, otherRegistered: user.isRegistered)));
     } catch (e) {
       if (context.mounted) {
@@ -228,7 +244,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                     ),
                   ),
                   Expanded(
-                    child: users.isEmpty
+                    child: !provider.hasLoaded
+                        ? const Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2))
+                        : users.isEmpty
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -364,7 +382,12 @@ class _UserCard extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: color.withValues(alpha: 0.15),
                       border: Border.all(color: color, width: 1.5),
-                      image: user.avatar.isNotEmpty ? DecorationImage(image: MemoryImage(base64Decode(user.avatar)), fit: BoxFit.cover) : null,
+                      image: user.avatar.isNotEmpty
+                          ? DecorationImage(
+                              image: MemoryImage(_avatarCache.putIfAbsent(user.avatar, () => base64Decode(user.avatar))),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
                     child: user.avatar.isNotEmpty ? null : Center(child: Text(user.initial, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w700))),
                   ),

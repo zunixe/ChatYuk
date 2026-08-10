@@ -64,7 +64,9 @@ class AuthService {
     if (id != null) {
       try {
         await _sb.from('profiles').update({'email': googleEmail}).eq('id', id);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[AUTH] signInWithGoogle email update error: $e');
+      }
     }
 
     return (response: response, googleEmail: googleEmail);
@@ -148,6 +150,31 @@ class AuthService {
     }, onConflict: 'id');
   }
 
+  /// Ambil setting admin global: apakah foto view-once di-watermark forensik.
+  /// Default false (kirim biasa) jika gagal / belum ada data.
+  Future<bool> fetchWatermarkEnabled() async {
+    try {
+      final res = await _sb
+          .from('app_settings')
+          .select('watermark_enabled')
+          .eq('id', 'global')
+          .maybeSingle();
+      return res?['watermark_enabled'] == true;
+    } catch (e) {
+      debugPrint('[AUTH] fetchWatermarkEnabled error: $e');
+      return false;
+    }
+  }
+
+  /// Update setting admin global. RLS membatasi hanya email admin (zunixe@gmail.com).
+  Future<void> updateWatermarkEnabled(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'watermark_enabled': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
+  }
+
   /// Login dengan email + password.
   /// Setelah ini, getProfile() akan mengembalikan profile user.
   Future<void> signInWithEmail(String email, String password) async {
@@ -167,7 +194,9 @@ class AuthService {
     if (id == null) return;
     try {
       await _sb.from('profiles').update({'is_registered': true}).eq('id', id);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AUTH] markRegistered error: $e');
+    }
   }
 
   /// Cek apakah email sudah terdaftar di Auth (RPC security definer).
@@ -296,7 +325,7 @@ class AuthService {
     final id = uid;
     if (id == null) return null;
     // Exclude fcm_token dan ip_address �?" tidak dibutuhkan di model
-    const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen';
+    const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points';
     final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
     if (res == null) return null;
     return UserModel.fromMap(id, snakeToCamel(res));
@@ -305,10 +334,50 @@ class AuthService {
   /// Ambil profil user lain (untuk halaman info pengguna).
   Future<UserModel?> getProfileById(String id) async {
     if (id.isEmpty) return null;
-    const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen';
+    const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points';
     final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
     if (res == null) return null;
     return UserModel.fromMap(id, snakeToCamel(res));
+  }
+
+  /// Stream realtime profil sendiri — poin, status, email terdaftar, dll.
+  /// Dipakai AuthProvider untuk update badge di seluruh app tanpa reload.
+  Stream<UserModel> onMyProfileUpdates() {
+    final id = uid;
+    if (id == null) return const Stream.empty();
+    final controller = StreamController<UserModel>.broadcast();
+
+    final channel = _sb.channel('my-profile-$id');
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'profiles',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'id',
+        value: id,
+      ),
+      callback: (payload) {
+        if (controller.isClosed) return;
+        try {
+          final row = payload.newRecord;
+          final model = UserModel.fromMap(id, snakeToCamel(row));
+          controller.add(model);
+        } catch (_) {}
+      },
+    );
+    channel.subscribe();
+
+    controller.onCancel = () {
+      _sb.removeChannel(channel);
+    };
+    return controller.stream;
+  }
+
+  Future<void> updateHashtags(List<String> hashtags) async {
+    final id = uid;
+    if (id == null) return;
+    await _sb.from('profiles').update({'hashtags': hashtags}).eq('id', id);
   }
 
   Future<void> updateProfile({int? age, String? country, String? city, String? nickname}) async {
@@ -366,7 +435,9 @@ class AuthService {
     if (id == null) return;
     try {
       await _sb.from('profiles').update({'status': 'offline', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AUTH] goOffline error: $e');
+    }
   }
 
   Future<void> goIdle() async {
@@ -377,7 +448,9 @@ class AuthService {
         'status': 'idle',
         'last_seen': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', id);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AUTH] goIdle error: $e');
+    }
   }
 
   Future<void> goOnline() async {
@@ -385,7 +458,9 @@ class AuthService {
     if (id == null) return;
     try {
       await _sb.from('profiles').update({'status': 'online', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AUTH] goOnline error: $e');
+    }
   }
 
   /// Heartbeat: update last_seen tanpa mengubah status.
@@ -396,7 +471,9 @@ class AuthService {
     if (id == null) return;
     try {
       await _sb.from('profiles').update({'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AUTH] updateLastSeen error: $e');
+    }
   }
 
   /// Ambil semua foto galeri milik satu user.
