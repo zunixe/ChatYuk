@@ -275,7 +275,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                 children: [
                   CircleAvatar(
                     backgroundColor: Color(userColorPalette[colorHashForUid(msg.senderId) % userColorPalette.length]),
-                    child: Text(msg.senderName[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                    child: Text(msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -515,7 +515,7 @@ class _MessageBubble extends StatelessWidget {
               radius: 16,
               backgroundColor: color,
               child: Text(
-                msg.senderName[0].toUpperCase(),
+                msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?',
                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
               ),
             ),
