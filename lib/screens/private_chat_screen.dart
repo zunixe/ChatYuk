@@ -19,6 +19,7 @@ import '../services/forensic_watermark.dart';
 import '../services/screen_secure_service.dart';
 import '../main.dart';
 import '../utils.dart';
+import '../widgets/emoji_picker_sheet.dart';
 import 'user_info_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
@@ -590,40 +591,85 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   );
                 }),
                 Row(
-                children: [
-                  // Tombol foto kecil
-                  _InputIconBtn(
-                    icon: Icons.image_outlined,
-                    color: AppTheme.primary,
-                    onTap: _sendPhoto,
-                    tooltip: context.read<LocaleProvider>().s.tooltipPhoto,
-                  ),
-                  const SizedBox(width: 4),
-                  // Tombol sekali lihat kecil
-                  _InputIconBtn(
-                    icon: Icons.timer_outlined,
-                    color: Colors.orange,
-                    onTap: _sendViewOncePhoto,
-                    tooltip: s.viewOnceTap,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: TextField(
-                      controller: _msgCtrl,
-                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-                      decoration: InputDecoration(hintText: s.hintTypeMessage, isDense: true),
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(),
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: IconButton(
+                        onPressed: () => EmojiPickerSheet.show(context, _msgCtrl),
+                        icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
+                        color: AppTheme.textSecondary,
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: _send,
-                    icon: const Icon(Icons.send, color: AppTheme.primary),
-                    style: IconButton.styleFrom(backgroundColor: AppTheme.primary.withValues(alpha: 0.15)),
-                  ),
-                ],
-              ),],), // close Row, Column, SafeArea
+                    const SizedBox(width: 2),
+                    Expanded(
+                      child: TextField(
+                        controller: _msgCtrl,
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, height: 1.35),
+                        decoration: InputDecoration(
+                          hintText: s.hintTypeMessage,
+                          hintStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+                          isDense: true,
+                        ),
+                        textInputAction: TextInputAction.newline,
+                        onSubmitted: (_) => _send(),
+                        minLines: 1,
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        textCapitalization: TextCapitalization.sentences,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    _InputIconBtn(
+                      icon: Icons.image_outlined,
+                      color: AppTheme.primary,
+                      onTap: _sendPhoto,
+                      tooltip: context.read<LocaleProvider>().s.tooltipPhoto,
+                    ),
+                    const SizedBox(width: 2),
+                    _InputIconBtn(
+                      icon: Icons.timer_outlined,
+                      color: Colors.orange,
+                      onTap: _sendViewOncePhoto,
+                      tooltip: s.viewOnceTap,
+                    ),
+                    const SizedBox(width: 2),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _msgCtrl,
+                      builder: (context, value, _) => AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        transitionBuilder: (child, anim) => SizeTransition(
+                          sizeFactor: anim,
+                          axis: Axis.horizontal,
+                          axisAlignment: -1,
+                          child: FadeTransition(opacity: anim, child: child),
+                        ),
+                        child: value.text.trim().isEmpty
+                            ? const SizedBox(width: 0, key: ValueKey('empty'))
+                            : SizedBox(
+                                key: const ValueKey('send'),
+                                width: 48,
+                                height: 48,
+                                child: IconButton(
+                                  onPressed: _send,
+                                  icon: const Icon(Icons.send_rounded, size: 22),
+                                  color: Colors.white,
+                                  padding: EdgeInsets.zero,
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: AppTheme.primary,
+                                    shape: const CircleBorder(),
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),]),
             ),
           ),
         ],
@@ -707,25 +753,36 @@ class _MessageBubble extends StatelessWidget {
                       isExpired: msg.type == 'view_once_expired',
                     )
                   else
-                    Text(msg.text, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-                      if (isMe) ...[
-                        const SizedBox(width: 3),
-                        if (isPending)
-                          Icon(Icons.done, size: 12, color: AppTheme.textSecondary)
-                        else
-                          Icon(
-                            isRead ? Icons.done_all : Icons.done,
-                            size: 12,
-                            color: isRead ? AppTheme.primary : AppTheme.textSecondary,
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                        children: [
+                          TextSpan(text: msg.text),
+                          const TextSpan(text: '  '),
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.belowBaseline,
+                            baseline: TextBaseline.alphabetic,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                                if (isMe) ...[
+                                  const SizedBox(width: 3),
+                                  if (isPending)
+                                    Icon(Icons.done, size: 12, color: AppTheme.textSecondary)
+                                  else
+                                    Icon(
+                                      isRead ? Icons.done_all : Icons.done,
+                                      size: 12,
+                                      color: isRead ? AppTheme.primary : AppTheme.textSecondary,
+                                    ),
+                                ],
+                              ],
+                            ),
                           ),
-                      ],
-                    ],
-                  ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1003,67 +1060,171 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
       );
     }
 
-    // Penerima — idle: tombol lihat
+    // Penerima — idle: kartu modern "tekan untuk melihat"
     if (_state == _ViewOnceState.idle) {
       return GestureDetector(
         onTap: _startViewing,
         child: Container(
-          width: 200, height: 80,
+          width: 220,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(
-            color: AppTheme.bgInput,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1E88E5), Color(0xFF00BCD4)],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00BCD4).withValues(alpha: 0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.remove_red_eye_outlined, color: AppTheme.primary, size: 24),
-              const SizedBox(height: 6),
-              Text(s.viewOnceTap,
-                style: const TextStyle(color: AppTheme.primary, fontSize: 12),
-                textAlign: TextAlign.center),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.22),
+                ),
+                child: const Icon(
+                  Icons.remove_red_eye_outlined,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                s.viewOnceTitle,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                s.viewOnceTap,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  s.btnView,
+                  style: const TextStyle(
+                    color: Color(0xFF1E88E5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       );
     }
 
-    // Expired — blur penuh
+    // Expired — blur penuh + kartu terkunci modern
     if (_state == _ViewOnceState.expired) {
-      return Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: _decoded != null
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            // Foto blur — non-positioned, menentukan ukuran Stack
+            _decoded != null
                 ? ImageFiltered(
                     imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                     child: Image.memory(
-                        _decoded!.bytes,
-                        width: _viewWidth(_decoded!),
-                        height: _viewHeight(_decoded!),
-                        fit: BoxFit.cover),
+                      _decoded!.bytes,
+                      width: _viewWidth(_decoded!),
+                      height: _viewHeight(_decoded!),
+                      fit: BoxFit.cover,
+                    ),
                   )
-                : Container(width: 200, height: 120, color: AppTheme.bgInput),
-          ),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(10),
+                : Container(
+                    width: 200,
+                    height: 120,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF37474F), Color(0xFF263238)],
+                      ),
+                    ),
+                  ),
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.15),
+                      Colors.black.withValues(alpha: 0.72),
+                    ],
+                  ),
+                ),
               ),
-              alignment: Alignment.center,
+            ),
+            Positioned.fill(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.lock_outline, color: Colors.white70, size: 24),
-                  const SizedBox(height: 4),
-                  Text(s.viewOnceExpired,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.lock_clock_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    s.viewOnceExpired,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    s.viewOnceExpiredHint,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontSize: 10.5,
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
