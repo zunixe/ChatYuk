@@ -10,6 +10,9 @@ class MessageModel {
   final String type;
   final String imageData;
   final DateTime timestamp;
+  final String? repliedToId;
+  final String? repliedToText;
+  final String? repliedToSenderName;
 
   MessageModel({
     required this.id,
@@ -21,6 +24,9 @@ class MessageModel {
     required this.type,
     required this.imageData,
     required this.timestamp,
+    this.repliedToId,
+    this.repliedToText,
+    this.repliedToSenderName,
   });
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
@@ -34,6 +40,9 @@ class MessageModel {
       type: map['type'] ?? 'text',
       imageData: map['imageData'] ?? '',
       timestamp: parseDate(map['timestamp'] ?? map['createdAt']),
+      repliedToId: map['repliedToId'] is String ? map['repliedToId'] : null,
+      repliedToText: map['repliedToText'],
+      repliedToSenderName: map['repliedToSenderName'],
     );
   }
 
@@ -48,5 +57,22 @@ class MessageModel {
       'imageData': imageData,
       'timestamp': timestamp.toUtc().toIso8601String(),
     };
+  }
+
+  MessageModel copyWith({String? imageData, String? type}) {
+    return MessageModel(
+      id: id,
+      senderId: senderId,
+      senderName: senderName,
+      senderGender: senderGender,
+      isRegistered: isRegistered,
+      text: text,
+      type: type ?? this.type,
+      imageData: imageData ?? this.imageData,
+      timestamp: timestamp,
+      repliedToId: repliedToId,
+      repliedToText: repliedToText,
+      repliedToSenderName: repliedToSenderName,
+    );
   }
 }

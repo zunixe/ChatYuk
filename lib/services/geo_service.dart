@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class GeoInfo {
@@ -67,7 +68,8 @@ class GeoService {
 
       if (country.isEmpty) return null;
       return GeoInfo(country: country, city: city, ipAddress: ip);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[geo] detect error: $e');
       return null;
     }
   }

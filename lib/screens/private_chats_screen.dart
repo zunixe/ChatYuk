@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
+import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../utils.dart';
 import 'private_chat_screen.dart';
@@ -24,7 +25,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   static const int _pageSize = 20;
   final ScrollController _scrollCtrl = ScrollController();
   int _lastTotal = 0;
-  Set<String> _hiddenChats = {};
 
   @override
   void initState() {
@@ -32,19 +32,12 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     final auth = context.read<AuthProvider>();
     if (auth.uid != null) {
       _stream = context.read<ChatProvider>().getMyPrivateChats(auth.uid!);
-      _loadHidden(auth.uid!);
     }
     _scrollCtrl.addListener(_onScroll);
   }
 
-  Future<void> _loadHidden(String uid) async {
-    final hidden = await context.read<ChatProvider>().getHiddenChats(uid);
-    if (mounted) setState(() => _hiddenChats = hidden);
-  }
-
   Future<void> _deleteChat(String uid, String chatId) async {
     await context.read<ChatProvider>().hideChat(uid, chatId);
-    if (mounted) setState(() => _hiddenChats = {..._hiddenChats, chatId});
   }
 
   @override
@@ -65,8 +58,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   Widget build(BuildContext context) {
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final blocked = context.watch<ChatProvider>().blockedUids;
-    final onlineUsers = context.watch<OnlineUsersProvider>().users;
+    final blocked = context.select<ChatProvider, List<String>>((c) => c.blockedUids);
+    final onlineUsers = context.select<OnlineUsersProvider, List<UserModel>>((o) => o.users);
     if (auth.uid == null) return const SizedBox();
 
     // Map uid → status dari daftar online users
@@ -84,9 +77,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
           }
-          final chats = (snap.data ?? [])
-              .where((c) => !_hiddenChats.contains(c.chatId))
-              .toList();
+          final chats = (snap.data ?? []).toList();
           // Reset page jika data berubah total
           if (chats.length != _lastTotal) {
             _lastTotal = chats.length;

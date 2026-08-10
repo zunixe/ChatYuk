@@ -145,6 +145,24 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   ),
                   const SizedBox(height: 24),
 
+                  if (profile != null && profile.hashtags.isNotEmpty) ...[
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: profile.hashtags.map((tag) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
+                        ),
+                        child: Text('#$tag', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w500)),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
                   // Info card
                   Card(
                     child: Padding(
