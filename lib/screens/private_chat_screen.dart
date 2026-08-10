@@ -13,6 +13,7 @@ import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/points_provider.dart';
 import '../services/chat_service.dart';
 import '../services/forensic_watermark.dart';
 import '../services/screen_secure_service.dart';
@@ -203,6 +204,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _isSending = false;
       return;
     }
+
+    // Deduct poin sebelum kirim
+    final pp = context.read<PointsProvider>();
+    final remaining = await pp.deductBeforeSend('text');
+    if (remaining < 0) {
+      _isSending = false;
+      if (mounted) {
+        final ss = context.read<LocaleProvider>().s;
+        pp.showOutOfPointsDialog(context, ss.isId);
+      }
+      return;
+    }
+
     final pending = MessageModel(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
       senderId: uid,
@@ -222,7 +236,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         senderName: profile.nickname,
         senderGender: profile.gender,
         text: text,
-        receiverId: widget.otherUid,
+
       );
     } catch (e) {
       if (mounted) {
@@ -239,6 +253,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       await Future.delayed(const Duration(milliseconds: 300));
       _isSending = false;
     }
+    context.read<PointsProvider>().showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-1 Poin' : '-1 Point');
     _scrollToBottom();
   }
 
@@ -271,6 +286,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
+    final ppPhoto = context.read<PointsProvider>();
+    final rPhoto = await ppPhoto.deductBeforeSend('image');
+    if (rPhoto < 0) { if (mounted) { ppPhoto.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId); } return; }
     try {
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
@@ -280,8 +298,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         text: '',
         type: 'image',
         imageData: base64,
-        receiverId: widget.otherUid,
       );
+      ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-3 Poin' : '-3 Points');
+      ppPhoto.oneTimeBonus('first_photo', 10).then((earned) {
+        if (earned && mounted) {
+          ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '+10 Poin — Foto pertama!' : '+10 Points — First photo!');
+        }
+      });
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
@@ -311,6 +334,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
+    final ppView = context.read<PointsProvider>();
+    final rView = await ppView.deductBeforeSend('view_once');
+    if (rView < 0) { if (mounted) { ppView.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId); } return; }
     try {
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
@@ -320,8 +346,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         text: '',
         type: 'view_once',
         imageData: base64,
-        receiverId: widget.otherUid,
       );
+      ppView.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-3 Poin' : '-3 Points');
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
@@ -351,6 +377,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final genderLabel = widget.otherGender == 'male' ? s.genderMale : widget.otherGender == 'female' ? s.genderFemale : '';
     final agePart = widget.otherAge > 0 ? '${widget.otherAge}' : '';
     final subtitle = [if (genderLabel.isNotEmpty) '$genderLabel $agePart'.trim(), widget.otherCountry].where((e) => e.isNotEmpty).join(' · ');
+    final points = auth.profile?.points ?? 50;
+
+    // Show online bonus toast jika ada yang nunggu
+    Future.microtask(() {
+      final pp = context.read<PointsProvider>();
+      pp.checkAndShowOnlineToast(context, s.isId);
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -426,7 +459,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   Row(
                     children: [
                       if (subtitle.isNotEmpty)
-                        Expanded(
+                        Flexible(
                           child: Text(
                             subtitle,
                             style: const TextStyle(
@@ -436,7 +469,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                      const SizedBox(width: 8),
                       _StatusIndicator(status: displayStatus),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(
+                          '🪙 $points',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -472,6 +518,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 final msgs = snap.data ?? [];
                 final all = [...msgs, ..._pending];
                 if (all.isEmpty) {
+                  // Stream belum emit (data == null) → jangan tampilkan empty state —
+                  // mencegah flash "Mulai percakapan!" saat buka chat yang ada isinya.
+                  // Hanya tampilkan empty state setelah stream selesai (data != null).
+                  if (snap.data == null) return const SizedBox.shrink();
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -512,7 +562,34 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               border: Border(top: BorderSide(color: AppTheme.divider)),
             ),
             child: SafeArea(
-              child: Row(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Builder(builder: (ctx) {
+                  final pts = ctx.watch<PointsProvider>();
+                  final loc = ctx.read<LocaleProvider>();
+                  Color badgeColor;
+                  String badgeText;
+                  if (pts.points <= 0) {
+                    return const SizedBox.shrink();
+                  } else if (pts.points <= 5) {
+                    badgeColor = Colors.orange;
+                    badgeText = loc.s.isId ? '⚠️ ${pts.points} poin — daftar email +100' : '⚠️ ${pts.points} points — register +100';
+                  } else if (pts.points <= 10) {
+                    badgeColor = Colors.amber;
+                    badgeText = loc.s.isId ? '${pts.points} poin — baca room +2' : '${pts.points} points — read room +2';
+                  } else if (pts.points <= 20) {
+                    badgeColor = Colors.lightGreen;
+                    badgeText = loc.s.isId ? '${pts.points} poin' : '${pts.points} points';
+                  } else {
+                    return const SizedBox.shrink();
+                  }
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    margin: const EdgeInsets.only(bottom: 4),
+                    decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                    child: Text(badgeText, style: TextStyle(color: badgeColor, fontSize: 11), textAlign: TextAlign.center),
+                  );
+                }),
+                Row(
                 children: [
                   // Tombol foto kecil
                   _InputIconBtn(
@@ -546,7 +623,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     style: IconButton.styleFrom(backgroundColor: AppTheme.primary.withValues(alpha: 0.15)),
                   ),
                 ],
-              ),
+              ),],), // close Row, Column, SafeArea
             ),
           ),
         ],

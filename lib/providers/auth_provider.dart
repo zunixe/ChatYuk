@@ -4,6 +4,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/message_cache.dart';
+import '../services/points_service.dart';
 import '../services/screen_secure_service.dart';
 
 // Shortcut untuk fire-and-forget.
@@ -26,6 +28,7 @@ class AuthProvider extends ChangeNotifier {
 
   Timer? _idleTimer;
   Timer? _heartbeatTimer;
+  StreamSubscription<UserModel>? _profileSub;
   bool _isIdle = false;
   static const Duration idleTimeout = Duration(minutes: 3);
   static const Duration heartbeatInterval = Duration(seconds: 60);
@@ -34,11 +37,13 @@ class AuthProvider extends ChangeNotifier {
   bool _notificationsEnabled = true;
 
   bool _screenshotEnabled = true;
+  bool _watermarkEnabled = false;
 
   UserModel? get profile => _profile;
   bool get loading => _loading;
   String? get error => _error;
   bool get screenshotEnabled => _screenshotEnabled;
+  bool get watermarkEnabled => _watermarkEnabled;
   bool get isSignedIn => _auth.isSignedIn;
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
@@ -58,23 +63,51 @@ class AuthProvider extends ChangeNotifier {
     _loading = true;
     _error = null;
     if (!_disposed) notifyListeners();
-    try {
-      debugPrint('[AUTH] signInAnonymously...');
-      await _auth.signInAnonymously();
-      debugPrint('[AUTH] signInAnonymously OK');
-      _profile = await _auth.getProfile();
-      debugPrint('[AUTH] getProfile -> ${_profile?.uid}');
-      // Terapkan setting admin: izinkan screenshot aplikasi atau tidak
-      await _loadScreenshotSetting();
+    // Auto-retry dengan backoff: jaringan (DNS/connectivity) sering gagal
+    // sesaat, apalagi pas baru connect WiFi atau ganti user. Jangan langsung
+    // tampilkan layar error — coba ulang dulu beberapa kali.
+    const maxAttempts = 6;
+    const delays = [2, 3, 5, 8, 12, 15]; // detik antar percobaan
+    Object? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        debugPrint('[AUTH] _init attempt $attempt/$maxAttempts');
+        await _auth.signInAnonymously();
+        debugPrint('[AUTH] signInAnonymously OK');
+        _profile = await _auth.getProfile();
+        debugPrint('[AUTH] getProfile -> ${_profile?.uid}');
+        // Realtime: profil sendiri (poin, status, email terdaftar, dll) —
+        // badge poin di profil & private chat langsung update.
+        _listenProfile();
+        // Terapkan setting admin: izinkan screenshot aplikasi atau tidak
+        await _loadScreenshotSetting();
+        // Terapkan setting admin: watermark forensik foto view-once
+        await _loadWatermarkSetting();
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        debugPrint('[AUTH] _init attempt $attempt failed: $e');
+        if (_disposed) return;
+        if (attempt < maxAttempts) {
+          await Future.delayed(Duration(seconds: delays[attempt - 1]));
+          if (_disposed) return;
+        }
+      }
+    }
+    if (lastError != null) {
+      debugPrint('[AUTH] _init ERROR: $lastError');
+      _error = lastError.toString();
+    } else {
       // FCM token di-fetch asinkron — jangan block loading screen
       if (_profile != null) updateFcmToken();
       // Bersihkan akun anonymous stale (fire-and-forget) supaya nickname
       // bebas dan tidak ada ghost "online". Tidak block startup.
       cleanupStaleAnonymous();
+      if (_disposed) return;
       _startHeartbeat();
-    } catch (e) {
-      debugPrint('[AUTH] _init ERROR: $e');
-      _error = e.toString();
+      // Daily login bonus poin
+      _claimDailyPoints();
     }
     _loading = false;
     _initInProgress = false;
@@ -100,6 +133,9 @@ class AuthProvider extends ChangeNotifier {
     final result = await _auth.signInWithGoogle();
     final googleEmail = result.googleEmail;
     print('[AUTH-PROVIDER] signInWithGoogle result uid=${result.response.user?.id} email=$googleEmail');
+
+    // Bersihkan semua cache lama setelah login Google
+    MessageCache.instance.clearAllLegacy().catchError((_) {});
 
     // Cek apakah email ini sudah punya profile di akun lain
     if (googleEmail != null) {
@@ -182,6 +218,13 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> retry() => _init();
 
+  /// Simpan daftar hashtag profil (diupdate lokal + server).
+  Future<void> updateHashtags(List<String> hashtags) async {
+    await _auth.updateHashtags(hashtags);
+    _profile = _profile?.copyWith(hashtags: hashtags);
+    if (!_disposed) notifyListeners();
+  }
+
   /// Ambil setting admin global (screenshot enabled?) lalu terapkan.
   Future<void> _loadScreenshotSetting() async {
     _screenshotEnabled = await _auth.fetchScreenshotEnabled();
@@ -198,6 +241,23 @@ class AuthProvider extends ChangeNotifier {
       await _auth.updateScreenshotEnabled(enabled);
     } catch (e) {
       debugPrint('[AUTH] updateScreenshotEnabled error: $e');
+    }
+  }
+
+  /// Ambil setting admin global (watermark forensik view-once?).
+  Future<void> _loadWatermarkSetting() async {
+    _watermarkEnabled = await _auth.fetchWatermarkEnabled();
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Admin mengaktifkan/menonaktifkan watermark forensik foto view-once.
+  Future<void> setWatermarkEnabled(bool enabled) async {
+    _watermarkEnabled = enabled;
+    if (!_disposed) notifyListeners();
+    try {
+      await _auth.updateWatermarkEnabled(enabled);
+    } catch (e) {
+      debugPrint('[AUTH] updateWatermarkEnabled error: $e');
     }
   }
 
@@ -228,7 +288,7 @@ class AuthProvider extends ChangeNotifier {
     await _auth.signInWithEmail(email, password);
     _profile = await _auth.getProfile();
     if (_profile != null) await updateFcmToken();
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Upgrade anonymous account ke email account. UID tetap sama.
@@ -236,7 +296,34 @@ class AuthProvider extends ChangeNotifier {
     await _auth.linkEmailToAccount(email, password);
     await _auth.markRegistered();
     _profile = _profile?.copyWith(isRegistered: true);
-    notifyListeners();
+    // Kasih bonus +100 poin untuk register email
+    _claimRegisterBonus();
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _claimDailyPoints() async {
+    try {
+      final pointsService = PointsService();
+      final old = _profile?.points ?? 0;
+      final newPoints = await pointsService.dailyLoginBonus();
+      _profile = _profile?.copyWith(points: newPoints);
+      debugPrint('[AUTH] dailyLoginBonus: $old -> $newPoints');
+      // Toast akan ditampilkan oleh PointsProvider di screen yang aktif
+      // via checkAndShowOnlineToast / PointsProvider listener
+    } catch (e) {
+      debugPrint('[AUTH] dailyLoginBonus error: $e');
+    }
+  }
+
+  Future<void> _claimRegisterBonus() async {
+    try {
+      final pointsService = PointsService();
+      final newPoints = await pointsService.registerBonus();
+      _profile = _profile?.copyWith(points: newPoints);
+      debugPrint('[AUTH] registerBonus -> $newPoints');
+    } catch (e) {
+      debugPrint('[AUTH] registerBonus error: $e');
+    }
   }
 
   /// Kirim ulang email verifikasi untuk user yang sudah signup tapi belum verify.
@@ -255,13 +342,12 @@ class AuthProvider extends ChangeNotifier {
   /// Set password baru setelah recovery. Logout otomatis agar login ulang.
   Future<void> resetPassword(String newPassword) async {
     _idleTimer?.cancel();
+    _heartbeatTimer?.cancel();
     _isIdle = false;
     await _auth.resetPassword(newPassword);
     _profile = null;
     _loading = false;
-    notifyListeners();
-    // Jangan panggil _init() di sini — biarkan user login ulang manual.
-    // _init() secara unawaited akan race condition dengan signInWithEmail.
+    if (!_disposed) notifyListeners();
   }
 
   /// Cek apakah nickname tersedia.
@@ -315,7 +401,7 @@ class AuthProvider extends ChangeNotifier {
       }
     }
     debugPrint('[AUTH] registerProfile DONE: ${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     debugPrint('[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
     resetIdleTimer();
     updateFcmToken();
@@ -334,7 +420,7 @@ class AuthProvider extends ChangeNotifier {
       city: city ?? _profile?.city,
       nickname: nickname ?? _profile?.nickname,
     );
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Update IP address di server (tidak disimpan di aplikasi).
@@ -343,22 +429,23 @@ class AuthProvider extends ChangeNotifier {
   Future<void> updateAvatar(String base64) async {
     await _auth.updateAvatar(base64);
     _profile = _profile?.copyWith(avatar: base64);
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> removeAvatar() async {
     await _auth.removeAvatar();
     _profile = _profile?.copyWith(avatar: '');
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> signOut() async {
     _idleTimer?.cancel();
+    _heartbeatTimer?.cancel();
     _isIdle = false;
-    await _auth.goOffline(); // set status offline di DB sebelum sign out
+    await _auth.goOffline();
     await _auth.signOut();
     _profile = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Call on any user interaction (tap, scroll, typing...).
@@ -427,11 +514,21 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
+  void _listenProfile() {
+    _profileSub?.cancel();
+    _profileSub = _auth.onMyProfileUpdates().listen((updated) {
+      if (_disposed) return;
+      _profile = updated;
+      notifyListeners();
+    });
+  }
+
   @override
   void dispose() {
     _disposed = true;
     _idleTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _profileSub?.cancel();
     super.dispose();
   }
 }

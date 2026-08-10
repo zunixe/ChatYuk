@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/points_provider.dart';
 import '../utils.dart';
 
 class LinkEmailScreen extends StatefulWidget {
@@ -43,8 +44,11 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
     try {
       await context.read<AuthProvider>().linkEmailToAccount(email, password);
       if (!mounted) return;
+      // Kasih bonus poin +100
+      final pointsProvider = context.read<PointsProvider>();
+      await pointsProvider.claimRegisterBonus();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.msgAccountLinked)));
+        SnackBar(content: Text('${s.msgAccountLinked} +100 Poin!')));
       Navigator.of(context).pop();
     } on Exception catch (e) {
       if (!mounted) return;
