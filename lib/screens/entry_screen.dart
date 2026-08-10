@@ -132,7 +132,6 @@ class _EntryScreenState extends State<EntryScreen> {
       // 'exists' — profile sudah ada, _AuthGate handle navigasi otomatis
     } catch (e) {
       debugPrint('[GOOGLE] signInWithGoogle error: $e');
-      print('[GOOGLE] signInWithGoogle error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${s.errGoogleSignIn}$e')),
@@ -178,31 +177,41 @@ class _EntryScreenState extends State<EntryScreen> {
     _entered = true;
     setState(() => _loading = true);
     debugPrint('[ENTRY] _enter start nick=$nick');
-    try {
-      await context.read<AuthProvider>().registerProfile(
-            nickname: nick,
-            gender: _gender,
-            age: _age,
-            country: _negara,
-            city: _kota,
-            ipAddress: _ipAddress,
-          );
-      debugPrint('[ENTRY] registerProfile returned OK');
-    } catch (e) {
-      debugPrint('[ENTRY] registerProfile ERROR: $e');
+    // Retry ringan: jaringan (DNS) kadang gagal sesaat saat ganti user.
+    Object? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await context.read<AuthProvider>().registerProfile(
+              nickname: nick,
+              gender: _gender,
+              age: _age,
+              country: _negara,
+              city: _kota,
+              ipAddress: _ipAddress,
+            );
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        debugPrint('[ENTRY] registerProfile attempt $attempt ERROR: $e');
+        if (attempt < 3) await Future.delayed(const Duration(seconds: 2));
+      }
+    }
+    if (lastError != null) {
       _entered = false; // allow retry on error
       if (mounted) {
         setState(() => _loading = false);
-        final msg = e.toString().toLowerCase();
+        final msg = lastError.toString().toLowerCase();
         if (msg.contains('duplicate') || msg.contains('nickname') || msg.contains('taken')) {
           setState(() => _nicknameError = s.errNicknameTaken);
           _nicknameFocus.requestFocus();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$lastError')));
         }
       }
       return;
     }
+    debugPrint('[ENTRY] registerProfile returned OK');
     if (mounted) setState(() => _loading = false);
     debugPrint('[ENTRY] _enter done, loading=false');
   }

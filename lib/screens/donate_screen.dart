@@ -75,7 +75,7 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(
-        title: Text(s.titleDonate),
+          title: Text(s.titleDonate),
         bottom: TabBar(
           controller: _tab,
           labelColor: Colors.white,
@@ -83,9 +83,9 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
           indicatorColor: Colors.white,
           indicatorWeight: 3,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          tabs: const [
-            Tab(text: 'QRIS'),
-            Tab(text: 'USDT Crypto'),
+          tabs: [
+            Tab(text: s.labelQris),
+            Tab(text: s.labelUsdt),
           ],
         ),
       ),
@@ -106,6 +106,7 @@ class _QrisTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -125,10 +126,10 @@ class _QrisTab extends StatelessWidget {
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Scan QRIS untuk donasi',
+          Text(
+            s.donateScanQris,
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 20),
           Center(
@@ -164,7 +165,7 @@ class _QrisTab extends StatelessWidget {
           const SizedBox(height: 24),
           _InfoCard(
             icon: Icons.info_outline,
-            text: 'QRIS dapat digunakan di semua aplikasi dompet digital dan mobile banking Indonesia (GoPay, OVO, Dana, BCA, Mandiri, dll)',
+            text: s.donateQrisInfo,
           ),
           const SizedBox(height: 16),
           _ThankYouNote(),
@@ -338,6 +339,7 @@ class _ThankYouNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -349,23 +351,23 @@ class _ThankYouNote extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.favorite, color: AppTheme.primary, size: 28),
-          SizedBox(height: 8),
+          const Icon(Icons.favorite, color: AppTheme.primary, size: 28),
+          const SizedBox(height: 8),
           Text(
-            'Terima Kasih!',
-            style: TextStyle(
+            s.donateThankYou,
+            style: const TextStyle(
               color: AppTheme.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 16,
             ),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
-            'Donasi kamu membantu pengembangan ChatYuk agar terus gratis dan bebas iklan.',
+            s.donateThanksMsg,
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           ),
         ],
       ),

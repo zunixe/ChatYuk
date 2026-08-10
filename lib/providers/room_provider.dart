@@ -40,6 +40,7 @@ class RoomProvider extends ChangeNotifier {
   Future<void> reload() async {
     try {
       final rooms = await _service.fetchRooms(_country);
+      if (_roomsEqual(rooms, _rooms) && _counts.isEmpty) return;
       _rooms = rooms;
       _applyCounts();
       if (!_seeded && rooms.isEmpty) {
@@ -53,6 +54,14 @@ class RoomProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
+  }
+
+  bool _roomsEqual(List<RoomModel> a, List<RoomModel> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].onlineCount != b[i].onlineCount) return false;
+    }
+    return true;
   }
 
   void _applyCounts() {

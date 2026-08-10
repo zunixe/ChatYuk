@@ -3,14 +3,15 @@ import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/message_cache.dart';
+import '../services/photo_cache.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatService _service = ChatService();
   List<String> _blockedUids = [];
 
-  // Stream cache untuk private chats — mencegah StreamBuilder resubscribe setiap build
+  // Stream cache untuk private chats — Mencegah StreamBuilder resubscribe tiap build.
+  // Hapus cache setelah semua listener cancel karena controller mati (channel dihapus).
   final _privateChatsCache = <String, Stream<List<PrivateChatInfo>>>{};
-  final _roomUsersCache = <String, Stream<List<UserModel>>>{};
 
   List<String> get blockedUids => _blockedUids;
 
@@ -37,6 +38,8 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // Private chat
+  Future<bool> isUserActive(String uid) => _service.isUserActive(uid);
+
   Future<String> startPrivateChat({
     required String myUid,
     required String otherUid,
@@ -72,6 +75,10 @@ class ChatProvider extends ChangeNotifier {
 
   Stream<String> getUserStatus(String uid) => _service.getUserStatus(uid);
 
+  Stream<void> getTypingStream(String chatId) => _service.getTypingStream(chatId);
+
+  void sendTyping(String chatId) => _service.sendTyping(chatId);
+
   Future<void> sendPrivateMessage({
     required String chatId,
     required String senderId,
@@ -80,7 +87,9 @@ class ChatProvider extends ChangeNotifier {
     required String text,
     String type = 'text',
     String imageData = '',
-    String receiverId = '',
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
   }) async {
     await _service.sendPrivateMessage(
       chatId: chatId,
@@ -90,7 +99,9 @@ class ChatProvider extends ChangeNotifier {
       text: text,
       type: type,
       imageData: imageData,
-      receiverId: receiverId,
+      repliedToId: repliedToId,
+      repliedToText: repliedToText,
+      repliedToSenderName: repliedToSenderName,
     );
   }
 
@@ -103,12 +114,11 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
-    return _privateChatsCache.putIfAbsent(myUid, () => _service.getMyPrivateChats(myUid));
+    return _service.getMyPrivateChats(myUid);
   }
 
-  // Online users
   Stream<List<UserModel>> getOnlineUsersInRoom(String roomId) {
-    return _roomUsersCache.putIfAbsent(roomId, () => _service.getOnlineUsersInRoom(roomId));
+    return _service.getOnlineUsersInRoom(roomId);
   }
 
   Future<void> joinRoom(String roomId, UserModel user) async {
@@ -163,6 +173,7 @@ class ChatProvider extends ChangeNotifier {
     _privateChatsCache.clear();
     _service.clearCachedStreams();
     MessageCache.instance.clearAll();
+    PhotoCache.instance.clearAll();
     notifyListeners();
   }
 }

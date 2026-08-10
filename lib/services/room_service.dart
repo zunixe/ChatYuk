@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/room_model.dart';
 import '../config/supabase_config.dart';
@@ -61,6 +62,7 @@ class RoomService {
   }
 
   Future<void> updateOnlineCount(String roomId, int count) async {
-    // Online count dihitung dari room_presence — tidak perlu simpan terpisah.
+    // Online count dihitung dari room_presence — tidak perlu simpan, tapi pertahankan API.
+    debugPrint('[room] updateOnlineCount deprecation: roomId=$roomId count=$count');
   }
 }

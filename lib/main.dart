@@ -15,6 +15,7 @@ import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/supabase_config.dart';
 import 'utils.dart';
+import 'services/message_cache.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final LocaleProvider localeProvider = LocaleProvider();
@@ -246,6 +247,7 @@ void main() async {
     if (e.code != 'duplicate-app') rethrow;
   }
   await SupabaseConfig.init();
+  await MessageCache.instance.clearAllLegacy(); // bersihkan semua cache lama
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await _initNotifications();
   runApp(const ChatYukApp());

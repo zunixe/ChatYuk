@@ -34,7 +34,7 @@ class ForensicWatermark {
   static const int size = 1024;
   static const int blockSize = 64;
   static const int coeffsPerBlock = 32;
-  static const double alpha = 100.0;
+  static const double alpha = 50.0;
 
   /// Ambang z-score antar-seed untuk verdict "matched". Seed benar adalah
   /// outlier jauh di atas distribusi seed lain (dalam uji: victim z≈2.8,
@@ -194,7 +194,7 @@ class ForensicWatermark {
     // Resize proporsional: sisi terpanjang = size, rasio asli dipertahankan.
     final resized = _resizeMaxSide(decoded, size);
     _embedInto(resized, seed);
-    final jpg = img.encodeJpg(resized, quality: 85);
+    final jpg = img.encodeJpg(resized, quality: 90);
     return base64Encode(jpg);
   }
 

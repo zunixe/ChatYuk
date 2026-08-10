@@ -18,7 +18,9 @@ class UserPhoto {
       photo: map['photo'] ?? '',
       createdAt: map['createdAt'] is DateTime
           ? map['createdAt'] as DateTime
-          : DateTime.parse('${map['createdAt']}'),
+          : map['createdAt'] != null
+              ? DateTime.parse('${map['createdAt']}')
+              : DateTime.now(),
     );
   }
 }

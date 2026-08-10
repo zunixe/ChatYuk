@@ -11,14 +11,21 @@ class MessageCache {
   MessageCache._();
   static final MessageCache instance = MessageCache._();
 
-  static const _keyPrefix = 'chat_cache_v1_';
+  static const _keyPrefix = 'chat_cache_v2_';
   static const _storage = FlutterSecureStorage();
   static final _aes = AesGcm.with256bits();
 
   SecretKey? _key;
 
+  Future<SecretKey>? _keyFuture;
+
   Future<SecretKey> _getKey() async {
     if (_key != null) return _key!;
+    _keyFuture ??= _loadKey();
+    return _keyFuture!;
+  }
+
+  Future<SecretKey> _loadKey() async {
     const keyId = 'chatyuk_msg_key_v1';
     final existing = await _storage.read(key: keyId);
     if (existing != null && existing.isNotEmpty) {
@@ -57,8 +64,22 @@ class MessageCache {
     return utf8.decode(clear);
   }
 
+  /// Enkripsi string apa pun (dipakai juga oleh PhotoCache untuk file foto).
+  Future<String> encryptString(String plain) async {
+    final key = await _getKey();
+    return _encrypt(plain, key);
+  }
+
+  /// Dekripsi string hasil encryptString.
+  Future<String> decryptString(String encoded) async {
+    final key = await _getKey();
+    return _decrypt(encoded, key);
+  }
+
   /// Simpan daftar pesan untuk sebuah chat (key = chatId/roomId).
   /// Kirim list kosong untuk menghapus cache chat tersebut.
+  /// imageData di-strip (foto disimpan terpisah di PhotoCache) supaya
+  /// cache pesan tetap kecil dan cepat dibaca.
   Future<void> saveMessages(String chatKey, List<MessageModel> messages) async {
     final prefs = await SharedPreferences.getInstance();
     if (messages.isEmpty) {
@@ -66,7 +87,7 @@ class MessageCache {
       return;
     }
     final key = await _getKey();
-    final data = messages.map((m) => m.toMap()).toList();
+    final data = messages.map((m) => {...m.toMap(), 'imageData': ''}).toList();
     final plain = jsonEncode(data);
     final enc = await _encrypt(plain, key);
     await prefs.setString('$_keyPrefix$chatKey', enc);
@@ -88,12 +109,16 @@ class MessageCache {
     }
   }
 
-  /// Hapus cache semua chat (dipanggil saat logout).
-  Future<void> clearAll() async {
+  /// Hapus SEMUA cache versi lama & baru (dipanggil saat app start & logout).
+  Future<void> clearAllLegacy() async {
     final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys().where((k) => k.startsWith(_keyPrefix)).toList();
-    for (final k in keys) {
-      await prefs.remove(k);
+    for (final prefix in ['chat_cache_v1_', 'chat_cache_v2_']) {
+      final keys = prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
+      for (final k in keys) {
+        await prefs.remove(k);
+      }
     }
   }
+
+  Future<void> clearAll() => clearAllLegacy();
 }
