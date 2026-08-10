@@ -16,6 +16,7 @@ import 'screens/room_chat_screen.dart';
 import 'config/supabase_config.dart';
 import 'utils.dart';
 import 'services/message_cache.dart';
+import 'services/photo_cache.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final LocaleProvider localeProvider = LocaleProvider();
@@ -248,6 +249,7 @@ void main() async {
   }
   await SupabaseConfig.init();
   await MessageCache.instance.clearAllLegacy(); // bersihkan semua cache lama
+  PhotoCache.instance.cleanOldPhotos(); // fire-and-forget, hapus foto >7 hari
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await _initNotifications();
   runApp(const ChatYukApp());

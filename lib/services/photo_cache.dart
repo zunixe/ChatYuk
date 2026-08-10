@@ -53,4 +53,21 @@ class PhotoCache {
       }
     } catch (_) {}
   }
+
+  /// Hapus foto lebih tua dari 7 hari — panggil sesekali (startup).
+  Future<void> cleanOldPhotos() async {
+    try {
+      final folder = await _folder();
+      if (!await folder.exists()) return;
+      final cutoff = DateTime.now().subtract(const Duration(days: 7));
+      await for (final entity in folder.list()) {
+        if (entity is File) {
+          final stat = await entity.stat();
+          if (stat.modified.isBefore(cutoff)) {
+            await entity.delete();
+          }
+        }
+      }
+    } catch (_) {}
+  }
 }

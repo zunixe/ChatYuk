@@ -78,7 +78,7 @@ class ChatService {
     String? lastSavedSig;
 
     void scheduleCacheSave() {
-      if (controller.isClosed) return;
+      if (controller.isClosed || _current.isEmpty) return;
       saveDebounce?.cancel();
       saveDebounce = Timer(const Duration(seconds: 2), () async {
         if (controller.isClosed) return;

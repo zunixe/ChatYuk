@@ -204,7 +204,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Center(
-                                  child: Text(otherName[0].toUpperCase(),
+                                  child: Text(otherName.isNotEmpty ? otherName[0].toUpperCase() : '?',
                                     style: TextStyle(
                                       color: isBlocked ? AppTheme.textSecondary : AppTheme.textPrimary,
                                       fontWeight: FontWeight.w700,

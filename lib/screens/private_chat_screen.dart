@@ -443,7 +443,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     radius: 20,
                     backgroundColor: Colors.white.withValues(alpha: 0.25),
                     child: Text(
-                      widget.otherName[0].toUpperCase(),
+                      widget.otherName.isNotEmpty ? widget.otherName[0].toUpperCase() : '?',
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
                     ),
                   ),
