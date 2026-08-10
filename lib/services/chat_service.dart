@@ -397,6 +397,8 @@ class ChatService {
 
   // Map: userId -> list of reload callbacks untuk getMyPrivateChats streams
   final Map<String, List<void Function()>> _chatReloaders = {};
+  // Cache stream per myUid agar tidak buat channel baru tiap subscribe
+  final Map<String, StreamController<List<PrivateChatInfo>>> _privateChatsStreams = {};
 
   Future<void> markAsRead(String chatId, String uid) async {
     try {
@@ -462,10 +464,20 @@ class ChatService {
 
   void clearCachedStreams() {
     _chatReloaders.clear();
+    for (final c in _privateChatsStreams.values) {
+      if (!c.isClosed) c.close();
+    }
+    _privateChatsStreams.clear();
   }
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
+    // Cache: kembali stream yang sudah ada agar channel Supabase
+    // tidak dilipatgandakan tiap subscribe/didChange berikutnya.
+    final existing = _privateChatsStreams[myUid];
+    if (existing != null && !existing.isClosed) return existing.stream;
+
     final controller = StreamController<List<PrivateChatInfo>>.broadcast();
+    _privateChatsStreams[myUid] = controller;
 
     Future<List<PrivateChatInfo>> fetch() async {
       final rows = await _sb
@@ -572,6 +584,8 @@ class ChatService {
       if (_chatReloaders[myUid]?.isEmpty == true) _chatReloaders.remove(myUid);
       _sb.removeChannel(channel);
       _sb.removeChannel(msgChannel);
+      final cached = _privateChatsStreams[myUid];
+      if (cached == controller) _privateChatsStreams.remove(myUid);
     };
 
     return controller.stream;

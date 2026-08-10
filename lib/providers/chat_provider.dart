@@ -8,6 +8,7 @@ import '../services/photo_cache.dart';
 class ChatProvider extends ChangeNotifier {
   final ChatService _service = ChatService();
   List<String> _blockedUids = [];
+  Future<List<String>>? _loadingBlockedUids;
 
   // Stream cache untuk private chats — Mencegah StreamBuilder resubscribe tiap build.
   // Hapus cache setelah semua listener cancel karena controller mati (channel dihapus).
@@ -162,7 +163,13 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> loadBlockedUids(String myUid) async {
-    _blockedUids = await _service.getBlockedUids(myUid);
+    if (_loadingBlockedUids != null) { await _loadingBlockedUids; return; }
+    _loadingBlockedUids = _service.getBlockedUids(myUid);
+    try {
+      _blockedUids = await _loadingBlockedUids!;
+    } finally {
+      _loadingBlockedUids = null;
+    }
     notifyListeners();
   }
 
