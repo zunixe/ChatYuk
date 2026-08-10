@@ -579,15 +579,32 @@ class ChatService {
 
   /// Stream status realtime satu user (online/idle/offline).
   /// Pakai channel postgres changes pada profiles — ringan, hanya 1 row.
+  /// Status dihitung efektif: last_seen basi (> 15 menit) dianggap offline,
+  /// supaya sinkron dengan daftar pengguna online di list chat.
   Stream<String> getUserStatus(String uid) {
     final controller = StreamController<String>.broadcast();
     String _current = 'offline';
 
+    String effectiveStatus(String? rawStatus, String? lastSeenStr) {
+      final s = rawStatus ?? 'offline';
+      if (s == 'offline') return 'offline';
+      final lastSeen = DateTime.tryParse(lastSeenStr ?? '');
+      if (lastSeen == null) return 'offline';
+      final stale = lastSeen.toUtc().isBefore(
+            DateTime.now().toUtc().subtract(const Duration(minutes: 15)),
+          );
+      return stale ? 'offline' : s;
+    }
+
     Future<void> fetchStatus() async {
       try {
-        final row = await _sb.from('profiles').select('status').eq('id', uid).maybeSingle();
+        final row = await _sb
+            .from('profiles')
+            .select('status,last_seen')
+            .eq('id', uid)
+            .maybeSingle();
         if (row == null || controller.isClosed) return;
-        final s = row['status'] as String? ?? 'offline';
+        final s = effectiveStatus(row['status'] as String?, row['last_seen'] as String?);
         if (s != _current) {
           _current = s;
           controller.add(_current);
@@ -605,7 +622,10 @@ class ChatService {
       filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: uid),
       callback: (payload) {
         if (controller.isClosed) return;
-        final s = payload.newRecord['status'] as String? ?? 'offline';
+        final s = effectiveStatus(
+          payload.newRecord['status'] as String?,
+          payload.newRecord['last_seen'] as String?,
+        );
         if (s != _current) {
           _current = s;
           controller.add(_current);
