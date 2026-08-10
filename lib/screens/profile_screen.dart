@@ -67,7 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Future.microtask(() {
       final pp = context.read<PointsProvider>();
       final s = context.read<LocaleProvider>().s;
-      pp.showOnboardingIfNeeded(context, s.isId);
+      pp.refreshEnabled().then((_) => pp.showOnboardingIfNeeded(context, s.isId));
     });
   }
 
@@ -681,9 +681,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 12),
 
                   // Poin
-                  _SectionLabel(label: s.pointsTitle),
-                  const SizedBox(height: 6),
-                  _SectionCard(children: [
+                  if (context.watch<PointsProvider>().enabled) ...[
+                    _SectionLabel(label: s.pointsTitle),
+                    const SizedBox(height: 6),
+                    _SectionCard(children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                       child: Row(
@@ -724,6 +725,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ]),
+                  ],
                   const SizedBox(height: 12),
 
                   // Pengaturan

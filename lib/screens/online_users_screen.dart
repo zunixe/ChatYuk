@@ -10,7 +10,6 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../services/chat_service.dart';
 import 'private_chat_screen.dart';

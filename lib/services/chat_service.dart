@@ -6,8 +6,6 @@ import '../models/user_model.dart';
 import '../config/supabase_config.dart';
 import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
-import '../services/points_service.dart';
-import '../utils.dart';
 import '../utils.dart';
 
 class ChatService {

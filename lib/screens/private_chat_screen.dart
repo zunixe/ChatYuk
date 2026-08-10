@@ -17,9 +17,9 @@ import '../providers/points_provider.dart';
 import '../services/chat_service.dart';
 import '../services/forensic_watermark.dart';
 import '../services/screen_secure_service.dart';
+import '../widgets/emoji_picker_sheet.dart';
 import '../main.dart';
 import '../utils.dart';
-import '../widgets/emoji_picker_sheet.dart';
 import 'user_info_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
@@ -133,6 +133,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _wasBlocked = context.read<ChatProvider>().isBlocked(widget.otherUid);
     if (!_wasBlocked) {
       _subscribeStatus();
+      _subscribeTyping();
     }
 
     _chatInfoSub = _chatInfoStream.listen((chats) {
@@ -156,6 +157,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _chatInfoSub?.cancel();
     _msgsSub?.cancel();
     _statusSub?.cancel();
+    _typingSub?.cancel();
+    _typingClearTimer?.cancel();
     if (activeChatId.value == widget.chatId) {
       activeChatId.value = null;
     }
@@ -184,6 +187,30 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   bool _isSending = false;
+  StreamSubscription<void>? _typingSub;
+  Timer? _typingClearTimer;
+  DateTime _lastTypingSent = DateTime(2000);
+  bool _showTyping = false;
+
+  void _subscribeTyping() {
+    _typingSub?.cancel();
+    _typingSub = context.read<ChatProvider>().getTypingStream(widget.chatId).listen((_) {
+      if (!mounted) return;
+      setState(() { _showTyping = true; });
+      _typingClearTimer?.cancel();
+      _typingClearTimer = Timer(const Duration(seconds: 3), () {
+        if (!mounted) return;
+        setState(() => _showTyping = false);
+      });
+    });
+  }
+
+  void _sendTypingSignal() {
+    final now = DateTime.now();
+    if (now.difference(_lastTypingSent).inMilliseconds < 2500) return;
+    _lastTypingSent = now;
+    context.read<ChatProvider>().sendTyping(widget.chatId);
+  }
 
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
@@ -254,7 +281,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       await Future.delayed(const Duration(milliseconds: 300));
       _isSending = false;
     }
-    context.read<PointsProvider>().showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-1 Poin' : '-1 Point');
+    if (context.read<PointsProvider>().enabled) {
+      context.read<PointsProvider>().showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-1 Poin' : '-1 Point');
+    }
     _scrollToBottom();
   }
 
@@ -300,12 +329,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         type: 'image',
         imageData: base64,
       );
-      ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-3 Poin' : '-3 Points');
-      ppPhoto.oneTimeBonus('first_photo', 10).then((earned) {
-        if (earned && mounted) {
-          ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '+10 Poin — Foto pertama!' : '+10 Points — First photo!');
-        }
-      });
+      if (ppPhoto.enabled) {
+        ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-3 Poin' : '-3 Points');
+        ppPhoto.oneTimeBonus('first_photo', 10).then((earned) {
+          if (earned && mounted) {
+            ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '+10 Poin — Foto pertama!' : '+10 Points — First photo!');
+          }
+        });
+      }
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
@@ -348,7 +379,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         type: 'view_once',
         imageData: base64,
       );
-      ppView.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-3 Poin' : '-3 Points');
+      if (ppView.enabled) {
+        ppView.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-3 Poin' : '-3 Points');
+      }
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
@@ -369,10 +402,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (_wasBlocked && !isBlocked) {
       _wasBlocked = false;
       _subscribeStatus();
+      _subscribeTyping();
     } else if (!_wasBlocked && isBlocked) {
       _wasBlocked = true;
       _statusSub?.cancel();
       _statusSub = null;
+      _typingSub?.cancel();
+      _typingSub = null;
     }
     final displayStatus = isBlocked ? 'offline' : _otherStatus;
     final genderLabel = widget.otherGender == 'male' ? s.genderMale : widget.otherGender == 'female' ? s.genderFemale : '';
@@ -459,7 +495,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   ),
                   Row(
                     children: [
-                      if (subtitle.isNotEmpty)
+                      if (_showTyping)
+                        Flexible(
+                          child: Text(
+                            s.typingStatus,
+                            style: const TextStyle(
+                              color: Color(0xFF69F0AE),
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )
+                      else if (subtitle.isNotEmpty)
                         Flexible(
                           child: Text(
                             subtitle,
@@ -472,18 +520,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         ),
                       const SizedBox(width: 8),
                       _StatusIndicator(status: displayStatus),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(9),
+                      if (context.watch<PointsProvider>().enabled) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Text(
+                            '🪙 $points',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
                         ),
-                        child: Text(
-                          '🪙 $points',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                 ],
@@ -556,17 +606,28 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               },
             ),
           ),
+          if (_showTyping)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 6, 0, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _TypingBubble(),
+              ),
+            ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: const BoxDecoration(
-              color: AppTheme.bgCard,
-              border: Border(top: BorderSide(color: AppTheme.divider)),
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+            decoration: BoxDecoration(
+              color: AppTheme.bgScreen,
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, -1)),
+              ],
             ),
             child: SafeArea(
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Builder(builder: (ctx) {
                   final pts = ctx.watch<PointsProvider>();
                   final loc = ctx.read<LocaleProvider>();
+                  if (!pts.enabled) return const SizedBox.shrink();
                   Color badgeColor;
                   String badgeText;
                   if (pts.points <= 0) {
@@ -591,7 +652,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   );
                 }),
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     SizedBox(
                       width: 44,
@@ -606,35 +667,55 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     ),
                     const SizedBox(width: 2),
                     Expanded(
-                      child: TextField(
-                        controller: _msgCtrl,
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, height: 1.35),
-                        decoration: InputDecoration(
-                          hintText: s.hintTypeMessage,
-                          hintStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 15),
-                          isDense: true,
+                      child: Container(
+                        constraints: const BoxConstraints(maxHeight: 132),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgCard,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppTheme.bgCard, width: 1),
                         ),
-                        textInputAction: TextInputAction.newline,
-                        onSubmitted: (_) => _send(),
-                        minLines: 1,
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                        textCapitalization: TextCapitalization.sentences,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextField(
+                                controller: _msgCtrl,
+                                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, height: 1.35),
+                                decoration: InputDecoration(
+                                  hintText: s.hintTypeMessage,
+                                  hintStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+                                  filled: false,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                textInputAction: TextInputAction.newline,
+                                onSubmitted: (_) => _send(),
+                                onChanged: (_) => _sendTypingSignal(),
+                                minLines: 1,
+                                maxLines: 4,
+                                keyboardType: TextInputType.multiline,
+                                textCapitalization: TextCapitalization.sentences,
+                              ),
+                            ),
+                            _InputIconBtn(
+                              icon: Icons.image_outlined,
+                              color: AppTheme.primary,
+                              onTap: _sendPhoto,
+                              tooltip: context.read<LocaleProvider>().s.tooltipPhoto,
+                            ),
+                            _InputIconBtn(
+                              icon: Icons.timer_outlined,
+                              color: Colors.orange,
+                              onTap: _sendViewOncePhoto,
+                              tooltip: s.viewOnceTap,
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 2),
-                    _InputIconBtn(
-                      icon: Icons.image_outlined,
-                      color: AppTheme.primary,
-                      onTap: _sendPhoto,
-                      tooltip: context.read<LocaleProvider>().s.tooltipPhoto,
-                    ),
-                    const SizedBox(width: 2),
-                    _InputIconBtn(
-                      icon: Icons.timer_outlined,
-                      color: Colors.orange,
-                      onTap: _sendViewOncePhoto,
-                      tooltip: s.viewOnceTap,
                     ),
                     const SizedBox(width: 2),
                     ValueListenableBuilder<TextEditingValue>(
@@ -669,10 +750,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                       ),
                     ),
                   ],
-                ),]),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
+      ],
       ),
     );
   }
@@ -755,34 +838,51 @@ class _MessageBubble extends StatelessWidget {
                   else
                     RichText(
                       text: TextSpan(
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, height: 1.2),
                         children: [
                           TextSpan(text: msg.text),
                           const TextSpan(text: '  '),
                           WidgetSpan(
                             alignment: PlaceholderAlignment.belowBaseline,
                             baseline: TextBaseline.alphabetic,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-                                if (isMe) ...[
-                                  const SizedBox(width: 3),
-                                  if (isPending)
-                                    Icon(Icons.done, size: 12, color: AppTheme.textSecondary)
-                                  else
-                                    Icon(
-                                      isRead ? Icons.done_all : Icons.done,
-                                      size: 12,
-                                      color: isRead ? AppTheme.primary : AppTheme.textSecondary,
-                                    ),
-                                ],
-                              ],
-                            ),
+                            child: Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
                           ),
+                          if (isMe)
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.belowBaseline,
+                              baseline: TextBaseline.alphabetic,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 3),
+                                child: Icon(
+                                  isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
+                                  size: 12,
+                                  color: isPending ? AppTheme.textSecondary : (isRead ? AppTheme.primary : AppTheme.textSecondary),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
+                  if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired') ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                        if (isMe) ...[
+                          const SizedBox(width: 3),
+                          if (isPending)
+                            Icon(Icons.done, size: 12, color: AppTheme.textSecondary)
+                          else
+                            Icon(
+                              isRead ? Icons.done_all : Icons.done,
+                              size: 12,
+                              color: isRead ? AppTheme.primary : AppTheme.textSecondary,
+                            ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -926,11 +1026,58 @@ class _InputIconBtn extends StatelessWidget {
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, color: color, size: 20),
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 30,
+          height: 48,
+          child: Icon(icon, color: color, size: 22),
         ),
+      ),
+    );
+  }
+}
+
+class _TypingBubble extends StatefulWidget {
+  const _TypingBubble();
+
+  @override
+  State<_TypingBubble> createState() => _TypingBubbleState();
+}
+
+class _TypingBubbleState extends State<_TypingBubble> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.bgInput,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(3, (i) {
+          final t = TweenSequence<double>([
+            TweenSequenceItem(tween: Tween(begin: 0.3, end: 1.0).chain(CurveTween(curve: Curves.easeInOut)), weight: 50),
+            TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.3).chain(CurveTween(curve: Curves.easeInOut)), weight: 50),
+          ]).animate(CurvedAnimation(parent: _ctrl, curve: Interval(i * 0.15, 1, curve: Curves.linear)));
+          return FadeTransition(
+            opacity: t,
+            child: Container(
+              width: 7,
+              height: 7,
+              margin: const EdgeInsets.symmetric(horizontal: 2.5),
+              decoration: const BoxDecoration(color: AppTheme.textSecondary, shape: BoxShape.circle),
+            ),
+          );
+        }),
       ),
     );
   }
@@ -1040,23 +1187,45 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
   Widget build(BuildContext context) {
     final s = context.read<LocaleProvider>().s;
 
-    // Pengirim hanya lihat ikon kamera — tidak bisa buka
+    // Pengirim lihat foto asli + badge
     if (widget.isMe) {
-      return Container(
-        width: 200, height: 80,
-        decoration: BoxDecoration(
-          color: AppTheme.primary.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.timer_outlined, color: AppTheme.primary, size: 20),
-            const SizedBox(width: 8),
-            Text(s.msgViewOnce,
-              style: const TextStyle(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w500)),
-          ],
-        ),
+      final decoded = _decoded;
+      return Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: decoded != null
+                ? Image.memory(
+                    decoded.bytes,
+                    width: _viewWidth(decoded),
+                    height: _viewHeight(decoded),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.high,
+                  )
+                : Container(width: 200, height: 120, color: AppTheme.bgInput),
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
+                  const SizedBox(width: 3),
+                  Text(s.msgViewOnce,
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
 
@@ -1144,7 +1313,6 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
         borderRadius: BorderRadius.circular(12),
         child: Stack(
           children: [
-            // Foto blur — non-positioned, menentukan ukuran Stack
             _decoded != null
                 ? ImageFiltered(
                     imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),

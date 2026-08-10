@@ -304,6 +304,8 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _claimDailyPoints() async {
     try {
       final pointsService = PointsService();
+      final enabled = await pointsService.fetchEnabled();
+      if (!enabled) return;
       final old = _profile?.points ?? 0;
       final newPoints = await pointsService.dailyLoginBonus();
       _profile = _profile?.copyWith(points: newPoints);
@@ -318,6 +320,8 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _claimRegisterBonus() async {
     try {
       final pointsService = PointsService();
+      final enabled = await pointsService.fetchEnabled();
+      if (!enabled) return;
       final newPoints = await pointsService.registerBonus();
       _profile = _profile?.copyWith(points: newPoints);
       debugPrint('[AUTH] registerBonus -> $newPoints');

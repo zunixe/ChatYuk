@@ -191,7 +191,7 @@ as $$
 declare
   result jsonb;
 begin
-  if auth.email() != 'zunixe@gmail.com' then
+  if coalesce(auth.email(),'') != 'zunixe@gmail.com' then
     raise exception 'Unauthorized';
   end if;
 
@@ -204,7 +204,7 @@ begin
     'messages_today',
       (select count(*) from private_messages where created_at >= current_date at time zone 'Asia/Jakarta') +
       (select count(*) from messages where created_at >= current_date at time zone 'Asia/Jakarta'),
-    'rooms_active', (select count(distinct room_id) from room_presence where left_at is null),
+    'rooms_active', (select count(distinct room_id) from room_presence),
     'avg_points', (select round(avg(points)) from profiles),
     'total_points', (select sum(points) from profiles),
     'top_earners', (select coalesce(jsonb_agg(
@@ -223,6 +223,7 @@ begin
   return result;
 end;
 $$;
+revoke execute on function public.admin_stats() from public, anon;
 grant execute on function public.admin_stats() to authenticated, service_role;
 
 -- 10. RPC: admin mass bonus (admin only)
@@ -234,7 +235,7 @@ set search_path = public
 as $$
 declare affected int;
 begin
-  if auth.email() != 'zunixe@gmail.com' then
+  if coalesce(auth.email(),'') != 'zunixe@gmail.com' then
     raise exception 'Unauthorized';
   end if;
 
@@ -248,6 +249,7 @@ begin
   return jsonb_build_object('affected', affected, 'bonus', bonus);
 end;
 $$;
+revoke execute on function public.admin_mass_bonus(int) from public, anon;
 grant execute on function public.admin_mass_bonus(int) to authenticated, service_role;
 
 -- 11. RPC: admin reset all points (admin only)
@@ -259,11 +261,11 @@ set search_path = public
 as $$
 declare affected int;
 begin
-  if auth.email() != 'zunixe@gmail.com' then
+  if coalesce(auth.email(),'') != 'zunixe@gmail.com' then
     raise exception 'Unauthorized';
   end if;
 
-  update profiles set points = 50;
+  update profiles set points = 50 where true;
   get diagnostics affected = row_count;
 
   insert into point_events (user_id, event, amount, metadata)
@@ -273,6 +275,7 @@ begin
   return affected;
 end;
 $$;
+revoke execute on function public.admin_reset_points() from public, anon;
 grant execute on function public.admin_reset_points() to authenticated, service_role;
 
 -- 12. RPC: admin toggle points system (admin only)
@@ -283,7 +286,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.email() != 'zunixe@gmail.com' then
+  if coalesce(auth.email(),'') != 'zunixe@gmail.com' then
     raise exception 'Unauthorized';
   end if;
 
@@ -294,4 +297,5 @@ begin
   return enabled;
 end;
 $$;
+revoke execute on function public.admin_toggle_points(boolean) from public, anon;
 grant execute on function public.admin_toggle_points(boolean) to authenticated, service_role;
