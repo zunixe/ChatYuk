@@ -28,7 +28,7 @@ class ChatYukApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ChangeNotifierProvider(create: (_) => PointsProvider()..checkOnboarding()),
+        ChangeNotifierProvider(create: (_) => PointsProvider()..checkOnboarding()..refreshEnabled()..subscribeEnabled()),
         ChangeNotifierProvider(create: (_) => AdminProvider()),
         ChangeNotifierProvider(create: (_) => localeProvider),
       ],

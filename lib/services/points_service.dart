@@ -1,11 +1,25 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/material.dart';
 
 class PointsService {
   final SupabaseClient _sb;
 
   PointsService([SupabaseClient? sb]) : _sb = sb ?? Supabase.instance.client;
+
+  Future<bool> fetchEnabled() async {
+    final res = await _sb.rpc('get_points_enabled');
+    return res == true;
+  }
+
+  Stream<bool> watchEnabled() {
+    return _sb
+        .from('app_settings')
+        .stream(primaryKey: ['id'])
+        .map((rows) {
+          final matching = rows.where((r) => r['id'] == 'global').toList();
+          return matching.isEmpty ? true : matching.first['points_enabled'] == true;
+        });
+  }
 
   Future<int> dailyLoginBonus() async {
     final res = await _sb.rpc('daily_login_bonus');

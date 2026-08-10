@@ -18,8 +18,32 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _claimed120min = false;
   Timer? _onlineTickTimer;
   bool _onboardingShown = false;
+  bool _enabled = true;
+  StreamSubscription<bool>? _enabledSub;
 
   int get points => _points;
+  bool get enabled => _enabled;
+
+  void subscribeEnabled() {
+    try {
+      _enabledSub ??= _service.watchEnabled().listen((value) {
+        if (_disposed) return;
+        _enabled = value;
+        notifyListeners();
+      });
+    } catch (e) {
+      debugPrint('[POINTS] watchEnabled error: $e');
+    }
+  }
+
+  Future<void> refreshEnabled() async {
+    try {
+      _enabled = await _service.fetchEnabled();
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      debugPrint('[POINTS] fetchEnabled error: $e');
+    }
+  }
 
   void setPoints(int value) {
     _points = value;
@@ -40,8 +64,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await prefs.setBool(_onboardingKey, true);
   }
 
-  void showOnboardingIfNeeded(BuildContext context, bool isId) {
-    if (_onboardingShown) return;
+  Future<void> showOnboardingIfNeeded(BuildContext context, bool isId) async {
+    // Tunggu fetch flag selesai dulu supaya popup tidak muncul saat disabled
+    await refreshEnabled();
+    if (_onboardingShown || !_enabled) return;
+    if (!context.mounted) return;
     markOnboardingShown();
     showDialog(
       context: context,
@@ -89,6 +116,9 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_disposed) return;
     if (state == AppLifecycleState.resumed) {
+      // Refresh flag setiap app kembali aktif, supaya toggle admin
+      // langsung berefek tanpa harus restart app
+      refreshEnabled();
       _sessionStart = DateTime.now();
       _onlineTickTimer?.cancel();
       _onlineTickTimer = Timer.periodic(const Duration(seconds: 30), (_) => _checkOnlineMilestones());
@@ -103,6 +133,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _checkOnlineMilestones() {
+    if (!_enabled) return;
     if (_sessionStart != null) {
       _todayOnlineSeconds += DateTime.now().difference(_sessionStart!).inSeconds;
       _sessionStart = DateTime.now();
@@ -169,6 +200,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> claimDailyLogin() async {
+    if (!_enabled) return;
     try {
       final old = _points;
       _points = await _service.dailyLoginBonus();
@@ -183,6 +215,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<int> deductBeforeSend(String msgType) async {
+    if (!_enabled) return _points;
     try {
       final remaining = await _service.deductChatPoint(msgType);
       _points = remaining;
@@ -199,6 +232,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> roomReadBonus() async {
+    if (!_enabled) return;
     try {
       _points = await _service.roomReadBonus();
       if (!_disposed) notifyListeners();
@@ -208,6 +242,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<bool> oneTimeBonus(String actionKey, int bonus) async {
+    if (!_enabled) return false;
     try {
       final old = _points;
       _points = await _service.oneTimeBonus(actionKey, bonus);
@@ -220,6 +255,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<bool> claimRegisterBonus() async {
+    if (!_enabled) return false;
     try {
       final old = _points;
       _points = await _service.registerBonus();
@@ -355,6 +391,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _disposed = true;
+    _enabledSub?.cancel();
     _onlineTickTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -415,26 +452,5 @@ class _PointsToastState extends State<_PointsToast> with SingleTickerProviderSta
         ),
       ),
     );
-  }
-}
-
-class _LinkEmailWrapper extends StatelessWidget {
-  const _LinkEmailWrapper();
-  @override
-  Widget build(BuildContext context) {
-    return const _LinkEmailScreenPlaceholder();
-  }
-}
-
-class _LinkEmailScreenPlaceholder extends StatefulWidget {
-  const _LinkEmailScreenPlaceholder();
-  @override
-  State<_LinkEmailScreenPlaceholder> createState() => _LinkEmailScreenPlaceholderState();
-}
-
-class _LinkEmailScreenPlaceholderState extends State<_LinkEmailScreenPlaceholder> {
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: Text('Register from Profile')));
   }
 }
