@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,7 +15,37 @@ import '../providers/online_users_provider.dart';
 import '../services/chat_service.dart';
 import 'private_chat_screen.dart';
 
-final _avatarCache = <String, Uint8List>{};
+Uint8List? _decodeBase64(String b64) {
+  try { return base64Decode(b64); } catch (_) { return null; }
+}
+
+class _BoundedCache<T> {
+  final int maxSize;
+  final _map = <String, T>{};
+  final _order = <String>[];
+  _BoundedCache(this.maxSize);
+  T? get(String key) {
+    final i = _order.indexOf(key);
+    if (i >= 0) { _order.removeAt(i); _order.add(key); }
+    return _map[key];
+  }
+  T putIfAbsent(String key, T ifAbsent()) {
+    final existing = _map[key];
+    if (existing != null) return existing;
+    if (_order.length >= maxSize) { _map.remove(_order.removeAt(0)); }
+    final val = ifAbsent();
+    _map[key] = val;
+    _order.add(key);
+    return val;
+  }
+  void clear() { _map.clear(); _order.clear(); }
+}
+
+final _avatarCache = _BoundedCache<Uint8List>(80);
+
+void clearAllAvatarCaches() {
+  _avatarCache.clear();
+}
 
 class OnlineUsersScreen extends StatefulWidget {
   const OnlineUsersScreen({super.key});
@@ -110,10 +141,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
         otherAge: user.age,
       );
       if (!context.mounted) return;
-      // Bonus poin: chat orang baru
       context.read<PointsProvider>().oneTimeBonus('new_chat_${user.uid}', 5);
       Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: user.nickname, otherUid: user.uid, otherGender: user.gender, otherCountry: user.country, otherAge: user.age, otherRegistered: user.isRegistered)));
     } catch (e) {
+      final msg = e.toString().toLowerCase();
+      // TOCTOU: user dihapus antara isUserActive check dan startPrivateChat
+      if (msg.contains('23503') || msg.contains('foreign key') || msg.contains('42501')) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errUserNotFound)));
+        }
+        return;
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
       }

@@ -66,8 +66,8 @@ class AuthProvider extends ChangeNotifier {
     // Auto-retry dengan backoff: jaringan (DNS/connectivity) sering gagal
     // sesaat, apalagi pas baru connect WiFi atau ganti user. Jangan langsung
     // tampilkan layar error — coba ulang dulu beberapa kali.
-    const maxAttempts = 6;
-    const delays = [2, 3, 5, 8, 12, 15]; // detik antar percobaan
+    const maxAttempts = 2;
+    const delays = [3, 5]; // detik antar percobaan
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -99,15 +99,13 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('[AUTH] _init ERROR: $lastError');
       _error = lastError.toString();
     } else {
-      // FCM token di-fetch asinkron — jangan block loading screen
-      if (_profile != null) updateFcmToken();
-      // Bersihkan akun anonymous stale (fire-and-forget) supaya nickname
-      // bebas dan tidak ada ghost "online". Tidak block startup.
-      cleanupStaleAnonymous();
+      // FCM token & cleanup di-fire-and-forget — tidak block loading screen
+      if (_profile != null) unawaited(updateFcmToken());
+      unawaited(cleanupStaleAnonymous());
       if (_disposed) return;
       _startHeartbeat();
       // Daily login bonus poin
-      _claimDailyPoints();
+      unawaited(_claimDailyPoints());
     }
     _loading = false;
     _initInProgress = false;
