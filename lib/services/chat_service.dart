@@ -181,32 +181,36 @@ class ChatService {
       _drainPhotoQueue();
     }
 
-    // Isi imageData dari file lokal (paralel terbatas); yang belum ada → antri download.
-    // Load foto lokal + trigger download untuk yang belum ada. Background
-    // (tidak di-await) supaya teks tampil dulu, foto nyusul.
+    // Isi imageData dari file lokal (batch decrypt 1 isolate per chunk).
+    // Background (tidak di-await) supaya teks tampil dulu, foto nyusul.
+    // Chunk kecil → foto pertama muncul cepat, sisanya menyusul berurutan.
     void loadPhotosAsync(List<MessageModel> models) {
       if (models.isEmpty) return;
-      // Jangan buat gate baru tiap kali — pakai gate global supaya tidak
-      // kelebihan isolate decrypt sekaligus.
-      Future.wait(models.where((m) {
+      final photos = models.where((m) {
         return m.type == 'image' || m.type == 'view_once' || m.type == 'view_once_expired';
-      }).map((m) async {
-        final data = await _photoLoadGate.run(() async {
-          final cached = await PhotoCache.instance.load(cacheKey, m.id);
-          return cached;
-        });
-        if (data != null) {
+      }).toList();
+      if (photos.isEmpty) return;
+      _photoLoadGate.run(() async {
+        for (var i = 0; i < photos.length; i += 20) {
           if (controller.isClosed) return;
-          final idx = _current.indexWhere((x) => x.id == m.id);
-          if (idx >= 0 && _current[idx].imageData.isEmpty) {
-            _current[idx] = _current[idx].copyWith(imageData: data);
-            controller.add(List.unmodifiable(_current));
-            scheduleCacheSave();
+          final chunk = photos.skip(i).take(20).map((m) => m.id).toList();
+          final map = await PhotoCache.instance.loadMany(cacheKey, chunk);
+          if (controller.isClosed) return;
+          for (final m in photos.skip(i).take(20)) {
+            final data = map[m.id];
+            if (data == null || data.isEmpty) {
+              queuePhotoDownload(m);
+              continue;
+            }
+            final idx = _current.indexWhere((x) => x.id == m.id);
+            if (idx >= 0 && _current[idx].imageData.isEmpty) {
+              _current[idx] = _current[idx].copyWith(imageData: data);
+              controller.add(List.unmodifiable(_current));
+              scheduleCacheSave();
+            }
           }
-        } else {
-          queuePhotoDownload(m);
         }
-      }));
+      });
     }
 
     Future<List<MessageModel>> fetchServer({DateTime? before, int limit = 100}) async {

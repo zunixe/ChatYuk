@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -65,6 +66,37 @@ Future<String?> _decStr(Map<String, dynamic> args) async {
     );
     final clear = await aes.decrypt(box, secretKey: key);
     return utf8.decode(clear);
+  } catch (_) {
+    return null;
+  }
+}
+
+// Top-level function untuk compute() — decrypt BANYAK foto sekaligus dalam
+// SATU isolate. Baca file + decrypt di background; hasil Map<messageId, b64>.
+// Jauh lebih cepat daripada decrypt satu-satu (tiap call spawn isolate baru).
+Future<Map<String, String>?> _decBatch(Map<String, dynamic> args) async {
+  try {
+    final paths = (args['paths'] as Map).cast<String, String>();
+    final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
+    final key = SecretKey(List<int>.from(keyBytes));
+    final aes = AesGcm.with256bits();
+    final result = <String, String>{};
+    await Future.wait(paths.entries.map((e) async {
+      try {
+        final f = File(e.value);
+        if (!await f.exists()) return;
+        final encoded = await f.readAsString();
+        final payload = jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
+        final box = SecretBox(
+          base64Decode(payload['c'] as String),
+          nonce: base64Decode(payload['n'] as String),
+          mac: Mac(base64Decode(payload['m'] as String)),
+        );
+        final clear = await aes.decrypt(box, secretKey: key);
+        result[e.key] = utf8.decode(clear);
+      } catch (_) {}
+    }));
+    return result;
   } catch (_) {
     return null;
   }
@@ -154,6 +186,19 @@ class MessageCache {
       final key = await _getKey();
       final keyBytes = await key.extractBytes();
       return await compute(_decStr, {'encoded': encoded, 'keyBytes': keyBytes});
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Dekripsi BANYAK foto dalam SATU isolate (baca file + decrypt).
+  /// paths = Map<messageId, pathFileEnkripsi> → hasil Map<messageId, b64>.
+  Future<Map<String, String>?> decryptMany(Map<String, String> paths) async {
+    try {
+      if (paths.isEmpty) return {};
+      final key = await _getKey();
+      final keyBytes = await key.extractBytes();
+      return await compute(_decBatch, {'paths': paths, 'keyBytes': keyBytes});
     } catch (_) {
       return null;
     }
