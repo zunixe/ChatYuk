@@ -1,7 +1,7 @@
 import 'package:intl/intl.dart';
 
 DateTime parseDate(dynamic v) {
-  if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
+  if (v == null) return DateTime.now();
   if (v is DateTime) return v;
   if (v is String) {
     final dt = DateTime.tryParse(v);
@@ -84,14 +84,26 @@ int notifIdForKey(String key) {
   return hash.abs() & 0x7FFFFFFF;
 }
 
+final _snakeKeyCache = <String, Map<String, String>>{};
+
 /// Konversi key snake_case (dari Postgres) → camelCase (untuk model Dart).
+/// Cache hanya untuk mapping nama key (snake→camel), BUKAN nilai — tiap row
+/// punya nilai berbeda, jadi cache seluruh Map<String, dynamic> akan merusak data.
 Map<String, dynamic> snakeToCamel(Map<String, dynamic> map) {
-  return map.map((k, v) {
-    final parts = k.split('_');
-    if (parts.length <= 1) return MapEntry(k, v);
-    final camel = parts.first +
-        parts.skip(1).where((p) => p.isNotEmpty)
-            .map((p) => p[0].toUpperCase() + p.substring(1)).join();
-    return MapEntry(camel, v);
-  });
+  final keyStr = map.keys.join(',');
+  final keyMap = _snakeKeyCache[keyStr] ?? (() {
+    final m = <String, String>{};
+    for (final k in map.keys) {
+      final parts = k.split('_');
+      if (parts.length <= 1) {
+        m[k] = k;
+      } else {
+        m[k] = parts.first +
+            parts.skip(1).where((p) => p.isNotEmpty)
+                .map((p) => p[0].toUpperCase() + p.substring(1)).join();
+      }
+    }
+    return _snakeKeyCache[keyStr] = m;
+  })();
+  return map.map((k, v) => MapEntry(keyMap[k] ?? k, v));
 }

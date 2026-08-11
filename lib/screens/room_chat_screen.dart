@@ -42,7 +42,8 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     _auth = context.read<AuthProvider>();
     _chat = context.read<ChatProvider>();
     activeChatId.value = widget.room.id;
-    _msgsStream = _chat.getRoomMessages(widget.room.id);
+    final msgsHandle = _chat.getRoomMessages(widget.room.id);
+    _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
     _pointsProv = context.read<PointsProvider>();
     _joinRoom();
@@ -138,7 +139,6 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
       }
       _scrollToBottom();
     } finally {
-      await Future.delayed(const Duration(milliseconds: 500));
       _isSending = false;
     }
   }

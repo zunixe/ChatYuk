@@ -59,7 +59,13 @@ class MessageModel {
     };
   }
 
-  MessageModel copyWith({String? imageData, String? type}) {
+  MessageModel copyWith({
+    String? imageData,
+    String? type,
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
+  }) {
     return MessageModel(
       id: id,
       senderId: senderId,
@@ -70,9 +76,9 @@ class MessageModel {
       type: type ?? this.type,
       imageData: imageData ?? this.imageData,
       timestamp: timestamp,
-      repliedToId: repliedToId,
-      repliedToText: repliedToText,
-      repliedToSenderName: repliedToSenderName,
+      repliedToId: repliedToId ?? this.repliedToId,
+      repliedToText: repliedToText ?? this.repliedToText,
+      repliedToSenderName: repliedToSenderName ?? this.repliedToSenderName,
     );
   }
 }

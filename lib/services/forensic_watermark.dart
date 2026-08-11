@@ -31,7 +31,7 @@ class WatermarkDetect {
 class ForensicWatermark {
   ForensicWatermark._();
 
-  static const int size = 1024;
+  static const int size = 1600;
   static const int blockSize = 64;
   static const int coeffsPerBlock = 32;
   static const double alpha = 50.0;
@@ -270,7 +270,7 @@ class ForensicWatermark {
     // grid = size/blockSize = 16 blok pada sisi terpanjang. Saat ekstraksi,
     // blockSize harus mengikuti ukuran gambar agar grid tetap 16 blok.
     const gridBlocks = 16;
-    const scales = [1024, 768, 512, 448, 384, 320, 256, 224, 192];
+    const scales = [1600, 1024, 768, 512, 448, 384, 320, 256, 224, 192];
     const shifts = [0, -8, 8, -16, 16];
 
     // Kumpulkan SEMUA ekstraksi (tiap skala × shift) untuk evaluasi per seed.

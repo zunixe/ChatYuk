@@ -64,6 +64,15 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> forceLogout(String targetUid) async {
+    try {
+      await _service.forceLogout(targetUid);
+    } catch (e) {
+      debugPrint('[ADMIN] forceLogout error: $e');
+      rethrow;
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;

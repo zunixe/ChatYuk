@@ -65,11 +65,16 @@ class RoomProvider extends ChangeNotifier {
   }
 
   void _applyCounts() {
-    _rooms = _rooms
-        .map((r) => r.onlineCount == (_counts[r.id] ?? 0)
-            ? r
-            : r.copyWith(onlineCount: _counts[r.id] ?? 0))
-        .toList();
+    bool changed = false;
+    final updated = _rooms.map((r) {
+      final count = _counts[r.id] ?? 0;
+      if (r.onlineCount != count) {
+        changed = true;
+        return r.copyWith(onlineCount: count);
+      }
+      return r;
+    }).toList();
+    if (changed) _rooms = updated;
   }
 
   Future<void> seedRooms() async {

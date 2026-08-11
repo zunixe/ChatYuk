@@ -263,7 +263,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       debugPrint('[GOOGLE] login signInWithGoogle error: $e');
-      _snack('Google sign in gagal: $e');
+      _snack('${s.errGoogleSignIn}$e');
     }
     if (mounted) setState(() => _googleLoading = false);
   }

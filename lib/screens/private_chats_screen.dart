@@ -47,10 +47,17 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     super.dispose();
   }
 
+  bool _pageDebounce = false;
+
   void _onScroll() {
+    if (_pageDebounce) return;
     if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 100) {
+      _pageDebounce = true;
       _page++;
       setState(() {});
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) _pageDebounce = false;
+      });
     }
   }
 

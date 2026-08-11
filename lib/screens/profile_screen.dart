@@ -48,6 +48,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _uploading = false;
+  bool _loggingOut = false;
 
   final AuthService _authService = AuthService();
   List<UserPhoto> _photos = [];
@@ -730,7 +731,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 12),
 
                   // Pengaturan
-                  _SectionLabel(label: s.isId ? 'Pengaturan' : 'Settings'),
+                  _SectionLabel(label: s.titleSettings),
                   const SizedBox(height: 6),
                   _SectionCard(children: [
                     // Notifikasi
@@ -776,7 +777,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 child: const Icon(Icons.admin_panel_settings, color: AppTheme.primary, size: 20),
                               ),
                               const SizedBox(width: 12),
-                              const Expanded(child: Text('Admin Panel', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600))),
+                              Expanded(child: Text(s.adminPanel, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600))),
                               const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
                             ],
                           ),
@@ -1006,7 +1007,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: () async {
+                      onPressed: _loggingOut ? null : () async {
+                        _loggingOut = true;
                         final chat = context.read<ChatProvider>();
                         await auth.signOut();
                         chat.reset();

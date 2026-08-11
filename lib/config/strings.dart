@@ -170,6 +170,7 @@ class S {
   String get errPhotoSave     => isId ? 'Gagal simpan foto: '         : 'Failed to save photo: ';
   String get errPhotoLoad     => isId ? 'Gagal membaca gambar'        : 'Failed to read image';
   String get msgPhotoExpired  => isId ? '⏰ Foto sudah expired'        : '⏰ Photo expired';
+  String get msgPhotoTapToLoad => isId ? 'Ketuk untuk memuat foto'     : 'Tap to load photo';
 
   // ── Galeri Foto Pribadi ──
   String get labelGallery     => isId ? 'Foto Saya'                    : 'My Photos';
@@ -315,4 +316,38 @@ class S {
   String get tooltipPhoto       => isId ? 'Foto'                               : 'Photo';
   String get labelGenderFilter  => isId ? 'Gender'                             : 'Gender';
   String get btnDelete          => isId ? 'Hapus'                              : 'Delete';
+  String get adminPanel          => isId ? 'Admin Panel'                        : 'Admin Panel';
+  String get statsUsers          => isId ? 'Users'                              : 'Users';
+  String get statsActive         => isId ? 'Active'                             : 'Active';
+  String get statsMsgs           => isId ? 'Msgs'                               : 'Msgs';
+  String get statsRooms          => isId ? 'Rooms'                              : 'Rooms';
+  String get statsReg            => isId ? 'Reg.'                               : 'Reg.';
+  String get statsAnon           => isId ? 'Anon'                               : 'Anon';
+  String get statsAvg            => isId ? 'Avg'                                : 'Avg';
+  String get statsTotal          => isId ? 'Total'                              : 'Total';
+  String get adminNoUsers        => isId ? 'Tidak ada user'                    : 'No users';
+  String get adminTopEarners     => isId ? 'Top Earners'                        : 'Top Earners';
+  String get adminMassBonus      => isId ? 'Bonus Massal'                       : 'Mass Bonus';
+  String get adminForceLogout    => isId ? 'Force Logout'                       : 'Force Logout';
+  String get adminPointsSystem   => isId ? 'Sistem Poin'                        : 'Points System';
+  String get adminReports        => isId ? 'Laporan'                            : 'Reports';
+  String get adminNoReports      => isId ? 'Tidak ada laporan'                  : 'No reports';
+  String get adminDangerZone     => isId ? 'Zona Bahaya'                        : 'Danger Zone';
+  String get adminResetAllPoints => isId ? 'Reset semua user ke 50 poin'       : 'Reset all users to 50 points';
+  String get adminResetAllTitle  => isId ? 'Reset Semua Poin?'                  : 'Reset All Points?';
+  String get adminResetAllBody   => isId ? 'Semua user akan memiliki 50 poin.' : 'All users will have 50 points.';
+  String get adminWipeAll        => isId ? 'Reset Semua'                        : 'Wipe All';
+  String get adminReset          => isId ? 'Reset'                              : 'Reset';
+  String get adminLogout         => isId ? 'Keluar'                             : 'Logout';
+  String get adminRunning        => isId ? 'Berjalan'                           : 'Running';
+  String get adminPaused         => isId ? 'Dihentikan'                          : 'Paused';
+  String get adminRealtimeDesc   => isId ? 'Realtime — efek langsung ke semua device' : 'Realtime — immediate effect on all devices';
+  String get adminRegisteredOnly => isId ? 'Hanya user registered'              : 'Registered users only';
+  String get btnSend              => isId ? 'Kirim'                               : 'Send';
+  String get adminStuckUsers     => isId ? 'user terjebak (0 poin)'             : 'users stuck (0 points)';
+  String get onlineActiveUsers   => isId ? 'pengguna aktif'                     : 'active users';
+  String get labelVerified       => isId ? 'Terverifikasi'                      : 'Verified';
+  String get lobbyCountryHint    => isId ? 'Negara / Country'                   : 'Country / Negara';
+  String get donateCopyAddress   => isId ? 'Salin Alamat '                      : 'Copy Address ';
+  String get googleSignInFailed  => isId ? 'Google sign in gagal: '             : 'Google sign in failed: ';
 }
