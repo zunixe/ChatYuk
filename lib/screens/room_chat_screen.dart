@@ -26,8 +26,8 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   final _scrollCtrl = ScrollController();
   bool _showUsers = false;
   bool _sheetOpen = false;
-  AuthProvider? _auth;
-  ChatProvider? _chat;
+  late AuthProvider _auth;
+  late ChatProvider _chat;
   int _lastMsgCount = 0;
   bool _readBonusClaimed = false;
   int _roomSendCount = 0;
@@ -37,19 +37,13 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   late Stream<List<UserModel>> _usersStream;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _auth = context.read<AuthProvider>();
-    _chat = context.read<ChatProvider>();
-  }
-
-  @override
   void initState() {
     super.initState();
+    _auth = context.read<AuthProvider>();
+    _chat = context.read<ChatProvider>();
     activeChatId.value = widget.room.id;
-    final chat = context.read<ChatProvider>();
-    _msgsStream = chat.getRoomMessages(widget.room.id);
-    _usersStream = chat.getOnlineUsersInRoom(widget.room.id);
+    _msgsStream = _chat.getRoomMessages(widget.room.id);
+    _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
     _pointsProv = context.read<PointsProvider>();
     _joinRoom();
     _scrollCtrl.addListener(_onRoomScroll);
@@ -82,9 +76,9 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     if (activeChatId.value == widget.room.id) {
       activeChatId.value = null;
     }
-    final uid = _auth?.uid;
+    final uid = _auth.uid;
     if (uid != null) {
-      _chat?.leaveRoom(widget.room.id, uid);
+      _chat.leaveRoom(widget.room.id, uid);
     }
     _msgCtrl.dispose();
     _scrollCtrl.dispose();

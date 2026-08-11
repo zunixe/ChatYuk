@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'message_cache.dart';
 
@@ -51,7 +52,7 @@ class PhotoCache {
       if (await folder.exists()) {
         await folder.delete(recursive: true);
       }
-    } catch (_) {}
+    } catch (e) { debugPrint('[PhotoCache] clearAll ignored: $e'); }
   }
 
   /// Hapus foto lebih tua dari 7 hari — panggil sesekali (startup).
@@ -68,6 +69,6 @@ class PhotoCache {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) { debugPrint('[PhotoCache] clearAll ignored: $e'); }
   }
 }

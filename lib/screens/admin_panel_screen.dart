@@ -36,11 +36,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       ..showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
   }
 
-  final _cardDeco = BoxDecoration(
-    color: AppTheme.bgCard,
-    borderRadius: BorderRadius.circular(12),
-  );
-
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<AdminProvider>();

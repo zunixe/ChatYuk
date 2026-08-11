@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import '../widgets/async_photo.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -975,7 +976,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   children: [
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
-                                      child: Image.memory(base64Decode(_photos[i].photo), fit: BoxFit.cover),
+                                      child: AsyncPhotoThumbnail(base64: _photos[i].photo),
                                     ),
                                     Positioned(
                                       top: 4, right: 4,
@@ -1179,7 +1180,7 @@ class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
         itemBuilder: (ctx, i) => Center(
           child: InteractiveViewer(
             maxScale: 4,
-            child: Image.memory(base64Decode(widget.photos[i].photo), fit: BoxFit.contain),
+            child: AsyncPhotoViewer(base64: widget.photos[i].photo),
           ),
         ),
       ),

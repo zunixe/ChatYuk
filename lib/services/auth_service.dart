@@ -363,7 +363,7 @@ class AuthService {
           final row = payload.newRecord;
           final model = UserModel.fromMap(id, snakeToCamel(row));
           controller.add(model);
-        } catch (_) {}
+        } catch (e) { debugPrint('[AuthService] onMyProfileUpdates ignored: $e'); }
       },
     );
     channel.subscribe();
