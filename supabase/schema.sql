@@ -37,7 +37,9 @@ create table if not exists public.rooms (
   name text not null,
   description text not null default '',
   icon text not null default '💬',
-  "order" int not null default 0
+  "order" int not null default 0,
+  country text not null default 'Indonesia',
+  category text not null default 'general'
 );
 
 alter table public.rooms enable row level security;

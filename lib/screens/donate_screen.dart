@@ -277,7 +277,7 @@ class _NetworkCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   GestureDetector(
-                    onTap: () => onCopy(network.address, 'Alamat ${network.label}'),
+                    onTap: () => onCopy(network.address, '${s.donateCopyAddress}${network.label}'),
                     child: const Icon(Icons.copy, size: 18, color: AppTheme.primary),
                   ),
                 ],

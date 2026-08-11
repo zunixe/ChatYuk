@@ -10,16 +10,14 @@ class ChatProvider extends ChangeNotifier {
   List<String> _blockedUids = [];
   Future<List<String>>? _loadingBlockedUids;
 
-  // Stream cache untuk private chats — Mencegah StreamBuilder resubscribe tiap build.
-  // Hapus cache setelah semua listener cancel karena controller mati (channel dihapus).
-  final _privateChatsCache = <String, Stream<List<PrivateChatInfo>>>{};
+  
 
   List<String> get blockedUids => _blockedUids;
 
   // Room chat — TIDAK di-cache karena stream mati saat RoomChatScreen dispose.
   // Setiap kali masuk room, stream baru dibuat agar pesan selalu fresh.
-  Stream<List<MessageModel>> getRoomMessages(String roomId) {
-    return _service.getRoomMessagesCached(roomId);
+  ChatMessageStream getRoomMessages(String roomId) {
+    return _service.getRoomMessages(roomId);
   }
 
   Future<void> sendRoomMessage({
@@ -67,7 +65,7 @@ class ChatProvider extends ChangeNotifier {
     );
   }
 
-  Stream<List<MessageModel>> getPrivateChatMessages(String chatId) {
+  ChatMessageStream getPrivateChatMessages(String chatId) {
     // Jangan cache stream private chat — controller.onCancel di _cachedMessagesStream
     // memanggil removeChannel saat screen ditutup, sehingga stream lama tidak emit lagi.
     // Setiap buka chat harus dapat stream baru yang fresh.
@@ -177,7 +175,6 @@ class ChatProvider extends ChangeNotifier {
 
   void reset() {
     _blockedUids = [];
-    _privateChatsCache.clear();
     _service.clearCachedStreams();
     MessageCache.instance.clearAll();
     PhotoCache.instance.clearAll();

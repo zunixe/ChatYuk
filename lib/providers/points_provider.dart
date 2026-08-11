@@ -182,12 +182,14 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       'online_60min': isId ? 'Online 60 menit' : 'Online 60 min',
       'online_120min': isId ? 'Online 120 menit' : 'Online 120 min',
     };
-    final label = labels[_lastToastMsg!] ?? '';
     final msg = _lastToastMsg;
     _lastToastMsg = null;
+    if (msg == null) return;
+    final label = labels[msg] ?? '';
     if (label.isNotEmpty) {
       final pts = {'online_5min': 5, 'online_30min': 10, 'online_60min': 15, 'online_120min': 15};
-      showPointsToast(context, isId ? '+${pts[msg!]} Poin — $label' : '+${pts[msg!]} Points — $label');
+      final p = pts[msg] ?? 0;
+      showPointsToast(context, isId ? '+$p Poin — $label' : '+$p Points — $label');
     }
   }
 

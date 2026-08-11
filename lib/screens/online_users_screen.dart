@@ -201,7 +201,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(s.titleOnline, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
-              Text('${prov.users.length} ${s.isId ? "pengguna aktif" : "active users"}',
+              Text('${prov.users.length} ${s.onlineActiveUsers}',
                 style: const TextStyle(color: Colors.white70, fontSize: 12)),
             ],
           ),
@@ -462,8 +462,8 @@ class _UserCard extends StatelessWidget {
                         ),
                         if (user.isRegistered) ...[
                           const SizedBox(width: 4),
-                          const Tooltip(
-                            message: 'Verified',
+Tooltip(
+    message: s.labelVerified,
                             child: Icon(Icons.verified, size: 15, color: Color(0xFF4A90E2)),
                           ),
                         ],

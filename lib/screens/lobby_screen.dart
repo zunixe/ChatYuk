@@ -98,7 +98,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         isExpanded: true,
                         isDense: true,
                         menuMaxHeight: 400,
-                        hint: const Text('Negara / Country', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                        hint: Text(s.lobbyCountryHint, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                         style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
                         items: [
                           for (final c in allCountries)

@@ -8,13 +8,50 @@ import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
 import '../utils.dart';
 
+// Concurrency limiter: max N operasi paralel, sisanya antri.
+class _Semaphore {
+  final int max;
+  int _count = 0;
+  final _waiters = <Completer<void>>[];
+  _Semaphore(this.max);
+  Future<void> acquire() async {
+    if (_count < max) { _count++; return; }
+    final c = Completer<void>();
+    _waiters.add(c);
+    await c.future;
+  }
+  void release() {
+    _count--;
+    if (_waiters.isNotEmpty) {
+      _waiters.removeAt(0).complete();
+      _count++;
+    }
+  }
+  Future<T> run<T>(Future<T> Function() fn) async {
+    await acquire();
+    try { return await fn(); }
+    finally { release(); }
+  }
+}
+
+// Handle stream chat — expose stream + aksi loadOlder untuk pagination.
+class ChatMessageStream {
+  final Stream<List<MessageModel>> stream;
+  final Future<void> Function() loadOlder;
+  final Future<void> Function(String messageId) fetchImage;
+  const ChatMessageStream({
+    required this.stream,
+    required this.loadOlder,
+    required this.fetchImage,
+  });
+}
+
 class ChatService {
   final SupabaseClient _sb = SupabaseConfig.client;
 
   // ── Room Chat ──
 
-  /// Stream pesan room dengan cache lokal (instan) + realtime server.
-  Stream<List<MessageModel>> getRoomMessagesCached(String roomId) {
+  ChatMessageStream getRoomMessages(String roomId) {
     return _cachedMessagesStream(cacheKey: 'room_$roomId');
   }
 
@@ -44,17 +81,16 @@ class ChatService {
     return '${ids[0]}_${ids[1]}';
   }
 
-  Stream<List<MessageModel>> getPrivateChatMessages(String chatId) {
+  ChatMessageStream getPrivateChatMessages(String chatId) {
     return _cachedMessagesStream(cacheKey: 'private_$chatId');
   }
 
-  /// Gabungan cache lokal (instan) + realtime server.
   /// - loadCache dan fetchServer jalan PARALEL untuk tampilan secepat mungkin.
   /// - INSERT event langsung di-append ke list tanpa refetch (0 network round-trip).
   /// - UPDATE/DELETE tetap refetch karena perlu reorder.
   /// - Poll fallback hanya jalan kalau realtime diam > 25s (event terlewat),
   ///   supaya tidak duplikasi pekerjaan realtime tiap 30 detik.
-  Stream<List<MessageModel>> _cachedMessagesStream({
+  ChatMessageStream _cachedMessagesStream({
     required String cacheKey,
   }) {
     final isPrivate = cacheKey.startsWith('private_');
@@ -64,6 +100,9 @@ class ChatService {
 
     final controller = StreamController<List<MessageModel>>.broadcast();
     var _current = <MessageModel>[];
+    var _loadingOlder = false;
+    var _hasMore = true;
+    final _loadMoreReqs = <Completer<void>>[];
 
     // Private chat: cutoff waktu delete — pesan lama (<= cutoff) tidak
     // pernah ditampilkan lagi untuk user yang menghapus, meski ada di server.
@@ -98,10 +137,14 @@ class ChatService {
     final cols = isPrivate ? '$baseCols,$replyCols' : baseCols;
 
     // Sync foto otomatis: server → file lokal terenkripsi. Download lazy
-    // (2-3 paralel) hanya untuk pesan yang fotonya belum ada di lokal.
+    // (paralel) hanya untuk pesan yang fotonya belum ada di lokal.
     final photoQueue = <MessageModel>[];
     var downloading = 0;
-    const maxConcurrentPhotos = 3;
+    const maxConcurrentPhotos = 5;
+
+    // Batasi load foto lokal paralel — 100 foto decrypt sekaligus bikin
+    // buka chat lambat. Max 4 parallel, sisanya antri.
+    final _photoLoadGate = _Semaphore(4);
 
     Future<void> _drainPhotoQueue() async {
       while (photoQueue.isNotEmpty && downloading < maxConcurrentPhotos) {
@@ -138,24 +181,38 @@ class ChatService {
       _drainPhotoQueue();
     }
 
-    // Isi imageData dari file lokal (paralel); yang belum ada → antri download.
+    // Isi imageData dari file lokal (paralel terbatas); yang belum ada → antri download.
     Future<List<MessageModel>> withLocalPhotos(List<MessageModel> models) async {
       return Future.wait(models.map((m) async {
         if (m.type != 'image' && m.type != 'view_once' && m.type != 'view_once_expired') return m;
-        final cached = await PhotoCache.instance.load(cacheKey, m.id);
-        if (cached != null) return m.copyWith(imageData: cached);
+        final data = await _photoLoadGate.run(() async {
+          final cached = await PhotoCache.instance.load(cacheKey, m.id);
+          return cached;
+        });
+        if (data != null) return m.copyWith(imageData: data);
         queuePhotoDownload(m);
         return m.copyWith(imageData: '');
       }));
     }
 
-    Future<List<MessageModel>> fetchServer() async {
-      final rows = await _sb
+    Future<List<MessageModel>> fetchServer({DateTime? before, int limit = 100}) async {
+      var query = _sb
           .from(table)
           .select(cols)
           .eq(filterKey, filterVal)
-          .order('created_at', ascending: true)
-          .limit(500);
+          .order('created_at', ascending: false)
+          .limit(limit);
+      if (before != null) {
+        // Query pesan dengan timestamp < before (lebih lama), pakai lt().
+        query = _sb
+            .from(table)
+            .select(cols)
+            .eq(filterKey, filterVal)
+            .lt('created_at', before.toUtc().toIso8601String())
+            .order('created_at', ascending: false)
+            .limit(limit);
+      }
+      final rows = await query;
       final models = rows
           .map((row) => MessageModel.fromMap('${row['id']}', snakeToCamel(row)))
           .toList();
@@ -185,7 +242,7 @@ class ChatService {
 
     Future<void> reload() async {
       try {
-        final server = await fetchServer();
+        final server = await fetchServer(limit: 100);
         if (controller.isClosed) return;
         if (isPrivate) {
           _hiddenCutoff = await fetchHiddenCutoff();
@@ -193,7 +250,20 @@ class ChatService {
             server.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
           }
         }
-        _current = server;
+        // MERGE: server DESC (newest dulu) → reverse jadi ASC (oldest dulu).
+        // _current (realtime) yang belum ada di server ditambahkan di akhir
+        // (paling baru). JANGAN sort by timestamp: parseDate antara REST API
+        // (string → .toLocal()) dan realtime payload (DateTime → UTC) bisa
+        // berbeda 7 jam sehingga urutan kacau.
+        final merged = List<MessageModel>.from(server.reversed);
+        final seenIds = merged.map((m) => m.id).toSet();
+        for (final m in _current) {
+          if (seenIds.add(m.id)) merged.add(m);
+        }
+        if (_hiddenCutoff != null) {
+          merged.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
+        }
+        _current = merged;
         controller.add(_current);
         scheduleCacheSave();
       } catch (e) {
@@ -285,6 +355,68 @@ class ChatService {
       reload();
     });
 
+    // Load pesan lebih lama (pagination): ambil 100 pesan SEBELUM pesan tertua.
+    Future<void> loadOlder() async {
+      if (_loadingOlder || !_hasMore || _current.isEmpty || controller.isClosed) return;
+      _loadingOlder = true;
+      try {
+        final oldest = _current.first.timestamp;
+        final older = await fetchServer(before: oldest, limit: 100);
+        if (controller.isClosed) return;
+        if (older.isEmpty) {
+          _hasMore = false;
+        } else {
+          final seen = _current.map((m) => m.id).toSet();
+          final newMsgs = older.reversed.where((m) => seen.add(m.id)).toList();
+          if (newMsgs.isEmpty) {
+            _hasMore = false;
+          } else {
+            _current = [...newMsgs, ..._current];
+            controller.add(List.unmodifiable(_current));
+            scheduleCacheSave();
+          }
+        }
+      } catch (e) {
+        debugPrint('[chat pagination] loadOlder error: $e');
+      } finally {
+        _loadingOlder = false;
+        while (_loadMoreReqs.isNotEmpty) {
+          _loadMoreReqs.removeAt(0).complete();
+        }
+      }
+    }
+
+    // Ambil image_data satu pesan (icon refresh di bubble) — dari PhotoCache
+    // atau server, lalu update _current.
+    Future<void> fetchImage(String messageId) async {
+      try {
+        final idx = _current.indexWhere((x) => x.id == messageId);
+        if (idx < 0) return;
+        final m = _current[idx];
+        final cached = await PhotoCache.instance.load(cacheKey, m.id);
+        var data = cached;
+        if (data == null) {
+          final row = await _sb
+              .from(table)
+              .select('image_data')
+              .eq('id', m.id)
+              .maybeSingle();
+          data = row?['image_data'] as String? ?? '';
+          if (data.isNotEmpty) {
+            await PhotoCache.instance.save(cacheKey, m.id, data);
+          }
+        }
+        if (controller.isClosed) return;
+        if (data != null && data.isNotEmpty) {
+          _current[idx] = _current[idx].copyWith(imageData: data);
+          controller.add(List.unmodifiable(_current));
+          scheduleCacheSave();
+        }
+      } catch (e) {
+        debugPrint('[chat pagination] fetchImage $messageId error: $e');
+      }
+    }
+
     controller.onCancel = () {
       pollTimer.cancel();
       saveDebounce?.cancel();
@@ -298,7 +430,11 @@ class ChatService {
       _sb.removeChannel(channel);
     };
 
-    return controller.stream;
+    return ChatMessageStream(
+      stream: controller.stream,
+      loadOlder: loadOlder,
+      fetchImage: fetchImage,
+    );
   }
 
   Future<String> startPrivateChat({

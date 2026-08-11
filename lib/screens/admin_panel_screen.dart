@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
 import '../providers/admin_provider.dart';
 import '../providers/points_provider.dart';
-import '../services/admin_service.dart';
+import '../providers/locale_provider.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -39,15 +39,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<AdminProvider>();
+    final s = context.watch<LocaleProvider>().s;
     final stats = admin.stats;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
-        title: const Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.admin_panel_settings, size: 20, color: AppTheme.primary),
-          SizedBox(width: 8),
-          Text('Admin Panel'),
+        title: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.admin_panel_settings, size: 20, color: AppTheme.primary),
+          const SizedBox(width: 8),
+          Text(s.adminPanel),
         ]),
         actions: [
           IconButton(icon: const Icon(Icons.refresh_rounded, size: 20, color: AppTheme.primary), onPressed: () => admin.fetchStats()),
@@ -56,25 +57,25 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       body: admin.loading
           ? const Center(child: CircularProgressIndicator())
           : admin.error != null
-              ? _errorView(admin)
+              ? _errorView(admin, s)
               : RefreshIndicator(
                   onRefresh: () => admin.fetchStats(),
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                     children: [
-                      _statsGrid(stats),
+                      _statsGrid(stats, s),
                       const SizedBox(height: 8),
-                      _topEarners(stats),
+                      _topEarners(stats, s),
                       const SizedBox(height: 12),
-                      _controls(admin),
+                      _controls(admin, s),
                       const SizedBox(height: 12),
-                      _massBonus(admin),
+                      _massBonus(admin, s),
                       const SizedBox(height: 12),
-                      _reportedUsers(stats),
+                      _reportedUsers(stats, s),
                       const SizedBox(height: 12),
-                      _forceLogout(),
+                      _forceLogout(s),
                       const SizedBox(height: 12),
-                      _dangerZone(admin),
+                      _dangerZone(admin, s),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -82,26 +83,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  Widget _errorView(AdminProvider admin) {
+  Widget _errorView(AdminProvider admin, S s) {
     return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
       const SizedBox(height: 8),
       Text(admin.error!, style: const TextStyle(color: AppTheme.danger)),
       const SizedBox(height: 8),
-      ElevatedButton(onPressed: () => admin.fetchStats(), child: const Text('Retry')),
+      ElevatedButton(onPressed: () => admin.fetchStats(), child: Text(s.btnRetry)),
     ]));
   }
 
-  Widget _statsGrid(Map<String, dynamic>? stats) {
+  Widget _statsGrid(Map<String, dynamic>? stats, S s) {
     final items = [
-      ('Users', '${stats?['total_users'] ?? '-'}', Icons.people_outline, AppTheme.primary),
-      ('Active', '${stats?['active_today'] ?? '-'}', Icons.online_prediction, Colors.green),
-      ('Msgs', '${stats?['messages_today'] ?? '-'}', Icons.message_outlined, Colors.deepPurple),
-      ('Rooms', '${stats?['rooms_active'] ?? '-'}', Icons.chat_bubble_outline, Colors.teal),
-      ('Reg.', '${stats?['registered_users'] ?? '-'}', Icons.verified_outlined, Colors.blue),
-      ('Anon', '${stats?['anonymous_users'] ?? '-'}', Icons.person_outline, Colors.orange),
-      ('Avg', '${stats?['avg_points'] ?? '-'}', Icons.trending_up, Colors.amber.shade700),
-      ('Total', '${stats?['total_points'] ?? '-'}', Icons.monetization_on_outlined, Colors.pink),
+      (s.statsUsers, '${stats?['total_users'] ?? '-'}', Icons.people_outline, AppTheme.primary),
+      (s.statsActive, '${stats?['active_today'] ?? '-'}', Icons.online_prediction, Colors.green),
+      (s.statsMsgs, '${stats?['messages_today'] ?? '-'}', Icons.message_outlined, Colors.deepPurple),
+      (s.statsRooms, '${stats?['rooms_active'] ?? '-'}', Icons.chat_bubble_outline, Colors.teal),
+      (s.statsReg, '${stats?['registered_users'] ?? '-'}', Icons.verified_outlined, Colors.blue),
+      (s.statsAnon, '${stats?['anonymous_users'] ?? '-'}', Icons.person_outline, Colors.orange),
+      (s.statsAvg, '${stats?['avg_points'] ?? '-'}', Icons.trending_up, Colors.amber.shade700),
+      (s.statsTotal, '${stats?['total_points'] ?? '-'}', Icons.monetization_on_outlined, Colors.pink),
     ];
     return GridView.builder(
       shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
@@ -126,11 +127,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  Widget _topEarners(Map<String, dynamic>? stats) {
+  Widget _topEarners(Map<String, dynamic>? stats, S s) {
     final earners = (stats?['top_earners'] as List?) ?? [];
-    return _card('Top Earners', Icons.emoji_events_outlined, Colors.amber, [
+    return _card(s.adminTopEarners, Icons.emoji_events_outlined, Colors.amber, [
       if (earners.isEmpty)
-        const Text('No users', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        Text(s.adminNoUsers, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
       for (var i = 0; i < earners.length && i < 5; i++)
         Padding(
           padding: const EdgeInsets.only(bottom: 5),
@@ -159,14 +160,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           child: Row(children: [
             const Icon(Icons.warning_amber_rounded, size: 14, color: AppTheme.danger),
             const SizedBox(width: 4),
-            Text('${stats!['stuck_users']} users stuck (0 points)', style: const TextStyle(color: AppTheme.danger, fontSize: 11)),
+            Text('${stats!['stuck_users']} ${s.adminStuckUsers}', style: const TextStyle(color: AppTheme.danger, fontSize: 11)),
           ]),
         ),
     ]);
   }
 
-  Widget _controls(AdminProvider admin) {
-    return _card('Points System', Icons.toggle_on_outlined, AppTheme.primary, [
+  Widget _controls(AdminProvider admin, S s) {
+    return _card(s.adminPointsSystem, Icons.toggle_on_outlined, AppTheme.primary, [
       Row(children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -177,7 +178,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.circle, size: 8, color: admin.pointsEnabled ? Colors.green : AppTheme.danger),
             const SizedBox(width: 6),
-            Text(admin.pointsEnabled ? 'Running' : 'Paused',
+            Text(admin.pointsEnabled ? s.adminRunning : s.adminPaused,
               style: TextStyle(color: admin.pointsEnabled ? Colors.green : AppTheme.danger, fontSize: 12, fontWeight: FontWeight.w700)),
           ]),
         ),
@@ -192,12 +193,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         ),
       ]),
       const SizedBox(height: 2),
-      const Text('Realtime — efek langsung ke semua device', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+      Text(s.adminRealtimeDesc, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
     ]);
   }
 
-  Widget _massBonus(AdminProvider admin) {
-    return _card('Mass Bonus', Icons.card_giftcard, Colors.amber, [
+  Widget _massBonus(AdminProvider admin, S s) {
+    return _card(s.adminMassBonus, Icons.card_giftcard, Colors.amber, [
       Row(children: [
         Expanded(
           child: TextField(
@@ -205,7 +206,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             keyboardType: TextInputType.number,
             style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
             decoration: InputDecoration(
-              labelText: 'Points',
+              labelText: s.pointsBalance,
               isDense: true,
               filled: true,
               fillColor: AppTheme.bgInput,
@@ -223,20 +224,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             if (result != null) _toast('+$amount → ${result['affected']} users');
           },
           icon: const Icon(Icons.send_rounded, size: 16),
-          label: const Text('Send'),
+          label: Text(s.btnSend),
           style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
         ),
       ]),
       const SizedBox(height: 4),
-      const Text('Hanya user registered', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+      Text(s.adminRegisteredOnly, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
     ]);
   }
 
-  Widget _reportedUsers(Map<String, dynamic>? stats) {
+  Widget _reportedUsers(Map<String, dynamic>? stats, S s) {
     final reports = (stats?['reported_users'] as List?) ?? [];
-    return _card('Reports', Icons.flag_outlined, Colors.orange, [
+    return _card(s.adminReports, Icons.flag_outlined, Colors.orange, [
       if (reports.isEmpty)
-        const Text('No reports', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        Text(s.adminNoReports, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
       for (var i = 0; i < reports.length && i < 8; i++)
         Padding(
           padding: const EdgeInsets.only(bottom: 3),
@@ -255,15 +256,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     ]);
   }
 
-  Widget _forceLogout() {
-    return _card('Force Logout', Icons.logout, Colors.orange, [
+  Widget _forceLogout(S s) {
+    return _card(s.adminForceLogout, Icons.logout, Colors.orange, [
       Row(children: [
         Expanded(
           child: TextField(
             controller: _logoutCtrl,
             style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
             decoration: InputDecoration(
-              hintText: 'User ID',
+              hintText: s.labelUserId,
               isDense: true,
               filled: true,
               fillColor: AppTheme.bgInput,
@@ -277,12 +278,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           onPressed: () {
             final uid = _logoutCtrl.text.trim();
             if (uid.isEmpty) return;
-            AdminService(Supabase.instance.client).forceLogout(uid);
-            _toast('Force logout: ${uid.substring(0, 8)}...');
-            _logoutCtrl.clear();
+            try {
+              context.read<AdminProvider>().forceLogout(uid);
+              _toast('Force logout: ${uid.substring(0, 8)}...');
+              _logoutCtrl.clear();
+            } catch (e) {
+              _toast('Failed: $e');
+            }
           },
           icon: const Icon(Icons.logout, size: 16, color: Colors.orange),
-          label: const Text('Logout', style: TextStyle(color: Colors.orange)),
+          label: Text(s.adminLogout, style: const TextStyle(color: Colors.orange)),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.orange,
             visualDensity: VisualDensity.compact,
@@ -293,7 +298,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     ]);
   }
 
-  Widget _dangerZone(AdminProvider admin) {
+  Widget _dangerZone(AdminProvider admin, S s) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -304,11 +309,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       child: Row(children: [
         const Icon(Icons.warning_amber_rounded, size: 20, color: AppTheme.danger),
         const SizedBox(width: 10),
-        const Expanded(
+        Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Danger Zone', style: TextStyle(color: AppTheme.danger, fontSize: 13, fontWeight: FontWeight.w700)),
-            SizedBox(height: 2),
-            Text('Reset all users to 50 points', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+            Text(s.adminDangerZone, style: const TextStyle(color: AppTheme.danger, fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            Text(s.adminResetAllPoints, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
           ]),
         ),
         TextButton.icon(
@@ -317,24 +322,24 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               context: context,
               builder: (ctx) => AlertDialog(
                 backgroundColor: AppTheme.bgCard,
-                title: const Text('Reset All Points?', style: TextStyle(color: AppTheme.textPrimary)),
-                content: const Text('All users will have 50 points.', style: TextStyle(color: AppTheme.textSecondary)),
+                title: Text(s.adminResetAllTitle, style: const TextStyle(color: AppTheme.textPrimary)),
+                content: Text(s.adminResetAllBody, style: const TextStyle(color: AppTheme.textSecondary)),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.btnCancel)),
                   TextButton(
                     onPressed: () async {
                       Navigator.pop(ctx);
                       final count = await admin.resetAllPoints();
                       if (count != null) _toast('$count users reset');
                     },
-                    child: const Text('Wipe All', style: TextStyle(color: AppTheme.danger)),
+                    child: Text(s.adminWipeAll, style: const TextStyle(color: AppTheme.danger)),
                   ),
                 ],
               ),
             );
           },
           icon: const Icon(Icons.delete_sweep_rounded, size: 16, color: AppTheme.danger),
-          label: const Text('Reset', style: TextStyle(color: AppTheme.danger)),
+          label: Text(s.adminReset, style: const TextStyle(color: AppTheme.danger)),
           style: TextButton.styleFrom(
             backgroundColor: AppTheme.danger.withValues(alpha: 0.08),
             visualDensity: VisualDensity.compact,

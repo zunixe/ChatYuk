@@ -29,7 +29,7 @@ class GeoService {
   static const _providers = <String>[
     'https://ipwho.is/',
     'https://ipapi.co/json/',
-    'http://ip-api.com/json/',
+    'https://ip-api.com/json/',
   ];
 
   Future<GeoInfo?> detect() async {
