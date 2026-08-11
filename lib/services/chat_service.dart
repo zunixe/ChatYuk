@@ -158,11 +158,13 @@ class ChatService {
               .maybeSingle();
           final data = row?['image_data'] as String? ?? '';
           if (data.isNotEmpty) {
-            await PhotoCache.instance.save(cacheKey, m.id, data);
+            // save() menyimpan full-res + membuat thumbnail (dikembalikan).
+            // Bubble pakai thumbnail supaya decode cepat; full-res di PhotoCache.
+            final thumb = await PhotoCache.instance.save(cacheKey, m.id, data);
             if (controller.isClosed) return;
             final idx = _current.indexWhere((x) => x.id == m.id);
             if (idx >= 0 && _current[idx].imageData.isEmpty) {
-              _current[idx] = _current[idx].copyWith(imageData: data);
+              _current[idx] = _current[idx].copyWith(imageData: thumb ?? data);
               controller.add(List.unmodifiable(_current));
               scheduleCacheSave();
             }
@@ -316,7 +318,7 @@ class ChatService {
           if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!)) return;
           // Foto dari realtime langsung di-sync ke file lokal (fire-and-forget)
           if (msg.imageData.isNotEmpty) {
-            PhotoCache.instance.save(cacheKey, msg.id, msg.imageData).catchError((_) {});
+            PhotoCache.instance.save(cacheKey, msg.id, msg.imageData).catchError((_) => null);
           } else if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired') {
             queuePhotoDownload(msg);
           }
@@ -404,14 +406,15 @@ class ChatService {
       }
     }
 
-    // Ambil image_data satu pesan (icon refresh di bubble) — dari PhotoCache
-    // atau server, lalu update _current.
+    // Ambil foto satu pesan (icon refresh di bubble) — thumb dari PhotoCache
+    // atau server, lalu update _current. Bubble pakai thumb supaya cepat;
+    // full-res dimuat saat buka fullscreen.
     Future<void> fetchImage(String messageId) async {
       try {
         final idx = _current.indexWhere((x) => x.id == messageId);
         if (idx < 0) return;
         final m = _current[idx];
-        final cached = await PhotoCache.instance.load(cacheKey, m.id);
+        final cached = await PhotoCache.instance.loadThumb(cacheKey, m.id);
         var data = cached;
         if (data == null) {
           final row = await _sb
@@ -419,9 +422,9 @@ class ChatService {
               .select('image_data')
               .eq('id', m.id)
               .maybeSingle();
-          data = row?['image_data'] as String? ?? '';
-          if (data.isNotEmpty) {
-            await PhotoCache.instance.save(cacheKey, m.id, data);
+          final full = row?['image_data'] as String? ?? '';
+          if (full.isNotEmpty) {
+            data = await PhotoCache.instance.save(cacheKey, m.id, full) ?? full;
           }
         }
         if (controller.isClosed) return;

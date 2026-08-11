@@ -16,15 +16,19 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/chat_service.dart';
 import '../services/forensic_watermark.dart';
+import '../services/photo_cache.dart';
 import '../services/screen_secure_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../main.dart';
 import '../utils.dart';
 import 'user_info_screen.dart';
 
+// cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
+// ('private_$chatId' untuk private chat).
+String cacheKeyFor(String chatId) => 'private_$chatId';
+
 // Top-level function untuk compute() isolate — decode + resize + encode di background
-String? _processImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
+String? _processImage(Uint8List bytes) {  final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
   final resized = _resizeMaxSide(decoded, 1024);
   final jpg = img.encodeJpg(resized, quality: 85);
@@ -670,6 +674,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     return _MessageBubble(
                       key: ValueKey(msg.id),
                       msg: msg,
+                      chatKey: cacheKeyFor(widget.chatId),
                       isMe: isMe,
                       isRead: isRead,
                       isPending: isPending,
@@ -870,6 +875,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
 class _MessageBubble extends StatelessWidget {
   final MessageModel msg;
+  final String chatKey;
   final bool isMe;
   final bool isRead;
   final bool isPending;
@@ -880,6 +886,7 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     super.key,
     required this.msg,
+    required this.chatKey,
     required this.isMe,
     required this.isRead,
     this.isPending = false,
@@ -913,13 +920,18 @@ class _MessageBubble extends StatelessWidget {
                   if (msg.type == 'image' && msg.imageData.isNotEmpty)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: _MessageImage(imageData: msg.imageData),
+                      child: _MessageImage(
+                        imageData: msg.imageData,
+                        chatKey: chatKey,
+                        messageId: msg.id,
+                      ),
                     )
                   else if (msg.type == 'image' && msg.imageData.isEmpty && isImageDeferred)
                     _DeferredImage(onTap: () => onRetryImage?.call(msg.id))
                   else if (msg.type == 'view_once' || msg.type == 'view_once_expired')
                     _ViewOnceImage(
                       imageData: msg.imageData,
+                      chatKey: chatKey,
                       isMe: isMe,
                       messageId: msg.id,
                       isExpired: msg.type == 'view_once_expired',
@@ -1015,7 +1027,13 @@ class _DeferredImage extends StatelessWidget {
 
 class _MessageImage extends StatefulWidget {
   final String imageData;
-  const _MessageImage({required this.imageData});
+  final String chatKey;
+  final String messageId;
+  const _MessageImage({
+    required this.imageData,
+    required this.chatKey,
+    required this.messageId,
+  });
 
   @override
   State<_MessageImage> createState() => _MessageImageState();
@@ -1090,7 +1108,12 @@ class _MessageImageState extends State<_MessageImage> {
     final decoded = _decoded;
     if (decoded == null || !mounted) return;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => _PhotoViewerScreen(bytes: decoded.bytes)),
+      MaterialPageRoute(
+        builder: (_) => _PhotoViewerScreen(
+          bytes: decoded.bytes,
+          fullLoader: () => PhotoCache.instance.load(widget.chatKey, widget.messageId),
+        ),
+      ),
     );
   }
 }
@@ -1234,11 +1257,13 @@ final _viewOnceStates = <String, _ViewOnceTick>{};
 
 class _ViewOnceImage extends StatefulWidget {
   final String imageData;
+  final String chatKey;
   final bool isMe;
   final String? messageId;
   final bool isExpired;
   const _ViewOnceImage({
     required this.imageData,
+    required this.chatKey,
     required this.isMe,
     this.messageId,
     this.isExpired = false,
@@ -1334,6 +1359,11 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
         .push(MaterialPageRoute(
           builder: (_) => _PhotoViewerScreen(
             bytes: _decoded!.bytes,
+            fullLoader: () {
+              final id = widget.messageId;
+              if (id == null || id.startsWith('pending-')) return Future.value(null);
+              return PhotoCache.instance.load(widget.chatKey, id);
+            },
             countdown: _tick.countdown,
           ),
         ))
@@ -1650,20 +1680,45 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
 }
 
 // ── Photo Viewer Fullscreen ─────────────────────────────────────────────────
-// Menampilkan foto fullscreen (hitam) dengan zoom + close. Untuk view-once,
-// countdown diteruskan dari state pemilik sehingga timer terus berjalan.
+// Menampilkan foto fullscreen (hitam) dengan zoom + close. Bubble mengirim
+// THUMBNAIL (bytes) supaya viewer langsung tampil, lalu fullLoader mengambil
+// versi full-res dari PhotoCache dan menggantinya begitu siap.
+// Untuk view-once, countdown diteruskan dari state pemilik sehingga timer
+// terus berjalan.
 class _PhotoViewerScreen extends StatefulWidget {
   final Uint8List bytes;
+  final Future<String?> Function()? fullLoader;
   final ValueNotifier<int>? countdown;
-  const _PhotoViewerScreen({required this.bytes, this.countdown});
+  const _PhotoViewerScreen({required this.bytes, this.fullLoader, this.countdown});
 
   @override
   State<_PhotoViewerScreen> createState() => _PhotoViewerScreenState();
 }
 
 class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
+  Uint8List? _fullBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFull();
+  }
+
+  Future<void> _loadFull() async {
+    final loader = widget.fullLoader;
+    if (loader == null) return;
+    try {
+      final b64 = await loader();
+      if (b64 == null || b64.isEmpty || !mounted) return;
+      final bytes = await compute(_b64ToBytes, b64);
+      if (bytes == null || !mounted) return;
+      setState(() => _fullBytes = bytes);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bytes = _fullBytes ?? widget.bytes;
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -1672,9 +1727,22 @@ class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
             Center(
               child: InteractiveViewer(
                 maxScale: 5,
-                child: Image.memory(widget.bytes, fit: BoxFit.contain),
+                child: Image.memory(bytes, fit: BoxFit.contain),
               ),
             ),
+            if (_fullBytes == null && widget.fullLoader != null)
+              const Positioned(
+                top: 40,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                  ),
+                ),
+              ),
             Positioned(
               top: 8,
               left: 8,
@@ -1714,4 +1782,9 @@ class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
       ),
     );
   }
+}
+
+// Top-level untuk compute() — base64 → bytes (fullscreen viewer).
+Uint8List? _b64ToBytes(String b64) {
+  try { return base64Decode(b64); } catch (_) { return null; }
 }
