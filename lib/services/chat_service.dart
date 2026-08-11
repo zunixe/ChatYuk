@@ -182,16 +182,30 @@ class ChatService {
     }
 
     // Isi imageData dari file lokal (paralel terbatas); yang belum ada → antri download.
-    Future<List<MessageModel>> withLocalPhotos(List<MessageModel> models) async {
-      return Future.wait(models.map((m) async {
-        if (m.type != 'image' && m.type != 'view_once' && m.type != 'view_once_expired') return m;
+    // Load foto lokal + trigger download untuk yang belum ada. Background
+    // (tidak di-await) supaya teks tampil dulu, foto nyusul.
+    void loadPhotosAsync(List<MessageModel> models) {
+      if (models.isEmpty) return;
+      // Jangan buat gate baru tiap kali — pakai gate global supaya tidak
+      // kelebihan isolate decrypt sekaligus.
+      Future.wait(models.where((m) {
+        return m.type == 'image' || m.type == 'view_once' || m.type == 'view_once_expired';
+      }).map((m) async {
         final data = await _photoLoadGate.run(() async {
           final cached = await PhotoCache.instance.load(cacheKey, m.id);
           return cached;
         });
-        if (data != null) return m.copyWith(imageData: data);
-        queuePhotoDownload(m);
-        return m.copyWith(imageData: '');
+        if (data != null) {
+          if (controller.isClosed) return;
+          final idx = _current.indexWhere((x) => x.id == m.id);
+          if (idx >= 0 && _current[idx].imageData.isEmpty) {
+            _current[idx] = _current[idx].copyWith(imageData: data);
+            controller.add(List.unmodifiable(_current));
+            scheduleCacheSave();
+          }
+        } else {
+          queuePhotoDownload(m);
+        }
       }));
     }
 
@@ -213,10 +227,9 @@ class ChatService {
             .limit(limit);
       }
       final rows = await query;
-      final models = rows
+      return rows
           .map((row) => MessageModel.fromMap('${row['id']}', snakeToCamel(row)))
           .toList();
-      return withLocalPhotos(models);
     }
 
     // Ambil cutoff delete user ini (UTC → local). null = tidak pernah delete.
@@ -266,15 +279,16 @@ class ChatService {
         _current = merged;
         controller.add(_current);
         scheduleCacheSave();
+        // Foto di-load background — teks tidak menunggu decrypt foto.
+        loadPhotosAsync(merged);
       } catch (e) {
         debugPrint('[_cachedMessagesStream] fetch error: $e');
         // Fallback: tampilkan cache hanya kalau server gagal
-        MessageCache.instance.loadMessages(cacheKey).then((cached) async {
+        MessageCache.instance.loadMessages(cacheKey).then((cached) {
           if (cached.isNotEmpty && !controller.isClosed && _current.isEmpty) {
-            final filled = await withLocalPhotos(cached);
-            if (controller.isClosed) return;
-            _current = filled;
+            _current = cached;
             controller.add(_current);
+            loadPhotosAsync(cached);
           }
         });
       }

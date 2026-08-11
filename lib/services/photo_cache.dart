@@ -32,7 +32,8 @@ class PhotoCache {
     try {
       final f = await _fileFor(chatKey, messageId);
       if (!await f.exists()) return null;
-      return await MessageCache.instance.decryptString(await f.readAsString());
+      // Decrypt di background isolate agar UI tidak freeze saat load banyak foto
+      return await MessageCache.instance.decryptStringAsync(await f.readAsString());
     } catch (_) {
       return null;
     }
