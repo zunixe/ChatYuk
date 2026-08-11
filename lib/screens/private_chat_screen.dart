@@ -43,34 +43,6 @@ _DecodedImage? _decodeImage(String base64) {
   }
 }
 
-// Concurrency limiter: max 3 decode paralel di isolate
-final _decodeGate = _Semaphore(3);
-
-class _Semaphore {
-  final int max;
-  int _count = 0;
-  final _waiters = <Completer<void>>[];
-  _Semaphore(this.max);
-  Future<void> acquire() async {
-    if (_count < max) { _count++; return; }
-    final c = Completer<void>();
-    _waiters.add(c);
-    await c.future;
-  }
-  void release() {
-    _count--;
-    if (_waiters.isNotEmpty) {
-      _waiters.removeAt(0).complete();
-      _count++;
-    }
-  }
-  Future<T> run<T>(Future<T> Function() fn) async {
-    await acquire();
-    try { return await fn(); }
-    finally { release(); }
-  }
-}
-
 // Hasil decode: bytes + dimensi asli agar tampilan proporsional.
 class _DecodedImage {
   final Uint8List bytes;
@@ -170,9 +142,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _msgsSub = _msgsStream.listen((msgs) {
       if (_pending.isEmpty || !mounted) return;
       final mySenderIds = _pending.map((p) => p.senderId).toSet();
-      final confirmed = msgs.where((m) => mySenderIds.contains(m.senderId) && m.type == 'text').map((m) => m.text).toList();
-      for (final text in confirmed) {
+      final confirmedTexts = msgs.where((m) => mySenderIds.contains(m.senderId) && m.type == 'text').map((m) => m.text).toList();
+      for (final text in confirmedTexts) {
         final idx = _pending.indexWhere((p) => p.type == 'text' && p.text == text);
+        if (idx != -1) {
+          setState(() { _pending.removeAt(idx); });
+        }
+      }
+      // Foto & view-once: cocokkan via imageData (hash konten) — biar tidak dobel
+      final confirmedImages = msgs
+          .where((m) => mySenderIds.contains(m.senderId) && (m.type == 'image' || m.type == 'view_once'))
+          .map((m) => m.imageData)
+          .toSet();
+      for (final img in confirmedImages) {
+        if (img.isEmpty) continue;
+        final idx = _pending.indexWhere((p) => (p.type == 'image' || p.type == 'view_once') && p.imageData == img);
         if (idx != -1) {
           setState(() { _pending.removeAt(idx); });
         }
@@ -438,6 +422,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final profile = auth.profile;
     if (uid == null || profile == null) return;
     final pp = context.read<PointsProvider>();
+    // Optimistic: tampilkan foto view-once langsung tanpa nunggu server —
+    // supaya pengirim tidak lihat spinner muter terus.
+    final pending = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
+      text: '',
+      type: 'view_once',
+      imageData: base64,
+      timestamp: DateTime.now(),
+    );
+    setState(() => _pending.add(pending));
+    _scrollToBottom();
     try {
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
@@ -455,6 +454,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
+        setState(() => _pending.remove(pending));
         final s = context.read<LocaleProvider>().s;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
       }
@@ -1044,7 +1044,7 @@ class _MessageImageState extends State<_MessageImage> {
   }
 
   Future<void> _decode(int key) async {
-    final decoded = await _decodeGate.run(() => compute(_decodeImage, widget.imageData));
+    final decoded = await compute(_decodeImage, widget.imageData);
     _decodedCache[key] = decoded!;
     if (!mounted) return;
     setState(() => _decoded = decoded);
@@ -1286,7 +1286,7 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
 
   Future<void> _decode() async {
     if (widget.imageData.isEmpty) return;
-    final decoded = await _decodeGate.run(() => compute(_decodeImage, widget.imageData));
+    final decoded = await compute(_decodeImage, widget.imageData);
     _tick.decoded = decoded;
     if (!mounted) return;
     setState(() => _decoded = decoded);
