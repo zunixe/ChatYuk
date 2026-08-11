@@ -273,14 +273,14 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       late OverlayEntry entry;
       entry = OverlayEntry(
         builder: (_) => _PointsToast(message: message, isError: isError, onDismiss: () {
-          try { entry.remove(); } catch (_) {}
+          try { entry.remove(); } catch (e) { debugPrint('[PointsProvider] showPointsToast ignored: $e'); }
         }),
       );
       overlay.insert(entry);
       Future.delayed(const Duration(milliseconds: 2000), () {
-        try { entry.remove(); } catch (_) {}
+        try { entry.remove(); } catch (e) { debugPrint('[PointsProvider] showPointsToast ignored: $e'); }
       });
-    } catch (_) {}
+    } catch (e) { debugPrint('[PointsProvider] showPointsToast ignored: $e'); }
   }
 
   void showOutOfPointsDialog(BuildContext context, bool isId) {
@@ -418,7 +418,7 @@ class _PointsToastState extends State<_PointsToast> with SingleTickerProviderSta
   void initState() {
     super.initState();
     _ctrl.forward();
-    Future.delayed(const Duration(seconds: 1), () => _ctrl.reverse().then((_) => widget.onDismiss()));
+    Future.delayed(const Duration(seconds: 1), () => _ctrl.reverse().then((_) { if (mounted) widget.onDismiss(); }));
   }
 
   @override

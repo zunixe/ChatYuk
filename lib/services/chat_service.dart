@@ -87,7 +87,7 @@ class ChatService {
         lastSavedSig = sig;
         try {
           await MessageCache.instance.saveMessages(cacheKey, _current);
-        } catch (_) {}
+        } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
       });
     }
 
@@ -155,7 +155,7 @@ class ChatService {
           .select(cols)
           .eq(filterKey, filterVal)
           .order('created_at', ascending: true)
-          .limit(100);
+          .limit(500);
       final models = rows
           .map((row) => MessageModel.fromMap('${row['id']}', snakeToCamel(row)))
           .toList();
@@ -392,7 +392,7 @@ class ChatService {
       await _sb.from('private_messages')
           .update({'image_data': '', 'type': 'view_once_expired'})
           .eq('id', messageId);
-    } catch (_) {}
+    } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
   }
 
   // Map: userId -> list of reload callbacks untuk getMyPrivateChats streams
@@ -485,7 +485,7 @@ class ChatService {
           .select()
           .contains('participants', [myUid])
           .order('last_message_at', ascending: false)
-          .limit(200);
+          .limit(500);
       print('[DEBUG-CHATLIST] FETCH for $myUid, got ${rows.length} rows');
       for (final r in rows) {
         print('[DEBUG-CHATLIST]   chat=${r['chat_id']} last=${r['last_message']}');
@@ -493,7 +493,7 @@ class ChatService {
       Set<String> hiddenSet = {};
       try {
         hiddenSet = await getHiddenChats(myUid);
-      } catch (_) {}
+      } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
       return rows
           .where((row) => !hiddenSet.contains(row['chat_id']))
           .map((row) {
@@ -572,7 +572,7 @@ class ChatService {
           }
           await unhideChat(myUid, chatId);
           reload();
-        } catch (_) {}
+        } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
       },
     );
     msgChannel.subscribe();
@@ -671,7 +671,7 @@ class ChatService {
             .neq('status', 'offline')
             .gte('last_seen', cutoff)
             .order('last_seen', ascending: false)
-            .limit(200);
+            .limit(500);
         cached = rows
             .map((row) => UserModel.fromMap('${row['id']}', snakeToCamel(row)))
             .toList();
@@ -696,7 +696,7 @@ class ChatService {
         DateTime? lastSeen;
         try {
           lastSeen = DateTime.tryParse(lastSeenStr ?? '');
-        } catch (_) {}
+        } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
         final idx = cached.indexWhere((u) => u.uid == id);
         if (idx >= 0) {
           cached[idx] = cached[idx].copyWith(status: newStatus, lastSeen: lastSeen);

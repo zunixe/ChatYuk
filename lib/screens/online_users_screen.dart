@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -14,10 +15,6 @@ import '../providers/points_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../services/chat_service.dart';
 import 'private_chat_screen.dart';
-
-Uint8List? _decodeBase64(String b64) {
-  try { return base64Decode(b64); } catch (_) { return null; }
-}
 
 class _BoundedCache<T> {
   final int maxSize;
@@ -64,6 +61,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
   static const _prefKeyGender = 'filter_gender';
   final ScrollController _scrollCtrl = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
+  StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
+  Map<String, int> _unreadMap = {};
 
   @override
   bool get wantKeepAlive => true;
@@ -73,6 +72,27 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
     super.initState();
     _scrollCtrl.addListener(_onScroll);
     _loadFilter();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _unreadSub?.cancel();
+    final auth = context.read<AuthProvider>();
+    if (auth.uid != null) {
+      _unreadSub = context.read<ChatProvider>().getMyPrivateChats(auth.uid!).listen((chats) {
+        if (!mounted) return;
+        final map = <String, int>{};
+        for (final c in chats) {
+          final otherUid = c.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
+          if (otherUid.isNotEmpty) {
+            final count = c.unreadCounts[auth.uid] ?? 0;
+            if (count > 0) map[otherUid] = count;
+          }
+        }
+        setState(() => _unreadMap = map);
+      });
+    }
   }
 
   Future<void> _loadFilter() async {
@@ -203,18 +223,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
             return true;
           }).toList();
 
-          return StreamBuilder<List<PrivateChatInfo>>(
-            stream: auth.uid != null ? chat.getMyPrivateChats(auth.uid!) : const Stream.empty(),
-            builder: (_, chatSnap) {
-              final chats = chatSnap.data ?? [];
-              final unreadMap = <String, int>{};
-              for (final c in chats) {
-                final otherUid = c.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-                if (otherUid.isNotEmpty) {
-                  final count = c.unreadCounts[auth.uid] ?? 0;
-                  if (count > 0) unreadMap[otherUid] = count;
-                }
-              }
+          final unreadMap = _unreadMap;
 
               final paged = users.take(_page * _pageSize).toList();
               final hasMore = paged.length < users.length;
@@ -317,8 +326,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                   ),
                 ],
               );
-            },
-          );
         },
       ),
     );

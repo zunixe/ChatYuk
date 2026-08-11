@@ -43,6 +43,34 @@ _DecodedImage? _decodeImage(String base64) {
   }
 }
 
+// Concurrency limiter: max 3 decode paralel di isolate
+final _decodeGate = _Semaphore(3);
+
+class _Semaphore {
+  final int max;
+  int _count = 0;
+  final _waiters = <Completer<void>>[];
+  _Semaphore(this.max);
+  Future<void> acquire() async {
+    if (_count < max) { _count++; return; }
+    final c = Completer<void>();
+    _waiters.add(c);
+    await c.future;
+  }
+  void release() {
+    _count--;
+    if (_waiters.isNotEmpty) {
+      _waiters.removeAt(0).complete();
+      _count++;
+    }
+  }
+  Future<T> run<T>(Future<T> Function() fn) async {
+    await acquire();
+    try { return await fn(); }
+    finally { release(); }
+  }
+}
+
 // Hasil decode: bytes + dimensi asli agar tampilan proporsional.
 class _DecodedImage {
   final Uint8List bytes;
@@ -394,10 +422,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthProvider>();
-    final chat = context.watch<ChatProvider>(); // watch untuk detect block/unblock
+    final chat = context.read<ChatProvider>();
+    // select: rebuild hanya saat isBlocked untuk UID lawan bicara berubah
+    final isBlocked = context.select<ChatProvider, bool>((c) => c.isBlocked(widget.otherUid));
     final s = context.watch<LocaleProvider>().s;
-    // Kalau diblokir, tampilkan offline — sembunyikan status asli
-    final isBlocked = chat.isBlocked(widget.otherUid);
     // Saat unblock: re-subscribe status realtime
     if (_wasBlocked && !isBlocked) {
       _wasBlocked = false;
@@ -912,7 +940,7 @@ class _MessageImageState extends State<_MessageImage> {
 
   // Decode di isolate agar UI tidak freeze untuk foto besar.
   Future<void> _decode() async {
-    final decoded = await compute(_decodeImage, widget.imageData);
+    final decoded = await _decodeGate.run(() => compute(_decodeImage, widget.imageData));
     if (!mounted) return;
     setState(() => _decoded = decoded);
   }
@@ -1133,7 +1161,7 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
   // Decode di isolate agar UI tidak freeze untuk foto besar.
   Future<void> _decode() async {
     if (widget.imageData.isEmpty) return;
-    final decoded = await compute(_decodeImage, widget.imageData);
+    final decoded = await _decodeGate.run(() => compute(_decodeImage, widget.imageData));
     if (!mounted) return;
     setState(() => _decoded = decoded);
   }

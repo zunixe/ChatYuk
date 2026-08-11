@@ -10,9 +10,9 @@ import '../services/screen_secure_service.dart';
 
 // Shortcut untuk fire-and-forget.
 // Tidak membungkam error: log biar kegagalan tetap terlihat di debug.
-void unawaited(Future<void> future) {
+void safeUnawaited(Future<void> future) {
   future.catchError((Object e, StackTrace st) {
-    debugPrint('[AUTH] unawaited error: $e\n$st');
+    debugPrint('[AUTH] safeUnawaited error: $e\n$st');
   });
 }
 
@@ -100,12 +100,12 @@ class AuthProvider extends ChangeNotifier {
       _error = lastError.toString();
     } else {
       // FCM token & cleanup di-fire-and-forget — tidak block loading screen
-      if (_profile != null) unawaited(updateFcmToken());
-      unawaited(cleanupStaleAnonymous());
+      if (_profile != null) safeUnawaited(updateFcmToken());
+      safeUnawaited(cleanupStaleAnonymous());
       if (_disposed) return;
       _startHeartbeat();
       // Daily login bonus poin
-      unawaited(_claimDailyPoints());
+      safeUnawaited(_claimDailyPoints());
     }
     _loading = false;
     _initInProgress = false;
@@ -512,7 +512,7 @@ class AuthProvider extends ChangeNotifier {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
       if (_disposed) return;
-      unawaited(_auth.updateLastSeen());
+      safeUnawaited(_auth.updateLastSeen());
     });
   }
 

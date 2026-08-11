@@ -1,11 +1,13 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
+import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/auth_service.dart';
+import '../widgets/async_photo.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String userId;
@@ -21,12 +23,29 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   bool _loading = true;
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
+  String _status = 'offline';
+  StreamSubscription<String>? _statusSub;
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadPhotos();
+    _subscribeStatus();
+  }
+
+  @override
+  void dispose() {
+    _statusSub?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeStatus() {
+    _statusSub?.cancel();
+    _statusSub = context.read<ChatProvider>().getUserStatus(widget.userId).listen((status) {
+      if (!mounted) return;
+      setState(() => _status = status);
+    });
   }
 
   Future<void> _load() async {
@@ -64,7 +83,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         : profile?.gender == 'female'
             ? s.genderLabelFemale
             : s.genderLabelOther;
-    final status = profile?.status ?? 'offline';
+    final status = _status;
     final statusLabel = status == 'online'
         ? s.statusOnline
         : status == 'idle'
@@ -90,23 +109,19 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: profile?.gender == 'male'
-                            ? AppTheme.male
-                            : profile?.gender == 'female'
-                                ? AppTheme.female
-                                : AppTheme.accent,
-                        backgroundImage: (profile?.avatar ?? '').isNotEmpty
-                            ? MemoryImage(base64Decode(profile!.avatar))
-                            : null,
-                        child: (profile?.avatar ?? '').isEmpty
-                            ? Text(
-                                (name.isNotEmpty ? name[0] : '?').toUpperCase(),
-                                style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w800),
-                              )
-                            : null,
-                      ),
+                      (profile?.avatar ?? '').isNotEmpty
+                          ? AsyncCircleAvatar(
+                              base64: profile!.avatar,
+                              radius: 50,
+                              bgColor: profile.gender == 'male' ? AppTheme.male : profile.gender == 'female' ? AppTheme.female : AppTheme.accent,
+                            )
+                          : CircleAvatar(
+                              radius: 50,
+                              backgroundColor: profile?.gender == 'male'
+                                  ? AppTheme.male : profile?.gender == 'female' ? AppTheme.female : AppTheme.accent,
+                              child: Text((name.isNotEmpty ? name[0] : '?').toUpperCase(),
+                                style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w800)),
+                            ),
                       Container(
                         width: 18,
                         height: 18,
@@ -217,7 +232,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                 onTap: () => _showPhotoViewer(_photos, i),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(10),
-                                  child: Image.memory(base64Decode(_photos[i].photo), fit: BoxFit.cover),
+                                  child: AsyncPhotoThumbnail(base64: _photos[i].photo),
                                 ),
                               ),
                             ),
@@ -287,7 +302,7 @@ class _UserPhotoViewerState extends State<_UserPhotoViewer> {
         itemBuilder: (ctx, i) => Center(
           child: InteractiveViewer(
             maxScale: 4,
-            child: Image.memory(base64Decode(widget.photos[i].photo), fit: BoxFit.contain),
+            child: AsyncPhotoViewer(base64: widget.photos[i].photo),
           ),
         ),
       ),

@@ -1,8 +1,32 @@
 import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message_model.dart';
+
+// Top-level function for compute() — encrypt + write di background isolate
+Future<void> _encSave(Map<String, dynamic> args) async {
+  final prefsKey = args['prefsKey'] as String;
+  final plaintext = args['plaintext'] as String;
+  final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
+  final key = SecretKey(List<int>.from(keyBytes));
+  final aes = AesGcm.with256bits();
+  final iv = aes.newNonce();
+  final secretBox = await aes.encrypt(
+    utf8.encode(plaintext),
+    secretKey: key,
+    nonce: iv,
+  );
+  final payload = {
+    'n': base64Encode(secretBox.nonce),
+    'c': base64Encode(secretBox.cipherText),
+    'm': base64Encode(secretBox.mac.bytes),
+  };
+  final enc = base64Encode(utf8.encode(jsonEncode(payload)));
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(prefsKey, enc);
+}
 
 /// Cache pesan lokal ter-enkripsi (AES-GCM).
 /// Kunci AES disimpan aman di Android Keystore via flutter_secure_storage.
@@ -89,8 +113,12 @@ class MessageCache {
     final key = await _getKey();
     final data = messages.map((m) => {...m.toMap(), 'imageData': ''}).toList();
     final plain = jsonEncode(data);
-    final enc = await _encrypt(plain, key);
-    await prefs.setString('$_keyPrefix$chatKey', enc);
+    final keyBytes = await key.extractBytes();
+    await compute(_encSave, {
+      'prefsKey': '$_keyPrefix$chatKey',
+      'plaintext': plain,
+      'keyBytes': keyBytes,
+    });
   }
 
   /// Ambil pesan cache (null jika tidak ada).
