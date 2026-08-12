@@ -76,9 +76,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
           ],
           bottom: TabBar(
-            labelColor: AppTheme.primary,
-            unselectedLabelColor: AppTheme.textSecondary,
-            indicatorColor: AppTheme.primary,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            indicatorWeight: 3,
+            labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            indicatorSize: TabBarIndicatorSize.tab,
             tabs: [
               Tab(text: s.adminOverview),
               Tab(text: s.adminChatMonitor),
@@ -97,7 +101,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           if (mounted) setState(() => _lastUpdated = DateTime.now());
                         },
                         child: ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 24),
                           children: [
                             _lastUpdatedHeader(s),
                             const SizedBox(height: 8),

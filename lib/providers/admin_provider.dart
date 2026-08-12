@@ -85,14 +85,22 @@ class AdminProvider extends ChangeNotifier {
   }
 
   // ── Admin Chat Monitor ──
+  static const int chatPageSize = 50;
+  static const int messagePageSize = 100;
+
   List<Map<String, dynamic>> _chats = [];
   List<Map<String, dynamic>> _chatMessages = [];
   bool _chatsLoading = false;
+  bool _chatsHasMore = true;
+  int _chatsTotal = 0;
+  bool _chatsFetchingMore = false;
   String? _chatsError;
 
   List<Map<String, dynamic>> get chats => _chats;
   List<Map<String, dynamic>> get chatMessages => _chatMessages;
   bool get chatsLoading => _chatsLoading;
+  bool get chatsHasMore => _chatsHasMore;
+  int get chatsTotal => _chatsTotal;
   String? get chatsError => _chatsError;
 
   Future<void> fetchChats() async {
@@ -100,7 +108,10 @@ class AdminProvider extends ChangeNotifier {
     _chatsError = null;
     if (!_disposed) notifyListeners();
     try {
-      _chats = await _service.listChats();
+      final res = await _service.listChats(limit: chatPageSize, offset: 0);
+      _chats = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      _chatsTotal = (res['total'] as num?)?.toInt() ?? 0;
+      _chatsHasMore = _chats.length < _chatsTotal;
     } catch (e) {
       _chatsError = e.toString();
       debugPrint('[ADMIN] fetchChats error: $e');
@@ -109,21 +120,47 @@ class AdminProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Muat halaman berikutnya (infinite scroll list chat).
+  Future<void> fetchMoreChats() async {
+    if (_chatsFetchingMore || !_chatsHasMore || _chatsLoading) return;
+    _chatsFetchingMore = true;
+    try {
+      final res = await _service.listChats(limit: chatPageSize, offset: _chats.length);
+      final more = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      _chatsTotal = (res['total'] as num?)?.toInt() ?? _chatsTotal;
+      _chats = [..._chats, ...more];
+      _chatsHasMore = _chats.length < _chatsTotal;
+    } catch (e) {
+      debugPrint('[ADMIN] fetchMoreChats error: $e');
+    }
+    _chatsFetchingMore = false;
+    if (!_disposed) notifyListeners();
+  }
+
   /// Refresh daftar chat tanpa loading spinner (untuk polling berkala).
   Future<void> refreshChats() async {
     try {
-      _chats = await _service.listChats();
+      final res = await _service.listChats(limit: chatPageSize, offset: 0);
+      _chats = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      _chatsTotal = (res['total'] as num?)?.toInt() ?? 0;
+      _chatsHasMore = _chats.length < _chatsTotal;
     } catch (e) {
       debugPrint('[ADMIN] refreshChats error: $e');
     }
     if (!_disposed) notifyListeners();
   }
 
+  bool _chatMessagesHasMore = true;
+  bool _chatMessagesFetchingMore = false;
+  bool get chatMessagesHasMore => _chatMessagesHasMore;
+
   Future<bool> fetchChatMessages(String chatId) async {
     _chatMessages = [];
+    _chatMessagesHasMore = true;
     if (!_disposed) notifyListeners();
     try {
-      _chatMessages = await _service.getChatMessages(chatId);
+      _chatMessages = await _service.getChatMessages(chatId, limit: messagePageSize, offset: 0);
+      _chatMessagesHasMore = _chatMessages.length >= messagePageSize;
       return true;
     } catch (e) {
       debugPrint('[ADMIN] fetchChatMessages error: $e');
@@ -131,6 +168,45 @@ class AdminProvider extends ChangeNotifier {
     } finally {
       if (!_disposed) notifyListeners();
     }
+  }
+
+  /// Muat pesan lebih lama (pagination, dipanggil saat scroll ke atas).
+  Future<void> fetchMoreChatMessages(String chatId) async {
+    if (_chatMessagesFetchingMore || !_chatMessagesHasMore) return;
+    _chatMessagesFetchingMore = true;
+    try {
+      final older = await _service.getChatMessages(
+        chatId,
+        limit: messagePageSize,
+        offset: _chatMessages.length,
+      );
+      _chatMessages = [..._chatMessages, ...older];
+      _chatMessagesHasMore = older.length >= messagePageSize;
+    } catch (e) {
+      debugPrint('[ADMIN] fetchMoreChatMessages error: $e');
+    }
+    _chatMessagesFetchingMore = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Refresh pesan terbaru tanpa reset pagination — merge dengan yang sudah
+  /// dimuat supaya scroll history tidak hilang saat ada pesan baru masuk.
+  Future<void> refreshChatMessages(String chatId) async {
+    try {
+      final latest = await _service.getChatMessages(chatId, limit: messagePageSize, offset: 0);
+      final knownIds = _chatMessages.map((m) => '${m['id']}').toSet();
+      final merged = List<Map<String, dynamic>>.from(_chatMessages);
+      // Pesan baru (belum ada) ditambahkan di depan (terbaru duluan).
+      for (final m in latest) {
+        if (!knownIds.contains('${m['id']}')) {
+          merged.insert(0, m);
+        }
+      }
+      _chatMessages = merged;
+    } catch (e) {
+      debugPrint('[ADMIN] refreshChatMessages error: $e');
+    }
+    if (!_disposed) notifyListeners();
   }
 
   /// Fetch image_data untuk satu foto (retry / thumb).
@@ -145,6 +221,8 @@ class AdminProvider extends ChangeNotifier {
 
   void clearChatMessages() {
     _chatMessages = [];
+    _chatMessagesHasMore = true;
+    _chatMessagesFetchingMore = false;
     if (!_disposed) notifyListeners();
   }
 

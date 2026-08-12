@@ -11,6 +11,7 @@ import '../providers/points_provider.dart';
 import '../utils.dart';
 import '../main.dart';
 import '../widgets/emoji_picker_sheet.dart';
+import '../widgets/private_chat_message.dart';
 import 'private_chat_screen.dart';
 
 class RoomChatScreen extends StatefulWidget {
@@ -52,7 +53,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
 
   void _onRoomScroll() {
     if (_readBonusClaimed) return;
-    if (_scrollCtrl.hasClients && _scrollCtrl.position.extentAfter < 300) {
+    if (_scrollCtrl.hasClients && _scrollCtrl.position.pixels < 300) {
       _readBonusClaimed = true;
       _pointsProv?.roomReadBonus().then((_) {
         if (mounted && _pointsProv?.enabled == true) {
@@ -89,16 +90,18 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
-        _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+        _scrollCtrl.animateTo(
+          0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
 
   bool get _isNearBottom {
     if (!_scrollCtrl.hasClients) return true;
-    final max = _scrollCtrl.position.maxScrollExtent;
-    final pixels = _scrollCtrl.position.pixels;
-    return max - pixels < 100;
+    return _scrollCtrl.position.pixels < 100;
   }
 
   bool _isSending = false;
@@ -222,15 +225,19 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                 }
                 return ListView.builder(
                   controller: _scrollCtrl,
+                  reverse: true,
                   padding: const EdgeInsets.all(12),
                   itemCount: msgs.length,
-                  itemBuilder: (_, i) => _MessageBubble(
-                    key: ValueKey(msgs[i].id),
-                    msg: msgs[i],
-                    isMe: msgs[i].senderId == auth.uid,
-                    color: Color(userColorPalette[colorHashForUid(msgs[i].senderId) % userColorPalette.length]),
-                    onTapUser: () => _onTapUser(msgs[i], auth),
-                  ),
+                  itemBuilder: (_, i) {
+                    final m = msgs[msgs.length - 1 - i];
+                    return _MessageBubble(
+                      key: ValueKey(m.id),
+                      msg: m,
+                      isMe: m.senderId == auth.uid,
+                      color: Color(userColorPalette[colorHashForUid(m.senderId) % userColorPalette.length]),
+                      onTapUser: () => _onTapUser(m, auth),
+                    );
+                  },
                 );
               },
             ),
@@ -459,7 +466,7 @@ class _MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Container(
-              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.72),
+              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
               decoration: BoxDecoration(
                 color: _myColor,
@@ -477,19 +484,12 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ],
               ),
-              child: RichText(
-                text: TextSpan(
-                  style: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),
-                  children: [
-                    TextSpan(text: msg.text),
-                    const TextSpan(text: '  '),
-                    WidgetSpan(
-                      alignment: PlaceholderAlignment.belowBaseline,
-                      baseline: TextBaseline.alphabetic,
-                      child: Text(timeStr, style: TextStyle(color: _textColor.withValues(alpha: 0.45), fontSize: 10.5)),
-                    ),
-                  ],
-                ),
+              child: MessageTextWithTime(
+                text: msg.text,
+                timeStr: timeStr,
+                textStyle: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),
+                timeStyle: TextStyle(color: _textColor.withValues(alpha: 0.45), fontSize: 10.5),
+                alignRight: true,
               ),
             ),
           ],
@@ -537,7 +537,7 @@ class _MessageBubble extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Container(
-                  constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.72),
+                  constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                   decoration: BoxDecoration(
                     color: _theirColor,
@@ -587,19 +587,12 @@ class _MessageBubble extends StatelessWidget {
                             ],
                           ),
                         ),
-                      RichText(
-                        text: TextSpan(
-                          style: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),
-                          children: [
-                            TextSpan(text: msg.text),
-                            const TextSpan(text: '  '),
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.belowBaseline,
-                              baseline: TextBaseline.alphabetic,
-                              child: Text(timeStr, style: TextStyle(color: _textColor.withValues(alpha: 0.45), fontSize: 10.5)),
-                            ),
-                          ],
-                        ),
+                      MessageTextWithTime(
+                        text: msg.text,
+                        timeStr: timeStr,
+                        textStyle: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),
+                        timeStyle: TextStyle(color: _textColor.withValues(alpha: 0.45), fontSize: 10.5),
+                        alignRight: false,
                       ),
                     ],
                   ),

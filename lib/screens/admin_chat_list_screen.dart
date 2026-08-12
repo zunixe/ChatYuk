@@ -19,6 +19,7 @@ class AdminChatListScreen extends StatefulWidget {
 class _AdminChatListScreenState extends State<AdminChatListScreen> {
   Timer? _refreshTimer;
   final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
   String _query = '';
 
   @override
@@ -29,13 +30,24 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       context.read<AdminProvider>().refreshChats();
     });
+    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _scrollCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    final admin = context.read<AdminProvider>();
+    if (!_scrollCtrl.hasClients) return;
+    // Load halaman berikutnya saat mendekati bawah list.
+    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 300) {
+      admin.fetchMoreChats();
+    }
   }
 
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> chats) {
@@ -113,10 +125,18 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
                   : RefreshIndicator(
                       onRefresh: () => admin.fetchChats(),
                       child: ListView.builder(
+                        controller: _scrollCtrl,
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        itemCount: _filtered(admin.chats).length,
+                        itemCount: _filtered(admin.chats).length + (admin.chatsHasMore ? 1 : 0),
                         itemBuilder: (_, i) {
-                          final chat = _filtered(admin.chats)[i];
+                          final filtered = _filtered(admin.chats);
+                          if (i >= filtered.length) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+                            );
+                          }
+                          final chat = filtered[i];
                           return _AdminChatCard(chat: chat, s: s);
                         },
                       ),
