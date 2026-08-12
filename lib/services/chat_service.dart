@@ -261,13 +261,16 @@ class ChatService {
 
     Future<void> reload() async {
       try {
-        final server = await fetchServer(limit: 100);
-        if (controller.isClosed) return;
+        // Fetch cutoff delete duluan supaya fallback cache di bawah juga
+        // bisa menerapkan filter yang sama (history pre-delete tidak pernah
+        // tampil lagi meski sesi ini gagal fetch dari server).
         if (isPrivate) {
           _hiddenCutoff = await fetchHiddenCutoff();
-          if (_hiddenCutoff != null) {
-            server.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
-          }
+        }
+        final server = await fetchServer(limit: 100);
+        if (controller.isClosed) return;
+        if (_hiddenCutoff != null) {
+          server.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
         }
         // MERGE: server DESC (newest dulu) → reverse jadi ASC (oldest dulu).
         // _current (realtime) yang belum ada di server ditambahkan di akhir
@@ -289,12 +292,21 @@ class ChatService {
         loadPhotosAsync(merged);
       } catch (e) {
         debugPrint('[_cachedMessagesStream] fetch error: $e');
-        // Fallback: tampilkan cache hanya kalau server gagal
+        // Fallback: tampilkan cache hanya kalau server gagal.
+        // Filter hiddenCutoff TETAP diterapkan — cache lokal bisa berisi
+        // history sebelum delete yang tidak boleh muncul lagi.
         MessageCache.instance.loadMessages(cacheKey).then((cached) {
           if (cached.isNotEmpty && !controller.isClosed && _current.isEmpty) {
-            _current = cached;
+            var list = cached;
+            if (_hiddenCutoff != null) {
+              list = list
+                  .where((m) => m.timestamp.isAfter(_hiddenCutoff!))
+                  .toList();
+            }
+            if (list.isEmpty) return;
+            _current = list;
             controller.add(_current);
-            loadPhotosAsync(cached);
+            loadPhotosAsync(list);
           }
         });
       }
@@ -308,17 +320,27 @@ class ChatService {
       event: PostgresChangeEvent.insert,
       schema: 'public',
       table: table,
-      callback: (payload) {
+      callback: (payload) async {
         if (controller.isClosed) return;
         try {
           final row = payload.newRecord;
           if (row[filterKey]?.toString() != filterVal) return;
-          final msg = MessageModel.fromMap('${row['id']}', snakeToCamel(row));
+          var msg = MessageModel.fromMap('${row['id']}', snakeToCamel(row));
           if (_current.any((m) => m.id == msg.id)) return; // dedupe
           if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!)) return;
-          // Foto dari realtime langsung di-sync ke file lokal (fire-and-forget)
+          // Foto dari realtime: buat thumbnail DULU sebelum emit — bubble langsung
+          // pakai thumb (decode cepat, ala WhatsApp). Kalau thumb gagal dibuat,
+          // fallback ke imageData penuh supaya gambar tetap muncul (tidak spinner
+          // selamanya). Full-res tersimpan di PhotoCache untuk fullscreen.
           if (msg.imageData.isNotEmpty) {
-            PhotoCache.instance.save(cacheKey, msg.id, msg.imageData).catchError((_) => null);
+            try {
+              final thumb = await PhotoCache.instance.save(cacheKey, msg.id, msg.imageData);
+              if (!controller.isClosed && thumb != null && thumb.isNotEmpty) {
+                msg = msg.copyWith(imageData: thumb);
+              }
+            } catch (e) {
+              debugPrint('[photo save] ${msg.id} error: $e');
+            }
           } else if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired') {
             queuePhotoDownload(msg);
           }
@@ -381,8 +403,13 @@ class ChatService {
       _loadingOlder = true;
       try {
         final oldest = _current.first.timestamp;
-        final older = await fetchServer(before: oldest, limit: 100);
+        var older = await fetchServer(before: oldest, limit: 100);
         if (controller.isClosed) return;
+        // Pagination juga harus menghormati cutoff delete — pesan sebelum
+        // cutoff tidak boleh muncul meski di-scroll ke atas.
+        if (_hiddenCutoff != null) {
+          older = older.where((m) => m.timestamp.isAfter(_hiddenCutoff!)).toList();
+        }
         if (older.isEmpty) {
           _hasMore = false;
         } else {
@@ -748,23 +775,32 @@ class ChatService {
     return controller.stream;
   }
 
+  /// Hitung status efektif: last_seen basi (> 15 menit) dianggap offline.
+  /// Dipakai getUserStatus & UserInfoScreen agar logikanya seragam.
+  static String effectiveStatusOf(String? rawStatus, String? lastSeenStr) {
+    final s = rawStatus ?? 'offline';
+    if (s == 'offline') return 'offline';
+    final lastSeen = DateTime.tryParse(lastSeenStr ?? '');
+    if (lastSeen == null) return 'offline';
+    final stale = lastSeen.toUtc().isBefore(
+          DateTime.now().toUtc().subtract(const Duration(minutes: 15)),
+        );
+    return stale ? 'offline' : s;
+  }
+
   /// Stream status realtime satu user (online/idle/offline).
   /// Pakai channel postgres changes pada profiles — ringan, hanya 1 row.
   /// Status dihitung efektif: last_seen basi (> 15 menit) dianggap offline,
   /// supaya sinkron dengan daftar pengguna online di list chat.
-  Stream<String> getUserStatus(String uid) {
+  /// [initialStatus] membuat stream langsung emit status yang sudah diketahui
+  /// (misal dari profil yang baru di-fetch) tanpa query DB tambahan.
+  Stream<String> getUserStatus(String uid, {String? initialStatus}) {
     final controller = StreamController<String>.broadcast();
-    String _current = 'offline';
-
-    String effectiveStatus(String? rawStatus, String? lastSeenStr) {
-      final s = rawStatus ?? 'offline';
-      if (s == 'offline') return 'offline';
-      final lastSeen = DateTime.tryParse(lastSeenStr ?? '');
-      if (lastSeen == null) return 'offline';
-      final stale = lastSeen.toUtc().isBefore(
-            DateTime.now().toUtc().subtract(const Duration(minutes: 15)),
-          );
-      return stale ? 'offline' : s;
+    String _current = initialStatus ?? 'offline';
+    if (initialStatus != null && initialStatus != 'offline') {
+      Future.microtask(() {
+        if (!controller.isClosed) controller.add(_current);
+      });
     }
 
     Future<void> fetchStatus() async {
@@ -775,7 +811,7 @@ class ChatService {
             .eq('id', uid)
             .maybeSingle();
         if (row == null || controller.isClosed) return;
-        final s = effectiveStatus(row['status'] as String?, row['last_seen'] as String?);
+        final s = ChatService.effectiveStatusOf(row['status'] as String?, row['last_seen'] as String?);
         if (s != _current) {
           _current = s;
           controller.add(_current);
@@ -793,7 +829,7 @@ class ChatService {
       filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: uid),
       callback: (payload) {
         if (controller.isClosed) return;
-        final s = effectiveStatus(
+        final s = ChatService.effectiveStatusOf(
           payload.newRecord['status'] as String?,
           payload.newRecord['last_seen'] as String?,
         );
@@ -804,7 +840,7 @@ class ChatService {
       },
     );
     channel.subscribe();
-    fetchStatus();
+    if (initialStatus == null) fetchStatus();
 
     controller.onCancel = () => _sb.removeChannel(channel);
     return controller.stream;

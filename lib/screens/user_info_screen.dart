@@ -7,6 +7,7 @@ import '../models/user_photo.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/auth_service.dart';
+import '../services/chat_service.dart';
 import '../widgets/async_photo.dart';
 
 class UserInfoScreen extends StatefulWidget {
@@ -31,7 +32,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     super.initState();
     _load();
     _loadPhotos();
-    _subscribeStatus();
   }
 
   @override
@@ -40,20 +40,31 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     super.dispose();
   }
 
-  void _subscribeStatus() {
+  /// Subscribe status dengan seed dari profil yang baru di-fetch,
+  /// supaya dot status benar sejak frame pertama tanpa query tambahan.
+  void _subscribeStatus(UserModel? fresh) {
     _statusSub?.cancel();
-    _statusSub = context.read<ChatProvider>().getUserStatus(widget.userId).listen((status) {
+    final known = fresh == null
+        ? null
+        : ChatService.effectiveStatusOf(fresh.status, fresh.lastSeen.toIso8601String());
+    _statusSub = context.read<ChatProvider>().getUserStatus(widget.userId, initialStatus: known).listen((status) {
       if (!mounted) return;
       setState(() => _status = status);
     });
   }
 
   Future<void> _load() async {
+    UserModel? p;
     try {
-      final p = await AuthService().getProfileById(widget.userId);
-      if (mounted) setState(() => _profile = p);
+      p = await AuthService().getProfileById(widget.userId);
     } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() {
+        _profile = p;
+        _loading = false;
+      });
+      _subscribeStatus(p);
+    }
   }
 
   Future<void> _loadPhotos() async {
