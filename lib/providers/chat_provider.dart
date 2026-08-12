@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/message_cache.dart';
@@ -72,7 +71,8 @@ class ChatProvider extends ChangeNotifier {
     return _service.getPrivateChatMessages(chatId);
   }
 
-  Stream<String> getUserStatus(String uid) => _service.getUserStatus(uid);
+  Stream<String> getUserStatus(String uid, {String? initialStatus}) =>
+      _service.getUserStatus(uid, initialStatus: initialStatus);
 
   Stream<void> getTypingStream(String chatId) => _service.getTypingStream(chatId);
 

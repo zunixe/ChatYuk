@@ -1,12 +1,27 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 
 Uint8List? _decodeBase64(String b64) {
   try { return base64Decode(b64); } catch (_) { return null; }
 }
 
-/// Foto thumbnail grid — decode di isolate, tampil placeholder dulu.
+// Top-level untuk compute() — decode + resize ke thumbnail kecil (~256px).
+// Grid galeri tidak perlu memegang gambar penuh 800px; render jadi ringan.
+Uint8List? _decodeThumb(String b64) {
+  try {
+    final bytes = base64Decode(b64);
+    final image = img.decodeImage(bytes);
+    if (image == null) return null;
+    final thumb = img.copyResize(image, width: 256, interpolation: img.Interpolation.linear);
+    return img.encodeJpg(thumb, quality: 80);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Foto thumbnail grid — decode + resize di isolate, tampil placeholder dulu.
 class AsyncPhotoThumbnail extends StatefulWidget {
   final String base64;
   final double? width;
@@ -31,9 +46,9 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
   }
 
   Future<void> _decode() async {
-    final bytes = await compute(_decodeBase64, widget.base64);
+    final bytes = await compute(_decodeThumb, widget.base64);
     if (!mounted) return;
-    if (bytes != null && _cache.length < 100) _cache[widget.base64] = bytes;
+    if (bytes != null && _cache.length < 300) _cache[widget.base64] = bytes;
     setState(() => _bytes = bytes);
   }
 

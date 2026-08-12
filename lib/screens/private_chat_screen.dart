@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -123,10 +122,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   String _otherStatus = 'offline';
   bool _wasBlocked = false;
   final List<MessageModel> _pending = [];
+  // Foto yang sudah dikonfirmasi server (id pesan server) — dipakai dedupe
+  // FIFO karena imageData di stream berupa thumbnail, bukan base64 penuh.
+  // Hanya foto dengan timestamp setelah screen dibuka yang diproses, supaya
+  // history lama tidak ikut menghapus pending.
+  final Set<String> _confirmedPhotoIds = {};
+  late final DateTime _openedAt;
 
   @override
   void initState() {
     super.initState();
+    _openedAt = DateTime.now();
     activeChatId.value = widget.chatId;
     // Anti-screenshot dikontrol setting admin global (ScreenSecureService).
     // Privasi view_once tetap terjaga via enterViewOnce/exitViewOnce.
@@ -153,16 +159,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           setState(() { _pending.removeAt(idx); });
         }
       }
-      // Foto & view-once: cocokkan via imageData (hash konten) — biar tidak dobel
-      final confirmedImages = msgs
-          .where((m) => mySenderIds.contains(m.senderId) && (m.type == 'image' || m.type == 'view_once'))
-          .map((m) => m.imageData)
-          .toSet();
-      for (final img in confirmedImages) {
-        if (img.isEmpty) continue;
-        final idx = _pending.indexWhere((p) => (p.type == 'image' || p.type == 'view_once') && p.imageData == img);
-        if (idx != -1) {
-          setState(() { _pending.removeAt(idx); });
+      // Foto & view-once: FIFO via id pesan server. ImageData di stream berupa
+      // THUMBNAIL (bukan base64 penuh seperti pending), jadi tidak bisa
+      // cocokkan konten — setiap pesan foto terkonfirmasi menghapus satu
+      // pending foto tertua (urutan kirim). Hanya pesan yang tiba setelah
+      // screen dibuka yang diproses (history lama di-skip via _openedAt).
+      for (final m in msgs) {
+        if (mySenderIds.contains(m.senderId) &&
+            (m.type == 'image' || m.type == 'view_once') &&
+            m.timestamp.isAfter(_openedAt) &&
+            _confirmedPhotoIds.add(m.id)) {
+          final idx = _pending.indexWhere((p) => (p.type == 'image' || p.type == 'view_once'));
+          if (idx != -1) {
+            setState(() { _pending.removeAt(idx); });
+          }
         }
       }
     });
@@ -1650,7 +1660,6 @@ class _ViewOnceImageState extends State<_ViewOnceImage> {
           ),
         ),
       );
-    return const SizedBox.shrink();
     },
     );
   }
