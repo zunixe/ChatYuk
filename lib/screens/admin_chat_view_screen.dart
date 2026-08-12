@@ -31,6 +31,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   late Timer _pollTimer;
   RealtimeChannel? _channel;
   final _photoLoading = <String>{};
+  final _scrollCtrl = ScrollController();
 
   @override
   void initState() {
@@ -38,43 +39,36 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     _fetch();
     _subscribeRealtime();
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
+    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _pollTimer.cancel();
     _channel?.unsubscribe();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
-
-  Future<void> _fetch() async {
+  void _onScroll() {
     final admin = context.read<AdminProvider>();
-    final ok = await admin.fetchChatMessages(widget.chatId);
-    if (!mounted) return;
-    if (!ok) {
-      setState(() { _loading = false; _error = 'fetch failed'; });
-      return;
+    if (!_scrollCtrl.hasClients) return;
+    // ListView reverse:true → "atas" (pesan lebih lama) = maxScrollExtent.
+    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 300) {
+      if (admin.chatMessagesHasMore && !admin.chatsLoading) {
+        admin.fetchMoreChatMessages(widget.chatId).then((_) {
+          if (mounted) _applyMessages();
+        });
+      }
     }
-    final list = _mapMessages(admin.chatMessages);
-    final senders = <String>[];
-    for (final m in list) { if (!senders.contains(m.senderId)) senders.add(m.senderId); }
-    setState(() {
-      _msgs = list;
-      _leftUid = senders.isNotEmpty ? senders.first : null;
-      _loading = false;
-      _error = null;
-    });
-    _loadPhotos();
   }
 
-  Future<void> _poll() async {
+  /// Re-map dari provider ke _msgs (dipakai setelah load-more / fetch).
+  void _applyMessages() {
+    if (!mounted) return;
     final admin = context.read<AdminProvider>();
-    final ok = await admin.fetchChatMessages(widget.chatId);
-    if (!ok || !mounted) return;
     final list = _mapMessages(admin.chatMessages);
-    // Merge: pertahankan imageData yang sudah di-load
+    // Pertahankan imageData yang sudah di-load
     final oldMap = <String, String>{};
     for (final m in _msgs) {
       if (m.imageData.isNotEmpty) oldMap[m.id] = m.imageData;
@@ -87,13 +81,38 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     }
     final senders = <String>[];
     for (final m in list) { if (!senders.contains(m.senderId)) senders.add(m.senderId); }
-    if (!mounted) return;
     setState(() {
       _msgs = list;
       _leftUid = senders.isNotEmpty ? senders.first : null;
       _error = null;
     });
     _loadPhotos();
+  }
+
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+
+  Future<void> _fetch() async {
+    final admin = context.read<AdminProvider>();
+    try {
+      final ok = await admin.fetchChatMessages(widget.chatId);
+      if (!mounted) return;
+      if (!ok) {
+        setState(() { _loading = false; _error = 'fetchChatMessages returned false'; });
+        return;
+      }
+      _applyMessages();
+      _loading = false;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loading = false; _error = 'EXCEPTION: $e'; });
+    }
+  }
+
+  Future<void> _poll() async {
+    final admin = context.read<AdminProvider>();
+    await admin.refreshChatMessages(widget.chatId);
+    if (!mounted) return;
+    _applyMessages();
   }
 
   List<MessageModel> _mapMessages(List<Map<String, dynamic>> raw) {
@@ -107,7 +126,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   void _loadPhotos() {
     for (final m in _msgs) {
-      if (m.type == 'image' && m.imageData.isEmpty && !_photoLoading.contains(m.id)) {
+      final isPhoto = m.type == 'image' ||
+          m.type == 'view_once' ||
+          m.type == 'view_once_expired';
+      if (isPhoto && m.imageData.isEmpty && !_photoLoading.contains(m.id)) {
         _loadOnePhoto(m);
       }
     }
@@ -215,6 +237,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
+    final admin = context.read<AdminProvider>();
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -257,10 +280,17 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                 : RefreshIndicator(
                     onRefresh: _fetch,
                     child: ListView.builder(
+                      controller: _scrollCtrl,
                       reverse: true,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: _msgs.length,
+                      padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).padding.bottom + 16),
+                      itemCount: _msgs.length + (admin.chatMessagesHasMore ? 1 : 0),
                       itemBuilder: (_, i) {
+                        if (i >= _msgs.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+                          );
+                        }
                         final msg = _msgs[_msgs.length - 1 - i];
                         final isMe = msg.senderId != _leftUid;
                         final isImageDeferred =

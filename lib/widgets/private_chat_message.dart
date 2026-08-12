@@ -44,6 +44,68 @@ Uint8List? b64ToBytes(String b64) {
 // Cache decode agar scroll-back tidak resize (glitch). Key = hash imageData.
 final decodedImageCache = <int, DecodedImage>{};
 
+// Teks + waktu: 1 baris → inline [teks  waktu]; 2+ baris → waktu di baris
+// baru rata kanan/kiri, sejajar dengan waktu pesan 1 baris di atasnya.
+class MessageTextWithTime extends StatelessWidget {
+  final String text;
+  final String timeStr;
+  final TextStyle textStyle;
+  final TextStyle timeStyle;
+  final bool alignRight;
+  final Widget? trailing;
+  const MessageTextWithTime({
+    super.key,
+    required this.text,
+    required this.timeStr,
+    required this.textStyle,
+    required this.timeStyle,
+    required this.alignRight,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final available = constraints.maxWidth.isFinite
+          ? constraints.maxWidth
+          : MediaQuery.sizeOf(context).width * 0.8;
+      final tp = TextPainter(
+        text: TextSpan(text: text, style: textStyle),
+        maxLines: 1,
+        textDirection: Directionality.of(context),
+      )..layout();
+      final timeTp = TextPainter(
+        text: TextSpan(text: timeStr, style: timeStyle),
+        textDirection: Directionality.of(context),
+      )..layout();
+      final extra = timeTp.width + 8 + (trailing != null ? 16.0 : 0);
+      final wraps = tp.width + extra > available;
+      if (!wraps) {
+        return RichText(
+          text: TextSpan(style: textStyle, children: [
+            TextSpan(text: text),
+            const TextSpan(text: '  '),
+            WidgetSpan(alignment: PlaceholderAlignment.belowBaseline, baseline: TextBaseline.alphabetic, child: Text(timeStr, style: timeStyle)),
+            if (trailing != null) WidgetSpan(alignment: PlaceholderAlignment.belowBaseline, baseline: TextBaseline.alphabetic, child: Padding(padding: const EdgeInsets.only(left: 3), child: trailing)),
+          ]),
+        );
+      }
+      return Column(
+        crossAxisAlignment: alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(text, style: textStyle),
+          const SizedBox(height: 3),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(timeStr, style: timeStyle),
+            if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+          ]),
+        ],
+      );
+    });
+  }
+}
+
 class MessageBubble extends StatelessWidget {
   final MessageModel msg;
   final String chatKey;
@@ -78,6 +140,9 @@ class MessageBubble extends StatelessWidget {
         children: [
           Flexible(
             child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width * 0.8,
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isMe ? AppTheme.primary.withValues(alpha: 0.25) : AppTheme.bgInput,
@@ -94,71 +159,97 @@ class MessageBubble extends StatelessWidget {
                   if (msg.type == 'image' && msg.imageData.isNotEmpty)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: MessageImage(
-                        imageData: msg.imageData,
-                        chatKey: chatKey,
-                        messageId: msg.id,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          MessageImage(
+                            imageData: msg.imageData,
+                            chatKey: chatKey,
+                            messageId: msg.id,
+                          ),
+                          Positioned(
+                            right: 6,
+                            bottom: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.55),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(timeStr, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                                  if (isMe) ...[
+                                    const SizedBox(width: 3),
+                                    Icon(
+                                      isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
+                                      size: 12,
+                                      color: isPending ? Colors.white70 : (isRead ? const Color(0xFF7EC8FF) : Colors.white70),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     )
                   else if (msg.type == 'image' && msg.imageData.isEmpty && isImageDeferred)
                     DeferredImage(onTap: () => onRetryImage?.call(msg.id))
                   else if (msg.type == 'view_once' || msg.type == 'view_once_expired')
-                    ViewOnceImage(
-                      imageData: msg.imageData,
-                      chatKey: chatKey,
-                      isMe: isMe,
-                      messageId: msg.id,
-                      isExpired: msg.type == 'view_once_expired',
-                      isAdminView: isAdminView,
+                    Stack(
+                      children: [
+                        ViewOnceImage(
+                          imageData: msg.imageData,
+                          chatKey: chatKey,
+                          isMe: isMe,
+                          messageId: msg.id,
+                          isExpired: msg.type == 'view_once_expired',
+                          isAdminView: isAdminView,
+                        ),
+                        Positioned(
+                          right: 6,
+                          bottom: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(timeStr, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                                if (isMe) ...[
+                                  const SizedBox(width: 3),
+                                  Icon(
+                                    isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
+                                    size: 12,
+                                    color: isPending ? Colors.white70 : (isRead ? const Color(0xFF7EC8FF) : Colors.white70),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     )
                   else
-                    RichText(
-                      text: TextSpan(
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, height: 1.2),
-                        children: [
-                          TextSpan(text: msg.text),
-                          const TextSpan(text: '  '),
-                          WidgetSpan(
-                            alignment: PlaceholderAlignment.belowBaseline,
-                            baseline: TextBaseline.alphabetic,
-                            child: Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-                          ),
-                          if (isMe)
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.belowBaseline,
-                              baseline: TextBaseline.alphabetic,
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 3),
-                                child: Icon(
-                                  isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
-                                  size: 12,
-                                  color: isPending ? AppTheme.textSecondary : (isRead ? AppTheme.primary : AppTheme.textSecondary),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired') ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-                        if (isMe) ...[
-                          const SizedBox(width: 3),
-                          if (isPending)
-                            Icon(Icons.done, size: 12, color: AppTheme.textSecondary)
-                          else
-                            Icon(
-                              isRead ? Icons.done_all : Icons.done,
+                    MessageTextWithTime(
+                      text: msg.text,
+                      timeStr: timeStr,
+                      textStyle: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, height: 1.2),
+                      timeStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                      alignRight: isMe,
+                      trailing: isMe
+                          ? Icon(
+                              isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
                               size: 12,
-                              color: isRead ? AppTheme.primary : AppTheme.textSecondary,
-                            ),
-                        ],
-                      ],
+                              color: isPending ? AppTheme.textSecondary : (isRead ? AppTheme.primary : AppTheme.textSecondary),
+                            )
+                          : null,
                     ),
-                  ],
                 ],
               ),
             ),
@@ -483,67 +574,66 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     } catch (_) {}
   }
 
+  Widget _buildAdminView(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    final decoded = _decoded;
+    final w = decoded != null ? _viewWidth(decoded) : 200.0;
+    final h = decoded != null ? _viewHeight(decoded) : 200.0;
+    final child = ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: w,
+        height: h,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            decoded != null
+                ? Image.memory(decoded.bytes, fit: BoxFit.contain, gaplessPlayback: true, filterQuality: FilterQuality.high)
+                : Container(color: AppTheme.bgInput, alignment: Alignment.center,
+                    child: const SizedBox(width: 28, height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70))),
+            Positioned(
+              top: 6, right: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(12)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
+                  const SizedBox(width: 3),
+                  Text(s.msgViewOnce, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (decoded == null) return child;
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.black,
+            body: SafeArea(
+              child: Stack(children: [
+                Center(child: InteractiveViewer(maxScale: 5, child: Image.memory(decoded.bytes, fit: BoxFit.contain))),
+                Positioned(top: 8, left: 8, child: IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 28), onPressed: () => Navigator.of(context).pop())),
+              ]),
+            ),
+          ),
+        ));
+      },
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.isAdminView) return _buildAdminView(context);
     return ValueListenableBuilder<ViewOnceState>(
       valueListenable: _tick.stateNotifier,
       builder: (_, st, _) {
     final s = context.read<LocaleProvider>().s;
-
-    // Admin monitor: foto view-once (termasuk expired) langsung tampil asli,
-    // tanpa kartu terkunci / timer. Tidak bisa "re-open" — cukup lihat sekali tampil.
-    if (widget.isAdminView) {
-      final decoded = _decoded;
-      final w = decoded != null ? _viewWidth(decoded) : 200.0;
-      final h = decoded != null ? _viewHeight(decoded) : 200.0;
-      return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: SizedBox(
-            width: w,
-            height: h,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                decoded != null
-                    ? Image.memory(
-                        decoded.bytes,
-                        fit: BoxFit.contain,
-                        gaplessPlayback: true,
-                        filterQuality: FilterQuality.high,
-                      )
-                    : Container(
-                        color: AppTheme.bgInput,
-                        alignment: Alignment.center,
-                        child: const SizedBox(
-                          width: 28, height: 28,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70),
-                        ),
-                      ),
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
-                        const SizedBox(width: 3),
-                        Text(s.msgViewOnce,
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      );
-    }
 
     // Pengirim lihat foto asli + badge
     if (widget.isMe) {

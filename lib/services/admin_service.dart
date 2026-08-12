@@ -30,17 +30,29 @@ class AdminService {
   }
 
   // ── Admin Chat Monitor ──
-  Future<List<Map<String, dynamic>>> listChats() async {
-    final res = await _sb.rpc('admin_list_chats');
-    final list = res as List<dynamic>? ?? const [];
-    return list.cast<Map<String, dynamic>>();
+  /// List chats dengan pagination. Return Map {'total': int, 'items': [...]}.
+  Future<Map<String, dynamic>> listChats({int limit = 50, int offset = 0}) async {
+    final res = await _sb.rpc(
+      'admin_list_chats_page',
+      params: {'p_limit': limit, 'p_offset': offset},
+    );
+    return (res as Map<String, dynamic>?) ?? {};
   }
 
-  /// Ambil semua pesan chat — image_data kosong kecuali view-once.
-  /// Foto biasa di-load lazy via PhotoCache + admin_get_message_image.
-  Future<List<Map<String, dynamic>>> getChatMessages(String chatId) async {
-    final res = await _sb.rpc('admin_get_chat_messages', params: {'p_chat_id': chatId});
-    final list = res as List<dynamic>? ?? const [];
+  /// Ambil pesan chat dengan pagination (desc dari terbaru) — image_data
+  /// kosong kecuali view-once. Foto biasa di-load lazy via PhotoCache.
+  Future<List<Map<String, dynamic>>> getChatMessages(
+    String chatId, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    print('[ADMIN-SVC] getChatMessages chatId=$chatId limit=$limit offset=$offset');
+    final res = await _sb.rpc(
+      'admin_get_chat_messages_page',
+      params: {'p_chat_id': chatId, 'p_limit': limit, 'p_offset': offset},
+    );
+    print('[ADMIN-SVC] getChatMessages result type=${res.runtimeType} len=${(res is List ? res.length : 'not list')}');
+    final list = res is List ? res : <dynamic>[];
     return list.cast<Map<String, dynamic>>();
   }
 

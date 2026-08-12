@@ -118,6 +118,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> signInAnonymously() async {
     await _auth.signInAnonymously();
     _profile = await _auth.getProfile();
+    _listenProfile();
     if (!_disposed) notifyListeners();
   }
 
@@ -143,6 +144,7 @@ class AuthProvider extends ChangeNotifier {
         _pendingLinkProfileId = existing['profile_id'] as String?;
         _pendingLinkNickname = existing['nickname'] as String?;
         _profile = await _auth.getProfile();
+        _listenProfile();
         if (!_disposed) notifyListeners();
         return 'link_prompt';
       }
@@ -150,6 +152,7 @@ class AuthProvider extends ChangeNotifier {
 
     _profile = await _auth.getProfile();
     print('[AUTH-PROVIDER] getProfile after google -> ${_profile?.uid}');
+    _listenProfile();
     if (!_disposed) notifyListeners();
     if (_profile != null) return 'exists';
     return 'new';
@@ -165,6 +168,7 @@ class AuthProvider extends ChangeNotifier {
     if (_pendingLinkProfileId == null) return;
     await _auth.linkGoogleProfile(_pendingLinkProfileId!);
     _profile = await _auth.getProfile();
+    _listenProfile();
     _pendingLinkProfileId = null;
     _pendingLinkNickname = null;
     if (!_disposed) notifyListeners();
@@ -285,6 +289,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> signInWithEmail(String email, String password) async {
     await _auth.signInWithEmail(email, password);
     _profile = await _auth.getProfile();
+    _listenProfile();
     if (_profile != null) await updateFcmToken();
     if (!_disposed) notifyListeners();
   }
@@ -443,6 +448,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> signOut() async {
     _idleTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _profileSub?.cancel();
     _isIdle = false;
     await _auth.goOffline();
     await _auth.signOut();
