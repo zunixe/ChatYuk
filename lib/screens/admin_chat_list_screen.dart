@@ -1,0 +1,212 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../config/theme.dart';
+import '../config/strings.dart';
+import '../providers/admin_provider.dart';
+import '../providers/locale_provider.dart';
+import '../utils.dart';
+import 'admin_chat_view_screen.dart';
+
+/// Admin: daftar semua percakapan user (monitoring).
+class AdminChatListScreen extends StatefulWidget {
+  const AdminChatListScreen({super.key});
+
+  @override
+  State<AdminChatListScreen> createState() => _AdminChatListScreenState();
+}
+
+class _AdminChatListScreenState extends State<AdminChatListScreen> {
+  Timer? _refreshTimer;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => context.read<AdminProvider>().fetchChats());
+    // Polling berkala → daftar chat selalu fresh tanpa loading flash.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      context.read<AdminProvider>().refreshChats();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> chats) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return chats;
+    return chats.where((chat) {
+      final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
+      final label = names.values.where((e) => e != null && '$e'.isNotEmpty).join(' ').toLowerCase();
+      final lastMsg = (chat['last_message'] as String? ?? '').toLowerCase();
+      return label.contains(q) || lastMsg.contains(q);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final admin = context.watch<AdminProvider>();
+    final s = context.watch<LocaleProvider>().s;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(s.adminChatMonitor,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, color: AppTheme.primary),
+                onPressed: () => admin.fetchChats(),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _query = v),
+            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: s.adminSearchChat,
+              prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 20),
+              isDense: true,
+              filled: true,
+              fillColor: AppTheme.bgInput,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            ),
+          ),
+        ),
+        Expanded(
+          child: admin.chatsLoading && admin.chats.isEmpty
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          : admin.chatsError != null
+              ? Center(
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
+                    const SizedBox(height: 8),
+                    Text(admin.chatsError!, style: const TextStyle(color: AppTheme.danger)),
+                    const SizedBox(height: 8),
+                    ElevatedButton(onPressed: () => admin.fetchChats(), child: Text(s.btnRetry)),
+                  ]),
+                )
+              : _filtered(admin.chats).isEmpty
+                  ? Center(
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.chat_bubble_outline, size: 48, color: AppTheme.textSecondary),
+                        const SizedBox(height: 12),
+                        Text(_query.isEmpty ? s.adminChatNoChats : s.searchNoResult,
+                          style: const TextStyle(color: AppTheme.textSecondary)),
+                      ]),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () => admin.fetchChats(),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                        itemCount: _filtered(admin.chats).length,
+                        itemBuilder: (_, i) {
+                          final chat = _filtered(admin.chats)[i];
+                          return _AdminChatCard(chat: chat, s: s);
+                        },
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdminChatCard extends StatelessWidget {
+  final Map<String, dynamic> chat;
+  final S s;
+  const _AdminChatCard({required this.chat, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
+    final participants = (chat['participants'] as List<dynamic>?) ?? const [];
+    final nameList = names.values.where((e) => e != null && '$e'.isNotEmpty).toList();
+    final label = nameList.isNotEmpty
+        ? nameList.join(' & ')
+        : participants.length == 1
+            ? '${participants.length} ${s.adminUserSingular}'
+            : '${participants.length} ${s.adminUsersPlural}';
+    final lastMsg = (chat['last_message'] as String? ?? '').trim();
+    final count = chat['message_count'] ?? 0;
+    final tsRaw = chat['last_message_at'];
+    final ts = tsRaw != null ? DateTime.tryParse('$tsRaw') : null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => AdminChatViewScreen(chatId: chat['chat_id'] as String? ?? '', chatLabel: label)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.forum_outlined, color: AppTheme.primary, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label,
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 3),
+                      Text(
+                        lastMsg.isEmpty ? '$count ${s.adminChatMsgs}' : lastMsg,
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('$count', style: const TextStyle(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w700)),
+                    if (ts != null) ...[
+                      const SizedBox(height: 2),
+                      Text(formatRelativeTime(ts, isId: s.isId),
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -297,9 +297,37 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text('🟢', style: TextStyle(fontSize: 48)),
-                                const SizedBox(height: 12),
-                                Text(_search.isNotEmpty ? s.searchNoResult : s.noOnlineUsers, style: const TextStyle(color: AppTheme.textSecondary)),
+                                Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      width: 88,
+                                      height: 88,
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primary.withValues(alpha: 0.08),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const Icon(Icons.group_add_rounded, size: 48, color: AppTheme.primary),
+                                    Positioned(
+                                      right: 4, bottom: 4,
+                                      child: Container(
+                                        width: 22, height: 22,
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.online,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 3),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _search.isNotEmpty ? s.searchNoResult : s.noOnlineUsers,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                                ),
                               ],
                             ),
                           )

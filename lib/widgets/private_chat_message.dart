@@ -1,0 +1,960 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
+import 'package:provider/provider.dart';
+import '../config/theme.dart';
+import '../models/message_model.dart';
+import '../providers/chat_provider.dart';
+import '../providers/locale_provider.dart';
+import '../services/photo_cache.dart';
+import '../services/screen_secure_service.dart';
+import '../utils.dart';
+
+// cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
+// ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
+String cacheKeyFor(String chatId) => 'private_$chatId';
+
+// Top-level function untuk compute() isolate — decode base64 + dimensi di background
+DecodedImage? decodeImageB64(String base64) {
+  try {
+    final bytes = base64Decode(base64);
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return DecodedImage(bytes, 0, 0);
+    return DecodedImage(bytes, decoded.width, decoded.height);
+  } catch (_) {
+    return null;
+  }
+}
+
+// Hasil decode: bytes + dimensi asli agar tampilan proporsional.
+class DecodedImage {
+  final Uint8List bytes;
+  final int width;
+  final int height;
+  const DecodedImage(this.bytes, this.width, this.height);
+}
+
+// Top-level untuk compute() — base64 → bytes (fullscreen viewer).
+Uint8List? b64ToBytes(String b64) {
+  try { return base64Decode(b64); } catch (_) { return null; }
+}
+
+// Cache decode agar scroll-back tidak resize (glitch). Key = hash imageData.
+final decodedImageCache = <int, DecodedImage>{};
+
+class MessageBubble extends StatelessWidget {
+  final MessageModel msg;
+  final String chatKey;
+  final bool isMe;
+  final bool isRead;
+  final bool isPending;
+  // Image kosong karena di luar window auto-load (pesan lama) → tampilkan
+  // icon refresh; klik memanggil onRetryImage(messageId).
+  final bool isImageDeferred;
+  final Future<void> Function(String messageId)? onRetryImage;
+  // Admin monitor: view-once yang sudah expired tetap bisa dilihat admin.
+  final bool isAdminView;
+  const MessageBubble({
+    super.key,
+    required this.msg,
+    required this.chatKey,
+    required this.isMe,
+    required this.isRead,
+    this.isPending = false,
+    this.isImageDeferred = false,
+    this.onRetryImage,
+    this.isAdminView = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final timeStr = formatTime(msg.timestamp);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isMe ? AppTheme.primary.withValues(alpha: 0.25) : AppTheme.bgInput,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(14),
+                  topRight: const Radius.circular(14),
+                  bottomLeft: Radius.circular(isMe ? 14 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 14),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (msg.type == 'image' && msg.imageData.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: MessageImage(
+                        imageData: msg.imageData,
+                        chatKey: chatKey,
+                        messageId: msg.id,
+                      ),
+                    )
+                  else if (msg.type == 'image' && msg.imageData.isEmpty && isImageDeferred)
+                    DeferredImage(onTap: () => onRetryImage?.call(msg.id))
+                  else if (msg.type == 'view_once' || msg.type == 'view_once_expired')
+                    ViewOnceImage(
+                      imageData: msg.imageData,
+                      chatKey: chatKey,
+                      isMe: isMe,
+                      messageId: msg.id,
+                      isExpired: msg.type == 'view_once_expired',
+                      isAdminView: isAdminView,
+                    )
+                  else
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, height: 1.2),
+                        children: [
+                          TextSpan(text: msg.text),
+                          const TextSpan(text: '  '),
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.belowBaseline,
+                            baseline: TextBaseline.alphabetic,
+                            child: Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                          ),
+                          if (isMe)
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.belowBaseline,
+                              baseline: TextBaseline.alphabetic,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 3),
+                                child: Icon(
+                                  isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
+                                  size: 12,
+                                  color: isPending ? AppTheme.textSecondary : (isRead ? AppTheme.primary : AppTheme.textSecondary),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired') ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(timeStr, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                        if (isMe) ...[
+                          const SizedBox(width: 3),
+                          if (isPending)
+                            Icon(Icons.done, size: 12, color: AppTheme.textSecondary)
+                          else
+                            Icon(
+                              isRead ? Icons.done_all : Icons.done,
+                              size: 12,
+                              color: isRead ? AppTheme.primary : AppTheme.textSecondary,
+                            ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Image yang belum di-load (pesan lama di luar window 50) — tampilkan icon refresh.
+class DeferredImage extends StatelessWidget {
+  final VoidCallback? onTap;
+  const DeferredImage({super.key, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 200,
+        height: 120,
+        color: AppTheme.bgInput,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.refresh, color: AppTheme.textSecondary, size: 22),
+            const SizedBox(height: 4),
+            Text(s.msgPhotoTapToLoad, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MessageImage extends StatefulWidget {
+  final String imageData;
+  final String chatKey;
+  final String messageId;
+  const MessageImage({
+    super.key,
+    required this.imageData,
+    required this.chatKey,
+    required this.messageId,
+  });
+
+  @override
+  State<MessageImage> createState() => _MessageImageState();
+}
+
+class _MessageImageState extends State<MessageImage> {
+  DecodedImage? _decoded;
+
+  @override
+  void initState() {
+    super.initState();
+    final key = widget.imageData.hashCode;
+    _decoded = decodedImageCache[key];
+    if (_decoded == null) _decode(key);
+  }
+
+  @override
+  void didUpdateWidget(MessageImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // imageData berubah (fetch awal kosong → photo download selesai) → re-decode
+    if (widget.imageData != oldWidget.imageData && widget.imageData.isNotEmpty) {
+      final key = widget.imageData.hashCode;
+      _decoded = decodedImageCache[key];
+      if (_decoded == null) _decode(key);
+    }
+  }
+
+  Future<void> _decode(int key) async {
+    final decoded = await compute(decodeImageB64, widget.imageData);
+    decodedImageCache[key] = decoded!;
+    if (!mounted) return;
+    setState(() => _decoded = decoded);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    final decoded = _decoded;
+    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
+      return Container(
+        width: 200, height: 200,
+        color: AppTheme.bgInput,
+        alignment: Alignment.center,
+        child: Text(s.msgPhotoExpired, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+      );
+    }
+    final aspect = decoded.width / decoded.height;
+    var width = 200.0;
+    var height = width / aspect;
+    if (height > 280) { height = 280; width = height * aspect; }
+    return GestureDetector(
+      onTap: () => _openFullscreen(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.memory(
+          decoded.bytes,
+          width: width, height: height,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => Container(
+            width: 200, height: 200,
+            color: AppTheme.bgInput,
+            alignment: Alignment.center,
+            child: Text(s.msgPhotoExpired, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openFullscreen() {
+    final decoded = _decoded;
+    if (decoded == null || !mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PhotoViewerScreen(
+          bytes: decoded.bytes,
+          fullLoader: () => PhotoCache.instance.load(widget.chatKey, widget.messageId),
+        ),
+      ),
+    );
+  }
+}
+
+// ── View Once Image ──────────────────────────────────────────────────────────
+enum ViewOnceState { idle, viewing, expired }
+
+// Timer & state persist di luar widget lifecycle — ListView.builder recycle
+// widget saat scroll, tapi timer harus terus jalan & state tidak boleh reset.
+class ViewOnceTick {
+  int left = 10;
+  Timer? timer;
+  final ValueNotifier<int> countdown = ValueNotifier<int>(10);
+  ViewOnceState _state = ViewOnceState.idle;
+  final ValueNotifier<ViewOnceState> stateNotifier = ValueNotifier<ViewOnceState>(ViewOnceState.idle);
+  bool viewerOpen = false;
+  DecodedImage? decoded;
+
+  ViewOnceState get state => _state;
+  set state(ViewOnceState s) { _state = s; stateNotifier.value = s; }
+
+  void dispose() { timer?.cancel(); countdown.dispose(); stateNotifier.dispose(); }
+}
+final viewOnceStates = <String, ViewOnceTick>{};
+
+class ViewOnceImage extends StatefulWidget {
+  final String imageData;
+  final String chatKey;
+  final bool isMe;
+  final String? messageId;
+  final bool isExpired;
+  // Admin monitor: lewati kartu "expired" — foto tetap bisa dilihat.
+  final bool isAdminView;
+  const ViewOnceImage({
+    super.key,
+    required this.imageData,
+    required this.chatKey,
+    required this.isMe,
+    this.messageId,
+    this.isExpired = false,
+    this.isAdminView = false,
+  });
+
+  @override
+  State<ViewOnceImage> createState() => _ViewOnceImageState();
+}
+
+class _ViewOnceImageState extends State<ViewOnceImage> {
+  late ViewOnceTick _tick;
+  DecodedImage? _decoded;
+
+  @override
+  void initState() {
+    super.initState();
+    // Admin monitor: bypass global viewOnceStates — tidak perlu timer/expired.
+    // Decode langsung dari imageData (yang sekarang selalu utuh di DB).
+    if (widget.isAdminView) {
+      if (widget.imageData.isNotEmpty) _decodeAdmin();
+      return;
+    }
+    final id = widget.messageId ?? 'pending-${widget.imageData.hashCode}';
+    _tick = viewOnceStates[id] ?? (viewOnceStates[id] = ViewOnceTick());
+    if (widget.isExpired && _tick.state != ViewOnceState.viewing) {
+      _tick.state = ViewOnceState.expired;
+    }
+    if (_tick.state == ViewOnceState.expired) return;
+    _decoded = _tick.decoded;
+    if (_decoded == null) _decode();
+  }
+
+  @override
+  void didUpdateWidget(ViewOnceImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isAdminView) {
+      if (widget.imageData.isNotEmpty && widget.imageData != oldWidget.imageData) {
+        _decodeAdmin();
+      }
+      return;
+    }
+    if (widget.isExpired && _tick.state != ViewOnceState.viewing) {
+      _tick.state = ViewOnceState.expired;
+      ScreenSecureService.exitViewOnce();
+      setState(() {});
+      return;
+    }
+    if (_tick.state == ViewOnceState.expired) return;
+    if (widget.imageData != oldWidget.imageData && widget.imageData.isNotEmpty) {
+      _decoded = _tick.decoded;
+      if (_decoded == null) _decode();
+    }
+  }
+
+  Future<void> _decodeAdmin() async {
+    final decoded = await compute(decodeImageB64, widget.imageData);
+    if (!mounted) return;
+    setState(() => _decoded = decoded);
+  }
+
+  @override
+  void dispose() {
+    // Jangan dispose _tick — timer harus terus jalan via viewOnceStates
+    super.dispose();
+  }
+
+  Future<void> _decode() async {
+    // Sender/load: kalau imageData thumbnail kosong, ambil dari PhotoCache
+    // (messageId) dulu — view-once yang pernah dilihat pengirim harus tetap tampil.
+    var data = widget.imageData;
+    if (data.isEmpty) {
+      final id = widget.messageId;
+      if (id != null && !id.startsWith('pending-')) {
+        try {
+          data = await PhotoCache.instance.load(widget.chatKey, id) ?? '';
+        } catch (_) {}
+      }
+    }
+    // Data tidak tersedia (server sudah hapus image view-once & cache kosong)
+    // → tampilkan kartu terkunci, jangan spinner muter terus.
+    if (data.isEmpty) {
+      // Kalau BUKAN expired (pesan baru view_once), jangan langsung kunci.
+      // Realtime bisa truncate base64 besar → image_data broadcast kosong.
+      // Photo download async akan mengisi imageData via didUpdateWidget.
+      if (!widget.isExpired) return;
+      _tick.state = ViewOnceState.expired;
+      ScreenSecureService.exitViewOnce();
+      if (!mounted) return;
+      setState(() {});
+      return;
+    }
+    final decoded = await compute(decodeImageB64, data);
+    _tick.decoded = decoded;
+    if (!mounted) return;
+    setState(() => _decoded = decoded);
+    // Kalau user sudah tap "Lihat" sebelum gambar siap → mulai timer sekarang
+    if (_tick.state == ViewOnceState.viewing && _tick.timer == null && decoded != null) {
+      _beginCountdown();
+    }
+  }
+
+  void _startViewing() {
+    if (_tick.state != ViewOnceState.idle) return;
+    _tick.state = ViewOnceState.viewing;
+    setState(() {});
+    ScreenSecureService.enterViewOnce();
+    // Mulai timer hanya kalau gambar sudah siap — kalau belum, nunggu _decode selesai
+    if (_decoded != null) {
+      _beginCountdown();
+    }
+  }
+
+  void _beginCountdown() {
+    if (_tick.timer != null) return;
+    _tick.left = 10;
+    _tick.countdown.value = 10;
+    _tick.timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      _tick.left--;
+      _tick.countdown.value = _tick.left;
+      if (_tick.left <= 0) {
+        t.cancel();
+        _tick.timer = null;
+        _tick.state = ViewOnceState.expired;
+        ScreenSecureService.exitViewOnce();
+        if (_tick.viewerOpen && mounted) Navigator.of(context).maybePop();
+        if (mounted) { setState(() {}); _clearFromServer(); }
+        return;
+      }
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _openViewer() {
+    if (_decoded == null || _tick.state != ViewOnceState.viewing || !mounted) return;
+    _tick.viewerOpen = true;
+    Navigator.of(context)
+        .push(MaterialPageRoute(
+          builder: (_) => PhotoViewerScreen(
+            bytes: _decoded!.bytes,
+            fullLoader: () {
+              final id = widget.messageId;
+              if (id == null || id.startsWith('pending-')) return Future.value(null);
+              return PhotoCache.instance.load(widget.chatKey, id);
+            },
+            countdown: _tick.countdown,
+          ),
+        ))
+        .whenComplete(() => _tick.viewerOpen = false);
+  }
+
+  Future<void> _clearFromServer() async {
+    final id = widget.messageId;
+    if (id == null || id.startsWith('pending-')) return;
+    try {
+      await context.read<ChatProvider>().clearViewOnceImage(id);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ViewOnceState>(
+      valueListenable: _tick.stateNotifier,
+      builder: (_, st, _) {
+    final s = context.read<LocaleProvider>().s;
+
+    // Admin monitor: foto view-once (termasuk expired) langsung tampil asli,
+    // tanpa kartu terkunci / timer. Tidak bisa "re-open" — cukup lihat sekali tampil.
+    if (widget.isAdminView) {
+      final decoded = _decoded;
+      final w = decoded != null ? _viewWidth(decoded) : 200.0;
+      final h = decoded != null ? _viewHeight(decoded) : 200.0;
+      return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            width: w,
+            height: h,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                decoded != null
+                    ? Image.memory(
+                        decoded.bytes,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                        filterQuality: FilterQuality.high,
+                      )
+                    : Container(
+                        color: AppTheme.bgInput,
+                        alignment: Alignment.center,
+                        child: const SizedBox(
+                          width: 28, height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70),
+                        ),
+                      ),
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
+                        const SizedBox(width: 3),
+                        Text(s.msgViewOnce,
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      );
+    }
+
+    // Pengirim lihat foto asli + badge
+    if (widget.isMe) {
+      // View-once terkunci (data sudah tidak tersedia) → kartu terkunci, bukan spinner
+      if (_tick.state == ViewOnceState.expired) {
+        return ViewOnceLockedCard(title: s.viewOnceExpired, hint: s.viewOnceExpiredHint);
+      }
+      final decoded = _decoded;
+      final w = decoded != null ? _viewWidth(decoded) : 200.0;
+      final h = decoded != null ? _viewHeight(decoded) : 200.0;
+      return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            width: w,
+            height: h,
+            child: Stack(
+            fit: StackFit.expand,
+            children: [
+              decoded != null
+                  ? Image.memory(
+                      decoded.bytes,
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.high,
+                    )
+                  : Container(
+                      color: AppTheme.bgInput,
+                      alignment: Alignment.center,
+                      child: const SizedBox(
+                        width: 28, height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70),
+                      ),
+                    ),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
+                      const SizedBox(width: 3),
+                      Text(s.msgViewOnce,
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            ),
+          ),
+      );
+    }
+
+    // Penerima — idle: kartu modern "tekan untuk melihat"
+    if (_tick.state == ViewOnceState.idle) {
+      return GestureDetector(
+        onTap: _startViewing,
+        child: Container(
+          width: 220,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1E88E5), Color(0xFF00BCD4)],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00BCD4).withValues(alpha: 0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.22),
+                ),
+                child: const Icon(
+                  Icons.remove_red_eye_outlined,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                s.viewOnceTitle,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                s.viewOnceTap,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  s.btnView,
+                  style: const TextStyle(
+                    color: Color(0xFF1E88E5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Expired — kartu terkunci (tanpa image — hemat memori & tidak load foto)
+    if (_tick.state == ViewOnceState.expired) {
+      return ViewOnceLockedCard(title: s.viewOnceExpired, hint: s.viewOnceExpiredHint);
+    }
+
+    // Viewing — tampilkan foto proporsional + countdown; tap untuk memperbesar
+    final decoded = _decoded;
+    final vw = decoded != null ? _viewWidth(decoded) : 200.0;
+    final vh = decoded != null ? _viewHeight(decoded) : 200.0;
+    return GestureDetector(
+      onTap: _openViewer,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            width: vw,
+            height: vh,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                decoded != null
+                    ? Image.memory(
+                        decoded.bytes,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true)
+                    : Container(
+                        color: AppTheme.bgInput,
+                        alignment: Alignment.center,
+                        child: const SizedBox(
+                          width: 28, height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70),
+                        ),
+                      ),
+                Positioned(
+                  top: 6, right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer, color: Colors.white, size: 12),
+                        const SizedBox(width: 3),
+                        ValueListenableBuilder<int>(
+                          valueListenable: _tick.countdown,
+                          builder: (_, v, _) => Text('${v}s',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+    );
+  }
+
+  // Lebar/tinggi tampilan proporsional (maks 200×280) sesuai rasio asli.
+  static double _viewWidth(DecodedImage d) {
+    final aspect = d.width / d.height;
+    var width = 200.0;
+    var height = width / aspect;
+    if (height > 280) {
+      height = 280;
+      width = height * aspect;
+    }
+    return width;
+  }
+
+  static double _viewHeight(DecodedImage d) {
+    final aspect = d.width / d.height;
+    var width = 200.0;
+    var height = width / aspect;
+    if (height > 280) {
+      height = 280;
+      width = height * aspect;
+    }
+    return height;
+  }
+}
+
+// ── Photo Viewer Fullscreen ─────────────────────────────────────────────────
+// Menampilkan foto fullscreen (hitam) dengan zoom + close. Bubble mengirim
+// THUMBNAIL (bytes) supaya viewer langsung tampil, lalu fullLoader mengambil
+// versi full-res dari PhotoCache dan menggantinya begitu siap.
+// Untuk view-once, countdown diteruskan dari state pemilik sehingga timer
+// terus berjalan.
+class PhotoViewerScreen extends StatefulWidget {
+  final Uint8List bytes;
+  final Future<String?> Function()? fullLoader;
+  final ValueNotifier<int>? countdown;
+  const PhotoViewerScreen({super.key, required this.bytes, this.fullLoader, this.countdown});
+
+  @override
+  State<PhotoViewerScreen> createState() => _PhotoViewerScreenState();
+}
+
+class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
+  Uint8List? _fullBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFull();
+  }
+
+  Future<void> _loadFull() async {
+    final loader = widget.fullLoader;
+    if (loader == null) return;
+    try {
+      final b64 = await loader();
+      if (b64 == null || b64.isEmpty || !mounted) return;
+      final bytes = await compute(b64ToBytes, b64);
+      if (bytes == null || !mounted) return;
+      setState(() => _fullBytes = bytes);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _fullBytes ?? widget.bytes;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                maxScale: 5,
+                child: Image.memory(bytes, fit: BoxFit.contain),
+              ),
+            ),
+            if (_fullBytes == null && widget.fullLoader != null)
+              const Positioned(
+                top: 40,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                  ),
+                ),
+              ),
+            Positioned(
+              top: 8,
+              left: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Tutup',
+              ),
+            ),
+            if (widget.countdown != null)
+              Positioned(
+                top: 12,
+                right: 16,
+                child: ValueListenableBuilder<int>(
+                  valueListenable: widget.countdown!,
+                  builder: (_, secs, _) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer, color: Colors.white, size: 16),
+                        const SizedBox(width: 4),
+                        Text('${secs}s',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Kartu "foto sudah kadaluarsa" — dipakai pengirim & penerima (design sama).
+class ViewOnceLockedCard extends StatelessWidget {
+  final String title;
+  final String hint;
+  const ViewOnceLockedCard({super.key, required this.title, required this.hint});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 200,
+        height: 140,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF37474F), Color(0xFF263238)],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.15),
+                      Colors.black.withValues(alpha: 0.72),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.lock_clock_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hint,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontSize: 10.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

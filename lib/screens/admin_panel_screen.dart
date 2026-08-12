@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -5,6 +6,8 @@ import '../config/strings.dart';
 import '../providers/admin_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/locale_provider.dart';
+import '../utils.dart';
+import 'admin_chat_list_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -15,15 +18,26 @@ class AdminPanelScreen extends StatefulWidget {
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
   final _bonusCtrl = TextEditingController(text: '100');
   final _logoutCtrl = TextEditingController();
+  Timer? _statsTimer;
+  DateTime? _lastUpdated;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() => context.read<AdminProvider>().fetchStats());
+    // Polling ringan → angka statistik selalu segar tanpa loading flash.
+    _statsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _pollStats());
+  }
+
+  Future<void> _pollStats() async {
+    final admin = context.read<AdminProvider>();
+    await admin.refreshStats();
+    if (mounted) setState(() => _lastUpdated = DateTime.now());
   }
 
   @override
   void dispose() {
+    _statsTimer?.cancel();
     _bonusCtrl.dispose();
     _logoutCtrl.dispose();
     super.dispose();
@@ -42,44 +56,72 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final s = context.watch<LocaleProvider>().s;
     final stats = admin.stats;
 
-    return Scaffold(
-      backgroundColor: AppTheme.bgScreen,
-      appBar: AppBar(
-        title: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.admin_panel_settings, size: 20, color: AppTheme.primary),
-          const SizedBox(width: 8),
-          Text(s.adminPanel),
-        ]),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh_rounded, size: 20, color: AppTheme.primary), onPressed: () => admin.fetchStats()),
-        ],
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppTheme.bgScreen,
+        appBar: AppBar(
+          title: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.admin_panel_settings, size: 20, color: AppTheme.primary),
+            const SizedBox(width: 8),
+            Text(s.adminPanel),
+          ]),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 20, color: AppTheme.primary),
+              onPressed: () async {
+                await admin.fetchStats();
+                if (mounted) setState(() => _lastUpdated = DateTime.now());
+              },
+            ),
+          ],
+          bottom: TabBar(
+            labelColor: AppTheme.primary,
+            unselectedLabelColor: AppTheme.textSecondary,
+            indicatorColor: AppTheme.primary,
+            tabs: [
+              Tab(text: s.adminOverview),
+              Tab(text: s.adminChatMonitor),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            admin.loading
+                ? const Center(child: CircularProgressIndicator())
+                : admin.error != null
+                    ? _errorView(admin, s)
+                    : RefreshIndicator(
+                        onRefresh: () async {
+                          await admin.fetchStats();
+                          if (mounted) setState(() => _lastUpdated = DateTime.now());
+                        },
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          children: [
+                            _lastUpdatedHeader(s),
+                            const SizedBox(height: 8),
+                            _statsGrid(stats, s),
+                            const SizedBox(height: 8),
+                            _topEarners(stats, s),
+                            const SizedBox(height: 12),
+                            _controls(admin, s),
+                            const SizedBox(height: 12),
+                            _massBonus(admin, s),
+                            const SizedBox(height: 12),
+                            _reportedUsers(stats, s),
+                            const SizedBox(height: 12),
+                            _forceLogout(s),
+                            const SizedBox(height: 12),
+                            _dangerZone(admin, s),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+            const AdminChatListScreen(),
+          ],
+        ),
       ),
-      body: admin.loading
-          ? const Center(child: CircularProgressIndicator())
-          : admin.error != null
-              ? _errorView(admin, s)
-              : RefreshIndicator(
-                  onRefresh: () => admin.fetchStats(),
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                    children: [
-                      _statsGrid(stats, s),
-                      const SizedBox(height: 8),
-                      _topEarners(stats, s),
-                      const SizedBox(height: 12),
-                      _controls(admin, s),
-                      const SizedBox(height: 12),
-                      _massBonus(admin, s),
-                      const SizedBox(height: 12),
-                      _reportedUsers(stats, s),
-                      const SizedBox(height: 12),
-                      _forceLogout(s),
-                      const SizedBox(height: 12),
-                      _dangerZone(admin, s),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
     );
   }
 
@@ -91,6 +133,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       const SizedBox(height: 8),
       ElevatedButton(onPressed: () => admin.fetchStats(), child: Text(s.btnRetry)),
     ]));
+  }
+
+  Widget _lastUpdatedHeader(S s) {
+    final ts = _lastUpdated;
+    if (ts == null) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Text(
+        '${s.adminLastUpdate} ${formatRelativeTime(ts, isId: s.isId)}',
+        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+      ),
+    );
   }
 
   Widget _statsGrid(Map<String, dynamic>? stats, S s) {

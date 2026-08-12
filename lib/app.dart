@@ -274,7 +274,11 @@ class _BottomNav extends StatelessWidget {
           currentIndex: currentIndex,
           onTap: onTap,
           items: [
-            BottomNavigationBarItem(icon: const Icon(Icons.wifi_tethering), label: s.navOnline),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.group_rounded),
+              activeIcon: const Icon(Icons.group_rounded),
+              label: s.navOnline,
+            ),
             BottomNavigationBarItem(
               icon: _BadgedIcon(icon: Icons.chat_bubble, count: totalUnread),
               label: s.navChats,
