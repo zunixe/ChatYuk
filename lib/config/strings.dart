@@ -350,4 +350,19 @@ class S {
   String get lobbyCountryHint    => isId ? 'Negara / Country'                   : 'Country / Negara';
   String get donateCopyAddress   => isId ? 'Salin Alamat '                      : 'Copy Address ';
   String get googleSignInFailed  => isId ? 'Google sign in gagal: '             : 'Google sign in failed: ';
+
+  // ── Admin Chat Monitor ──
+  String get adminOverview       => isId ? 'Ringkasan'                        : 'Overview';
+  String get adminChatMonitor   => isId ? 'Monitor Chat'                     : 'Chat Monitor';
+  String get adminChatNoChats   => isId ? 'Belum ada percakapan'             : 'No conversations yet';
+  String get adminChatMsgs      => isId ? 'pesan'                            : 'messages';
+  String get adminChatOpen      => isId ? 'Buka Percakapan'                  : 'Open Conversation';
+  String get adminChatLoading   => isId ? 'Memuat percakapan...'             : 'Loading conversation...';
+  String get adminChatError     => isId ? 'Gagal memuat percakapan'          : 'Failed to load conversation';
+  String get adminChatBack      => isId ? 'Kembali'                          : 'Back';
+  String get adminViewOnce      => isId ? 'Foto Sekali Lihat (Admin)'        : 'View-Once Photo (Admin)';
+  String get adminLastUpdate    => isId ? 'Update terakhir'                  : 'Last updated';
+  String get adminSearchChat    => isId ? 'Cari percakapan...'               : 'Search conversations...';
+  String get adminUserSingular  => isId ? 'user'                             : 'user';
+  String get adminUsersPlural   => isId ? 'user'                             : 'users';
 }

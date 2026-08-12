@@ -368,6 +368,7 @@ class ChatService {
           if (idx < 0) { reload(); return; }
           final updated = _current[idx].copyWith(
             imageData: newRecord['image_data'] as String?,
+            type: newRecord['type'] as String?,
           );
           _current[idx] = updated;
           controller.add(List.unmodifiable(_current));
@@ -569,12 +570,13 @@ class ChatService {
     });
   }
 
-  /// Hapus image_data dari view_once message setelah dilihat.
-  /// Data foto dihapus dari DB — hanya metadata yang tersisa.
+  /// Tandai view_once message sebagai expired setelah dilihat.
+  /// image_data DIKEEP di DB (admin masih bisa melihat) — hanya type yang
+  /// diubah. Kontrol "boleh lihat/tidak" dilakukan di sisi UI.
   Future<void> clearViewOnceImage(String messageId) async {
     try {
       await _sb.from('private_messages')
-          .update({'image_data': '', 'type': 'view_once_expired'})
+          .update({'type': 'view_once_expired'})
           .eq('id', messageId);
     } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
   }
