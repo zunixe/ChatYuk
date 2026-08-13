@@ -40,24 +40,14 @@ class RoomService {
         .toList();
   }
 
-  /// Buat/lengkapi room kategori untuk satu negara (id = '<negara>_<kategori>').
+  /// Buat/lengkapi room kategori untuk satu negara via RPC security definer.
+  /// RLS rooms INSERT/UPDATE dibatasi admin (hardening) — seeding lewat
+  /// RPC agar user biasa tetap bisa memunculkan room saat app dibuka.
   /// Hanya dijalankan sekali per negara per sesi app.
   Future<void> seedCountryRooms(String country) async {
     if (country.isEmpty) return;
     if (_seededCountries.contains(country)) return;
-    final rows = [
-      for (int i = 0; i < roomCategories.length; i++)
-        {
-          'id': '${country}_${roomCategories[i]['id']}',
-          'name': roomCategories[i]['name']!,
-          'description': roomCategories[i]['desc']!,
-          'icon': roomCategories[i]['icon']!,
-          'country': country,
-          'category': roomCategories[i]['id']!,
-          'order': i + 1,
-        },
-    ];
-    await _sb.from('rooms').upsert(rows, onConflict: 'id');
+    await _sb.rpc('seed_rooms', params: {'p_country': country});
     _seededCountries.add(country);
   }
 

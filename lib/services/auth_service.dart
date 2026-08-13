@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
 import '../config/supabase_config.dart';
+import '../services/storage_photo_service.dart';
 import '../utils.dart';
 
 /// Dilempar saat email tidak terdaftar di Auth (cek via RPC sebelum kirim reset).
@@ -91,8 +92,11 @@ class AuthService {
     final newId = uid;
     if (newId == null) return;
     try {
-      // Copy profile lama ke uid baru
-      final old = await _sb.from('profiles').select().eq('id', oldProfileId).maybeSingle();
+      // Copy profile lama ke uid baru.
+      // Exclude ip_address & fcm_token — kolom ini di-revoke dari akses
+      // publik (hardening), dan tidak boleh ditimpa saat link akun.
+      const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,hashtags,points';
+      final old = await _sb.from('profiles').select(cols).eq('id', oldProfileId).maybeSingle();
       if (old == null) return;
 
       // Upsert profile lama ke uid baru
@@ -356,11 +360,17 @@ class AuthService {
   Future<UserModel?> getProfile() async {
     final id = uid;
     if (id == null) return null;
-    // Exclude fcm_token dan ip_address �?" tidak dibutuhkan di model
+    // Exclude fcm_token dan ip_address — tidak dibutuhkan di model
     const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points';
     final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
     if (res == null) return null;
-    return UserModel.fromMap(id, snakeToCamel(res));
+    final model = UserModel.fromMap(id, snakeToCamel(res));
+    // avatar berupa PATH storage → download → isi base64 (UI tetap pakai base64).
+    if (model.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(model.avatar)) {
+      final b64 = await StoragePhotoService.instance.download(model.avatar) ?? '';
+      return model.copyWith(avatar: b64);
+    }
+    return model;
   }
 
   /// Ambil profil user lain (untuk halaman info pengguna).
@@ -369,7 +379,12 @@ class AuthService {
     const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points';
     final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
     if (res == null) return null;
-    return UserModel.fromMap(id, snakeToCamel(res));
+    final model = UserModel.fromMap(id, snakeToCamel(res));
+    if (model.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(model.avatar)) {
+      final b64 = await StoragePhotoService.instance.download(model.avatar) ?? '';
+      return model.copyWith(avatar: b64);
+    }
+    return model;
   }
 
   /// Stream realtime profil sendiri — poin, status, email terdaftar, dll.
@@ -389,11 +404,16 @@ class AuthService {
         column: 'id',
         value: id,
       ),
-      callback: (payload) {
+      callback: (payload) async {
         if (controller.isClosed) return;
         try {
           final row = payload.newRecord;
-          final model = UserModel.fromMap(id, snakeToCamel(row));
+          var model = UserModel.fromMap(id, snakeToCamel(row));
+          // avatar PATH storage → download → base64 (UI tetap pakai base64).
+          if (model.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(model.avatar)) {
+            final b64 = await StoragePhotoService.instance.download(model.avatar) ?? '';
+            model = model.copyWith(avatar: b64);
+          }
           controller.add(model);
         } catch (e) { debugPrint('[AuthService] onMyProfileUpdates ignored: $e'); }
       },
@@ -447,7 +467,11 @@ class AuthService {
     if (base64.length > 524288) {
       throw Exception('Image too large (max 384KB)');
     }
-    await _sb.from('profiles').update({'avatar': base64}).eq('id', id);
+    // Upload ke Storage — DB hanya simpan path (hemat ruang).
+    final path = base64.isEmpty
+        ? ''
+        : await StoragePhotoService.instance.uploadAvatar(uid: id, base64: base64) ?? '';
+    await _sb.from('profiles').update({'avatar': path}).eq('id', id);
   }
 
   Future<void> removeAvatar() async {
@@ -528,11 +552,20 @@ class AuthService {
         .select('id,user_id,photo,created_at')
         .eq('user_id', userId)
         .order('created_at', ascending: false);
-    return rows.map((row) => UserPhoto.fromMap('${row['id']}', {
-      'userId': row['user_id'],
-      'photo': row['photo'],
-      'createdAt': row['created_at'],
-    })).toList();
+    final result = <UserPhoto>[];
+    for (final row in rows) {
+      var photo = row['photo'] as String? ?? '';
+      // photo bisa berupa PATH storage (foto baru) → download → base64.
+      if (photo.isNotEmpty && StoragePhotoService.instance.isGalleryPath(photo)) {
+        photo = await StoragePhotoService.instance.download(photo) ?? '';
+      }
+      result.add(UserPhoto.fromMap('${row['id']}', {
+        'userId': row['user_id'],
+        'photo': photo,
+        'createdAt': row['created_at'],
+      }));
+    }
+    return result;
   }
 
   /// Upload foto galeri milik sendiri. Max 6 foto per user.
@@ -554,12 +587,21 @@ class AuthService {
     if (rows.length >= 6) {
       throw Exception('Max 6 photos');
     }
-    await _sb.from('user_photos').insert({'user_id': id, 'photo': base64});
+    // Upload ke Storage — DB hanya simpan path (hemat ruang).
+    final path = await StoragePhotoService.instance.uploadPhoto(uid: id, base64: base64) ?? base64;
+    await _sb.from('user_photos').insert({'user_id': id, 'photo': path});
   }
 
   /// Hapus foto galeri (hanya punya sendiri, RLS menjamin).
   Future<void> deletePhoto(String photoId) async {
     if (photoId.isEmpty) return;
+    try {
+      final row = await _sb.from('user_photos').select('photo').eq('id', photoId).maybeSingle();
+      final photo = row?['photo'] as String? ?? '';
+      if (photo.isNotEmpty && StoragePhotoService.instance.isGalleryPath(photo)) {
+        await StoragePhotoService.instance.delete(photo);
+      }
+    } catch (_) {}
     await _sb.from('user_photos').delete().eq('id', photoId);
   }
 

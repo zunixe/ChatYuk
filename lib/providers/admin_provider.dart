@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/admin_service.dart';
+import '../services/storage_photo_service.dart';
 
 class AdminProvider extends ChangeNotifier {
   final AdminService _service = AdminService(Supabase.instance.client);
@@ -39,6 +40,16 @@ class AdminProvider extends ChangeNotifier {
       debugPrint('[ADMIN] refreshStats error: $e');
     }
     if (!_disposed) notifyListeners();
+  }
+
+  /// Ambil detail data card Overview (list user/room per kategori).
+  Future<Map<String, dynamic>> fetchStatsDetail() async {
+    try {
+      return await _service.getStatsDetail();
+    } catch (e) {
+      debugPrint('[ADMIN] fetchStatsDetail error: $e');
+      return {};
+    }
   }
 
   Future<Map<String, dynamic>?> massBonus(int bonus) async {
@@ -90,6 +101,7 @@ class AdminProvider extends ChangeNotifier {
 
   List<Map<String, dynamic>> _chats = [];
   List<Map<String, dynamic>> _chatMessages = [];
+  List<String> _adminUids = [];
   bool _chatsLoading = false;
   bool _chatsHasMore = true;
   int _chatsTotal = 0;
@@ -98,6 +110,7 @@ class AdminProvider extends ChangeNotifier {
 
   List<Map<String, dynamic>> get chats => _chats;
   List<Map<String, dynamic>> get chatMessages => _chatMessages;
+  List<String> get adminUids => _adminUids;
   bool get chatsLoading => _chatsLoading;
   bool get chatsHasMore => _chatsHasMore;
   int get chatsTotal => _chatsTotal;
@@ -112,6 +125,9 @@ class AdminProvider extends ChangeNotifier {
       _chats = List<Map<String, dynamic>>.from(res['items'] ?? const []);
       _chatsTotal = (res['total'] as num?)?.toInt() ?? 0;
       _chatsHasMore = _chats.length < _chatsTotal;
+      _adminUids = (res['admin_uids'] as List<dynamic>? ?? const [])
+          .map((e) => '$e')
+          .toList();
     } catch (e) {
       _chatsError = e.toString();
       debugPrint('[ADMIN] fetchChats error: $e');
@@ -130,6 +146,9 @@ class AdminProvider extends ChangeNotifier {
       _chatsTotal = (res['total'] as num?)?.toInt() ?? _chatsTotal;
       _chats = [..._chats, ...more];
       _chatsHasMore = _chats.length < _chatsTotal;
+      _adminUids = (res['admin_uids'] as List<dynamic>? ?? const [])
+          .map((e) => '$e')
+          .toList();
     } catch (e) {
       debugPrint('[ADMIN] fetchMoreChats error: $e');
     }
@@ -144,6 +163,9 @@ class AdminProvider extends ChangeNotifier {
       _chats = List<Map<String, dynamic>>.from(res['items'] ?? const []);
       _chatsTotal = (res['total'] as num?)?.toInt() ?? 0;
       _chatsHasMore = _chats.length < _chatsTotal;
+      _adminUids = (res['admin_uids'] as List<dynamic>? ?? const [])
+          .map((e) => '$e')
+          .toList();
     } catch (e) {
       debugPrint('[ADMIN] refreshChats error: $e');
     }
@@ -216,6 +238,26 @@ class AdminProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[ADMIN] fetchMessageImage error: $e');
       return '';
+    }
+  }
+
+  /// Hapus chat + (opsional) user. Return true jika sukses.
+  Future<bool> deleteChat(String chatId, List<String> deleteUserIds) async {
+    try {
+      final res = await _service.deleteChat(chatId, deleteUserIds);
+      final paths = (res['photo_paths'] as List<dynamic>? ?? const [])
+          .whereType<String>()
+          .toList();
+      // Cleanup foto di bucket storage (best-effort, tidak blokir).
+      for (final p in paths) {
+        if (StoragePhotoService.instance.isPath(p)) {
+          await StoragePhotoService.instance.delete(p);
+        }
+      }
+      return res['ok'] == true;
+    } catch (e) {
+      debugPrint('[ADMIN] deleteChat error: $e');
+      return false;
     }
   }
 

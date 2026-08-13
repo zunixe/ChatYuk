@@ -137,7 +137,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
                             );
                           }
                           final chat = filtered[i];
-                          return _AdminChatCard(chat: chat, s: s);
+                          return _AdminChatCard(chat: chat, s: s, adminUids: admin.adminUids);
                         },
                       ),
                     ),
@@ -150,7 +150,8 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
 class _AdminChatCard extends StatelessWidget {
   final Map<String, dynamic> chat;
   final S s;
-  const _AdminChatCard({required this.chat, required this.s});
+  final List<String> adminUids;
+  const _AdminChatCard({required this.chat, required this.s, required this.adminUids});
 
   @override
   Widget build(BuildContext context) {
@@ -222,11 +223,108 @@ class _AdminChatCard extends StatelessWidget {
                     ],
                   ],
                 ),
+                const SizedBox(width: 4),
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _showDeleteDialog(context),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _showDeleteDialog(BuildContext context) async {
+    final participants = (chat['participants'] as List<dynamic>?) ?? const [];
+    final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
+    final myUids = participants.map((e) => '$e').toList();
+    if (myUids.length < 2) return;
+
+    final selected = <String>{};
+    // Secara default centang SEMUA user yang bukan admin.
+    for (final uid in myUids) {
+      if (!adminUids.contains(uid)) selected.add(uid);
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          final delMe = myUids[0];
+          final delOther = myUids[1];
+          final isAdminMe = adminUids.contains(delMe);
+          final isAdminOther = adminUids.contains(delOther);
+          final nameMe = '${names[delMe] ?? 'User'}' + (isAdminMe ? ' ${s.adminCannotDeleteAdmin}' : '');
+          final nameOther = '${names[delOther] ?? 'User'}' + (isAdminOther ? ' ${s.adminCannotDeleteAdmin}' : '');
+
+          return AlertDialog(
+            backgroundColor: AppTheme.bgCard,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            title: Row(children: [
+              const Icon(Icons.delete_forever, color: AppTheme.danger, size: 22),
+              const SizedBox(width: 10),
+              Expanded(child: Text(s.adminDeleteChatTitle, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700))),
+            ]),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.adminDeleteChatBody, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    value: selected.contains(delMe),
+                    onChanged: isAdminMe ? null : (v) => setState(() {
+                      v == true ? selected.add(delMe) : selected.remove(delMe);
+                    }),
+                    title: Text('${s.adminDeleteUser}: $nameMe',
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    activeColor: AppTheme.danger,
+                  ),
+                  CheckboxListTile(
+                    value: selected.contains(delOther),
+                    onChanged: isAdminOther ? null : (v) => setState(() {
+                      v == true ? selected.add(delOther) : selected.remove(delOther);
+                    }),
+                    title: Text('${s.adminDeleteUser}: $nameOther',
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    activeColor: AppTheme.danger,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(s.adminDeleteChatOnly, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel, style: const TextStyle(color: AppTheme.textSecondary))),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+                child: Text(s.adminDeleteChat, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final admin = context.read<AdminProvider>();
+    final ok = await admin.deleteChat(chat['chat_id'] as String? ?? '', selected.toList());
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? s.adminChatDeleted : s.adminDeleteFail)),
+    );
+    admin.fetchChats();
   }
 }

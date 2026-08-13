@@ -14,6 +14,7 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/chat_service.dart';
 import '../services/forensic_watermark.dart';
+import '../services/storage_photo_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
@@ -23,8 +24,8 @@ import 'user_info_screen.dart';
 // Top-level function untuk compute() isolate — decode + resize + encode di background
 String? _processImage(Uint8List bytes) {  final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = _resizeMaxSide(decoded, 1024);
-  final jpg = img.encodeJpg(resized, quality: 85);
+  final resized = _resizeMaxSide(decoded, 800);
+  final jpg = img.encodeJpg(resized, quality: 75);
   return base64Encode(jpg);
 }
 
@@ -45,13 +46,13 @@ String? _processViewOnceImage((Uint8List, String) args) {
   return ForensicWatermark.embedToBase64(bytes, seed);
 }
 
-// Top-level function untuk compute() isolate — tanpa watermark: resize 1600px + JPEG
+// Top-level function untuk compute() isolate — tanpa watermark: resize 1200px + JPEG
 // Kamera kirim foto besar (10-20MB) → decode gagal di penerima kalau tidak di-resize.
 String? _passthroughImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = _resizeMaxSide(decoded, 1600);
-  final jpg = img.encodeJpg(resized, quality: 90);
+  final resized = _resizeMaxSide(decoded, 1200);
+  final jpg = img.encodeJpg(resized, quality: 82);
   return base64Encode(jpg);
 }
 
@@ -356,6 +357,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final rPhoto = await ppPhoto.deductBeforeSend('image');
     if (rPhoto < 0) { if (mounted) { ppPhoto.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId); } return; }
     try {
+      // Upload foto ke Storage — DB hanya simpan path (hemat ruang).
+      final path = await StoragePhotoService.instance.upload(
+        chatId: widget.chatId,
+        base64: base64,
+      );
+      final stored = path ?? base64;
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
         senderId: uid,
@@ -363,7 +370,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         senderGender: profile.gender,
         text: '',
         type: 'image',
-        imageData: base64,
+        imageData: stored,
       );
       if (ppPhoto.enabled) {
         ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-3 Poin' : '-3 Points');
@@ -426,6 +433,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     setState(() => _pending.add(pending));
     _scrollToBottom();
     try {
+      // Upload ke Storage — DB hanya simpan path (hemat ruang).
+      final path = await StoragePhotoService.instance.upload(
+        chatId: widget.chatId,
+        base64: base64,
+      );
+      final stored = path ?? base64;
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
         senderId: uid,
@@ -433,7 +446,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         senderGender: profile.gender,
         text: '',
         type: 'view_once',
-        imageData: base64,
+        imageData: stored,
       );
       if (pp.enabled) {
         final loc = context.read<LocaleProvider>();

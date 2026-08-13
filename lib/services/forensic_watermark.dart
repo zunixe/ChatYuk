@@ -31,7 +31,7 @@ class WatermarkDetect {
 class ForensicWatermark {
   ForensicWatermark._();
 
-  static const int size = 1600;
+  static const int size = 1200;
   static const int blockSize = 64;
   static const int coeffsPerBlock = 32;
   static const double alpha = 50.0;
@@ -194,7 +194,7 @@ class ForensicWatermark {
     // Resize proporsional: sisi terpanjang = size, rasio asli dipertahankan.
     final resized = _resizeMaxSide(decoded, size);
     _embedInto(resized, seed);
-    final jpg = img.encodeJpg(resized, quality: 90);
+    final jpg = img.encodeJpg(resized, quality: 82);
     return base64Encode(jpg);
   }
 

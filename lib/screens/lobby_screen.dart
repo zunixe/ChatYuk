@@ -176,7 +176,7 @@ class _RoomCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(s.roomName(room.category), style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
@@ -184,21 +184,20 @@ class _RoomCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppTheme.online.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.online, shape: BoxShape.circle)),
-                      const SizedBox(width: 5),
-                      Text('${room.onlineCount} ${s.roomOnlineCount}', style: const TextStyle(color: AppTheme.online, fontSize: 12, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppTheme.online.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.online, shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Text('${room.onlineCount} ${s.roomOnlineCount}', style: const TextStyle(color: AppTheme.online, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
                 ),
               ),
             ],

@@ -25,8 +25,11 @@ class OnlineUsersProvider extends ChangeNotifier {
   OnlineUsersProvider() {
     _sub = _service.getOnlineUsers().listen((users) {
       _loaded = true;
-      if (_usersEqual(_users, users)) return;
-      _users = users;
+      // Dedupe by uid — pertahanan kedua terhadap duplikat dari stream.
+      final seen = <String>{};
+      final deduped = users.where((u) => seen.add(u.uid)).toList();
+      if (_usersEqual(_users, deduped)) return;
+      _users = deduped;
       _error = null;
       notifyListeners();
     }, onError: (e) {
