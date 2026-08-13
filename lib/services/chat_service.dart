@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../config/supabase_config.dart';
 import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
+import '../services/storage_photo_service.dart';
 import '../utils.dart';
 
 // Concurrency limiter: max N operasi paralel, sisanya antri.
@@ -48,6 +49,23 @@ class ChatMessageStream {
 
 class ChatService {
   final SupabaseClient _sb = SupabaseConfig.client;
+
+  // Cache avatar (path → base64) — hindari download ulang tiap fetch online.
+  final Map<String, String> _avatarCache = {};
+  static const _avatarCacheMax = 100;
+
+  Future<String> _avatarB64(String path) async {
+    final cached = _avatarCache[path];
+    if (cached != null) return cached;
+    final b64 = await StoragePhotoService.instance.download(path) ?? '';
+    if (b64.isNotEmpty) {
+      if (_avatarCache.length >= _avatarCacheMax) {
+        _avatarCache.remove(_avatarCache.keys.first);
+      }
+      _avatarCache[path] = b64;
+    }
+    return b64;
+  }
 
   // ── Room Chat ──
 
@@ -156,7 +174,11 @@ class ChatService {
               .select('image_data')
               .eq('id', m.id)
               .maybeSingle();
-          final data = row?['image_data'] as String? ?? '';
+          var data = row?['image_data'] as String? ?? '';
+          // image_data berupa PATH storage (foto baru) → download dari bucket.
+          if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
+            data = await StoragePhotoService.instance.download(data) ?? '';
+          }
           if (data.isNotEmpty) {
             // save() menyimpan full-res + membuat thumbnail (dikembalikan).
             // Bubble pakai thumbnail supaya decode cepat; full-res di PhotoCache.
@@ -334,9 +356,16 @@ class ChatService {
           // selamanya). Full-res tersimpan di PhotoCache untuk fullscreen.
           if (msg.imageData.isNotEmpty) {
             try {
-              final thumb = await PhotoCache.instance.save(cacheKey, msg.id, msg.imageData);
-              if (!controller.isClosed && thumb != null && thumb.isNotEmpty) {
-                msg = msg.copyWith(imageData: thumb);
+              var data = msg.imageData;
+              // PATH storage → download dari bucket sebelum dibuat thumbnail.
+              if (StoragePhotoService.instance.isPath(data)) {
+                data = await StoragePhotoService.instance.download(data) ?? '';
+              }
+              if (data.isNotEmpty) {
+                final thumb = await PhotoCache.instance.save(cacheKey, msg.id, data);
+                if (!controller.isClosed && thumb != null && thumb.isNotEmpty) {
+                  msg = msg.copyWith(imageData: thumb);
+                }
               }
             } catch (e) {
               debugPrint('[photo save] ${msg.id} error: $e');
@@ -450,7 +479,11 @@ class ChatService {
               .select('image_data')
               .eq('id', m.id)
               .maybeSingle();
-          final full = row?['image_data'] as String? ?? '';
+          var full = row?['image_data'] as String? ?? '';
+          // PATH storage → download dari bucket sebelum disimpan ke cache.
+          if (full.isNotEmpty && StoragePhotoService.instance.isPath(full)) {
+            full = await StoragePhotoService.instance.download(full) ?? '';
+          }
           if (full.isNotEmpty) {
             data = await PhotoCache.instance.save(cacheKey, m.id, full) ?? full;
           }
@@ -544,8 +577,10 @@ class ChatService {
     if (!['text', 'image', 'view_once'].contains(type)) {
       throw Exception('Invalid message type');
     }
-    // Validasi image data jika ada
-    if (imageData.isNotEmpty && !isValidImageBase64(imageData)) {
+    // Validasi image data jika ada — boleh base64 (lama) ATAU path storage (baru)
+    if (imageData.isNotEmpty &&
+        !isValidImageBase64(imageData) &&
+        !StoragePhotoService.instance.isPath(imageData)) {
       throw Exception('Invalid image data');
     }
     // Batasi panjang teks pesan
@@ -696,12 +731,13 @@ class ChatService {
               .map((k, v) => MapEntry(k.toString(), v == true)),
           lastMessage: d['lastMessage'] ?? '',
           lastMessageAt: parseDate(d['lastMessageAt']),
+          messageCount: (d['messageCount'] as num?)?.toInt() ?? 0,
           unreadCounts: (d['unreadCounts'] as Map<dynamic, dynamic>? ?? {})
               .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
           lastReadAt: (d['lastReadAt'] as Map<dynamic, dynamic>? ?? {})
               .map((k, v) => MapEntry(k.toString(), parseDate(v))),
         );
-      }).toList();
+      }).where((c) => c.messageCount > 0).toList();
     }
 
     Future<void> reload() async {
@@ -883,10 +919,19 @@ class ChatService {
             .gte('last_seen', cutoff)
             .order('last_seen', ascending: false)
             .limit(500);
-        cached = rows
-            .map((row) => UserModel.fromMap('${row['id']}', snakeToCamel(row)))
-            .where((u) => u.uid != invisibleUid)
-            .toList();
+        cached = <UserModel>[];
+        final seenUids = <String>{};
+        for (final row in rows) {
+          var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
+          if (u.uid == invisibleUid) continue;
+          // Dedupe by uid — cegah duplikat dari race/query apa pun.
+          if (!seenUids.add(u.uid)) continue;
+          // avatar PATH storage → download (cache per path supaya tidak berulang).
+          if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+            u = u.copyWith(avatar: await _avatarB64(u.avatar));
+          }
+          cached.add(u);
+        }
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
       } catch (e) {
         debugPrint('[getOnlineUsers] fetch error: $e');
@@ -928,6 +973,18 @@ class ChatService {
     );
     channel.subscribe();
 
+    // Toggle invisible admin mengubah app_settings (invisible_enabled) —
+    // subscribe realtime app_settings supaya device lain langsung tahu
+    // tanpa menunggu poll 30 detik.
+    final settingChannel = _sb.channel('online-users-settings');
+    settingChannel.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'app_settings',
+      callback: (_) => fetchOnline(),
+    );
+    settingChannel.subscribe();
+
     // Poll setiap 30 detik — cukup responsif untuk status online/idle/offline
     final timer = Timer.periodic(const Duration(seconds: 30), (_) => fetchOnline());
     fetchOnline();
@@ -935,6 +992,7 @@ class ChatService {
     controller.onCancel = () {
       timer.cancel();
       _sb.removeChannel(channel);
+      _sb.removeChannel(settingChannel);
     };
     return controller.stream;
   }
@@ -1098,6 +1156,7 @@ class PrivateChatInfo {
   final Map<String, bool> participantRegistered;
   final String lastMessage;
   final DateTime lastMessageAt;
+  final int messageCount;
   final Map<String, int> unreadCounts;
   final Map<String, DateTime> lastReadAt;
 
@@ -1111,6 +1170,7 @@ class PrivateChatInfo {
     this.participantRegistered = const {},
     required this.lastMessage,
     required this.lastMessageAt,
+    this.messageCount = 0,
     this.unreadCounts = const {},
     this.lastReadAt = const {},
   });

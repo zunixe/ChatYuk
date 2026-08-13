@@ -153,32 +153,36 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   Widget _statsGrid(Map<String, dynamic>? stats, S s) {
     final items = [
-      (s.statsUsers, '${stats?['total_users'] ?? '-'}', Icons.people_outline, AppTheme.primary),
-      (s.statsActive, '${stats?['active_today'] ?? '-'}', Icons.online_prediction, Colors.green),
-      (s.statsMsgs, '${stats?['messages_today'] ?? '-'}', Icons.message_outlined, Colors.deepPurple),
-      (s.statsRooms, '${stats?['rooms_active'] ?? '-'}', Icons.chat_bubble_outline, Colors.teal),
-      (s.statsReg, '${stats?['registered_users'] ?? '-'}', Icons.verified_outlined, Colors.blue),
-      (s.statsAnon, '${stats?['anonymous_users'] ?? '-'}', Icons.person_outline, Colors.orange),
-      (s.statsAvg, '${stats?['avg_points'] ?? '-'}', Icons.trending_up, Colors.amber.shade700),
-      (s.statsTotal, '${stats?['total_points'] ?? '-'}', Icons.monetization_on_outlined, Colors.pink),
+      (s.statsUsers, '${stats?['total_users'] ?? '-'}', Icons.people_outline, AppTheme.primary, 'users_all'),
+      (s.statsActive, '${stats?['active_today'] ?? '-'}', Icons.online_prediction, Colors.green, 'users_active'),
+      (s.statsMsgs, '${stats?['messages_today'] ?? '-'}', Icons.message_outlined, Colors.deepPurple, ''),
+      (s.statsRooms, '${stats?['rooms_active'] ?? '-'}', Icons.chat_bubble_outline, Colors.teal, 'rooms_active'),
+      (s.statsReg, '${stats?['registered_users'] ?? '-'}', Icons.verified_outlined, Colors.blue, 'users_registered'),
+      (s.statsAnon, '${stats?['anonymous_users'] ?? '-'}', Icons.person_outline, Colors.orange, 'users_anonymous'),
+      (s.statsAvg, '${stats?['avg_points'] ?? '-'}', Icons.trending_up, Colors.amber.shade700, ''),
+      (s.statsTotal, '${stats?['total_points'] ?? '-'}', Icons.monetization_on_outlined, Colors.pink, ''),
     ];
     Widget cell(int i) {
       return Expanded(
-        child: Container(
-          height: 76,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: AppTheme.bgCard,
+        child: Material(
+          color: AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
             borderRadius: BorderRadius.circular(10),
+            onTap: items[i].$5.isEmpty ? null : () => _showStatDetail(context, items[i]),
+            child: Container(
+              height: 76,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(items[i].$3, size: 15, color: items[i].$4),
+                const SizedBox(height: 5),
+                Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(items[i].$2,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w800)))),
+                const SizedBox(height: 2),
+                Text(items[i].$1, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+              ]),
+            ),
           ),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(items[i].$3, size: 15, color: items[i].$4),
-            const SizedBox(height: 5),
-            Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(items[i].$2,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w800)))),
-            const SizedBox(height: 2),
-            Text(items[i].$1, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
-          ]),
         ),
       );
     }
@@ -190,6 +194,93 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         const SizedBox(height: 8),
         Row(children: [cell(4), const SizedBox(width: 8), cell(5), const SizedBox(width: 8), cell(6), const SizedBox(width: 8), cell(7)]),
       ],
+    );
+  }
+
+  Future<void> _showStatDetail(BuildContext context, (String, String, IconData, Color, String) item) async {
+    final admin = context.read<AdminProvider>();
+    final s = context.read<LocaleProvider>().s;
+    final detail = await admin.fetchStatsDetail();
+    if (!context.mounted) return;
+
+    final key = item.$5;
+    final list = (detail[key] as List<dynamic>?) ?? const [];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgScreen,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) {
+        Widget row(String name, String sub, String right) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(children: [
+              Container(width: 34, height: 34,
+                decoration: BoxDecoration(color: item.$4.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                child: Center(child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: TextStyle(color: item.$4, fontWeight: FontWeight.w700)))),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (sub.isNotEmpty) Text(sub, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ])),
+              Text(right, style: TextStyle(color: item.$4, fontSize: 11, fontWeight: FontWeight.w700)),
+            ]),
+          );
+        }
+
+        return SafeArea(
+          child: DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.7,
+            maxChildSize: 0.9,
+            builder: (ctx, scrollCtrl) => Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Row(children: [
+                    Icon(item.$3, color: item.$4, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('${item.$1} (${list.length})', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700))),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ]),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: list.isEmpty
+                      ? Center(child: Text(s.adminNoUsers, style: const TextStyle(color: AppTheme.textSecondary)))
+                      : ListView(
+                          controller: scrollCtrl,
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          children: [
+                            if (key == 'users_all' || key == 'users_active' || key == 'users_registered' || key == 'users_anonymous')
+                              for (final u in list)
+                                row(
+                                  '${u['nickname'] ?? '?'}',
+                                  [
+                                    if ((u['age'] ?? 0) > 0) '${u['age']}',
+                                    if ((u['country'] ?? '').isNotEmpty) '${u['country']}',
+                                    if ((u['status'] ?? '').isNotEmpty) '${u['status']}',
+                                    (u['is_registered'] == true) ? 'registered' : 'anon',
+                                  ].join(' · '),
+                                  '${u['last_seen'] != null ? formatRelativeTime(DateTime.tryParse('${u['last_seen']}') ?? DateTime.now(), isId: s.isId) : ''}',
+                                ),
+                            if (key == 'rooms_active')
+                              for (final r in list)
+                                row(
+                                  '${r['room_id'] ?? '?'}',
+                                  '',
+                                  '${r['user_count'] ?? 0} ${s.roomOnlineCount}',
+                                ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

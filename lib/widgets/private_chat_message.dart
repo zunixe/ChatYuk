@@ -11,6 +11,7 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/photo_cache.dart';
 import '../services/screen_secure_service.dart';
+import '../services/storage_photo_service.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
@@ -474,7 +475,13 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   }
 
   Future<void> _decodeAdmin() async {
-    final decoded = await compute(decodeImageB64, widget.imageData);
+    var data = widget.imageData;
+    // imageData bisa berupa PATH storage (foto baru) → download dari bucket.
+    if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
+      data = await StoragePhotoService.instance.download(data) ?? '';
+    }
+    if (data.isEmpty) return;
+    final decoded = await compute(decodeImageB64, data);
     if (!mounted) return;
     setState(() => _decoded = decoded);
   }
@@ -486,6 +493,14 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   }
 
   Future<void> _decode() async {
+    // View-once SUDAH expired (server tandai type='view_once_expired') —
+    // WAJIB terkunci permanen, apapun isi imageData. Jangan decode/tampil.
+    if (widget.isExpired) {
+      _tick.state = ViewOnceState.expired;
+      ScreenSecureService.exitViewOnce();
+      if (mounted) setState(() {});
+      return;
+    }
     // Sender/load: kalau imageData thumbnail kosong, ambil dari PhotoCache
     // (messageId) dulu — view-once yang pernah dilihat pengirim harus tetap tampil.
     var data = widget.imageData;

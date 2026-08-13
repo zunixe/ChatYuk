@@ -30,12 +30,12 @@ String? _processAvatar(Uint8List bytes) {
   return base64Encode(jpg);
 }
 
-// Galeri foto — resize lebih besar (800px), pertahankan rasio
+// Galeri foto — resize (600px), pertahankan rasio
 String? _processPhoto(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = img.copyResize(decoded, width: 800);
-  final jpg = img.encodeJpg(resized, quality: 80);
+  final resized = img.copyResize(decoded, width: 600);
+  final jpg = img.encodeJpg(resized, quality: 75);
   return base64Encode(jpg);
 }
 
@@ -490,15 +490,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
             expandedHeight: 220,
             pinned: true,
             actions: [
-              IconButton(icon: const Icon(Icons.share_outlined), tooltip: s.btnShareApp, onPressed: () {
-            Share.share(s.msgShareApp);
-            context.read<PointsProvider>().oneTimeBonus('invited_friend', 30).then((earned) {
-              if (earned && context.mounted) {
-                context.read<PointsProvider>().showPointsToast(context, s.isId ? '+30 Poin — Share!' : '+30 Points — Share!');
-              }
-            });
-          }),
-              IconButton(icon: const Icon(Icons.edit_outlined), tooltip: s.btnEditProfile, onPressed: _editProfile),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                    icon: _loggingOut
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.logout_rounded, size: 20),
+                    tooltip: s.btnLogout,
+                    onPressed: _loggingOut ? null : () => _confirmLogout(),
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                    icon: const Icon(Icons.share_outlined, size: 20),
+                    tooltip: s.btnShareApp,
+                    onPressed: () {
+                      Share.share(s.msgShareApp);
+                      context.read<PointsProvider>().oneTimeBonus('invited_friend', 30).then((earned) {
+                        if (earned && context.mounted) {
+                          context.read<PointsProvider>().showPointsToast(context, s.isId ? '+30 Poin — Share!' : '+30 Points — Share!');
+                        }
+                      });
+                    },
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    tooltip: s.btnEditProfile,
+                    onPressed: _editProfile,
+                  ),
+                ],
+              ),
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
@@ -730,6 +759,134 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                   const SizedBox(height: 12),
 
+                  // Hashtag
+                  _SectionLabel(label: s.labelHashtags),
+                  const SizedBox(height: 6),
+                  _SectionCard(children: [
+                    Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _hashtags.map((tag) => InputChip(
+                              label: Text('#$tag'),
+                              onDeleted: _savingHashtags ? null : () => _removeHashtag(tag),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              backgroundColor: AppTheme.accent.withValues(alpha: 0.08),
+                              side: BorderSide(color: AppTheme.accent.withValues(alpha: 0.3)),
+                              labelStyle: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                              visualDensity: VisualDensity.compact,
+                            )).toList(),
+                          ),
+                          if (_hashtags.isEmpty && !_savingHashtags)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(s.hintHashtag, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _hashtagCtrl,
+                            enabled: !_savingHashtags,
+                            onSubmitted: _addHashtag,
+                            textInputAction: TextInputAction.done,
+                            decoration: InputDecoration(
+                              hintText: s.hintHashtag,
+                              isDense: true,
+                              prefixIcon: const Padding(
+                                padding: EdgeInsets.only(bottom: 2),
+                                child: Icon(Icons.tag, size: 18, color: AppTheme.accent),
+                              ),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 40),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.divider)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.divider)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.accent)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+
+                  // Galeri
+                  _SectionLabel(label: s.labelGallery),
+                  const SizedBox(height: 6),
+                  _SectionCard(children: [
+                    Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(children: [
+                                Container(width: 36, height: 36, decoration: BoxDecoration(color: Colors.pink.shade50, shape: BoxShape.circle), child: Icon(Icons.photo_library_outlined, color: Colors.pink.shade400, size: 20)),
+                                const SizedBox(width: 12),
+                                Text(s.labelGallery, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 14)),
+                              ]),
+                              if (_photos.length < 6)
+                                TextButton.icon(
+                                  onPressed: _uploading ? null : _pickGalleryFromSource,
+                                  icon: _uploading
+                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                                      : const Icon(Icons.add, size: 16),
+                                  label: Text(s.btnAddGallery, style: const TextStyle(fontSize: 12)),
+                                  style: TextButton.styleFrom(foregroundColor: AppTheme.primary, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (_loadingPhotos)
+                            const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)))
+                          else if (_photos.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Center(child: Text(s.labelGalleryEmpty, textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
+                            )
+                          else
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 6, crossAxisSpacing: 6),
+                              itemCount: _photos.length,
+                              itemBuilder: (_, i) => GestureDetector(
+                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _PhotoViewerScreen(photos: _photos, initialIndex: i))),
+                                onLongPress: () => _confirmDeletePhoto(_photos[i]),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: AsyncPhotoThumbnail(base64: _photos[i].photo),
+                                    ),
+                                    Positioned(
+                                      top: 4, right: 4,
+                                      child: GestureDetector(
+                                        onTap: () => _confirmDeletePhoto(_photos[i]),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(alpha: 0.55),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+
                   // Pengaturan
                   _SectionLabel(label: s.titleSettings),
                   const SizedBox(height: 6),
@@ -903,156 +1060,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   ]),
-                  const SizedBox(height: 12),
-
-                  // Hashtag
-                  _SectionLabel(label: s.labelHashtags),
-                  const SizedBox(height: 6),
-                  _SectionCard(children: [
-                    Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _hashtags.map((tag) => InputChip(
-                              label: Text('#$tag'),
-                              onDeleted: _savingHashtags ? null : () => _removeHashtag(tag),
-                              deleteIcon: const Icon(Icons.close, size: 16),
-                              backgroundColor: AppTheme.accent.withValues(alpha: 0.08),
-                              side: BorderSide(color: AppTheme.accent.withValues(alpha: 0.3)),
-                              labelStyle: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                              visualDensity: VisualDensity.compact,
-                            )).toList(),
-                          ),
-                          if (_hashtags.isEmpty && !_savingHashtags)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Text(s.hintHashtag, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _hashtagCtrl,
-                            enabled: !_savingHashtags,
-                            onSubmitted: _addHashtag,
-                            textInputAction: TextInputAction.done,
-                            decoration: InputDecoration(
-                              hintText: s.hintHashtag,
-                              isDense: true,
-                              prefixIcon: const Padding(
-                                padding: EdgeInsets.only(bottom: 2),
-                                child: Icon(Icons.tag, size: 18, color: AppTheme.accent),
-                              ),
-                              prefixIconConstraints: const BoxConstraints(minWidth: 40),
-                              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.divider)),
-                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.divider)),
-                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.accent)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 12),
-
-                  // Galeri
-                  _SectionLabel(label: s.labelGallery),
-                  const SizedBox(height: 6),
-                  _SectionCard(children: [
-                    Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(children: [
-                                Container(width: 36, height: 36, decoration: BoxDecoration(color: Colors.pink.shade50, shape: BoxShape.circle), child: Icon(Icons.photo_library_outlined, color: Colors.pink.shade400, size: 20)),
-                                const SizedBox(width: 12),
-                                Text(s.labelGallery, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 14)),
-                              ]),
-                              if (_photos.length < 6)
-                                TextButton.icon(
-                                  onPressed: _uploading ? null : _pickGalleryFromSource,
-                                  icon: _uploading
-                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
-                                      : const Icon(Icons.add, size: 16),
-                                  label: Text(s.btnAddGallery, style: const TextStyle(fontSize: 12)),
-                                  style: TextButton.styleFrom(foregroundColor: AppTheme.primary, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          if (_loadingPhotos)
-                            const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)))
-                          else if (_photos.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              child: Center(child: Text(s.labelGalleryEmpty, textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
-                            )
-                          else
-                            GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 6, crossAxisSpacing: 6),
-                              itemCount: _photos.length,
-                              itemBuilder: (_, i) => GestureDetector(
-                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _PhotoViewerScreen(photos: _photos, initialIndex: i))),
-                                onLongPress: () => _confirmDeletePhoto(_photos[i]),
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: AsyncPhotoThumbnail(base64: _photos[i].photo),
-                                    ),
-                                    Positioned(
-                                      top: 4, right: 4,
-                                      child: GestureDetector(
-                                        onTap: () => _confirmDeletePhoto(_photos[i]),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withValues(alpha: 0.55),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(Icons.close, size: 14, color: Colors.white),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 20),
-
-                  // Actions
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _loggingOut ? null : () async {
-                        _loggingOut = true;
-                        final chat = context.read<ChatProvider>();
-                        await auth.signOut();
-                        chat.reset();
-                      },
-                      icon: const Icon(Icons.logout),
-                      label: Text(s.btnLogout),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.danger,
-                        side: const BorderSide(color: AppTheme.danger),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 16),
                   Center(
                     child: GestureDetector(
@@ -1088,6 +1095,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
       case 'invisible': return '🫥 ${s.statusInvisible}';
       default: return '🟢 ${s.statusOnline}';
     }
+  }
+
+  Future<void> _confirmLogout() async {
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final chat = context.read<ChatProvider>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(children: [
+          const Icon(Icons.logout_rounded, color: AppTheme.danger, size: 24),
+          const SizedBox(width: 10),
+          Expanded(child: Text(s.btnLogout, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 17, fontWeight: FontWeight.w700))),
+        ]),
+        content: Text(
+          s.confirmLogoutBody,
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.btnCancel, style: const TextStyle(color: AppTheme.textSecondary)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: Text(s.btnLogout, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _loggingOut = true);
+    await auth.signOut();
+    chat.reset();
   }
 }
 

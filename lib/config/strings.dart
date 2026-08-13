@@ -158,6 +158,7 @@ class S {
   String get errHashtagFormat => isId ? 'Hanya huruf, angka, atau underscore' : 'Letters, numbers, or underscore only';
   String get labelYears       => isId ? 'tahun'                       : 'years';
   String get btnLogout        => isId ? 'Keluar'                      : 'Logout';
+  String get confirmLogoutBody => isId ? 'Yakin ingin keluar dari akun ini?' : 'Are you sure you want to log out?';
   String get genderLabelMale  => isId ? '👨 Laki-laki'                 : '👨 Male';
   String get genderLabelFemale => isId ? '👩 Perempuan'                : '👩 Female';
   String get genderLabelOther => isId ? '🧑 Lainnya'                   : '🧑 Other';
@@ -372,4 +373,13 @@ class S {
   String get adminSearchChat    => isId ? 'Cari percakapan...'               : 'Search conversations...';
   String get adminUserSingular  => isId ? 'user'                             : 'user';
   String get adminUsersPlural   => isId ? 'user'                             : 'users';
+  String get chatMsgCount       => isId ? 'pesan'                            : 'messages';
+  String get adminDeleteChat    => isId ? 'Hapus Chat'                        : 'Delete Chat';
+  String get adminDeleteChatTitle => isId ? 'Hapus Chat & User'               : 'Delete Chat & Users';
+  String get adminDeleteChatBody => isId ? 'Semua history chat antara kedua user akan dihapus permanen (termasuk foto di storage). Pilih user yang juga ingin dihapus akunnya:' : 'All chat history between both users will be permanently deleted (including photos in storage). Select users to also delete their accounts:';
+  String get adminDeleteChatOnly => isId ? 'Hapus chat saja'                  : 'Delete chat only';
+  String get adminDeleteUser     => isId ? 'Hapus akun'                       : 'Delete account';
+  String get adminCannotDeleteAdmin => isId ? '(admin, tidak bisa dihapus)'   : '(admin, cannot be deleted)';
+  String get adminChatDeleted    => isId ? 'Chat dihapus'                     : 'Chat deleted';
+  String get adminDeleteFail     => isId ? 'Gagal menghapus chat'             : 'Failed to delete chat';
 }

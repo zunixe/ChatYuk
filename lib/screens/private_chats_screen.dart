@@ -297,7 +297,11 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${chat.messageCount} ${s.chatMsgCount}',
+                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+                                ),                              ],
                             ),
                           ),
                           const SizedBox(width: 8),

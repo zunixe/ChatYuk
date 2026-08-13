@@ -10,6 +10,7 @@ import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/photo_cache.dart';
+import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
@@ -166,7 +167,12 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       final msgId = int.tryParse(msg.id);
       if (msgId != null) {
         final admin = context.read<AdminProvider>();
-        data = await admin.fetchMessageImage(msgId);
+        var raw = await admin.fetchMessageImage(msgId);
+        // image_data berupa PATH storage (foto baru) → download dari bucket.
+        if (raw.isNotEmpty && StoragePhotoService.instance.isPath(raw)) {
+          raw = await StoragePhotoService.instance.download(raw) ?? '';
+        }
+        data = raw;
         if (data.isNotEmpty) {
           try {
             await PhotoCache.instance.save(_chatKey, msg.id, data);

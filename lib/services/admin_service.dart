@@ -10,6 +10,12 @@ class AdminService {
     return res as Map<String, dynamic>;
   }
 
+  /// Detail data per kategori untuk card Overview (list user/room).
+  Future<Map<String, dynamic>> getStatsDetail() async {
+    final res = await _sb.rpc('admin_stats_detail');
+    return (res as Map<String, dynamic>?) ?? {};
+  }
+
   Future<Map<String, dynamic>> massBonus(int bonus) async {
     final res = await _sb.rpc('admin_mass_bonus', params: {'bonus': bonus});
     return res as Map<String, dynamic>;
@@ -60,5 +66,14 @@ class AdminService {
   Future<String> getMessageImage(int messageId) async {
     final res = await _sb.rpc('admin_get_message_image', params: {'p_message_id': messageId});
     return (res as String?) ?? '';
+  }
+
+  /// Hapus chat + (opsional) user. Return {'ok': bool, 'photo_paths': [...]}.
+  Future<Map<String, dynamic>> deleteChat(String chatId, List<String> deleteUserIds) async {
+    final res = await _sb.rpc(
+      'admin_delete_chat',
+      params: {'p_chat_id': chatId, 'p_delete_user_ids': deleteUserIds},
+    );
+    return (res as Map<String, dynamic>?) ?? {};
   }
 }
