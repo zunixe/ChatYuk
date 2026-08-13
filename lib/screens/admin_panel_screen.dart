@@ -162,26 +162,34 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       (s.statsAvg, '${stats?['avg_points'] ?? '-'}', Icons.trending_up, Colors.amber.shade700),
       (s.statsTotal, '${stats?['total_points'] ?? '-'}', Icons.monetization_on_outlined, Colors.pink),
     ];
-    return GridView.builder(
-      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4, mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 0.95),
-      itemCount: items.length,
-      itemBuilder: (_, i) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(10),
+    Widget cell(int i) {
+      return Expanded(
+        child: Container(
+          height: 76,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.bgCard,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(items[i].$3, size: 15, color: items[i].$4),
+            const SizedBox(height: 5),
+            Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(items[i].$2,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w800)))),
+            const SizedBox(height: 2),
+            Text(items[i].$1, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+          ]),
         ),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(items[i].$3, size: 15, color: items[i].$4),
-          const SizedBox(height: 5),
-          Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(items[i].$2,
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w800)))),
-          const SizedBox(height: 2),
-          Text(items[i].$1, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
-        ]),
-      ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(children: [cell(0), const SizedBox(width: 8), cell(1), const SizedBox(width: 8), cell(2), const SizedBox(width: 8), cell(3)]),
+        const SizedBox(height: 8),
+        Row(children: [cell(4), const SizedBox(width: 8), cell(5), const SizedBox(width: 8), cell(6), const SizedBox(width: 8), cell(7)]),
+      ],
     );
   }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../models/message_model.dart';
@@ -10,7 +11,6 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/photo_cache.dart';
 import '../services/screen_secure_service.dart';
-import '../utils.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
@@ -96,10 +96,13 @@ class MessageTextWithTime extends StatelessWidget {
         children: [
           Text(text, style: textStyle),
           const SizedBox(height: 3),
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(timeStr, style: timeStyle),
-            if (trailing != null) ...[const SizedBox(width: 3), trailing!],
-          ]),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(timeStr, style: timeStyle),
+              if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+            ],
+          ),
         ],
       );
     });
@@ -132,7 +135,7 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeStr = formatTime(msg.timestamp);
+    final timeStr = DateFormat.Hm().format(msg.timestamp.toLocal());
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(

@@ -132,7 +132,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
                     color: AppTheme.danger,
                     borderRadius: BorderRadius.circular(12),
@@ -172,7 +172,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                   }
                 },
                 child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
                     color: isBlocked ? AppTheme.bgCard.withValues(alpha: 0.5) : Colors.white,
                     borderRadius: BorderRadius.circular(14),

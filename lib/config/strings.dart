@@ -98,6 +98,7 @@ class S {
   String get statusOnline    => isId ? 'Online'                       : 'Online';
   String get statusIdle      => isId ? 'Idle'                         : 'Idle';
   String get statusOffline   => isId ? 'Offline'                      : 'Offline';
+  String get statusInvisible => isId ? 'Invisible'                    : 'Invisible';
   String get typingStatus    => isId ? 'Sedang mengetik'              : 'Typing';
   String get genderMale      => isId ? '👨 Laki-laki'                  : '👨 Male';
   String get genderFemale    => isId ? '👩 Perempuan'                  : '👩 Female';
@@ -112,6 +113,8 @@ class S {
   String get startConversation => msgStartConversation;
   String get noMessages      => isId ? 'Belum ada pesan'              : 'No messages yet';
   String get timeJustNow     => isId ? 'Baru'                         : 'Now';
+  String get labelToday      => isId ? 'Hari ini'                     : 'Today';
+  String get labelYesterday  => isId ? 'Kemarin'                      : 'Yesterday';
 
   // ── Chat Screen (private & room) ──
   String get hintTypeMessage  => isId ? 'Ketik pesan...'              : 'Type a message...';
@@ -285,6 +288,10 @@ class S {
   // ── Watermark admin ──
   String get labelWatermarkAdmin => isId ? 'Aktifkan watermark forensik'       : 'Enable forensic watermark';
   String get descWatermarkAdmin  => isId ? 'Admin — foto sekali lihat ditandai identitas penerima' : 'Admin — view-once photos tagged with receiver identity';
+
+  // ── Invisible admin ──
+  String get labelInvisibleAdmin => isId ? 'Mode invisible'                : 'Invisible mode';
+  String get descInvisibleAdmin  => isId ? 'Admin — tidak muncul di daftar pengguna online' : 'Admin — hidden from online users list';
 
   // ── Points ──
   String get pointsTitle          => isId ? 'Poin ChatYuk'          : 'ChatYuk Points';

@@ -16,6 +16,7 @@ import '../services/chat_service.dart';
 import '../services/forensic_watermark.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
+import '../widgets/date_chip.dart';
 import '../main.dart';
 import 'user_info_screen.dart';
 
@@ -641,13 +642,30 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     ),
                   );
                 }
+                // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
+                // pola WhatsApp — item list berisi pesan + separator tanggal.
+                final items = <ChatItem>[];
+                String? prevDateKey;
+                for (final m in all) {
+                  final local = m.timestamp.toLocal();
+                  final dateKey = '${local.year}-${local.month}-${local.day}';
+                  if (prevDateKey != dateKey) {
+                    items.add(ChatItem.date(dateChipLabel(m.timestamp, s)));
+                  }
+                  prevDateKey = dateKey;
+                  items.add(ChatItem.message(m));
+                }
                 return ListView.builder(
                   controller: _scrollCtrl,
                   reverse: true,
                   padding: const EdgeInsets.all(12),
-                  itemCount: all.length,
+                  itemCount: items.length,
                   itemBuilder: (_, i) {
-                    final msg = all[all.length - 1 - i];
+                    final item = items[items.length - 1 - i];
+                    if (item.dateLabel != null) {
+                      return DateChip(label: item.dateLabel!);
+                    }
+                    final msg = item.msg!;
                     final isMe = msg.senderId == auth.uid;
                     final isPending = msg.id.startsWith('pending-');
                     final isRead = isMe && !isPending && _otherLastRead != null && msg.timestamp.isBefore(_otherLastRead!);

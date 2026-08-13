@@ -777,15 +777,16 @@ class ChatService {
     return controller.stream;
   }
 
-  /// Hitung status efektif: last_seen basi (> 15 menit) dianggap offline.
+  /// Hitung status efektif: last_seen basi (> 30 menit) dianggap offline.
+  /// Status 'invisible' (admin) dianggap offline bagi user lain.
   /// Dipakai getUserStatus & UserInfoScreen agar logikanya seragam.
   static String effectiveStatusOf(String? rawStatus, String? lastSeenStr) {
     final s = rawStatus ?? 'offline';
-    if (s == 'offline') return 'offline';
+    if (s == 'offline' || s == 'invisible') return 'offline';
     final lastSeen = DateTime.tryParse(lastSeenStr ?? '');
     if (lastSeen == null) return 'offline';
     final stale = lastSeen.toUtc().isBefore(
-          DateTime.now().toUtc().subtract(const Duration(minutes: 15)),
+          DateTime.now().toUtc().subtract(const Duration(minutes: 30)),
         );
     return stale ? 'offline' : s;
   }
@@ -854,21 +855,37 @@ class ChatService {
 
     Future<void> fetchOnline() async {
       try {
+        // Admin invisible: ambil uid admin yang sedang invisible, exclude
+        // dari daftar online — tidak bergantung pada status (tahan race
+        // toggle OFF→ON yang bisa menimpa status ke online sesaat).
+        String? invisibleUid;
+        try {
+          final setting = await _sb
+              .from('app_settings')
+              .select('invisible_enabled,invisible_admin_uid')
+              .eq('id', 'global')
+              .maybeSingle();
+          if (setting?['invisible_enabled'] == true) {
+            invisibleUid = setting?['invisible_admin_uid'] as String?;
+          }
+        } catch (_) {}
         // Exclude kolom sensitif: fcm_token, ip_address
         const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
-        // Hanya user yang masih aktif: last_seen dalam 15 menit terakhir.
+        // Hanya user yang masih aktif: last_seen dalam 30 menit terakhir.
         // User yang uninstall app / akunnya hilang last_seen-nya tidak pernah
         // di-update lagi sehingga otomatis hilang dari daftar online.
-        final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 15)).toIso8601String();
+        final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 30)).toIso8601String();
         final rows = await _sb
             .from('profiles')
             .select(cols)
             .neq('status', 'offline')
+            .neq('status', 'invisible')
             .gte('last_seen', cutoff)
             .order('last_seen', ascending: false)
             .limit(500);
         cached = rows
             .map((row) => UserModel.fromMap('${row['id']}', snakeToCamel(row)))
+            .where((u) => u.uid != invisibleUid)
             .toList();
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
       } catch (e) {
@@ -894,9 +911,19 @@ class ChatService {
         } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
         final idx = cached.indexWhere((u) => u.uid == id);
         if (idx >= 0) {
-          cached[idx] = cached[idx].copyWith(status: newStatus, lastSeen: lastSeen);
+          // Status offline/invisible → hapus dari daftar online (langsung,
+          // tanpa menunggu poll). Status lain → update status di cache.
+          if (newStatus == 'offline' || newStatus == 'invisible') {
+            cached = List.of(cached)..removeAt(idx);
+          } else {
+            cached[idx] = cached[idx].copyWith(status: newStatus, lastSeen: lastSeen);
+          }
           controller.add(List.unmodifiable(cached));
         }
+        // Toggle invisible admin mengubah app_settings (bukan profiles) —
+        // re-fetch berkala tetap jalan; re-fetch ringan di sini memastikan
+        // admin invisible cepat hilang walau status masih 'online' sesaat.
+        fetchOnline();
       },
     );
     channel.subscribe();

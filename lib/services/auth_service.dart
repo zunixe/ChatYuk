@@ -175,6 +175,38 @@ class AuthService {
     }, onConflict: 'id');
   }
 
+  /// Ambil setting admin: invisible (admin tidak muncul di daftar online).
+  /// Return Map {'enabled': bool, 'adminUid': String?}.
+  Future<Map<String, dynamic>> fetchInvisibleSetting() async {
+    try {
+      final res = await _sb
+          .from('app_settings')
+          .select('invisible_enabled,invisible_admin_uid')
+          .eq('id', 'global')
+          .maybeSingle();
+      return {
+        'enabled': res?['invisible_enabled'] == true,
+        'adminUid': res?['invisible_admin_uid'] as String?,
+      };
+    } catch (e) {
+      debugPrint('[AUTH] fetchInvisibleSetting error: $e');
+      return {'enabled': false, 'adminUid': null};
+    }
+  }
+
+  /// Update setting admin invisible. RLS membatasi hanya admin.
+  /// Saat enabled=true, simpan UID admin supaya trigger server bisa
+  /// memaksa status 'invisible' pada user itu.
+  Future<void> updateInvisibleEnabled(bool enabled) async {
+    final myUid = uid;
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'invisible_enabled': enabled,
+      'invisible_admin_uid': enabled ? myUid : null,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
+  }
+
   /// Login dengan email + password.
   /// Setelah ini, getProfile() akan mengembalikan profile user.
   Future<void> signInWithEmail(String email, String password) async {
@@ -437,6 +469,18 @@ class AuthService {
       await _sb.from('profiles').update({'status': 'offline', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
     } catch (e) {
       debugPrint('[AUTH] goOffline error: $e');
+    }
+  }
+
+  /// Admin invisible — status khusus 'invisible' di DB. User lain melihatnya
+  /// offline (via effectiveStatusOf) & tidak muncul di daftar online.
+  Future<void> goInvisible() async {
+    final id = uid;
+    if (id == null) return;
+    try {
+      await _sb.from('profiles').update({'status': 'invisible', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
+    } catch (e) {
+      debugPrint('[AUTH] goInvisible error: $e');
     }
   }
 
