@@ -44,11 +44,19 @@ Aturan ini dibaca otomatis oleh AI coding tools. Patuhi selalu.
 ## Build & Signing
 
 - Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass `chatyuk2024secure`)
-- Build release:
+- **WAJIB** pakai obfuscation + split debug info supaya kode Dart sulit di-reverse engineering:
   ```bash
-  KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" flutter build apk --release
+  KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+    flutter build apk --release --obfuscate --split-debug-info=build/app/symbols
   ```
-- Sebelum selesai, selalu: `flutter analyze` → `flutter build apk --release` → install & test
+- AAB untuk Google Play juga pakai flag yang sama:
+  ```bash
+  KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+    flutter build appbundle --release --obfuscate --split-debug-info=build/app/symbols
+  ```
+- Debug symbols disimpan di `build/app/symbols` (jangan dihapus) — dipakai `flutter symbolize` untuk baca stack trace saat crash.
+- Sebelum selesai, selalu: `flutter analyze` → `flutter build apk --release --obfuscate --split-debug-info=build/app/symbols` → install & test
+- Keamanan: jangan pernah simpan secret server (password DB, Supabase service_role key) di app — hanya `publishableKey` di `lib/config/supabase_config.dart`. Data dilindungi RLS per-user.
 
 ## Fitur Khusus
 
