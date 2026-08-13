@@ -223,6 +223,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // User tetap tampil di menu online sebagai idle, baru hilang saat logout.
       auth.goIdle();
     } else if (state == AppLifecycleState.resumed) {
+      // Re-sync invisible dulu (multi-device) supaya device kedua tidak
+      // menimpa balik status admin yang sudah di-toggle invisible.
+      auth.resyncInvisible();
       auth.goOnline();
     }
   }

@@ -38,12 +38,14 @@ class AuthProvider extends ChangeNotifier {
 
   bool _screenshotEnabled = true;
   bool _watermarkEnabled = false;
+  bool _invisibleEnabled = false;
 
   UserModel? get profile => _profile;
   bool get loading => _loading;
   String? get error => _error;
   bool get screenshotEnabled => _screenshotEnabled;
   bool get watermarkEnabled => _watermarkEnabled;
+  bool get invisibleEnabled => _invisibleEnabled;
   bool get isSignedIn => _auth.isSignedIn;
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
@@ -83,6 +85,8 @@ class AuthProvider extends ChangeNotifier {
         await _loadScreenshotSetting();
         // Terapkan setting admin: watermark forensik foto view-once
         await _loadWatermarkSetting();
+        // Terapkan setting admin: invisible (tidak muncul di daftar online)
+        await _loadInvisibleSetting();
         lastError = null;
         break;
       } catch (e) {
@@ -261,6 +265,58 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[AUTH] updateWatermarkEnabled error: $e');
     }
+  }
+
+  /// Ambil setting admin global (invisible — tidak muncul di daftar online).
+  /// Hanya admin dengan UID yang tercatat yang ikut jadi invisible.
+  Future<void> _loadInvisibleSetting() async {
+    final setting = await _auth.fetchInvisibleSetting();
+    _invisibleEnabled = setting['enabled'] == true && setting['adminUid'] == _auth.uid;
+    if (_invisibleEnabled) {
+      _profile = _profile?.copyWith(status: 'invisible');
+      safeUnawaited(_auth.goInvisible());
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Re-sync setting invisible (dipanggil saat app resumed). Supaya device
+  /// kedua ikut tahu toggle dari device pertama dan tidak menimpa balik.
+  Future<void> resyncInvisible() async {
+    final setting = await _auth.fetchInvisibleSetting();
+    final enabled = setting['enabled'] == true && setting['adminUid'] == _auth.uid;
+    if (enabled == _invisibleEnabled) return;
+    _invisibleEnabled = enabled;
+    if (enabled) {
+      _idleTimer?.cancel();
+      _isIdle = false;
+      await _auth.goInvisible();
+      _profile = _profile?.copyWith(status: 'invisible');
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Admin toggle invisible. ON → status invisible (user lain lihat offline,
+  /// tidak muncul di daftar online; admin sendiri lihat "invisible").
+  /// OFF → kembali online. Hanya tersedia untuk admin.
+  Future<void> setInvisibleEnabled(bool enabled) async {
+    _invisibleEnabled = enabled;
+    if (!_disposed) notifyListeners();
+    try {
+      await _auth.updateInvisibleEnabled(enabled);
+      if (enabled) {
+        _idleTimer?.cancel();
+        _isIdle = false;
+        await _auth.goInvisible();
+        _profile = _profile?.copyWith(status: 'invisible');
+      } else {
+        await _auth.goOnline();
+        _profile = _profile?.copyWith(status: 'online');
+        resetIdleTimer();
+      }
+    } catch (e) {
+      debugPrint('[AUTH] updateInvisibleEnabled error: $e');
+    }
+    if (!_disposed) notifyListeners();
   }
 
   /// Bersihkan akun anonymous stale di server (fire-and-forget).
@@ -460,6 +516,7 @@ class AuthProvider extends ChangeNotifier {
   /// If user was idle, go back online. Resets the idle countdown.
   void notifyActivity() {
     if (_idleTimer == null) return; // not signed in yet
+    if (_invisibleEnabled) return; // invisible → jangan pernah kembali online
     if (_isIdle) {
       _isIdle = false;
       _auth.goOnline();
@@ -473,11 +530,13 @@ class AuthProvider extends ChangeNotifier {
   void resetIdleTimer() {
     _isIdle = false;
     _idleTimer?.cancel();
+    if (_invisibleEnabled) return;
     _idleTimer = Timer(idleTimeout, _becomeIdle);
   }
 
   Future<void> _becomeIdle() async {
     if (_disposed) return;
+    if (_invisibleEnabled) return;
     _isIdle = true;
     await _auth.goIdle();
     _profile = _profile?.copyWith(status: 'idle');
@@ -486,6 +545,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> goOnline() async {
     if (_disposed) return;
+    if (_invisibleEnabled) return; // invisible → jangan pernah online
     await _auth.goOnline();
     _profile = _profile?.copyWith(status: 'online');
     if (!_disposed) notifyListeners();
@@ -496,6 +556,7 @@ class AuthProvider extends ChangeNotifier {
   /// User tetap tampil di menu online sebagai idle, tidak hilang.
   Future<void> goIdle() async {
     if (_disposed) return;
+    if (_invisibleEnabled) return; // invisible → tetap offline
     _idleTimer?.cancel();
     _isIdle = true;
     await _auth.goIdle();

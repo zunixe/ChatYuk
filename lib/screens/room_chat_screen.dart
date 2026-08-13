@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../models/room_model.dart';
@@ -10,6 +11,7 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../utils.dart';
 import '../main.dart';
+import '../widgets/date_chip.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import 'private_chat_screen.dart';
@@ -152,6 +154,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     final s = context.watch<LocaleProvider>().s;
 
     return Scaffold(
+      backgroundColor: AppTheme.bgCard,
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -201,6 +204,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
             child: StreamBuilder<List<MessageModel>>(
               stream: _msgsStream,
               builder: (_, snap) {
+                final s = context.read<LocaleProvider>().s;
                 final msgs = snap.data ?? [];
                 if (msgs.isEmpty) {
                   return Center(
@@ -223,13 +227,28 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                 } else {
                   _lastMsgCount = msgs.length;
                 }
+                // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
+                // pola WhatsApp — item list berisi pesan + separator tanggal.
+                final items = <ChatItem>[];
+                String? prevDateKey;
+                for (final m in msgs) {
+                  final local = m.timestamp.toLocal();
+                  final dateKey = '${local.year}-${local.month}-${local.day}';
+                  if (prevDateKey != dateKey) {
+                    items.add(ChatItem.date(dateChipLabel(m.timestamp, s)));
+                  }
+                  prevDateKey = dateKey;
+                  items.add(ChatItem.message(m));
+                }
                 return ListView.builder(
                   controller: _scrollCtrl,
                   reverse: true,
                   padding: const EdgeInsets.all(12),
-                  itemCount: msgs.length,
+                  itemCount: items.length,
                   itemBuilder: (_, i) {
-                    final m = msgs[msgs.length - 1 - i];
+                    final item = items[items.length - 1 - i];
+                    if (item.dateLabel != null) return DateChip(label: item.dateLabel!);
+                    final m = item.msg!;
                     return _MessageBubble(
                       key: ValueKey(m.id),
                       msg: m,
@@ -455,41 +474,43 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeStr = formatTime(msg.timestamp);
+    final timeStr = DateFormat.Hm().format(msg.timestamp.toLocal());
 
     // Pesan sendiri: hijau, rata kanan, tanpa avatar
     if (isMe) {
       return Padding(
-        padding: const EdgeInsets.only(left: 60, bottom: 6),
+        padding: const EdgeInsets.only(bottom: 6),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Container(
-              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-              decoration: BoxDecoration(
-                color: _myColor,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                  bottomLeft: Radius.circular(8),
-                  bottomRight: Radius.circular(2),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
+            Flexible(
+              child: Container(
+                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _myColor,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(8),
+                    topRight: Radius.circular(8),
+                    bottomLeft: Radius.circular(8),
+                    bottomRight: Radius.circular(2),
                   ),
-                ],
-              ),
-              child: MessageTextWithTime(
-                text: msg.text,
-                timeStr: timeStr,
-                textStyle: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),
-                timeStyle: TextStyle(color: _textColor.withValues(alpha: 0.45), fontSize: 10.5),
-                alignRight: true,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: MessageTextWithTime(
+                  text: msg.text,
+                  timeStr: timeStr,
+                  textStyle: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),
+                  timeStyle: TextStyle(color: _textColor.withValues(alpha: 0.45), fontSize: 10.5),
+                  alignRight: true,
+                ),
               ),
             ),
           ],
@@ -587,7 +608,7 @@ class _MessageBubble extends StatelessWidget {
                             ],
                           ),
                         ),
-                      MessageTextWithTime(
+                                            MessageTextWithTime(
                         text: msg.text,
                         timeStr: timeStr,
                         textStyle: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),

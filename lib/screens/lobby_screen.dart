@@ -144,7 +144,7 @@ class _RoomCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),

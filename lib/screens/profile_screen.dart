@@ -844,6 +844,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     const Divider(height: 1, indent: 52),
+                    // Admin: invisible (tidak muncul di daftar online) — hanya zunixe@gmail.com
+                    if (auth.userEmail == 'zunixe@gmail.com')
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36, height: 36,
+                              decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.12), shape: BoxShape.circle),
+                              child: const Icon(Icons.visibility_off_outlined, color: Colors.purple, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(s.labelInvisibleAdmin, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 14)),
+                                  Text(s.descInvisibleAdmin, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: auth.invisibleEnabled,
+                              onChanged: (v) => context.read<AuthProvider>().setInvisibleEnabled(v),
+                              activeThumbColor: Colors.purple,
+                            ),
+                          ],
+                        ),
+                      ),
+                    const Divider(height: 1, indent: 52),
                     // Bahasa
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -1055,6 +1085,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     switch (status) {
       case 'idle': return '🌙 ${s.statusIdle}';
       case 'offline': return '⚪ ${s.statusOffline}';
+      case 'invisible': return '🫥 ${s.statusInvisible}';
       default: return '🟢 ${s.statusOnline}';
     }
   }

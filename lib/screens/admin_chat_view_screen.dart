@@ -11,6 +11,7 @@ import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/photo_cache.dart';
 import '../utils.dart';
+import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
 
 class AdminChatViewScreen extends StatefulWidget {
@@ -32,6 +33,24 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   RealtimeChannel? _channel;
   final _photoLoading = <String>{};
   final _scrollCtrl = ScrollController();
+
+  // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
+  // pola WhatsApp — sama seperti room chat. _msgs datang DESC (terbaru dulu),
+  // jadi iterasi dibalik supaya terbaru tampil di bawah.
+  List<ChatItem> get _items {
+    final items = <ChatItem>[];
+    String? prevDateKey;
+    for (final m in _msgs.reversed) {
+      final local = m.timestamp.toLocal();
+      final dateKey = '${local.year}-${local.month}-${local.day}';
+      if (prevDateKey != dateKey) {
+        items.add(ChatItem.date(dateChipLabel(m.timestamp, context.read<LocaleProvider>().s)));
+      }
+      prevDateKey = dateKey;
+      items.add(ChatItem.message(m));
+    }
+    return items;
+  }
 
   @override
   void initState() {
@@ -283,15 +302,17 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                       controller: _scrollCtrl,
                       reverse: true,
                       padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).padding.bottom + 16),
-                      itemCount: _msgs.length + (admin.chatMessagesHasMore ? 1 : 0),
+                      itemCount: _items.length + (admin.chatMessagesHasMore ? 1 : 0),
                       itemBuilder: (_, i) {
-                        if (i >= _msgs.length) {
+                        if (i >= _items.length) {
                           return const Padding(
                             padding: EdgeInsets.symmetric(vertical: 16),
                             child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
                           );
                         }
-                        final msg = _msgs[_msgs.length - 1 - i];
+                        final item = _items[_items.length - 1 - i];
+                        if (item.dateLabel != null) return DateChip(label: item.dateLabel!);
+                        final msg = item.msg!;
                         final isMe = msg.senderId != _leftUid;
                         final isImageDeferred =
                             msg.type == 'image' && msg.imageData.isEmpty;
