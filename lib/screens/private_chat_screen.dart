@@ -319,7 +319,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _isSending = false;
     }
     if (context.read<PointsProvider>().enabled) {
-      context.read<PointsProvider>().showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-1 Poin' : '-1 Point');
+      context.read<PointsProvider>().showPointsToast(context, context.read<LocaleProvider>().s.pointsDeduct(1));
     }
     _scrollToBottom();
   }
@@ -373,10 +373,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         imageData: stored,
       );
       if (ppPhoto.enabled) {
-        ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-3 Poin' : '-3 Points');
+        ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.pointsDeduct(3));
         ppPhoto.oneTimeBonus('first_photo', 10).then((earned) {
           if (earned && mounted) {
-            ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '+10 Poin — Foto pertama!' : '+10 Points — First photo!');
+            ppPhoto.showPointsToast(context, context.read<LocaleProvider>().s.pointsGain(10, context.read<LocaleProvider>().s.reasonFirstPhoto));
           }
         });
       }
@@ -450,7 +450,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       );
       if (pp.enabled) {
         final loc = context.read<LocaleProvider>();
-        pp.showPointsToast(context, loc.isId ? '-3 Poin' : '-3 Points');
+        pp.showPointsToast(context, loc.s.pointsDeduct(3));
       }
       _scrollToBottom();
     } catch (e) {
@@ -491,6 +491,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     Future.microtask(() {
       final pp = context.read<PointsProvider>();
       pp.checkAndShowOnlineToast(context, s.isId);
+      pp.checkAndShowStreakToast(context, s.isId);
     });
 
     return Scaffold(

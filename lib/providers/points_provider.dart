@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,6 +22,20 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   int get points => _points;
   bool get enabled => _enabled;
+  int get loginStreak => _loginStreak;
+  int _loginStreak = 0;
+  int _lastStreakBonus = 0;
+
+  PointsProvider() {
+    // Daftarkan observer + mulai sesi online SEKARANG. Tanpa ini,
+    // didChangeAppLifecycleState tidak pernah terpanggil (observer tak
+    // terdaftar) sehingga bonus online tidak pernah jalan, dan sesi
+    // pertama (cold start) tidak terhitung.
+    WidgetsBinding.instance.addObserver(this);
+    _sessionStart = DateTime.now();
+    _onlineTickTimer = Timer.periodic(
+        const Duration(seconds: 30), (_) => _checkOnlineMilestones());
+  }
 
   void subscribeEnabled() {
     try {
@@ -205,14 +218,41 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (!_enabled) return;
     try {
       final old = _points;
-      _points = await _service.dailyLoginBonus();
+      final res = await _service.dailyLoginBonus();
+      _points = (res['points'] as num?)?.toInt() ?? _points;
+      _loginStreak = (res['streak'] as num?)?.toInt() ?? _loginStreak;
+      _lastStreakBonus = (res['bonus'] as num?)?.toInt() ?? 0;
       resetOnlineTrackers();
       if (!_disposed) notifyListeners();
       if (_points > old) {
-        debugPrint('[POINTS] dailyLoginBonus +${_points - old} -> $_points');
+        debugPrint('[POINTS] dailyLoginBonus +${_points - old} streak=$_loginStreak -> $_points');
       }
     } catch (e) {
       debugPrint('[POINTS] dailyLoginBonus error: $e');
+    }
+  }
+
+  /// Tampilkan toast streak setelah daily login (dipanggil dari UI yang punya context).
+  void checkAndShowStreakToast(BuildContext context, bool isId) {
+    if (_lastStreakBonus <= 0) return;
+    final bonus = _lastStreakBonus;
+    final streak = _loginStreak;
+    _lastStreakBonus = 0;
+    showPointsToast(context,
+        isId ? '🔥 Streak $streak hari — +$bonus Poin' : '🔥 $streak-day streak — +$bonus Points');
+  }
+
+  /// Bonus chat orang baru (harian ber-limit, dikelola server).
+  Future<bool> newChatBonus(String otherUid) async {
+    if (!_enabled) return false;
+    try {
+      final old = _points;
+      _points = await _service.newChatBonus(otherUid);
+      if (!_disposed) notifyListeners();
+      return _points > old;
+    } catch (e) {
+      debugPrint('[POINTS] newChatBonus error: $e');
+      return false;
     }
   }
 

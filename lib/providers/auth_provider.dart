@@ -393,9 +393,10 @@ class AuthProvider extends ChangeNotifier {
       final enabled = await pointsService.fetchEnabled();
       if (!enabled) return;
       final old = _profile?.points ?? 0;
-      final newPoints = await pointsService.dailyLoginBonus();
+      final res = await pointsService.dailyLoginBonus();
+      final newPoints = (res['points'] as num?)?.toInt() ?? old;
       _profile = _profile?.copyWith(points: newPoints);
-      debugPrint('[AUTH] dailyLoginBonus: $old -> $newPoints');
+      debugPrint('[AUTH] dailyLoginBonus: $old -> $newPoints (streak ${res['streak']})');
       // Toast akan ditampilkan oleh PointsProvider di screen yang aktif
       // via checkAndShowOnlineToast / PointsProvider listener
     } catch (e) {

@@ -61,7 +61,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
       _pointsProv?.roomReadBonus().then((_) {
         if (mounted && _pointsProv?.enabled == true) {
           final s = context.read<LocaleProvider>().s;
-          _pointsProv?.showPointsToast(context, s.isId ? '+2 Poin — Baca room' : '+2 Points — Room read');
+          _pointsProv?.showPointsToast(context, s.pointsGain(2, s.reasonRoomRead));
         }
       });
     }
@@ -132,14 +132,14 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
         text: text,
       );
       if (pp.enabled) {
-        pp.showPointsToast(context, context.read<LocaleProvider>().s.isId ? '-1 Poin' : '-1 Point');
+        pp.showPointsToast(context, context.read<LocaleProvider>().s.pointsDeduct(1));
       }
       _roomSendCount++;
       if (_roomSendCount == 5) {
         _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
           if (earned && mounted) {
             final s = context.read<LocaleProvider>().s;
-            _pointsProv?.showPointsToast(context, s.isId ? '+5 Poin — Room chat!' : '+5 Points — Room chat!');
+            _pointsProv?.showPointsToast(context, s.pointsGain(5, s.reasonRoomChat));
           }
         });
       }

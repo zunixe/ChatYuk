@@ -20,6 +20,7 @@ import '../utils.dart';
 import 'link_email_screen.dart';
 import 'admin_panel_screen.dart';
 import 'donate_screen.dart';
+import 'leaderboard_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
 String? _processAvatar(Uint8List bytes) {
@@ -444,7 +445,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           final pp = context.read<PointsProvider>();
                           pp.oneTimeBonus('completed_profile', 10).then((earned) {
                             if (earned && mounted) {
-                              pp.showPointsToast(context, s.isId ? '+10 Poin — Profil lengkap!' : '+10 Points — Profile complete!');
+                              pp.showPointsToast(context, s.pointsGain(10, s.reasonProfileComplete));
                             }
                           });
                         }
@@ -513,7 +514,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Share.share(s.msgShareApp);
                       context.read<PointsProvider>().oneTimeBonus('invited_friend', 30).then((earned) {
                         if (earned && context.mounted) {
-                          context.read<PointsProvider>().showPointsToast(context, s.isId ? '+30 Poin — Share!' : '+30 Points — Share!');
+                          context.read<PointsProvider>().showPointsToast(context, s.pointsGain(30, s.reasonShare));
                         }
                       });
                     },
@@ -732,9 +733,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               children: [
                                 Text('${s.pointsBalance}: ${profile?.points ?? 50}',
                                   style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
-                                Text('≈ ${profile?.points ?? 50} ${s.isId ? "pesan lagi" : "more messages"}',
-                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-                                if (isAnon)
+                                Text(s.pointsMoreMessages(profile?.points ?? 50),
+                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),                                if (isAnon)
                                   Text(s.pointsAnonymousLose, style: TextStyle(color: Colors.orange.shade700, fontSize: 11))
                                 else
                                   Text(s.pointsSafe, style: const TextStyle(color: Colors.green, fontSize: 12)),
@@ -755,6 +755,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ],
+                    const Divider(height: 1, indent: 52),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+                        icon: const Icon(Icons.leaderboard_outlined, size: 18, color: AppTheme.primary),
+                        label: Text(s.lbTitle, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
                   ]),
                   ],
                   const SizedBox(height: 12),
