@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kebijakan Privasi — ChatYuk</title>
+  <title>Kebijakan Privasi — ChatYuk | Privacy Policy</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; color: #333; max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; }
     h1 { font-size: 28px; color: #1a1a2e; border-bottom: 2px solid #4A90E2; padding-bottom: 12px; }
@@ -12,84 +12,184 @@
     p, li { font-size: 15px; }
     .updated { color: #888; font-size: 14px; margin-top: -8px; }
     .box { background: #f5f7fa; border-left: 4px solid #4A90E2; padding: 16px; border-radius: 6px; margin: 16px 0; }
+    .lang-toggle { display: flex; gap: 12px; margin-bottom: 24px; }
+    .lang-toggle a { text-decoration: none; padding: 8px 16px; border-radius: 6px; background: #f0f2f5; color: #333; font-weight: 600; }
+    .lang-toggle a.active { background: #4A90E2; color: #fff; }
+    .section { display: none; }
+    .section.active { display: block; }
     ul { padding-left: 24px; }
     a { color: #4A90E2; }
   </style>
 </head>
 <body>
-  <h1>Kebijakan Privasi ChatYuk</h1>
-  <p class="updated">Terakhir diperbarui: 8 Agustus 2026</p>
-
-  <p>Selamat datang di <strong>ChatYuk</strong> ("aplikasi", "kami", "milik kami"). Kebijakan Privasi ini menjelaskan bagaimana kami mengumpulkan, menggunakan, menyimpan, dan melindungi data Anda saat Anda menggunakan aplikasi ChatYuk.</p>
-
-  <p>Dengan menggunakan aplikasi ChatYuk, Anda menyetujui pengumpulan dan penggunaan informasi sesuai dengan Kebijakan ini.</p>
-
-  <h2>1. Data yang Kami Kumpulkan</h2>
-
-  <h3>1.1 Data yang Anda berikan secara langsung</h3>
-  <ul>
-    <li><strong>Profil:</strong> nickname (nama panggilan), jenis kelamin, usia, negara, dan kota.</li>
-    <li><strong>Foto profil:</strong> foto avatar yang Anda unggah.</li>
-    <li><strong>Foto galeri:</strong> foto tambahan yang Anda unggah ke profil Anda (maksimal 6 foto).</li>
-    <li><strong>Pesan chat:</strong> teks, foto, dan pesan sekali lihat (view once) yang Anda kirim.</li>
-    <li><strong>Alamat email:</strong> jika Anda mendaftar atau menautkan akun email.</li>
-  </ul>
-
-  <h3>1.2 Data yang dikumpulkan otomatis</h3>
-  <ul>
-    <li><strong>Alamat IP:</strong> dicatat untuk keperluan keamanan dan moderasi.</li>
-    <li><strong>Token perangkat (FCM token):</strong> digunakan untuk mengirim notifikasi push.</li>
-    <li><strong>Status online/idle/offline</strong> dan waktu terakhir aktif (last seen).</li>
-  </ul>
-
-  <h2>2. Bagaimana Kami Menggunakan Data</h2>
-  <ul>
-    <li>Menyediakan dan memelihara fitur aplikasi (chat room, chat pribadi, profil, dan lainnya).</li>
-    <li>Mengirim notifikasi pesan baru.</li>
-    <li>Keamanan, pencegahan penyalahgunaan, dan moderasi konten.</li>
-    <li>Menampilkan informasi profil Anda kepada pengguna lain sesuai fitur aplikasi.</li>
-    <li>Peningkatan kualitas dan kinerja aplikasi.</li>
-  </ul>
-
-  <h2>3. Informasi yang Terlihat oleh Pengguna Lain</h2>
-  <p>Beberapa informasi profil Anda bersifat publik di dalam aplikasi dan dapat dilihat oleh pengguna lain, antara lain: nickname, jenis kelamin, usia, negara, kota, foto profil, foto galeri, dan status online. Hati-hati dalam membagikan informasi pribadi melalui chat.</p>
-
-  <h2>4. Penyimpanan dan Keamanan Data</h2>
-  <ul>
-    <li>Data Anda disimpan secara aman di server cloud (Supabase).</li>
-    <li>Cache pesan di perangkat Anda dienkripsi (AES-GCM) untuk melindungi privasi.</li>
-    <li>Anti-screenshot diaktifkan pada halaman chat pribadi dan pesan sekali lihat untuk melindungi privasi percakapan.</li>
-  </ul>
-
-  <h2>5. Izin Perangkat</h2>
-  <ul>
-    <li><strong>Notifikasi:</strong> untuk menerima pemberitahuan pesan baru.</li>
-    <li><strong>Penyimpanan/Galeri:</strong> untuk memilih dan mengirim foto.</li>
-    <li><strong>Internet:</strong> untuk terhubung ke server dan berkomunikasi.</li>
-  </ul>
-
-  <h2>6. Berbagi Data dengan Pihak Ketiga</h2>
-  <p>Kami tidak menjual data pribadi Anda. Kami menggunakan layanan pihak ketiga untuk operasional teknis:</p>
-  <ul>
-    <li><strong>Supabase</strong> — penyimpanan data dan autentikasi.</li>
-    <li><strong>Google Firebase</strong> — layanan notifikasi push (FCM).</li>
-  </ul>
-
-  <h2>7. Penghapusan Data</h2>
-  <p>Anda dapat meminta penghapusan akun dan data Anda dengan menghubungi kami melalui email di bawah. Data akun yang tidak aktif dalam jangka waktu lama dapat dibersihkan secara otomatis oleh sistem.</p>
-
-  <h2>8. Privasi Anak-anak</h2>
-  <p>Aplikasi ini tidak ditujukan untuk anak-anak di bawah 13 tahun. Kami tidak dengan sengaja mengumpulkan data dari anak-anak di bawah 13 tahun.</p>
-
-  <h2>9. Perubahan Kebijakan</h2>
-  <p>Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Perubahan yang signifikan akan kami beritahukan melalui aplikasi atau email. Tanggal pembaruan terakhir ditampilkan di bagian atas kebijakan ini.</p>
-
-  <h2>10. Hubungi Kami</h2>
-  <p>Jika Anda memiliki pertanyaan tentang Kebijakan Privasi ini, hubungi kami melalui email:</p>
-  <p><a href="mailto:scanorder.official@gmail.com">scanorder.official@gmail.com</a></p>
-
-  <div class="box">
-    <strong>Terima kasih telah menggunakan ChatYuk!</strong>
+  <div class="lang-toggle">
+    <a href="#id" class="active" onclick="switchLang('id'); return false;">Indonesia</a>
+    <a href="#en" onclick="switchLang('en'); return false;">English</a>
   </div>
+
+  <div id="lang-id" class="section active">
+    <h1>Kebijakan Privasi ChatYuk</h1>
+    <p class="updated">Terakhir diperbarui: 14 Agustus 2026</p>
+
+    <p>Selamat datang di <strong>ChatYuk</strong> ("aplikasi", "kami", "milik kami"). Kebijakan Privasi ini menjelaskan bagaimana kami mengumpulkan, menggunakan, menyimpan, dan melindungi data Anda saat Anda menggunakan aplikasi ChatYuk.</p>
+
+    <p>Dengan menggunakan aplikasi ChatYuk, Anda menyetujui pengumpulan dan penggunaan informasi sesuai dengan Kebijakan ini.</p>
+
+    <h2>1. Data yang Kami Kumpulkan</h2>
+
+    <h3>1.1 Data yang Anda berikan secara langsung</h3>
+    <ul>
+      <li><strong>Profil:</strong> nickname (nama panggilan), jenis kelamin, usia, negara, dan kota.</li>
+      <li><strong>Foto profil:</strong> foto avatar yang Anda unggah.</li>
+      <li><strong>Foto galeri:</strong> foto tambahan yang Anda unggah ke profil Anda (maksimal 6 foto).</li>
+      <li><strong>Pesan chat:</strong> teks, foto, dan pesan sekali lihat (view once) yang Anda kirim.</li>
+      <li><strong>Alamat email:</strong> jika Anda mendaftar atau menautkan akun email.</li>
+    </ul>
+
+    <h3>1.2 Data yang dikumpulkan otomatis</h3>
+    <ul>
+      <li><strong>Alamat IP:</strong> dicatat untuk keperluan keamanan dan moderasi.</li>
+      <li><strong>Token perangkat (FCM token):</strong> digunakan untuk mengirim notifikasi push.</li>
+      <li><strong>Status online/idle/offline</strong> dan waktu terakhir aktif (last seen).</li>
+    </ul>
+
+    <h2>2. Bagaimana Kami Menggunakan Data</h2>
+    <ul>
+      <li>Menyediakan dan memelihara fitur aplikasi (chat room, chat pribadi, profil, dan lainnya).</li>
+      <li>Mengirim notifikasi pesan baru.</li>
+      <li>Keamanan, pencegahan penyalahgunaan, dan moderasi konten.</li>
+      <li>Menampilkan informasi profil Anda kepada pengguna lain sesuai fitur aplikasi.</li>
+      <li>Peningkatan kualitas dan kinerja aplikasi.</li>
+    </ul>
+
+    <h2>3. Informasi yang Terlihat oleh Pengguna Lain</h2>
+    <p>Beberapa informasi profil Anda bersifat publik di dalam aplikasi dan dapat dilihat oleh pengguna lain, antara lain: nickname, jenis kelamin, usia, negara, kota, foto profil, foto galeri, dan status online. Hati-hati dalam membagikan informasi pribadi melalui chat.</p>
+
+    <h2>4. Penyimpanan dan Keamanan Data</h2>
+    <ul>
+      <li>Data Anda disimpan secara aman di server cloud (Supabase).</li>
+      <li>Cache pesan di perangkat Anda dienkripsi (AES-GCM) untuk melindungi privasi.</li>
+      <li>Anti-screenshot diaktifkan pada halaman chat pribadi dan pesan sekali lihat untuk melindungi privasi percakapan.</li>
+    </ul>
+
+    <h2>5. Izin Perangkat</h2>
+    <ul>
+      <li><strong>Notifikasi:</strong> untuk menerima pemberitahuan pesan baru.</li>
+      <li><strong>Penyimpanan/Galeri:</strong> untuk memilih dan mengirim foto.</li>
+      <li><strong>Internet:</strong> untuk terhubung ke server dan berkomunikasi.</li>
+    </ul>
+
+    <h2>6. Berbagi Data dengan Pihak Ketiga</h2>
+    <p>Kami tidak menjual data pribadi Anda. Kami menggunakan layanan pihak ketiga untuk operasional teknis:</p>
+    <ul>
+      <li><strong>Supabase</strong> — penyimpanan data dan autentikasi.</li>
+      <li><strong>Google Firebase</strong> — layanan notifikasi push (FCM).</li>
+    </ul>
+
+    <h2>7. Penghapusan Data</h2>
+    <p>Anda dapat meminta penghapusan akun dan data Anda dengan menghubungi kami melalui email di bawah. Data akun yang tidak aktif dalam jangka waktu lama dapat dibersihkan secara otomatis oleh sistem.</p>
+
+    <h2>8. Privasi Anak-anak</h2>
+    <p>Aplikasi ini tidak ditujukan untuk anak-anak di bawah 13 tahun. Kami tidak dengan sengaja mengumpulkan data dari anak-anak di bawah 13 tahun.</p>
+
+    <h2>9. Perubahan Kebijakan</h2>
+    <p>Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Perubahan yang signifikan akan kami beritahukan melalui aplikasi atau email. Tanggal pembaruan terakhir ditampilkan di bagian atas kebijakan ini.</p>
+
+    <h2>10. Hubungi Kami</h2>
+    <p>Jika Anda memiliki pertanyaan tentang Kebijakan Privasi ini, hubungi kami melalui email:</p>
+    <p><a href="mailto:scanorder.official@gmail.com">scanorder.official@gmail.com</a></p>
+
+    <div class="box">
+      <strong>Terima kasih telah menggunakan ChatYuk!</strong>
+    </div>
+  </div>
+
+  <div id="lang-en" class="section">
+    <h1>ChatYuk Privacy Policy</h1>
+    <p class="updated">Last updated: August 14, 2026</p>
+
+    <p>Welcome to <strong>ChatYuk</strong> ("the app", "we", "our"). This Privacy Policy explains how we collect, use, store, and protect your data when you use the ChatYuk app.</p>
+
+    <p>By using the ChatYuk app, you agree to the collection and use of information in accordance with this Policy.</p>
+
+    <h2>1. Data We Collect</h2>
+
+    <h3>1.1 Data you provide directly</h3>
+    <ul>
+      <li><strong>Profile:</strong> nickname, gender, age, country, and city.</li>
+      <li><strong>Profile photo:</strong> the avatar photo you upload.</li>
+      <li><strong>Gallery photos:</strong> additional photos you upload to your profile (up to 6 photos).</li>
+      <li><strong>Chat messages:</strong> text, photos, and view-once messages you send.</li>
+      <li><strong>Email address:</strong> if you register or link an email account.</li>
+    </ul>
+
+    <h3>1.2 Data collected automatically</h3>
+    <ul>
+      <li><strong>IP address:</strong> recorded for security and moderation purposes.</li>
+      <li><strong>Device token (FCM token):</strong> used to send push notifications.</li>
+      <li><strong>Online/idle/offline status</strong> and last seen time.</li>
+    </ul>
+
+    <h2>2. How We Use Your Data</h2>
+    <ul>
+      <li>To provide and maintain app features (chat rooms, private chat, profiles, and more).</li>
+      <li>To send notifications for new messages.</li>
+      <li>For security, abuse prevention, and content moderation.</li>
+      <li>To display your profile information to other users as part of app features.</li>
+      <li>To improve app quality and performance.</li>
+    </ul>
+
+    <h2>3. Information Visible to Other Users</h2>
+    <p>Some of your profile information is public within the app and can be seen by other users, including: nickname, gender, age, country, city, profile photo, gallery photos, and online status. Be careful when sharing personal information through chat.</p>
+
+    <h2>4. Data Storage and Security</h2>
+    <ul>
+      <li>Your data is stored securely on cloud servers (Supabase).</li>
+      <li>Message cache on your device is encrypted (AES-GCM) to protect privacy.</li>
+      <li>Anti-screenshot is enabled on private chat and view-once message screens to protect conversation privacy.</li>
+    </ul>
+
+    <h2>5. Device Permissions</h2>
+    <ul>
+      <li><strong>Notifications:</strong> to receive notifications of new messages.</li>
+      <li><strong>Storage/Gallery:</strong> to pick and send photos.</li>
+      <li><strong>Internet:</strong> to connect to the server and communicate.</li>
+    </ul>
+
+    <h2>6. Sharing Data with Third Parties</h2>
+    <p>We do not sell your personal data. We use third-party services for technical operations:</p>
+    <ul>
+      <li><strong>Supabase</strong> — data storage and authentication.</li>
+      <li><strong>Google Firebase</strong> — push notification service (FCM).</li>
+    </ul>
+
+    <h2>7. Data Deletion</h2>
+    <p>You may request the deletion of your account and data by contacting us via the email below. Accounts that have been inactive for a long period may be cleaned up automatically by the system.</p>
+
+    <h2>8. Children's Privacy</h2>
+    <p>This app is not intended for children under 13 years old. We do not knowingly collect data from children under 13.</p>
+
+    <h2>9. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. Significant changes will be communicated through the app or email. The last updated date is shown at the top of this policy.</p>
+
+    <h2>10. Contact Us</h2>
+    <p>If you have any questions about this Privacy Policy, contact us via email:</p>
+    <p><a href="mailto:scanorder.official@gmail.com">scanorder.official@gmail.com</a></p>
+
+    <div class="box">
+      <strong>Thank you for using ChatYuk!</strong>
+    </div>
+  </div>
+
+  <script>
+    function switchLang(lang) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById('lang-' + lang).classList.add('active');
+      document.querySelectorAll('.lang-toggle a').forEach(a => a.classList.remove('active'));
+      var target = lang === 'id' ? '#id' : '#en';
+      document.querySelector('.lang-toggle a[href="' + target + '"]').classList.add('active');
+    }
+    if (window.location.hash === '#en') switchLang('en');
+  </script>
 </body>
 </html>
