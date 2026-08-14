@@ -31,9 +31,15 @@ const String _channelId = 'chatyuk_chat';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  final data = message.data;  final title = message.notification?.title ??
-      (data['type'] == 'room' ? data['roomName'] ?? 'Room' : 'New message');
-  final body = message.notification?.body ?? 'You have a new message';
+  final data = message.data;
+  final isOnline = data['type'] == 'online';
+  final title = isOnline
+      ? data['otherName'] ?? 'User'
+      : message.notification?.title ??
+          (data['type'] == 'room' ? data['roomName'] ?? 'Room' : 'New message');
+  final body = isOnline
+      ? 'is online'
+      : message.notification?.body ?? 'You have a new message';
 
   final androidInit = const lpn.AndroidInitializationSettings('@mipmap/ic_launcher');
   final settings = lpn.InitializationSettings(android: androidInit);
@@ -63,9 +69,14 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   if (chatKey.isNotEmpty && activeChatId.value == chatKey) return;
 
   final s = localeProvider.s;
-  final title = message.notification?.title ??
-      (data['type'] == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
-  final body = message.notification?.body ?? s.notifNewMessageBody;
+  final isOnline = data['type'] == 'online';
+  final title = isOnline
+      ? data['otherName'] ?? s.unknownUser
+      : message.notification?.title ??
+          (data['type'] == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
+  final body = isOnline
+      ? s.notifOnlineBody
+      : message.notification?.body ?? s.notifNewMessageBody;
 
   await localNotifications.show(
     id: notifIdForKey(data['chatId'] ?? data['roomId'] ?? 'local'),

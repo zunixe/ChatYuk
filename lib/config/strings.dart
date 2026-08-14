@@ -199,6 +199,7 @@ class S {
   String get notifChannelDesc => isId ? 'Notifikasi pesan baru dari chat' : 'New message notifications from chat';
   String get notifNewMessage  => isId ? 'Pesan baru'                  : 'New message';
   String get notifNewMessageBody => isId ? 'Pesan baru masuk'         : 'You have a new message';
+  String get notifOnlineBody  => isId ? 'sedang online'                : 'is online';
   String get labelNotifications => isId ? 'Notifikasi'                : 'Notifications';
   String get notifEnabledDesc  => isId ? 'Terima notifikasi pesan baru' : 'Receive new message notifications';
 
