@@ -21,6 +21,7 @@ import 'link_email_screen.dart';
 import 'admin_panel_screen.dart';
 import 'donate_screen.dart';
 import 'leaderboard_screen.dart';
+import 'missions_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
 String? _processAvatar(Uint8List bytes) {
@@ -518,6 +519,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         }
                       });
                     },
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                    icon: const Icon(Icons.emoji_events_outlined, size: 20),
+                    tooltip: s.missionsTitle,
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MissionsScreen())),
                   ),
                   IconButton(
                     padding: EdgeInsets.zero,
