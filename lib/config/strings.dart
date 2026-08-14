@@ -336,6 +336,10 @@ class S {
   String get missionClaim         => isId ? 'Klaim'                 : 'Claim';
   String get missionClaimed       => isId ? 'Sudah diklaim'         : 'Claimed';
   String missionClaimedToast(int n) => isId ? '+$n Poin — Misi mingguan!' : '+$n Points — Weekly mission!';
+  String get missionsMyPoints     => isId ? 'Poin kamu'             : 'Your points';
+  String missionsProgress(int done, int total) => isId ? '$done dari $total selesai' : '$done of $total done';
+  String get missionsAllDone      => isId ? 'Semua misi selesai! 🎉' : 'All missions done! 🎉';
+  String get missionsReadyClaim   => isId ? 'Siap diklaim!'         : 'Ready to claim!';
   // Nama misi
   String get mDailyLogin          => isId ? 'Login harian'          : 'Daily login';
   String get mRoomRead            => isId ? 'Baca room'             : 'Read rooms';

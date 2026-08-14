@@ -275,12 +275,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _editNickname() async {
+  Future<void> _editProfile() async {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final current = auth.profile?.nickname ?? '';
-    final ctrl = TextEditingController(text: current);
+    final profile = auth.profile;
+    if (profile == null) return;
+    final currentNick = profile.nickname;
+    final ctrl = TextEditingController(text: currentNick);
     final focus = FocusNode();
+    int age = profile.age;
+    String negara = profile.country;
+    String kota = profile.city;
     String? error;
     bool loading = false;
 
@@ -300,7 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(2))),
                 const SizedBox(height: 16),
-                Text(s.btnChangeUsername, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+                Text(s.btnEditProfile, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 Text(s.msgUsernameOldReleased, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 const SizedBox(height: 16),
@@ -312,96 +317,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     labelText: s.labelUsername,
                     hintText: s.hintNickname,
                     errorText: error,
-                    suffixIcon: error == null && ctrl.text.isNotEmpty && ctrl.text != current
+                    prefixIcon: const Icon(Icons.alternate_email, size: 20),
+                    suffixIcon: error == null && ctrl.text.isNotEmpty && ctrl.text != currentNick
                         ? const Icon(Icons.check_circle, color: Colors.green)
                         : null,
                   ),
                   onChanged: (v) => setSheet(() => error = null),
                 ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: loading
-                        ? null
-                        : () async {
-                            final nick = ctrl.text.trim();
-                            if (nick.length < 3) {
-                              setSheet(() => error = s.errNicknameShort);
-                              focus.requestFocus();
-                              return;
-                            }
-                            if (nick.length > 20) {
-                              setSheet(() => error = s.errNicknameLong);
-                              focus.requestFocus();
-                              return;
-                            }
-                            if (!isValidNickname(nick)) {
-                              setSheet(() => error = s.errNicknameInvalid);
-                              focus.requestFocus();
-                              return;
-                            }
-                            final available = await context.read<AuthProvider>().isNicknameAvailable(nick);
-                            if (!available) {
-                              setSheet(() => error = s.errNicknameTaken);
-                              focus.requestFocus();
-                              return;
-                            }
-                            setSheet(() => loading = true);
-                            try {
-                              await context.read<AuthProvider>().updateProfile(nickname: nick);
-                              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-                            } catch (e) {
-                              if (sheetCtx.mounted) {
-                                setSheet(() {
-                                  loading = false;
-                                  error = '${s.errGeneric}$e';
-                                });
-                              }
-                            }
-                          },
-                    child: loading
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : Text(s.btnSave, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _editProfile() async {
-    final s = context.read<LocaleProvider>().s;
-    final profile = context.read<AuthProvider>().profile;
-    if (profile == null) return;
-    int age = profile.age;
-    String negara = profile.country;
-    String kota = profile.city;
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      isScrollControlled: true,
-      builder: (sheetCtx) => StatefulBuilder(
-        builder: (sheetCtx, setSheet) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(sheetCtx).viewInsets.bottom),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(2))),
-                const SizedBox(height: 16),
-                Text(s.btnEditProfile, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<int>(
                   initialValue: age,
-                  decoration: InputDecoration(labelText: s.labelAge),
+                  decoration: InputDecoration(labelText: s.labelAge, prefixIcon: const Icon(Icons.cake_outlined, size: 20)),
                   items: [
                     for (int i = 13; i <= 60; i++)
                       DropdownMenuItem(value: i, child: Text('$i')),
@@ -411,7 +337,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: negara,
-                  decoration: InputDecoration(labelText: s.labelCountry),
+                  decoration: InputDecoration(labelText: s.labelCountry, prefixIcon: const Icon(Icons.public, size: 20)),
                   items: [
                     for (final n in kotaByNegara.keys)
                       DropdownMenuItem(value: n, child: Text(negaraLabel(n, s.isId))),
@@ -425,7 +351,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: kota,
-                  decoration: InputDecoration(labelText: s.labelCity),
+                  decoration: InputDecoration(labelText: s.labelCity, prefixIcon: const Icon(Icons.location_city, size: 20)),
                   items: [
                     for (final k in kotaByNegara[negara]!)
                       DropdownMenuItem(value: k, child: Text(k)),
@@ -436,27 +362,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () async {
-                      Navigator.pop(sheetCtx);
-                      try {
-                        await context.read<AuthProvider>().updateProfile(age: age, country: negara, city: kota);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgProfileSaved)));
-                          // Bonus: complete profile
-                          final pp = context.read<PointsProvider>();
-                          pp.oneTimeBonus('completed_profile', 10).then((earned) {
-                            if (earned && mounted) {
-                              pp.showPointsToast(context, s.pointsGain(10, s.reasonProfileComplete));
+                    onPressed: loading
+                        ? null
+                        : () async {
+                            final nick = ctrl.text.trim();
+                            final nickChanged = nick != currentNick;
+                            if (nickChanged) {
+                              if (nick.length < 3) {
+                                setSheet(() => error = s.errNicknameShort);
+                                focus.requestFocus();
+                                return;
+                              }
+                              if (nick.length > 20) {
+                                setSheet(() => error = s.errNicknameLong);
+                                focus.requestFocus();
+                                return;
+                              }
+                              if (!isValidNickname(nick)) {
+                                setSheet(() => error = s.errNicknameInvalid);
+                                focus.requestFocus();
+                                return;
+                              }
+                              final available = await context.read<AuthProvider>().isNicknameAvailable(nick);
+                              if (!available) {
+                                setSheet(() => error = s.errNicknameTaken);
+                                focus.requestFocus();
+                                return;
+                              }
                             }
-                          });
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errProfileSave}$e')));
-                        }
-                      }
-                    },
-                    child: Text(s.btnSave),
+                            setSheet(() => loading = true);
+                            try {
+                              await context.read<AuthProvider>().updateProfile(
+                                    nickname: nickChanged ? nick : null,
+                                    age: age,
+                                    country: negara,
+                                    city: kota,
+                                  );
+                              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgProfileSaved)));
+                                final pp = context.read<PointsProvider>();
+                                pp.oneTimeBonus('completed_profile', 10).then((earned) {
+                                  if (earned && mounted) {
+                                    pp.showPointsToast(context, s.pointsGain(10, s.reasonProfileComplete));
+                                  }
+                                });
+                              }
+                            } catch (e) {
+                              if (sheetCtx.mounted) {
+                                setSheet(() {
+                                  loading = false;
+                                  error = '${s.errGeneric}$e';
+                                });
+                              }
+                            }
+                          },
+                    child: loading
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Text(s.btnSave, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -491,53 +454,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SliverAppBar(
             expandedHeight: 220,
             pinned: true,
+            leading: IconButton(
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              icon: _loggingOut
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.logout_rounded, size: 20),
+              tooltip: s.btnLogout,
+              onPressed: _loggingOut ? null : () => _confirmLogout(),
+            ),
             actions: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                    icon: _loggingOut
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.logout_rounded, size: 20),
-                    tooltip: s.btnLogout,
-                    onPressed: _loggingOut ? null : () => _confirmLogout(),
-                  ),
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                    icon: const Icon(Icons.share_outlined, size: 20),
-                    tooltip: s.btnShareApp,
-                    onPressed: () {
-                      Share.share(s.msgShareApp);
-                      context.read<PointsProvider>().oneTimeBonus('invited_friend', 30).then((earned) {
-                        if (earned && context.mounted) {
-                          context.read<PointsProvider>().showPointsToast(context, s.pointsGain(30, s.reasonShare));
-                        }
-                      });
-                    },
-                  ),
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                    icon: const Icon(Icons.emoji_events_outlined, size: 20),
-                    tooltip: s.missionsTitle,
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MissionsScreen())),
-                  ),
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                    icon: const Icon(Icons.edit_outlined, size: 20),
-                    tooltip: s.btnEditProfile,
-                    onPressed: _editProfile,
-                  ),
-                ],
+              IconButton(
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 40, height: 44),
+                icon: const Icon(Icons.emoji_events_outlined, size: 20),
+                tooltip: s.missionsTitle,
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MissionsScreen())),
               ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 40, height: 44),
+                icon: const Icon(Icons.share_outlined, size: 20),
+                tooltip: s.btnShareApp,
+                onPressed: () async {
+                  final pp = context.read<PointsProvider>();
+                  final result = await Share.share(s.msgShareApp);
+                  // Hanya beri bonus kalau benar-benar dibagikan (bukan sekadar
+                  // buka lalu tutup share sheet). Bonus invited_friend one-time —
+                  // kalau sudah pernah, earned=false → toast tidak muncul lagi.
+                  if (result.status != ShareResultStatus.success) return;
+                  final earned = await pp.oneTimeBonus('invited_friend', 30);
+                  if (earned && context.mounted) {
+                    pp.showPointsToast(context, s.pointsGain(30, s.reasonShare));
+                  }
+                },
+              ),
+              const SizedBox(width: 4),
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
@@ -710,8 +664,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.primary),
-                            tooltip: s.btnChangeUsername,
-                            onPressed: _editNickname,
+                            tooltip: s.btnEditProfile,
+                            onPressed: _editProfile,
                           ),
                         ],
                       ),

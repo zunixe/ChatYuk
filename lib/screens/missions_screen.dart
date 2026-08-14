@@ -23,11 +23,14 @@ class _MissionsScreenState extends State<MissionsScreen>
   List<dynamic> _daily = [];
   List<dynamic> _weekly = [];
   List<dynamic> _oneTime = [];
+  int _points = 0;
+  int _streak = 0;
   String? _claiming;
 
   @override
   void initState() {
     super.initState();
+    _tab.addListener(() => setState(() {}));
     _load();
   }
 
@@ -46,6 +49,8 @@ class _MissionsScreenState extends State<MissionsScreen>
         _daily = (res['daily'] as List?) ?? [];
         _weekly = (res['weekly'] as List?) ?? [];
         _oneTime = (res['oneTime'] as List?) ?? [];
+        _points = (res['points'] as num?)?.toInt() ?? 0;
+        _streak = (res['streak'] as num?)?.toInt() ?? 0;
         _loading = false;
       });
     } catch (e) {
@@ -76,73 +81,276 @@ class _MissionsScreenState extends State<MissionsScreen>
     }
   }
 
+  int _doneCount(List<dynamic> items) =>
+      items.where((e) => (e as Map)['done'] == true).length;
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
+    final current = _tab.index == 0 ? _daily : _tab.index == 1 ? _weekly : _oneTime;
+    final claimableCount = _weekly.where((e) => (e as Map)['claimable'] == true).length;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(s.missionsTitle),
-        bottom: TabBar(
-          controller: _tab,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            Tab(text: s.missionsDaily),
-            Tab(text: s.missionsWeekly),
-            Tab(text: s.missionsOnce),
-          ],
-        ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-          : TabBarView(
-              controller: _tab,
-              children: [
-                _list(s.missionsDailyHint, _daily, s),
-                _list(s.missionsWeeklyHint, _weekly, s),
-                _list(s.missionsOnceHint, _oneTime, s),
-              ],
+      backgroundColor: AppTheme.bgScreen,
+      body: NestedScrollView(
+        headerSliverBuilder: (_, __) => [
+          SliverAppBar(
+            expandedHeight: 190,
+            pinned: true,
+            backgroundColor: AppTheme.primary,
+            iconTheme: const IconThemeData(color: Colors.white),
+            title: Text(s.missionsTitle, style: const TextStyle(color: Colors.white)),
+            flexibleSpace: FlexibleSpaceBar(
+              background: _Header(points: _points, streak: _streak, s: s),
             ),
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: Container(
+                color: AppTheme.primary,
+                child: TabBar(
+                  controller: _tab,
+                  indicatorColor: Colors.white,
+                  indicatorWeight: 3,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                  tabs: [
+                    _tabWithBadge(s.missionsDaily, 0),
+                    _tabWithBadge(s.missionsWeekly, claimableCount),
+                    _tabWithBadge(s.missionsOnce, 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+        body: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+            : Column(
+                children: [
+                  _ProgressBanner(
+                    done: _doneCount(current),
+                    total: current.length,
+                    hint: _tab.index == 0
+                        ? s.missionsDailyHint
+                        : _tab.index == 1
+                            ? s.missionsWeeklyHint
+                            : s.missionsOnceHint,
+                    s: s,
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tab,
+                      children: [
+                        _list(_daily, s),
+                        _list(_weekly, s),
+                        _list(_oneTime, s),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 
-  Widget _list(String hint, List<dynamic> items, S s) {
+  Widget _tabWithBadge(String text, int badge) {
+    return Tab(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(text),
+          if (badge > 0) ...[
+            const SizedBox(width: 5),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(color: AppTheme.danger, borderRadius: BorderRadius.circular(10)),
+              child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _list(List<dynamic> items, S s) {
+    if (items.isEmpty) {
+      return Center(child: Text(s.missionsEmpty, style: const TextStyle(color: AppTheme.textSecondary)));
+    }
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            child: Row(children: [
-              const Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
-              const SizedBox(width: 6),
-              Expanded(child: Text(hint, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12))),
-            ]),
+      color: AppTheme.primary,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+        itemCount: items.length,
+        itemBuilder: (_, i) => _MissionCard(
+          data: Map<String, dynamic>.from(items[i] as Map),
+          claimingKey: _claiming,
+          onClaim: _claim,
+          index: i,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Header dengan gradient + saldo poin + streak ──
+class _Header extends StatelessWidget {
+  final int points;
+  final int streak;
+  final S s;
+  const _Header({required this.points, required this.streak, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppTheme.primary, AppTheme.primaryDark, Color(0xFF6A1B9A)],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 40, 20, 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.stars_rounded, color: Colors.amber, size: 32),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(s.missionsMyPoints,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text('$points',
+                      style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800, height: 1)),
+                ],
+              ),
+              const Spacer(),
+              if (streak > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text('🔥', style: TextStyle(fontSize: 18)),
+                      const SizedBox(height: 2),
+                      Text('$streak',
+                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, height: 1)),
+                    ],
+                  ),
+                ),
+            ],
           ),
-          if (items.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Center(child: Text(s.missionsEmpty, style: const TextStyle(color: AppTheme.textSecondary))),
-            )
-          else
-            ...items.map((e) => _MissionTile(
-                  data: Map<String, dynamic>.from(e as Map),
-                  claimingKey: _claiming,
-                  onClaim: _claim,
-                )),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Banner progress tab aktif ──
+class _ProgressBanner extends StatelessWidget {
+  final int done;
+  final int total;
+  final String hint;
+  final S s;
+  const _ProgressBanner({required this.done, required this.total, required this.hint, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = total == 0 ? 0.0 : (done / total).clamp(0.0, 1.0);
+    final allDone = total > 0 && done == total;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 44, height: 44,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 44, height: 44,
+                  child: CircularProgressIndicator(
+                    value: pct,
+                    strokeWidth: 5,
+                    backgroundColor: AppTheme.divider,
+                    valueColor: AlwaysStoppedAnimation(allDone ? AppTheme.online : AppTheme.primary),
+                  ),
+                ),
+                Text('${(pct * 100).round()}%',
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  allDone ? s.missionsAllDone : s.missionsProgress(done, total),
+                  style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(hint, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _MissionTile extends StatelessWidget {
+// ── Kartu misi ──
+class _MissionCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final String? claimingKey;
   final void Function(String key, int reward) onClaim;
-  const _MissionTile({required this.data, required this.claimingKey, required this.onClaim});
+  final int index;
+  const _MissionCard({required this.data, required this.claimingKey, required this.onClaim, required this.index});
+
+  static const _meta = <String, ({IconData icon, Color color})>{
+    'daily_login': (icon: Icons.wb_sunny_rounded, color: Color(0xFFFFA000)),
+    'room_read': (icon: Icons.menu_book_rounded, color: Color(0xFF00897B)),
+    'new_chat': (icon: Icons.person_add_rounded, color: Color(0xFF1E88E5)),
+    'online_5min': (icon: Icons.timer_rounded, color: Color(0xFF43A047)),
+    'online_30min': (icon: Icons.timer_rounded, color: Color(0xFF43A047)),
+    'online_60min': (icon: Icons.timer_rounded, color: Color(0xFF43A047)),
+    'online_120min': (icon: Icons.timer_rounded, color: Color(0xFF43A047)),
+    'w_login': (icon: Icons.calendar_month_rounded, color: Color(0xFF8E24AA)),
+    'w_social': (icon: Icons.groups_rounded, color: Color(0xFF1E88E5)),
+    'w_active': (icon: Icons.forum_rounded, color: Color(0xFFE53935)),
+    'registered': (icon: Icons.mark_email_read_rounded, color: Color(0xFF43A047)),
+    'rated_app': (icon: Icons.star_rounded, color: Color(0xFFFFB300)),
+    'completed_profile': (icon: Icons.badge_rounded, color: Color(0xFFFB8C00)),
+    'invited_friend': (icon: Icons.share_rounded, color: Color(0xFF00ACC1)),
+    'first_photo': (icon: Icons.photo_camera_rounded, color: Color(0xFFD81B60)),
+    'first_room_chat': (icon: Icons.chat_bubble_rounded, color: Color(0xFF3949AB)),
+  };
 
   String _label(S s, String key) {
     switch (key) {
@@ -177,69 +385,110 @@ class _MissionTile extends StatelessWidget {
     final current = (data['current'] as num?)?.toInt() ?? 0;
     final hasProgress = target > 1;
     final isClaiming = claimingKey == key;
+    final meta = _meta[key] ?? (icon: Icons.emoji_events_rounded, color: AppTheme.primary);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: done
-                    ? AppTheme.online.withValues(alpha: 0.15)
-                    : AppTheme.primary.withValues(alpha: 0.1),
-              ),
-              child: Icon(
-                done ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: done ? AppTheme.online : AppTheme.textSecondary,
-                size: 20,
-              ),
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 260 + index * 45),
+      curve: Curves.easeOutCubic,
+      tween: Tween(begin: 0, end: 1),
+      builder: (_, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset(0, (1 - t) * 16), child: child),
+      ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(16),
+          border: claimable
+              ? Border.all(color: AppTheme.primary, width: 1.5)
+              : Border.all(color: Colors.transparent),
+          boxShadow: [
+            BoxShadow(
+              color: claimable
+                  ? AppTheme.primary.withValues(alpha: 0.18)
+                  : Colors.black.withValues(alpha: 0.04),
+              blurRadius: claimable ? 12 : 6,
+              offset: const Offset(0, 2),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_label(s, key),
-                      style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 2),
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text('+$reward',
-                          style: TextStyle(color: Colors.amber.shade800, fontSize: 11, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Ikon berwarna
+              Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: done
+                        ? [AppTheme.online.withValues(alpha: 0.85), AppTheme.online]
+                        : [meta.color.withValues(alpha: 0.85), meta.color],
+                  ),
+                  borderRadius: BorderRadius.circular(13),
+                  boxShadow: [BoxShadow(color: (done ? AppTheme.online : meta.color).withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))],
+                ),
+                child: Icon(done ? Icons.check_rounded : meta.icon, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(_label(s, key),
+                              style: TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                decoration: done ? TextDecoration.none : null,
+                              )),
+                        ),
+                        _RewardChip(reward: reward, done: done),
+                      ],
                     ),
                     if (hasProgress) ...[
-                      const SizedBox(width: 8),
-                      Text('$current/$target',
-                          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-                    ],
-                  ]),
-                  if (hasProgress) ...[
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: target == 0 ? 0 : (current / target).clamp(0.0, 1.0),
-                        minHeight: 5,
-                        backgroundColor: AppTheme.divider,
-                        valueColor: AlwaysStoppedAnimation(done ? AppTheme.online : AppTheme.primary),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: TweenAnimationBuilder<double>(
+                                duration: const Duration(milliseconds: 600),
+                                curve: Curves.easeOut,
+                                tween: Tween(begin: 0, end: target == 0 ? 0 : (current / target).clamp(0.0, 1.0)),
+                                builder: (_, v, __) => LinearProgressIndicator(
+                                  value: v,
+                                  minHeight: 7,
+                                  backgroundColor: AppTheme.divider,
+                                  valueColor: AlwaysStoppedAnimation(done ? AppTheme.online : meta.color),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('$current/$target',
+                              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w700)),
+                        ],
                       ),
-                    ),
+                    ] else if (claimable) ...[
+                      const SizedBox(height: 4),
+                      Text(s.missionsReadyClaim,
+                          style: const TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            _trailing(s, key, reward, done, claimable, isClaiming),
-          ],
+              const SizedBox(width: 8),
+              _trailing(s, key, reward, done, claimable, isClaiming),
+            ],
+          ),
         ),
       ),
     );
@@ -251,18 +500,59 @@ class _MissionTile extends StatelessWidget {
         onPressed: isClaiming ? null : () => onClaim(key, reward),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.primary,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          minimumSize: const Size(0, 32),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          minimumSize: const Size(0, 36),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 0,
         ),
         child: isClaiming
             ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Text(s.missionClaim, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+            : Text(s.missionClaim, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
       );
     }
     if (done) {
-      return Text(s.missionDone,
-          style: const TextStyle(color: AppTheme.online, fontSize: 12, fontWeight: FontWeight.w600));
+      return Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(color: AppTheme.online.withValues(alpha: 0.12), shape: BoxShape.circle),
+        child: const Icon(Icons.done_all_rounded, color: AppTheme.online, size: 18),
+      );
     }
     return const SizedBox.shrink();
+  }
+}
+
+class _RewardChip extends StatelessWidget {
+  final int reward;
+  final bool done;
+  const _RewardChip({required this.reward, required this.done});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: done
+              ? [AppTheme.online.withValues(alpha: 0.15), AppTheme.online.withValues(alpha: 0.15)]
+              : [const Color(0xFFFFF3E0), const Color(0xFFFFE0B2)],
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.monetization_on_rounded,
+              size: 12, color: done ? AppTheme.online : const Color(0xFFF57C00)),
+          const SizedBox(width: 3),
+          Text('+$reward',
+              style: TextStyle(
+                color: done ? AppTheme.online : const Color(0xFFE65100),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+              )),
+        ],
+      ),
+    );
   }
 }
