@@ -59,4 +59,20 @@ class PointsService {
     if (res is Map) return Map<String, dynamic>.from(res);
     return {'scope': scope, 'entries': [], 'me': null};
   }
+
+  /// Status semua misi (harian/mingguan/sekali). tzOffset = menit offset lokal.
+  Future<Map<String, dynamic>> quests(int tzOffsetMinutes) async {
+    final res = await _sb.rpc('points_quests',
+        params: {'tz_offset_minutes': tzOffsetMinutes});
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'points': 0, 'streak': 0, 'daily': [], 'weekly': [], 'oneTime': []};
+  }
+
+  /// Klaim misi mingguan. Return {points, claimed}.
+  Future<Map<String, dynamic>> claimWeeklyQuest(String key, int tzOffsetMinutes) async {
+    final res = await _sb.rpc('claim_weekly_quest',
+        params: {'quest_key': key, 'tz_offset_minutes': tzOffsetMinutes});
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'points': 0, 'claimed': false};
+  }
 }

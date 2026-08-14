@@ -323,6 +323,36 @@ class S {
   String get lbUnranked           => isId ? 'Belum masuk peringkat' : 'Not ranked yet';
   String get lbWeeklyHint         => isId ? 'Poin didapat 7 hari terakhir' : 'Points earned in last 7 days';
   String get lbAllTimeHint        => isId ? 'Total saldo poin'      : 'Total points balance';
+  // ── Misi Point ──
+  String get missionsTitle        => isId ? 'Misi Point'            : 'Point Missions';
+  String get missionsDaily        => isId ? 'Harian'                : 'Daily';
+  String get missionsWeekly       => isId ? 'Mingguan'              : 'Weekly';
+  String get missionsOnce         => isId ? 'Sekali'                : 'One-Time';
+  String get missionsDailyHint    => isId ? 'Reset tiap hari — otomatis dapat saat selesai' : 'Resets daily — auto-awarded on completion';
+  String get missionsWeeklyHint   => isId ? 'Reset tiap minggu — klaim manual saat selesai' : 'Resets weekly — claim manually when done';
+  String get missionsOnceHint     => isId ? 'Hanya bisa didapat sekali' : 'Can only be earned once';
+  String get missionsEmpty        => isId ? 'Belum ada misi'        : 'No missions';
+  String get missionDone          => isId ? 'Selesai'               : 'Done';
+  String get missionClaim         => isId ? 'Klaim'                 : 'Claim';
+  String get missionClaimed       => isId ? 'Sudah diklaim'         : 'Claimed';
+  String missionClaimedToast(int n) => isId ? '+$n Poin — Misi mingguan!' : '+$n Points — Weekly mission!';
+  // Nama misi
+  String get mDailyLogin          => isId ? 'Login harian'          : 'Daily login';
+  String get mRoomRead            => isId ? 'Baca room'             : 'Read rooms';
+  String get mNewChat             => isId ? 'Chat orang baru'       : 'Chat new people';
+  String get mOnline5             => isId ? 'Online 5 menit'        : 'Online 5 min';
+  String get mOnline30            => isId ? 'Online 30 menit'       : 'Online 30 min';
+  String get mOnline60            => isId ? 'Online 60 menit'       : 'Online 60 min';
+  String get mOnline120           => isId ? 'Online 120 menit'      : 'Online 120 min';
+  String get mwLogin              => isId ? 'Login 5 hari'          : 'Login 5 days';
+  String get mwSocial             => isId ? 'Chat 10 orang baru'    : 'Chat 10 new people';
+  String get mwActive             => isId ? 'Kirim 100 pesan'       : 'Send 100 messages';
+  String get mRegistered          => isId ? 'Daftar email'          : 'Register email';
+  String get mRatedApp            => isId ? 'Rate aplikasi'         : 'Rate the app';
+  String get mCompletedProfile    => isId ? 'Lengkapi profil'       : 'Complete profile';
+  String get mInvitedFriend       => isId ? 'Invite teman'          : 'Invite a friend';
+  String get mFirstPhoto          => isId ? 'Kirim foto pertama'    : 'Send first photo';
+  String get mFirstRoomChat       => isId ? 'Chat room pertama'     : 'First room chat';
   String get btnRetry           => isId ? 'Coba Lagi'                          : 'Retry';
   String get msgServerError     => isId ? 'Gagal terhubung ke server'          : 'Failed to connect to server';
   String get msgServerErrorHint => isId ? 'Periksa koneksi internet kamu, lalu coba lagi.' : 'Check your internet connection and try again.';
