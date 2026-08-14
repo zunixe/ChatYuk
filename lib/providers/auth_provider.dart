@@ -91,7 +91,7 @@ class AuthProvider extends ChangeNotifier {
     // sesaat, apalagi pas baru connect WiFi atau ganti user. Jangan langsung
     // tampilkan layar error — coba ulang dulu beberapa kali.
     const maxAttempts = 2;
-    const delays = [3, 5]; // detik antar percobaan
+    const delays = [2, 3]; // detik antar percobaan
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -103,12 +103,11 @@ class AuthProvider extends ChangeNotifier {
         // Realtime: profil sendiri (poin, status, email terdaftar, dll) —
         // badge poin di profil & private chat langsung update.
         _listenProfile();
-        // Terapkan setting admin: izinkan screenshot aplikasi atau tidak
-        await _loadScreenshotSetting();
-        // Terapkan setting admin: watermark forensik foto view-once
-        await _loadWatermarkSetting();
-        // Terapkan setting admin: invisible (tidak muncul di daftar online)
-        await _loadInvisibleSetting();
+        // Setting admin (screenshot/watermark/invisible) di-fire-and-forget:
+        // tidak wajib tunggu sebelum masuk app — loading cuma butuh login + profil.
+        safeUnawaited(_loadScreenshotSetting());
+        safeUnawaited(_loadWatermarkSetting());
+        safeUnawaited(_loadInvisibleSetting());
         lastError = null;
         break;
       } catch (e) {

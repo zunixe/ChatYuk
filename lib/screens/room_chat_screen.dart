@@ -15,6 +15,7 @@ import '../widgets/date_chip.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import 'private_chat_screen.dart';
+import 'user_info_screen.dart';
 
 class RoomChatScreen extends StatefulWidget {
   final RoomModel room;
@@ -291,24 +292,40 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: Color(userColorPalette[colorHashForUid(msg.senderId) % userColorPalette.length]),
-                    child: Text(msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(msg.senderName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-                        Text(msg.senderGender == 'male' ? s.genderMale : msg.senderGender == 'female' ? s.genderFemale : s.genderOther,
-                            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                      ],
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  // Tutup sheet lalu buka halaman profil user.
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => UserInfoScreen(
+                        userId: msg.senderId,
+                        fallbackName: msg.senderName,
+                      ),
                     ),
-                  ),
-                ],
+                  );
+                },
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: Color(userColorPalette[colorHashForUid(msg.senderId) % userColorPalette.length]),
+                      child: Text(msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(msg.senderName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                          Text(msg.senderGender == 'male' ? s.genderMale : msg.senderGender == 'female' ? s.genderFemale : s.genderOther,
+                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                  ],
+                ),
               ),
             ),
             ListTile(

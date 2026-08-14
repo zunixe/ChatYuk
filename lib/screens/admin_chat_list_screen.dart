@@ -205,7 +205,9 @@ class _AdminChatCard extends StatelessWidget {
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 3),
                       Text(
-                        lastMsg.isEmpty ? '$count ${s.adminChatMsgs}' : lastMsg,
+                        lastMsg.isEmpty
+                            ? (count > 0 ? '$count ${s.adminChatMsgs}' : '')
+                            : lastMsg,
                         style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
@@ -215,7 +217,8 @@ class _AdminChatCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('$count', style: const TextStyle(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w700)),
+                    if (count > 0)
+                      Text('$count', style: const TextStyle(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w700)),
                     if (ts != null) ...[
                       const SizedBox(height: 2),
                       Text(formatRelativeTime(ts, isId: s.isId),
