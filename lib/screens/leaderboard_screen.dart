@@ -80,6 +80,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         bottom: TabBar(
           controller: _tab,
           indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
           tabs: [
             Tab(text: s.lbWeekly),
             Tab(text: s.lbAllTime),

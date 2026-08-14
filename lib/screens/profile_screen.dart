@@ -768,6 +768,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: TextButton.icon(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MissionsScreen())),
+                        icon: const Icon(Icons.emoji_events_outlined, size: 18, color: Colors.amber),
+                        label: Text(s.missionsTitle, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const Divider(height: 1, indent: 52),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
                         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
                         icon: const Icon(Icons.leaderboard_outlined, size: 18, color: AppTheme.primary),
                         label: Text(s.lbTitle, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600)),
