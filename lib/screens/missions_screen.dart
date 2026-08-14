@@ -85,6 +85,8 @@ class _MissionsScreenState extends State<MissionsScreen>
         bottom: TabBar(
           controller: _tab,
           indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
           tabs: [
             Tab(text: s.missionsDaily),
             Tab(text: s.missionsWeekly),
