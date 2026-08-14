@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/message_cache.dart';
@@ -29,6 +30,8 @@ class AuthProvider extends ChangeNotifier {
   Timer? _idleTimer;
   Timer? _heartbeatTimer;
   StreamSubscription<UserModel>? _profileSub;
+  StreamSubscription<AuthState>? _authStateSub;
+  bool _manualSignOut = false;
   bool _isIdle = false;
   static const Duration idleTimeout = Duration(minutes: 3);
   static const Duration heartbeatInterval = Duration(seconds: 60);
@@ -54,8 +57,27 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider() {
     debugPrint('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
+    _listenAuthState();
     _init();
     loadNotificationPref();
+  }
+
+  /// Pantau event auth Supabase. Kalau session hilang TANPA logout manual
+  /// (mis. user anon dihapus di server / refresh token gagal), reset profile
+  /// lokal agar tidak jadi "zombie" (user ID kosong & tidak online).
+  void _listenAuthState() {
+    _authStateSub = _auth.authStateChanges.listen((state) {
+      if (_disposed) return;
+      if (state.event != AuthChangeEvent.signedOut) return;
+      if (_manualSignOut) return; // logout manual — sudah di-handle signOut()
+      debugPrint('[AUTH] SIGNED_OUT unexpected, resetting profile (session hilang)');
+      _idleTimer?.cancel();
+      _heartbeatTimer?.cancel();
+      _profileSub?.cancel();
+      _isIdle = false;
+      _profile = null;
+      if (!_disposed) notifyListeners();
+    });
   }
 
   Future<void> _init() async {
@@ -133,7 +155,13 @@ class AuthProvider extends ChangeNotifier {
   ///   'new'     — user baru, perlu isi profile
   ///   'exists'  — profile sudah ada (login ulang)
   Future<String> signInWithGoogle() async {
-    final result = await _auth.signInWithGoogle();
+    _manualSignOut = true;
+    final ({AuthResponse response, String? googleEmail}) result;
+    try {
+      result = await _auth.signInWithGoogle();
+    } finally {
+      _manualSignOut = false;
+    }
     final googleEmail = result.googleEmail;
     print('[AUTH-PROVIDER] signInWithGoogle result uid=${result.response.user?.id} email=$googleEmail');
 
@@ -407,7 +435,12 @@ class AuthProvider extends ChangeNotifier {
     _idleTimer?.cancel();
     _heartbeatTimer?.cancel();
     _isIdle = false;
-    await _auth.resetPassword(newPassword);
+    _manualSignOut = true;
+    try {
+      await _auth.resetPassword(newPassword);
+    } finally {
+      _manualSignOut = false;
+    }
     _profile = null;
     _loading = false;
     if (!_disposed) notifyListeners();
@@ -449,7 +482,12 @@ class AuthProvider extends ChangeNotifier {
           msg.contains('42501');
       if (userInvalid) {
         debugPrint('[AUTH] registerProfile failed (stale anon), refreshing session: $e');
-        await _auth.signOut();
+        _manualSignOut = true;
+        try {
+          await _auth.signOut();
+        } finally {
+          _manualSignOut = false;
+        }
         await _auth.signInAnonymously();
         _profile = await _auth.registerProfile(
           nickname: nickname,
@@ -502,14 +540,19 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
-    _idleTimer?.cancel();
-    _heartbeatTimer?.cancel();
-    _profileSub?.cancel();
-    _isIdle = false;
-    await _auth.goOffline();
-    await _auth.signOut();
-    _profile = null;
-    if (!_disposed) notifyListeners();
+    _manualSignOut = true;
+    try {
+      _idleTimer?.cancel();
+      _heartbeatTimer?.cancel();
+      _profileSub?.cancel();
+      _isIdle = false;
+      await _auth.goOffline();
+      await _auth.signOut();
+      _profile = null;
+      if (!_disposed) notifyListeners();
+    } finally {
+      _manualSignOut = false;
+    }
   }
 
   /// Call on any user interaction (tap, scroll, typing...).
@@ -598,6 +641,7 @@ class AuthProvider extends ChangeNotifier {
     _idleTimer?.cancel();
     _heartbeatTimer?.cancel();
     _profileSub?.cancel();
+    _authStateSub?.cancel();
     super.dispose();
   }
 }
