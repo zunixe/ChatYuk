@@ -70,13 +70,18 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = await getAccessToken();
+    const isOnline = body.data?.type === 'online';
     const message = {
       message: {
         token,
-        notification: {
-          title: title || 'Pesan baru',
-          body: msgBody || 'Ada pesan baru',
-        },
+        ...(isOnline
+          ? {}
+          : {
+              notification: {
+                title: title || 'Pesan baru',
+                body: msgBody || 'Ada pesan baru',
+              },
+            }),
         data: data || {},
         android: { priority: 'high' },
       },
