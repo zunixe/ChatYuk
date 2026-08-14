@@ -48,7 +48,7 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
       final pointsProvider = context.read<PointsProvider>();
       await pointsProvider.claimRegisterBonus();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${s.msgAccountLinked} +100 Poin!')));
+        SnackBar(content: Text('${s.msgAccountLinked} ${s.pointsGain(100, s.reasonRegister)}')));
       Navigator.of(context).pop();
     } on Exception catch (e) {
       if (!mounted) return;

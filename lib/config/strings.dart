@@ -298,25 +298,31 @@ class S {
   // ── Points ──
   String get pointsTitle          => isId ? 'Poin ChatYuk'          : 'ChatYuk Points';
   String get pointsBalance        => isId ? 'Poin'                  : 'Points';
-  String get pointsEstimate       => isId ? '≈ %d pesan lagi'       : '≈ %d more messages';
   String get pointsSafe           => isId ? '✅ Aman selamanya'      : '✅ Safe forever';
   String get pointsAnonymousLose  => isId ? 'Poin akan hilang kalau kamu logout atau ganti HP' : 'Points will be lost if you logout or switch phones';
-  String get pointsSecureHeader   => isId ? 'Amankan Poin Kamu'     : 'Secure Your Points';
-  String get pointsSecureBody     => isId ? '%d poin. Daftar = aman + bonus 100!' : '%d points. Register = safe + 100 bonus!';
-  String get pointsLow            => isId ? '⚠️ %d poin'             : '⚠️ %d points';
-  String get pointsEmptyTitle     => isId ? 'Poin Habis!'           : 'Out of Points!';
-  String get pointsDailyLoginTxt  => isId ? '+25 login harian'     : '+25 daily login';
-  String get pointsOnlineBonus    => isId ? '+55 online bonus'     : '+55 online bonus';
   String get pointsRegisterBonusLabel => isId ? '+100 daftar email' : '+100 register email';
-  String get pointsRateAppLabel   => isId ? '+20 rate aplikasi'    : '+20 rate app';
-  String get pointsShareAppLabel  => isId ? '+10 share ke teman'    : '+10 share app';
-  String get pointsInviteLabel    => isId ? '+30 invite teman'     : '+30 invite friend';
-  String get pointsProfileLabel   => isId ? '+10 lengkapi profil'   : '+10 complete profile';
-  String get pointsNewChatLabel   => isId ? '+5 chat orang baru'    : '+5 chat new person';
-  String get pointsFirstPhotoLabel => isId ? '+10 kirim foto pertama' : '+10 first photo';
-  String get pointsRegisterBonusText => isId ? 'Daftarkan email untuk klaim poin' : 'Register email to claim points';
-  String get pointsDeductToast    => isId ? '-%d Poin'             : '-%d Points';
-  String get pointsEarned         => isId ? '+%d Poin'             : '+%d Points';
+  // Parameterized (Dart tak dukung %d — pakai fungsi)
+  String pointsDeduct(int n)            => isId ? '-$n Poin'            : '-$n Points';
+  String pointsGain(int n, String reason) => isId ? '+$n Poin — $reason' : '+$n Points — $reason';
+  String pointsStreakToast(int day, int n) => isId ? '🔥 Streak $day hari — +$n Poin' : '🔥 $day-day streak — +$n Points';
+  String pointsMoreMessages(int n)      => isId ? '≈ $n pesan lagi'     : '≈ $n more messages';
+  // Alasan bonus (dipakai pointsGain)
+  String get reasonFirstPhoto     => isId ? 'Foto pertama'          : 'First photo';
+  String get reasonRoomRead       => isId ? 'Baca room'             : 'Room read';
+  String get reasonRoomChat       => isId ? 'Chat room'             : 'Room chat';
+  String get reasonProfileComplete => isId ? 'Profil lengkap'       : 'Profile complete';
+  String get reasonShare          => isId ? 'Share'                 : 'Share';
+  String get reasonNewChat        => isId ? 'Chat orang baru'       : 'New chat';
+  String get reasonRegister       => isId ? 'Daftar email'          : 'Register';
+  // ── Leaderboard ──
+  String get lbTitle              => isId ? 'Papan Peringkat'       : 'Leaderboard';
+  String get lbWeekly             => isId ? 'Mingguan'              : 'Weekly';
+  String get lbAllTime            => isId ? 'Sepanjang Masa'        : 'All-Time';
+  String get lbYourRank           => isId ? 'Peringkat kamu'        : 'Your rank';
+  String get lbEmpty              => isId ? 'Belum ada data peringkat' : 'No leaderboard data yet';
+  String get lbUnranked           => isId ? 'Belum masuk peringkat' : 'Not ranked yet';
+  String get lbWeeklyHint         => isId ? 'Poin didapat 7 hari terakhir' : 'Points earned in last 7 days';
+  String get lbAllTimeHint        => isId ? 'Total saldo poin'      : 'Total points balance';
   String get btnRetry           => isId ? 'Coba Lagi'                          : 'Retry';
   String get msgServerError     => isId ? 'Gagal terhubung ke server'          : 'Failed to connect to server';
   String get msgServerErrorHint => isId ? 'Periksa koneksi internet kamu, lalu coba lagi.' : 'Check your internet connection and try again.';

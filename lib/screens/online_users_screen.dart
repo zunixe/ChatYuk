@@ -161,7 +161,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
         otherAge: user.age,
       );
       if (!context.mounted) return;
-      context.read<PointsProvider>().oneTimeBonus('new_chat_${user.uid}', 5);
+      context.read<PointsProvider>().newChatBonus(user.uid);
       Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: user.nickname, otherUid: user.uid, otherGender: user.gender, otherCountry: user.country, otherAge: user.age, otherRegistered: user.isRegistered)));
     } catch (e) {
       final msg = e.toString().toLowerCase();
