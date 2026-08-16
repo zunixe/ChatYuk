@@ -4,17 +4,20 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/supabase_config.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import '../providers/points_provider.dart';
 import '../providers/online_users_provider.dart';
+import '../providers/social_provider.dart';
 import '../services/chat_service.dart';
 import 'private_chat_screen.dart';
+import 'nearby_screen.dart';
 
 class _BoundedCache<T> {
   final int maxSize;
@@ -51,7 +54,8 @@ class OnlineUsersScreen extends StatefulWidget {
   State<OnlineUsersScreen> createState() => _OnlineUsersScreenState();
 }
 
-class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKeepAliveClientMixin {
+class _OnlineUsersScreenState extends State<OnlineUsersScreen>
+    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
   String _negara = 'all';
   String _gender = 'all';
   String _search = '';
@@ -64,6 +68,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
   Map<String, int> _unreadMap = {};
 
+  late final AnimationController _sharePulse;
+  late final Animation<double> _shareScale;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -72,6 +79,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
     super.initState();
     _scrollCtrl.addListener(_onScroll);
     _loadFilter();
+    _sharePulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
+      ..repeat(reverse: true);
+    _shareScale = Tween<double>(begin: 1.0, end: 1.06).animate(
+      CurvedAnimation(parent: _sharePulse, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -114,7 +126,18 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
+    _sharePulse.dispose();
+    _unreadSub?.cancel();
     super.dispose();
+  }
+
+  Future<void> _shareApp() async {
+    final auth = context.read<AuthProvider>();
+    final s = context.read<LocaleProvider>().s;
+    final uid = auth.uid;
+    if (uid == null) return;
+    final link = SupabaseConfig.shareLink(uid);
+    await Share.share(s.shareInviteMsg(link));
   }
 
   bool _scrollDebounce = false;
@@ -161,8 +184,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
         otherAge: user.age,
       );
       if (!context.mounted) return;
-      context.read<PointsProvider>().newChatBonus(user.uid);
-      Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: user.nickname, otherUid: user.uid, otherGender: user.gender, otherCountry: user.country, otherAge: user.age, otherRegistered: user.isRegistered)));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: user.nickname, otherUid: user.uid, otherGender: user.gender, otherCountry: user.country, otherCity: user.city, otherAge: user.age, otherRegistered: user.isRegistered)));
     } catch (e) {
       final msg = e.toString().toLowerCase();
       // TOCTOU: user dihapus antara isUserActive check dan startPrivateChat
@@ -200,16 +222,28 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(s.titleOnline, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+              Text(s.titleOnline, style: AppText.title.copyWith(color: Colors.white)),
               Text('${prov.users.length} ${s.onlineActiveUsers}',
-                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                style: AppText.bodySmall.copyWith(color: Colors.white70)),
             ],
           ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            tooltip: s.nearbyTitle,
+            icon: const Icon(Icons.explore_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NearbyScreen()),
+            ),
+          ),
+        ],
       ),
-      body: Consumer<OnlineUsersProvider>(
-        builder: (_, provider, __) {
+      body: Stack(
+        children: [
+          Consumer<OnlineUsersProvider>(
+            builder: (_, provider, __) {
           final chat = context.read<ChatProvider>();
           final allUsers = provider.users.where((u) => u.uid != auth.uid && !chat.isBlocked(u.uid)).toList();
 
@@ -326,7 +360,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                                 Text(
                                   _search.isNotEmpty ? s.searchNoResult : s.noOnlineUsers,
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                                  style: AppText.body.copyWith(color: AppTheme.textSecondary),
                                 ),
                               ],
                             ),
@@ -354,7 +388,52 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> with AutomaticKee
                   ),
                 ],
               );
-        },
+          },
+        ),
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: ScaleTransition(
+              scale: _shareScale,
+              child: Tooltip(
+                message: s.shareTooltip,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(30),
+                    onTap: _shareApp,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
+                        ),
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primary.withValues(alpha: 0.35),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.ios_share, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          Text(s.shareTooltip, style: AppText.bodyStrong.copyWith(color: Colors.white)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -400,7 +479,7 @@ class _FilterDropdown extends StatelessWidget {
                   labels[i],
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
-                  style: const TextStyle(fontSize: 13),
+                  style: AppText.bodySmall,
                 ),
               ),
           ],
@@ -461,7 +540,7 @@ class _UserCard extends StatelessWidget {
                             )
                           : null,
                     ),
-                    child: user.avatar.isNotEmpty ? null : Center(child: Text(user.initial, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w700))),
+                    child: user.avatar.isNotEmpty ? null : Center(child: Text(user.initial, style: TextStyle(color: color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700))),
                   ),
                   Positioned(right: 0, bottom: 0,
                     child: Container(width: 11, height: 11,
@@ -473,7 +552,7 @@ class _UserCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(3),
                         decoration: const BoxDecoration(color: AppTheme.danger, shape: BoxShape.circle),
-                        child: Text('$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                        child: Text('$unreadCount', style: AppText.micro.copyWith(color: Colors.white)),
                       ),
                     ),
                 ],
@@ -486,7 +565,7 @@ class _UserCard extends StatelessWidget {
                     Row(
                       children: [
                         Flexible(
-                          child: Text(user.nickname, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                          child: Text(user.nickname, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis),
                         ),
                         if (user.isRegistered) ...[
                           const SizedBox(width: 4),
@@ -497,19 +576,55 @@ Tooltip(
                         ],
                       ],
                     ),
-                        Text('$genderLabel ${user.age} · ${user.city}, ${user.country}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('$genderLabel ${user.age} · ${user.city}, ${user.country}', style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
               const SizedBox(width: 6),
               Column(
                 children: [
-                  Text(statusLabel, style: TextStyle(color: _statusColor(user.status), fontSize: 10, fontWeight: FontWeight.w600)),
+                  Text(statusLabel, style: AppText.caption.copyWith(color: _statusColor(user.status), fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
-                  Container(
-                    width: 30, height: 30,
-                    decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.chat_bubble_outline, color: AppTheme.primary, size: 17),
+                  Row(
+                    children: [
+                      Consumer<SocialProvider>(
+                        builder: (_, sp, __) {
+                          final following = sp.isFollowing(user.uid);
+                          return GestureDetector(
+                            onTap: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              final ok = following
+                                  ? await sp.unfollow(user.uid)
+                                  : await sp.follow(user.uid);
+                              if (ok) {
+                                messenger.showSnackBar(SnackBar(
+                                  content: Text(following ? s.btnUnfollow : s.btnFollow)));
+                              }
+                            },
+                            child: Container(
+                              width: 30, height: 30,
+                              decoration: BoxDecoration(
+                                color: following
+                                    ? AppTheme.primary.withValues(alpha: 0.12)
+                                    : AppTheme.textSecondary.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                following ? Icons.person_remove : Icons.person_add,
+                                size: 17,
+                                color: following ? AppTheme.primary : AppTheme.textSecondary,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 30, height: 30,
+                        decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.chat_bubble_outline, color: AppTheme.primary, size: 17),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -5,12 +5,12 @@ import '../config/theme.dart';
 import '../config/regions.dart';
 import '../utils.dart';
 import '../providers/auth_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/locale_provider.dart';
 import '../services/auth_service.dart';
 import '../services/geo_service.dart';
+import '../services/location_service.dart';
+import '../main.dart';
 import 'login_screen.dart';
-import 'donate_screen.dart';
 
 enum RegisterMode { full, profileOnly }
 
@@ -55,14 +55,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _detectGeo() async {
-    final info = await _geo.detect();
+    // 1. Coba GPS presisi (tanpa memicu dialog — hanya bila izin sudah ada).
+    GeoInfo? info;
+    try {
+      final gps = await LocationService().tryDevicePositionForRegister();
+      if (gps != null) {
+        info = await _geo.detectByCoordinates(gps.$1, gps.$2);
+      }
+    } catch (_) {}
+    // 2. Fallback: IP geolocation.
+    info ??= await _geo.detect();
     if (info == null || !mounted) return;
-    final cities = getCitiesForCountry(info.country);
+    final finalInfo = info;
+    final cities = getCitiesForCountry(finalInfo.country);
     if (cities.isEmpty) return;
     setState(() {
-      _negara = info.country;
-      _kota = cities.contains(info.city) ? info.city : cities.first;
-      _ipAddress = info.ipAddress;
+      _negara = finalInfo.country;
+      _kota = cities.contains(finalInfo.city) ? finalInfo.city : cities.first;
+      _ipAddress = finalInfo.ipAddress;
     });
   }
 
@@ -137,15 +147,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ipAddress: _ipAddress,
         );
         if (!mounted) return;
-        // Profile selesai → pop ke halaman utama
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-        });
+        // Profile selesai → kembali ke route root (AuthGate render _MainNav).
+        _goToMain();
         return;
       }
 
-      // Mode full: sign up → simpan pending → dialog verifikasi
-      await context.read<AuthProvider>().signUpWithEmail(
+      // Mode full: sign up → (bila perlu) verifikasi OTP → registerProfile
+      final autoLogin = await context.read<AuthProvider>().signUpWithEmail(
         email: email,
         password: password,
         nickname: nickname,
@@ -154,53 +162,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
         country: _negara,
         city: _kota,
       );
-
-      // 2. Simpan pending profile ke SharedPreferences
-      //    supaya tidak hilang kalau app di-kill sebelum registerProfile selesai.
-      //    (IP TIDAK disimpan di aplikasi — hanya di server)
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pending_email', email);
-      await prefs.setString('pending_nickname', nickname);
-      await prefs.setString('pending_gender', _gender);
-      await prefs.setInt('pending_age', _age);
-      await prefs.setString('pending_country', _negara);
-      await prefs.setString('pending_city', _kota);
-
       if (!mounted) return;
-      // Tampilkan dialog verifikasi email
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppTheme.bgCard,
-          title: Row(children: [
-            const Icon(Icons.mark_email_read_outlined, color: AppTheme.primary),
-            const SizedBox(width: 8),
-            Text(s.titleLogin, style: const TextStyle(color: AppTheme.textPrimary)),
-          ]),
-          content: Text(s.msgVerifyEmail, style: const TextStyle(color: AppTheme.textSecondary)),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                // Navigasi ke login screen
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => LoginScreen(
-                    prefillEmail: email,
-                    pendingNickname: nickname,
-                    pendingGender: _gender,
-                    pendingAge: _age,
-                    pendingCountry: _negara,
-                    pendingCity: _kota,
-                    pendingIp: _ipAddress,
-                  )),
-                );
-              },
-              child: Text(s.btnLogin),
-            ),
-          ],
-        ),
-      );
+      if (autoLogin) {
+        // Email auto-confirm → langsung masuk.
+        _goToMain();
+        return;
+      }
+      // Perlu verifikasi OTP → tampilkan form kode.
+      if (!mounted) return;
+      final verified = await _showOtpDialog(email, nickname, _gender, _age, _negara, _kota);
+      if (!mounted) return;
+      if (verified) {
+        _goToMain();
+      }
+      return;
     } on Exception catch (e) {
       if (!mounted) return;
       if (e is EmailAlreadyRegisteredException) {
@@ -227,9 +202,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ipAddress: _ipAddress,
               );
               if (!mounted) return;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-              });
+              _goToMain();
               return;
             } catch (_) {
               if (mounted) {
@@ -262,6 +235,105 @@ class _RegisterScreenState extends State<RegisterScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  /// Dialog masukkan kode OTP + kirim ulang. Return true bila terverifikasi.
+  Future<bool> _showOtpDialog(
+    String email,
+    String nickname,
+    String gender,
+    int age,
+    String country,
+    String city,
+  ) async {
+    final s = context.read<LocaleProvider>().s;
+    final ctrl = TextEditingController();
+    var resendCooldown = false;
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => StatefulBuilder(
+            builder: (ctx, setInner) => AlertDialog(
+              backgroundColor: AppTheme.bgCard,
+              title: Text(s.titleVerifyEmail),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.msgVerifyCodeSent, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: ctrl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: AppText.titleEmphasis.copyWith(letterSpacing: 8),
+                    decoration: InputDecoration(
+                      hintText: s.hintVerifyCode,
+                      counterText: '',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: resendCooldown
+                      ? null
+                      : () async {
+                          setInner(() => resendCooldown = true);
+                          try {
+                            await context.read<AuthProvider>().resendEmailOtp(email);
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(content: Text(s.msgResendCodeSent)),
+                              );
+                            }
+                          } catch (_) {}
+                          Future.delayed(const Duration(seconds: 30), () {
+                            if (ctx.mounted) setInner(() => resendCooldown = false);
+                          });
+                        },
+                  child: Text(s.btnResendCode),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+                  onPressed: () async {
+                    final code = ctrl.text.trim();
+                    if (code.length != 6) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(s.errInvalidCode)));
+                      return;
+                    }
+                    final ok = await context.read<AuthProvider>().verifyEmailAndRegister(
+                      email: email,
+                      token: code,
+                      nickname: nickname,
+                      gender: gender,
+                      age: age,
+                      country: country,
+                      city: city,
+                    );
+                    if (!ctx.mounted) return;
+                    if (ok) {
+                      Navigator.pop(ctx, true);
+                    } else {
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(s.errInvalidCode)));
+                    }
+                  },
+                  child: Text(s.btnVerify, style: const TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ) ??
+        false;
+  }
+
+  /// Kembali ke route root (AuthGate). Karena profile sudah terisi, AuthGate
+  /// otomatis menampilkan halaman utama (_MainNav).
+  void _goToMain() {
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+    nav.popUntil((route) => route.isFirst);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
@@ -273,6 +345,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Kartu form — satu grup utuh, komposisi sama dengan login
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.bgCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.divider, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
             // Email & Password — hanya tampil di mode full
             if (!profileOnly) ...[
               TextField(
@@ -360,7 +443,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Expanded(
                       child: Text(
                         _nicknameError!,
-                        style: const TextStyle(color: AppTheme.danger, fontSize: 13),
+                        style: AppText.bodySmall.copyWith(color: AppTheme.danger),
                       ),
                     ),
                   ],
@@ -393,8 +476,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               onPressed: _loading ? null : _register,
               child: _loading
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(s.btnRegister, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  : Text(s.btnRegister, style: AppText.button),
             ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 8),
 
             // Link ke login
@@ -405,21 +491,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ),
             const SizedBox(height: 8),
-
-            // Tombol Donasi
-            Center(
-              child: GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonateScreen())),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.favorite, size: 16, color: AppTheme.danger),
-                    const SizedBox(width: 4),
-                    Text(s.titleDonate, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -440,9 +511,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 18)),
+            Text(emoji, style: const TextStyle(fontSize: AppGlyph.sm)),
             const SizedBox(width: 6),
-            Text(label, style: TextStyle(color: selected ? color : AppTheme.textSecondary, fontWeight: FontWeight.w600, fontSize: 13)),
+            Text(label, style: AppText.bodySmall.copyWith(
+              color: selected ? color : AppTheme.textSecondary,
+              fontWeight: FontWeight.w600,
+            )),
           ],
         ),
       ),

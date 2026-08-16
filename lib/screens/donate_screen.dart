@@ -82,7 +82,7 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
           indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          labelStyle: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700),
           tabs: [
             Tab(text: s.labelQris),
             Tab(text: s.labelUsdt),
@@ -114,22 +114,22 @@ class _QrisTab extends StatelessWidget {
         children: [
           const SizedBox(height: 8),
           // Nama merchant
-          const Text(
+          Text(
             'OneHeart',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w800),
+            style: AppText.title,
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'NMID: ID1026566504126A01',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 4),
           Text(
             s.donateScanQris,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 20),
           Center(
@@ -192,7 +192,7 @@ class _UsdtTab extends StatelessWidget {
           Text(
             s.donateSelectHint,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            style: AppText.body.copyWith(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 20),
           ...networks.map((n) => _NetworkCard(network: n, onCopy: onCopy, s: s)),
@@ -241,15 +241,11 @@ class _NetworkCard extends StatelessWidget {
                   children: [
                     Text(
                       'USDT ${network.label}',
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
+                      style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700),
                     ),
                     Text(
                       network.subtitle,
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                      style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                     ),
                   ],
                 ),
@@ -267,10 +263,8 @@ class _NetworkCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       network.address,
-                      style: const TextStyle(
+                      style: AppText.bodySmall.copyWith(
                         fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: AppTheme.textPrimary,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -325,7 +319,7 @@ class _InfoCard extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
             ),
           ),
         ],
@@ -357,17 +351,13 @@ class _ThankYouNote extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             s.donateThankYou,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-            ),
+            style: AppText.titleEmphasis,
           ),
           const SizedBox(height: 4),
           Text(
             s.donateThanksMsg,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
           ),
         ],
       ),

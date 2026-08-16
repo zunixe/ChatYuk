@@ -7,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as lpn;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 import 'models/room_model.dart';
@@ -32,13 +33,20 @@ const String _channelId = 'chatyuk_chat';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   final data = message.data;
-  final isOnline = data['type'] == 'online';
-  final title = isOnline
-      ? data['otherName'] ?? 'User'
+  final type = data['type'];
+  final isDataOnly = type == 'online' || type == 'follow' || type == 'friend_request' || type == 'subscribe';
+  final title = isDataOnly
+      ? data['otherName'] ?? data['fromName'] ?? 'User'
       : message.notification?.title ??
-          (data['type'] == 'room' ? data['roomName'] ?? 'Room' : 'New message');
-  final body = isOnline
-      ? 'is online'
+          (type == 'room' ? data['roomName'] ?? 'Room' : 'New message');
+  final body = isDataOnly
+      ? (type == 'online'
+          ? 'is online'
+          : type == 'follow'
+              ? 'started following you'
+              : type == 'friend_request'
+                  ? 'sent you a friend request'
+                  : 'subscribed to you')
       : message.notification?.body ?? 'You have a new message';
 
   final androidInit = const lpn.AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -69,13 +77,21 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   if (chatKey.isNotEmpty && activeChatId.value == chatKey) return;
 
   final s = localeProvider.s;
-  final isOnline = data['type'] == 'online';
-  final title = isOnline
-      ? data['otherName'] ?? s.unknownUser
+  final type = data['type'];
+  final isDataOnly = type == 'online' || type == 'follow' || type == 'friend_request' || type == 'subscribe';
+  final isOnline = type == 'online';
+  final title = isDataOnly
+      ? data['otherName'] ?? data['fromName'] ?? s.unknownUser
       : message.notification?.title ??
-          (data['type'] == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
-  final body = isOnline
-      ? s.notifOnlineBody
+          (type == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
+  final body = isDataOnly
+      ? (isOnline
+          ? s.notifOnlineBody
+          : type == 'follow'
+              ? s.notifFollowBody
+              : type == 'friend_request'
+                  ? s.notifFriendRequestBody
+                  : s.notifSubscribeBody)
       : message.notification?.body ?? s.notifNewMessageBody;
 
   await localNotifications.show(
@@ -212,6 +228,18 @@ Future<void> _setRecoverySession(String accessToken, String refreshToken) async 
 
 void _handleDeepLink(Uri uri) {
   if (uri.scheme != 'chatyuk') return;
+
+    // chatyuk://referral?u=<uid> — referrer tracking (share link).
+    if (uri.host == 'referral') {
+      final referrer = uri.queryParameters['u'];
+      if (referrer != null && referrer.isNotEmpty) {
+        // Simpan ke SharedPreferences; AuthProvider membacanya saat register.
+        try {
+          SharedPreferences.getInstance()
+              .then((p) => p.setString('pending_referrer_uid', referrer));
+        } catch (_) {}
+      }
+    }
 
     // chatyuk://login-callback — Supabase password recovery / email confirm
     if (uri.host == 'login-callback') {

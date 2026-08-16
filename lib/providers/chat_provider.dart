@@ -25,6 +25,8 @@ class ChatProvider extends ChangeNotifier {
     required String senderName,
     required String senderGender,
     required String text,
+    String type = 'text',
+    String imageData = '',
   }) async {
     await _service.sendRoomMessage(
       roomId: roomId,
@@ -32,11 +34,26 @@ class ChatProvider extends ChangeNotifier {
       senderName: senderName,
       senderGender: senderGender,
       text: text,
+      type: type,
+      imageData: imageData,
     );
   }
 
   // Private chat
   Future<bool> isUserActive(String uid) => _service.isUserActive(uid);
+
+  /// Kirim koin ke lawan bicara (via RPC server). Return {ok, points}.
+  Future<Map<String, dynamic>> sendCoins(String chatId, String receiverId, int amount) {
+    return _service.sendCoins(chatId, receiverId, amount);
+  }
+
+  /// Kirim hadiah ke lawan bicara (via RPC server). Return {ok, points, net, cut}.
+  Future<Map<String, dynamic>> sendGift(String chatId, String receiverId, String giftId) {
+    return _service.sendGift(chatId, receiverId, giftId);
+  }
+
+  /// Daftar hadiah dari server (fallback katalog lokal bila gagal).
+  Future<List<Map<String, dynamic>>> listGifts() => _service.listGifts();
 
   Future<String> startPrivateChat({
     required String myUid,
@@ -108,8 +125,14 @@ class ChatProvider extends ChangeNotifier {
     await _service.markAsRead(chatId, uid);
   }
 
-  Future<void> clearViewOnceImage(String messageId) async {
-    await _service.clearViewOnceImage(messageId);
+  /// Tandai dibaca dari monitor admin (RPC SECURITY DEFINER khusus admin —
+  /// mark_chat_read biasa kena RLS participant saat dipanggil akun admin).
+  Future<void> markAsReadAdmin(String chatId, String uid) async {
+    await _service.markAsReadAdmin(chatId, uid);
+  }
+
+  Future<void> clearViewOnceImage(String messageId, {bool isRoom = false}) async {
+    await _service.clearViewOnceImage(messageId, isRoom: isRoom);
   }
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {

@@ -8,6 +8,7 @@ import 'providers/room_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/online_users_provider.dart';
 import 'providers/points_provider.dart';
+import 'providers/social_provider.dart';
 import 'providers/admin_provider.dart';
 import 'providers/locale_provider.dart';
 import 'services/chat_service.dart';
@@ -29,6 +30,7 @@ class ChatYukApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => PointsProvider()..checkOnboarding()..refreshEnabled()..subscribeEnabled()),
+        ChangeNotifierProvider(create: (_) => SocialProvider()),
         ChangeNotifierProvider(create: (_) => AdminProvider()),
         ChangeNotifierProvider(create: (_) => localeProvider),
       ],
@@ -38,6 +40,13 @@ class ChatYukApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           navigatorKey: navigatorKey,
+          // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
+          // tapi tetap menghormati preferensi aksesibilitas user.
+          builder: (context, child) => MediaQuery.withClampedTextScaling(
+            minScaleFactor: 0.9,
+            maxScaleFactor: 1.3,
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: const _AuthGate(),
         ),
       ),
@@ -145,13 +154,13 @@ class _AuthGateState extends State<_AuthGate> {
                 const SizedBox(height: 16),
                 Text(
                   s.msgServerError,
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+                  style: AppText.title,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   s.msgServerErrorHint,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
@@ -320,7 +329,7 @@ class _BadgedIcon extends StatelessWidget {
             ),
             child: Text(
               count > 99 ? '99+' : '$count',
-              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+              style: AppText.micro.copyWith(color: Colors.white),
               textAlign: TextAlign.center,
             ),
           ),

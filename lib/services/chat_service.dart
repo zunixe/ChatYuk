@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../config/supabase_config.dart';
+import '../config/gifts.dart';
 import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
 import '../services/storage_photo_service.dart';
@@ -79,16 +80,28 @@ class ChatService {
     required String senderName,
     required String senderGender,
     required String text,
+    String type = 'text',
+    String imageData = '',
   }) async {
-    if (text.isEmpty || text.length > 2000) return;
+    // Validasi tipe pesan
+    if (!['text', 'image', 'view_once'].contains(type)) {
+      throw Exception('Invalid message type');
+    }
+    // Validasi image data jika ada — boleh base64 (lama) ATAU path storage (baru)
+    if (imageData.isNotEmpty &&
+        !isValidImageBase64(imageData) &&
+        !StoragePhotoService.instance.isPath(imageData)) {
+      throw Exception('Invalid image data');
+    }
+    if (type == 'text' && (text.isEmpty || text.length > 2000)) return;
     await _sb.from('messages').insert({
       'room_id': roomId,
       'sender_id': senderId,
       'sender_name': senderName,
       'sender_gender': senderGender,
       'text': text,
-      'type': 'text',
-      'image_data': '',
+      'type': type,
+      'image_data': imageData,
     });
   }
 
@@ -605,12 +618,47 @@ class ChatService {
     });
   }
 
+  /// Kirim koin ke lawan bicara. Server yang memvalidasi & memotong koin.
+  /// Return {ok, points}. Lempar PostgrestException bila gagal.
+  Future<Map<String, dynamic>> sendCoins(String chatId, String receiverId, int amount) async {
+    final res = await _sb.rpc('send_coins', params: {
+      'p_chat_id': chatId,
+      'p_receiver_id': receiverId,
+      'p_amount': amount,
+    });
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Kirim hadiah (gift) ke lawan bicara. Server memotong koin pengirim,
+  /// ambil platform cut, kredit net ke penerima. Return {ok, points, net, cut}.
+  Future<Map<String, dynamic>> sendGift(String chatId, String receiverId, String giftId) async {
+    final res = await _sb.rpc('send_gift', params: {
+      'p_chat_id': chatId,
+      'p_receiver_id': receiverId,
+      'p_gift_id': giftId,
+    });
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Daftar hadiah dari server (fallback ke katalog lokal bila gagal).
+  Future<List<Map<String, dynamic>>> listGifts() async {
+    try {
+      final res = await _sb.rpc('list_gifts');
+      if (res is List) return res.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('[ChatService] listGifts fallback local: $e');
+    }
+    return kGiftCatalog
+        .map((g) => {'id': g.id, 'emoji': g.emoji, 'name_id': g.nameId, 'name_en': g.nameEn, 'coins': g.coins})
+        .toList();
+  }
+
   /// Tandai view_once message sebagai expired setelah dilihat.
   /// image_data DIKEEP di DB (admin masih bisa melihat) — hanya type yang
   /// diubah. Kontrol "boleh lihat/tidak" dilakukan di sisi UI.
-  Future<void> clearViewOnceImage(String messageId) async {
+  Future<void> clearViewOnceImage(String messageId, {bool isRoom = false}) async {
     try {
-      await _sb.from('private_messages')
+      await _sb.from(isRoom ? 'messages' : 'private_messages')
           .update({'type': 'view_once_expired'})
           .eq('id', messageId);
     } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
@@ -628,6 +676,18 @@ class ChatService {
       _refreshChatStreams(uid);
     } catch (e) {
       debugPrint('[DEBUG-READ] RPC FAIL chat=$chatId uid=$uid err=$e');
+    }
+  }
+
+  /// Tandai dibaca atas nama peserta dari monitor admin. Pakai RPC khusus
+  /// (SECURITY DEFINER + guard admin) karena akun admin bukan participant,
+  /// sehingga mark_chat_read biasa (RLS participants) tidak mengubah apa-apa.
+  Future<void> markAsReadAdmin(String chatId, String uid) async {
+    try {
+      await _sb.rpc('admin_mark_chat_read', params: {'p_chat_id': chatId, 'p_uid': uid});
+      _refreshChatStreams(uid);
+    } catch (e) {
+      debugPrint('[DEBUG-READ-ADMIN] RPC FAIL chat=$chatId uid=$uid err=$e');
     }
   }
 
@@ -900,7 +960,8 @@ class ChatService {
               .from('app_settings')
               .select('invisible_enabled,invisible_admin_uid')
               .eq('id', 'global')
-              .maybeSingle();
+              .maybeSingle()
+              .timeout(const Duration(seconds: 10));
           if (setting?['invisible_enabled'] == true) {
             invisibleUid = setting?['invisible_admin_uid'] as String?;
           }
@@ -918,23 +979,33 @@ class ChatService {
             .neq('status', 'invisible')
             .gte('last_seen', cutoff)
             .order('last_seen', ascending: false)
-            .limit(500);
+            .limit(500)
+            .timeout(const Duration(seconds: 10));
         cached = <UserModel>[];
         final seenUids = <String>{};
         for (final row in rows) {
-          var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
-          if (u.uid == invisibleUid) continue;
-          // Dedupe by uid — cegah duplikat dari race/query apa pun.
-          if (!seenUids.add(u.uid)) continue;
-          // avatar PATH storage → download (cache per path supaya tidak berulang).
-          if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
-            u = u.copyWith(avatar: await _avatarB64(u.avatar));
+          try {
+            var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
+            if (u.uid == invisibleUid) continue;
+            // Dedupe by uid — cegah duplikat dari race/query apa pun.
+            if (!seenUids.add(u.uid)) continue;
+            // avatar PATH storage → download (cache per path supaya tidak berulang).
+            if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+              u = u.copyWith(avatar: await _avatarB64(u.avatar));
+            }
+            cached.add(u);
+          } catch (e) {
+            // Row bermasalah dilewati — jangan sampai satu row rusak
+            // menggagalkan seluruh daftar online.
+            debugPrint('[getOnlineUsers] skip bad row: $e');
           }
-          cached.add(u);
         }
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
       } catch (e) {
         debugPrint('[getOnlineUsers] fetch error: $e');
+        // Forward error ke stream supaya hasLoaded=true (provider menangkap
+        // onError) — spinner tidak akan pernah muter selamanya saat REST gagal.
+        if (!controller.isClosed) controller.addError(e);
       }
     }
 
@@ -1002,32 +1073,48 @@ class ChatService {
         .from('room_presence')
         .stream(primaryKey: ['room_id', 'user_id'])
         .eq('room_id', roomId)
-        .map((rows) => rows.map((row) {
-              final d = snakeToCamel(row);
-              return UserModel(
-                uid: d['userId'] ?? '',
-                nickname: d['nickname'] ?? 'Anon',
-                gender: d['gender'] ?? 'other',
-                age: (d['age'] as num?)?.toInt() ?? 0,
-                country: d['country'] ?? '',
-                city: d['city'] ?? '',
-                ipAddress: '',
-                status: 'online',
-                avatar: '',
-                isRegistered: d['isRegistered'] == true,
-                loginAt: DateTime.now(),
-                createdAt: DateTime.now(),
-                lastSeen: parseDate(d['joinedAt']),
-              );
-            }).toList());
+        .map((rows) {
+      // Presensi basi (joined_at > 5 menit, heartbeat 60 detik tidak jalan
+      // lagi karena app di-kill/background) dianggap sudah keluar room.
+      final cutoff =
+          DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+      return rows
+          .where((row) {
+            final joined = DateTime.tryParse('${row['joined_at']}');
+            return joined != null && joined.toUtc().isAfter(cutoff);
+          })
+          .map((row) {
+            final d = snakeToCamel(row);
+            return UserModel(
+              uid: d['userId'] ?? '',
+              nickname: d['nickname'] ?? 'Anon',
+              gender: d['gender'] ?? 'other',
+              age: (d['age'] as num?)?.toInt() ?? 0,
+              country: d['country'] ?? '',
+              city: d['city'] ?? '',
+              ipAddress: '',
+              status: 'online',
+              avatar: '',
+              isRegistered: d['isRegistered'] == true,
+              loginAt: DateTime.now(),
+              createdAt: DateTime.now(),
+              lastSeen: parseDate(d['joinedAt']),
+            );
+          })
+          .toList();
+    });
   }
 
   Future<void> joinRoom(String roomId, UserModel user) async {
     // nickname, gender, age di-set oleh trigger DB dari profiles
     // tidak dikirim dari client untuk mencegah impersonasi
+    // joined_at di-refresh setiap heartbeat (60 detik) — row presence
+    // yang basi (app di-kill/force-stop) otomatis difilter dari daftar
+    // online room oleh getOnlineUsersInRoom / getRoomOnlineCounts.
     await _sb.from('room_presence').upsert({
       'room_id': roomId,
       'user_id': user.uid,
+      'joined_at': DateTime.now().toUtc().toIso8601String(),
     }, onConflict: 'room_id,user_id');
   }
 
@@ -1095,7 +1182,13 @@ class ChatService {
         .stream(primaryKey: ['room_id', 'user_id'])
         .map((rows) {
           final counts = <String, int>{};
+          // Sama seperti daftar user room: presence basi (> 5 menit) tidak
+          // dihitung supaya count online di lobby tidak ghost.
+          final cutoff =
+              DateTime.now().toUtc().subtract(const Duration(minutes: 5));
           for (final row in rows) {
+            final joined = DateTime.tryParse('${row['joined_at']}');
+            if (joined == null || !joined.toUtc().isAfter(cutoff)) continue;
             final roomId = '${row['room_id']}';
             counts[roomId] = (counts[roomId] ?? 0) + 1;
           }

@@ -80,7 +80,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             Text(
               s.msgSetNewPasswordHint,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              style: AppText.body.copyWith(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 24),
 
@@ -122,7 +122,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               onPressed: _loading ? null : _submit,
               child: _loading
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(s.btnSavePassword, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  : Text(s.btnSavePassword, style: AppText.button),
             ),
           ],
         ),

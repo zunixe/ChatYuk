@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -7,6 +8,7 @@ import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/geo_service.dart';
+import '../services/location_service.dart';
 import '../utils.dart';
 import 'register_screen.dart';
 import 'login_screen.dart';
@@ -44,19 +46,29 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Future<void> _detectGeo() async {
-    final info = await _geo.detect();
+    // 1. Coba GPS presisi (tanpa memicu dialog — hanya bila izin sudah ada).
+    GeoInfo? info;
+    try {
+      final gps = await LocationService().tryDevicePositionForRegister();
+      if (gps != null) {
+        info = await _geo.detectByCoordinates(gps.$1, gps.$2);
+      }
+    } catch (_) {}
+    // 2. Fallback: IP geolocation.
+    info ??= await _geo.detect();
     if (info == null || !mounted) return;
+    final finalInfo = info;
     // IP selalu dicatat, walau negara tidak ada di daftar kota
-    _ipAddress = info.ipAddress;
-    final kotaList = kotaByNegara[info.country];
+    _ipAddress = finalInfo.ipAddress;
+    final kotaList = kotaByNegara[finalInfo.country];
     if (kotaList == null) return;
     setState(() {
-      _negara = info.country;
-      _kota = kotaList.contains(info.city) ? info.city : kotaList.first;
+      _negara = finalInfo.country;
+      _kota = kotaList.contains(finalInfo.city) ? finalInfo.city : kotaList.first;
     });
-    // Auto-set bahasa dari IP — hanya jika belum pernah disimpan
+    // Auto-set bahasa dari lokasi — hanya jika belum pernah disimpan
     if (mounted) {
-      await context.read<LocaleProvider>().setLangFromCountry(info.country);
+      await context.read<LocaleProvider>().setLangFromCountry(finalInfo.country);
     }
   }
 
@@ -115,15 +127,15 @@ class _EntryScreenState extends State<EntryScreen> {
           await context.read<AuthProvider>().confirmLinkGoogle();
         } else {
           context.read<AuthProvider>().cancelLinkGoogle();
-          Navigator.pushReplacement(
+          Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const RegisterScreen()),
+            MaterialPageRoute(builder: (_) => const RegisterScreen(mode: RegisterMode.profileOnly)),
           );
         }
       } else if (result == 'new') {
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+          MaterialPageRoute(builder: (_) => const RegisterScreen(mode: RegisterMode.profileOnly)),
         );
       } else if (result == 'exists') {
         // Profile sudah ada — _AuthGate sudah menampilkan halaman utama,
@@ -229,13 +241,16 @@ class _EntryScreenState extends State<EntryScreen> {
             children: [
               const SizedBox(height: 16),
 
-              // Logo — sama dengan icon aplikasi
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.asset(
-                  'assets/app_icon.png',
-                  width: 72,
-                  height: 72,
+              // Logo — animasi halus dalam lingkaran transparan
+              // (komposisi sama dengan halaman login).
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const _AnimatedLogo(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -248,9 +263,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 child: Text(
                   s.appTagline,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                  style: AppText.display.copyWith(
                     color: Colors.white,
                     letterSpacing: 0.5,
                   ),
@@ -260,13 +273,23 @@ class _EntryScreenState extends State<EntryScreen> {
               Text(
                 s.appSubtagline,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: AppText.bodySmall.copyWith(
                   color: AppTheme.textSecondary,
-                  fontSize: 13,
                 ),
               ),
               const SizedBox(height: 12),
 
+              // Kartu form — satu grup utuh, komposisi sama dengan login
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgCard,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.divider, width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
               // Nickname
               TextField(
                 controller: _nicknameCtrl,
@@ -307,7 +330,7 @@ class _EntryScreenState extends State<EntryScreen> {
                       Expanded(
                         child: Text(
                           _nicknameError!,
-                          style: const TextStyle(color: AppTheme.danger, fontSize: 13),
+                          style: AppText.bodySmall.copyWith(color: AppTheme.danger),
                         ),
                       ),
                     ],
@@ -355,12 +378,11 @@ class _EntryScreenState extends State<EntryScreen> {
                         )
                       : Text(
                           s.btnStartChat,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1,
-                          ),
+                          style: const TextStyle(letterSpacing: 1),
                         ),
+                ),
+              ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -370,7 +392,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 const Expanded(child: Divider()),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(s.labelOr, style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  child: Text(s.labelOr, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ),
                 const Expanded(child: Divider()),
               ]),
@@ -398,7 +420,7 @@ class _EntryScreenState extends State<EntryScreen> {
                               errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 22, color: Colors.red),
                             ),
                             const SizedBox(width: 10),
-                            Text(s.btnContinueGoogle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                            Text(s.btnContinueGoogle, style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w600)),
                           ],
                         ),
                 ),
@@ -439,7 +461,7 @@ class _EntryScreenState extends State<EntryScreen> {
                     children: [
                       const Icon(Icons.favorite, size: 16, color: AppTheme.danger),
                       const SizedBox(width: 4),
-                      Text(s.titleDonate, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                      Text(s.titleDonate, style: AppText.body.copyWith(color: AppTheme.textSecondary)),
                     ],
                   ),
                 ),
@@ -496,10 +518,9 @@ class _EntryScreenState extends State<EntryScreen> {
             Flexible(
               child: Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
+                style: AppText.label.copyWith(
+                  letterSpacing: 0,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: AppTheme.textPrimary,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -513,7 +534,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 color: color.withValues(alpha: 0.15),
               ),
               child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 15)),
+                child: Text(emoji, style: const TextStyle(fontSize: AppGlyph.sm)),
               ),
             ),
           ],
@@ -574,6 +595,57 @@ class _EntryScreenState extends State<EntryScreen> {
       onChanged: (v) {
         if (v != null) setState(() => _kota = v);
       },
+    );
+  }
+}
+
+/// Logo app dengan animasi halus: ayun kiri-kanan, mengambang naik-turun,
+/// dan denyut opacity seperti asap. Skala seragam → ikon tetap proporsional.
+class _AnimatedLogo extends StatefulWidget {
+  const _AnimatedLogo();
+
+  @override
+  State<_AnimatedLogo> createState() => _AnimatedLogoState();
+}
+
+class _AnimatedLogoState extends State<_AnimatedLogo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        final t = _ctrl.value * 2 * math.pi;
+        return Transform.translate(
+          offset: Offset(math.sin(t) * 8, math.sin(t * 2) * 5 - 2),
+          child: Opacity(
+            opacity: 0.85 + 0.15 * math.sin(t * 2 + math.pi / 2),
+            child: Transform.scale(
+              scale: 1.0 + 0.05 * math.sin(t),
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.asset(
+          'assets/app_icon.png',
+          width: 72,
+          height: 72,
+        ),
+      ),
     );
   }
 }

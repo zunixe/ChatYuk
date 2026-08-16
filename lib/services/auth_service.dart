@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
@@ -30,12 +31,18 @@ class AuthService {
   bool get isAnonymous => _sb.auth.currentUser?.isAnonymous ?? true;
   String? get userEmail => _sb.auth.currentUser?.email;
 
+  /// Email sudah terverifikasi? (null = anonymous / belum terverifikasi)
+  bool get emailConfirmed =>
+      _sb.auth.currentUser?.emailConfirmedAt != null;
+
   /// Sign in dengan Google via Supabase OAuth.
   /// Native google_sign_in — butuh Android OAuth client (keystore v2)
   /// dan Web client untuk serverClientId.
   /// Return AuthResponse + email Google yang digunakan.
-  Future<({AuthResponse response, String? googleEmail})> signInWithGoogle() async {
-    const webClientId = '688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com';
+  Future<({AuthResponse response, String? googleEmail})>
+  signInWithGoogle() async {
+    const webClientId =
+        '688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com';
 
     final googleSignIn = GoogleSignIn(serverClientId: webClientId);
     print('[GOOGLE] calling signIn()');
@@ -48,7 +55,9 @@ class AuthService {
     final googleAuth = await googleUser.authentication;
     final idToken = googleAuth.idToken;
     final accessToken = googleAuth.accessToken;
-    print('[GOOGLE] idToken=${idToken != null} accessToken=${accessToken != null}');
+    print(
+      '[GOOGLE] idToken=${idToken != null} accessToken=${accessToken != null}',
+    );
 
     if (idToken == null) throw Exception('Google idToken null');
 
@@ -76,7 +85,10 @@ class AuthService {
   /// Cek apakah email sudah terdaftar di akun lain.
   Future<Map<String, dynamic>?> checkEmailExists(String email) async {
     try {
-      final res = await _sb.rpc('check_email_exists', params: {'p_email': email});
+      final res = await _sb.rpc(
+        'check_email_exists',
+        params: {'p_email': email},
+      );
       if (res == null) return null;
       final map = Map<String, dynamic>.from(res as Map);
       return map['exists'] == true ? map : null;
@@ -95,8 +107,13 @@ class AuthService {
       // Copy profile lama ke uid baru.
       // Exclude ip_address & fcm_token — kolom ini di-revoke dari akses
       // publik (hardening), dan tidak boleh ditimpa saat link akun.
-      const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,hashtags,points';
-      final old = await _sb.from('profiles').select(cols).eq('id', oldProfileId).maybeSingle();
+      const cols =
+          'id,nickname,gender,age,country,city,status,avatar,is_registered,hashtags,points';
+      final old = await _sb
+          .from('profiles')
+          .select(cols)
+          .eq('id', oldProfileId)
+          .maybeSingle();
       if (old == null) return;
 
       // Upsert profile lama ke uid baru
@@ -123,9 +140,26 @@ class AuthService {
   /// ghost "online". Fire-and-forget dari app saat start.
   Future<void> cleanupStaleAnonymous({int minAgeDays = 7}) async {
     try {
-      await _sb.rpc('cleanup_stale_anonymous', params: {'min_age_days': minAgeDays});
+      await _sb.rpc(
+        'cleanup_stale_anonymous',
+        params: {'min_age_days': minAgeDays},
+      );
     } catch (e) {
       debugPrint('[AUTH] cleanupStaleAnonymous error (abaikan): $e');
+    }
+  }
+
+  /// Bersihkan presence room yang basi (> 10 menit) di server — row yang
+  /// ditinggalkan app yang di-kill/force-stop tanpa sempat leaveRoom.
+  /// Fire-and-forget dari app saat start.
+  Future<void> cleanupStalePresence({int minAgeMinutes = 10}) async {
+    try {
+      await _sb.rpc(
+        'cleanup_stale_presence',
+        params: {'min_age_minutes': minAgeMinutes},
+      );
+    } catch (e) {
+      debugPrint('[AUTH] cleanupStalePresence error (abaikan): $e');
     }
   }
 
@@ -214,7 +248,10 @@ class AuthService {
   /// Login dengan email + password.
   /// Setelah ini, getProfile() akan mengembalikan profile user.
   Future<void> signInWithEmail(String email, String password) async {
-    final res = await _sb.auth.signInWithPassword(email: email, password: password);
+    final res = await _sb.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
     if (res.user == null) throw Exception('Login failed');
   }
 
@@ -238,9 +275,15 @@ class AuthService {
   /// Cek apakah email sudah terdaftar di Auth (RPC security definer).
   /// Kalau RPC belum dibuat di DB, fallback ke [fallback]
   /// (reset: true = lanjut kirim seperti lama; signup: false = lanjut daftar).
-  Future<bool> checkEmailRegistered(String email, {bool fallback = true}) async {
+  Future<bool> checkEmailRegistered(
+    String email, {
+    bool fallback = true,
+  }) async {
     try {
-      final res = await _sb.rpc('check_email_registered', params: {'p_email': email});
+      final res = await _sb.rpc(
+        'check_email_registered',
+        params: {'p_email': email},
+      );
       return res == true;
     } catch (e) {
       debugPrint('[AUTH] checkEmailRegistered error, fallback=$fallback: $e');
@@ -270,7 +313,41 @@ class AuthService {
     await _sb.auth.resend(type: OtpType.signup, email: email);
   }
 
-  /// Kirim email reset password.
+  /// Kirim ulang kode verifikasi (OTP) ke email — untuk user belum terverifikasi.
+  Future<void> resendEmailOtp(String email) async {
+    await _sb.auth.resend(
+      type: OtpType.signup,
+      email: email,
+      emailRedirectTo: 'chatyuk://login-callback',
+    );
+  }
+
+  /// Verifikasi kode OTP 6 digit. Return true bila sukses.
+  Future<bool> verifyEmailOtp(String email, String token) async {
+    try {
+      // type 'email' (bukan 'signup' yang deprecated) — dipakai untuk
+      // verifikasi OTP yang dikirim saat sign-up/sign-in.
+      await _sb.auth.verifyOTP(
+        email: email,
+        token: token,
+        type: OtpType.email,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[AUTH] verifyEmailOtp error: $e');
+      return false;
+    }
+  }
+  /// Ikat diri sendiri ke referrer (sekali). Return {ok}.
+  Future<bool> bindReferrer(String referrerUid) async {
+    try {
+      final res = await _sb.rpc('bind_referrer', params: {'p_referrer': referrerUid});
+      return res is Map && res['ok'] == true;
+    } catch (e) {
+      debugPrint('[AUTH] bindReferrer error: $e');
+      return false;
+    }
+  }  /// Kirim email reset password.
   Future<void> sendPasswordResetEmail(String email) async {
     await _sb.auth.resetPasswordForEmail(
       email,
@@ -301,7 +378,8 @@ class AuthService {
     required int age,
     required String country,
     required String city,
-    String ipAddress = '', // disimpan di server saja, tidak disimpan di aplikasi
+    String ipAddress =
+        '', // disimpan di server saja, tidak disimpan di aplikasi
   }) async {
     // Kalau session hilang (misal habis logout Google), buat session
     // anonymous baru supaya user baru tetap bisa daftar.
@@ -361,13 +439,20 @@ class AuthService {
     final id = uid;
     if (id == null) return null;
     // Exclude fcm_token dan ip_address — tidak dibutuhkan di model
-    const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points';
-    final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
+    const cols =
+        'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points,share_location,followers_count,following_count,subscriber_count,subscription_price,friends_count';
+    final res = await _sb
+        .from('profiles')
+        .select(cols)
+        .eq('id', id)
+        .maybeSingle();
     if (res == null) return null;
     final model = UserModel.fromMap(id, snakeToCamel(res));
     // avatar berupa PATH storage → download → isi base64 (UI tetap pakai base64).
-    if (model.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-      final b64 = await StoragePhotoService.instance.download(model.avatar) ?? '';
+    if (model.avatar.isNotEmpty &&
+        StoragePhotoService.instance.isAvatarPath(model.avatar)) {
+      final b64 =
+          await StoragePhotoService.instance.download(model.avatar) ?? '';
       return model.copyWith(avatar: b64);
     }
     return model;
@@ -376,12 +461,19 @@ class AuthService {
   /// Ambil profil user lain (untuk halaman info pengguna).
   Future<UserModel?> getProfileById(String id) async {
     if (id.isEmpty) return null;
-    const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points';
-    final res = await _sb.from('profiles').select(cols).eq('id', id).maybeSingle();
+    const cols =
+        'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points,share_location,followers_count,following_count,subscriber_count,subscription_price,friends_count';
+    final res = await _sb
+        .from('profiles')
+        .select(cols)
+        .eq('id', id)
+        .maybeSingle();
     if (res == null) return null;
     final model = UserModel.fromMap(id, snakeToCamel(res));
-    if (model.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-      final b64 = await StoragePhotoService.instance.download(model.avatar) ?? '';
+    if (model.avatar.isNotEmpty &&
+        StoragePhotoService.instance.isAvatarPath(model.avatar)) {
+      final b64 =
+          await StoragePhotoService.instance.download(model.avatar) ?? '';
       return model.copyWith(avatar: b64);
     }
     return model;
@@ -410,12 +502,16 @@ class AuthService {
           final row = payload.newRecord;
           var model = UserModel.fromMap(id, snakeToCamel(row));
           // avatar PATH storage → download → base64 (UI tetap pakai base64).
-          if (model.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-            final b64 = await StoragePhotoService.instance.download(model.avatar) ?? '';
+          if (model.avatar.isNotEmpty &&
+              StoragePhotoService.instance.isAvatarPath(model.avatar)) {
+            final b64 =
+                await StoragePhotoService.instance.download(model.avatar) ?? '';
             model = model.copyWith(avatar: b64);
           }
           controller.add(model);
-        } catch (e) { debugPrint('[AuthService] onMyProfileUpdates ignored: $e'); }
+        } catch (e) {
+          debugPrint('[AuthService] onMyProfileUpdates ignored: $e');
+        }
       },
     );
     channel.subscribe();
@@ -432,7 +528,12 @@ class AuthService {
     await _sb.from('profiles').update({'hashtags': hashtags}).eq('id', id);
   }
 
-  Future<void> updateProfile({int? age, String? country, String? city, String? nickname}) async {
+  Future<void> updateProfile({
+    int? age,
+    String? country,
+    String? city,
+    String? nickname,
+  }) async {
     final id = uid;
     if (id == null) return;
     final data = <String, dynamic>{
@@ -470,7 +571,11 @@ class AuthService {
     // Upload ke Storage — DB hanya simpan path (hemat ruang).
     final path = base64.isEmpty
         ? ''
-        : await StoragePhotoService.instance.uploadAvatar(uid: id, base64: base64) ?? '';
+        : await StoragePhotoService.instance.uploadAvatar(
+                uid: id,
+                base64: base64,
+              ) ??
+              '';
     await _sb.from('profiles').update({'avatar': path}).eq('id', id);
   }
 
@@ -490,7 +595,13 @@ class AuthService {
     final id = uid;
     if (id == null) return;
     try {
-      await _sb.from('profiles').update({'status': 'offline', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
+      await _sb
+          .from('profiles')
+          .update({
+            'status': 'offline',
+            'last_seen': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', id);
     } catch (e) {
       debugPrint('[AUTH] goOffline error: $e');
     }
@@ -502,7 +613,13 @@ class AuthService {
     final id = uid;
     if (id == null) return;
     try {
-      await _sb.from('profiles').update({'status': 'invisible', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
+      await _sb
+          .from('profiles')
+          .update({
+            'status': 'invisible',
+            'last_seen': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', id);
     } catch (e) {
       debugPrint('[AUTH] goInvisible error: $e');
     }
@@ -512,10 +629,13 @@ class AuthService {
     final id = uid;
     if (id == null) return;
     try {
-      await _sb.from('profiles').update({
-        'status': 'idle',
-        'last_seen': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', id);
+      await _sb
+          .from('profiles')
+          .update({
+            'status': 'idle',
+            'last_seen': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', id);
     } catch (e) {
       debugPrint('[AUTH] goIdle error: $e');
     }
@@ -525,7 +645,13 @@ class AuthService {
     final id = uid;
     if (id == null) return;
     try {
-      await _sb.from('profiles').update({'status': 'online', 'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
+      await _sb
+          .from('profiles')
+          .update({
+            'status': 'online',
+            'last_seen': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', id);
     } catch (e) {
       debugPrint('[AUTH] goOnline error: $e');
     }
@@ -538,7 +664,10 @@ class AuthService {
     final id = uid;
     if (id == null) return;
     try {
-      await _sb.from('profiles').update({'last_seen': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
+      await _sb
+          .from('profiles')
+          .update({'last_seen': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', id);
     } catch (e) {
       debugPrint('[AUTH] updateLastSeen error: $e');
     }
@@ -556,20 +685,58 @@ class AuthService {
     for (final row in rows) {
       var photo = row['photo'] as String? ?? '';
       // photo bisa berupa PATH storage (foto baru) → download → base64.
-      if (photo.isNotEmpty && StoragePhotoService.instance.isGalleryPath(photo)) {
+      if (photo.isNotEmpty &&
+          StoragePhotoService.instance.isGalleryPath(photo)) {
         photo = await StoragePhotoService.instance.download(photo) ?? '';
       }
-      result.add(UserPhoto.fromMap('${row['id']}', {
-        'userId': row['user_id'],
-        'photo': photo,
-        'createdAt': row['created_at'],
-      }));
+      result.add(
+        UserPhoto.fromMap('${row['id']}', {
+          'userId': row['user_id'],
+          'photo': photo,
+          'createdAt': row['created_at'],
+        }),
+      );
+    }
+    return result;
+  }
+
+  /// Ambil foto galeri user LAIN dengan kontrol akses paywall.
+  /// Index 0 gratis; sisanya terkunci (kirim preview blur) sampai dibuka.
+  /// Foto terbuka: field photo = path/base64 asli. Terkunci: photo = preview.
+  Future<List<UserPhoto>> getPhotosWithAccess(String userId) async {
+    if (userId.isEmpty) return [];
+    final res = await _sb.rpc(
+      'get_user_photos_access',
+      params: {'p_user_id': userId},
+    );
+    final list = res is List ? res : <dynamic>[];
+    final result = <UserPhoto>[];
+    for (final row in list) {
+      final m = Map<String, dynamic>.from(row as Map);
+      final unlocked = m['unlocked'] == true;
+      var photo = m['photo'] as String? ?? '';
+      // Foto terbuka bisa berupa PATH storage → download jadi base64.
+      // Foto terkunci = preview base64 (bukan path) → pakai apa adanya.
+      if (unlocked &&
+          photo.isNotEmpty &&
+          StoragePhotoService.instance.isGalleryPath(photo)) {
+        photo = await StoragePhotoService.instance.download(photo) ?? '';
+      }
+      result.add(
+        UserPhoto.fromMap('${m['id']}', {
+          'userId': userId,
+          'photo': photo,
+          'unlocked': unlocked,
+          'preview': m['preview'] ?? '',
+          'createdAt': m['created_at'],
+        }),
+      );
     }
     return result;
   }
 
   /// Upload foto galeri milik sendiri. Max 6 foto per user.
-  Future<void> uploadPhoto(String base64) async {
+  Future<void> uploadPhoto(String base64, {String? preview}) async {
     final id = uid;
     if (id == null) return;
     if (base64.isNotEmpty && !isValidImageBase64(base64)) {
@@ -580,25 +747,36 @@ class AuthService {
       throw Exception('Photo too large (max 768KB)');
     }
     // Batasi jumlah foto per user = 6
-    final rows = await _sb
-        .from('user_photos')
-        .select('id')
-        .eq('user_id', id);
+    final rows = await _sb.from('user_photos').select('id').eq('user_id', id);
     if (rows.length >= 6) {
       throw Exception('Max 6 photos');
     }
     // Upload ke Storage — DB hanya simpan path (hemat ruang).
-    final path = await StoragePhotoService.instance.uploadPhoto(uid: id, base64: base64) ?? base64;
-    await _sb.from('user_photos').insert({'user_id': id, 'photo': path});
+    final path =
+        await StoragePhotoService.instance.uploadPhoto(
+          uid: id,
+          base64: base64,
+        ) ??
+        base64;
+    await _sb.from('user_photos').insert({
+      'user_id': id,
+      'photo': path,
+      if (preview != null && preview.isNotEmpty) 'photo_preview': preview,
+    });
   }
 
   /// Hapus foto galeri (hanya punya sendiri, RLS menjamin).
   Future<void> deletePhoto(String photoId) async {
     if (photoId.isEmpty) return;
     try {
-      final row = await _sb.from('user_photos').select('photo').eq('id', photoId).maybeSingle();
+      final row = await _sb
+          .from('user_photos')
+          .select('photo')
+          .eq('id', photoId)
+          .maybeSingle();
       final photo = row?['photo'] as String? ?? '';
-      if (photo.isNotEmpty && StoragePhotoService.instance.isGalleryPath(photo)) {
+      if (photo.isNotEmpty &&
+          StoragePhotoService.instance.isGalleryPath(photo)) {
         await StoragePhotoService.instance.delete(photo);
       }
     } catch (_) {}
@@ -606,7 +784,170 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    _dummySessionActive = false;
+    _dummyUid = null;
+    await _clearAdminTokens();
+    try {
+      // Teardown total realtime: cegah socket/channel lama nyangkut saat
+      // login ulang di proses yang sama (race disconnect/connect di
+      // realtime_client bisa bikin socket mati permanen).
+      await _sb.realtime.removeAllChannels();
+      await _sb.realtime.disconnect();
+    } catch (e) {
+      debugPrint('[AuthService] realtime teardown error: $e');
+    }
     await _sb.auth.signOut();
+  }
+
+  // ── Dummy session (admin berpindah akun tanpa login manual) ──
+  String? _adminAccessToken;
+  String? _adminRefreshToken;
+  String? _dummyUid;
+  bool _dummySessionActive = false;
+  static const _kAdminAccessToken = 'dummy_admin_access_token';
+  static const _kAdminRefreshToken = 'dummy_admin_refresh_token';
+
+  /// True saat sesi aktif adalah akun dummy (bukan admin).
+  bool get dummySessionActive => _dummySessionActive;
+
+  /// UID dummy yang sedang aktif (null jika bukan sesi dummy).
+  String? get activeDummyUid => _dummyUid;
+
+  Future<void> _saveAdminTokens(
+    String? accessToken,
+    String? refreshToken,
+  ) async {
+    if (accessToken == null || refreshToken == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kAdminAccessToken, accessToken);
+    await prefs.setString(_kAdminRefreshToken, refreshToken);
+  }
+
+  Future<void> _clearAdminTokens() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kAdminAccessToken);
+    await prefs.remove(_kAdminRefreshToken);
+  }
+
+  /// Pulihkan state dummy setelah app restart: sesi aktif anonymous milik
+  /// dummy → restore flag + token admin dari SharedPreferences.
+  Future<void> restoreDummyIfNeeded() async {
+    final user = _sb.auth.currentUser;
+    if (user == null || !user.isAnonymous) return;
+    final uid = user.id;
+    try {
+      final isDummy =
+          await _sb.rpc('is_dummy_account', params: {'p_uid': uid}) as bool? ??
+          false;
+      if (!isDummy) return;
+    } catch (e) {
+      debugPrint('[AUTH] restoreDummyIfNeeded check error: $e');
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final refresh = prefs.getString(_kAdminRefreshToken);
+    final access = prefs.getString(_kAdminAccessToken);
+    if (refresh == null || refresh.isEmpty) return;
+    _adminRefreshToken = refresh;
+    _adminAccessToken = access;
+    _dummyUid = uid;
+    _dummySessionActive = true;
+    debugPrint('[AUTH] dummy session restored: $uid');
+  }
+
+  /// Pindah ke akun dummy: tukar session ke refresh_token dummy
+  /// (GoTrue memutar token tiap swap → simpan token baru di DB).
+  /// Kembali ke admin via [backToAdmin].
+  Future<void> becomeDummy(String uid) async {
+    final session = _sb.auth.currentSession;
+    _adminAccessToken = session?.accessToken;
+    _adminRefreshToken = session?.refreshToken;
+    _dummyUid = uid;
+    await _saveAdminTokens(_adminAccessToken, _adminRefreshToken);
+    // Token lama bisa basi (GoTrue me-revoke saat auto-refresh client).
+    // Fallback: regenerasi sesi dummy lewat RPC supaya swap selalu berhasil.
+    var refreshToken =
+        await _sb.rpc('admin_get_dummy_token', params: {'p_uid': uid})
+            as String?;
+    if (refreshToken == null || refreshToken.isEmpty) {
+      refreshToken =
+          await _sb.rpc('admin_renew_dummy_token', params: {'p_uid': uid})
+              as String?;
+    }
+    if (refreshToken == null || refreshToken.isEmpty) {
+      throw Exception('dummy_token_missing');
+    }
+    try {
+      await _sb.auth.setSession(refreshToken);
+    } catch (e) {
+      // Token dummy mati/invalid → regenerasi lalu coba sekali lagi.
+      debugPrint('[AUTH] becomeDummy setSession failed: $e — renewing');
+      try {
+        final renewed =
+            await _sb.rpc('admin_renew_dummy_token', params: {'p_uid': uid})
+                as String?;
+        if (renewed != null && renewed.isNotEmpty) {
+          await _sb.auth.setSession(renewed);
+        } else {
+          throw Exception('dummy_token_invalid');
+        }
+      } catch (e2) {
+        // JANGAN biarkan sesi rusak (user jadi logout) — pulihkan admin.
+        debugPrint('[AUTH] becomeDummy renew failed: $e2 — restoring admin');
+        final a = _adminAccessToken;
+        final r = _adminRefreshToken;
+        _adminAccessToken = null;
+        _adminRefreshToken = null;
+        _dummyUid = null;
+        _dummySessionActive = false;
+        if (r != null && a != null) {
+          try {
+            await _sb.auth.setSession(r, accessToken: a);
+          } catch (_) {}
+        }
+        await _clearAdminTokens();
+        throw Exception('dummy_token_invalid');
+      }
+    }
+    final newToken = _sb.auth.currentSession?.refreshToken;
+    if (newToken != null) {
+      try {
+        await _sb.rpc(
+          'admin_update_dummy_token',
+          params: {'p_uid': uid, 'p_refresh_token': newToken},
+        );
+      } catch (e) {
+        debugPrint('[AUTH] admin_update_dummy_token error: $e');
+      }
+    }
+    _dummySessionActive =
+        _adminAccessToken != null && _adminRefreshToken != null;
+  }
+
+  /// Kembali ke akun admin. Sesi dummy TIDAK di-logout dan statusnya
+  /// TIDAK diubah — apa pun status dummy (online/idle/offline) yang di-set
+  /// admin panel tetap dipertahankan. Hanya user aktif yang balik ke admin.
+  /// Return false jika token admin kedaluwarsa (perlu login manual).
+  Future<bool> backToAdmin() async {
+    _dummySessionActive = false;
+    var adminAccess = _adminAccessToken;
+    var adminRefresh = _adminRefreshToken;
+    _adminAccessToken = null;
+    _adminRefreshToken = null;
+    _dummyUid = null;
+    if (adminAccess == null || adminRefresh == null) {
+      final prefs = await SharedPreferences.getInstance();
+      adminAccess = prefs.getString(_kAdminAccessToken);
+      adminRefresh = prefs.getString(_kAdminRefreshToken);
+    }
+    if (adminRefresh == null || adminAccess == null) return false;
+    try {
+      await _sb.auth.setSession(adminRefresh, accessToken: adminAccess);
+      await _clearAdminTokens();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Stream<bool> get authState {

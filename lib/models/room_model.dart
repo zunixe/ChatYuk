@@ -7,6 +7,11 @@ class RoomModel {
   final String category;
   final int order;
   final int onlineCount;
+  final bool isPrivate;
+  final String ownerId;
+  final String ownerName;
+  final bool hasPassword;
+  final DateTime? expiresAt;
 
   RoomModel({
     required this.id,
@@ -17,6 +22,11 @@ class RoomModel {
     required this.category,
     required this.order,
     this.onlineCount = 0,
+    this.isPrivate = false,
+    this.ownerId = '',
+    this.ownerName = '',
+    this.hasPassword = false,
+    this.expiresAt,
   });
 
   factory RoomModel.fromMap(String id, Map<String, dynamic> map) {
@@ -29,6 +39,11 @@ class RoomModel {
       category: map['category'] ?? '',
       order: map['order'] ?? 0,
       onlineCount: map['onlineCount'] ?? 0,
+      isPrivate: map['is_private'] == true,
+      ownerId: map['owner_id'] ?? '',
+      ownerName: map['owner_name'] ?? '',
+      hasPassword: map['has_password'] == true,
+      expiresAt: map['expires_at'] != null ? DateTime.tryParse('${map['expires_at']}') : null,
     );
   }
 
@@ -54,6 +69,11 @@ class RoomModel {
       category: category,
       order: order,
       onlineCount: onlineCount ?? this.onlineCount,
+      isPrivate: isPrivate,
+      ownerId: ownerId,
+      ownerName: ownerName,
+      hasPassword: hasPassword,
+      expiresAt: expiresAt,
     );
   }
 }

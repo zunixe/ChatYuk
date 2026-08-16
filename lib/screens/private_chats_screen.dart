@@ -10,6 +10,7 @@ import '../providers/online_users_provider.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../utils.dart';
+import '../widgets/profile_avatar.dart';
 import 'private_chat_screen.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
@@ -25,6 +26,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   static const int _pageSize = 20;
   final ScrollController _scrollCtrl = ScrollController();
   int _lastTotal = 0;
+  String _query = '';
+  final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -44,6 +47,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   void dispose() {
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -78,35 +82,74 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.titlePrivateChat)),
-      body: StreamBuilder<List<PrivateChatInfo>>(
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              decoration: InputDecoration(
+                hintText: s.searchHint,
+                prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.clear, color: AppTheme.textSecondary, size: 18),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _query = '');
+                        },
+                      ),
+                filled: true,
+                fillColor: Colors.white,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<List<PrivateChatInfo>>(
         stream: _stream,
         builder: (_, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
           }
           final chats = (snap.data ?? []).toList();
+          // Filter pencarian berdasarkan nama lawan chat
+          final filtered = _query.isEmpty
+              ? chats
+              : chats.where((c) {
+                  final otherUid = c.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
+                  final otherName = c.participantNames[otherUid] ?? '';
+                  return otherName.toLowerCase().contains(_query);
+                }).toList();
           // Reset page jika data berubah total
           if (chats.length != _lastTotal) {
             _lastTotal = chats.length;
             _page = 1;
           }
-          if (chats.isEmpty) {
+          if (filtered.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('💬', style: TextStyle(fontSize: 48)),
+                  const Text('💬', style: TextStyle(fontSize: AppGlyph.xl)),
                   const SizedBox(height: 12),
-                  Text(s.noPrivateChats, style: const TextStyle(color: AppTheme.textSecondary)),
+                  Text(_query.isEmpty ? s.noPrivateChats : s.searchNoResult, style: AppText.bodyStrong.copyWith(color: AppTheme.textSecondary)),
                   const SizedBox(height: 4),
-                  Text(s.noPrivateChatsHint, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  Text(_query.isEmpty ? s.noPrivateChatsHint : '', style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ],
               ),
             );
           }
           // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus
-          final paged = chats.take(_page * _pageSize).toList();
-          final hasMore = paged.length < chats.length;
+          final paged = filtered.take(_page * _pageSize).toList();
+          final hasMore = paged.length < filtered.length;
           return ListView.builder(
             controller: _scrollCtrl,
             padding: const EdgeInsets.all(16),
@@ -142,7 +185,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     children: [
                       const Icon(Icons.delete_outline, color: Colors.white, size: 24),
                       const SizedBox(height: 4),
-                      Text(s.btnDelete, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                      Text(s.btnDelete, style: AppText.caption.copyWith(color: Colors.white)),
                     ],
                   ),
                 ),
@@ -200,58 +243,36 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       child: Row(
                         children: [
-                          Stack(
-                            children: [
-                              Container(
-                                width: 44, height: 44,
-                                decoration: BoxDecoration(
-                                  color: isBlocked
-                                      ? AppTheme.textSecondary.withValues(alpha: 0.15)
-                                      : AppTheme.accent.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Center(
-                                  child: Text(otherName.isNotEmpty ? otherName[0].toUpperCase() : '?',
-                                    style: TextStyle(
-                                      color: isBlocked ? AppTheme.textSecondary : AppTheme.textPrimary,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 18,
-                                    )),
-                                ),
-                              ),
-                              if (isBlocked)
-                                Positioned(
-                                  right: -2, bottom: -2,
-                                  child: Container(
+                          ProfileAvatar(
+                            uid: otherUid,
+                            name: otherName,
+                            size: 44,
+                            borderRadius: 12,
+                            bgColor: isBlocked
+                                ? AppTheme.textSecondary.withValues(alpha: 0.15)
+                                : AppTheme.accent.withValues(alpha: 0.15),
+                            textColor: isBlocked ? AppTheme.textSecondary : AppTheme.textPrimary,
+                            badge: isBlocked
+                                ? Container(
                                     padding: const EdgeInsets.all(2),
                                     decoration: BoxDecoration(
                                       color: AppTheme.danger,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: const Icon(Icons.block, size: 10, color: Colors.white),
+                                  )
+                                : Container(
+                                    width: 12, height: 12,
+                                    decoration: BoxDecoration(
+                                      color: (statusMap[otherUid] ?? 'offline') == 'online'
+                                          ? const Color(0xFF4CAF50)
+                                          : (statusMap[otherUid] ?? 'offline') == 'idle'
+                                              ? const Color(0xFFFFC107)
+                                              : const Color(0xFF9E9E9E),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 2),
+                                    ),
                                   ),
-                                )
-                              else
-                                Positioned(
-                                  right: -1, bottom: -1,
-                                  child: () {
-                                    final status = statusMap[otherUid] ?? 'offline';
-                                    final color = status == 'online'
-                                        ? const Color(0xFF4CAF50)
-                                        : status == 'idle'
-                                            ? const Color(0xFFFFC107)
-                                            : const Color(0xFF9E9E9E);
-                                    return Container(
-                                      width: 12, height: 12,
-                                      decoration: BoxDecoration(
-                                        color: color,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
-                                      ),
-                                    );
-                                  }(),
-                                ),
-                            ],
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -266,9 +287,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                         children: [
                                           Flexible(
                                             child: Text(otherName,
-                                              style: TextStyle(
+                                              style: AppText.bodyStrong.copyWith(
                                                 color: isBlocked ? AppTheme.textSecondary : AppTheme.textPrimary,
-                                                fontWeight: FontWeight.w600,
                                               )),
                                           ),
                                           if (chat.participantRegistered[otherUid] == true) ...[
@@ -286,21 +306,21 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(s.msgBlocked.split(',').first,
-                                          style: const TextStyle(color: AppTheme.danger, fontSize: 10, fontWeight: FontWeight.w600)),
+                                          style: AppText.micro.copyWith(color: AppTheme.danger, fontWeight: FontWeight.w600)),
                                       ),
                                   ],
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   _chatSubtitle(chat, auth.uid!, s),
-                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                                  style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   '${chat.messageCount} ${s.chatMsgCount}',
-                                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+                                  style: AppText.caption.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
                                 ),                              ],
                             ),
                           ),
@@ -321,7 +341,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(s.btnUnblock,
-                                style: const TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+                                style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600)),
                             ),
                           )
                         else
@@ -329,7 +349,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(_formatTime(chat.lastMessageAt, s),
-                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                                style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                               if (unread > 0) ...[
                                 const SizedBox(height: 4),
                                 Container(
@@ -339,7 +359,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text('$unread',
-                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                                    style: AppText.caption.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
                                 ),
                               ],
                             ],
@@ -354,7 +374,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
             },
           );
         },
+        ),
       ),
+      ],
+    ),
     );
   }
 

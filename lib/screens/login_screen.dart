@@ -8,6 +8,7 @@ import '../providers/locale_provider.dart';
 import '../utils.dart';
 import '../services/auth_service.dart';
 import '../services/geo_service.dart';
+import '../services/location_service.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -60,9 +61,18 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
 
-    if (email.isEmpty) { _snack(s.errEmailEmpty); return; }
-    if (!isValidEmail(email)) { _snack(s.errEmailInvalid); return; }
-    if (password.isEmpty) { _snack(s.errPasswordShort); return; }
+    if (email.isEmpty) {
+      _snack(s.errEmailEmpty);
+      return;
+    }
+    if (!isValidEmail(email)) {
+      _snack(s.errEmailInvalid);
+      return;
+    }
+    if (password.isEmpty) {
+      _snack(s.errPasswordShort);
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -79,21 +89,21 @@ class _LoginScreenState extends State<LoginScreen> {
       // (fallback jika app di-kill setelah signup sebelum registerProfile)
       // IP TIDAK disimpan di aplikasi — hanya dari widget param (memori)
       String? nickname = widget.pendingNickname;
-      String? gender   = widget.pendingGender;
-      int?    age      = widget.pendingAge;
-      String? country  = widget.pendingCountry;
-      String? city     = widget.pendingCity;
-      String? ip       = widget.pendingIp;
+      String? gender = widget.pendingGender;
+      int? age = widget.pendingAge;
+      String? country = widget.pendingCountry;
+      String? city = widget.pendingCity;
+      String? ip = widget.pendingIp;
 
       if (nickname == null && auth.profile == null) {
         final prefs = await SharedPreferences.getInstance();
         final savedEmail = prefs.getString('pending_email');
         if (savedEmail == email) {
           nickname = prefs.getString('pending_nickname');
-          gender   = prefs.getString('pending_gender');
-          age      = prefs.getInt('pending_age');
-          country  = prefs.getString('pending_country');
-          city     = prefs.getString('pending_city');
+          gender = prefs.getString('pending_gender');
+          age = prefs.getInt('pending_age');
+          country = prefs.getString('pending_country');
+          city = prefs.getString('pending_city');
         }
       }
 
@@ -122,10 +132,12 @@ class _LoginScreenState extends State<LoginScreen> {
       // E2: Login sukses tapi masih belum ada profile → arahkan ke form profil
       if (auth.profile == null) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => RegisterScreen(
-            prefillEmail: email,
-            mode: RegisterMode.profileOnly,
-          )),
+          MaterialPageRoute(
+            builder: (_) => RegisterScreen(
+              prefillEmail: email,
+              mode: RegisterMode.profileOnly,
+            ),
+          ),
         );
         return;
       }
@@ -139,7 +151,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       final s2 = context.read<LocaleProvider>().s;
       final code = e.code ?? e.message.toLowerCase();
-      if (code.contains('invalid') || code.contains('credentials') || code.contains('wrong')) {
+      if (code.contains('invalid') ||
+          code.contains('credentials') ||
+          code.contains('wrong')) {
         _snack(s2.errInvalidCredentials);
       } else if (code.contains('verified') || code.contains('confirm')) {
         _snack(s2.errEmailNotVerified);
@@ -169,15 +183,24 @@ class _LoginScreenState extends State<LoginScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
-        title: Text(s.titleForgotPassword, style: const TextStyle(color: AppTheme.textPrimary)),
+        title: Text(
+          s.titleForgotPassword,
+          style: const TextStyle(color: AppTheme.textPrimary),
+        ),
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.emailAddress,
           style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: InputDecoration(labelText: s.labelEmail, hintText: s.hintEmail),
+          decoration: InputDecoration(
+            labelText: s.labelEmail,
+            hintText: s.hintEmail,
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(s.btnCancel)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(s.btnCancel),
+          ),
           ElevatedButton(
             onPressed: () {
               final email = ctrl.text.trim();
@@ -193,18 +216,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (submittedEmail != null && mounted) {
       try {
-        await context.read<AuthProvider>().sendPasswordResetEmail(submittedEmail!);
+        await context.read<AuthProvider>().sendPasswordResetEmail(
+          submittedEmail!,
+        );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(s.msgPasswordResetSent)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(s.msgPasswordResetSent)));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(
-              e is EmailNotRegisteredException
-                  ? s.msgEmailNotRegistered
-                  : s.msgPasswordResetFailed)));
+            SnackBar(
+              content: Text(
+                e is EmailNotRegisteredException
+                    ? s.msgEmailNotRegistered
+                    : s.msgPasswordResetFailed,
+              ),
+            ),
+          );
         }
       }
     }
@@ -248,13 +278,13 @@ class _LoginScreenState extends State<LoginScreen> {
           context.read<AuthProvider>().cancelLinkGoogle();
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const RegisterScreen()),
+            MaterialPageRoute(builder: (_) => const RegisterScreen(mode: RegisterMode.profileOnly)),
           );
         }
       } else if (result == 'new') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+          MaterialPageRoute(builder: (_) => const RegisterScreen(mode: RegisterMode.profileOnly)),
         );
       } else if (result == 'exists') {
         // Profile sudah ada — pop LoginScreen yang di-push di atas _AuthGate
@@ -276,18 +306,24 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final geo = GeoService();
       final info = await geo.detect();
-      if (info == null || info.ipAddress.isEmpty) return;
-      if (!mounted) return;
-      final auth = context.read<AuthProvider>();
-      await auth.updateIpAddress(info.ipAddress);
-      // Update country/city jika deteksi valid dan berbeda dari profile
-      final profile = auth.profile;
-      if (profile != null &&
-          (profile.country != info.country || profile.city != info.city)) {
-        await auth.updateProfile(country: info.country, city: info.city);
+      if (info != null && info.ipAddress.isNotEmpty && mounted) {
+        final auth = context.read<AuthProvider>();
+        await auth.updateIpAddress(info.ipAddress);
+        // Update country/city jika deteksi valid dan berbeda dari profile
+        final profile = auth.profile;
+        if (profile != null &&
+            (profile.country != info.country || profile.city != info.city)) {
+          await auth.updateProfile(country: info.country, city: info.city);
+        }
       }
+      // Perbarui koordinat (minta izin GPS sekali kalau belum pernah;
+      // ditolak → perkiraan IP). Jalan INDEPENDEN dari deteksi IP —
+      // GPS jangan sampai terlewat gara-gara provider IP lagi down.
+      final loc = LocationService();
+      await loc.requestPermission();
+      await loc.updateMyLocation();
     } catch (_) {
-      // gagal mendeteksi IP — abaikan, jangan ganggu alur login
+      // gagal — abaikan, jangan ganggu alur login
     }
   }
 
@@ -297,78 +333,137 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(s.titleLogin)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Icon
+            // Header — logo + nama app + tagline (komposisi seperti
+            // kartu poin di profil: ikon bulat transparan + teks besar)
             Center(
-              child: ClipRRect(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    'assets/app_icon.png',
+                    width: 64,
+                    height: 64,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'ChatYuk',
+              textAlign: TextAlign.center,
+              style: AppText.headline,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              s.appTagline,
+              textAlign: TextAlign.center,
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 28),
+
+            // Kartu form login — satu grup utuh, lega dan rapi
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.bgCard,
                 borderRadius: BorderRadius.circular(16),
-                child: Image.asset('assets/app_icon.png', width: 64, height: 64),
+                border: Border.all(color: AppTheme.divider, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Email
+                  TextField(
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: s.labelEmail,
+                      hintText: s.hintEmail,
+                      prefixIcon: const Icon(Icons.email_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Password
+                  TextField(
+                    controller: _passwordCtrl,
+                    obscureText: _obscure,
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: s.labelPassword,
+                      prefixIcon: const Icon(Icons.lock_outlined),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscure ? Icons.visibility_off : Icons.visibility,
+                        ),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _login(),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Lupa Password
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _forgotPassword,
+                      child: Text(
+                        s.btnForgotPassword,
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Tombol Login
+                  ElevatedButton(
+                    onPressed: _loading ? null : _login,
+                    child: _loading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(s.btnLogin, style: AppText.button),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
 
-            // Email
-            TextField(
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              style: const TextStyle(color: AppTheme.textPrimary),
-              decoration: InputDecoration(
-                labelText: s.labelEmail,
-                hintText: s.hintEmail,
-                prefixIcon: const Icon(Icons.email_outlined),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Password
-            TextField(
-              controller: _passwordCtrl,
-              obscureText: _obscure,
-              style: const TextStyle(color: AppTheme.textPrimary),
-              decoration: InputDecoration(
-                labelText: s.labelPassword,
-                prefixIcon: const Icon(Icons.lock_outlined),
-                suffixIcon: IconButton(
-                  icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                ),
-              ),
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _login(),
-            ),
-            const SizedBox(height: 6),
-
-            // Lupa Password
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _forgotPassword,
-                child: Text(s.btnForgotPassword, style: const TextStyle(color: AppTheme.primary, fontSize: 13)),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Tombol Login
-            ElevatedButton(
-              onPressed: _loading ? null : _login,
-              child: _loading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(s.btnLogin, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            ),
-            const SizedBox(height: 16),
-
             // Divider
-            Row(children: [
-              const Expanded(child: Divider()),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(s.labelOr, style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-              ),
-              const Expanded(child: Divider()),
-            ]),
+            Row(
+              children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    s.labelOr,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            ),
             const SizedBox(height: 12),
 
             // Login dengan Google
@@ -376,22 +471,38 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: _googleLoading ? null : _signInWithGoogle,
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: AppTheme.divider, width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 backgroundColor: Colors.white,
               ),
               child: _googleLoading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Image.network(
                           'https://www.google.com/favicon.ico',
-                          width: 20, height: 20,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 22, color: Colors.red),
+                          width: 20,
+                          height: 20,
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.g_mobiledata,
+                            size: 22,
+                            color: Colors.red,
+                          ),
                         ),
                         const SizedBox(width: 10),
-                        Text(s.btnContinueGoogle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                        Text(
+                          s.btnContinueGoogle,
+                          style: AppText.bodyStrong.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ),
             ),
@@ -400,8 +511,14 @@ class _LoginScreenState extends State<LoginScreen> {
             // Link ke register
             Center(
               child: TextButton(
-                onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
-                child: Text(s.btnRegisterEmail, style: const TextStyle(color: AppTheme.primary)),
+                onPressed: () => Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                ),
+                child: Text(
+                  s.btnRegisterEmail,
+                  style: const TextStyle(color: AppTheme.primary),
+                ),
               ),
             ),
           ],

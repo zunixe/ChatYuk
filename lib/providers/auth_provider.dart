@@ -1,10 +1,15 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../main.dart';
+import '../config/theme.dart';
 import '../models/user_model.dart';
+import '../providers/locale_provider.dart';
 import '../services/auth_service.dart';
+import '../services/location_service.dart';
 import '../services/message_cache.dart';
 import '../services/points_service.dart';
 import '../services/screen_secure_service.dart';
@@ -19,7 +24,8 @@ void safeUnawaited(Future<void> future) {
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _auth = AuthService();
-  final String instanceId = 'AP-${DateTime.now().microsecondsSinceEpoch.toString().substring(8)}';
+  final String instanceId =
+      'AP-${DateTime.now().microsecondsSinceEpoch.toString().substring(8)}';
   UserModel? _profile;
   bool _loading = true;
   bool _disposed = false;
@@ -29,6 +35,7 @@ class AuthProvider extends ChangeNotifier {
 
   Timer? _idleTimer;
   Timer? _heartbeatTimer;
+  Timer? _locationTimer;
   StreamSubscription<UserModel>? _profileSub;
   StreamSubscription<AuthState>? _authStateSub;
   bool _manualSignOut = false;
@@ -38,6 +45,11 @@ class AuthProvider extends ChangeNotifier {
 
   static const String _notifPrefKey = 'notif_enabled';
   bool _notificationsEnabled = true;
+
+  // Referrer dari link share (deep link / link referal). Disimpan sementara
+  // dan di-bind ke profile saat registerProfile selesai.
+  static const String _referrerPrefKey = 'pending_referrer_uid';
+  String? _pendingReferrer;
 
   bool _screenshotEnabled = true;
   bool _watermarkEnabled = false;
@@ -60,6 +72,46 @@ class AuthProvider extends ChangeNotifier {
     _listenAuthState();
     _init();
     loadNotificationPref();
+    _loadPendingReferrer();
+  }
+
+  /// Baca referrer tersimpan (dari deep link) ke memori.
+  Future<void> _loadPendingReferrer() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _pendingReferrer = prefs.getString(_referrerPrefKey);
+    } catch (_) {}
+  }
+
+  /// Simpan referrer (dipanggil saat deep link referal masuk).
+  Future<void> setPendingReferrer(String uid) async {
+    if (uid.isEmpty) return;
+    _pendingReferrer = uid;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_referrerPrefKey, uid);
+    } catch (_) {}
+  }
+
+  /// Ikat referrer (sekali) & klaim reward untuk pengundang. Fire-and-forget.
+  Future<void> _bindAndClaimReferrer() async {
+    final referrer = _pendingReferrer;
+    if (referrer == null || referrer.isEmpty) return;
+    _pendingReferrer = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_referrerPrefKey);
+    } catch (_) {}
+    if (referrer == uid) return;
+    try {
+      final ok = await _auth.bindReferrer(referrer);
+      if (ok) {
+        await PointsService().claimReferralReward();
+        debugPrint('[AUTH] referral bind+claim OK for $referrer');
+      }
+    } catch (e) {
+      debugPrint('[AUTH] referral bind error: $e');
+    }
   }
 
   /// Pantau event auth Supabase. Kalau session hilang TANPA logout manual
@@ -70,9 +122,12 @@ class AuthProvider extends ChangeNotifier {
       if (_disposed) return;
       if (state.event != AuthChangeEvent.signedOut) return;
       if (_manualSignOut) return; // logout manual — sudah di-handle signOut()
-      debugPrint('[AUTH] SIGNED_OUT unexpected, resetting profile (session hilang)');
+      debugPrint(
+        '[AUTH] SIGNED_OUT unexpected, resetting profile (session hilang)',
+      );
       _idleTimer?.cancel();
       _heartbeatTimer?.cancel();
+      _locationTimer?.cancel();
       _profileSub?.cancel();
       _isIdle = false;
       _profile = null;
@@ -100,6 +155,8 @@ class AuthProvider extends ChangeNotifier {
         debugPrint('[AUTH] signInAnonymously OK');
         _profile = await _auth.getProfile();
         debugPrint('[AUTH] getProfile -> ${_profile?.uid}');
+        // Restart saat sesi dummy aktif → pulihkan state dummy + token admin.
+        await _auth.restoreDummyIfNeeded();
         // Realtime: profil sendiri (poin, status, email terdaftar, dll) —
         // badge poin di profil & private chat langsung update.
         _listenProfile();
@@ -127,8 +184,11 @@ class AuthProvider extends ChangeNotifier {
       // FCM token & cleanup di-fire-and-forget — tidak block loading screen
       if (_profile != null) safeUnawaited(updateFcmToken());
       safeUnawaited(cleanupStaleAnonymous());
+      safeUnawaited(cleanupStalePresence());
       if (_disposed) return;
       _startHeartbeat();
+      _startLocationPing();
+      safeUnawaited(_initLocation());
       // Daily login bonus poin
       safeUnawaited(_claimDailyPoints());
     }
@@ -162,7 +222,9 @@ class AuthProvider extends ChangeNotifier {
       _manualSignOut = false;
     }
     final googleEmail = result.googleEmail;
-    print('[AUTH-PROVIDER] signInWithGoogle result uid=${result.response.user?.id} email=$googleEmail');
+    print(
+      '[AUTH-PROVIDER] signInWithGoogle result uid=${result.response.user?.id} email=$googleEmail',
+    );
 
     // Bersihkan semua cache lama setelah login Google
     MessageCache.instance.clearAllLegacy().catchError((_) {});
@@ -212,7 +274,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> updateFcmToken() async {
-    if (!_notificationsEnabled) return;    try {
+    if (!_notificationsEnabled) return;
+    try {
       final token = await FirebaseMessaging.instance.getToken();
       await _auth.updateFcmToken(token);
     } catch (_) {
@@ -244,7 +307,9 @@ class AuthProvider extends ChangeNotifier {
     if (enabled) {
       await updateFcmToken();
     } else {
-      try { await _auth.updateFcmToken(''); } catch (_) {}
+      try {
+        await _auth.updateFcmToken('');
+      } catch (_) {}
     }
     if (!_disposed) notifyListeners();
   }
@@ -298,7 +363,8 @@ class AuthProvider extends ChangeNotifier {
   /// Hanya admin dengan UID yang tercatat yang ikut jadi invisible.
   Future<void> _loadInvisibleSetting() async {
     final setting = await _auth.fetchInvisibleSetting();
-    _invisibleEnabled = setting['enabled'] == true && setting['adminUid'] == _auth.uid;
+    _invisibleEnabled =
+        setting['enabled'] == true && setting['adminUid'] == _auth.uid;
     if (_invisibleEnabled) {
       _profile = _profile?.copyWith(status: 'invisible');
       safeUnawaited(_auth.goInvisible());
@@ -310,7 +376,8 @@ class AuthProvider extends ChangeNotifier {
   /// kedua ikut tahu toggle dari device pertama dan tidak menimpa balik.
   Future<void> resyncInvisible() async {
     final setting = await _auth.fetchInvisibleSetting();
-    final enabled = setting['enabled'] == true && setting['adminUid'] == _auth.uid;
+    final enabled =
+        setting['enabled'] == true && setting['adminUid'] == _auth.uid;
     if (enabled == _invisibleEnabled) return;
     _invisibleEnabled = enabled;
     if (enabled) {
@@ -351,11 +418,18 @@ class AuthProvider extends ChangeNotifier {
     return _auth.cleanupStaleAnonymous(minAgeDays: minAgeDays);
   }
 
+  /// Bersihkan presence room yang basi di server (fire-and-forget).
+  Future<void> cleanupStalePresence({int minAgeMinutes = 10}) {
+    return _auth.cleanupStalePresence(minAgeMinutes: minAgeMinutes);
+  }
+
   /// Ambil profil user lain by UID.
   Future<UserModel?> getOtherProfile(String uid) => _auth.getProfileById(uid);
-  /// Sign up dengan email — membuat akun Supabase baru.
-  /// Setelah ini user perlu verifikasi email, lalu registerProfile().
-  Future<void> signUpWithEmail({
+
+  /// Sign up dengan email — membuat akun Supabase baru (butuh verifikasi
+  /// email). Return true bila session sudah aktif (auto-confirm), false bila
+  /// perlu verifikasi OTP dulu.
+  Future<bool> signUpWithEmail({
     required String email,
     required String password,
     required String nickname,
@@ -365,8 +439,52 @@ class AuthProvider extends ChangeNotifier {
     required String city,
   }) async {
     await _auth.signUpWithEmail(email, password);
-    // Profile akan di-save setelah verifikasi email + login
+    final user = _auth.currentUser;
+    // Kalau email sudah auto-confirm → session aktif, langsung daftarkan profil.
+    if (user != null && user.emailConfirmedAt != null) {
+      await registerProfile(
+        nickname: nickname,
+        gender: gender,
+        age: age,
+        country: country,
+        city: city,
+      );
+      return true;
+    }
+    return false;
   }
+
+  /// Verifikasi kode OTP email, lalu daftarkan profil. Return true bila sukses.
+  Future<bool> verifyEmailAndRegister({
+    required String email,
+    required String token,
+    required String nickname,
+    required String gender,
+    required int age,
+    required String country,
+    required String city,
+  }) async {
+    final ok = await _auth.verifyEmailOtp(email, token);
+    if (!ok) return false;
+    await registerProfile(
+      nickname: nickname,
+      gender: gender,
+      age: age,
+      country: country,
+      city: city,
+    );
+    return true;
+  }
+
+  /// Email user aktif sudah terverifikasi?
+  bool get emailConfirmed => _auth.emailConfirmed;
+
+  /// Boleh pakai fitur point berbayar? (harus registered + email verified)
+  bool get canUsePaid =>
+      (profile?.isRegistered ?? false) && _auth.emailConfirmed;
+
+  /// Kirim ulang kode verifikasi OTP.
+  Future<void> resendEmailOtp(String email) => _auth.resendEmailOtp(email);
 
   /// Login dengan email + password.
   Future<void> signInWithEmail(String email, String password) async {
@@ -396,7 +514,9 @@ class AuthProvider extends ChangeNotifier {
       final res = await pointsService.dailyLoginBonus();
       final newPoints = (res['points'] as num?)?.toInt() ?? old;
       _profile = _profile?.copyWith(points: newPoints);
-      debugPrint('[AUTH] dailyLoginBonus: $old -> $newPoints (streak ${res['streak']})');
+      debugPrint(
+        '[AUTH] dailyLoginBonus: $old -> $newPoints (streak ${res['streak']})',
+      );
       // Toast akan ditampilkan oleh PointsProvider di screen yang aktif
       // via checkAndShowOnlineToast / PointsProvider listener
     } catch (e) {
@@ -434,6 +554,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> resetPassword(String newPassword) async {
     _idleTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _locationTimer?.cancel();
     _isIdle = false;
     _manualSignOut = true;
     try {
@@ -475,13 +596,16 @@ class AuthProvider extends ChangeNotifier {
       // lagi ada di auth.users → insert profile gagal foreign key.
       // Deteksi & buat user anon baru, lalu retry sekali.
       final msg = e.toString().toLowerCase();
-      final userInvalid = msg.contains('23503') ||
+      final userInvalid =
+          msg.contains('23503') ||
           msg.contains('foreign key') ||
           msg.contains('violates') ||
           msg.contains('row-level security') ||
           msg.contains('42501');
       if (userInvalid) {
-        debugPrint('[AUTH] registerProfile failed (stale anon), refreshing session: $e');
+        debugPrint(
+          '[AUTH] registerProfile failed (stale anon), refreshing session: $e',
+        );
         _manualSignOut = true;
         try {
           await _auth.signOut();
@@ -501,14 +625,25 @@ class AuthProvider extends ChangeNotifier {
         rethrow;
       }
     }
-    debugPrint('[AUTH] registerProfile DONE: ${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
+    debugPrint(
+      '[AUTH] registerProfile DONE: ${_profile?.uid} inst=$instanceId hasListeners=$hasListeners',
+    );
     if (!_disposed) notifyListeners();
-    debugPrint('[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners');
+    debugPrint(
+      '[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners',
+    );
     resetIdleTimer();
     updateFcmToken();
+    // Ikat referrer (bila ada) — sekali saja, setelah profil terdaftar.
+    _bindAndClaimReferrer();
   }
 
-  Future<void> updateProfile({int? age, String? country, String? city, String? nickname}) async {
+  Future<void> updateProfile({
+    int? age,
+    String? country,
+    String? city,
+    String? nickname,
+  }) async {
     await _auth.updateProfile(
       age: age,
       country: country,
@@ -544,6 +679,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       _idleTimer?.cancel();
       _heartbeatTimer?.cancel();
+      _locationTimer?.cancel();
       _profileSub?.cancel();
       _isIdle = false;
       await _auth.goOffline();
@@ -555,10 +691,38 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// True saat sesi aktif adalah akun dummy (bukan admin).
+  bool get dummySessionActive => _auth.dummySessionActive;
+
+  /// Pindah ke akun dummy (swap sesi tanpa login manual). Profile di-reload
+  /// supaya seluruh UI (lobby, profil) langsung memakai akun dummy.
+  Future<void> becomeDummy(String uid) async {
+    await _auth.becomeDummy(uid);
+    await reloadProfile();
+  }
+
+  /// Kembali ke akun admin dari sesi dummy. Return false jika token admin
+  /// kedaluwarsa (perlu login manual).
+  Future<bool> backToAdmin() async {
+    final ok = await _auth.backToAdmin();
+    await reloadProfile();
+    return ok;
+  }
+
+  /// Reload profile untuk user sesi aktif sekarang (dipakai setelah swap
+  /// sesi dummy ⇄ admin, karena event signedIn tidak di-trigger manual).
+  Future<void> reloadProfile() async {
+    _profileSub?.cancel();
+    _profile = await _auth.getProfile();
+    _listenProfile();
+    if (!_disposed) notifyListeners();
+  }
+
   /// Call on any user interaction (tap, scroll, typing...).
   /// If user was idle, go back online. Resets the idle countdown.
   void notifyActivity() {
     if (_idleTimer == null) return; // not signed in yet
+    if (dummySessionActive) return; // status dummy dikontrol admin panel
     if (_invisibleEnabled) return; // invisible → jangan pernah kembali online
     if (_isIdle) {
       _isIdle = false;
@@ -571,6 +735,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void resetIdleTimer() {
+    if (dummySessionActive) return; // status dummy dikontrol admin panel
     _isIdle = false;
     _idleTimer?.cancel();
     if (_invisibleEnabled) return;
@@ -579,6 +744,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _becomeIdle() async {
     if (_disposed) return;
+    if (dummySessionActive) return; // status dummy dikontrol admin panel
     if (_invisibleEnabled) return;
     _isIdle = true;
     await _auth.goIdle();
@@ -588,6 +754,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> goOnline() async {
     if (_disposed) return;
+    if (dummySessionActive) return; // status dummy dikontrol admin panel
     if (_invisibleEnabled) return; // invisible → jangan pernah online
     await _auth.goOnline();
     _profile = _profile?.copyWith(status: 'online');
@@ -599,6 +766,7 @@ class AuthProvider extends ChangeNotifier {
   /// User tetap tampil di menu online sebagai idle, tidak hilang.
   Future<void> goIdle() async {
     if (_disposed) return;
+    if (dummySessionActive) return; // status dummy dikontrol admin panel
     if (_invisibleEnabled) return; // invisible → tetap offline
     _idleTimer?.cancel();
     _isIdle = true;
@@ -626,6 +794,79 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
+  /// Update lokasi berkala (5 menit) saat app aktif — pin di peta admin
+  /// dan daftar orang sekitar selalu segar. GPS dipakai kalau izin sudah
+  /// ada, else perkiraan IP. Gagal diam-diam (tidak mengganggu apapun).
+  void _startLocationPing() {
+    _locationTimer?.cancel();
+    _locationTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (_disposed || dummySessionActive) return;
+      safeUnawaited(LocationService().updateMyLocation());
+    });
+  }
+
+  /// Minta izin lokasi saat app start (dialog native) lalu update lokasi.
+  /// Dijalankan di semua jalur login — termasuk session anonymous yang
+  /// auto-restore (di situ LoginScreen tidak pernah tampil). Kalau izin
+  /// sudah pernah ditentukan (mis. cuma "kira-kira"), Android tidak
+  /// menampilkan dialog lagi → arahkan user ke Pengaturan sekali saja.
+  Future<void> _initLocation() async {
+    try {
+      final loc = LocationService();
+      await loc.requestPermission();
+      // Kalau lokasi TIDAK tersimpan sama sekali (GPS & IP gagal) →
+      // besar kemungkinan izin presisi (FINE) belum diberikan dan
+      // Android tidak mau menampilkan dialog lagi → arahkan ke Settings.
+      final source = await loc.updateMyLocation();
+      if (source == null) {
+        final prefs = await SharedPreferences.getInstance();
+        final prompted = prefs.getBool('location_settings_prompted') ?? false;
+        if (!prompted && !_disposed) {
+          await prefs.setBool('location_settings_prompted', true);
+          _promptLocationSettings();
+        }
+      }
+    } catch (e) {
+      debugPrint('[AUTH] _initLocation error: $e');
+    }
+  }
+
+  /// Dialog sekali: arahkan ke Pengaturan kalau lokasi presisi mati.
+  void _promptLocationSettings() {
+    final ctx = navigatorKey.currentContext;
+    if (ctx == null) return;
+    final s = ctx.read<LocaleProvider>().s;
+    showDialog(
+      context: ctx,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(
+          s.locPrecisionTitle,
+          style: const TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          s.locPrecisionOff,
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(dctx);
+              await LocationService().openSettings();
+              // Setelah balik dari Settings, coba simpan lokasi lagi.
+              await LocationService().updateMyLocation();
+            },
+            child: Text(s.locOpenSettings),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _listenProfile() {
     _profileSub?.cancel();
     _profileSub = _auth.onMyProfileUpdates().listen((updated) {
@@ -640,6 +881,7 @@ class AuthProvider extends ChangeNotifier {
     _disposed = true;
     _idleTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _locationTimer?.cancel();
     _profileSub?.cancel();
     _authStateSub?.cancel();
     super.dispose();

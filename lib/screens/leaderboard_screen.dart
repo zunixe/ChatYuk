@@ -97,7 +97,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 const Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
                 const SizedBox(width: 6),
                 Text(_scope == 'weekly' ? s.lbWeeklyHint : s.lbAllTimeHint,
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                    style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -158,7 +158,7 @@ class _RankTile extends StatelessWidget {
         ],
       ),
       trailing: Text('$score',
-          style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w800, fontSize: 15)),
+          style: AppText.bodyStrong.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w800)),
     );
   }
 }
@@ -169,12 +169,12 @@ class _RankBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (rank == 1) return const Text('🥇', style: TextStyle(fontSize: 18), textAlign: TextAlign.center);
-    if (rank == 2) return const Text('🥈', style: TextStyle(fontSize: 18), textAlign: TextAlign.center);
-    if (rank == 3) return const Text('🥉', style: TextStyle(fontSize: 18), textAlign: TextAlign.center);
+    if (rank == 1) return const Text('🥇', style: TextStyle(fontSize: AppGlyph.sm), textAlign: TextAlign.center);
+    if (rank == 2) return const Text('🥈', style: TextStyle(fontSize: AppGlyph.sm), textAlign: TextAlign.center);
+    if (rank == 3) return const Text('🥉', style: TextStyle(fontSize: AppGlyph.sm), textAlign: TextAlign.center);
     return Text('$rank',
         textAlign: TextAlign.center,
-        style: const TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w700, fontSize: 13));
+        style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w700));
   }
 }
 
@@ -237,7 +237,7 @@ class _MyRankBar extends StatelessWidget {
             ),
           ),
           Text('$score',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+              style: AppText.titleEmphasis.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
         ],
       ),
     );

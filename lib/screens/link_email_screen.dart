@@ -97,7 +97,7 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
                     Text(auth.profile?.nickname ?? '', style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
                   ]),
                   const SizedBox(height: 6),
-                  Text(s.msgAnonymousWarning, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  Text(s.msgAnonymousWarning, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ],
               ),
             ),
@@ -155,7 +155,7 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
               icon: _loading
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.security),
-              label: Text(s.btnSecureAccount, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              label: Text(s.btnSecureAccount, style: AppText.button),
             ),
           ],
         ),
