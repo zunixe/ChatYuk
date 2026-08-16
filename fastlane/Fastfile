@@ -1,0 +1,33 @@
+# Fastfile untuk ChatYuk — build & upload AAB ke Google Play.
+# Kebutuhan:
+#   - Service account JSON: fastlane/google-play.json (jangan commit)
+#   - Plugin: `fastlane add_plugin fastlane-plugin-json_key` (opsional)
+#
+# Pemakaian:
+#   fastlane play track:alpha     -> build AAB + upload ke track alpha (pengujian tertutup)
+#   fastlane play track:production-> build AAB + upload ke track production (release)
+
+default_platform(:android)
+
+platform :android do
+  desc "Build AAB flavor play (obfuscated) lalu upload ke track"
+  lane :play do |options|
+    track = options[:track] || "alpha"
+
+    gradle(
+      task: "bundlePlayRelease",
+      project_dir: "android"
+    )
+
+    upload_to_play_store(
+      package_name: "com.chatyuk.chatyuk",
+      track: track,
+      aab: "build/app/outputs/bundle/playRelease/app-play-release.aab",
+      json_key: "fastlane/google-play.json",
+      release_status: "completed",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end

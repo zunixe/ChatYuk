@@ -113,8 +113,8 @@ class _MissionsScreenState extends State<MissionsScreen>
                   indicatorWeight: 3,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white70,
-                  labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                  unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                  labelStyle: AppText.bodyStrong,
+                  unselectedLabelStyle: AppText.body.copyWith(fontWeight: FontWeight.w500),
                   tabs: [
                     _tabWithBadge(s.missionsDaily, 0),
                     _tabWithBadge(s.missionsWeekly, claimableCount),
@@ -166,7 +166,7 @@ class _MissionsScreenState extends State<MissionsScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(color: AppTheme.danger, borderRadius: BorderRadius.circular(10)),
-              child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+              child: Text('$badge', style: AppText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
             ),
           ],
         ],
@@ -233,10 +233,10 @@ class _Header extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(s.missionsMyPoints,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                      style: AppText.bodySmall.copyWith(color: Colors.white70, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 2),
                   Text('$points',
-                      style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800, height: 1)),
+                      style: AppText.display.copyWith(color: Colors.white, height: 1)),
                 ],
               ),
               const Spacer(),
@@ -249,10 +249,10 @@ class _Header extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      const Text('🔥', style: TextStyle(fontSize: 18)),
+                      const Text('🔥', style: TextStyle(fontSize: AppGlyph.sm)),
                       const SizedBox(height: 2),
                       Text('$streak',
-                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, height: 1)),
+                          style: AppText.bodyStrong.copyWith(color: Colors.white, fontWeight: FontWeight.w800, height: 1)),
                     ],
                   ),
                 ),
@@ -301,7 +301,7 @@ class _ProgressBanner extends StatelessWidget {
                   ),
                 ),
                 Text('${(pct * 100).round()}%',
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+                    style: AppText.micro.copyWith(fontWeight: FontWeight.w800)),
               ],
             ),
           ),
@@ -312,10 +312,10 @@ class _ProgressBanner extends StatelessWidget {
               children: [
                 Text(
                   allDone ? s.missionsAllDone : s.missionsProgress(done, total),
-                  style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 14),
+                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
-                Text(hint, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                Text(hint, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -442,10 +442,8 @@ class _MissionCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(_label(s, key),
-                              style: TextStyle(
-                                color: AppTheme.textPrimary,
+                              style: AppText.bodyStrong.copyWith(
                                 fontWeight: FontWeight.w700,
-                                fontSize: 14,
                                 decoration: done ? TextDecoration.none : null,
                               )),
                         ),
@@ -474,13 +472,13 @@ class _MissionCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Text('$current/$target',
-                              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w700)),
+                              style: AppText.caption.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w700)),
                         ],
                       ),
                     ] else if (claimable) ...[
                       const SizedBox(height: 4),
                       Text(s.missionsReadyClaim,
-                          style: const TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+                          style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600)),
                     ],
                   ],
                 ),
@@ -508,7 +506,7 @@ class _MissionCard extends StatelessWidget {
         ),
         child: isClaiming
             ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Text(s.missionClaim, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+            : Text(s.missionClaim, style: AppText.label.copyWith(letterSpacing: 0, fontWeight: FontWeight.w800)),
       );
     }
     if (done) {
@@ -546,9 +544,8 @@ class _RewardChip extends StatelessWidget {
               size: 12, color: done ? AppTheme.online : const Color(0xFFF57C00)),
           const SizedBox(width: 3),
           Text('+$reward',
-              style: TextStyle(
+              style: AppText.caption.copyWith(
                 color: done ? AppTheme.online : const Color(0xFFE65100),
-                fontSize: 11.5,
                 fontWeight: FontWeight.w800,
               )),
         ],

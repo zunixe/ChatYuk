@@ -28,7 +28,7 @@ class EmojiPickerSheet {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 10),
-            Text(s.btnEmoji, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+            Text(s.btnEmoji, style: AppText.bodyStrong),
             const SizedBox(height: 4),
             Flexible(
               child: GridView.builder(
@@ -43,7 +43,7 @@ class EmojiPickerSheet {
                 itemBuilder: (_, i) => InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () => insertAtCursor(controller, _emojis[i]),
-                  child: Center(child: Text(_emojis[i], style: const TextStyle(fontSize: 22))),
+                  child: Center(child: Text(_emojis[i], style: const TextStyle(fontSize: AppGlyph.md))),
                 ),
               ),
             ),

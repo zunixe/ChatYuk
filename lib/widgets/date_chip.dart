@@ -41,7 +41,7 @@ class DateChip extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.w500),
+          style: AppText.label.copyWith(color: AppTheme.textSecondary, letterSpacing: 0, fontWeight: FontWeight.w500),
         ),
       ),
     );

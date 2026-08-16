@@ -68,6 +68,22 @@ android {
             )
         }
     }
+
+    // Flavor distribusi: apkpure (default, fitur penuh) vs play (kepatuhan Play).
+    // applicationId berbeda agar bisa terpasang bersamaan untuk pengujian.
+    flavorDimensions += "store"
+    productFlavors {
+        create("apkpure") {
+            dimension = "store"
+            applicationId = "com.chatyuk.chatyuk"
+            versionNameSuffix = "-apkpure"
+        }
+        create("play") {
+            dimension = "store"
+            applicationId = "com.chatyuk.chatyuk"
+            versionNameSuffix = "-play"
+        }
+    }
 }
 
 flutter {

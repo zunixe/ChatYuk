@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../config/gifts.dart';
 import '../models/message_model.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
@@ -122,6 +123,8 @@ class MessageBubble extends StatelessWidget {
   final Future<void> Function(String messageId)? onRetryImage;
   // Admin monitor: view-once yang sudah expired tetap bisa dilihat admin.
   final bool isAdminView;
+  // Room chat pakai tabel 'messages' untuk clear view-once.
+  final bool isRoom;
   const MessageBubble({
     super.key,
     required this.msg,
@@ -132,6 +135,7 @@ class MessageBubble extends StatelessWidget {
     this.isImageDeferred = false,
     this.onRetryImage,
     this.isAdminView = false,
+    this.isRoom = false,
   });
 
   @override
@@ -149,7 +153,9 @@ class MessageBubble extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isMe ? AppTheme.primary.withValues(alpha: 0.25) : AppTheme.bgInput,
+                color: msg.type == 'coin'
+                    ? const Color(0xFFFFF3C4)
+                    : (isMe ? AppTheme.primary.withValues(alpha: 0.25) : AppTheme.bgInput),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),
@@ -183,8 +189,8 @@ class MessageBubble extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(timeStr, style: const TextStyle(color: Colors.white, fontSize: 10)),
-                                  if (isMe) ...[
+                                  Text(timeStr, style: AppText.micro.copyWith(color: Colors.white)),
+                                   if (isMe) ...[
                                     const SizedBox(width: 3),
                                     Icon(
                                       isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
@@ -211,6 +217,7 @@ class MessageBubble extends StatelessWidget {
                           messageId: msg.id,
                           isExpired: msg.type == 'view_once_expired',
                           isAdminView: isAdminView,
+                          isRoom: isRoom,
                         ),
                         Positioned(
                           right: 6,
@@ -224,7 +231,7 @@ class MessageBubble extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(timeStr, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                                Text(timeStr, style: AppText.micro.copyWith(color: Colors.white)),
                                 if (isMe) ...[
                                   const SizedBox(width: 3),
                                   Icon(
@@ -239,12 +246,54 @@ class MessageBubble extends StatelessWidget {
                         ),
                       ],
                     )
+                  else if (msg.type == 'coin')
+                    Builder(builder: (context) {
+                      final s = context.read<LocaleProvider>().s;
+                      final amount = int.tryParse(msg.text) ?? 0;
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('🪙', style: TextStyle(fontSize: AppGlyph.sm)),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              isMe ? s.coinBubbleSent(amount) : s.coinBubbleReceived(amount),
+                              style: AppText.bodyStrong.copyWith(color: const Color(0xFFB8860B)),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                        ],
+                      );
+                    })
+                  else if (msg.type == 'gift')
+                    Builder(builder: (context) {
+                      final s = context.read<LocaleProvider>().s;
+                      final g = giftById(msg.text);
+                      final emoji = g?.emoji ?? '🎁';
+                      final name = g == null ? '' : (s.isId ? g.nameId : g.nameEn);
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(emoji, style: const TextStyle(fontSize: AppGlyph.md)),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              isMe ? s.giftBubbleSent(name) : s.giftBubbleReceived(name),
+                              style: AppText.bodyStrong.copyWith(color: const Color(0xFFB8860B)),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                        ],
+                      );
+                    })
                   else
                     MessageTextWithTime(
                       text: msg.text,
                       timeStr: timeStr,
-                      textStyle: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, height: 1.2),
-                      timeStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                      textStyle: AppText.body,
+                      timeStyle: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400),
                       alignRight: isMe,
                       trailing: isMe
                           ? Icon(
@@ -284,7 +333,7 @@ class DeferredImage extends StatelessWidget {
           children: [
             Icon(Icons.refresh, color: AppTheme.textSecondary, size: 22),
             const SizedBox(height: 4),
-            Text(s.msgPhotoTapToLoad, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+            Text(s.msgPhotoTapToLoad, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
           ],
         ),
       ),
@@ -345,7 +394,7 @@ class _MessageImageState extends State<MessageImage> {
         width: 200, height: 200,
         color: AppTheme.bgInput,
         alignment: Alignment.center,
-        child: Text(s.msgPhotoExpired, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        child: Text(s.msgPhotoExpired, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
       );
     }
     final aspect = decoded.width / decoded.height;
@@ -365,7 +414,7 @@ class _MessageImageState extends State<MessageImage> {
             width: 200, height: 200,
             color: AppTheme.bgInput,
             alignment: Alignment.center,
-            child: Text(s.msgPhotoExpired, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            child: Text(s.msgPhotoExpired, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
           ),
         ),
       ),
@@ -415,6 +464,8 @@ class ViewOnceImage extends StatefulWidget {
   final bool isExpired;
   // Admin monitor: lewati kartu "expired" — foto tetap bisa dilihat.
   final bool isAdminView;
+  // Room chat pakai tabel 'messages', private pakai 'private_messages'.
+  final bool isRoom;
   const ViewOnceImage({
     super.key,
     required this.imageData,
@@ -423,6 +474,7 @@ class ViewOnceImage extends StatefulWidget {
     this.messageId,
     this.isExpired = false,
     this.isAdminView = false,
+    this.isRoom = false,
   });
 
   @override
@@ -588,7 +640,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     final id = widget.messageId;
     if (id == null || id.startsWith('pending-')) return;
     try {
-      await context.read<ChatProvider>().clearViewOnceImage(id);
+      await context.read<ChatProvider>().clearViewOnceImage(id, isRoom: widget.isRoom);
     } catch (_) {}
   }
 
@@ -618,7 +670,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
                   const SizedBox(width: 3),
-                  Text(s.msgViewOnce, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                  Text(s.msgViewOnce, style: AppText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
                 ]),
               ),
             ),
@@ -700,7 +752,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                       const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
                       const SizedBox(width: 3),
                       Text(s.msgViewOnce,
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                        style: AppText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -752,9 +804,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               const SizedBox(height: 10),
               Text(
                 s.viewOnceTitle,
-                style: const TextStyle(
+                style: AppText.bodySmall.copyWith(
                   color: Colors.white,
-                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -762,9 +813,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               Text(
                 s.viewOnceTap,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: AppText.caption.copyWith(
                   color: Colors.white.withValues(alpha: 0.85),
-                  fontSize: 11,
                 ),
               ),
               const SizedBox(height: 10),
@@ -776,9 +826,9 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                 ),
                 child: Text(
                   s.btnView,
-                  style: const TextStyle(
-                    color: Color(0xFF1E88E5),
-                    fontSize: 12,
+                  style: AppText.label.copyWith(
+                    color: const Color(0xFF1E88E5),
+                    letterSpacing: 0,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -837,7 +887,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                         ValueListenableBuilder<int>(
                           valueListenable: _tick.countdown,
                           builder: (_, v, _) => Text('${v}s',
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                            style: AppText.label.copyWith(color: Colors.white, letterSpacing: 0, fontWeight: FontWeight.w700)),
                         ),
                       ],
                     ),
@@ -967,8 +1017,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                         const Icon(Icons.timer, color: Colors.white, size: 16),
                         const SizedBox(width: 4),
                         Text('${secs}s',
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                          style: AppText.bodyStrong.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
                       ],
                     ),
                   ),
@@ -1042,9 +1091,9 @@ class ViewOnceLockedCard extends StatelessWidget {
                   Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: AppText.label.copyWith(
                       color: Colors.white,
-                      fontSize: 12,
+                      letterSpacing: 0,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1052,9 +1101,9 @@ class ViewOnceLockedCard extends StatelessWidget {
                   Text(
                     hint,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: AppText.micro.copyWith(
                       color: Colors.white.withValues(alpha: 0.75),
-                      fontSize: 10.5,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ],

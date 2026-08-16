@@ -43,6 +43,11 @@ app.*.map.json
 *firebase-adminsdk*
 google-services.json
 
+# fastlane — service account Google Play (rahasia)
+fastlane/google-play.json
+fastlane/report.xml
+fastlane/README.md
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
@@ -57,3 +62,16 @@ key.properties
 
 # Konfigurasi lokal (berisi secret) — jangan di-push
 CONFIG.md
+.env
+.env.*
+!.env.example
+
+# Artefak debug sesi (screenshot, dump console, dll)
+apkpure-*.yml
+apkpure-*.png
+apkpure-*.txt
+console-*.txt
+release-notes-overlay.png
+sql-result.png
+*.jpeg
+xiaomi15_profil.png

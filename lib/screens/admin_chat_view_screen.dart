@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
+import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/photo_cache.dart';
 import '../services/storage_photo_service.dart';
@@ -18,7 +19,15 @@ import '../widgets/private_chat_message.dart';
 class AdminChatViewScreen extends StatefulWidget {
   final String chatId;
   final String chatLabel;
-  const AdminChatViewScreen({super.key, required this.chatId, required this.chatLabel});
+
+  /// Urutan peserta sesuai judul (nama pertama = bubble kiri, kedua = kanan).
+  final List<String> participantOrder;
+  const AdminChatViewScreen({
+    super.key,
+    required this.chatId,
+    required this.chatLabel,
+    this.participantOrder = const [],
+  });
 
   @override
   State<AdminChatViewScreen> createState() => _AdminChatViewScreenState();
@@ -30,6 +39,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   String? _error;
   String? _leftUid;
   String get _chatKey => cacheKeyFor(widget.chatId);
+  bool _markedRead = false;
   late Timer _pollTimer;
   RealtimeChannel? _channel;
   final _photoLoading = <String>{};
@@ -103,10 +113,37 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     for (final m in list) { if (!senders.contains(m.senderId)) senders.add(m.senderId); }
     setState(() {
       _msgs = list;
-      _leftUid = senders.isNotEmpty ? senders.first : null;
+      _leftUid = _computeLeftUid(senders);
       _error = null;
     });
+    _markDummyRead();
     _loadPhotos();
+  }
+
+  /// Sisi kiri = peserta pertama sesuai urutan judul (mis. judul
+  /// "A & B" → bubble A di kiri, B di kanan). Konsisten, tidak tergantung
+  /// siapa yang terakhir kirim pesan. Fallback ke chatId (di-sort) bila
+  /// urutan peserta tidak tersedia.
+  String? _computeLeftUid(List<String> senders) {
+    if (widget.participantOrder.length >= 2) return widget.participantOrder.first;
+    final parts = widget.chatId.split('_');
+    if (parts.length == 2) return parts.first;
+    return senders.isNotEmpty ? senders.first : null;
+  }
+
+  /// Tandai chat sudah dibaca atas nama dummy/pemilik akun (bukan lawan
+  /// bicara) — badge unread di tab admin dummy hilang setelah monitor dibuka.
+  /// Sekali per sesi buka screen; poll 5 detik tidak menandai ulang.
+  void _markDummyRead() {
+    if (_markedRead) return;
+    final left = _leftUid;
+    if (left == null) return;
+    final parts = widget.chatId.split('_');
+    if (parts.length != 2) return;
+    final dummyUid = parts[0] == left ? parts[1] : parts[0];
+    if (dummyUid == left) return;
+    _markedRead = true;
+    context.read<ChatProvider>().markAsReadAdmin(widget.chatId, dummyUid);
   }
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
@@ -277,7 +314,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
           ),
         ),
         title: Text(widget.chatLabel,
-          style: const TextStyle(color: Colors.white, fontSize: 16),
+          style: AppText.titleEmphasis.copyWith(color: Colors.white),
           overflow: TextOverflow.ellipsis),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -291,7 +328,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
               padding: const EdgeInsets.symmetric(vertical: 6),
               color: AppTheme.danger.withValues(alpha: 0.1),
               child: Text(s.adminChatError, textAlign: TextAlign.center,
-                style: const TextStyle(color: AppTheme.danger, fontSize: 12)),
+                style: AppText.bodySmall.copyWith(color: AppTheme.danger)),
             ),
           Expanded(
             child: _msgs.isEmpty && !_loading

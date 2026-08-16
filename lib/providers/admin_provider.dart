@@ -43,9 +43,23 @@ class AdminProvider extends ChangeNotifier {
   }
 
   /// Ambil detail data card Overview (list user/room per kategori).
+  /// Di-cache 60 detik: peta user & bottom sheet stat memanggil ini di
+  /// saat bersamaan — hindari double fetch payload besar.
+  Map<String, dynamic>? _detailCache;
+  DateTime? _detailCacheAt;
+  static const _detailTtl = Duration(seconds: 60);
+
   Future<Map<String, dynamic>> fetchStatsDetail() async {
+    if (_detailCache != null &&
+        _detailCacheAt != null &&
+        DateTime.now().difference(_detailCacheAt!) < _detailTtl) {
+      return _detailCache!;
+    }
     try {
-      return await _service.getStatsDetail();
+      final d = await _service.getStatsDetail();
+      _detailCache = d;
+      _detailCacheAt = DateTime.now();
+      return d;
     } catch (e) {
       debugPrint('[ADMIN] fetchStatsDetail error: $e');
       return {};
@@ -141,7 +155,10 @@ class AdminProvider extends ChangeNotifier {
     if (_chatsFetchingMore || !_chatsHasMore || _chatsLoading) return;
     _chatsFetchingMore = true;
     try {
-      final res = await _service.listChats(limit: chatPageSize, offset: _chats.length);
+      final res = await _service.listChats(
+        limit: chatPageSize,
+        offset: _chats.length,
+      );
       final more = List<Map<String, dynamic>>.from(res['items'] ?? const []);
       _chatsTotal = (res['total'] as num?)?.toInt() ?? _chatsTotal;
       _chats = [..._chats, ...more];
@@ -181,7 +198,11 @@ class AdminProvider extends ChangeNotifier {
     _chatMessagesHasMore = true;
     if (!_disposed) notifyListeners();
     try {
-      _chatMessages = await _service.getChatMessages(chatId, limit: messagePageSize, offset: 0);
+      _chatMessages = await _service.getChatMessages(
+        chatId,
+        limit: messagePageSize,
+        offset: 0,
+      );
       _chatMessagesHasMore = _chatMessages.length >= messagePageSize;
       return true;
     } catch (e) {
@@ -215,7 +236,11 @@ class AdminProvider extends ChangeNotifier {
   /// dimuat supaya scroll history tidak hilang saat ada pesan baru masuk.
   Future<void> refreshChatMessages(String chatId) async {
     try {
-      final latest = await _service.getChatMessages(chatId, limit: messagePageSize, offset: 0);
+      final latest = await _service.getChatMessages(
+        chatId,
+        limit: messagePageSize,
+        offset: 0,
+      );
       final knownIds = _chatMessages.map((m) => '${m['id']}').toSet();
       final merged = List<Map<String, dynamic>>.from(_chatMessages);
       // Pesan baru (belum ada) ditambahkan di depan (terbaru duluan).

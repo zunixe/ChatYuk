@@ -4,6 +4,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/points_service.dart';
+import '../config/app_flavor.dart';
+import '../config/theme.dart';
 
 class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   final PointsService _service = PointsService(Supabase.instance.client);
@@ -19,12 +21,92 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _onboardingShown = false;
   bool _enabled = true;
   StreamSubscription<bool>? _enabledSub;
+  StreamSubscription<int>? _pointsSub;
+  StreamSubscription<AuthState>? _authSub;
 
   int get points => _points;
-  bool get enabled => _enabled;
+
+  // Mode development: admin (developer) tetap melihat & bisa menguji sistem
+  // koin walau app_settings.points_enabled = false di production.
+  bool _adminDev = false;
+
+  /// Sistem koin aktif untuk user ini (nilai server ATAU admin/developer).
+  bool get enabled => _enabled || _adminDev;
   int get loginStreak => _loginStreak;
   int _loginStreak = 0;
   int _lastStreakBonus = 0;
+
+  // Wallet 3 bucket (Fase 1). _points tetap = total (kompat UI lama).
+  int _bonusBalance = 0;
+  int _topupBalance = 0;
+  int _earnedBalance = 0;
+  int get bonusBalance => _bonusBalance;
+  int get topupBalance => _topupBalance;
+  int get earnedBalance => _earnedBalance;
+  int get withdrawableBalance => _earnedBalance;
+
+  /// Saldo "pro" (topup + earned) — koin yang bisa dipakai untuk fitur
+  /// berbayar (kirim koin, gift, room private, subscribe, buka foto).
+  int get paidBalance => _topupBalance + _earnedBalance;
+
+  // Biaya buka foto terkunci (dari app_settings; default sesuai server).
+  int _photoUnlockOnce = 5;
+  int _photoUnlockPerm = 20;
+  int get photoUnlockOnce => _photoUnlockOnce;
+  int get photoUnlockPerm => _photoUnlockPerm;
+
+  // Harga room private (dual pricing, dari server).
+  int _roomCreatePaid = 100;
+  int _roomCreatePwPaid = 150;
+  int _roomJoinPaid = 5;
+  int _roomExtendPaid = 50;
+  int _bonusMultiplier = 3;
+  int get roomCreatePaid => _roomCreatePaid;
+  int get roomCreatePwPaid => _roomCreatePwPaid;
+  int get roomJoinPaid => _roomJoinPaid;
+  int get roomExtendPaid => _roomExtendPaid;
+  int get bonusMultiplier => _bonusMultiplier;
+
+  /// Ambil harga room dari server (dipanggil saat buka lobby).
+  Future<void> refreshRoomPricing() async {
+    try {
+      final p = await _service.roomPricing();
+      _roomCreatePaid = (p['create_paid'] as num?)?.toInt() ?? _roomCreatePaid;
+      _roomCreatePwPaid = (p['create_pw_paid'] as num?)?.toInt() ?? _roomCreatePwPaid;
+      _roomJoinPaid = (p['join_paid'] as num?)?.toInt() ?? _roomJoinPaid;
+      _roomExtendPaid = (p['extend_paid'] as num?)?.toInt() ?? _roomExtendPaid;
+      _bonusMultiplier = (p['multiplier'] as num?)?.toInt() ?? _bonusMultiplier;
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      debugPrint('[POINTS] refreshRoomPricing error: $e');
+    }
+  }
+
+  /// Ambil nominal biaya foto dari server (dipanggil saat buka profil orang).
+  Future<void> refreshPhotoCosts() async {
+    try {
+      final c = await _service.photoCosts();
+      _photoUnlockOnce = c.$1;
+      _photoUnlockPerm = c.$2;
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      debugPrint('[POINTS] refreshPhotoCosts error: $e');
+    }
+  }
+
+  /// Ambil saldo wallet 3 bucket dari server (RPC get_wallet).
+  Future<void> refreshWallet() async {
+    try {
+      final w = await _service.getWallet();
+      _bonusBalance = (w['bonus'] as num?)?.toInt() ?? 0;
+      _topupBalance = (w['topup'] as num?)?.toInt() ?? 0;
+      _earnedBalance = (w['earned'] as num?)?.toInt() ?? 0;
+      _points = (w['total'] as num?)?.toInt() ?? _points;
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      debugPrint('[POINTS] getWallet error: $e');
+    }
+  }
 
   PointsProvider() {
     // Daftarkan observer + mulai sesi online SEKARANG. Tanpa ini,
@@ -35,6 +117,79 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     _sessionStart = DateTime.now();
     _onlineTickTimer = Timer.periodic(
         const Duration(seconds: 30), (_) => _checkOnlineMilestones());
+    // Sinkron saldo koin via realtime profiles — koin masuk (transfer) &
+    // keluar (belanja) langsung tampil tanpa reload.
+    subscribeOwnPoints();
+    // Saat user berganti (login/logout), stream poin harus di-resubscribe
+    // supaya menunjuk ke row profiles yang benar.
+    try {
+      _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+        if (_disposed) return;
+        _refreshAdminDev();
+        if (state.event == AuthChangeEvent.initialSession ||
+            state.event == AuthChangeEvent.signedIn ||
+            state.event == AuthChangeEvent.tokenRefreshed ||
+            state.event == AuthChangeEvent.signedOut) {
+          subscribeOwnPoints();
+        }
+        // signOut men-teardown semua channel realtime (removeAllChannels) —
+        // watchEnabled harus di-resubscribe ulang, `??=` saja tidak cukup.
+        if (state.event == AuthChangeEvent.signedOut) {
+          _enabledSub?.cancel();
+          _enabledSub = null;
+          subscribeEnabled();
+        }
+      });
+      _refreshAdminDev();
+    } catch (e) {
+      debugPrint('[POINTS] auth listener error: $e');
+    }
+    // Sesi sudah direstore sebelum runApp (Supabase.initialize di main()),
+    // event initialSession bisa ter-emit sebelum listener terdaftar sehingga
+    // adminDev tidak pernah aktif — cek ulang setelah frame pertama.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAdminDev());
+  }
+
+  /// Mode development: admin (developer) selalu bisa menguji sistem koin,
+  /// termasuk saat points_enabled = false di production.
+  void _refreshAdminDev() {
+    final email = Supabase.instance.client.auth.currentUser?.email;
+    final isAdmin = email == AppFlavor.adminEmail;
+    if (isAdmin != _adminDev) {
+      _adminDev = isAdmin;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Realtime saldo koin sendiri. Di-resubscribe saat user berganti (login/
+  /// logout) supaya stream menunjuk ke row yang benar.
+  void subscribeOwnPoints() {
+    try {
+      _pointsSub?.cancel();
+      _pointsSub = _service.watchOwnPoints().listen((value) {
+        if (_disposed) return;
+        // profiles.points = cache total ledger. Saat berubah, tarik rincian
+        // bucket dari server supaya bonus/topup/earned ikut ter-update.
+        final changed = value != _points;
+        _points = value;
+        notifyListeners();
+        if (changed) refreshWallet();
+      });
+      // Ambil rincian awal saat subscribe
+      refreshWallet();
+    } catch (e) {
+      debugPrint('[POINTS] watchOwnPoints error: $e');
+    }
+  }
+
+  /// Saldo koin dari profil saat ini (dipakai sebagai nilai awal sebelum
+  /// realtime event pertama tiba).
+  void syncFromProfile(int value) {
+    if (_disposed) return;
+    if (value != _points) {
+      _points = value;
+      notifyListeners();
+    }
   }
 
   void subscribeEnabled() {
@@ -77,7 +232,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await prefs.setBool(_onboardingKey, true);
   }
 
-  Future<void> showOnboardingIfNeeded(BuildContext context, bool isId) async {
+  Future<void> showOnboardingIfNeeded(BuildContext context, dynamic s) async {
     // Tunggu fetch flag selesai dulu supaya popup tidak muncul saat disabled
     await refreshEnabled();
     if (_onboardingShown || !_enabled) return;
@@ -85,42 +240,115 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     markOnboardingShown();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => Dialog(
         backgroundColor: const Color(0xFF1E1E2E),
-        title: Row(children: [
-          Text(isId ? '🪙 Sistem Poin ChatYuk' : '🪙 ChatYuk Points', style: const TextStyle(color: Colors.white)),
-        ]),
-        content: Column(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _onboardItem('💬', isId ? 'Chat = pakai poin (-1 per pesan)' : 'Chat = uses points (-1 per msg)'),
-            _onboardItem('📅', isId ? 'Login tiap hari = +25 poin' : 'Daily login = +25 points'),
-            _onboardItem('⏱️', isId ? 'Online 60 menit = +45 bonus' : 'Online 60 min = +45 bonus'),
-            _onboardItem('📧', isId ? 'Daftar email = +100 + AMAN!' : 'Register email = +100 + SAFE!'),
-            const SizedBox(height: 4),
-            Text(isId ? '🎉 Mulai dengan 50 poin gratis' : '🎉 Start with 50 free points',
-              style: const TextStyle(color: Colors.amber, fontSize: 13)),
+            // Header gradient elegan.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
+                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Row(children: [
+                Text('🪙', style: TextStyle(fontSize: AppGlyph.lg)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.pointsOnboardTitle, style: AppText.title.copyWith(color: Colors.white)),
+                      Text(s.pointsOnboardSub, style: AppText.caption.copyWith(color: Colors.white70)),
+                    ],
+                  ),
+                ),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Email +100 — paling atas (di bawah header).
+                  _onboardItem('📧', s.pointsOnboardEmail, highlight: true),
+                  _onboardItem('💬', s.pointsOnboardChat),
+                  _onboardItem('📅', s.pointsOnboardDaily),
+                  _onboardItem('⏱️', s.pointsOnboardOnline),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    Text('🎉', style: TextStyle(fontSize: AppGlyph.sm)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(s.pointsOnboardStart,
+                        style: AppText.bodySmall.copyWith(color: Colors.amber)),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2ECC71),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(s.pointsOnboardOk, style: AppText.button),
+                ),
+              ),
+            ),
           ],
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: Text(isId ? 'OK, Paham!' : 'OK, Got it!', style: const TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _onboardItem(String emoji, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+  Widget _onboardItem(String emoji, String text, {bool highlight = false}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: highlight
+            ? const Color(0xFF2ECC71).withValues(alpha: 0.14)
+            : Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: highlight ? const Color(0xFF2ECC71).withValues(alpha: 0.5) : Colors.transparent,
+          width: 1.2,
+        ),
+      ),
       child: Row(children: [
-        Text(emoji, style: const TextStyle(fontSize: 16)),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 13))),
+        Text(emoji, style: TextStyle(fontSize: AppGlyph.md)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(text, style: AppText.body.copyWith(
+            color: highlight ? Colors.white : Colors.white70,
+            fontWeight: highlight ? FontWeight.w700 : FontWeight.w400,
+          )),
+        ),
+        if (highlight)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2ECC71),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text('+100', style: AppText.label.copyWith(color: Colors.white)),
+          ),
       ]),
     );
   }
@@ -200,7 +428,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (msg == null) return;
     final label = labels[msg] ?? '';
     if (label.isNotEmpty) {
-      final pts = {'online_5min': 5, 'online_30min': 10, 'online_60min': 15, 'online_120min': 15};
+      final pts = {'online_5min': 5, 'online_30min': 5, 'online_60min': 5, 'online_120min': 5};
       final p = pts[msg] ?? 0;
       showPointsToast(context, isId ? '+$p Poin — $label' : '+$p Points — $label');
     }
@@ -296,6 +524,35 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Reward koin untuk upload foto galeri slot 1..5 (sekali per slot).
+  /// Return jumlah koin yang bertambah (0 jika tidak dapat).
+  Future<int> rewardPhotoSlot(int slotIndex) async {
+    if (!_enabled) return 0;
+    try {
+      final old = _points;
+      _points = await _service.rewardPhotoSlot(slotIndex);
+      if (!_disposed) notifyListeners();
+      return _points > old ? _points - old : 0;
+    } catch (e) {
+      debugPrint('[POINTS] rewardPhotoSlot error: $e');
+      return 0;
+    }
+  }
+
+  /// Buka foto terkunci. mode 'once' | 'perm'. Return true jika sukses.
+  /// Lempar 'topup' bila koin topup kurang (untuk dialog top up).
+  Future<bool> unlockPhoto(String photoId, String mode) async {
+    try {
+      final res = await _service.unlockPhoto(photoId, mode);
+      if (res['points'] != null) setPoints((res['points'] as num).toInt());
+      return res['ok'] == true;
+    } on PostgrestException catch (e) {
+      if (e.message.contains('Not enough topup')) throw 'topup';
+      debugPrint('[POINTS] unlockPhoto error: $e');
+      rethrow;
+    }
+  }
+
   Future<bool> claimRegisterBonus() async {
     if (!_enabled) return false;
     try {
@@ -307,6 +564,20 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       debugPrint('[POINTS] registerBonus error: $e');
       return false;
     }
+  }
+
+  /// Subscribe creator (paid-only). Lempar exception bila gagal.
+  Future<Map<String, dynamic>> subscribeCreator(String creatorUid, {int periods = 1}) async {
+    final res = await _service.subscribeCreator(creatorUid, periods: periods);
+    await refreshWallet();
+    return res;
+  }
+
+  /// Klaim reward referral-install (sekali per referred).
+  Future<Map<String, dynamic>> claimReferralReward() async {
+    final res = await _service.claimReferralReward();
+    await refreshWallet();
+    return res;
   }
 
   void showPointsToast(BuildContext context, String message, {bool isError = false}) {
@@ -337,10 +608,10 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(isId ? 'Akun anonim: poin bisa hilang kapan saja!' : 'Anonymous account: points can be lost!',
-                style: const TextStyle(color: Colors.orange, fontSize: 12)),
+                style: AppText.bodySmall.copyWith(color: Colors.orange)),
               const SizedBox(height: 8),
               Text(isId ? 'Dapatkan sekarang:' : 'Get now:',
-                style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                style: AppText.bodySmall.copyWith(color: Colors.white70)),
               const SizedBox(height: 6),
               _dialogBtn(ctx, isId, '📧 ${isId ? "Daftar Email" : "Register Email"}', '+100', Colors.green, () {
                 Navigator.of(ctx).pop();
@@ -376,7 +647,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
               }),
               const Divider(color: Colors.white24),
               Text(isId ? 'Gratis besok:' : 'Free tomorrow:',
-                style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                style: AppText.bodySmall.copyWith(color: Colors.white70)),
               const SizedBox(height: 4),
               _dialogAction(isId, '📅 ${isId ? "Login Besok" : "Login Tomorrow"}', '+25', Colors.amber),
               _dialogAction(isId, '📖 ${isId ? "Baca Room" : "Read Room"}', '+2', Colors.grey),
@@ -402,11 +673,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           child: Row(children: [
-            Expanded(child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 13))),
+            Expanded(child: Text(label, style: AppText.bodySmall.copyWith(color: Colors.white))),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-              child: Text(pts, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+              child: Text(pts, style: AppText.label.copyWith(color: color, letterSpacing: 0, fontWeight: FontWeight.w700)),
             ),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
@@ -420,11 +691,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Expanded(child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 13))),
+        Expanded(child: Text(label, style: AppText.bodySmall.copyWith(color: Colors.white))),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-          child: Text(pts, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+          child: Text(pts, style: AppText.label.copyWith(color: color, letterSpacing: 0, fontWeight: FontWeight.w700)),
         ),
       ]),
     );
@@ -434,6 +705,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     _enabledSub?.cancel();
+    _pointsSub?.cancel();
+    _authSub?.cancel();
     _onlineTickTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -487,7 +760,7 @@ class _PointsToastState extends State<_PointsToast> with SingleTickerProviderSta
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
                 ),
-                child: Text(widget.message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                child: Text(widget.message, style: AppText.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
               ),
             ),
           ),

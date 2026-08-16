@@ -51,9 +51,11 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
   }
 
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> chats) {
+    // Sembunyikan chat kosong (belum ada percakapan) dari monitor.
+    final nonEmpty = chats.where((chat) => ((chat['message_count'] ?? 0) as num) > 0).toList();
     final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return chats;
-    return chats.where((chat) {
+    if (q.isEmpty) return nonEmpty;
+    return nonEmpty.where((chat) {
       final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
       final label = names.values.where((e) => e != null && '$e'.isNotEmpty).join(' ').toLowerCase();
       final lastMsg = (chat['last_message'] as String? ?? '').toLowerCase();
@@ -74,7 +76,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
             children: [
               Expanded(
                 child: Text(s.adminChatMonitor,
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+                  style: AppText.titleEmphasis),
               ),
               IconButton(
                 icon: const Icon(Icons.refresh_rounded, color: AppTheme.primary),
@@ -88,7 +90,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
           child: TextField(
             controller: _searchCtrl,
             onChanged: (v) => setState(() => _query = v),
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+            style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: s.adminSearchChat,
               prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 20),
@@ -163,6 +165,15 @@ class _AdminChatCard extends StatelessWidget {
         : participants.length == 1
             ? '${participants.length} ${s.adminUserSingular}'
             : '${participants.length} ${s.adminUsersPlural}';
+    // Urutan uid SAMA dengan urutan nama di judul (kiri → kanan).
+    final orderUids = names.entries
+        .where((e) => e.value != null && '${e.value}'.isNotEmpty)
+        .map((e) => '${e.key}')
+        .toList();
+    for (final p in participants) {
+      final u = '$p';
+      if (!orderUids.contains(u)) orderUids.add(u);
+    }
     final lastMsg = (chat['last_message'] as String? ?? '').trim();
     final count = chat['message_count'] ?? 0;
     final tsRaw = chat['last_message_at'];
@@ -181,7 +192,11 @@ class _AdminChatCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => AdminChatViewScreen(chatId: chat['chat_id'] as String? ?? '', chatLabel: label)),
+            MaterialPageRoute(builder: (_) => AdminChatViewScreen(
+              chatId: chat['chat_id'] as String? ?? '',
+              chatLabel: label,
+              participantOrder: orderUids,
+            )),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -201,14 +216,14 @@ class _AdminChatCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(label,
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
+                        style: AppText.bodyStrong,
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 3),
                       Text(
                         lastMsg.isEmpty
                             ? (count > 0 ? '$count ${s.adminChatMsgs}' : '')
                             : lastMsg,
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                        style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
@@ -218,11 +233,11 @@ class _AdminChatCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     if (count > 0)
-                      Text('$count', style: const TextStyle(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w700)),
+                      Text('$count', style: AppText.bodySmall.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
                     if (ts != null) ...[
                       const SizedBox(height: 2),
                       Text(formatRelativeTime(ts, isId: s.isId),
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                        style: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400)),
                     ],
                   ],
                 ),
@@ -272,14 +287,14 @@ class _AdminChatCard extends StatelessWidget {
             title: Row(children: [
               const Icon(Icons.delete_forever, color: AppTheme.danger, size: 22),
               const SizedBox(width: 10),
-              Expanded(child: Text(s.adminDeleteChatTitle, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700))),
+              Expanded(child: Text(s.adminDeleteChatTitle, style: AppText.titleEmphasis)),
             ]),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(s.adminDeleteChatBody, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  Text(s.adminDeleteChatBody, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     value: selected.contains(delMe),
@@ -287,7 +302,7 @@ class _AdminChatCard extends StatelessWidget {
                       v == true ? selected.add(delMe) : selected.remove(delMe);
                     }),
                     title: Text('${s.adminDeleteUser}: $nameMe',
-                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                      style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
                     controlAffinity: ListTileControlAffinity.leading,
                     dense: true,
                     activeColor: AppTheme.danger,
@@ -298,13 +313,13 @@ class _AdminChatCard extends StatelessWidget {
                       v == true ? selected.add(delOther) : selected.remove(delOther);
                     }),
                     title: Text('${s.adminDeleteUser}: $nameOther',
-                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                      style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
                     controlAffinity: ListTileControlAffinity.leading,
                     dense: true,
                     activeColor: AppTheme.danger,
                   ),
                   const SizedBox(height: 4),
-                  Text(s.adminDeleteChatOnly, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  Text(s.adminDeleteChatOnly, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ],
               ),
             ),

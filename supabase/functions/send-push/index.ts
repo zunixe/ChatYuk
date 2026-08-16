@@ -70,11 +70,14 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = await getAccessToken();
-    const isOnline = body.data?.type === 'online';
+    // Data-only untuk tipe yang teksnya dirender client (bilingual):
+    // online, follow, friend_request, subscribe. Lainnya pakai notification block.
+    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe'];
+    const isDataOnly = dataOnlyTypes.includes(body.data?.type);
     const message = {
       message: {
         token,
-        ...(isOnline
+        ...(isDataOnly
           ? {}
           : {
               notification: {

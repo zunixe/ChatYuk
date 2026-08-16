@@ -3,12 +3,18 @@ class UserPhoto {
   final String userId;
   final String photo;
   final DateTime createdAt;
+  // Paywall: apakah foto ini terbuka untuk viewer saat ini.
+  final bool unlocked;
+  // Preview blur (base64) untuk foto terkunci.
+  final String preview;
 
   const UserPhoto({
     required this.id,
     required this.userId,
     required this.photo,
     required this.createdAt,
+    this.unlocked = true,
+    this.preview = '',
   });
 
   factory UserPhoto.fromMap(String id, Map<String, dynamic> map) {
@@ -21,6 +27,8 @@ class UserPhoto {
           : map['createdAt'] != null
               ? DateTime.parse('${map['createdAt']}')
               : DateTime.now(),
+      unlocked: map['unlocked'] == null ? true : map['unlocked'] == true,
+      preview: map['preview'] ?? '',
     );
   }
 }

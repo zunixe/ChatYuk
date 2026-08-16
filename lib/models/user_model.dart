@@ -16,6 +16,12 @@ class UserModel {
   final DateTime lastSeen;
   final List<String> hashtags;
   final int points;
+  final bool shareLocation;
+  final int followersCount;
+  final int followingCount;
+  final int subscriberCount;
+  final int subscriptionPrice;
+  final int friendsCount;
 
   UserModel({
     required this.uid,
@@ -33,6 +39,12 @@ class UserModel {
     required this.lastSeen,
     this.hashtags = const [],
     this.points = 50,
+    this.shareLocation = false,
+    this.followersCount = 0,
+    this.followingCount = 0,
+    this.subscriberCount = 0,
+    this.subscriptionPrice = 0,
+    this.friendsCount = 0,
   });
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -52,6 +64,12 @@ class UserModel {
       lastSeen: parseDate(map['lastSeen']),
       hashtags: map['hashtags'] is List ? (map['hashtags'] as List).cast<String>() : const [],
       points: map['points'] ?? 50,
+      shareLocation: map['shareLocation'] == true,
+      followersCount: (map['followersCount'] as num?)?.toInt() ?? 0,
+      followingCount: (map['followingCount'] as num?)?.toInt() ?? 0,
+      subscriberCount: (map['subscriberCount'] as num?)?.toInt() ?? 0,
+      subscriptionPrice: (map['subscriptionPrice'] as num?)?.toInt() ?? 0,
+      friendsCount: (map['friendsCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -87,6 +105,12 @@ class UserModel {
     DateTime? lastSeen,
     List<String>? hashtags,
     int? points,
+    bool? shareLocation,
+    int? followersCount,
+    int? followingCount,
+    int? subscriberCount,
+    int? subscriptionPrice,
+    int? friendsCount,
   }) {
     return UserModel(
       uid: uid,
@@ -104,6 +128,12 @@ class UserModel {
       lastSeen: lastSeen ?? this.lastSeen,
       hashtags: hashtags ?? this.hashtags,
       points: points ?? this.points,
+      shareLocation: shareLocation ?? this.shareLocation,
+      followersCount: followersCount ?? this.followersCount,
+      followingCount: followingCount ?? this.followingCount,
+      subscriberCount: subscriberCount ?? this.subscriberCount,
+      subscriptionPrice: subscriptionPrice ?? this.subscriptionPrice,
+      friendsCount: friendsCount ?? this.friendsCount,
     );
   }
 

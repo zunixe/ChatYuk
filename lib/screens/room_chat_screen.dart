@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -9,6 +14,8 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
+import '../services/storage_photo_service.dart';
+import '../services/forensic_watermark.dart';
 import '../utils.dart';
 import '../main.dart';
 import '../widgets/date_chip.dart';
@@ -16,6 +23,34 @@ import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
+
+// Isolate helpers untuk proses foto (sama seperti private chat).
+String? _roomProcessImage(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final w = decoded.width, h = decoded.height;
+  final img.Image resized = (w <= 800 && h <= 800)
+      ? decoded
+      : img.copyResize(decoded,
+          width: w > h ? 800 : null, height: h >= w ? 800 : null);
+  return base64Encode(img.encodeJpg(resized, quality: 75));
+}
+
+String? _roomPassthroughImage(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final w = decoded.width, h = decoded.height;
+  final img.Image resized = (w <= 1200 && h <= 1200)
+      ? decoded
+      : img.copyResize(decoded,
+          width: w > h ? 1200 : null, height: h >= w ? 1200 : null);
+  return base64Encode(img.encodeJpg(resized, quality: 82));
+}
+
+String? _roomViewOnceImage((Uint8List, String) args) {
+  final (bytes, seed) = args;
+  return ForensicWatermark.embedToBase64(bytes, seed);
+}
 
 class RoomChatScreen extends StatefulWidget {
   final RoomModel room;
@@ -25,9 +60,11 @@ class RoomChatScreen extends StatefulWidget {
   State<RoomChatScreen> createState() => _RoomChatScreenState();
 }
 
-class _RoomChatScreenState extends State<RoomChatScreen> {
+class _RoomChatScreenState extends State<RoomChatScreen>
+    with WidgetsBindingObserver {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  final _imagePicker = ImagePicker();
   bool _showUsers = false;
   bool _sheetOpen = false;
   late AuthProvider _auth;
@@ -36,6 +73,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   bool _readBonusClaimed = false;
   int _roomSendCount = 0;
   PointsProvider? _pointsProv;
+  Timer? _presenceTimer;
 
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<UserModel>> _usersStream;
@@ -43,6 +81,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _auth = context.read<AuthProvider>();
     _chat = context.read<ChatProvider>();
     activeChatId.value = widget.room.id;
@@ -51,7 +90,46 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
     _pointsProv = context.read<PointsProvider>();
     _joinRoom();
+    _startPresenceHeartbeat();
     _scrollCtrl.addListener(_onRoomScroll);
+  }
+
+  /// Heartbeat presence: refresh joined_at tiap 60 detik selama room terbuka.
+  /// Kalau app di-kill/force-stop, heartbeat berhenti → row presence basi
+  /// dan otomatis hilang dari daftar online room setelah 5 menit.
+  void _startPresenceHeartbeat() {
+    _presenceTimer?.cancel();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!mounted) return;
+      final profile = _auth.profile;
+      if (profile == null) return;
+      _chat.joinRoom(widget.room.id, profile);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final uid = _auth.uid;
+    if (uid == null) return;
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      // App di-background/ditutup → keluar dari room supaya tidak jadi
+      // ghost "online" di daftar member room.
+      _chat.leaveRoom(widget.room.id, uid);
+    } else if (state == AppLifecycleState.resumed) {
+      if (mounted && _auth.profile != null) {
+        _chat.joinRoom(widget.room.id, _auth.profile!);
+      }
+    }
+  }
+
+  Future<void> _joinRoom() async {
+    final auth = context.read<AuthProvider>();
+    final chat = context.read<ChatProvider>();
+    if (auth.profile != null) {
+      await chat.joinRoom(widget.room.id, auth.profile!);
+      await chat.loadBlockedUids(auth.uid!);
+    }
   }
 
   void _onRoomScroll() {
@@ -67,17 +145,10 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     }
   }
 
-  Future<void> _joinRoom() async {
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
-    if (auth.profile != null) {
-      await chat.joinRoom(widget.room.id, auth.profile!);
-      await chat.loadBlockedUids(auth.uid!);
-    }
-  }
-
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _presenceTimer?.cancel();
     if (activeChatId.value == widget.room.id) {
       activeChatId.value = null;
     }
@@ -149,6 +220,109 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     }
   }
 
+  bool _showAttachRow = false;
+
+  void _toggleAttachRow() {
+    if (!_showAttachRow) FocusScope.of(context).unfocus();
+    setState(() => _showAttachRow = !_showAttachRow);
+  }
+
+  Future<void> _sendPhoto() async {
+    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > 10 * 1024 * 1024) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgFileTooLarge)));
+      }
+      return;
+    }
+    final base64 = await compute(_roomProcessImage, bytes);
+    if (base64 == null) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
+      }
+      return;
+    }
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    final chat = context.read<ChatProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
+    final pp = context.read<PointsProvider>();
+    final r = await pp.deductBeforeSend('image');
+    if (r < 0) { if (mounted) { pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId); } return; }
+    try {
+      final path = await StoragePhotoService.instance.upload(chatId: 'room_${widget.room.id}', base64: base64);
+      final stored = path ?? base64;
+      await chat.sendRoomMessage(
+        roomId: widget.room.id,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: '',
+        type: 'image',
+        imageData: stored,
+      );
+      _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+      }
+    }
+  }
+
+  Future<void> _sendViewOncePhoto() async {
+    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    final auth = context.read<AuthProvider>();
+    final results = await Future.wait([
+      auth.watermarkEnabled
+          ? compute(_roomViewOnceImage, (bytes, widget.room.id))
+          : compute(_roomPassthroughImage, bytes),
+      context.read<PointsProvider>().deductBeforeSend('view_once'),
+    ]);
+    final base64 = results[0] as String?;
+    if (base64 == null) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
+      }
+      return;
+    }
+    if (!mounted) return;
+    final rView = results[1] as int;
+    if (rView < 0) { if (mounted) { context.read<PointsProvider>().showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId); } return; }
+    final chat = context.read<ChatProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
+    try {
+      final path = await StoragePhotoService.instance.upload(chatId: 'room_${widget.room.id}', base64: base64);
+      final stored = path ?? base64;
+      await chat.sendRoomMessage(
+        roomId: widget.room.id,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: '',
+        type: 'view_once',
+        imageData: stored,
+      );
+      _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthProvider>();
@@ -160,7 +334,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(widget.room.icon, style: const TextStyle(fontSize: 20)),
+            Text(widget.room.icon, style: const TextStyle(fontSize: AppGlyph.sm)),
             const SizedBox(width: 8),
             Text(widget.room.name),
           ],
@@ -184,7 +358,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                   final users = snap.data ?? [];
                   if (users.isEmpty) {
                     return Center(
-                      child: Text(s.noOnlineUsers, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                      child: Text(s.noOnlineUsers, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                     );
                   }
                   return ListView.builder(
@@ -214,7 +388,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                       return Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text('👋', style: TextStyle(fontSize: 40)),
+                          const Text('👋', style: TextStyle(fontSize: AppGlyph.xl)),
                           const SizedBox(height: 8),
                           Text(s.msgStartConversation, style: const TextStyle(color: AppTheme.textSecondary)),
                         ],
@@ -255,6 +429,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                       msg: m,
                       isMe: m.senderId == auth.uid,
                       color: Color(userColorPalette[colorHashForUid(m.senderId) % userColorPalette.length]),
+                      roomId: widget.room.id,
                       onTapUser: () => _onTapUser(m, auth),
                     );
                   },
@@ -263,7 +438,14 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
             ),
           ),
 
-          _ChatInput(controller: _msgCtrl, onSend: _send),
+          _ChatInput(
+            controller: _msgCtrl,
+            onSend: _send,
+            showAttachRow: _showAttachRow,
+            onToggleAttach: _toggleAttachRow,
+            onSendPhoto: () { setState(() => _showAttachRow = false); _sendPhoto(); },
+            onSendViewOnce: () { setState(() => _showAttachRow = false); _sendViewOncePhoto(); },
+          ),
         ],
       ),
     );
@@ -317,9 +499,9 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(msg.senderName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                          Text(msg.senderName, style: AppText.bodyStrong),
                           Text(msg.senderGender == 'male' ? s.genderMale : msg.senderGender == 'female' ? s.genderFemale : s.genderOther,
-                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                         ],
                       ),
                     ),
@@ -456,7 +638,7 @@ class _UserChip extends StatelessWidget {
                 backgroundColor: isMe ? AppTheme.primary : color,
                 child: Text(
                   user.initial,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: AppGlyph.avatarInitial(44)),
                 ),
               ),
               if (user.isRegistered)
@@ -469,7 +651,7 @@ class _UserChip extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             isMe ? s.labelYou : user.nickname,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -482,18 +664,73 @@ class _MessageBubble extends StatelessWidget {
   final MessageModel msg;
   final bool isMe;
   final Color color;
+  final String roomId;
   final VoidCallback onTapUser;
-  const _MessageBubble({super.key, required this.msg, required this.isMe, required this.color, required this.onTapUser});
+  const _MessageBubble({super.key, required this.msg, required this.isMe, required this.color, required this.roomId, required this.onTapUser});
 
-  static const _myColor = Color(0xFFD5F5E3);
-  static const _theirColor = Color(0xFFFFFFFF);
+  // Warna bubble disamakan dengan private chat.
   static const _textColor = Color(0xFF303030);
+
+  bool get _isMedia => msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired';
+
+  // Konten bubble: foto / view-once / teks — dipakai untuk pesan sendiri & orang lain.
+  Widget _content(BuildContext context, String timeStr, {required bool alignRight}) {
+    final chatKey = 'room_$roomId';
+    if (msg.type == 'image' && msg.imageData.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            MessageImage(imageData: msg.imageData, chatKey: chatKey, messageId: msg.id),
+            Positioned(
+              right: 6, bottom: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(8)),
+                child: Text(timeStr, style: AppText.micro.copyWith(color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (msg.type == 'view_once' || msg.type == 'view_once_expired') {
+      return Stack(
+        children: [
+          ViewOnceImage(
+            imageData: msg.imageData,
+            chatKey: chatKey,
+            isMe: isMe,
+            messageId: msg.id,
+            isExpired: msg.type == 'view_once_expired',
+            isRoom: true,
+          ),
+          Positioned(
+            right: 6, bottom: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(8)),
+              child: Text(timeStr, style: AppText.micro.copyWith(color: Colors.white)),
+            ),
+          ),
+        ],
+      );
+    }
+    return MessageTextWithTime(
+      text: msg.text,
+      timeStr: timeStr,
+      textStyle: AppText.body.copyWith(color: _textColor),
+      timeStyle: AppText.micro.copyWith(color: _textColor.withValues(alpha: 0.45), fontWeight: FontWeight.w400),
+      alignRight: alignRight,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final timeStr = DateFormat.Hm().format(msg.timestamp.toLocal());
 
-    // Pesan sendiri: hijau, rata kanan, tanpa avatar
+    // Pesan sendiri: biru muda (sama private), rata kanan, tanpa avatar
     if (isMe) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 6),
@@ -504,14 +741,14 @@ class _MessageBubble extends StatelessWidget {
             Flexible(
               child: Container(
                 constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                padding: _isMedia ? const EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                 decoration: BoxDecoration(
-                  color: _myColor,
+                  color: AppTheme.primary.withValues(alpha: 0.25),
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    topRight: Radius.circular(8),
-                    bottomLeft: Radius.circular(8),
-                    bottomRight: Radius.circular(2),
+                    topLeft: Radius.circular(14),
+                    topRight: Radius.circular(14),
+                    bottomLeft: Radius.circular(14),
+                    bottomRight: Radius.circular(4),
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -521,13 +758,7 @@ class _MessageBubble extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: MessageTextWithTime(
-                  text: msg.text,
-                  timeStr: timeStr,
-                  textStyle: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),
-                  timeStyle: TextStyle(color: _textColor.withValues(alpha: 0.45), fontSize: 10.5),
-                  alignRight: true,
-                ),
+                child: _content(context, timeStr, alignRight: true),
               ),
             ),
           ],
@@ -535,7 +766,7 @@ class _MessageBubble extends StatelessWidget {
       );
     }
 
-    // Pesan user lain: avatar + nama warna + bubble putih, rata kiri
+    // Pesan user lain: avatar + nama warna + bubble abu-abu (sama private), rata kiri
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -548,7 +779,7 @@ class _MessageBubble extends StatelessWidget {
               backgroundColor: color,
               child: Text(
                 msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                style: TextStyle(color: Colors.white, fontSize: AppGlyph.avatarInitial(32), fontWeight: FontWeight.w700),
               ),
             ),
           ),
@@ -564,7 +795,7 @@ class _MessageBubble extends StatelessWidget {
                     children: [
                       Text(
                         msg.senderName,
-                        style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+                        style: AppText.label.copyWith(color: color, letterSpacing: 0),
                       ),
                       if (msg.isRegistered) ...[
                         const SizedBox(width: 3),
@@ -575,15 +806,17 @@ class _MessageBubble extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Container(
-                  constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                  // Kurangi offset avatar (32) + gap (8) supaya tepi kanan bubble
+                  // sama dengan bubble private chat (80% lebar layar).
+                  constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8 - 40),
+                  padding: _isMedia ? const EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                   decoration: BoxDecoration(
-                    color: _theirColor,
+                    color: AppTheme.bgInput,
                     borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(8),
-                      topRight: Radius.circular(8),
-                      bottomLeft: Radius.circular(2),
-                      bottomRight: Radius.circular(8),
+                      topLeft: Radius.circular(14),
+                      topRight: Radius.circular(14),
+                      bottomLeft: Radius.circular(4),
+                      bottomRight: Radius.circular(14),
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -611,27 +844,21 @@ class _MessageBubble extends StatelessWidget {
                             children: [
                               Text(
                                 msg.repliedToSenderName ?? '',
-                                style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w600),
+                                style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 msg.repliedToText ?? '',
-                                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 11),
+                                style: AppText.caption.copyWith(color: _textColor.withValues(alpha: 0.6)),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
                         ),
-                                            MessageTextWithTime(
-                        text: msg.text,
-                        timeStr: timeStr,
-                        textStyle: const TextStyle(color: _textColor, fontSize: 14.5, height: 1.2, letterSpacing: -0.4),
-                        timeStyle: TextStyle(color: _textColor.withValues(alpha: 0.45), fontSize: 10.5),
-                        alignRight: false,
-                      ),
+                      _content(context, timeStr, alignRight: false),
                     ],
                   ),
                 ),
@@ -647,7 +874,18 @@ class _MessageBubble extends StatelessWidget {
 class _ChatInput extends StatefulWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
-  const _ChatInput({required this.controller, required this.onSend});
+  final bool showAttachRow;
+  final VoidCallback onToggleAttach;
+  final VoidCallback onSendPhoto;
+  final VoidCallback onSendViewOnce;
+  const _ChatInput({
+    required this.controller,
+    required this.onSend,
+    required this.showAttachRow,
+    required this.onToggleAttach,
+    required this.onSendPhoto,
+    required this.onSendViewOnce,
+  });
 
   @override
   State<_ChatInput> createState() => _ChatInputState();
@@ -682,90 +920,175 @@ class _ChatInputState extends State<_ChatInput> {
         ],
       ),
       child: SafeArea(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 44,
-              height: 44,
-              child: IconButton(
-                onPressed: () => EmojiPickerSheet.show(context, widget.controller),
-                icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
-                color: AppTheme.textSecondary,
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Expanded(
-              child: Container(
-                constraints: const BoxConstraints(maxHeight: 132),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgCard,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppTheme.bgCard, width: 1),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: IconButton(
+                    onPressed: () => EmojiPickerSheet.show(context, widget.controller),
+                    icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
+                    color: AppTheme.textSecondary,
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextField(
-                        controller: widget.controller,
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, height: 1.35),
-                        decoration: InputDecoration(
-                          hintText: s.hintTypeMessage,
-                          hintStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 15),
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        textInputAction: TextInputAction.newline,
-                        onSubmitted: (_) => widget.onSend(),
-                        minLines: 1,
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                        textCapitalization: TextCapitalization.sentences,
-                      ),
+                const SizedBox(width: 2),
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 132),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgCard,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: AppTheme.bgCard, width: 1),
                     ),
-                    const SizedBox(width: 8),
-                  ],
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: widget.controller,
+                            style: AppText.body,
+                            decoration: InputDecoration(
+                              hintText: s.hintTypeMessage,
+                              hintStyle: AppText.body.copyWith(color: AppTheme.textSecondary),
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            textInputAction: TextInputAction.newline,
+                            onSubmitted: (_) => widget.onSend(),
+                            minLines: 1,
+                            maxLines: null,
+                            keyboardType: TextInputType.multiline,
+                            textCapitalization: TextCapitalization.sentences,
+                          ),
+                        ),
+                        _RoomInputIconBtn(
+                          icon: widget.showAttachRow ? Icons.close : Icons.add_circle_outline,
+                          color: AppTheme.primary,
+                          onTap: widget.onToggleAttach,
+                          tooltip: s.menuSendPhoto,
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 2),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, anim) => SizeTransition(
+                    sizeFactor: anim,
+                    axis: Axis.horizontal,
+                    axisAlignment: -1,
+                    child: FadeTransition(opacity: anim, child: child),
+                  ),
+                  child: widget.controller.text.trim().isEmpty
+                      ? const SizedBox(width: 0, key: ValueKey('empty'))
+                      : SizedBox(
+                          key: const ValueKey('send'),
+                          width: 48,
+                          height: 48,
+                          child: IconButton(
+                            onPressed: widget.onSend,
+                            icon: const Icon(Icons.send_rounded, size: 22),
+                            color: Colors.white,
+                            padding: EdgeInsets.zero,
+                            style: IconButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              shape: const CircleBorder(),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
             ),
-            const SizedBox(width: 2),
-            AnimatedSwitcher(
+            AnimatedSize(
               duration: const Duration(milliseconds: 180),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, anim) => SizeTransition(
-                sizeFactor: anim,
-                axis: Axis.horizontal,
-                axisAlignment: -1,
-                child: FadeTransition(opacity: anim, child: child),
-              ),
-              child: widget.controller.text.trim().isEmpty
-                  ? const SizedBox(width: 0, key: ValueKey('empty'))
-                  : SizedBox(
-                      key: const ValueKey('send'),
-                      width: 48,
-                      height: 48,
-                      child: IconButton(
-                        onPressed: widget.onSend,
-                        icon: const Icon(Icons.send_rounded, size: 22),
-                        color: Colors.white,
-                        padding: EdgeInsets.zero,
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          shape: const CircleBorder(),
-                        ),
+              curve: Curves.easeOut,
+              child: widget.showAttachRow
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8, left: 4),
+                      child: Row(
+                        children: [
+                          _RoomAttachChip(
+                            icon: Icons.image_outlined,
+                            color: AppTheme.primary,
+                            label: s.menuSendPhoto,
+                            onTap: widget.onSendPhoto,
+                          ),
+                          const SizedBox(width: 12),
+                          _RoomAttachChip(
+                            icon: Icons.timer_outlined,
+                            color: Colors.orange,
+                            label: s.menuViewOnce,
+                            onTap: widget.onSendViewOnce,
+                          ),
+                        ],
                       ),
-                    ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RoomInputIconBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final String tooltip;
+  const _RoomInputIconBtn({required this.icon, required this.color, required this.onTap, required this.tooltip});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(width: 30, height: 48, child: Icon(icon, color: color, size: 22)),
+      ),
+    );
+  }
+}
+
+class _RoomAttachChip extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final VoidCallback onTap;
+  const _RoomAttachChip({required this.icon, required this.color, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48, height: 48,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
+            child: Center(child: Icon(icon, color: color, size: 24)),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+        ],
       ),
     );
   }

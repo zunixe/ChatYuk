@@ -40,6 +40,21 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
   @override
   void initState() {
     super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(AsyncPhotoThumbnail old) {
+    super.didUpdateWidget(old);
+    // base64 berubah (list foto di-refresh) → decode ulang, jangan pakai state lama.
+    if (old.base64 != widget.base64) {
+      _bytes = null;
+      _load();
+    }
+  }
+
+  void _load() {
+    if (widget.base64.isEmpty) return;
     final cached = _cache[widget.base64];
     if (cached != null) { _bytes = cached; return; }
     _decode();
@@ -55,7 +70,16 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
   @override
   Widget build(BuildContext context) {
     if (_bytes == null) {
-      return Container(width: widget.width, height: widget.height, color: const Color(0xFF1E1E2E));
+      return Container(
+        width: widget.width,
+        height: widget.height,
+        color: const Color(0xFFEDEDED),
+        alignment: Alignment.center,
+        child: const SizedBox(
+          width: 18, height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
     }
     return Image.memory(_bytes!, width: widget.width, height: widget.height, fit: widget.fit, gaplessPlayback: true);
   }
