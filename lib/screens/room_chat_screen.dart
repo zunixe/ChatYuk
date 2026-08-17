@@ -334,8 +334,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(widget.room.icon, style: const TextStyle(fontSize: AppGlyph.sm)),
-            const SizedBox(width: 8),
+            Text(widget.room.icon, style: TextStyle(fontSize: AppGlyph.sm)),
+            SizedBox(width: 8),
             Text(widget.room.name),
           ],
         ),
@@ -388,9 +388,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                       return Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text('👋', style: TextStyle(fontSize: AppGlyph.xl)),
-                          const SizedBox(height: 8),
-                          Text(s.msgStartConversation, style: const TextStyle(color: AppTheme.textSecondary)),
+                          Text('👋', style: TextStyle(fontSize: AppGlyph.xl)),
+                          SizedBox(height: 8),
+                          Text(s.msgStartConversation, style: TextStyle(color: AppTheme.textSecondary)),
                         ],
                       );
                     }),
@@ -492,9 +492,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   children: [
                     CircleAvatar(
                       backgroundColor: Color(userColorPalette[colorHashForUid(msg.senderId) % userColorPalette.length]),
-                      child: Text(msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      child: Text(msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -505,14 +505,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                         ],
                       ),
                     ),
-                    const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                    Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
                   ],
                 ),
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.chat_bubble, color: AppTheme.primary),
-              title: Text(s.titlePrivateChat, style: const TextStyle(color: AppTheme.textPrimary)),
+              leading: Icon(Icons.chat_bubble, color: AppTheme.primary),
+              title: Text(s.titlePrivateChat, style: TextStyle(color: AppTheme.textPrimary)),
               onTap: () async {
                 final chat = context.read<ChatProvider>();
                 final locale = context.read<LocaleProvider>();
@@ -593,9 +593,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
-        title: Text('${s.btnReport} $reportedName', style: const TextStyle(color: AppTheme.textPrimary)),
+        title: Text('${s.btnReport} $reportedName', style: TextStyle(color: AppTheme.textPrimary)),
         content: TextField(
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(hintText: s.reportHint),
           onChanged: (v) => reason = v,
         ),
@@ -626,7 +626,7 @@ class _UserChip extends StatelessWidget {
     final isMe = user.uid == myUid;
     final s = context.read<LocaleProvider>().s;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: EdgeInsets.only(right: 8),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -642,13 +642,13 @@ class _UserChip extends StatelessWidget {
                 ),
               ),
               if (user.isRegistered)
-                const Positioned(
+                Positioned(
                   right: -2, bottom: -2,
                   child: Icon(Icons.verified, size: 14, color: Color(0xFF4A90E2)),
                 ),
             ],
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(
             isMe ? s.labelYou : user.nickname,
             style: AppText.caption.copyWith(color: AppTheme.textSecondary),
@@ -768,7 +768,7 @@ class _MessageBubble extends StatelessWidget {
 
     // Pesan user lain: avatar + nama warna + bubble abu-abu (sama private), rata kiri
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -783,7 +783,7 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -798,18 +798,18 @@ class _MessageBubble extends StatelessWidget {
                         style: AppText.label.copyWith(color: color, letterSpacing: 0),
                       ),
                       if (msg.isRegistered) ...[
-                        const SizedBox(width: 3),
-                        const Icon(Icons.verified, size: 13, color: Color(0xFF4A90E2)),
+                        SizedBox(width: 3),
+                        Icon(Icons.verified, size: 13, color: Color(0xFF4A90E2)),
                       ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Container(
                   // Kurangi offset avatar (32) + gap (8) supaya tepi kanan bubble
                   // sama dengan bubble private chat (80% lebar layar).
                   constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8 - 40),
-                  padding: _isMedia ? const EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                  padding: _isMedia ? EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                   decoration: BoxDecoration(
                     color: AppTheme.bgInput,
                     borderRadius: const BorderRadius.only(
@@ -912,11 +912,11 @@ class _ChatInputState extends State<_ChatInput> {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      padding: EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
         color: AppTheme.bgScreen,
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, -1)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: Offset(0, -1)),
         ],
       ),
       child: SafeArea(
@@ -931,16 +931,16 @@ class _ChatInputState extends State<_ChatInput> {
                   height: 44,
                   child: IconButton(
                     onPressed: () => EmojiPickerSheet.show(context, widget.controller),
-                    icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
+                    icon: Icon(Icons.emoji_emotions_outlined, size: 22),
                     color: AppTheme.textSecondary,
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
-                const SizedBox(width: 2),
+                SizedBox(width: 2),
                 Expanded(
                   child: Container(
-                    constraints: const BoxConstraints(maxHeight: 132),
+                    constraints: BoxConstraints(maxHeight: 132),
                     decoration: BoxDecoration(
                       color: AppTheme.bgCard,
                       borderRadius: BorderRadius.circular(24),
@@ -949,7 +949,7 @@ class _ChatInputState extends State<_ChatInput> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const SizedBox(width: 16),
+                        SizedBox(width: 16),
                         Expanded(
                           child: TextField(
                             controller: widget.controller,
@@ -1086,7 +1086,7 @@ class _RoomAttachChip extends StatelessWidget {
             decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
             child: Center(child: Icon(icon, color: color, size: 24)),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(label, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
         ],
       ),

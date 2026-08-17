@@ -63,19 +63,19 @@ class _AdminRevenueScreenState extends State<AdminRevenueScreen> {
         title: Text(s.adminRevenueTitle),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 20, color: Colors.white),
+            icon: Icon(Icons.refresh_rounded, size: 20, color: Colors.white),
             onPressed: _load,
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : (_data == null || _data!.isEmpty)
               ? Center(
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    const Icon(Icons.pie_chart_outline, size: 48, color: AppTheme.textSecondary),
-                    const SizedBox(height: 8),
-                    Text(s.adminRevenueNoData, style: const TextStyle(color: AppTheme.textSecondary)),
+                    Icon(Icons.pie_chart_outline, size: 48, color: AppTheme.textSecondary),
+                    SizedBox(height: 8),
+                    Text(s.adminRevenueNoData, style: TextStyle(color: AppTheme.textSecondary)),
                   ]))
               : RefreshIndicator(
                   onRefresh: _load,
@@ -97,12 +97,12 @@ class _AdminRevenueScreenState extends State<AdminRevenueScreen> {
 
   Widget _card(String title, IconData icon, Color iconColor, List<Widget> children) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(color: AppTheme.bgCard, borderRadius: BorderRadius.circular(12)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Icon(icon, size: 16, color: iconColor),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Text(title, style: AppText.caption.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
         ]),
         const SizedBox(height: 10),
@@ -115,7 +115,7 @@ class _AdminRevenueScreenState extends State<AdminRevenueScreen> {
     return Expanded(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(value, style: AppText.title.copyWith(color: color, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 2),
+        SizedBox(height: 2),
         Text(label, style: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400)),
         if (sub != null) Text(sub, style: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400)),
       ]),
@@ -145,7 +145,7 @@ class _AdminRevenueScreenState extends State<AdminRevenueScreen> {
         Text(s.adminRevenueNoData, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
       for (final t in list)
         Padding(
-          padding: const EdgeInsets.only(bottom: 6),
+          padding: EdgeInsets.only(bottom: 6),
           child: Row(children: [
             Expanded(
               child: Text(_giftName(s, '${t['gift'] ?? ''}'),
@@ -187,10 +187,10 @@ class _AdminRevenueScreenState extends State<AdminRevenueScreen> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('${s.adminRevenueCutPct}: ${st['gift_cut_pct'] ?? '-'}%',
                 style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary)),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text('${s.adminRevenueRate}: ${st['withdraw_rate_idr'] ?? '-'}',
                 style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary)),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text('${s.withdrawAmount} min: ${st['withdraw_min_coins'] ?? '-'}',
                 style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary)),
           ]),

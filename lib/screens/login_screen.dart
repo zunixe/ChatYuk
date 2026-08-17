@@ -185,12 +185,12 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: AppTheme.bgCard,
         title: Text(
           s.titleForgotPassword,
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
         ),
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.emailAddress,
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(
             labelText: s.labelEmail,
             hintText: s.hintEmail,
@@ -333,7 +333,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(s.titleLogin)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -341,7 +341,7 @@ class _LoginScreenState extends State<LoginScreen> {
             // kartu poin di profil: ikon bulat transparan + teks besar)
             Center(
               child: Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
@@ -356,23 +356,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               'ChatYuk',
               textAlign: TextAlign.center,
               style: AppText.headline,
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             Text(
               s.appTagline,
               textAlign: TextAlign.center,
               style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
             ),
-            const SizedBox(height: 28),
+            SizedBox(height: 28),
 
             // Kartu form login — satu grup utuh, lega dan rapi
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AppTheme.bgCard,
                 borderRadius: BorderRadius.circular(16),
@@ -385,23 +385,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    style: TextStyle(color: AppTheme.textPrimary),
                     decoration: InputDecoration(
                       labelText: s.labelEmail,
                       hintText: s.hintEmail,
-                      prefixIcon: const Icon(Icons.email_outlined),
+                      prefixIcon: Icon(Icons.email_outlined),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
 
                   // Password
                   TextField(
                     controller: _passwordCtrl,
                     obscureText: _obscure,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    style: TextStyle(color: AppTheme.textPrimary),
                     decoration: InputDecoration(
                       labelText: s.labelPassword,
-                      prefixIcon: const Icon(Icons.lock_outlined),
+                      prefixIcon: Icon(Icons.lock_outlined),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscure ? Icons.visibility_off : Icons.visibility,
@@ -412,7 +412,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _login(),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
 
                   // Lupa Password
                   Align(
@@ -427,13 +427,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
 
                   // Tombol Login
                   ElevatedButton(
                     onPressed: _loading ? null : _login,
                     child: _loading
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
@@ -446,14 +446,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             // Divider
             Row(
               children: [
-                const Expanded(child: Divider()),
+                Expanded(child: Divider()),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
                     s.labelOr,
                     style: AppText.bodySmall.copyWith(
@@ -461,16 +461,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                const Expanded(child: Divider()),
+                Expanded(child: Divider()),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
 
             // Login dengan Google
             OutlinedButton(
               onPressed: _googleLoading ? null : _signInWithGoogle,
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppTheme.divider, width: 1.5),
+                side: BorderSide(color: AppTheme.divider, width: 1.5),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

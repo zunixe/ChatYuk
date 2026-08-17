@@ -78,33 +78,33 @@ class _TopUpScreenState extends State<TopUpScreen> {
       context: context,
       isDismissible: false,
       backgroundColor: AppTheme.bgCard,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.hourglass_bottom, size: 40, color: AppTheme.primary),
-            const SizedBox(height: 12),
+            Icon(Icons.hourglass_bottom, size: 40, color: AppTheme.primary),
+            SizedBox(height: 12),
             Text(s.topupWaitingTitle,
               style: AppText.titleEmphasis),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             Text(s.topupWaitingBody, textAlign: TextAlign.center,
               style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
                 onPressed: () => _checkStatus(ctx),
-                child: Text(s.topupCheckStatus, style: const TextStyle(color: Colors.white)),
+                child: Text(s.topupCheckStatus, style: TextStyle(color: Colors.white)),
               ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(s.btnClose, style: const TextStyle(color: AppTheme.textSecondary)),
+              child: Text(s.btnClose, style: TextStyle(color: AppTheme.textSecondary)),
             ),
           ],
         ),
@@ -139,30 +139,28 @@ class _TopUpScreenState extends State<TopUpScreen> {
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.topupTitle)),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               children: [
                 // Saldo saat ini
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.primary, AppTheme.accent],
-                    ),
+                    gradient: AppTheme.headerGradient,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.account_balance_wallet, color: Colors.white, size: 32),
-                      const SizedBox(width: 14),
+                      Icon(Icons.account_balance_wallet, color: Colors.white, size: 32),
+                      SizedBox(width: 14),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(s.walletTotal, style: AppText.bodySmall.copyWith(color: Colors.white70)),
                           Text('${pts.points} 🪙',
                             style: AppText.display.copyWith(color: Colors.white)),
-                          const SizedBox(height: 2),
+                          SizedBox(height: 2),
                           Text('${s.paidBalanceLabel}: ${pts.paidBalance} 🪙',
                             style: AppText.caption.copyWith(color: Colors.white70)),
                         ],
@@ -170,19 +168,19 @@ class _TopUpScreenState extends State<TopUpScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(s.topupPickPackage,
                   style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 ..._packages.map((p) => _PackageCard(
                   pkg: p,
                   buying: _buyingId == p['id'],
                   onTap: () => _buy(p),
                   s: s,
                 )),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withValues(alpha: 0.07),
                     borderRadius: BorderRadius.circular(10),
@@ -190,8 +188,8 @@ class _TopUpScreenState extends State<TopUpScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.info_outline, size: 18, color: AppTheme.primary),
-                      const SizedBox(width: 10),
+                      Icon(Icons.info_outline, size: 18, color: AppTheme.primary),
+                      SizedBox(width: 10),
                       Expanded(
                         child: Text(s.topupInfo,
                           style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
@@ -218,13 +216,13 @@ class _PackageCard extends StatelessWidget {
     final price = (pkg['price_idr'] as num?)?.toInt() ?? 0;
     final bonus = pkg['bonus_label'] as String?;
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: buying ? null : onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(16),
           child: Row(
             children: [
               Container(
@@ -234,7 +232,7 @@ class _PackageCard extends StatelessWidget {
                 ),
                 child: Icon(Icons.monetization_on, color: Colors.amber.shade700, size: 24),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,9 +242,9 @@ class _PackageCard extends StatelessWidget {
                         Text('$coins 🪙',
                           style: AppText.title),
                         if (bonus != null) ...[
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: Colors.green.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
@@ -257,7 +255,7 @@ class _PackageCard extends StatelessWidget {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2),
                     Text('Rp ${_fmt(price)}',
                       style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                   ],

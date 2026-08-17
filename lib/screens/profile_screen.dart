@@ -17,6 +17,7 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
+import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
@@ -156,13 +157,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final s = context.read<LocaleProvider>().s;
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
             ListTile(
@@ -272,13 +273,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final hasAvatar = (auth.profile?.avatar ?? '').isNotEmpty;
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
             ListTile(
@@ -323,28 +324,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     await showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       isScrollControlled: true,
       builder: (sheetCtx) => StatefulBuilder(
         builder: (sheetCtx, setSheet) => Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(sheetCtx).viewInsets.bottom),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(2))),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text(s.btnEditProfile, style: AppText.title),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(s.msgUsernameOldReleased, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 TextField(
                   controller: ctrl,
                   focusNode: focus,
-                  style: const TextStyle(color: AppTheme.textPrimary),
+                  style: TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: s.labelUsername,
                     hintText: s.hintNickname,
@@ -512,7 +513,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               visualDensity: VisualDensity.compact,
               icon: _loggingOut
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.logout_rounded, size: 20),
+                  : const Icon(Icons.power_settings_new, size: 20),
               tooltip: s.btnLogout,
               onPressed: _loggingOut ? null : () => _confirmLogout(),
             ),
@@ -546,22 +547,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   }
                 },
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: 4),
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
-                  ),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.headerGradient,
                 ),
                 child: SafeArea(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 32),
+                      SizedBox(height: 32),
                       // Avatar
                       Stack(
                         children: [
@@ -569,7 +566,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 3),
-                              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12, offset: const Offset(0, 4))],
+                              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, 4))],
                             ),
                             child: CircleAvatar(
                               radius: 46,
@@ -588,26 +585,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 width: 30, height: 30,
                                 decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
                                 child: _uploading
-                                    ? const Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
-                                    : const Icon(Icons.camera_alt, color: AppTheme.primary, size: 16),
+                                    ? Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                                    : Icon(Icons.camera_alt, color: AppTheme.primary, size: 16),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
+                      SizedBox(height: 10),
                       // Nama + verified badge
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(profile?.nickname ?? '-', style: AppText.headline.copyWith(color: Colors.white)),
                           if (profile?.isRegistered == true) ...[
-                            const SizedBox(width: 4),
-                            const Icon(Icons.verified, size: 18, color: Color(0xFF8AB4F8)),
+                            SizedBox(width: 4),
+                            Icon(Icons.verified, size: 18, color: Color(0xFF8AB4F8)),
                           ],
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: 6),
                       // Chips info
                       Wrap(
                         spacing: 6,
@@ -628,14 +625,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // ── Body ──
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Banner sesi dummy — kembali ke admin tanpa login manual
                   if (auth.dummySessionActive) ...[
                     Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
@@ -653,22 +650,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           Row(children: [
                             Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 color: AppTheme.accent.withValues(alpha: 0.18),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(Icons.theater_comedy_rounded,
+                              child: Icon(Icons.theater_comedy_rounded,
                                   color: AppTheme.accent, size: 20),
                             ),
-                            const SizedBox(width: 12),
+                            SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(s.dummyBannerTitle,
                                       style: AppText.bodyStrong.copyWith(color: AppTheme.accent)),
-                                  const SizedBox(height: 2),
+                                  SizedBox(height: 2),
                                   Text(
                                     s.dummyBannerSubtitle.replaceFirst('%s', profile?.nickname ?? '—'),
                                     style: AppText.caption.copyWith(color: AppTheme.textSecondary),
@@ -679,18 +676,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                           ]),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton.icon(
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppTheme.accent,
-                                padding: const EdgeInsets.symmetric(vertical: 11),
+                                padding: EdgeInsets.symmetric(vertical: 11),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12)),
                               ),
                               onPressed: () => _backToAdmin(s),
-                              icon: const Icon(Icons.admin_panel_settings_rounded,
+                              icon: Icon(Icons.admin_panel_settings_rounded,
                                   size: 18, color: Colors.white),
                               label: Text(s.dummyBackToAdmin,
                                   style: AppText.label.copyWith(
@@ -702,12 +699,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                   ],
                   // Anonymous warning — prominent (sembunyikan saat sesi dummy)
                   if (isAnon && !dummyActive) ...[
                     Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: Colors.orange.shade50,
                         borderRadius: BorderRadius.circular(12),
@@ -716,13 +713,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Row(
                         children: [
                           Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 22),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(s.titleAccountSecurity, style: AppText.bodySmall.copyWith(color: Colors.orange.shade800, fontWeight: FontWeight.w700)),
-                                const SizedBox(height: 2),
+                                SizedBox(height: 2),
                                 Text(s.msgAnonymousWarning, style: AppText.bodySmall.copyWith(color: Colors.orange.shade700)),
                               ],
                             ),
@@ -730,29 +727,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LinkEmailScreen())),
-                        icon: const Icon(Icons.security, size: 18),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LinkEmailScreen())),
+                        icon: Icon(Icons.security, size: 18),
                         label: Text(s.btnSecureAccount),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.orange.shade600,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    SizedBox(height: 20),
                   ],
 
                   // Status + email section
                   if (!isAnon) ...[
                     _SectionCard(children: [
                       ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4),
                         leading: Container(
                           width: 36, height: 36,
                           decoration: BoxDecoration(
@@ -769,7 +766,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           auth.emailConfirmed ? s.labelEmailVerified : s.labelEmailUnverified,
                           style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                         ),
-                        subtitle: Text(auth.userEmail ?? '-', style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                        subtitle: Text(auth.userEmail ?? '-', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
                         trailing: Icon(
                           auth.emailConfirmed ? Icons.check_circle : Icons.error_outline,
                           color: auth.emailConfirmed ? Colors.green : Colors.orange,
@@ -777,23 +774,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ]),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                   ],
 
                   // Status
                   _SectionCard(children: [
                     _InfoTile(icon: Icons.circle, iconColor: _statusColor(profile?.status ?? 'offline'), label: s.labelStatus, value: _statusLabel(profile?.status ?? 'offline', s)),
-                    const Divider(height: 1, indent: 52),
+                    Divider(height: 1, indent: 52),
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      padding: EdgeInsets.symmetric(vertical: 4),
                       child: Row(
                         children: [
                           Container(
                             width: 36, height: 36,
                             decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.1), shape: BoxShape.circle),
-                            child: const Icon(Icons.badge_outlined, color: AppTheme.accent, size: 18),
+                            child: Icon(Icons.badge_outlined, color: AppTheme.accent, size: 18),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -804,24 +801,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.primary),
+                            icon: Icon(Icons.edit_outlined, size: 18, color: AppTheme.primary),
                             tooltip: s.btnEditProfile,
                             onPressed: _editProfile,
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1, indent: 52),
+                    Divider(height: 1, indent: 52),
                     _InfoTile(icon: Icons.badge_outlined, iconColor: AppTheme.primary, label: s.labelUserId, value: auth.uid?.substring(0, 8) ?? '-'),
                   ]),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
 
                   // Hashtag
                   _SectionLabel(label: s.labelHashtags),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   _SectionCard(children: [
                     Padding(
-                      padding: const EdgeInsets.all(4),
+                      padding: EdgeInsets.all(4),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -831,7 +828,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             children: _hashtags.map((tag) => InputChip(
                               label: Text('#$tag'),
                               onDeleted: _savingHashtags ? null : () => _removeHashtag(tag),
-                              deleteIcon: const Icon(Icons.close, size: 16),
+                              deleteIcon: Icon(Icons.close, size: 16),
                               backgroundColor: AppTheme.accent.withValues(alpha: 0.08),
                               side: BorderSide(color: AppTheme.accent.withValues(alpha: 0.3)),
                               labelStyle: AppText.bodySmall,
@@ -840,10 +837,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           if (_hashtags.isEmpty && !_savingHashtags)
                             Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
+                              padding: EdgeInsets.only(bottom: 4),
                               child: Text(s.hintHashtag, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                             ),
-                          const SizedBox(height: 6),
+                          SizedBox(height: 6),
                           TextField(
                             controller: _hashtagCtrl,
                             enabled: !_savingHashtags,
@@ -852,29 +849,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             decoration: InputDecoration(
                               hintText: s.hintHashtag,
                               isDense: true,
-                              prefixIcon: const Padding(
+                              prefixIcon: Padding(
                                 padding: EdgeInsets.only(bottom: 2),
                                 child: Icon(Icons.tag, size: 18, color: AppTheme.accent),
                               ),
-                              prefixIconConstraints: const BoxConstraints(minWidth: 40),
-                              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.divider)),
-                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.divider)),
-                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.accent)),
+                              prefixIconConstraints: BoxConstraints(minWidth: 40),
+                              contentPadding: EdgeInsets.symmetric(vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppTheme.divider)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppTheme.divider)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppTheme.accent)),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ]),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
 
                   // Galeri
                   _SectionLabel(label: s.labelGallery),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   _SectionCard(children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: EdgeInsets.symmetric(horizontal: 4),
                       child: Column(
                         children: [
                           Row(
@@ -882,32 +879,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             children: [
                               Row(children: [
                                 Container(width: 32, height: 32, decoration: BoxDecoration(color: Colors.pink.shade50, shape: BoxShape.circle), child: Icon(Icons.photo_library_outlined, color: Colors.pink.shade400, size: 18)),
-                                const SizedBox(width: 10),
+                                SizedBox(width: 10),
                                 Text(s.labelGallery, style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500)),
                               ]),
                               if (_photos.length < 6)
                                 TextButton.icon(
                                   onPressed: _uploading ? null : _pickGalleryFromSource,
                                   icon: _uploading
-                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
-                                      : const Icon(Icons.add, size: 16),
+                                      ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                                      : Icon(Icons.add, size: 16),
                                   label: Text(s.btnAddGallery, style: AppText.bodySmall),
                                   style: TextButton.styleFrom(foregroundColor: AppTheme.primary, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
                                 ),
                             ],
                           ),
                           if (_loadingPhotos)
-                            const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)))
+                            Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)))
                           else if (_photos.isEmpty)
                             Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              padding: EdgeInsets.symmetric(vertical: 16),
                               child: Center(child: Text(s.labelGalleryEmpty, textAlign: TextAlign.center, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary))),
                             )
                           else
                             GridView.builder(
                               shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 6, crossAxisSpacing: 6),
+                              physics: NeverScrollableScrollPhysics(),
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 6, crossAxisSpacing: 6),
                               itemCount: _photos.length,
                               itemBuilder: (_, i) => GestureDetector(
                                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _PhotoViewerScreen(photos: _photos, initialIndex: i))),
@@ -924,12 +921,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       child: GestureDetector(
                                         onTap: () => _confirmDeletePhoto(_photos[i]),
                                         child: Container(
-                                          padding: const EdgeInsets.all(4),
+                                          padding: EdgeInsets.all(4),
                                           decoration: BoxDecoration(
                                             color: Colors.black.withValues(alpha: 0.55),
                                             shape: BoxShape.circle,
                                           ),
-                                          child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                          child: Icon(Icons.close, size: 14, color: Colors.white),
                                         ),
                                       ),
                                     ),
@@ -941,12 +938,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   ]),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
 
                   // Sosial — angka fans/following + akses list
                   if (!isAnon) ...[
                     _SectionLabel(label: s.socialFollowers),
-                    const SizedBox(height: 6),
+                    SizedBox(height: 6),
                     _SectionCard(children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -955,31 +952,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             label: s.socialFollowers,
                             value: profile?.followersCount ?? 0,
                             onTap: () => Navigator.push(context,
-                                MaterialPageRoute(builder: (_) => const SocialListScreen(kind: 'followers'))),
+                                MaterialPageRoute(builder: (_) => SocialListScreen(kind: 'followers'))),
                           ),
                           _ProfileStat(
                             label: s.socialFollowing,
                             value: profile?.followingCount ?? 0,
                             onTap: () => Navigator.push(context,
-                                MaterialPageRoute(builder: (_) => const SocialListScreen(kind: 'following'))),
+                                MaterialPageRoute(builder: (_) => SocialListScreen(kind: 'following'))),
                           ),
                           _ProfileStat(
                             label: s.socialFriends,
                             value: profile?.friendsCount ?? 0,
                             onTap: () => Navigator.push(context,
-                                MaterialPageRoute(builder: (_) => const SocialListScreen(kind: 'friends'))),
+                                MaterialPageRoute(builder: (_) => SocialListScreen(kind: 'friends'))),
                           ),
                         ],
                       ),
-                      const Divider(height: 16),
+                      Divider(height: 8),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.person_add_alt, color: AppTheme.primary),
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        leading: Icon(Icons.person_add_alt, color: AppTheme.primary),
                         title: Text(s.friendRequestTitle, style: AppText.bodyStrong),
                         trailing: Consumer<SocialProvider>(
                           builder: (_, sp, __) => sp.friendRequestCount > 0
                               ? Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: AppTheme.danger,
                                     borderRadius: BorderRadius.circular(10),
@@ -987,49 +986,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   child: Text('${sp.friendRequestCount}',
                                       style: AppText.caption.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
                                 )
-                              : const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                              : Icon(Icons.chevron_right, color: AppTheme.textSecondary),
                         ),
                         onTap: () => Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => const FriendRequestsScreen())),
+                            MaterialPageRoute(builder: (_) => FriendRequestsScreen())),
                       ),
                       // Subscribe hanya relevan saat sistem poin aktif —
                       // sembunyikan menu langganan & harga subscribe saat OFF.
                       if (pp.enabled) ...[
                         ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.star, color: Color(0xFFB8860B)),
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          leading: Icon(Icons.star, color: Color(0xFFB8860B)),
                           title: Text(s.subscriptionsTitle, style: AppText.bodyStrong),
-                          trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                          trailing: Icon(Icons.chevron_right, color: AppTheme.textSecondary),
                           onTap: () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => const SubscriptionsScreen())),
+                              MaterialPageRoute(builder: (_) => SubscriptionsScreen())),
                         ),
                         ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.workspace_premium, color: Color(0xFFB8860B)),
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          leading: Icon(Icons.workspace_premium, color: Color(0xFFB8860B)),
                           title: Text(s.setSubPriceTitle, style: AppText.bodyStrong),
                           subtitle: Text(
                             '${s.subscribePrice(profile?.subscriptionPrice ?? 0)}',
                             style: AppText.caption.copyWith(color: AppTheme.textSecondary),
                           ),
-                          trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                          trailing: Icon(Icons.chevron_right, color: AppTheme.textSecondary),
                           onTap: () => _editSubscriptionPrice(context),
                         ),
                       ],
                     ]),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                   ],
 
                   // Poin ChatYuk — diletakkan di antara My Photos dan Pengaturan
                   if (pp.enabled) ...[
                     _SectionLabel(label: s.pointsTitle),
-                    const SizedBox(height: 6),
+                    SizedBox(height: 6),
                     _SectionCard(children: [
                       // Header saldo — gradient amber dengan angka besar
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+                        padding: EdgeInsets.fromLTRB(14, 12, 6, 12),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                             colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -1047,7 +1050,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: Icon(isAnon ? Icons.lock_outlined : Icons.monetization_on_outlined,
                                 color: Colors.white, size: 24),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1065,18 +1068,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           IconButton(
                             onPressed: () => Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const PointHistoryScreen()),
+                              MaterialPageRoute(builder: (_) => PointHistoryScreen()),
                             ),
-                            icon: const Icon(Icons.history, size: 20, color: Colors.white),
+                            icon: Icon(Icons.history, size: 20, color: Colors.white),
                             tooltip: s.pointHistoryTitle,
                           ),
                         ]),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       if (isAnon && !dummyActive) ...[
                         Row(children: [
                           Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade700),
-                          const SizedBox(width: 6),
+                          SizedBox(width: 6),
                           Expanded(
                             child: Text(s.pointsAnonymousLose,
                                 style: AppText.caption.copyWith(color: Colors.orange.shade700)),
@@ -1100,15 +1103,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         _BucketRow(
                           icon: Icons.currency_exchange,
-                          color: const Color(0xFF2E7D32),
+                          color: Color(0xFF2E7D32),
                           label: s.walletBucketEarned,
                           hint: s.walletEarnedHint,
                           value: pp.earnedBalance,
                         ),
                       ],
-                      const SizedBox(height: 4),
-                      const Divider(height: 1),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
+                      Divider(height: 1),
+                      SizedBox(height: 4),
                       // Aksi cepat — grid ikon + label, rapi tanpa bubble
                       _ActionGrid(actions: [
                         if (isAnon && !dummyActive)
@@ -1117,7 +1120,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: Colors.orange,
                             label: s.pointsRegisterBonusLabel,
                             onTap: () => Navigator.push(
-                                context, MaterialPageRoute(builder: (_) => const LinkEmailScreen())),
+                                context, MaterialPageRoute(builder: (_) => LinkEmailScreen())),
                           ),
                         if (!isAnon && AppFlavor.topupEnabled)
                           _ActionItem(
@@ -1125,7 +1128,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: Colors.green,
                             label: s.topupTitle,
                             onTap: () => Navigator.push(
-                                context, MaterialPageRoute(builder: (_) => const TopUpScreen())),
+                                context, MaterialPageRoute(builder: (_) => TopUpScreen())),
                           ),
                         if (!isAnon && AppFlavor.showCashOut) ...[
                           _ActionItem(
@@ -1133,14 +1136,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: Colors.teal,
                             label: s.menuKyc,
                             onTap: () => Navigator.push(
-                                context, MaterialPageRoute(builder: (_) => const KycScreen())),
+                                context, MaterialPageRoute(builder: (_) => KycScreen())),
                           ),
                           _ActionItem(
                             icon: Icons.currency_exchange,
-                            color: const Color(0xFF2E7D32),
+                            color: Color(0xFF2E7D32),
                             label: s.withdrawTitle,
                             onTap: () => Navigator.push(
-                                context, MaterialPageRoute(builder: (_) => const WithdrawScreen())),
+                                context, MaterialPageRoute(builder: (_) => WithdrawScreen())),
                           ),
                         ],
                         _ActionItem(
@@ -1148,50 +1151,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           color: AppTheme.primary,
                           label: s.lbTitle,
                           onTap: () => Navigator.push(
-                              context, MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+                              context, MaterialPageRoute(builder: (_) => LeaderboardScreen())),
                         ),
                       ]),
                     ]),
                   ],
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
 
                   // Pengaturan
                   _SectionLabel(label: s.titleSettings),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   _SectionCard(children: [
                     // Admin Panel entry (hanya untuk zunixe@gmail.com)
                     if (auth.userEmail == 'zunixe@gmail.com')
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                         child: InkWell(
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelScreen())),
                           child: Row(
                             children: [
                               Container(
                                 width: 36, height: 36,
                                 decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.15), shape: BoxShape.circle),
-                                child: const Icon(Icons.admin_panel_settings, color: AppTheme.primary, size: 20),
+                                child: Icon(Icons.admin_panel_settings, color: AppTheme.primary, size: 20),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(child: Text(s.adminPanel, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600))),
-                              const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                              SizedBox(width: 12),
+                              Expanded(child: Text(s.adminPanel, style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600))),
+                              Icon(Icons.chevron_right, color: AppTheme.textSecondary),
                             ],
                           ),
                         ),
                       ),
                     if (auth.userEmail == 'zunixe@gmail.com')
-                      const Divider(height: 1, indent: 52),
+                      Divider(height: 1, indent: 52),
                     // Notifikasi
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                       child: Row(
                         children: [
                           Container(
                             width: 36, height: 36,
                             decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
-                            child: const Icon(Icons.notifications_outlined, color: AppTheme.primary, size: 20),
+                            child: Icon(Icons.notifications_outlined, color: AppTheme.primary, size: 20),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1209,19 +1212,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
-                    const Divider(height: 1, indent: 52),
+                    Divider(height: 1, indent: 52),
                     // Admin: izin screenshot aplikasi (hanya untuk zunixe@gmail.com)
                     if (auth.userEmail == 'zunixe@gmail.com')
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                         child: Row(
                           children: [
                             Container(
                               width: 36, height: 36,
                               decoration: BoxDecoration(color: AppTheme.online.withValues(alpha: 0.12), shape: BoxShape.circle),
-                              child: const Icon(Icons.screenshot_monitor, color: AppTheme.online, size: 20),
+                              child: Icon(Icons.screenshot_monitor, color: AppTheme.online, size: 20),
                             ),
-                            const SizedBox(width: 12),
+                            SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1239,19 +1242,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                       ),
-                    const Divider(height: 1, indent: 52),
+                    Divider(height: 1, indent: 52),
                     // Admin: watermark forensik foto view-once (hanya untuk zunixe@gmail.com)
                     if (auth.userEmail == 'zunixe@gmail.com')
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                         child: Row(
                           children: [
                             Container(
                               width: 36, height: 36,
                               decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
-                              child: const Icon(Icons.fingerprint, color: AppTheme.primary, size: 20),
+                              child: Icon(Icons.fingerprint, color: AppTheme.primary, size: 20),
                             ),
-                            const SizedBox(width: 12),
+                            SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1269,19 +1272,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                       ),
-                    const Divider(height: 1, indent: 52),
+                    Divider(height: 1, indent: 52),
                     // Admin: invisible (tidak muncul di daftar online) — hanya zunixe@gmail.com
                     if (auth.userEmail == 'zunixe@gmail.com')
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                         child: Row(
                           children: [
                             Container(
                               width: 36, height: 36,
                               decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.12), shape: BoxShape.circle),
-                              child: const Icon(Icons.visibility_off_outlined, color: Colors.purple, size: 20),
+                              child: Icon(Icons.visibility_off_outlined, color: Colors.purple, size: 20),
                             ),
-                            const SizedBox(width: 12),
+                            SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1299,18 +1302,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                       ),
-                    const Divider(height: 1, indent: 52),
+                    Divider(height: 1, indent: 52),
                     // Bahasa
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                       child: Row(
                         children: [
                           Container(
                             width: 36, height: 36,
                             decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.1), shape: BoxShape.circle),
-                            child: const Icon(Icons.language_outlined, color: AppTheme.accent, size: 20),
+                            child: Icon(Icons.language_outlined, color: AppTheme.accent, size: 20),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1328,14 +1331,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
+                    Divider(height: 1, indent: 52),
+                    // Tema gelap/terang
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.1), shape: BoxShape.circle),
+                            child: Icon(Icons.dark_mode_outlined, color: AppTheme.accent, size: 20),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(s.labelTheme, style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500)),
+                                Text(s.descTheme, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: context.watch<ThemeProvider>().isDark,
+                            onChanged: (v) => context.read<ThemeProvider>().setDark(v),
+                            activeThumbColor: AppTheme.primary,
+                          ),
+                        ],
+                      ),
+                    ),
                   ]),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Center(
                     child: GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonateScreen())),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DonateScreen())),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.favorite, size: 16, color: AppTheme.danger),
-                        const SizedBox(width: 4),
+                        Icon(Icons.favorite, size: 16, color: AppTheme.danger),
+                        SizedBox(width: 4),
                         Text(s.titleDonate, style: AppText.body.copyWith(color: AppTheme.textSecondary)),
                       ]),
                     ),
@@ -1361,7 +1393,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     switch (status) {
       case 'idle': return '🌙 ${s.statusIdle}';
       case 'offline': return '⚪ ${s.statusOffline}';
-      case 'invisible': return '🫥 ${s.statusInvisible}';
+      case 'invisible': return '👻 ${s.statusInvisible}';
       default: return '🟢 ${s.statusOnline}';
     }
   }
@@ -1378,7 +1410,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(s.btnCancel, style: const TextStyle(color: AppTheme.textSecondary)),
+            child: Text(s.btnCancel, style: TextStyle(color: AppTheme.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -1407,8 +1439,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
         title: Row(children: [
-          const Icon(Icons.star_rounded, color: Color(0xFFB8860B)),
-          const SizedBox(width: 8),
+          Icon(Icons.star_rounded, color: Color(0xFFB8860B)),
+          SizedBox(width: 8),
           Expanded(child: Text(s.setSubPriceTitle)),
         ]),
         content: Column(
@@ -1417,19 +1449,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Text(s.subscribeCreatorHint,
                 style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             TextField(
               controller: ctrl,
               keyboardType: TextInputType.number,
               autofocus: true,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.setSubPriceTitle,
                 hintText: s.setSubPriceHint,
                 suffixText: s.subscribePriceSuffix,
               ),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Text(s.setSubPriceExplain,
                 style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
           ],
@@ -1466,8 +1498,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: AppTheme.bgCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Row(children: [
-          const Icon(Icons.logout_rounded, color: AppTheme.danger, size: 24),
-          const SizedBox(width: 10),
+          Icon(Icons.logout_rounded, color: AppTheme.danger, size: 24),
+          SizedBox(width: 10),
           Expanded(child: Text(s.btnLogout, style: AppText.title)),
         ]),
         content: Text(
@@ -1477,7 +1509,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(s.btnCancel, style: const TextStyle(color: AppTheme.textSecondary)),
+            child: Text(s.btnCancel, style: TextStyle(color: AppTheme.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -1523,12 +1555,12 @@ class _ProfileStat extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
         child: Column(
           children: [
             Text(value < 0 ? '—' : '$value',
                 style: AppText.titleEmphasis.copyWith(color: AppTheme.primary)),
-            const SizedBox(height: 2),
+            SizedBox(height: 2),
             Text(label, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
           ],
         ),
@@ -1574,7 +1606,7 @@ class _InfoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
           Container(
@@ -1582,7 +1614,7 @@ class _InfoTile extends StatelessWidget {
             decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.1), shape: BoxShape.circle),
             child: Icon(icon, color: iconColor, size: 18),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1678,7 +1710,7 @@ class _BucketRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: EdgeInsets.symmetric(vertical: 5),
       child: Row(children: [
         Container(
           width: 30,
@@ -1689,7 +1721,7 @@ class _BucketRow extends StatelessWidget {
           ),
           child: Icon(icon, size: 15, color: color),
         ),
-        const SizedBox(width: 10),
+        SizedBox(width: 10),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label,
@@ -1734,7 +1766,7 @@ class _ActionGrid extends StatelessWidget {
               onTap: a.onTap,
               borderRadius: BorderRadius.circular(12),
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                padding: EdgeInsets.symmetric(vertical: 8, horizontal: 2),
                 child: Column(
                   children: [
                     Container(
@@ -1746,7 +1778,7 @@ class _ActionGrid extends StatelessWidget {
                       ),
                       child: Icon(a.icon, size: 22, color: a.color),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: 6),
                     Text(
                       a.label,
                       textAlign: TextAlign.center,

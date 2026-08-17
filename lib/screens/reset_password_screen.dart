@@ -66,7 +66,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(s.titleSetNewPassword)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -76,34 +76,34 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 child: Image.asset('assets/app_icon.png', width: 64, height: 64),
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             Text(
               s.msgSetNewPasswordHint,
               textAlign: TextAlign.center,
               style: AppText.body.copyWith(color: AppTheme.textSecondary),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
 
             TextField(
               controller: _passwordCtrl,
               obscureText: _obscure,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.labelPassword,
                 hintText: s.hintPassword,
-                prefixIcon: const Icon(Icons.lock_outlined),
+                prefixIcon: Icon(Icons.lock_outlined),
                 suffixIcon: IconButton(
                   icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
                   onPressed: () => setState(() => _obscure = !_obscure),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
 
             TextField(
               controller: _confirmCtrl,
               obscureText: _obscureConfirm,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.labelConfirmPassword,
                 hintText: s.hintPassword,

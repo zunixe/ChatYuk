@@ -32,6 +32,23 @@ class StoragePhotoService {
   String photoPath(String uid) =>
       'gallery/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
 
+  /// Path foto post timeline.
+  String postImagePath(String uid) =>
+      'posts/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
+
+  /// Upload foto post timeline → Storage. Return path atau null.
+  Future<String?> uploadPostImage({required String uid, required String base64}) async {
+    try {
+      final bytes = base64Decode(base64);
+      final path = postImagePath(uid);
+      await _sb.storage.from(_bucket).uploadBinary(path, bytes);
+      return path;
+    } catch (e) {
+      debugPrint('[StoragePhoto] uploadPostImage error: $e');
+      return null;
+    }
+  }
+
   /// Upload base64 JPEG → Storage. Return path atau null jika gagal.
   Future<String?> upload({
     required String chatId,
@@ -56,6 +73,18 @@ class StoragePhotoService {
       return base64Encode(bytes);
     } catch (e) {
       debugPrint('[StoragePhoto] download error: $e');
+      return null;
+    }
+  }
+
+  /// Download path → bytes mentah (untuk cache/thumbnail). Null jika gagal.
+  Future<Uint8List?> downloadBytes(String path) async {
+    try {
+      final bytes = await _sb.storage.from(_bucket).download(path);
+      if (bytes.isEmpty) return null;
+      return bytes;
+    } catch (e) {
+      debugPrint('[StoragePhoto] downloadBytes error: $e');
       return null;
     }
   }

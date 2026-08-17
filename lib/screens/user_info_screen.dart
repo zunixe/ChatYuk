@@ -120,8 +120,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
         title: Row(children: [
-          const Icon(Icons.star_rounded, color: Color(0xFFB8860B)),
-          const SizedBox(width: 8),
+          Icon(Icons.star_rounded, color: Color(0xFFB8860B)),
+          SizedBox(width: 8),
           Expanded(child: Text(s.subscribeConfirmTitle)),
         ]),
         content: Column(
@@ -130,7 +130,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           children: [
             Text(s.subscribeConfirmBody(profile.nickname, price, 1),
                 style: AppText.bodyStrong),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(s.subscribeFansHint,
                 style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
           ],
@@ -231,14 +231,14 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final mode = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppTheme.bgScreen,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Icon(Icons.lock_outline, size: 36, color: AppTheme.primary),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(s.photoLockedTitle, style: AppText.title),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(s.photoLockedHint, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
           const SizedBox(height: 16),
           ListTile(
@@ -320,12 +320,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(s.titleProfile)),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(24),
               child: Column(
                 children: [
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
 
                   // Avatar
                   Stack(
@@ -355,7 +355,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -364,23 +364,23 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         child: Text(name, style: AppText.headline.copyWith(color: AppTheme.textPrimary)),
                       ),
                       if (profile?.isRegistered == true) ...[
-                        const SizedBox(width: 5),
-                        const Icon(Icons.verified, size: 20, color: Color(0xFF4A90E2)),
+                        SizedBox(width: 5),
+                        Icon(Icons.verified, size: 20, color: Color(0xFF4A90E2)),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(genderLabel, style: AppText.bodyStrong.copyWith(color: AppTheme.textSecondary)),
                       if (profile?.age != null && profile!.age > 0) ...[
-                        const SizedBox(width: 12),
+                        SizedBox(width: 12),
                         Text('${profile.age} ${s.labelYears}', style: AppText.bodyStrong.copyWith(color: AppTheme.textSecondary)),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
 
                   if (profile != null && profile.hashtags.isNotEmpty) ...[
                     Wrap(
@@ -388,7 +388,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       runSpacing: 8,
                       alignment: WrapAlignment.center,
                       children: profile.hashtags.map((tag) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
                           color: AppTheme.accent.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(20),
@@ -397,29 +397,29 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         child: Text('#$tag', style: AppText.label.copyWith(letterSpacing: 0)),
                       )).toList(),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: 24),
                   ],
 
                   // Info card
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(16),
                       child: Column(
                         children: [
                           _infoRow(s.labelStatus, statusLabel),
                           if (profile != null) ...[
-                            const Divider(color: AppTheme.divider),
+                            Divider(color: AppTheme.divider),
                             _infoRow(s.labelCountry, profile.country.isEmpty ? '-' : profile.country),
-                            const Divider(color: AppTheme.divider),
+                            Divider(color: AppTheme.divider),
                             _infoRow(s.labelCity, profile.city.isEmpty ? '-' : profile.city),
                           ],
-                          const Divider(color: AppTheme.divider),
+                          Divider(color: AppTheme.divider),
                           _infoRow(s.labelUserId, widget.userId.substring(0, 8)),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
 
                   // Sosial: angka + tombol Follow / Friend / Subscribe
                   if (profile != null) ...[
@@ -431,7 +431,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.06),
                             blurRadius: 12,
-                            offset: const Offset(0, 4),
+                            offset: Offset(0, 4),
                           ),
                         ],
                       ),
@@ -439,12 +439,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         children: [
                           // Stats bar — angka + label + ikon, terpisah rapi.
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 18, 8, 16),
+                            padding: EdgeInsets.fromLTRB(8, 18, 8, 16),
                             child: Row(
                               children: [
                                 _statColumn(
                                   icon: Icons.favorite_rounded,
-                                  color: const Color(0xFFE91E63),
+                                  color: Color(0xFFE91E63),
                                   value: profile.followersCount,
                                   label: s.socialFollowers,
                                 ),
@@ -458,16 +458,16 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                 _statDivider(),
                                 _statColumn(
                                   icon: Icons.star_rounded,
-                                  color: const Color(0xFFB8860B),
+                                  color: Color(0xFFB8860B),
                                   value: profile.subscriberCount,
                                   label: s.socialSubscribers,
                                 ),
                               ],
                             ),
                           ),
-                          const Divider(height: 1, indent: 16, endIndent: 16),
+                          Divider(height: 1, indent: 16, endIndent: 16),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                            padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
                             child: Column(
                               children: [
                                 // Baris tombol aksi utama: Follow + Friend.
@@ -486,7 +486,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                         onTap: _toggleFollow,
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
+                                    SizedBox(width: 10),
                                     Expanded(
                                       child: _friend
                                           ? _SocialActionButton(
@@ -524,7 +524,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                   ],
                                 ),
                                 if (pointsEnabled && profile.subscriptionPrice > 0) ...[
-                                  const SizedBox(height: 10),
+                                  SizedBox(height: 10),
                                   SizedBox(
                                     width: double.infinity,
                                     child: _subscribed
@@ -532,10 +532,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                             active: true,
                                             activeIcon: Icons.star_rounded,
                                             activeLabel: s.btnSubscribed,
-                                            activeColor: const Color(0xFFB8860B),
+                                            activeColor: Color(0xFFB8860B),
                                             icon: Icons.star_rounded,
                                             label: s.btnSubscribed,
-                                            color: const Color(0xFFB8860B),
+                                            color: Color(0xFFB8860B),
                                             loading: false,
                                             onTap: () {},
                                           )
@@ -543,7 +543,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                             active: false,
                                             icon: Icons.star_rounded,
                                             label: '${s.btnSubscribe} · ${s.subscribePrice(profile.subscriptionPrice)}',
-                                            color: const Color(0xFFB8860B),
+                                            color: Color(0xFFB8860B),
                                             loading: _busySocial,
                                             onTap: _subscribe,
                                           ),
@@ -555,26 +555,26 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                   ],
 
                   // Galeri Foto Profil
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(s.labelOthersGallery, style: AppText.titleEmphasis),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           if (_loadingPhotos)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.symmetric(vertical: 20),
                               child: Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)),
                             )
                           else if (_photos.isEmpty)
                             Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              padding: EdgeInsets.symmetric(vertical: 20),
                               child: Center(child: Text(s.labelGalleryEmpty, textAlign: TextAlign.center, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary))),
                             )
                           else
@@ -650,12 +650,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   Widget _infoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: AppTheme.textSecondary)),
-          Text(value, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(color: AppTheme.textSecondary)),
+          Text(value, style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -680,12 +680,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             ),
             child: Icon(icon, size: 18, color: color),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             '$value',
             style: AppText.titleEmphasis.copyWith(color: AppTheme.textPrimary),
           ),
-          const SizedBox(height: 1),
+          SizedBox(height: 1),
           Text(
             label,
             style: AppText.caption.copyWith(color: AppTheme.textSecondary),

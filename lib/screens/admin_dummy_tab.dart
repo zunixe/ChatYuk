@@ -204,8 +204,8 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
   }
 
   Color _statusColor(String status) => switch (status) {
-        'online' => const Color(0xFF2E7D32),
-        'idle' => const Color(0xFFF9A825),
+        'online' => Color(0xFF2E7D32),
+        'idle' => Color(0xFFF9A825),
         _ => AppTheme.textSecondary,
       };
 
@@ -223,48 +223,48 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         children: [
           // ── Form pendaftaran / edit ──
           Text(_editingUid != null ? s.dummyEdit : s.dummyCreateTitle, style: AppText.titleEmphasis),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(s.dummyRegisterHint, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           _SectionCard(
             child: Column(children: [
               TextField(
                 controller: _nickCtrl,
                 decoration: InputDecoration(
                   labelText: s.dummyNicknameLabel,
-                  prefixIcon: const Icon(Icons.badge_outlined, size: 20),
-                  border: const OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.badge_outlined, size: 20),
+                  border: OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               // Gender
               Row(children: [
                 Expanded(child: _genderCard('female', '👩', AppTheme.female, s.labelGenderFemale)),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(child: _genderCard('male', '👨', AppTheme.male, s.labelGenderMale)),
               ]),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               // Umur & Negara
               Row(children: [
                 Expanded(child: _ageDropdown(s)),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(child: _countryDropdown(s)),
               ]),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               // Kota
               _cityDropdown(s),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: _busy ? null : () => _register(s),
                   icon: _busy
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -275,7 +275,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                 ),
               ),
               if (_editingUid != null) ...[
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
@@ -286,12 +286,12 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
               ],
             ]),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
 
           // ── Daftar akun dummy ──
           Row(children: [
             Text(s.dummyListTitle, style: AppText.titleEmphasis),
-            const Spacer(),
+            Spacer(),
             Text('${_items.length}', style: AppText.label.copyWith(color: AppTheme.textSecondary)),
           ]),
           const SizedBox(height: 6),
@@ -327,7 +327,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     return GestureDetector(
       onTap: () => setState(() => _gender = value),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -336,8 +336,8 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: AppGlyph.sm)),
-            const SizedBox(width: 6),
+            Text(emoji, style: TextStyle(fontSize: AppGlyph.sm)),
+            SizedBox(width: 6),
             Text(label,
                 style: AppText.label.copyWith(
                     color: selected ? color : AppTheme.textSecondary)),
@@ -410,7 +410,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       if (city.isNotEmpty) city,
     ].join(' · ');
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: 10),
       child: _SectionCard(
         child: Column(children: [
           Row(children: [
@@ -422,7 +422,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                 style: AppText.label.copyWith(color: AppTheme.primary),
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -441,21 +441,21 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
             ),
             if (unread > 0) ...[
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppTheme.danger,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.mark_chat_unread, size: 12, color: Colors.white),
-                  const SizedBox(width: 4),
+                  Icon(Icons.mark_chat_unread, size: 12, color: Colors.white),
+                  SizedBox(width: 4),
                   Text('$unread', style: AppText.label.copyWith(color: Colors.white)),
                 ]),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
             ],
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: _statusColor(status).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
@@ -470,7 +470,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
               ),
             ),
           ]),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Row(children: [
             Expanded(
               child: Wrap(
@@ -485,7 +485,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
             IconButton(
               tooltip: s.dummyEdit,
               onPressed: () => _startEdit(item),
-              icon: const Icon(Icons.edit_outlined, size: 20, color: AppTheme.textSecondary),
+              icon: Icon(Icons.edit_outlined, size: 20, color: AppTheme.textSecondary),
             ),
             IconButton(
               tooltip: s.dummyChatAs,
@@ -532,7 +532,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(12),

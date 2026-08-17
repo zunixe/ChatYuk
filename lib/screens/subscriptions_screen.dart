@@ -47,18 +47,18 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(s.subscriptionsTitle)),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
               : _items.isEmpty
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    padding: EdgeInsets.symmetric(horizontal: 32),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.star_rounded, size: 48, color: AppTheme.textSecondary),
-                        const SizedBox(height: 12),
+                        Icon(Icons.star_rounded, size: 48, color: AppTheme.textSecondary),
+                        SizedBox(height: 12),
                         Text(s.subscriptionsEmpty, style: AppText.bodyStrong.copyWith(color: AppTheme.textSecondary)),
-                        const SizedBox(height: 6),
+                        SizedBox(height: 6),
                         Text(s.subscriptionsEmptyHint, textAlign: TextAlign.center, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                       ],
                     ),
@@ -76,8 +76,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                       final price = (e['price'] as num?)?.toInt() ?? 0;
                       final registered = e['is_registered'] == true;
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        margin: EdgeInsets.only(bottom: 8),
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(14),
@@ -85,7 +85,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                         child: Row(
                           children: [
                             ProfileAvatar(uid: uid, name: name, size: 40, borderRadius: 20),
-                            const SizedBox(width: 10),
+                            SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,8 +94,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                                     children: [
                                       Flexible(child: Text(name, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis)),
                                       if (registered) ...[
-                                        const SizedBox(width: 4),
-                                        const Icon(Icons.verified, size: 14, color: Color(0xFF4A90E2)),
+                                        SizedBox(width: 4),
+                                        Icon(Icons.verified, size: 14, color: Color(0xFF4A90E2)),
                                       ],
                                     ],
                                   ),

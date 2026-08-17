@@ -76,13 +76,13 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(s.titleLinkEmail)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Info card
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
@@ -92,52 +92,52 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    const Icon(Icons.person_outline, color: AppTheme.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Text(auth.profile?.nickname ?? '', style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                    Icon(Icons.person_outline, color: AppTheme.primary, size: 20),
+                    SizedBox(width: 8),
+                    Text(auth.profile?.nickname ?? '', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
                   ]),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   Text(s.msgAnonymousWarning, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             // Email
             TextField(
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.labelEmail,
                 hintText: s.hintEmail,
-                prefixIcon: const Icon(Icons.email_outlined),
+                prefixIcon: Icon(Icons.email_outlined),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
 
             // Password
             TextField(
               controller: _passwordCtrl,
               obscureText: _obscurePass,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.labelPassword,
                 hintText: s.hintPassword,
-                prefixIcon: const Icon(Icons.lock_outlined),
+                prefixIcon: Icon(Icons.lock_outlined),
                 suffixIcon: IconButton(
                   icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
                   onPressed: () => setState(() => _obscurePass = !_obscurePass),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
 
             // Konfirmasi Password
             TextField(
               controller: _confirmCtrl,
               obscureText: _obscureConfirm,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.labelConfirmPassword,
                 prefixIcon: const Icon(Icons.lock_outlined),

@@ -176,7 +176,7 @@ class _MissionsScreenState extends State<MissionsScreen>
 
   Widget _list(List<dynamic> items, S s) {
     if (items.isEmpty) {
-      return Center(child: Text(s.missionsEmpty, style: const TextStyle(color: AppTheme.textSecondary)));
+      return Center(child: Text(s.missionsEmpty, style: TextStyle(color: AppTheme.textSecondary)));
     }
     return RefreshIndicator(
       onRefresh: _load,
@@ -277,12 +277,12 @@ class _ProgressBanner extends StatelessWidget {
     final pct = total == 0 ? 0.0 : (done / total).clamp(0.0, 1.0);
     final allDone = total > 0 && done == total;
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.all(14),
+      margin: EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: Offset(0, 2))],
       ),
       child: Row(
         children: [
@@ -305,7 +305,7 @@ class _ProgressBanner extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,7 +314,7 @@ class _ProgressBanner extends StatelessWidget {
                   allDone ? s.missionsAllDone : s.missionsProgress(done, total),
                   style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Text(hint, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
               ],
             ),
@@ -396,7 +396,7 @@ class _MissionCard extends StatelessWidget {
         child: Transform.translate(offset: Offset(0, (1 - t) * 16), child: child),
       ),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
+        margin: EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(16),
@@ -409,12 +409,12 @@ class _MissionCard extends StatelessWidget {
                   ? AppTheme.primary.withValues(alpha: 0.18)
                   : Colors.black.withValues(alpha: 0.04),
               blurRadius: claimable ? 12 : 6,
-              offset: const Offset(0, 2),
+              offset: Offset(0, 2),
             ),
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(12),
           child: Row(
             children: [
               // Ikon berwarna
@@ -429,11 +429,11 @@ class _MissionCard extends StatelessWidget {
                         : [meta.color.withValues(alpha: 0.85), meta.color],
                   ),
                   borderRadius: BorderRadius.circular(13),
-                  boxShadow: [BoxShadow(color: (done ? AppTheme.online : meta.color).withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))],
+                  boxShadow: [BoxShadow(color: (done ? AppTheme.online : meta.color).withValues(alpha: 0.3), blurRadius: 6, offset: Offset(0, 2))],
                 ),
                 child: Icon(done ? Icons.check_rounded : meta.icon, color: Colors.white, size: 24),
               ),
-              const SizedBox(width: 13),
+              SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -451,14 +451,14 @@ class _MissionCard extends StatelessWidget {
                       ],
                     ),
                     if (hasProgress) ...[
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(6),
                               child: TweenAnimationBuilder<double>(
-                                duration: const Duration(milliseconds: 600),
+                                duration: Duration(milliseconds: 600),
                                 curve: Curves.easeOut,
                                 tween: Tween(begin: 0, end: target == 0 ? 0 : (current / target).clamp(0.0, 1.0)),
                                 builder: (_, v, __) => LinearProgressIndicator(
@@ -470,7 +470,7 @@ class _MissionCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           Text('$current/$target',
                               style: AppText.caption.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w700)),
                         ],
