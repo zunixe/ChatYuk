@@ -41,12 +41,12 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppTheme.bgCard,
-          title: Text(s.kycRejectTitle, style: const TextStyle(color: AppTheme.textPrimary)),
+          title: Text(s.kycRejectTitle, style: TextStyle(color: AppTheme.textPrimary)),
           content: TextField(
             controller: _rejectCtrl,
             maxLines: 2,
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: InputDecoration(labelText: s.kycRejectReason, labelStyle: const TextStyle(color: AppTheme.textSecondary)),
+            style: TextStyle(color: AppTheme.textPrimary),
+            decoration: InputDecoration(labelText: s.kycRejectReason, labelStyle: TextStyle(color: AppTheme.textSecondary)),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.btnCancel)),
@@ -122,7 +122,7 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
   Widget _listBody(S s, String tab) {
     if (_loading && tab == _tab) return const Center(child: CircularProgressIndicator());
     if (_items.isEmpty) {
-      return Center(child: Text(s.kycNoRequests, style: const TextStyle(color: AppTheme.textSecondary)));
+      return Center(child: Text(s.kycNoRequests, style: TextStyle(color: AppTheme.textSecondary)));
     }
     return RefreshIndicator(
       onRefresh: _load,
@@ -152,7 +152,7 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
     };
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(12),
@@ -165,12 +165,12 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
                 style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700)),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
             child: Text(_statusLabel(s, status), style: AppText.caption.copyWith(color: color, fontWeight: FontWeight.w700)),
           ),
         ]),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text('$idType — $idNumber', style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
         Text('$email • $createdAt', style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
         if (rejectReason != null && rejectReason.toString().isNotEmpty) ...[

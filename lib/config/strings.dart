@@ -510,6 +510,8 @@ class S {
   // ── Settings ──
   String get titleSettings => isId ? 'Pengaturan' : 'Settings';
   String get labelLanguage => isId ? 'Bahasa / Language' : 'Language / Bahasa';
+  String get labelTheme => isId ? 'Mode Gelap' : 'Dark Mode';
+  String get descTheme => isId ? 'Tampilan gelap untuk kenyamanan mata' : 'Dark appearance for comfort';
   String get langId => isId ? '🇮🇩  Indonesia' : '🇮🇩  Indonesia';
   String get langEn => isId ? '🇬🇧  English' : '🇬🇧  English';
 
@@ -922,9 +924,15 @@ class S {
       ? 'File terlalu besar. Maksimal 10MB.'
       : 'File too large. Maximum 10MB.';
   String get btnEmoji => isId ? 'Emoji' : 'Emoji';
+  String get tooltipResize => isId ? 'Geser untuk mengubah ukuran' : 'Drag to resize';
   String get tooltipPhoto => isId ? 'Foto' : 'Photo';
   String get labelGenderFilter => isId ? 'Gender' : 'Gender';
   String get btnDelete => isId ? 'Hapus' : 'Delete';
+  String get confirmDeletePost => isId
+      ? 'Yakin ingin menghapus postingan ini?'
+      : 'Delete this post?';
+  String get postDeleted => isId ? 'Postingan dihapus' : 'Post deleted';
+  String get errDeletePost => isId ? 'Gagal menghapus postingan' : 'Failed to delete post';
   String get adminPanel => isId ? 'Admin Panel' : 'Admin Panel';
   String get statsUsers => isId ? 'Users' : 'Users';
   String get statsActive => isId ? 'Active' : 'Active';
@@ -1177,5 +1185,85 @@ class S {
   String get setSubPriceExplain => isId
       ? 'Fans membayar harga ini setiap bulan untuk berlangganan. Kamu terima 70%, platform 30%.'
       : 'Fans pay this price monthly to subscribe. You receive 70%, the platform takes 30%.';
+
+  // ── Timeline ──
+  String get navTimeline => isId ? 'Timeline' : 'Timeline';
+  String get tabAll => isId ? 'Semua' : 'All';
+  String get tabFollowing => isId ? 'Mengikuti' : 'Following';
+  String get tabMine => isId ? 'Postinganku' : 'My Posts';
+  String get tabMessages => isId ? 'Pesan' : 'Messages';
+  String get tabRooms => isId ? 'Room' : 'Rooms';
+  String get titleTimeline => isId ? 'Timeline' : 'Timeline';
+  String get hintWritePost => isId ? 'Tulis sesuatu...' : "Share what's on your mind...";
+  String get btnPost => isId ? 'Posting' : 'Post';
+  String get btnAdd => isId ? 'Add' : 'Add';
+  String get btnCamera => isId ? 'Kamera' : 'Camera';
+  String get btnGallery => isId ? 'Galeri' : 'Gallery';
+  String get postingAs => isId ? 'Posting sebagai' : 'Posting as';
+  String get promptCompleteEmailTitle => isId
+      ? 'Lengkapi email untuk posting'
+      : 'Complete email to post';
+  String get promptCompleteEmailMsg => isId
+      ? 'Kamu belum melengkapi email. Lengkapi email di halaman Profil agar bisa membuat postingan.'
+      : 'You have not completed your email. Complete your email on the Profile page to create posts.';
+  String get promptCompleteEmailTimelineTitle => isId
+      ? 'Lengkapi email untuk melihat timeline'
+      : 'Complete email to view timeline';
+  String get promptCompleteEmailTimelineMsg => isId
+      ? 'Kamu belum melengkapi email. Lengkapi email di halaman Profil agar bisa melihat timeline.'
+      : 'You have not completed your email. Complete your email on the Profile page to view the timeline.';
+  String get btnGoProfile => isId ? 'Ke Profil' : 'Go to Profile';
+  String get photoCountLabel => isId ? 'foto' : 'photos';
+  String get btnBoost => isId ? 'Boost' : 'Boost';
+  String get btnComment => isId ? 'Komentar' : 'Comments';
+  String get btnShare => isId ? 'Bagikan' : 'Share';
+  String get labelVisibility => isId ? 'Siapa yang bisa melihat' : 'Who can see this';
+  String get visPublic => isId ? 'Publik' : 'Public';
+  String get visFollowers => isId ? 'Pengikut' : 'Followers';
+  String get visSubscribers => isId ? 'Subscriber' : 'Subscribers';
+  String get visPublicDesc => isId ? 'Semua orang' : 'Everyone';
+  String get visFollowersDesc => isId ? 'Pengikut, teman & subscriber' : 'Followers, friends & subscribers';
+  String get visSubscribersDesc => isId ? 'Hanya subscriber aktif' : 'Active subscribers only';
+  String get hintComment => isId ? 'Tulis komentar...' : 'Write a comment...';
+  String get emptyTimeline => isId ? 'Belum ada postingan' : 'No posts yet';
+  String get emptyTimelineHint => isId
+      ? 'Jadilah yang pertama posting di timeline!'
+      : 'Be the first to post on the timeline!';
+  String get emptyTimelineCta => isId
+      ? 'Ketuk + untuk membuat postingan'
+      : 'Tap + to create a post';
+  String get emptyFollowing => isId
+      ? 'Belum ada postingan dari yang kamu ikuti'
+      : 'No posts from people you follow';
+  String get emptyFollowingHint => isId
+      ? 'Ikuti orang lain untuk melihat postingan mereka di sini.'
+      : 'Follow others to see their posts here.';
+  String get emptyMine => isId
+      ? 'Belum ada postinganmu'
+      : 'No posts from you yet';
+  String get emptyMineHint => isId
+      ? 'Buat postingan pertamamu, akan muncul di sini.'
+      : 'Create your first post, it will appear here.';
+  String get noMorePosts => isId ? 'Tidak ada postingan lagi' : 'No more posts';
+  String get errPostEmpty => isId ? 'Tulis sesuatu atau pilih foto' : 'Write something or pick a photo';
+  String get errPostTooLong => isId ? 'Postingan maksimal 2000 karakter' : 'Post must be at most 2000 characters';
+  String get errPostLimit => isId
+      ? 'Batas posting harian tercapai'
+      : 'Daily post limit reached';
+  String get boostPaidLabel => isId ? 'Boost (koin pro)' : 'Boost (pro coins)';
+  String get boostBonusLabel => isId ? 'Boost (koin bonus)' : 'Boost (bonus coins)';
+  String get boostConfirm => isId
+      ? 'Boost postingan ini supaya naik ke atas feed?'
+      : 'Boost this post to the top of the feed?';
+  String get msgBoosted => isId ? 'Postingan di-boost' : 'Post boosted';
+  String get msgPosted => isId ? 'Berhasil diposting' : 'Posted';
+  String get msgCommented => isId ? 'Komentar terkirim' : 'Comment posted';
+  String get msgLiked => isId ? 'Disukai' : 'Liked';
+  String get msgUnliked => isId ? 'Batal suka' : 'Unliked';
+  String get msgShared => isId ? 'Dibagikan' : 'Shared';
+  String get badgeBoosted => isId ? 'Boost' : 'Boost';
+  String get badgeFriend => isId ? 'Teman' : 'Friend';
+  String get badgeSubscriber => isId ? 'Subscriber' : 'Subscriber';
 }
+
 

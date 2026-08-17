@@ -83,7 +83,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   void _onScroll() {
     final admin = context.read<AdminProvider>();
     if (!_scrollCtrl.hasClients) return;
-    // ListView reverse:true → "atas" (pesan lebih lama) = maxScrollExtent.
+    // ListView( reverse:true → "atas" (pesan lebih lama) = maxScrollExtent.
     if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 300) {
       if (admin.chatMessagesHasMore && !admin.chatsLoading) {
         admin.fetchMoreChatMessages(widget.chatId).then((_) {
@@ -305,27 +305,23 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
         flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
-            ),
+          decoration: BoxDecoration(
+            gradient: AppTheme.headerGradient,
           ),
         ),
         title: Text(widget.chatLabel,
           style: AppText.titleEmphasis.copyWith(color: Colors.white),
           overflow: TextOverflow.ellipsis),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: Colors.white),
       ),
       body: Column(
         children: [
           if (_loading)
-            const LinearProgressIndicator(minHeight: 2, color: AppTheme.primary),
+            LinearProgressIndicator(minHeight: 2, color: AppTheme.primary),
           if (_error != null)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: EdgeInsets.symmetric(vertical: 6),
               color: AppTheme.danger.withValues(alpha: 0.1),
               child: Text(s.adminChatError, textAlign: TextAlign.center,
                 style: AppText.bodySmall.copyWith(color: AppTheme.danger)),
@@ -334,9 +330,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
             child: _msgs.isEmpty && !_loading
                 ? Center(
                     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const Icon(Icons.forum_outlined, size: 48, color: AppTheme.textSecondary),
-                      const SizedBox(height: 12),
-                      Text(s.adminChatNoChats, style: const TextStyle(color: AppTheme.textSecondary)),
+                      Icon(Icons.forum_outlined, size: 48, color: AppTheme.textSecondary),
+                      SizedBox(height: 12),
+                      Text(s.adminChatNoChats, style: TextStyle(color: AppTheme.textSecondary)),
                     ]),
                   )
                 : RefreshIndicator(

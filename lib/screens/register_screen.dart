@@ -341,13 +341,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(profileOnly ? s.msgCompleteProfile : s.titleRegister)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Kartu form — satu grup utuh, komposisi sama dengan login
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AppTheme.bgCard,
                 borderRadius: BorderRadius.circular(16),
@@ -361,46 +361,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
               TextField(
                 controller: _emailCtrl,
                 keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                style: TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
                   labelText: s.labelEmail,
                   hintText: s.hintEmail,
-                  prefixIcon: const Icon(Icons.email_outlined),
+                  prefixIcon: Icon(Icons.email_outlined),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               TextField(
                 controller: _passwordCtrl,
                 obscureText: _obscurePass,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                style: TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
                   labelText: s.labelPassword,
                   hintText: s.hintPassword,
-                  prefixIcon: const Icon(Icons.lock_outlined),
+                  prefixIcon: Icon(Icons.lock_outlined),
                   suffixIcon: IconButton(
                     icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
                     onPressed: () => setState(() => _obscurePass = !_obscurePass),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               // Konfirmasi Password
               TextField(
                 controller: _confirmCtrl,
                 obscureText: _obscureConfirm,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                style: TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
                   labelText: s.labelConfirmPassword,
-                  prefixIcon: const Icon(Icons.lock_outlined),
+                  prefixIcon: Icon(Icons.lock_outlined),
                   suffixIcon: IconButton(
                     icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
                     onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 8),
+              SizedBox(height: 16),
+              Divider(),
+              SizedBox(height: 8),
             ],
 
             // Nickname
@@ -408,7 +408,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               controller: _nicknameCtrl,
               focusNode: _nicknameFocus,
               onChanged: _onNicknameChanged,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 labelText: s.labelUsername,
                 hintText: s.hintNickname,
@@ -502,7 +502,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return GestureDetector(
       onTap: () => setState(() => _gender = value),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -511,8 +511,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: AppGlyph.sm)),
-            const SizedBox(width: 6),
+            Text(emoji, style: TextStyle(fontSize: AppGlyph.sm)),
+            SizedBox(width: 6),
             Text(label, style: AppText.bodySmall.copyWith(
               color: selected ? color : AppTheme.textSecondary,
               fontWeight: FontWeight.w600,

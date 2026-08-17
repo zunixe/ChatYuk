@@ -11,14 +11,19 @@ import 'providers/points_provider.dart';
 import 'providers/social_provider.dart';
 import 'providers/admin_provider.dart';
 import 'providers/locale_provider.dart';
+import 'providers/nav_provider.dart';
+import 'providers/theme_provider.dart';
+import 'providers/timeline_provider.dart';
 import 'services/chat_service.dart';
 import 'main.dart';
 import 'screens/entry_screen.dart';
-import 'screens/lobby_screen.dart';
-import 'screens/private_chats_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/online_users_screen.dart';
 import 'screens/reset_password_screen.dart';
+import 'screens/timeline_screen.dart';
+import 'screens/chats_screen.dart';
+import 'screens/post_composer_screen.dart';
+import 'widgets/anon_prompt_dialog.dart';
 
 class ChatYukApp extends StatelessWidget {
   const ChatYukApp({super.key});
@@ -31,14 +36,19 @@ class ChatYukApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => PointsProvider()..checkOnboarding()..refreshEnabled()..subscribeEnabled()),
         ChangeNotifierProvider(create: (_) => SocialProvider()),
+        ChangeNotifierProvider(create: (_) => TimelineProvider()),
         ChangeNotifierProvider(create: (_) => AdminProvider()),
+        ChangeNotifierProvider(create: (_) => NavProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => localeProvider),
       ],
-      child: Consumer<LocaleProvider>(
-        builder: (_, __, ___) => MaterialApp(
+      child: Consumer2<LocaleProvider, ThemeProvider>(
+        builder: (context, _, theme, _) => MaterialApp(
           title: 'ChatYuk',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: theme.themeMode,
           navigatorKey: navigatorKey,
           // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
           // tapi tetap menghormati preferensi aksesibilitas user.
@@ -133,9 +143,9 @@ class _AuthGateState extends State<_AuthGate> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(color: AppTheme.primary),
-              const SizedBox(height: 16),
-              Text(s.loading, style: const TextStyle(color: AppTheme.textSecondary)),
+              CircularProgressIndicator(color: AppTheme.primary),
+              SizedBox(height: 16),
+              Text(s.loading, style: TextStyle(color: AppTheme.textSecondary)),
             ],
           ),
         ),
@@ -146,17 +156,17 @@ class _AuthGateState extends State<_AuthGate> {
       return Scaffold(
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.wifi_off, color: AppTheme.textSecondary, size: 48),
-                const SizedBox(height: 16),
+                Icon(Icons.wifi_off, color: AppTheme.textSecondary, size: 48),
+                SizedBox(height: 16),
                 Text(
                   s.msgServerError,
                   style: AppText.title,
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(
                   s.msgServerErrorHint,
                   textAlign: TextAlign.center,
@@ -191,11 +201,10 @@ class _MainNav extends StatefulWidget {
 }
 
 class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
-  int _tab = 0;
   final _pages = const [
     OnlineUsersScreen(),
-    PrivateChatsScreen(),
-    LobbyScreen(),
+    ChatsScreen(),
+    TimelineScreen(),
     ProfileScreen(),
   ];
 
@@ -239,8 +248,22 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     }
   }
 
+  /// Pindah tab utama (juga dipanggil NavProvider dari screen lain).
+  /// Anon diblokir dari tab timeline — popup saja, tab tidak pindah.
+  void _onNavTap(int i) {
+    if (i == 2) {
+      final auth = context.read<AuthProvider>();
+      if (!(auth.profile?.isRegistered ?? false)) {
+        showAnonPromptDialog(context);
+        return;
+      }
+    }
+    context.read<NavProvider>().goTo(i);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tab = context.watch<NavProvider>().tab;
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: _roomProvider),
@@ -252,13 +275,31 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
           onTap: () => context.read<AuthProvider>().notifyActivity(),
           onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
           child: IndexedStack(
-            index: _tab,
+            index: tab,
             children: _pages,
           ),
         ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            final auth = context.read<AuthProvider>();
+            // Anon (belum isi email) — samakan dengan timeline: arahkan
+            // ke profil, jangan buka composer.
+            if (!(auth.profile?.isRegistered ?? false)) {
+              showAnonPromptDialog(context);
+              return;
+            }
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PostComposerScreen()),
+            );
+          },
+          backgroundColor: AppTheme.primary,
+          elevation: 3,
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         bottomNavigationBar: _BottomNav(
-          currentIndex: _tab,
-          onTap: (i) => setState(() => _tab = i),
+          currentIndex: tab,
+          onTap: _onNavTap,
         ),
       ),
     );
@@ -282,24 +323,42 @@ class _BottomNav extends StatelessWidget {
         final totalUnread = (snap.data ?? []).fold<int>(0, (sum, c) {
           return sum + ((c.unreadCounts[uid] ?? 0));
         });
-        return BottomNavigationBar(
-          currentIndex: currentIndex,
-          onTap: onTap,
-          items: [
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.group_rounded),
-              activeIcon: const Icon(Icons.group_rounded),
-              label: s.navOnline,
-            ),
-            BottomNavigationBarItem(
-              icon: _BadgedIcon(icon: Icons.chat_bubble, count: totalUnread),
-              label: s.navChats,
-            ),
-            BottomNavigationBarItem(icon: const Icon(Icons.chat), label: s.navRooms),
-            BottomNavigationBarItem(icon: const Icon(Icons.person), label: s.navProfile),
-          ],
+        return BottomAppBar(
+          color: AppTheme.bgCard,
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 8,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _navItem(Icons.group_rounded, s.navOnline, 0),
+              _navItem(Icons.chat_bubble, s.navChats, 1, badge: totalUnread),
+              const SizedBox(width: 48),
+              _navItem(Icons.dynamic_feed_rounded, s.navTimeline, 2),
+              _navItem(Icons.person, s.navProfile, 3),
+            ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _navItem(IconData icon, String label, int index, {int badge = 0}) {
+    final selected = currentIndex == index;
+    final color = selected ? AppTheme.primary : AppTheme.textSecondary;
+    return InkWell(
+      onTap: () => onTap(index),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _BadgedIcon(icon: icon, count: badge, color: color),
+            const SizedBox(height: 2),
+            Text(label, style: AppText.caption.copyWith(color: color, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -307,15 +366,17 @@ class _BottomNav extends StatelessWidget {
 class _BadgedIcon extends StatelessWidget {
   final IconData icon;
   final int count;
-  const _BadgedIcon({required this.icon, required this.count});
+  final Color? color;
+  const _BadgedIcon({required this.icon, required this.count, this.color});
 
   @override
   Widget build(BuildContext context) {
-    if (count <= 0) return Icon(icon);
+    final c = color ?? AppTheme.textPrimary;
+    if (count <= 0) return Icon(icon, color: c);
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Icon(icon),
+        Icon(icon, color: color),
         Positioned(
           right: -8,
           top: -4,

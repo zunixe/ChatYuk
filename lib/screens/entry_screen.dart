@@ -235,31 +235,29 @@ class _EntryScreenState extends State<EntryScreen> {
       resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // Logo — animasi halus dalam lingkaran transparan
               // (komposisi sama dengan halaman login).
               Center(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                   ),
-                  child: const _AnimatedLogo(),
+                  child: _AnimatedLogo(),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               // Title
               ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [AppTheme.primary, AppTheme.accent],
-                ).createShader(bounds),
+                shaderCallback: (bounds) => AppTheme.headerGradient.createShader(bounds),
                 child: Text(
                   s.appTagline,
                   textAlign: TextAlign.center,
@@ -269,7 +267,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4),
               Text(
                 s.appSubtagline,
                 textAlign: TextAlign.center,
@@ -277,11 +275,11 @@ class _EntryScreenState extends State<EntryScreen> {
                   color: AppTheme.textSecondary,
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               // Kartu form — satu grup utuh, komposisi sama dengan login
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: AppTheme.bgCard,
                   borderRadius: BorderRadius.circular(16),
@@ -295,20 +293,20 @@ class _EntryScreenState extends State<EntryScreen> {
                 controller: _nicknameCtrl,
                 focusNode: _nicknameFocus,
                 onChanged: _onNicknameChanged,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                style: TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
                   hintText: s.hintNickname,
                   labelText: s.labelUsername,
                   suffixIcon: _nicknameError != null
-                      ? const Icon(Icons.cancel, color: AppTheme.danger)
+                      ? Icon(Icons.cancel, color: AppTheme.danger)
                       : _nicknameCtrl.text.length >= 3
-                          ? const Icon(Icons.check_circle, color: Colors.green)
+                          ? Icon(Icons.check_circle, color: Colors.green)
                           : null,
                   enabledBorder: _nicknameError != null
-                      ? const OutlineInputBorder(borderSide: BorderSide(color: AppTheme.danger, width: 1.5))
+                      ? OutlineInputBorder(borderSide: BorderSide(color: AppTheme.danger, width: 1.5))
                       : null,
                   focusedBorder: _nicknameError != null
-                      ? const OutlineInputBorder(borderSide: BorderSide(color: AppTheme.danger, width: 2))
+                      ? OutlineInputBorder(borderSide: BorderSide(color: AppTheme.danger, width: 2))
                       : null,
                 ),
                 textInputAction: TextInputAction.done,
@@ -316,8 +314,8 @@ class _EntryScreenState extends State<EntryScreen> {
               ),
               if (_nicknameError != null)
                 Container(
-                  margin: const EdgeInsets.only(top: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  margin: EdgeInsets.only(top: 6),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppTheme.danger.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(10),
@@ -325,8 +323,8 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: AppTheme.danger, size: 18),
-                      const SizedBox(width: 8),
+                      Icon(Icons.info_outline, color: AppTheme.danger, size: 18),
+                      SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _nicknameError!,
@@ -336,31 +334,31 @@ class _EntryScreenState extends State<EntryScreen> {
                     ],
                   ),
                 ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
 
               // Gender
               Row(
                 children: [
                   Expanded(child: _genderCard('female', '👩', AppTheme.female, s.labelGenderFemale)),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(child: _genderCard('male', '👨', AppTheme.male, s.labelGenderMale)),
                 ],
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
 
               // Age & Country
               Row(
                 children: [
                   Expanded(child: _ageDropdown(s)),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(child: _countryDropdown(s)),
                 ],
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
 
               // City
               _cityDropdown(s),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               // Button
               SizedBox(
@@ -368,7 +366,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 child: ElevatedButton(
                   onPressed: _loading ? null : _enter,
                   child: _loading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
@@ -378,25 +376,25 @@ class _EntryScreenState extends State<EntryScreen> {
                         )
                       : Text(
                           s.btnStartChat,
-                          style: const TextStyle(letterSpacing: 1),
+                          style: TextStyle(letterSpacing: 1),
                         ),
                 ),
               ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // Divider
               Row(children: [
-                const Expanded(child: Divider()),
+                Expanded(child: Divider()),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 12),
                   child: Text(s.labelOr, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ),
-                const Expanded(child: Divider()),
+                Expanded(child: Divider()),
               ]),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               // Login dengan Google
               SizedBox(
@@ -404,63 +402,63 @@ class _EntryScreenState extends State<EntryScreen> {
                 child: OutlinedButton(
                   onPressed: _googleLoading ? null : _signInWithGoogle,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppTheme.divider, width: 1.5),
+                    side: BorderSide(color: AppTheme.divider, width: 1.5),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: EdgeInsets.symmetric(vertical: 12),
                     backgroundColor: Colors.white,
                   ),
                   child: _googleLoading
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Image.network(
                               'https://www.google.com/favicon.ico',
                               width: 20, height: 20,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 22, color: Colors.red),
+                              errorBuilder: (_, __, ___) => Icon(Icons.g_mobiledata, size: 22, color: Colors.red),
                             ),
-                            const SizedBox(width: 10),
+                            SizedBox(width: 10),
                             Text(s.btnContinueGoogle, style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w600)),
                           ],
                         ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
 
               // Daftar dengan Email
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RegisterScreen())),
-                  icon: const Icon(Icons.email_outlined, size: 18),
+                  icon: Icon(Icons.email_outlined, size: 18),
                   label: Text(s.btnRegisterEmail),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppTheme.primary,
-                    side: const BorderSide(color: AppTheme.primary),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: AppTheme.primary),
+                    padding: EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
 
               // Sudah punya akun
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen())),
-                  child: Text(s.btnLoginEmail, style: const TextStyle(color: AppTheme.primary)),
+                  child: Text(s.btnLoginEmail, style: TextStyle(color: AppTheme.primary)),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
 
               // Donasi
               Center(
                 child: GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DonateScreen())),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DonateScreen())),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.favorite, size: 16, color: AppTheme.danger),
-                      const SizedBox(width: 4),
+                      Icon(Icons.favorite, size: 16, color: AppTheme.danger),
+                      SizedBox(width: 4),
                       Text(s.titleDonate, style: AppText.body.copyWith(color: AppTheme.textSecondary)),
                     ],
                   ),
@@ -479,7 +477,7 @@ class _EntryScreenState extends State<EntryScreen> {
     return GestureDetector(
       onTap: () => setState(() => _gender = value),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),

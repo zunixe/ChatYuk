@@ -142,7 +142,7 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final timeStr = DateFormat.Hm().format(msg.timestamp.toLocal());
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: 8),
       child: Row(
         mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
@@ -151,10 +151,10 @@ class MessageBubble extends StatelessWidget {
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.sizeOf(context).width * 0.8,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: msg.type == 'coin'
-                    ? const Color(0xFFFFF3C4)
+                    ? Color(0xFFFFF3C4)
                     : (isMe ? AppTheme.primary.withValues(alpha: 0.25) : AppTheme.bgInput),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
@@ -253,15 +253,15 @@ class MessageBubble extends StatelessWidget {
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('🪙', style: TextStyle(fontSize: AppGlyph.sm)),
-                          const SizedBox(width: 6),
+                          Text('🪙', style: TextStyle(fontSize: AppGlyph.sm)),
+                          SizedBox(width: 6),
                           Flexible(
                             child: Text(
                               isMe ? s.coinBubbleSent(amount) : s.coinBubbleReceived(amount),
-                              style: AppText.bodyStrong.copyWith(color: const Color(0xFFB8860B)),
+                              style: AppText.bodyStrong.copyWith(color: Color(0xFFB8860B)),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          SizedBox(width: 6),
                           Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
                         ],
                       );
@@ -275,15 +275,15 @@ class MessageBubble extends StatelessWidget {
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(emoji, style: const TextStyle(fontSize: AppGlyph.md)),
-                          const SizedBox(width: 8),
+                          Text(emoji, style: TextStyle(fontSize: AppGlyph.md)),
+                          SizedBox(width: 8),
                           Flexible(
                             child: Text(
                               isMe ? s.giftBubbleSent(name) : s.giftBubbleReceived(name),
-                              style: AppText.bodyStrong.copyWith(color: const Color(0xFFB8860B)),
+                              style: AppText.bodyStrong.copyWith(color: Color(0xFFB8860B)),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          SizedBox(width: 6),
                           Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
                         ],
                       );
@@ -332,7 +332,7 @@ class DeferredImage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.refresh, color: AppTheme.textSecondary, size: 22),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(s.msgPhotoTapToLoad, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
           ],
         ),

@@ -842,11 +842,11 @@ class AuthProvider extends ChangeNotifier {
         backgroundColor: AppTheme.bgCard,
         title: Text(
           s.locPrecisionTitle,
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
         ),
         content: Text(
           s.locPrecisionOff,
-          style: const TextStyle(color: AppTheme.textSecondary),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(

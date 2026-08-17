@@ -57,11 +57,11 @@ class _SocialListScreenState extends State<SocialListScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : _items.isEmpty
               ? Center(
                   child: Text(s.socialListEmpty,
-                      style: const TextStyle(color: AppTheme.textSecondary)),
+                      style: TextStyle(color: AppTheme.textSecondary)),
                 )
               : RefreshIndicator(
                   onRefresh: _load,

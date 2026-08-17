@@ -209,12 +209,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
         flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
-            ),
+          decoration: BoxDecoration(
+            gradient: AppTheme.headerGradient,
           ),
         ),
         title: Consumer<OnlineUsersProvider>(
@@ -272,10 +268,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                       decoration: InputDecoration(
                         isDense: true,
                         hintText: s.searchHint,
-                        prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
+                        prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary),
                         suffixIcon: _search.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18, color: AppTheme.textSecondary),
+                                icon: Icon(Icons.clear, size: 18, color: AppTheme.textSecondary),
                                 onPressed: () { _searchCtrl.clear(); setState(() { _search = ''; _page = 1; }); },
                               )
                             : null,
@@ -325,7 +321,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   ),
                   Expanded(
                     child: !provider.hasLoaded
-                        ? const Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2))
+                        ? Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2))
                         : users.isEmpty
                         ? Center(
                             child: Column(
@@ -342,7 +338,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                         shape: BoxShape.circle,
                                       ),
                                     ),
-                                    const Icon(Icons.group_add_rounded, size: 48, color: AppTheme.primary),
+                                    Icon(Icons.group_add_rounded, size: 48, color: AppTheme.primary),
                                     Positioned(
                                       right: 4, bottom: 4,
                                       child: Container(
@@ -356,7 +352,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 16),
+                                SizedBox(height: 16),
                                 Text(
                                   _search.isNotEmpty ? s.searchNoResult : s.noOnlineUsers,
                                   textAlign: TextAlign.center,
@@ -405,11 +401,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
-                        ),
+                        gradient: AppTheme.headerGradient,
                         borderRadius: BorderRadius.circular(22),
                         boxShadow: [
                           BoxShadow(
@@ -510,11 +502,11 @@ class _UserCard extends StatelessWidget {
     final statusLabel = user.status == 'idle' ? s.statusIdle : user.status == 'offline' ? s.statusOffline : s.statusOnline;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
       ),
       child: Material(
         color: Colors.transparent,
@@ -522,7 +514,7 @@ class _UserCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               Stack(
@@ -550,14 +542,14 @@ class _UserCard extends StatelessWidget {
                   if (unreadCount > 0)
                     Positioned(right: -2, top: -2,
                       child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(color: AppTheme.danger, shape: BoxShape.circle),
+                        padding: EdgeInsets.all(3),
+                        decoration: BoxDecoration(color: AppTheme.danger, shape: BoxShape.circle),
                         child: Text('$unreadCount', style: AppText.micro.copyWith(color: Colors.white)),
                       ),
                     ),
                 ],
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,7 +560,7 @@ class _UserCard extends StatelessWidget {
                           child: Text(user.nickname, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis),
                         ),
                         if (user.isRegistered) ...[
-                          const SizedBox(width: 4),
+                          SizedBox(width: 4),
 Tooltip(
     message: s.labelVerified,
                             child: Icon(Icons.verified, size: 15, color: Color(0xFF4A90E2)),

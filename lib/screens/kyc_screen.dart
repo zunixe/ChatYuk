@@ -123,24 +123,24 @@ class _KycScreenState extends State<KycScreen> {
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.kycTitle), backgroundColor: AppTheme.bgScreen),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : ListView(
               padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 24),
               children: [
                 _statusBanner(s, st),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
                 TextField(
                   controller: _nameCtrl,
                   enabled: !approved && !pending,
-                  style: const TextStyle(color: AppTheme.textPrimary),
+                  style: TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: s.kycFullName,
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                     hintText: 'contoh: Budi Santoso',
                     hintStyle: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                   ),
                 ),
-                const SizedBox(height: 14),
+                SizedBox(height: 14),
                 Row(children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
@@ -149,7 +149,7 @@ class _KycScreenState extends State<KycScreen> {
                       style: AppText.body,
                       decoration: InputDecoration(
                         labelText: s.kycIdType,
-                        labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                        labelStyle: TextStyle(color: AppTheme.textSecondary),
                       ),
                       items: [
                         DropdownMenuItem(value: 'ktp', child: Text(s.kycIdTypeKtp)),
@@ -158,7 +158,7 @@ class _KycScreenState extends State<KycScreen> {
                       onChanged: approved || pending ? null : (v) => setState(() => _idType = v ?? 'ktp'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     child: InkWell(
                       onTap: approved || pending ? null : () => _pickBirthDate(),
@@ -166,7 +166,7 @@ class _KycScreenState extends State<KycScreen> {
                       child: InputDecorator(
                         decoration: InputDecoration(
                           labelText: s.kycBirthDate,
-                          labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                          labelStyle: TextStyle(color: AppTheme.textSecondary),
                         ),
                         child: Text(
                           _birthDate == null ? s.kycOptional : _birthDate!.toIso8601String().split('T').first,
@@ -176,30 +176,30 @@ class _KycScreenState extends State<KycScreen> {
                     ),
                   ),
                 ]),
-                const SizedBox(height: 14),
+                SizedBox(height: 14),
                 TextField(
                   controller: _idNumberCtrl,
                   enabled: !approved && !pending,
-                  style: const TextStyle(color: AppTheme.textPrimary),
+                  style: TextStyle(color: AppTheme.textPrimary),
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: s.kycIdNumber,
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                   ),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 Row(children: [
                   Expanded(child: _photoBox(s, label: s.kycIdPhoto, data: _idPhoto, onTap: _pickId)),
-                  const SizedBox(width: 14),
+                  SizedBox(width: 14),
                   Expanded(child: _photoBox(s, label: s.kycSelfie, data: _selfiePhoto, onTap: _pickSelfie)),
                 ]),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(s.kycHint, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: EdgeInsets.symmetric(vertical: 14),
                     disabledBackgroundColor: AppTheme.bgInput,
                   ),
                   onPressed: (approved || pending || _submitting) ? null : _submit,
@@ -256,12 +256,12 @@ class _KycScreenState extends State<KycScreen> {
         decoration: BoxDecoration(
           color: AppTheme.bgInput,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE0E0E0)),
+          border: Border.all(color: Color(0xFFE0E0E0)),
         ),
         child: data == null
             ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.add_a_photo_outlined, color: AppTheme.textSecondary, size: 28),
-                const SizedBox(height: 6),
+                Icon(Icons.add_a_photo_outlined, color: AppTheme.textSecondary, size: 28),
+                SizedBox(height: 6),
                 Text(label, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
               ])
             : ClipRRect(

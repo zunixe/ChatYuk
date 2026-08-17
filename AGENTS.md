@@ -197,6 +197,17 @@ Catatan penting:
 - Track beta = "Pengujian tertutup - Alpha" (nama API-nya `alpha`, bukan `beta`).
 - Keystore dibaca dari `android/key.properties` (bukan dari Fastfile).
 
+### Kebijakan versi — bump HANYA saat upload Google Play
+
+**Jangan bump `version:` di `pubspec.yaml` untuk build biasa (install ke HP / distribusi APKPure).**
+VersionCode hanya boleh dipakai ulang sekali untuk Google Play; kalau di-bump tiap build sesi, akan boros & bisa bentrok dengan versionCode yang sudah pernah di-upload.
+
+Aturan:
+- Build untuk **install ke HP / APKPure** → **tidak usah bump**. Pakai versi yang sedang aktif (saat ini `1.2.0+8`, versi terakhir yang di-upload ke Google Play).
+- **Hanya sebelum `fastlane play track:...`** → bump `version:` (mis. `1.2.0+8` → `1.2.1+9`), lalu `flutter clean` → `flutter build appbundle --flavor play` → upload.
+- Setelah upload, biarkan versi baru itu tetap aktif sampai upload berikutnya.
+- Referensi versi Google Play terakhir: cek `git log --oneline --all -- pubspec.yaml` (cari commit dengan keterangan "upload Google Play").
+
 ## Install ke Device (WAJIB clean install, bukan `-r`)
 
 Saat install ke HP, **selalu hapus cache/data dulu** (uninstall → install fresh).

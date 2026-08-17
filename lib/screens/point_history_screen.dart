@@ -45,15 +45,15 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(s.pointHistoryTitle)),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : _items.isEmpty
               ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.receipt_long_outlined, size: 48, color: AppTheme.textSecondary),
-                      const SizedBox(height: 12),
-                      Text(s.pointHistoryEmpty, style: const TextStyle(color: AppTheme.textSecondary)),
+                      Icon(Icons.receipt_long_outlined, size: 48, color: AppTheme.textSecondary),
+                      SizedBox(height: 12),
+                      Text(s.pointHistoryEmpty, style: TextStyle(color: AppTheme.textSecondary)),
                     ],
                   ),
                 )
@@ -119,7 +119,7 @@ class _HistoryTile extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: 2),
           Text(
             DateFormat('dd MMM yyyy HH:mm').format(time),
             style: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400),

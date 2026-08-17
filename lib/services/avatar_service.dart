@@ -8,6 +8,7 @@ class AvatarB64Service {
   static final instance = AvatarB64Service._();
 
   final Map<String, String> _cache = {};
+  final Map<String, String> _pathCache = {};
   final Set<String> _inflight = {};
   static const _maxCache = 100;
 
@@ -36,6 +37,27 @@ class AvatarB64Service {
       return '';
     } finally {
       _inflight.remove(uid);
+    }
+  }
+
+  /// Ambil avatar langsung dari path storage (tanpa query profil) —
+  /// dipakai timeline yang sudah membawa authorAvatar di payload.
+  Future<String> getByPath(String path) async {
+    if (path.isEmpty) return '';
+    final cached = _pathCache[path];
+    if (cached != null) return cached;
+    if (_inflight.contains(path)) return '';
+    _inflight.add(path);
+    try {
+      var b64 = await StoragePhotoService.instance.download(path) ?? '';
+      if (_pathCache.length >= _maxCache) _pathCache.remove(_pathCache.keys.first);
+      _pathCache[path] = b64;
+      return b64;
+    } catch (_) {
+      _pathCache[path] = '';
+      return '';
+    } finally {
+      _inflight.remove(path);
     }
   }
 }

@@ -131,21 +131,21 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.withdrawTitle), backgroundColor: AppTheme.bgScreen),
       body: _loadingKyc
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : ListView(
               padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 24),
               children: [
                 if (!_kycApproved) ...[
                   Container(
-                    padding: const EdgeInsets.all(14),
+                    padding: EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: Colors.teal.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.teal.withValues(alpha: 0.4)),
                     ),
                     child: Row(children: [
-                      const Icon(Icons.verified_user_outlined, color: Colors.teal, size: 22),
-                      const SizedBox(width: 10),
+                      Icon(Icons.verified_user_outlined, color: Colors.teal, size: 22),
+                      SizedBox(width: 10),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(s.withdrawKycRequired,
@@ -163,10 +163,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                       ),
                     ]),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                 ],
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: AppTheme.bgCard,
                     borderRadius: BorderRadius.circular(12),
@@ -175,20 +175,20 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                       Text(s.withdrawBalance, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                       Text('${points.earnedBalance} 🪙',
-                          style: AppText.bodyStrong.copyWith(color: const Color(0xFFB8860B), fontWeight: FontWeight.w800)),
+                          style: AppText.bodyStrong.copyWith(color: Color(0xFFB8860B), fontWeight: FontWeight.w800)),
                     ]),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                       Text(s.withdrawRate, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                       Text('1 🪙 = Rp${_rate}',
                           style: AppText.bodySmall.copyWith(fontWeight: FontWeight.w600)),
                     ]),
-                    const Divider(height: 20),
+                    Divider(height: 20),
                     Text(s.withdrawOnlyEarned,
                         style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
                   ]),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 TextField(
                   controller: _amountCtrl,
                   keyboardType: TextInputType.number,
@@ -197,36 +197,36 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   style: AppText.button.copyWith(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: s.withdrawAmount,
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                     suffixText: '🪙',
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2E7D32).withValues(alpha: 0.1),
+                    color: Color(0xFF2E7D32).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(children: [
-                    const Icon(Icons.payments_outlined, color: Color(0xFF2E7D32), size: 20),
-                    const SizedBox(width: 10),
+                    Icon(Icons.payments_outlined, color: Color(0xFF2E7D32), size: 20),
+                    SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         preview > 0 ? s.withdrawPreview(preview) : s.withdrawPreviewHint(_minCoins),
-                        style: AppText.bodySmall.copyWith(color: const Color(0xFF2E7D32), fontWeight: FontWeight.w700),
+                        style: AppText.bodySmall.copyWith(color: Color(0xFF2E7D32), fontWeight: FontWeight.w700),
                       ),
                     ),
                   ]),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _payMethod,
                   dropdownColor: AppTheme.bgCard,
                   style: AppText.body,
                   decoration: InputDecoration(
                     labelText: s.withdrawMethod,
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                   ),
                   items: ['qris', 'bank', 'ewallet'].map((m) => DropdownMenuItem(
                     value: m,
@@ -238,45 +238,45 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   )).toList(),
                   onChanged: _kycApproved ? (v) => setState(() => _payMethod = v ?? 'qris') : null,
                 ),
-                const SizedBox(height: 14),
+                SizedBox(height: 14),
                 TextField(
                   controller: _accountCtrl,
                   enabled: _kycApproved,
-                  style: const TextStyle(color: AppTheme.textPrimary),
+                  style: TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: _payMethod == 'qris' ? s.withdrawQrisId : s.withdrawAccountNo,
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                   ),
                 ),
-                const SizedBox(height: 14),
+                SizedBox(height: 14),
                 TextField(
                   controller: _holderCtrl,
                   enabled: _kycApproved,
-                  style: const TextStyle(color: AppTheme.textPrimary),
+                  style: TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     labelText: s.withdrawHolder,
-                    labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
                   ),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D32),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Color(0xFF2E7D32),
+                    padding: EdgeInsets.symmetric(vertical: 14),
                     disabledBackgroundColor: AppTheme.bgInput,
                   ),
                   onPressed: (!_kycApproved || _submitting) ? null : _submit,
                   icon: _submitting
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.currency_exchange),
+                      ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Icon(Icons.currency_exchange),
                   label: Text(_submitting ? s.loading : s.withdrawSubmit,
                       style: AppText.bodyStrong.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 TextButton.icon(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WithdrawalHistoryScreen())),
-                  icon: const Icon(Icons.history, size: 16, color: AppTheme.textSecondary),
-                  label: Text(s.withdrawHistory, style: const TextStyle(color: AppTheme.textSecondary)),
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WithdrawalHistoryScreen())),
+                  icon: Icon(Icons.history, size: 16, color: AppTheme.textSecondary),
+                  label: Text(s.withdrawHistory, style: TextStyle(color: AppTheme.textSecondary)),
                 ),
               ],
             ),

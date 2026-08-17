@@ -108,24 +108,24 @@ class _QrisTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           // Nama merchant
           Text(
             'OneHeart',
             textAlign: TextAlign.center,
             style: AppText.title,
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(
             'NMID: ID1026566504126A01',
             textAlign: TextAlign.center,
             style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(
             s.donateScanQris,
             textAlign: TextAlign.center,
@@ -184,11 +184,11 @@ class _UsdtTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             s.donateSelectHint,
             textAlign: TextAlign.center,
@@ -218,24 +218,24 @@ class _NetworkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: network.color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(network.icon, color: network.color, size: 20),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -255,7 +255,7 @@ class _NetworkCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
+                color: AppTheme.bgInput,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -305,7 +305,7 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.primary.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(10),
@@ -315,7 +315,7 @@ class _InfoCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 18, color: AppTheme.primary),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
@@ -335,7 +335,7 @@ class _ThankYouNote extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.read<LocaleProvider>().s;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -347,13 +347,13 @@ class _ThankYouNote extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(Icons.favorite, color: AppTheme.primary, size: 28),
-          const SizedBox(height: 8),
+          Icon(Icons.favorite, color: AppTheme.primary, size: 28),
+          SizedBox(height: 8),
           Text(
             s.donateThankYou,
             style: AppText.titleEmphasis,
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(
             s.donateThanksMsg,
             textAlign: TextAlign.center,

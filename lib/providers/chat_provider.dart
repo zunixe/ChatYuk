@@ -139,6 +139,11 @@ class ChatProvider extends ChangeNotifier {
     return _service.getMyPrivateChats(myUid);
   }
 
+  /// Refresh paksa list private chat (dipanggil saat tab Pesan di-mount ulang
+  /// supaya tidak stuck spinner pada broadcast stream yang di-cache).
+  void refreshMyPrivateChats(String myUid) =>
+      _service.refreshMyPrivateChats(myUid);
+
   Stream<List<UserModel>> getOnlineUsersInRoom(String roomId) {
     return _service.getOnlineUsersInRoom(roomId);
   }

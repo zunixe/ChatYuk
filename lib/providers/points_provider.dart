@@ -250,12 +250,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
-                ),
+              decoration: BoxDecoration(
+                gradient: AppTheme.headerGradient,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: Row(children: [

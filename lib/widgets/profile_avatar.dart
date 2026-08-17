@@ -20,7 +20,7 @@ class ProfileAvatar extends StatefulWidget {
   final double size;
   final double borderRadius;
   final Color bgColor;
-  final Color textColor;
+  final Color? textColor;
   final Widget? badge;
 
   const ProfileAvatar({
@@ -30,7 +30,7 @@ class ProfileAvatar extends StatefulWidget {
     this.size = 44,
     this.borderRadius = 0,
     this.bgColor = AppTheme.accent,
-    this.textColor = AppTheme.textPrimary,
+    this.textColor,
     this.badge,
   });
 
@@ -89,7 +89,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
           child: Text(
             widget.name.isNotEmpty ? widget.name[0].toUpperCase() : '?',
             style: TextStyle(
-              color: widget.textColor,
+              color: widget.textColor ?? AppTheme.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: AppGlyph.avatarInitial(widget.size),
             ),

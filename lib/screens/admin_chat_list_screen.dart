@@ -71,7 +71,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Row(
             children: [
               Expanded(
@@ -79,49 +79,49 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
                   style: AppText.titleEmphasis),
               ),
               IconButton(
-                icon: const Icon(Icons.refresh_rounded, color: AppTheme.primary),
+                icon: Icon(Icons.refresh_rounded, color: AppTheme.primary),
                 onPressed: () => admin.fetchChats(),
               ),
             ],
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: TextField(
             controller: _searchCtrl,
             onChanged: (v) => setState(() => _query = v),
             style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: s.adminSearchChat,
-              prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 20),
+              prefixIcon: Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 20),
               isDense: true,
               filled: true,
               fillColor: AppTheme.bgInput,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             ),
           ),
         ),
         Expanded(
           child: admin.chatsLoading && admin.chats.isEmpty
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : admin.chatsError != null
               ? Center(
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
-                    const SizedBox(height: 8),
-                    Text(admin.chatsError!, style: const TextStyle(color: AppTheme.danger)),
-                    const SizedBox(height: 8),
+                    Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
+                    SizedBox(height: 8),
+                    Text(admin.chatsError!, style: TextStyle(color: AppTheme.danger)),
+                    SizedBox(height: 8),
                     ElevatedButton(onPressed: () => admin.fetchChats(), child: Text(s.btnRetry)),
                   ]),
                 )
               : _filtered(admin.chats).isEmpty
                   ? Center(
                       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.chat_bubble_outline, size: 48, color: AppTheme.textSecondary),
-                        const SizedBox(height: 12),
+                        Icon(Icons.chat_bubble_outline, size: 48, color: AppTheme.textSecondary),
+                        SizedBox(height: 12),
                         Text(_query.isEmpty ? s.adminChatNoChats : s.searchNoResult,
-                          style: const TextStyle(color: AppTheme.textSecondary)),
+                          style: TextStyle(color: AppTheme.textSecondary)),
                       ]),
                     )
                   : RefreshIndicator(
@@ -180,11 +180,11 @@ class _AdminChatCard extends StatelessWidget {
     final ts = tsRaw != null ? DateTime.tryParse('$tsRaw') : null;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
       ),
       child: Material(
         color: Colors.transparent,
@@ -199,7 +199,7 @@ class _AdminChatCard extends StatelessWidget {
             )),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
                 Container(
@@ -208,9 +208,9 @@ class _AdminChatCard extends StatelessWidget {
                     color: AppTheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.forum_outlined, color: AppTheme.primary, size: 22),
+                  child: Icon(Icons.forum_outlined, color: AppTheme.primary, size: 22),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,7 +218,7 @@ class _AdminChatCard extends StatelessWidget {
                       Text(label,
                         style: AppText.bodyStrong,
                         maxLines: 1, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 3),
+                      SizedBox(height: 3),
                       Text(
                         lastMsg.isEmpty
                             ? (count > 0 ? '$count ${s.adminChatMsgs}' : '')
@@ -228,14 +228,14 @@ class _AdminChatCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     if (count > 0)
                       Text('$count', style: AppText.bodySmall.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
                     if (ts != null) ...[
-                      const SizedBox(height: 2),
+                      SizedBox(height: 2),
                       Text(formatRelativeTime(ts, isId: s.isId),
                         style: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400)),
                     ],
@@ -285,8 +285,8 @@ class _AdminChatCard extends StatelessWidget {
             backgroundColor: AppTheme.bgCard,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             title: Row(children: [
-              const Icon(Icons.delete_forever, color: AppTheme.danger, size: 22),
-              const SizedBox(width: 10),
+              Icon(Icons.delete_forever, color: AppTheme.danger, size: 22),
+              SizedBox(width: 10),
               Expanded(child: Text(s.adminDeleteChatTitle, style: AppText.titleEmphasis)),
             ]),
             content: SingleChildScrollView(
@@ -318,13 +318,13 @@ class _AdminChatCard extends StatelessWidget {
                     dense: true,
                     activeColor: AppTheme.danger,
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Text(s.adminDeleteChatOnly, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ],
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel, style: const TextStyle(color: AppTheme.textSecondary))),
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel, style: TextStyle(color: AppTheme.textSecondary))),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),

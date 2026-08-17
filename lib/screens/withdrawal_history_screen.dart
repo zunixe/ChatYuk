@@ -36,9 +36,9 @@ class _WithdrawalHistoryScreenState extends State<WithdrawalHistoryScreen> {
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.withdrawHistory), backgroundColor: AppTheme.bgScreen),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : _items.isEmpty
-              ? Center(child: Text(s.withdrawNoHistory, style: const TextStyle(color: AppTheme.textSecondary)))
+              ? Center(child: Text(s.withdrawNoHistory, style: TextStyle(color: AppTheme.textSecondary)))
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView.separated(
@@ -69,7 +69,7 @@ class _WithdrawalHistoryScreenState extends State<WithdrawalHistoryScreen> {
     };
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(12),
@@ -82,12 +82,12 @@ class _WithdrawalHistoryScreenState extends State<WithdrawalHistoryScreen> {
                 style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700)),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
             child: Text(label, style: AppText.caption.copyWith(color: color, fontWeight: FontWeight.w700)),
           ),
         ]),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text('${_methodLabel(s, method)} • $account • $holder',
             style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
         Text(createdAt, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),

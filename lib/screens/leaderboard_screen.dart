@@ -91,11 +91,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
-                const SizedBox(width: 6),
+                Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
+                SizedBox(width: 6),
                 Text(_scope == 'weekly' ? s.lbWeeklyHint : s.lbAllTimeHint,
                     style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
               ],
@@ -103,9 +103,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                 : _entries.isEmpty
-                    ? Center(child: Text(s.lbEmpty, style: const TextStyle(color: AppTheme.textSecondary)))
+                    ? Center(child: Text(s.lbEmpty, style: TextStyle(color: AppTheme.textSecondary)))
                     : RefreshIndicator(
                         onRefresh: _load,
                         child: ListView.separated(

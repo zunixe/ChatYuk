@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
@@ -39,7 +40,21 @@ class _NearbyScreenState extends State<NearbyScreen> {
     final auth = context.read<AuthProvider>();
     _shareOn = auth.profile?.shareLocation ?? false;
     // Pastikan lokasi terbaru sebelum query (GPS bila diizinkan, else IP).
-    await _loc.updateMyLocation();
+    final src = await _loc.updateMyLocation();
+    // Auto-enable share lokasi SEKALI — HANYA jika user mengizinkan GPS
+    // (sumber 'gps'). Kalau cuma fallback IP, jangan auto-enable.
+    // Tanpa ini hampir semua user default false → radar selalu kosong
+    // padahal banyak yang online. Toggle manual tetap dihormati.
+    if (src == 'gps') {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('nearby_auto_share') ?? false)) {
+        await prefs.setBool('nearby_auto_share', true);
+        if (!_shareOn) {
+          await _loc.setShareLocation(true);
+          _shareOn = true;
+        }
+      }
+    }
     await _refresh();
   }
 
@@ -139,15 +154,11 @@ class _NearbyScreenState extends State<NearbyScreen> {
       appBar: AppBar(
         title: Text(s.nearbyTitle),
         flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppTheme.primaryDark, AppTheme.primary, AppTheme.accent],
-            ),
+          decoration: BoxDecoration(
+            gradient: AppTheme.headerGradient,
           ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: Colors.white),
         titleTextStyle: AppText.title.copyWith(color: Colors.white),
       ),
       body: Column(
@@ -163,12 +174,12 @@ class _NearbyScreenState extends State<NearbyScreen> {
               activeColor: AppTheme.primary,
             ),
           ),
-          // Slider radius.
+          // Slider( radius.
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Row(
               children: [
-                const Icon(Icons.social_distance, size: 18, color: AppTheme.textSecondary),
+                Icon(Icons.social_distance, size: 18, color: AppTheme.textSecondary),
                 const SizedBox(width: 8),
                 Text('${s.nearbyRadius}: ${_radiusKm.round()} km', style: AppText.bodyStrong),
               ],
@@ -230,13 +241,13 @@ class _NearbyScreenState extends State<NearbyScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, size: 56, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            padding: EdgeInsets.symmetric(horizontal: 32),
             child: Text(title, textAlign: TextAlign.center, style: AppText.body.copyWith(color: AppTheme.textSecondary)),
           ),
           if (hint != null) ...[
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             Text(hint, textAlign: TextAlign.center, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
           ],
           if (actionLabel != null && onAction != null) ...[
@@ -290,7 +301,7 @@ class _RadarLoadingState extends State<_RadarLoading>
               ),
             ),
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: 18),
           Text(widget.caption, style: AppText.body.copyWith(color: AppTheme.textSecondary)),
         ],
       ),
@@ -388,11 +399,11 @@ class _NearbyCard extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
       ),
       child: Material(
         color: Colors.transparent,
@@ -400,7 +411,7 @@ class _NearbyCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
                 Stack(
@@ -428,7 +439,7 @@ class _NearbyCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -436,8 +447,8 @@ class _NearbyCard extends StatelessWidget {
                       Row(children: [
                         Flexible(child: Text(nickname, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis)),
                         if (isRegistered) ...[
-                          const SizedBox(width: 4),
-                          const Icon(Icons.verified, size: 15, color: Color(0xFF4A90E2)),
+                          SizedBox(width: 4),
+                          Icon(Icons.verified, size: 15, color: Color(0xFF4A90E2)),
                         ],
                       ]),
                       Text('$genderLabel $age · $city, $country',

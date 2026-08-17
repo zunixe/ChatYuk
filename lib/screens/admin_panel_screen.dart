@@ -367,12 +367,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 : () => _showStatDetail(context, items[i]),
             child: Container(
               height: 76,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(items[i].$3, size: 15, color: items[i].$4),
-                  const SizedBox(height: 5),
+                  SizedBox(height: 5),
                   Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
@@ -384,7 +384,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  SizedBox(height: 2),
                   Text(
                     items[i].$1,
                     style: AppText.micro.copyWith(
@@ -448,12 +448,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           borderRadius: BorderRadius.circular(10),
           child: Container(
             height: 76,
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: EdgeInsets.symmetric(vertical: 8),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(items[i].$3, size: 15, color: items[i].$4),
-                const SizedBox(height: 5),
+                SizedBox(height: 5),
                 Flexible(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
@@ -465,7 +465,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Text(
                   items[i].$1,
                   style: AppText.micro.copyWith(
@@ -504,13 +504,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.bgScreen,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (ctx) {
         Widget row(String name, String sub, String right) {
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
                 Container(
@@ -530,7 +530,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,7 +596,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           // embel-embel 'approx'.
           final locLabel = hasCoord ? '$lat, $lon' : s.adminViewOnMaps;
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.symmetric(vertical: 6),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -617,7 +617,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -640,12 +640,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       Row(
                         children: [
                           if (ip.isNotEmpty) ...[
-                            const Icon(
+                            Icon(
                               Icons.lan_outlined,
                               size: 12,
                               color: AppTheme.textSecondary,
                             ),
-                            const SizedBox(width: 3),
+                            SizedBox(width: 3),
                             Text(
                               ip,
                               style: AppText.caption.copyWith(
@@ -706,7 +706,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 )
               : '';
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.symmetric(vertical: 6),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -727,7 +727,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -769,11 +769,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             builder: (ctx, scrollCtrl) => Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: Row(
                     children: [
                       Icon(item.$3, color: item.$4, size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           '${item.$1} (${list.length})',
@@ -781,19 +781,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close),
+                        icon: Icon(Icons.close),
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
                   ),
                 ),
-                const Divider(height: 1),
+                Divider(height: 1),
                 Expanded(
                   child: list.isEmpty
                       ? Center(
                           child: Text(
                             s.adminNoUsers,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textSecondary,
                             ),
                           ),
@@ -841,7 +841,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         ),
       for (var i = 0; i < earners.length && i < 5; i++)
         Padding(
-          padding: const EdgeInsets.only(bottom: 5),
+          padding: EdgeInsets.only(bottom: 5),
           child: Row(
             children: [
               SizedBox(
@@ -948,7 +948,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 2),
+        SizedBox(height: 2),
         Text(
           s.adminRealtimeDesc,
           style: AppText.caption.copyWith(color: AppTheme.textSecondary),
@@ -960,7 +960,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Widget _pointSettingsCard(S s) {
     return _card(s.adminPointSettings, Icons.tune, Colors.indigo, [
       if (!_pointSettingsLoaded)
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(vertical: 12),
           child: Center(
             child: CircularProgressIndicator(
@@ -979,7 +979,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             isDense: true,
             filled: true,
             fillColor: AppTheme.bgInput,
-            contentPadding: const EdgeInsets.symmetric(
+            contentPadding: EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 10,
             ),
@@ -989,15 +989,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(
           'Klik link share user → redirect ke link ini. Ganti ke Google Play nanti.',
           style: AppText.caption.copyWith(color: AppTheme.textSecondary),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         for (final f in _pointFields)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
                 Expanded(
@@ -1058,19 +1058,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         InkWell(
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminRevenueScreen()),
+            MaterialPageRoute(builder: (_) => AdminRevenueScreen()),
           ),
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.ssid_chart,
                   color: Colors.pinkAccent,
                   size: 20,
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     s.adminRevenueDesc,
@@ -1079,7 +1079,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     ),
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right,
                   color: AppTheme.textSecondary,
                   size: 18,
@@ -1097,19 +1097,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       InkWell(
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const AdminKycScreen()),
+          MaterialPageRoute(builder: (_) => AdminKycScreen()),
         ),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.playlist_add_check,
                 color: Colors.teal,
                 size: 20,
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Text(
                   s.adminKycDesc,
@@ -1118,7 +1118,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 color: AppTheme.textSecondary,
                 size: 18,
@@ -1134,24 +1134,24 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     return _card(
       s.adminWithdrawTitle,
       Icons.currency_exchange,
-      const Color(0xFF2E7D32),
+      Color(0xFF2E7D32),
       [
         InkWell(
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminWithdrawalScreen()),
+            MaterialPageRoute(builder: (_) => AdminWithdrawalScreen()),
           ),
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.payments_outlined,
                   color: Color(0xFF2E7D32),
                   size: 20,
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     s.adminWithdrawDesc,
@@ -1160,7 +1160,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     ),
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right,
                   color: AppTheme.textSecondary,
                   size: 18,
@@ -1207,13 +1207,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               if (result != null)
                 _toast('+$amount → ${result['affected']} users');
             },
-            icon: const Icon(Icons.send_rounded, size: 16),
+            icon: Icon(Icons.send_rounded, size: 16),
             label: Text(s.btnSend),
             style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
           ),
         ],
       ),
-      const SizedBox(height: 4),
+      SizedBox(height: 4),
       Text(
         s.adminRegisteredOnly,
         style: AppText.caption.copyWith(color: AppTheme.textSecondary),
@@ -1231,7 +1231,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         ),
       for (var i = 0; i < reports.length && i < 8; i++)
         Padding(
-          padding: const EdgeInsets.only(bottom: 3),
+          padding: EdgeInsets.only(bottom: 3),
           child: Row(
             children: [
               Expanded(
@@ -1317,7 +1317,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   Widget _dangerZone(AdminProvider admin, S s) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.danger.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
@@ -1325,12 +1325,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.warning_amber_rounded,
             size: 20,
             color: AppTheme.danger,
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1342,7 +1342,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Text(
                   s.adminResetAllPoints,
                   style: AppText.caption.copyWith(
@@ -1360,11 +1360,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   backgroundColor: AppTheme.bgCard,
                   title: Text(
                     s.adminResetAllTitle,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    style: TextStyle(color: AppTheme.textPrimary),
                   ),
                   content: Text(
                     s.adminResetAllBody,
-                    style: const TextStyle(color: AppTheme.textSecondary),
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
                   actions: [
                     TextButton(
@@ -1412,7 +1412,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     List<Widget> children,
   ) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(12),
@@ -1423,7 +1423,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           Row(
             children: [
               Icon(icon, size: 16, color: iconColor),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 title,
                 style: AppText.caption.copyWith(
@@ -1674,7 +1674,7 @@ class _UserMapCardState extends State<_UserMapCard> {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgScreen,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (ctx) => Padding(
@@ -1704,7 +1704,7 @@ class _UserMapCardState extends State<_UserMapCard> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1726,7 +1726,7 @@ class _UserMapCardState extends State<_UserMapCard> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 4,
                   ),
@@ -1747,7 +1747,7 @@ class _UserMapCardState extends State<_UserMapCard> {
             if ((u['age'] ?? 0) > 0 ||
                 city.isNotEmpty ||
                 country.isNotEmpty) ...[
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               Text(
                 [
                   if ((u['age'] ?? 0) > 0)
@@ -1839,7 +1839,7 @@ class _UserMapCardState extends State<_UserMapCard> {
 
     Widget legendChip(Color color, String label, int count) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(10),
@@ -1852,7 +1852,7 @@ class _UserMapCardState extends State<_UserMapCard> {
               height: 8,
               decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
-            const SizedBox(width: 4),
+            SizedBox(width: 4),
             Text(
               '$label $count',
               style: AppText.micro.copyWith(
@@ -1866,7 +1866,7 @@ class _UserMapCardState extends State<_UserMapCard> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(12),
@@ -1876,8 +1876,8 @@ class _UserMapCardState extends State<_UserMapCard> {
         children: [
           Row(
             children: [
-              const Icon(Icons.map_outlined, size: 16, color: Colors.teal),
-              const SizedBox(width: 8),
+              Icon(Icons.map_outlined, size: 16, color: Colors.teal),
+              SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1901,8 +1901,8 @@ class _UserMapCardState extends State<_UserMapCard> {
               ),
               if (_live)
                 Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(
+                  margin: EdgeInsets.only(right: 6),
+                  padding: EdgeInsets.symmetric(
                     horizontal: 6,
                     vertical: 3,
                   ),
@@ -1916,12 +1916,12 @@ class _UserMapCardState extends State<_UserMapCard> {
                       Container(
                         width: 6,
                         height: 6,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: Colors.green,
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: 4),
                       Text(
                         s.mapLive,
                         style: AppText.micro.copyWith(
@@ -1933,7 +1933,7 @@ class _UserMapCardState extends State<_UserMapCard> {
                   ),
                 ),
               if (_resolving)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(right: 6),
                   child: SizedBox(
                     width: 14,
@@ -1942,7 +1942,7 @@ class _UserMapCardState extends State<_UserMapCard> {
                   ),
                 ),
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.refresh_rounded,
                   size: 18,
                   color: AppTheme.primary,
@@ -1952,7 +1952,7 @@ class _UserMapCardState extends State<_UserMapCard> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -1964,13 +1964,13 @@ class _UserMapCardState extends State<_UserMapCard> {
                 legendChip(Colors.redAccent, s.mapResolveFailed, _resolveFail),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: SizedBox(
               height: 280,
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? Center(child: CircularProgressIndicator())
                   : _error != null
                   ? Center(
                       child: Text(
@@ -1984,7 +1984,7 @@ class _UserMapCardState extends State<_UserMapCard> {
                       children: [
                         FlutterMap(
                           mapController: _mapCtrl,
-                          options: const MapOptions(
+                          options: MapOptions(
                             initialCenter: LatLng(-2.5489, 118.0149),
                             initialZoom: 4,
                             minZoom: 2,
@@ -2013,7 +2013,7 @@ class _UserMapCardState extends State<_UserMapCard> {
                             left: 8,
                             bottom: 8,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
                               ),
@@ -2043,7 +2043,7 @@ class _UserMapCardState extends State<_UserMapCard> {
                             left: 8,
                             top: 8,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
                               ),

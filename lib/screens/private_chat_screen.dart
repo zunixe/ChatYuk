@@ -916,26 +916,26 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final gift = await showModalBottomSheet<GiftItem>(
       context: context,
       backgroundColor: AppTheme.bgCard,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(s.giftTitle, style: AppText.title),
-              const SizedBox(height: 4),
+              SizedBox(height: 4),
               Text(
                 s.giftPick,
                 style: AppText.bodySmall.copyWith(
                   color: AppTheme.textSecondary,
                 ),
               ),
-              const SizedBox(height: 16),
-              if (!points.enabled) ...const [
+              SizedBox(height: 16),
+              if (!points.enabled) ...[
                 SizedBox.shrink(),
                 SizedBox(height: 12),
               ] else ...[
@@ -981,9 +981,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           children: [
                             Text(
                               g.emoji,
-                              style: const TextStyle(fontSize: AppGlyph.lg),
+                              style: TextStyle(fontSize: AppGlyph.lg),
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: 4),
                             Text(
                               s.isId ? g.nameId : g.nameEn,
                               maxLines: 1,
@@ -993,12 +993,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                 fontWeight: FontWeight.w400,
                               ),
                             ),
-                            const SizedBox(height: 2),
+                            SizedBox(height: 2),
                             Text(
                               '${g.coins} 🪙',
                               style: AppText.caption.copyWith(
                                 color: afford
-                                    ? const Color(0xFFB8860B)
+                                    ? Color(0xFFB8860B)
                                     : AppTheme.textSecondary,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1100,9 +1100,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   height: 12,
                   decoration: BoxDecoration(
                     color: displayStatus == 'online'
-                        ? const Color(0xFF69F0AE)
+                        ? Color(0xFF69F0AE)
                         : displayStatus == 'idle'
-                        ? const Color(0xFFFFD740)
+                        ? Color(0xFFFFD740)
                         : Colors.white38,
                     shape: BoxShape.circle,
                     border: Border.all(color: AppTheme.primary, width: 2),
@@ -1110,7 +1110,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1134,8 +1134,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                               ),
                             ),
                             if (widget.otherRegistered) ...[
-                              const SizedBox(width: 4),
-                              const Icon(
+                              SizedBox(width: 4),
+                              Icon(
                                 Icons.verified,
                                 size: 15,
                                 color: Color(0xFF8AB4F8),
@@ -1151,7 +1151,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     children: [
                       if (genderEmoji.isNotEmpty) ...[
                         Padding(
-                          padding: const EdgeInsets.only(right: 4),
+                          padding: EdgeInsets.only(right: 4),
                           child: Text(genderEmoji, style: AppText.bodySmall),
                         ),
                       ],
@@ -1175,7 +1175,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                   children: [
                                     for (final e
                                         in _otherHashtags.asMap().entries) ...[
-                                      if (e.key > 0) const TextSpan(text: '  '),
+                                      if (e.key > 0) TextSpan(text: '  '),
                                       TextSpan(
                                         text: '#${e.value}',
                                         style: AppText.caption.copyWith(
@@ -1201,7 +1201,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         ),
         actions: [
           PopupMenuButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
+            icon: Icon(Icons.more_vert, color: Colors.white),
             color: AppTheme.bgCard,
             onSelected: (val) {
               if (val == 'follow') {
@@ -1226,11 +1226,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'follow',
-                child: Text(s.menuFollow, style: const TextStyle(color: AppTheme.textPrimary)),
+                child: Text(s.menuFollow, style: TextStyle(color: AppTheme.textPrimary)),
               ),
               PopupMenuItem(
                 value: 'friend',
-                child: Text(s.menuAddFriend, style: const TextStyle(color: AppTheme.textPrimary)),
+                child: Text(s.menuAddFriend, style: TextStyle(color: AppTheme.textPrimary)),
               ),
               PopupMenuItem(
                 value: 'block',
@@ -1269,14 +1269,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text(
+                            Text(
                               '👋',
                               style: TextStyle(fontSize: AppGlyph.xl),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             Text(
                               s.startConversation,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppTheme.textSecondary,
                               ),
                             ),
@@ -1340,7 +1340,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     top: 8,
                     right: 12,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
+                      padding: EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 5,
                       ),
@@ -1351,7 +1351,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.15),
                             blurRadius: 8,
-                            offset: const Offset(0, 2),
+                            offset: Offset(0, 2),
                           ),
                         ],
                       ),
@@ -1368,7 +1368,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             ),
           ),
           if (_showTyping)
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(14, 6, 0, 10),
               child: Align(
                 alignment: Alignment.centerLeft,
@@ -1376,14 +1376,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               ),
             ),
           Container(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+            padding: EdgeInsets.fromLTRB(8, 6, 8, 6),
             decoration: BoxDecoration(
               color: AppTheme.bgScreen,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 4,
-                  offset: const Offset(0, -1),
+                  offset: Offset(0, -1),
                 ),
               ],
             ),
@@ -1401,7 +1401,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         child: IconButton(
                           onPressed: () =>
                               EmojiPickerSheet.show(context, _msgCtrl),
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.emoji_emotions_outlined,
                             size: 22,
                           ),
@@ -1410,10 +1410,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
-                      const SizedBox(width: 2),
+                      SizedBox(width: 2),
                       Expanded(
                         child: Container(
-                          constraints: const BoxConstraints(maxHeight: 132),
+                          constraints: BoxConstraints(maxHeight: 132),
                           decoration: BoxDecoration(
                             color: AppTheme.bgCard,
                             borderRadius: BorderRadius.circular(24),
@@ -1425,7 +1425,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              const SizedBox(width: 16),
+                              SizedBox(width: 16),
                               Expanded(
                                 child: TextField(
                                   controller: _msgCtrl,
@@ -1579,10 +1579,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         backgroundColor: AppTheme.bgCard,
         title: Text(
           '${s.btnReport} ${widget.otherName}',
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
         ),
         content: TextField(
-          style: const TextStyle(color: AppTheme.textPrimary),
+          style: TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(hintText: s.reportHint),
           onChanged: (v) => reason = v,
         ),
@@ -1680,7 +1680,7 @@ class _AttachChip extends StatelessWidget {
               ),
               child: Center(child: Icon(icon, color: color, size: 24)),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               label,
               style: AppText.caption.copyWith(color: AppTheme.textSecondary),
@@ -1717,7 +1717,7 @@ class _TypingBubbleState extends State<_TypingBubble>
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: AppTheme.bgInput,
         borderRadius: BorderRadius.circular(18),
@@ -1752,8 +1752,8 @@ class _TypingBubbleState extends State<_TypingBubble>
             child: Container(
               width: 7,
               height: 7,
-              margin: const EdgeInsets.symmetric(horizontal: 2.5),
-              decoration: const BoxDecoration(
+              margin: EdgeInsets.symmetric(horizontal: 2.5),
+              decoration: BoxDecoration(
                 color: AppTheme.textSecondary,
                 shape: BoxShape.circle,
               ),
