@@ -122,8 +122,20 @@ grant execute on function public.list_posts(text, int, timestamptz, boolean) to 
 -- 3. Realtime: tabel posts WAJIB masuk publication supabase_realtime
 --    supaya client (watchNewPosts → onPostgresChanges insert) menerima
 --    event post baru. Sebelumnya TIDAK terdaftar → channel diam.
+--    (idempotent: sebagian tabel mungkin sudah terdaftar dari apply manual)
 -- ──────────────────────────────────────────────
-alter publication supabase_realtime add table public.posts, public.post_likes, public.post_comments, public.post_shares;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['posts', 'post_likes', 'post_comments', 'post_shares'] loop
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then
+      null;
+    end;
+  end loop;
+end $$;
 
 -- Hapus signature lama (3 param) supaya tidak ambigu saat RPC dipanggil.
 drop function if exists public.list_posts(text, int, timestamptz);
