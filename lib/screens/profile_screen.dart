@@ -506,6 +506,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         slivers: [
           // ── Header Gradient ──
           SliverAppBar(
+      backgroundColor: AppTheme.headerGradient.colors.first,
             expandedHeight: 220,
             pinned: true,
             leading: IconButton(
@@ -1585,7 +1586,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),

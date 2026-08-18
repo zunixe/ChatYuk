@@ -821,7 +821,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.bgCard,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(

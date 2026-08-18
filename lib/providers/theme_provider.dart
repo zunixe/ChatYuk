@@ -24,8 +24,8 @@ class ThemeProvider extends ChangeNotifier {
     if (_dark == value) return;
     _dark = value;
     AppTheme.isDark = value;
+    notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefKey, value);
-    notifyListeners();
   }
 }

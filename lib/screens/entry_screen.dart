@@ -234,12 +234,18 @@ class _EntryScreenState extends State<EntryScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(height: 16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight - 24),
+                child: IntrinsicHeight(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+              SizedBox(height: 8),
 
               // Logo — animasi halus dalam lingkaran transparan
               // (komposisi sama dengan halaman login).
@@ -253,7 +259,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   child: _AnimatedLogo(),
                 ),
               ),
-              SizedBox(height: 12),
+              SizedBox(height: 8),
 
               // Title
               ShaderMask(
@@ -267,7 +273,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 4),
+              SizedBox(height: 2),
               Text(
                 s.appSubtagline,
                 textAlign: TextAlign.center,
@@ -275,7 +281,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   color: AppTheme.textSecondary,
                 ),
               ),
-              SizedBox(height: 12),
+              SizedBox(height: 8),
 
               // Kartu form — satu grup utuh, komposisi sama dengan login
               Container(
@@ -334,7 +340,7 @@ class _EntryScreenState extends State<EntryScreen> {
                     ],
                   ),
                 ),
-              SizedBox(height: 10),
+              SizedBox(height: 6),
 
               // Gender
               Row(
@@ -344,7 +350,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   Expanded(child: _genderCard('male', '👨', AppTheme.male, s.labelGenderMale)),
                 ],
               ),
-              SizedBox(height: 10),
+              SizedBox(height: 6),
 
               // Age & Country
               Row(
@@ -354,11 +360,11 @@ class _EntryScreenState extends State<EntryScreen> {
                   Expanded(child: _countryDropdown(s)),
                 ],
               ),
-              SizedBox(height: 10),
+              SizedBox(height: 6),
 
               // City
               _cityDropdown(s),
-              SizedBox(height: 12),
+              SizedBox(height: 8),
 
               // Button
               SizedBox(
@@ -383,7 +389,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   ],
                 ),
               ),
-              SizedBox(height: 16),
+              SizedBox(height: 8),
 
               // Divider
               Row(children: [
@@ -394,7 +400,7 @@ class _EntryScreenState extends State<EntryScreen> {
                 ),
                 Expanded(child: Divider()),
               ]),
-              SizedBox(height: 12),
+              SizedBox(height: 8),
 
               // Login dengan Google
               SizedBox(
@@ -405,7 +411,7 @@ class _EntryScreenState extends State<EntryScreen> {
                     side: BorderSide(color: AppTheme.divider, width: 1.5),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     padding: EdgeInsets.symmetric(vertical: 12),
-                    backgroundColor: Colors.white,
+                    backgroundColor: AppTheme.bgCard,
                   ),
                   child: _googleLoading
                       ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
@@ -464,9 +470,13 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-            ],
+              SizedBox(height: 8),
+                ],
+              ),
+            ),
           ),
+        );
+          },
         ),
       ),
     );
@@ -479,7 +489,7 @@ class _EntryScreenState extends State<EntryScreen> {
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected ? color : AppTheme.divider,

@@ -62,7 +62,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   int _page = 1;
   static const int _pageSize = 20;
   static const _prefKeyNegara = 'filter_negara';
-  static const _prefKeyGender = 'filter_gender';
   final ScrollController _scrollCtrl = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
@@ -111,14 +110,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _negara = prefs.getString(_prefKeyNegara) ?? 'all';
-      _gender = prefs.getString(_prefKeyGender) ?? 'all';
+      _gender = 'all';
     });
   }
 
   Future<void> _saveFilter() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKeyNegara, _negara);
-    await prefs.setString(_prefKeyGender, _gender);
   }
 
   @override
@@ -208,6 +206,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
+        backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: AppTheme.headerGradient,
@@ -504,7 +503,7 @@ class _UserCard extends StatelessWidget {
     return Container(
       margin: EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
       ),

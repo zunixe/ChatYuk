@@ -22,17 +22,15 @@ class PostPhotoViewer {
       barrierLabel: '',
       barrierColor: Colors.black.withValues(alpha: 0.95),
       transitionDuration: const Duration(milliseconds: 220),
-      pageBuilder: (_, _, _) => _ViewerBody(
-        paths: paths,
-        thumbs: thumbs,
-        initialIndex: initialIndex,
-      ),
+      pageBuilder: (_, _, _) =>
+          _ViewerBody(paths: paths, thumbs: thumbs, initialIndex: initialIndex),
       transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: ScaleTransition(
-          scale: Tween<double>(begin: 0.92, end: 1.0).animate(
-            CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
-          ),
+          scale: Tween<double>(
+            begin: 0.92,
+            end: 1.0,
+          ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
           child: child,
         ),
       ),
@@ -55,7 +53,9 @@ class _ViewerBody extends StatefulWidget {
 }
 
 class _ViewerBodyState extends State<_ViewerBody> {
-  late final PageController _page = PageController(initialPage: widget.initialIndex);
+  late final PageController _page = PageController(
+    initialPage: widget.initialIndex,
+  );
   late int _index = widget.initialIndex;
 
   @override
@@ -76,10 +76,8 @@ class _ViewerBodyState extends State<_ViewerBody> {
               controller: _page,
               itemCount: widget.paths.length,
               onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (_, i) => _ViewerPage(
-                path: widget.paths[i],
-                thumb: widget.thumbs[i],
-              ),
+              itemBuilder: (_, i) =>
+                  _ViewerPage(path: widget.paths[i], thumb: widget.thumbs[i]),
             ),
             Positioned(
               top: 8,
@@ -95,7 +93,10 @@ class _ViewerBodyState extends State<_ViewerBody> {
                 top: 16,
                 right: 16,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.55),
                     borderRadius: BorderRadius.circular(20),
@@ -103,6 +104,61 @@ class _ViewerBodyState extends State<_ViewerBody> {
                   child: Text(
                     '${_index + 1}/${widget.paths.length}',
                     style: AppText.micro.copyWith(color: Colors.white),
+                  ),
+                ),
+              ),
+            // Thumbnail strip bawah — klik untuk lompat ke foto itu.
+            if (widget.paths.length > 1)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 16,
+                child: Center(
+                  child: Container(
+                    height: 58,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      shrinkWrap: true,
+                      itemCount: widget.paths.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 6),
+                      itemBuilder: (_, i) => GestureDetector(
+                        onTap: () => _page.animateToPage(
+                          i,
+                          duration: const Duration(milliseconds: 240),
+                          curve: Curves.easeOutCubic,
+                        ),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: i == _index
+                                  ? Colors.white
+                                  : Colors.white24,
+                              width: i == _index ? 2 : 1,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.memory(
+                              widget.thumbs[i],
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -124,12 +180,23 @@ class _ViewerPage extends StatefulWidget {
 
 class _ViewerPageState extends State<_ViewerPage> {
   Uint8List? _fullBytes;
+  final TransformationController _transform = TransformationController();
 
   @override
   void initState() {
     super.initState();
     _loadFull();
   }
+
+  @override
+  void dispose() {
+    _transform.dispose();
+    super.dispose();
+  }
+
+  // Pan hanya aktif saat sudah zoom — kalau skala 1.0, drag horizontal
+  // dilempar ke PageView supaya swipe ganti foto tetap mulus.
+  bool get _zoomed => _transform.value.getMaxScaleOnAxis() > 1.01;
 
   Future<void> _loadFull() async {
     try {
@@ -148,8 +215,15 @@ class _ViewerPageState extends State<_ViewerPage> {
       children: [
         Center(
           child: InteractiveViewer(
+            transformationController: _transform,
             maxScale: 5,
-            child: Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true),
+            panEnabled: _zoomed,
+            onInteractionUpdate: (_) => setState(() {}),
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+            ),
           ),
         ),
         if (_fullBytes == null)
@@ -161,7 +235,10 @@ class _ViewerPageState extends State<_ViewerPage> {
               child: SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white54,
+                ),
               ),
             ),
           ),

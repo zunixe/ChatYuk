@@ -76,6 +76,7 @@ class _TimelineScreenState extends State<TimelineScreen>
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
+        backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: AppTheme.headerGradient,

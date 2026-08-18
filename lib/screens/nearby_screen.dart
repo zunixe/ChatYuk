@@ -152,6 +152,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
+        backgroundColor: AppTheme.headerGradient.colors.first,
         title: Text(s.nearbyTitle),
         flexibleSpace: Container(
           decoration: BoxDecoration(
@@ -401,7 +402,7 @@ class _NearbyCard extends StatelessWidget {
     return Container(
       margin: EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
       ),
