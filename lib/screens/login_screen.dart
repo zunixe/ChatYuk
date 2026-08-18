@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../services/geo_service.dart';
 import '../services/location_service.dart';
 import 'register_screen.dart';
+import '../providers/theme_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   final String? prefillEmail;
@@ -329,6 +330,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(title: Text(s.titleLogin)),

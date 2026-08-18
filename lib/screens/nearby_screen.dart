@@ -11,6 +11,7 @@ import '../providers/locale_provider.dart';
 
 import '../services/location_service.dart';
 import 'private_chat_screen.dart';
+import '../providers/theme_provider.dart';
 
 /// Fitur "Orang Sekitar": cari user online/idle dalam radius tertentu
 /// berdasarkan lokasi (GPS bila diizinkan, else perkiraan IP), tampilkan
@@ -96,9 +97,48 @@ class _NearbyScreenState extends State<NearbyScreen> {
     await _loc.setShareLocation(v);
     if (v) {
       // Minta izin lokasi presisi saat mengaktifkan (opsional bagi user).
-      await _loc.requestPermission();
+      final ok = await _loc.requestPermission();
+      if (!ok) {
+        // User menolak/tidak pernah izinkan → tawarkan lagi via dialog.
+        await _promptEnableGps();
+      }
       await _loc.updateMyLocation();
     }
+    await _refresh();
+  }
+
+  /// Dialog tawaran ulang akses GPS: bawa user ke Pengaturan bila dialog
+  /// native Android sudah tidak muncul lagi (permission permanently denied).
+  Future<void> _promptEnableGps() async {
+    final s = context.read<LocaleProvider>().s;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(
+          s.locSharePromptTitle,
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          s.locSharePromptBody,
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: Text(s.locOpenSettings),
+          ),
+        ],
+      ),
+    );
+    if (go != true) return;
+    await _loc.openSettings();
+    // Setelah balik dari Settings, simpan lokasi (GPS kalau diizinkan).
+    await _loc.updateMyLocation();
     await _refresh();
   }
 
@@ -148,6 +188,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,

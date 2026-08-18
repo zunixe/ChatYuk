@@ -7,11 +7,14 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
+import '../providers/social_provider.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
+import '../services/social_service.dart';
 import '../utils.dart';
 import '../widgets/profile_avatar.dart';
 import 'private_chat_screen.dart';
+import '../providers/theme_provider.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
   final bool embedded;
@@ -68,6 +71,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
     final blocked = context.select<ChatProvider, List<String>>((c) => c.blockedUids);
@@ -363,6 +367,11 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                     style: AppText.caption.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
                                 ),
                               ],
+                              if (otherUid.isNotEmpty &&
+                                  chat.participantRegistered[otherUid] == true) ...[
+                                const SizedBox(height: 6),
+                                _FriendButton(otherUid: otherUid),
+                              ],
                             ],
                           ),
                        ],
@@ -396,5 +405,89 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 
   String _formatTime(DateTime dt, S s) {
     return formatRelativeTime(dt, isId: s.isId);
+  }
+}
+
+/// Tombol add friend di list pesan untuk user yang terdaftar (registered).
+/// Status: friends / request pending (sent|received) / add friend.
+class _FriendButton extends StatefulWidget {
+  final String otherUid;
+  const _FriendButton({required this.otherUid});
+
+  @override
+  State<_FriendButton> createState() => _FriendButtonState();
+}
+
+class _FriendButtonState extends State<_FriendButton> {
+  final SocialService _service = SocialService();
+  bool _pendingRequest = false;
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final st = await _service.mySocialStatus(widget.otherUid);
+      if (!mounted) return;
+      setState(() {
+        _pendingRequest =
+            st['friend_request_sent'] == true || st['friend_request_received'] == true;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _send() async {
+    final s = context.read<LocaleProvider>().s;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    final res = await context.read<SocialProvider>().sendFriendRequest(widget.otherUid);
+    if (!mounted) return;
+    setState(() {
+      if (res == 'pending' || res == 'friends') _pendingRequest = true;
+      _busy = false;
+    });
+    messenger.showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final isFriend = context.watch<SocialProvider>().isFriend(widget.otherUid);
+    if (_loading) {
+      return SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.textSecondary),
+      );
+    }
+    final done = isFriend || _pendingRequest;
+    final label = isFriend ? s.btnFriends : (_pendingRequest ? s.btnFriendRequested : s.btnAddFriend);
+    return GestureDetector(
+      onTap: done || _busy ? null : _send,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: done ? AppTheme.textSecondary.withValues(alpha: 0.4) : AppTheme.primary,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: AppText.caption.copyWith(
+            color: done ? AppTheme.textSecondary : AppTheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
   }
 }

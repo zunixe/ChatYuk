@@ -13,6 +13,7 @@ import '../utils.dart';
 import 'register_screen.dart';
 import 'login_screen.dart';
 import 'donate_screen.dart';
+import '../providers/theme_provider.dart';
 
 class EntryScreen extends StatefulWidget {
   const EntryScreen({super.key});
@@ -230,6 +231,7 @@ class _EntryScreenState extends State<EntryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -285,7 +287,7 @@ class _EntryScreenState extends State<EntryScreen> {
 
               // Kartu form — satu grup utuh, komposisi sama dengan login
               Container(
-                padding: EdgeInsets.all(20),
+                padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppTheme.bgCard,
                   borderRadius: BorderRadius.circular(16),
@@ -346,7 +348,7 @@ class _EntryScreenState extends State<EntryScreen> {
               Row(
                 children: [
                   Expanded(child: _genderCard('female', '👩', AppTheme.female, s.labelGenderFemale)),
-                  SizedBox(width: 12),
+                  SizedBox(width: 10),
                   Expanded(child: _genderCard('male', '👨', AppTheme.male, s.labelGenderMale)),
                 ],
               ),
@@ -487,7 +489,7 @@ class _EntryScreenState extends State<EntryScreen> {
     return GestureDetector(
       onTap: () => setState(() => _gender = value),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(12),
@@ -522,21 +524,21 @@ class _EntryScreenState extends State<EntryScreen> {
                     )
                   : null,
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Flexible(
               child: Text(
                 label,
                 style: AppText.label.copyWith(
                   letterSpacing: 0,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  fontWeight: FontWeight.w500,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Container(
-              width: 30,
-              height: 30,
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: color.withValues(alpha: 0.15),
@@ -554,6 +556,7 @@ class _EntryScreenState extends State<EntryScreen> {
   Widget _ageDropdown(S s) {
     return DropdownButtonFormField<int>(
       initialValue: _age,
+      style: AppText.body,
       decoration: InputDecoration(labelText: s.labelAge),
       items: [
         for (int i = 13; i <= 60; i++)
@@ -568,6 +571,7 @@ class _EntryScreenState extends State<EntryScreen> {
   Widget _countryDropdown(S s) {
     return DropdownButtonFormField<String>(
       initialValue: _negara,
+      style: AppText.body,
       decoration: InputDecoration(labelText: s.labelCountry),
       isExpanded: true,
       menuMaxHeight: 350,
@@ -593,6 +597,7 @@ class _EntryScreenState extends State<EntryScreen> {
     final validKota = cities.contains(_kota) ? _kota : cities.first;
     return DropdownButtonFormField<String>(
       initialValue: validKota,
+      style: AppText.body,
       decoration: InputDecoration(labelText: s.labelCity),
       isExpanded: true,
       menuMaxHeight: 350,

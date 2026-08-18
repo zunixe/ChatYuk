@@ -23,6 +23,7 @@ import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
+import '../providers/theme_provider.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 String? _roomProcessImage(Uint8List bytes) {
@@ -325,6 +326,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
 
@@ -668,8 +670,9 @@ class _MessageBubble extends StatelessWidget {
   final VoidCallback onTapUser;
   const _MessageBubble({super.key, required this.msg, required this.isMe, required this.color, required this.roomId, required this.onTapUser});
 
-  // Warna bubble disamakan dengan private chat.
-  static const _textColor = Color(0xFF303030);
+  // Warna teks bubble mengikuti tema (gelap di light mode, terang di dark mode)
+  // supaya sinkron dengan warna bubble (bgInput / primary alpha).
+  static Color get _textColor => AppTheme.textPrimary;
 
   bool get _isMedia => msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired';
 

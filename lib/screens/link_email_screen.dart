@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../utils.dart';
+import '../providers/theme_provider.dart';
 
 class LinkEmailScreen extends StatefulWidget {
   const LinkEmailScreen({super.key});
@@ -70,6 +71,7 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
 

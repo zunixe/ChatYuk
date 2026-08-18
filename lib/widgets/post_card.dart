@@ -104,6 +104,9 @@ class _PostCardState extends State<PostCard> {
   Future<void> _comment() async {
     final s = context.read<LocaleProvider>().s;
     final ctrl = TextEditingController();
+    final commentsKey = GlobalKey<_CommentsListState>();
+    var replyToId = 0;
+    var replyToName = '';
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -111,72 +114,141 @@ class _PostCardState extends State<PostCard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(height: 12),
-            Text(
-              s.btnComment,
-              textAlign: TextAlign.center,
-              style: AppText.title,
-            ),
-            SizedBox(height: 8),
-            Flexible(child: _CommentsList(postId: _id)),
-            Divider(height: 1),
-            Padding(
-              padding: EdgeInsets.fromLTRB(16, 4, 8, 16),
-              child: Row(
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx2, setSheet) {
+            // Compact (bukan full page): sheet menempel bawah seperti dulu,
+            // tapi input tetap di atas menu Android (nav/gesture bar) & keyboard.
+            // viewInsets = keyboard; viewPadding = nav bar (tidak terpotong
+            // saat keyboard terbuka) — kombinasi ini paling aman di MIUI.
+            final bottom =
+                MediaQuery.viewInsetsOf(ctx2).bottom +
+                MediaQuery.viewPaddingOf(ctx2).bottom;
+            final replying = replyToId > 0;
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottom),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.bgCard,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: AppTheme.bgCard, width: 1),
-                      ),
-                      child: TextField(
-                        controller: ctrl,
-                        style: TextStyle(color: AppTheme.textPrimary),
-                        decoration: InputDecoration(
-                          hintText: s.hintComment,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          isDense: true,
-                        ),
-                        textInputAction: TextInputAction.send,
-                      ),
+                  SizedBox(height: 12),
+                  Text(
+                    s.btnComment,
+                    textAlign: TextAlign.center,
+                    style: AppText.title,
+                  ),
+                  SizedBox(height: 8),
+                  Flexible(
+                    child: _CommentsList(
+                      key: commentsKey,
+                      postId: _id,
+                      onReply: (id, name) =>
+                          setSheet(() { replyToId = id; replyToName = name; }),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: AppTheme.primary),
-                    onPressed: () async {
-                      final text = ctrl.text.trim();
-                      if (text.isEmpty) return;
-                      Navigator.of(ctx).pop();
-                      await _submitComment(text);
-                    },
+                  Divider(height: 1),
+                  if (replying)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(16, 6, 8, 0),
+                      child: Row(
+                        children: [
+                          Icon(Icons.subdirectory_arrow_right,
+                              size: 16, color: AppTheme.primary),
+                          SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              s.hintReplyTo(replyToName),
+                              style: AppText.caption.copyWith(
+                                color: AppTheme.primary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(Icons.close,
+                                size: 16, color: AppTheme.textSecondary),
+                            onPressed: () => setSheet(() {
+                              replyToId = 0;
+                              replyToName = '';
+                            }),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16, 4, 8, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppTheme.bgCard,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                  color: AppTheme.bgCard, width: 1),
+                            ),
+                            child: TextField(
+                              controller: ctrl,
+                              style: TextStyle(color: AppTheme.textPrimary),
+                              decoration: InputDecoration(
+                                hintText: replying
+                                    ? s.hintReplyTo(replyToName)
+                                    : s.hintComment,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                isDense: true,
+                              ),
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: (_) => _sendComment(
+                                ctx2,
+                                ctrl,
+                                replyToId,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.send, color: AppTheme.primary),
+                          onPressed: () =>
+                              _sendComment(ctx2, ctrl, replyToId),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Future<void> _submitComment(String text) async {
+  Future<void> _sendComment(
+    BuildContext ctx,
+    TextEditingController ctrl,
+    int parentId,
+  ) async {
+    final text = ctrl.text.trim();
+    if (text.isEmpty) return;
+    Navigator.of(ctx).pop();
+    await _submitComment(text, parentId: parentId);
+  }
+
+  Future<void> _submitComment(String text, {int? parentId}) async {
     final s = context.read<LocaleProvider>().s;
     try {
-      await TimelineService().addComment(_id, text);
+      if (parentId != null && parentId > 0) {
+        await TimelineService().replyComment(_id, parentId, text);
+      } else {
+        await TimelineService().addComment(_id, text);
+      }
       final cur = (_p['commentCount'] as num?)?.toInt() ?? 0;
       if (mounted) {
         context.read<TimelineProvider>().updatePost(_id, {
@@ -377,16 +449,19 @@ class _PostCardState extends State<PostCard> {
                       ? Icons.favorite_rounded
                       : Icons.favorite_border_rounded,
                   color: isLiked ? AppTheme.danger : AppTheme.textSecondary,
+                  scale: isLiked ? 1.2 : 1,
                   count: likeCount,
                   onTap: _like,
                 ),
                 _iconAction(
-                  icon: Icons.mode_comment_outlined,
+                  // Speech bubble bulat — icon comment khas Threads.
+                  icon: Icons.chat_bubble_outline_rounded,
                   color: AppTheme.textSecondary,
                   count: commentCount,
                   onTap: _comment,
                 ),
                 _iconAction(
+                  // Paper plane — icon share khas Threads.
                   icon: Icons.send_outlined,
                   color: AppTheme.textSecondary,
                   count: shareCount,
@@ -412,7 +487,8 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  /// Grid foto post — kotak-kotak (1 foto lebar penuh, >1 grid 3 kolom).
+  /// Foto post — 1 foto lebar penuh; multi foto = strip thumbnail di atas +
+  /// carousel slide kiri/kanan dengan badge counter di pojok foto.
   /// Tap foto → PostPhotoViewer (popup smooth, swipe multi foto, zoom).
   Widget _photoGrid() {
     final paths = _imagePaths();
@@ -422,19 +498,54 @@ class _PostCardState extends State<PostCard> {
       if (t != null && i < paths.length) loaded.add((t, paths[i]));
     }
     if (loaded.isEmpty) return const SizedBox.shrink();
-    Widget photo(int i) => GestureDetector(
-      onTap: () => _openViewer(i),
+    // Foto tunggal — tanpa Stack supaya tinggi natural (bukan unbounded).
+    Widget singlePhoto() => GestureDetector(
+      onTap: () => _openViewer(0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: Image.memory(
-          loaded[i].$1,
+          loaded[0].$1,
           fit: BoxFit.cover,
           gaplessPlayback: true,
         ),
       ),
     );
+    // Foto carousel — Positioned.fill + badge counter "2/3" sebagai penanda
+    // bahwa foto bisa di-slide. Hanya dipakai di PageView (tinggi bounded).
+    Widget carouselPhoto(int i) => GestureDetector(
+      onTap: () => _openViewer(i),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Image.memory(
+                loaded[i].$1,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              ),
+            ),
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${i + 1}/${loaded.length}',
+                  style: AppText.micro.copyWith(color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
     if (loaded.length == 1) {
-      return SizedBox(width: double.infinity, child: photo(0));
+      return SizedBox(width: double.infinity, child: singlePhoto());
     }
     // Multi foto: thumbnail strip di atas (klik → ganti foto besar) +
     // carousel slide kiri/kanan.
@@ -482,7 +593,7 @@ class _PostCardState extends State<PostCard> {
             controller: _pageCtrl,
             itemCount: loaded.length,
             onPageChanged: (i) => setState(() => _page = i),
-            itemBuilder: (_, i) => photo(i),
+            itemBuilder: (_, i) => carouselPhoto(i),
           ),
         ),
       ],
@@ -512,6 +623,7 @@ class _PostCardState extends State<PostCard> {
     required VoidCallback onTap,
     bool showCount = true,
     String? tooltip,
+    double scale = 1,
   }) {
     return Tooltip(
       message: tooltip ?? '',
@@ -523,7 +635,12 @@ class _PostCardState extends State<PostCard> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 20, color: color),
+              AnimatedScale(
+                scale: scale,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.elasticOut,
+                child: Icon(icon, size: 20, color: color),
+              ),
               if (showCount) ...[
                 const SizedBox(width: 4),
                 Text(
@@ -633,57 +750,205 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
-  String _timeAgo(DateTime t) {
-    final d = DateTime.now().difference(t);
-    if (d.inMinutes < 1) return '${d.inSeconds}s';
-    if (d.inHours < 1) return '${d.inMinutes}m';
-    if (d.inDays < 1) return '${d.inHours}h';
-    return '${d.inDays}d';
-  }
+  String _timeAgo(DateTime t) => _timeAgoShort(t);
 }
 
-class _CommentsList extends StatelessWidget {
+class _CommentsList extends StatefulWidget {
   final String postId;
-  const _CommentsList({required this.postId});
+  final void Function(int id, String name)? onReply;
+  const _CommentsList({super.key, required this.postId, this.onReply});
+
+  @override
+  State<_CommentsList> createState() => _CommentsListState();
+}
+
+class _CommentsListState extends State<_CommentsList> {
+  List<Map<String, dynamic>>? _items;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final list = await TimelineService().comments(widget.postId);
+    if (mounted) setState(() => _items = list);
+  }
+
+  Future<void> _like(Map<String, dynamic> c) async {
+    if (_busy) return;
+    _busy = true;
+    final id = (c['id'] as num?)?.toInt() ?? 0;
+    try {
+      final res = await TimelineService().toggleCommentLike(id);
+      if (!mounted) return;
+      final liked = res['liked'] == true;
+      final count =
+          ((c['likeCount'] as num?)?.toInt() ?? 0) + (liked ? 1 : -1);
+      setState(() {
+        c['isLiked'] = liked;
+        c['likeCount'] = count < 0 ? 0 : count;
+      });
+    } catch (_) {}
+    _busy = false;
+  }
+
+  Future<void> _share(Map<String, dynamic> c) async {
+    final id = (c['id'] as num?)?.toInt() ?? 0;
+    try {
+      final res = await TimelineService().shareComment(id);
+      final count = (res['share_count'] as num?)?.toInt();
+      if (!mounted) return;
+      if (count != null) setState(() => c['shareCount'] = count);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: TimelineService().comments(postId),
-      builder: (_, snap) {
-        final list = snap.data ?? [];
-        if (list.isEmpty) {
-          return const SizedBox(height: 80);
-        }
-        return ListView.builder(
-          shrinkWrap: true,
-          itemCount: list.length,
-          itemBuilder: (_, i) {
-            final c = list[i];
-            return ListTile(
-              dense: true,
-              leading: CircleAvatar(
+    final items = _items ?? [];
+    if (items.isEmpty) {
+      return const SizedBox(height: 80);
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: items.length,
+      itemBuilder: (_, i) {
+        final c = items[i];
+        final isReply = ((c['parentId'] as num?)?.toInt() ?? 0) > 0;
+        final createdAt =
+            DateTime.tryParse(c['createdAt'] as String? ?? '');
+        final likeCount = (c['likeCount'] as num?)?.toInt() ?? 0;
+        final shareCount = (c['shareCount'] as num?)?.toInt() ?? 0;
+        final isLiked = c['isLiked'] == true;
+        final name = c['authorName'] as String? ?? 'Anon';
+        final text = c['text'] as String? ?? '';
+        final id = (c['id'] as num?)?.toInt() ?? 0;
+        return Padding(
+          padding: EdgeInsets.only(left: isReply ? 26 : 0, bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
                 radius: 14,
                 backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
                 child: Text(
-                  (c['author_name'] as String? ?? 'A')[0].toUpperCase(),
+                  (name.isEmpty ? 'A' : name[0]).toUpperCase(),
                   style: AppText.label.copyWith(color: AppTheme.primary),
                 ),
               ),
-              title: Text(
-                c['author_name'] as String? ?? 'Anon',
-                style: AppText.label,
+              SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            style: AppText.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (createdAt != null) ...[
+                          SizedBox(width: 6),
+                          Text(
+                            '· ${_timeAgoShort(createdAt)}',
+                            style: AppText.micro.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    SizedBox(height: 2),
+                    Text(text, style: AppText.bodySmall),
+                    SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _CommentAction(
+                          icon: isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          color: isLiked
+                              ? AppTheme.danger
+                              : AppTheme.textSecondary,
+                          count: likeCount,
+                          onTap: () => _like(c),
+                        ),
+                        SizedBox(width: 16),
+                        _CommentAction(
+                          icon: Icons.chat_bubble_outline,
+                          color: AppTheme.textSecondary,
+                          count: null,
+                          onTap: () => widget.onReply?.call(id, name),
+                        ),
+                        SizedBox(width: 16),
+                        _CommentAction(
+                          icon: Icons.send_outlined,
+                          color: AppTheme.textSecondary,
+                          count: shareCount,
+                          onTap: () => _share(c),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              subtitle: Text(
-                c['text'] as String? ?? '',
-                style: AppText.bodySmall,
-              ),
-            );
-          },
+            ],
+          ),
         );
       },
     );
   }
+}
+
+class _CommentAction extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final int? count;
+  final VoidCallback onTap;
+  const _CommentAction({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            if (count != null && count! > 0) ...[
+              SizedBox(width: 4),
+              Text(
+                '$count',
+                style: AppText.micro.copyWith(color: AppTheme.textSecondary),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _timeAgoShort(DateTime t) {
+  final d = DateTime.now().difference(t);
+  if (d.inMinutes < 1) return '${d.inSeconds}s';
+  if (d.inHours < 1) return '${d.inMinutes}m';
+  if (d.inDays < 1) return '${d.inHours}h';
+  return '${d.inDays}d';
 }
 
 /// Avatar pengirim post — pakai `authorAvatar` dari payload list_posts

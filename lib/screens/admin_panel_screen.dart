@@ -19,6 +19,7 @@ import 'admin_dummy_tab.dart';
 import 'admin_kyc_screen.dart';
 import 'admin_revenue_screen.dart';
 import 'admin_withdrawal_screen.dart';
+import '../providers/theme_provider.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -145,6 +146,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final admin = context.watch<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
     final stats = admin.stats;
@@ -503,6 +505,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppTheme.bgScreen,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),

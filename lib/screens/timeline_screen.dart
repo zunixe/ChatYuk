@@ -7,6 +7,7 @@ import '../providers/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import 'post_composer_screen.dart';
+import '../providers/theme_provider.dart';
 
 /// Timeline feed: tab Semua / Mengikuti + infinite scroll + refresh.
 class TimelineScreen extends StatefulWidget {
@@ -64,6 +65,7 @@ class _TimelineScreenState extends State<TimelineScreen>
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     super.build(context);
     final s = context.watch<LocaleProvider>().s;
     // Rebuild granular: hanya rebuild saat daftar post / hasMore benar-benar

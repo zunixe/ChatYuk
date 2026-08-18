@@ -363,6 +363,31 @@ class AuthService {
     await _sb.auth.signOut();
   }
 
+  /// Akun punya password? Akun Google (sign-in via Google) tidak punya
+  /// password — user harus "set password" dulu sebelum bisa ganti.
+  bool get hasPassword =>
+      currentUser?.appMetadata['provider'] != 'google';
+
+  /// Set password baru (untuk akun Google yang belum punya password).
+  Future<void> setPassword(String newPassword) async {
+    await _sb.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
+  /// Ganti password: verifikasi password lama dulu, lalu update.
+  /// Lempar error bila password lama salah.
+  Future<void> changePassword(
+      String currentPassword, String newPassword) async {
+    final email = userEmail;
+    if (email == null || email.isEmpty) {
+      throw Exception('No email on account');
+    }
+    await _sb.auth.signInWithPassword(
+      email: email,
+      password: currentPassword,
+    );
+    await _sb.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
   /// Cek apakah nickname sudah dipakai oleh user lain.
   Future<bool> isNicknameAvailable(String nickname) async {
     final id = uid;

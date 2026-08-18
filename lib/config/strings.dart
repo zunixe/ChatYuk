@@ -594,6 +594,23 @@ class S {
       : 'Password changed. Please log in again.';
   String get errChangePassword =>
       isId ? 'Gagal mengubah password: ' : 'Failed to change password: ';
+  String get btnSetPassword => isId ? 'Set Password' : 'Set Password';
+  String get btnChangePassword =>
+      isId ? 'Ganti Password' : 'Change Password';
+  String get descSetPassword => isId
+      ? 'Akun Google kamu belum punya password. Buat sekarang agar bisa login pakai email + password.'
+      : 'Your Google account has no password yet. Set one to log in with email + password.';
+  String get descChangePassword => isId
+      ? 'Ganti password untuk keamanan akun kamu'
+      : 'Change your password for better account security';
+  String get labelCurrentPassword =>
+      isId ? 'Password Saat Ini' : 'Current Password';
+  String get msgPasswordSet => isId
+      ? 'Password berhasil dibuat. Kamu sekarang bisa login pakai email + password.'
+      : 'Password set successfully. You can now log in with email + password.';
+  String get errCurrentPasswordWrong => isId
+      ? 'Password saat ini salah'
+      : 'Current password is incorrect';
   String get msgAccountLinked => isId
       ? 'Email berhasil didaftarkan. Akun kamu sekarang aman.'
       : 'Email registered successfully. Your account is now secured.';
@@ -1020,6 +1037,13 @@ class S {
       ? 'Lokasi presisi nonaktif — posisi hanya perkiraan'
       : 'Precise location off — position is approximate';
   String get locOpenSettings => isId ? 'Buka Pengaturan' : 'Open Settings';
+  String get locSharePromptTitle => isId ? 'Aktifkan GPS' : 'Enable GPS';
+  String get locSharePromptBody => isId
+      ? 'Bagikan lokasi butuh akses GPS. Izinkan akses lokasi supaya posisimu akurat.'
+      : 'Sharing your location needs GPS access. Allow location access for an accurate position.';
+  String get locOnlinePromptBody => isId
+      ? 'Izinkan akses lokasi supaya pengguna lain bisa melihat lokasimu dan fitur orang sekitar berfungsi.'
+      : 'Allow location access so others can see your location and the nearby feature works.';
   String get adminSearchChat =>
       isId ? 'Cari percakapan...' : 'Search conversations...';
   String get adminUserSingular => isId ? 'user' : 'user';
@@ -1225,6 +1249,7 @@ class S {
   String get visFollowersDesc => isId ? 'Pengikut, teman & subscriber' : 'Followers, friends & subscribers';
   String get visSubscribersDesc => isId ? 'Hanya subscriber aktif' : 'Active subscribers only';
   String get hintComment => isId ? 'Tulis komentar...' : 'Write a comment...';
+  String hintReplyTo(String name) => isId ? 'Balas $name' : 'Reply to $name';
   String get emptyTimeline => isId ? 'Belum ada postingan' : 'No posts yet';
   String get emptyTimelineHint => isId
       ? 'Jadilah yang pertama posting di timeline!'

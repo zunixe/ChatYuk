@@ -15,6 +15,7 @@ import '../services/storage_photo_service.dart';
 import '../services/timeline_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
+import '../providers/theme_provider.dart';
 
 /// Proses foto (resize + JPEG) di isolate sebelum upload.
 Uint8List? _processPostImage(List<int> bytes) {
@@ -48,7 +49,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
   bool _picking = false;
   double _fieldHeight = 120;
 
-  static const _maxImages = 10;
+  static const _maxImages = 5;
   static const _maxText = 2000;
 
   @override
@@ -256,6 +257,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
     final profile = auth.profile;
@@ -282,7 +284,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
             // ── Header profil — avatar + nama + "Posting sebagai" ──
             Row(
               children: [
-                ProfileAvatar(uid: auth.uid ?? '', name: myName, size: 44),
+                ProfileAvatar(uid: auth.uid ?? '', name: myName, size: 44, borderRadius: 22),
                 SizedBox(width: 12),
                 Expanded(
                   child: Column(

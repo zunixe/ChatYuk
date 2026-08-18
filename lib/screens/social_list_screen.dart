@@ -4,6 +4,7 @@ import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/social_service.dart';
 import '../widgets/profile_avatar.dart';
+import '../providers/theme_provider.dart';
 
 /// Daftar sosial (followers / following / friends / subscribers).
 /// `kind` menentukan tipe; `userId` menentukan user yang diambil (diri sendiri
@@ -45,6 +46,7 @@ class _SocialListScreenState extends State<SocialListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final title = widget.title ??
         switch (widget.kind) {

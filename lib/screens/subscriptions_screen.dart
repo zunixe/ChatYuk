@@ -4,6 +4,7 @@ import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/social_service.dart';
 import '../widgets/profile_avatar.dart';
+import '../providers/theme_provider.dart';
 
 class SubscriptionsScreen extends StatefulWidget {
   const SubscriptionsScreen({super.key});
@@ -43,6 +44,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(title: Text(s.subscriptionsTitle)),

@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/locale_provider.dart';
 import '../services/points_service.dart';
+import '../providers/theme_provider.dart';
 
 /// Review pencairan (admin). Setujui dibayar / tolak (refund earned).
 class AdminWithdrawalScreen extends StatefulWidget {
@@ -113,6 +114,7 @@ class _AdminWithdrawalScreenState extends State<AdminWithdrawalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return DefaultTabController(
       length: 3,

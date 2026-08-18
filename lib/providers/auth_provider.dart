@@ -65,6 +65,7 @@ class AuthProvider extends ChangeNotifier {
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
   String? get userEmail => _auth.userEmail;
+  bool get hasPassword => _auth.hasPassword;
   bool get notificationsEnabled => _notificationsEnabled;
 
   AuthProvider() {
@@ -485,6 +486,14 @@ class AuthProvider extends ChangeNotifier {
 
   /// Kirim ulang kode verifikasi OTP.
   Future<void> resendEmailOtp(String email) => _auth.resendEmailOtp(email);
+
+  /// Set password untuk akun Google yang belum punya password.
+  Future<void> setPassword(String newPassword) =>
+      _auth.setPassword(newPassword);
+
+  /// Ganti password (akun email). Verifikasi password lama dulu.
+  Future<void> changePassword(String currentPassword, String newPassword) =>
+      _auth.changePassword(currentPassword, newPassword);
 
   /// Login dengan email + password.
   Future<void> signInWithEmail(String email, String password) async {

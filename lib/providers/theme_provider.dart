@@ -5,7 +5,7 @@ import '../config/theme.dart';
 /// Kontrol mode terang/gelap — persist di SharedPreferences.
 class ThemeProvider extends ChangeNotifier {
   static const _prefKey = 'app_theme_dark';
-  bool _dark = false;
+  bool _dark = true;
   bool _initialized = false;
 
   bool get isDark => _dark;
@@ -14,7 +14,7 @@ class ThemeProvider extends ChangeNotifier {
   Future<void> init() async {
     if (_initialized) return;
     final prefs = await SharedPreferences.getInstance();
-    _dark = prefs.getBool(_prefKey) ?? false;
+    _dark = prefs.getBool(_prefKey) ?? true;
     AppTheme.isDark = _dark;
     _initialized = true;
     notifyListeners();

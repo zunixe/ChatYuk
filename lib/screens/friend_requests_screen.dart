@@ -5,6 +5,7 @@ import '../providers/locale_provider.dart';
 import '../providers/social_provider.dart';
 import '../services/social_service.dart';
 import '../widgets/profile_avatar.dart';
+import '../providers/theme_provider.dart';
 
 class FriendRequestsScreen extends StatefulWidget {
   const FriendRequestsScreen({super.key});
@@ -54,6 +55,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(title: Text(s.friendRequestTitle)),

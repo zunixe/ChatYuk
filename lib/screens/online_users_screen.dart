@@ -16,8 +16,10 @@ import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
 import '../services/chat_service.dart';
+import '../services/location_service.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
+import '../providers/theme_provider.dart';
 
 class _BoundedCache<T> {
   final int maxSize;
@@ -83,6 +85,16 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     _shareScale = Tween<double>(begin: 1.0, end: 1.06).animate(
       CurvedAnimation(parent: _sharePulse, curve: Curves.easeInOut),
     );
+    _requestGpsOnce();
+  }
+
+  /// Minta izin GPS saat masuk menu pengguna online (dialog native muncul
+  /// sekali; kalau ditolak, user tetap bisa aktifkan lewat "bagikan lokasi").
+  Future<void> _requestGpsOnce() async {
+    final loc = LocationService();
+    final ok = await loc.requestPermission();
+    if (!ok) return;
+    await loc.updateMyLocation();
   }
 
   @override
@@ -200,6 +212,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     super.build(context);
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;

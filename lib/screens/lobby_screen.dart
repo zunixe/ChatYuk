@@ -9,6 +9,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import 'room_chat_screen.dart';
+import '../providers/theme_provider.dart';
 
 class LobbyScreen extends StatefulWidget {
   final bool embedded;
@@ -58,6 +59,7 @@ class _LobbyScreenState extends State<LobbyScreen>
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final roomProvider = context.watch<RoomProvider>();
     return Scaffold(

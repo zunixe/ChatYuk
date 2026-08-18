@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/locale_provider.dart';
 import '../services/screen_secure_service.dart';
+import '../providers/theme_provider.dart';
 
 class DonateScreen extends StatefulWidget {
   const DonateScreen({super.key});
@@ -72,6 +73,7 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(
