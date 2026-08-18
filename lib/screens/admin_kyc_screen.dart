@@ -92,8 +92,14 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
             unselectedLabelColor: Colors.white70,
             indicatorColor: Colors.white,
             indicatorWeight: 3,
-            labelStyle: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w800),
-            unselectedLabelStyle: AppText.body.copyWith(fontWeight: FontWeight.w600),
+            labelStyle: AppText.bodyStrong.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+            unselectedLabelStyle: AppText.body.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white70,
+            ),
             tabs: [
               Tab(text: s.kycStatusPending),
               Tab(text: s.kycStatusApproved),

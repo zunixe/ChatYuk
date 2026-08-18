@@ -84,7 +84,10 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
           indicatorWeight: 3,
-          labelStyle: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700),
+          labelStyle: AppText.bodyStrong.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
           tabs: [
             Tab(text: s.labelQris),
             Tab(text: s.labelUsdt),

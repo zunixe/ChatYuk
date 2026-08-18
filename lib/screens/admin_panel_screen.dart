@@ -187,9 +187,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             indicatorColor: Colors.white,
             indicatorWeight: 3,
             labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-            labelStyle: AppText.bodySmall.copyWith(fontWeight: FontWeight.w800),
+            labelStyle: AppText.bodySmall.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
             unselectedLabelStyle: AppText.bodySmall.copyWith(
               fontWeight: FontWeight.w600,
+              color: Colors.white70,
             ),
             indicatorSize: TabBarIndicatorSize.tab,
             tabs: [
