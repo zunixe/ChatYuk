@@ -103,7 +103,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         },
                       ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: AppTheme.bgCard,
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 border: OutlineInputBorder(
@@ -218,7 +218,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 child: Container(
                   margin: EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
-                    color: isBlocked ? AppTheme.bgCard.withValues(alpha: 0.5) : Colors.white,
+                    color: isBlocked ? AppTheme.bgCard.withValues(alpha: 0.5) : AppTheme.bgCard,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
                   ),

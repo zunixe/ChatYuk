@@ -504,7 +504,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: Container(
         padding: EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: selected ? color : AppTheme.divider, width: selected ? 2 : 1.5),
         ),

@@ -304,6 +304,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
+        backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: AppTheme.headerGradient,

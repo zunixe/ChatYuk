@@ -105,7 +105,7 @@ class _LobbyScreenState extends State<LobbyScreen>
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.bgCard,
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
@@ -239,7 +239,7 @@ class _RoomModeToggleState extends State<_RoomModeToggle>
           height: 44,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppTheme.bgCard,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.06),
@@ -925,7 +925,7 @@ class _PrivateRoomCard extends StatelessWidget {
     final card = Container(
       margin: EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
@@ -1082,7 +1082,7 @@ class _RoomCard extends StatelessWidget {
     return Container(
       margin: EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(

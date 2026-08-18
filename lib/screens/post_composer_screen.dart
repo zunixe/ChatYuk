@@ -265,6 +265,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
+        backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: AppTheme.headerGradient,
@@ -304,7 +305,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
             Container(
               padding: EdgeInsets.fromLTRB(14, 8, 14, 4),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.bgCard,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Stack(
@@ -322,7 +323,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                         hintText: s.hintWritePost,
                         hintStyle: AppText.body.copyWith(color: AppTheme.textSecondary),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: AppTheme.bgCard,
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(14)),
                           borderSide: BorderSide(color: AppTheme.bgCard, width: 1.5),
@@ -474,7 +475,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
             Container(
               padding: EdgeInsets.fromLTRB(14, 12, 14, 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.bgCard,
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2)),

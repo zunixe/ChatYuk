@@ -1345,7 +1345,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.bgCard,
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(

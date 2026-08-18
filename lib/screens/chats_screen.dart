@@ -28,6 +28,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
+        backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: AppTheme.headerGradient,

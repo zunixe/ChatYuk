@@ -92,7 +92,9 @@ class _PostCardState extends State<PostCard> {
       });
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errGeneric)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -116,7 +118,11 @@ class _PostCardState extends State<PostCard> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(height: 12),
-            Text(s.btnComment, textAlign: TextAlign.center, style: AppText.title),
+            Text(
+              s.btnComment,
+              textAlign: TextAlign.center,
+              style: AppText.title,
+            ),
             SizedBox(height: 8),
             Flexible(child: _CommentsList(postId: _id)),
             Divider(height: 1),
@@ -173,12 +179,18 @@ class _PostCardState extends State<PostCard> {
       await TimelineService().addComment(_id, text);
       final cur = (_p['commentCount'] as num?)?.toInt() ?? 0;
       if (mounted) {
-        context.read<TimelineProvider>().updatePost(_id, {'commentCount': cur + 1});
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgCommented)));
+        context.read<TimelineProvider>().updatePost(_id, {
+          'commentCount': cur + 1,
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.msgCommented)));
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errGeneric)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     }
   }
@@ -194,7 +206,9 @@ class _PostCardState extends State<PostCard> {
     final text = (_p['text'] as String? ?? '').trim();
     await Share.share(text.isEmpty ? author : '$author: $text');
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgShared)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.msgShared)));
     }
   }
 
@@ -210,8 +224,14 @@ class _PostCardState extends State<PostCard> {
           '${s.boostConfirm}\n\n${s.boostPaidLabel}: ${tp.boostPaid}\n${s.boostBonusLabel}: ${tp.boostBonus}',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(s.btnCancel)),
-          ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(s.btnBoost)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.btnCancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(s.btnBoost),
+          ),
         ],
       ),
     );
@@ -220,13 +240,19 @@ class _PostCardState extends State<PostCard> {
       await TimelineService().boostPost(_id);
       if (mounted) {
         context.read<TimelineProvider>().updatePost(_id, {'isBoosted': true});
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgBoosted)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.msgBoosted)));
       }
     } catch (e) {
       if (mounted) {
         final msg = e.toString().toLowerCase();
-        final label = msg.contains('enough') ? s.errCoinInsufficient : s.errGeneric;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(label)));
+        final label = msg.contains('enough')
+            ? s.errCoinInsufficient
+            : s.errGeneric;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(label)));
       }
     }
   }
@@ -234,9 +260,12 @@ class _PostCardState extends State<PostCard> {
   String _visibilityLabel(String v) {
     final s = context.read<LocaleProvider>().s;
     switch (v) {
-      case 'followers': return s.visFollowers;
-      case 'subscribers': return s.visSubscribers;
-      default: return s.visPublic;
+      case 'followers':
+        return s.visFollowers;
+      case 'subscribers':
+        return s.visSubscribers;
+      default:
+        return s.visPublic;
     }
   }
 
@@ -284,23 +313,42 @@ class _PostCardState extends State<PostCard> {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(name, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis),
+                            child: Text(
+                              name,
+                              style: AppText.bodyStrong,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                           if (isFriend) ...[
                             SizedBox(width: 5),
-                            Icon(Icons.people_alt_rounded, size: 13, color: AppTheme.primary),
+                            Icon(
+                              Icons.people_alt_rounded,
+                              size: 13,
+                              color: AppTheme.primary,
+                            ),
                           ],
                           if (isBoosted) ...[
                             SizedBox(width: 5),
-                            Icon(Icons.rocket_launch_rounded, size: 13, color: AppTheme.danger),
+                            Icon(
+                              Icons.rocket_launch_rounded,
+                              size: 13,
+                              color: AppTheme.danger,
+                            ),
                           ],
                         ],
                       ),
                       Row(
                         children: [
-                          Text(_timeAgo(createdAt), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                          Text(
+                            _timeAgo(createdAt),
+                            style: AppText.micro.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
                           SizedBox(width: 6),
-                          _visibilityIcon(_p['visibility'] as String? ?? 'public'),
+                          _visibilityIcon(
+                            _p['visibility'] as String? ?? 'public',
+                          ),
                         ],
                       ),
                     ],
@@ -325,7 +373,9 @@ class _PostCardState extends State<PostCard> {
             child: Row(
               children: [
                 _iconAction(
-                  icon: isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  icon: isLiked
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
                   color: isLiked ? AppTheme.danger : AppTheme.textSecondary,
                   count: likeCount,
                   onTap: _like,
@@ -345,7 +395,9 @@ class _PostCardState extends State<PostCard> {
                 const Spacer(),
                 if (isAuthor)
                   _iconAction(
-                    icon: isBoosted ? Icons.rocket_launch_rounded : Icons.rocket_launch_outlined,
+                    icon: isBoosted
+                        ? Icons.rocket_launch_rounded
+                        : Icons.rocket_launch_outlined,
                     color: isBoosted ? AppTheme.danger : AppTheme.primary,
                     count: 0,
                     showCount: false,
@@ -371,26 +423,59 @@ class _PostCardState extends State<PostCard> {
     }
     if (loaded.isEmpty) return const SizedBox.shrink();
     Widget photo(int i) => GestureDetector(
-          onTap: () => _openViewer(i),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Image.memory(
-              loaded[i].$1,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-            ),
-          ),
-        );
+      onTap: () => _openViewer(i),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Image.memory(
+          loaded[i].$1,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+        ),
+      ),
+    );
     if (loaded.length == 1) {
-      return SizedBox(
-        width: double.infinity,
-        child: photo(0),
-      );
+      return SizedBox(width: double.infinity, child: photo(0));
     }
-    // Multi foto: carousel slide kiri/kanan + indikator dot.
+    // Multi foto: thumbnail strip di atas (klik → ganti foto besar) +
+    // carousel slide kiri/kanan.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SizedBox(
+          height: 52,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: loaded.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 6),
+            itemBuilder: (_, i) => GestureDetector(
+              onTap: () => _pageCtrl.animateToPage(
+                i,
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+              ),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: i == _page ? 52 : 44,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: i == _page ? AppTheme.primary : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    loaded[i].$1,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         SizedBox(
           height: 260,
           child: PageView.builder(
@@ -399,23 +484,6 @@ class _PostCardState extends State<PostCard> {
             onPageChanged: (i) => setState(() => _page = i),
             itemBuilder: (_, i) => photo(i),
           ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var i = 0; i < loaded.length; i++)
-              AnimatedContainer(
-                duration: Duration(milliseconds: 200),
-                margin: EdgeInsets.symmetric(horizontal: 2),
-                width: i == _page ? 14 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: i == _page ? AppTheme.primary : AppTheme.divider,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-          ],
         ),
       ],
     );
@@ -444,7 +512,8 @@ class _PostCardState extends State<PostCard> {
     required VoidCallback onTap,
     bool showCount = true,
     String? tooltip,
-  }) {    return Tooltip(
+  }) {
+    return Tooltip(
       message: tooltip ?? '',
       child: InkWell(
         onTap: onTap,
@@ -457,7 +526,13 @@ class _PostCardState extends State<PostCard> {
               Icon(icon, size: 20, color: color),
               if (showCount) ...[
                 const SizedBox(width: 4),
-                Text('$count', style: AppText.caption.copyWith(color: color, fontWeight: FontWeight.w600)),
+                Text(
+                  '$count',
+                  style: AppText.caption.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ],
           ),
@@ -479,7 +554,10 @@ class _PostCardState extends State<PostCard> {
         const SizedBox(width: 3),
         Text(
           _visibilityLabel(v),
-          style: AppText.micro.copyWith(color: color, fontWeight: FontWeight.w600),
+          style: AppText.micro.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
@@ -500,9 +578,16 @@ class _PostCardState extends State<PostCard> {
           value: 'delete',
           child: Row(
             children: [
-              const Icon(Icons.delete_outline_rounded, size: 18, color: AppTheme.danger),
+              const Icon(
+                Icons.delete_outline_rounded,
+                size: 18,
+                color: AppTheme.danger,
+              ),
               const SizedBox(width: 8),
-              Text(s.btnDelete, style: AppText.body.copyWith(color: AppTheme.danger)),
+              Text(
+                s.btnDelete,
+                style: AppText.body.copyWith(color: AppTheme.danger),
+              ),
             ],
           ),
         ),
@@ -523,7 +608,10 @@ class _PostCardState extends State<PostCard> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(s.btnDelete, style: const TextStyle(color: AppTheme.danger)),
+            child: Text(
+              s.btnDelete,
+              style: const TextStyle(color: AppTheme.danger),
+            ),
           ),
         ],
       ),
@@ -533,12 +621,14 @@ class _PostCardState extends State<PostCard> {
       await TimelineService().deletePost(_id);
       if (!mounted) return;
       context.read<TimelineProvider>().removePost(_id);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.postDeleted)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.postDeleted)));
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(s.errDeletePost)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errDeletePost)));
       }
     }
   }
@@ -580,8 +670,14 @@ class _CommentsList extends StatelessWidget {
                   style: AppText.label.copyWith(color: AppTheme.primary),
                 ),
               ),
-              title: Text(c['author_name'] as String? ?? 'Anon', style: AppText.label),
-              subtitle: Text(c['text'] as String? ?? '', style: AppText.bodySmall),
+              title: Text(
+                c['author_name'] as String? ?? 'Anon',
+                style: AppText.label,
+              ),
+              subtitle: Text(
+                c['text'] as String? ?? '',
+                style: AppText.bodySmall,
+              ),
             );
           },
         );
@@ -598,14 +694,23 @@ class _AuthorAvatar extends StatelessWidget {
   final Map<String, dynamic> post;
   final String name;
   final double size;
-  const _AuthorAvatar({required this.post, required this.name, required this.size});
+  const _AuthorAvatar({
+    required this.post,
+    required this.name,
+    required this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
     final uid = post['authorId'] as String? ?? '';
     final avatar = post['authorAvatar'] as String? ?? '';
     if (avatar.isEmpty) {
-      return ProfileAvatar(uid: uid, name: name, size: size, borderRadius: size / 2);
+      return ProfileAvatar(
+        uid: uid,
+        name: name,
+        size: size,
+        borderRadius: size / 2,
+      );
     }
     final isPath = StoragePhotoService.instance.isAvatarPath(avatar);
     return FutureBuilder<String>(
@@ -615,12 +720,22 @@ class _AuthorAvatar extends StatelessWidget {
       builder: (_, snap) {
         final b64 = snap.data ?? '';
         if (b64.isEmpty) {
-          return ProfileAvatar(uid: uid, name: name, size: size, borderRadius: size / 2);
+          return ProfileAvatar(
+            uid: uid,
+            name: name,
+            size: size,
+            borderRadius: size / 2,
+          );
         }
         return _RoundedAvatar(
           base64: b64,
           size: size,
-          fallback: ProfileAvatar(uid: uid, name: name, size: size, borderRadius: size / 2),
+          fallback: ProfileAvatar(
+            uid: uid,
+            name: name,
+            size: size,
+            borderRadius: size / 2,
+          ),
         );
       },
     );
@@ -633,7 +748,11 @@ class _RoundedAvatar extends StatefulWidget {
   final String base64;
   final double size;
   final Widget fallback;
-  const _RoundedAvatar({required this.base64, required this.size, required this.fallback});
+  const _RoundedAvatar({
+    required this.base64,
+    required this.size,
+    required this.fallback,
+  });
 
   @override
   State<_RoundedAvatar> createState() => _RoundedAvatarState();

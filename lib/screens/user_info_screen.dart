@@ -425,7 +425,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   if (profile != null) ...[
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.bgCard,
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(

@@ -137,7 +137,7 @@ class _QrisTab extends StatelessWidget {
               width: 260,
               height: 260,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.bgCard,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppTheme.primary, width: 2),
                 boxShadow: [

@@ -475,7 +475,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: Colors.white,
+                backgroundColor: AppTheme.bgCard,
               ),
               child: _googleLoading
                   ? const SizedBox(
