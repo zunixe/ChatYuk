@@ -14,6 +14,7 @@ import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/social_service.dart';
 import '../widgets/async_photo.dart';
+import '../providers/theme_provider.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String userId;
@@ -295,6 +296,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final profile = _profile;
     final pointsEnabled = context.watch<PointsProvider>().enabled;

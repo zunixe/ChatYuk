@@ -7,6 +7,7 @@ import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_service.dart';
+import '../providers/theme_provider.dart';
 
 /// Tab Dummy di Admin Panel — buat/daftarkan akun dummy (anonymous, tanpa
 /// email/password) dengan gender/umur/negara/kota, chat sebagai akun itu
@@ -214,6 +215,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return RefreshIndicator(
       onRefresh: _load,

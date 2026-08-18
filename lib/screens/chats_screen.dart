@@ -56,7 +56,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
       ),
       body: TabBarView(
         controller: _tab,
-        children: const [
+        children: [
           PrivateChatsScreen(embedded: true),
           LobbyScreen(embedded: true),
         ],

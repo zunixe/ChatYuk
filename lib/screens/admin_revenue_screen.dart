@@ -6,6 +6,7 @@ import '../config/strings.dart';
 import '../config/gifts.dart';
 import '../providers/locale_provider.dart';
 import '../services/points_service.dart';
+import '../providers/theme_provider.dart';
 
 /// Dashboard pendapatan platform (admin): potongan gift + ringkasan pencairan.
 class AdminRevenueScreen extends StatefulWidget {
@@ -56,6 +57,7 @@ class _AdminRevenueScreenState extends State<AdminRevenueScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,

@@ -7,6 +7,7 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/topup_service.dart';
+import '../providers/theme_provider.dart';
 
 class TopUpScreen extends StatefulWidget {
   const TopUpScreen({super.key});
@@ -133,6 +134,7 @@ class _TopUpScreenState extends State<TopUpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final pts = context.watch<PointsProvider>();
     return Scaffold(

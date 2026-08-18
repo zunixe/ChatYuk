@@ -23,6 +23,7 @@ import '../widgets/date_chip.dart';
 import '../widgets/profile_avatar.dart';
 import '../main.dart';
 import 'user_info_screen.dart';
+import '../providers/theme_provider.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
 String? _processImage(Uint8List bytes) {
@@ -1024,6 +1025,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
     // select: rebuild hanya saat isBlocked untuk UID lawan bicara berubah

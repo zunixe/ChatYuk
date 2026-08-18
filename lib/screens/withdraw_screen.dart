@@ -8,6 +8,7 @@ import '../services/kyc_service.dart';
 import '../services/points_service.dart';
 import 'kyc_screen.dart';
 import 'withdrawal_history_screen.dart';
+import '../providers/theme_provider.dart';
 
 /// Screen pencairan koin (earned) → rupiah. Syarat: KYC approved.
 class WithdrawScreen extends StatefulWidget {
@@ -122,6 +123,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final points = context.watch<PointsProvider>();
     final coin = int.tryParse(_amountCtrl.text.trim()) ?? 0;

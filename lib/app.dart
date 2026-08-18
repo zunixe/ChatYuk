@@ -57,7 +57,7 @@ class ChatYukApp extends StatelessWidget {
             maxScaleFactor: 1.3,
             child: child ?? const SizedBox.shrink(),
           ),
-          home: const _AuthGate(),
+          home: _AuthGate(),
         ),
       ),
     );
@@ -133,6 +133,9 @@ class _AuthGateState extends State<_AuthGate> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
+    // Watch ThemeProvider supaya seluruh tree rebuild saat mode gelap/terang
+    // berubah — warna AppTheme diambil ulang di build().
+    context.watch<ThemeProvider>();
 
     // Jadwalkan auto-retry saat layar error tampil.
     _maybeScheduleAutoRetry(auth);
@@ -186,10 +189,10 @@ class _AuthGateState extends State<_AuthGate> {
     }
 
     if (auth.profile == null) {
-      return const EntryScreen();
+      return EntryScreen();
     }
 
-    return const _MainNav();
+    return _MainNav();
   }
 }
 
@@ -201,16 +204,14 @@ class _MainNav extends StatefulWidget {
 }
 
 class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
-  final _pages = const [
-    OnlineUsersScreen(),
-    ChatsScreen(),
-    TimelineScreen(),
-    ProfileScreen(),
-  ];
-
   // Provider dibuat sekali sebagai field — bukan di build()
   final _roomProvider = RoomProvider();
   final _onlineUsersProvider = OnlineUsersProvider();
+
+  // Instance halaman dibuat ulang HANYA saat mode terang/gelap berubah —
+  // bukan tiap tab switch (menghindari rebuild berlebihan).
+  List<Widget>? _pages;
+  bool? _pagesDark; // tema saat _pages terakhir dibuat
 
   @override
   void initState() {
@@ -264,6 +265,17 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final tab = context.watch<NavProvider>().tab;
+    // Rebuild seluruh tab saat mode terang/gelap berubah.
+    final dark = context.watch<ThemeProvider>().isDark;
+    if (_pages == null || _pagesDark != dark) {
+      _pages = [
+        OnlineUsersScreen(),
+        ChatsScreen(),
+        TimelineScreen(),
+        ProfileScreen(),
+      ];
+      _pagesDark = dark;
+    }
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: _roomProvider),
@@ -276,7 +288,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
           onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
           child: IndexedStack(
             index: tab,
-            children: _pages,
+            children: _pages!,
           ),
         ),
         floatingActionButton: FloatingActionButton(

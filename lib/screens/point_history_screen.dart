@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/locale_provider.dart';
 import '../services/points_service.dart';
+import '../providers/theme_provider.dart';
 
 class PointHistoryScreen extends StatefulWidget {
   const PointHistoryScreen({super.key});
@@ -41,6 +42,7 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(title: Text(s.pointHistoryTitle)),

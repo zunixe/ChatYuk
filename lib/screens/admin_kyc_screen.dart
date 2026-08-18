@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/locale_provider.dart';
 import '../services/kyc_service.dart';
+import '../providers/theme_provider.dart';
 
 /// Review KYC (admin). Menampilkan permohonan + foto, setujui/tolak.
 class AdminKycScreen extends StatefulWidget {
@@ -78,6 +79,7 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return DefaultTabController(
       length: 4,

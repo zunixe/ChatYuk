@@ -200,7 +200,7 @@ class AppTheme {
         onError: Colors.white,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: primary,
+        backgroundColor: isLight ? primary : const Color(0xFF1B2A3A),
         elevation: 0,
         centerTitle: true,
         titleTextStyle: AppText.title.copyWith(color: Colors.white),

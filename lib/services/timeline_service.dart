@@ -77,19 +77,45 @@ class TimelineService {
     }
   }
 
-  /// Komentar sebuah post.
+  /// Komentar sebuah post (termasuk likeCount/shareCount/isLiked dari RPC).
   Future<List<Map<String, dynamic>>> comments(String postId) async {
     try {
-      final res = await _sb
-          .from('post_comments')
-          .select()
-          .eq('post_id', postId)
-          .order('created_at');
-      return res.map((e) => Map<String, dynamic>.from(e)).toList();
+      final res = await _sb.rpc('list_post_comments', params: {
+        'p_post_id': postId,
+      });
+      if (res is List) {
+        return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
     } catch (e) {
       debugPrint('[TimelineService] comments error: $e');
       return [];
     }
+  }
+
+  Future<Map<String, dynamic>> toggleCommentLike(int commentId) async {
+    final res = await _sb
+        .rpc('toggle_comment_like', params: {'p_comment_id': commentId});
+    return _map(res);
+  }
+
+  Future<Map<String, dynamic>> replyComment(
+    String postId,
+    int parentId,
+    String text,
+  ) async {
+    final res = await _sb.rpc('reply_post_comment', params: {
+      'p_post_id': postId,
+      'p_parent_id': parentId,
+      'p_text': text,
+    });
+    return _map(res);
+  }
+
+  Future<Map<String, dynamic>> shareComment(int commentId) async {
+    final res = await _sb
+        .rpc('share_post_comment', params: {'p_comment_id': commentId});
+    return _map(res);
   }
 
   /// Biaya boost + limit harian dari server.

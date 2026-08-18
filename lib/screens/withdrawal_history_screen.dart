@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/locale_provider.dart';
 import '../services/points_service.dart';
+import '../providers/theme_provider.dart';
 
 /// Riwayat pencairan user sendiri.
 class WithdrawalHistoryScreen extends StatefulWidget {
@@ -31,6 +32,7 @@ class _WithdrawalHistoryScreenState extends State<WithdrawalHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,

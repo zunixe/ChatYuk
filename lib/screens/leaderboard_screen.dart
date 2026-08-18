@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/points_service.dart';
+import '../providers/theme_provider.dart';
 
 // Top-level untuk compute() — decode avatar base64 di background isolate
 Uint8List? _decodeAvatar(String b64) {
@@ -73,6 +74,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(

@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/points_service.dart';
+import '../providers/theme_provider.dart';
 
 class MissionsScreen extends StatefulWidget {
   const MissionsScreen({super.key});
@@ -86,6 +87,7 @@ class _MissionsScreenState extends State<MissionsScreen>
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final current = _tab.index == 0 ? _daily : _tab.index == 1 ? _weekly : _oneTime;
     final claimableCount = _weekly.where((e) => (e as Map)['claimable'] == true).length;

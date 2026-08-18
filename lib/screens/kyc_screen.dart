@@ -9,6 +9,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/locale_provider.dart';
 import '../services/kyc_service.dart';
+import '../providers/theme_provider.dart';
 
 String? _kycProcessImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
@@ -114,6 +115,7 @@ class _KycScreenState extends State<KycScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final st = _status['status'] ?? 'none';
     final approved = st == 'approved';

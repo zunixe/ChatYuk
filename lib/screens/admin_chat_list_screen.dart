@@ -7,6 +7,7 @@ import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
 import 'admin_chat_view_screen.dart';
+import '../providers/theme_provider.dart';
 
 /// Admin: daftar semua percakapan user (monitoring).
 class AdminChatListScreen extends StatefulWidget {
@@ -65,6 +66,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final admin = context.watch<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
 

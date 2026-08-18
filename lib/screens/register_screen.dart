@@ -11,6 +11,7 @@ import '../services/geo_service.dart';
 import '../services/location_service.dart';
 import '../main.dart';
 import 'login_screen.dart';
+import '../providers/theme_provider.dart';
 
 enum RegisterMode { full, profileOnly }
 
@@ -336,6 +337,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final profileOnly = widget.mode == RegisterMode.profileOnly;
     return Scaffold(

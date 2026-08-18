@@ -15,6 +15,7 @@ import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
+import '../providers/theme_provider.dart';
 
 class AdminChatViewScreen extends StatefulWidget {
   final String chatId;
@@ -298,6 +299,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final admin = context.read<AdminProvider>();
 
