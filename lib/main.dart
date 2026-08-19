@@ -13,7 +13,9 @@ import 'firebase_options.dart';
 import 'app.dart';
 import 'models/room_model.dart';
 import 'providers/auth_provider.dart';
+import 'providers/call_provider.dart';
 import 'providers/locale_provider.dart';
+import 'screens/incoming_call_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/supabase_config.dart';
@@ -36,19 +38,21 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   final data = message.data;
   final type = data['type'];
-  final isDataOnly = type == 'online' || type == 'follow' || type == 'friend_request' || type == 'subscribe';
+  final isDataOnly = type == 'online' || type == 'follow' || type == 'friend_request' || type == 'subscribe' || type == 'call';
   final title = isDataOnly
       ? data['otherName'] ?? data['fromName'] ?? 'User'
       : message.notification?.title ??
           (type == 'room' ? data['roomName'] ?? 'Room' : 'New message');
   final body = isDataOnly
-      ? (type == 'online'
-          ? 'is online'
-          : type == 'follow'
-              ? 'started following you'
-              : type == 'friend_request'
-                  ? 'sent you a friend request'
-                  : 'subscribed to you')
+      ? (type == 'call'
+          ? 'is calling you'
+          : type == 'online'
+              ? 'is online'
+              : type == 'follow'
+                  ? 'started following you'
+                  : type == 'friend_request'
+                      ? 'sent you a friend request'
+                      : 'subscribed to you')
       : message.notification?.body ?? 'You have a new message';
 
   final androidInit = const lpn.AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -80,20 +84,22 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
 
   final s = localeProvider.s;
   final type = data['type'];
-  final isDataOnly = type == 'online' || type == 'follow' || type == 'friend_request' || type == 'subscribe';
+  final isDataOnly = type == 'online' || type == 'follow' || type == 'friend_request' || type == 'subscribe' || type == 'call';
   final isOnline = type == 'online';
   final title = isDataOnly
       ? data['otherName'] ?? data['fromName'] ?? s.unknownUser
       : message.notification?.title ??
           (type == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
   final body = isDataOnly
-      ? (isOnline
-          ? s.notifOnlineBody
-          : type == 'follow'
-              ? s.notifFollowBody
-              : type == 'friend_request'
-                  ? s.notifFriendRequestBody
-                  : s.notifSubscribeBody)
+      ? (type == 'call'
+          ? s.notifCallingBody
+          : isOnline
+              ? s.notifOnlineBody
+              : type == 'follow'
+                  ? s.notifFollowBody
+                  : type == 'friend_request'
+                      ? s.notifFriendRequestBody
+                      : s.notifSubscribeBody)
       : message.notification?.body ?? s.notifNewMessageBody;
 
   await localNotifications.show(
@@ -117,6 +123,24 @@ void _openFromData(Map<String, dynamic> data) {
   final nav = navigatorKey.currentState;
   if (nav == null || data.isEmpty) return;
   final s = localeProvider.s;
+  // Panggilan masuk → buka IncomingCallScreen (tanpa reset stack, dan
+  // dedupe kalau layar panggilan yang sama sudah terbuka).
+  if (data['type'] == 'call') {
+    final callId = data['callId'] ?? '';
+    if (callId.isNotEmpty && CallProvider.instance.activeCallId != callId) {
+      nav.push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => IncomingCallScreen(
+            callId: callId,
+            callerUid: data['callerUid'] ?? '',
+            callType: data['callType'] ?? 'video',
+          ),
+        ),
+      );
+    }
+    return;
+  }
   nav.pushAndRemoveUntil(
     MaterialPageRoute(
       builder: (_) => data['type'] == 'room'

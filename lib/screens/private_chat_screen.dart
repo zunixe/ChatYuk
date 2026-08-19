@@ -10,11 +10,13 @@ import '../config/theme.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../services/chat_service.dart';
+import '../services/call_service.dart';
 import '../services/forensic_watermark.dart';
 import '../services/storage_photo_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
@@ -22,6 +24,7 @@ import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/profile_avatar.dart';
 import '../main.dart';
+import 'call_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
 
@@ -1093,6 +1096,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       pp.checkAndShowStreakToast(context, s.isId);
     });
 
+    Future.microtask(() {
+      final pp = context.read<PointsProvider>();
+      pp.checkAndShowOnlineToast(context, s.isId);
+      pp.checkAndShowStreakToast(context, s.isId);
+    });
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -1220,6 +1229,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           ],
         ),
         actions: [
+          if ((auth.profile?.isRegistered ?? false) && widget.otherRegistered) ...[
+            IconButton(
+              icon: Icon(Icons.call, color: Colors.white, size: 22),
+              tooltip: s.callAudio,
+              onPressed: () => _startCall(context, 'audio'),
+            ),
+            IconButton(
+              icon: Icon(Icons.videocam, color: Colors.white, size: 22),
+              tooltip: s.callVideo,
+              onPressed: () => _startCall(context, 'video'),
+            ),
+          ],
           PopupMenuButton(
             icon: Icon(Icons.more_vert, color: Colors.white),
             color: AppTheme.bgCard,
@@ -1588,6 +1609,39 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         ],
       ),
     );
+  }
+
+  /// Mulai panggilan audio/video ke lawan bicara.
+  Future<void> _startCall(BuildContext ctx, String callType) async {
+    final s = context.read<LocaleProvider>().s;
+    if (CallProvider.instance.inCall) {
+      ScaffoldMessenger.of(ctx)
+          .showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(ctx);
+    try {
+      final callId = await CallService.instance.startCall(
+        widget.otherUid,
+        callType,
+      );
+      if (!mounted) return;
+      CallProvider.instance.registerCall(callId);
+      Navigator.of(ctx).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => CallScreen(
+            callId: callId,
+            remoteUid: widget.otherUid,
+            remoteName: widget.otherName,
+            callType: callType,
+            isCaller: true,
+          ),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
+    }
   }
 
   void _showReportDialog() {

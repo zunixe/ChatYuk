@@ -6,15 +6,18 @@ import '../config/theme.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
 import '../providers/chat_provider.dart';
+import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/auth_service.dart';
+import '../services/call_service.dart';
 import '../services/chat_service.dart';
 import '../services/social_service.dart';
 import '../widgets/async_photo.dart';
 import '../providers/theme_provider.dart';
+import 'call_screen.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String userId;
@@ -167,6 +170,40 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(show)));
     } finally {
       if (mounted) setState(() => _busySocial = false);
+    }
+  }
+
+  /// Mulai panggilan audio/video (caller) ke user yang sedang dilihat.
+  Future<void> _startCall(BuildContext ctx, String callType) async {
+    final s = context.read<LocaleProvider>().s;
+    final name = _profile?.nickname ?? widget.fallbackName;
+    if (CallProvider.instance.inCall) {
+      ScaffoldMessenger.of(ctx)
+          .showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(ctx);
+    try {
+      final callId = await CallService.instance.startCall(
+        widget.userId,
+        callType,
+      );
+      if (!mounted) return;
+      CallProvider.instance.registerCall(callId);
+      Navigator.of(ctx).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => CallScreen(
+            callId: callId,
+            remoteUid: widget.userId,
+            remoteName: name,
+            callType: callType,
+            isCaller: true,
+          ),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
     }
   }
 
@@ -327,7 +364,23 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             : AppTheme.textSecondary;
 
     return Scaffold(
-      appBar: AppBar(title: Text(s.titleProfile)),
+      appBar: AppBar(
+        title: Text(s.titleProfile),
+        actions: [
+          if (!isAnonViewer && profile?.isRegistered == true) ...[
+            IconButton(
+              icon: Icon(Icons.call, size: 22),
+              tooltip: s.callAudio,
+              onPressed: () => _startCall(context, 'audio'),
+            ),
+            IconButton(
+              icon: Icon(Icons.videocam, size: 22),
+              tooltip: s.callVideo,
+              onPressed: () => _startCall(context, 'video'),
+            ),
+          ],
+        ],
+      ),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : SingleChildScrollView(
