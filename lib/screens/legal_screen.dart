@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/legal_section.dart';
 import '../providers/locale_provider.dart';
