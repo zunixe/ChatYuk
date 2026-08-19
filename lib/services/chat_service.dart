@@ -313,11 +313,29 @@ class ChatService {
 
     Future<void> reload() async {
       try {
-        // Fetch cutoff delete duluan supaya fallback cache di bawah juga
-        // bisa menerapkan filter yang sama (history pre-delete tidak pernah
-        // tampil lagi meski sesi ini gagal fetch dari server).
-        if (isPrivate) {
-          _hiddenCutoff = await fetchHiddenCutoff();
+        // Fetch cutoff delete + cache lokal PARALEL — tampilkan cache dulu
+        // supaya buka chat instan (mem-cache / decrypt isolate), server menyusul.
+        // Cutoff tetap diterapkan ke cache agar history pre-delete tidak pernah
+        // muncul walau sesaat.
+        final cutoffF = fetchHiddenCutoff();
+        final cacheF = _current.isEmpty
+            ? MessageCache.instance.loadMessages(cacheKey)
+            : Future<List<MessageModel>>.value(const <MessageModel>[]);
+        _hiddenCutoff = await cutoffF;
+        final cached = await cacheF;
+        if (controller.isClosed) return;
+        if (cached.isNotEmpty) {
+          var list = cached;
+          if (_hiddenCutoff != null) {
+            list = list
+                .where((m) => m.timestamp.isAfter(_hiddenCutoff!))
+                .toList();
+          }
+          if (list.isNotEmpty) {
+            _current = list;
+            controller.add(_current);
+            loadPhotosAsync(list);
+          }
         }
         final server = await fetchServer(limit: 100);
         if (controller.isClosed) return;
@@ -893,6 +911,12 @@ class ChatService {
           .map((k, v) => MapEntry(k.toString(), parseDate(v))),
     );
   }
+
+  /// Snapshot terakhir list private chat — dipakai initialData StreamBuilder
+  /// supaya tab Pesan tidak spinner saat di-mount ulang (broadcast stream
+  /// tidak me-replay event yang di-add sebelum subscriber terpasang).
+  List<PrivateChatInfo>? lastPrivateChatsSnapshot(String myUid) =>
+      _privateChatsLast[myUid];
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {
     // Cache: kembali stream yang sudah ada agar channel Supabase

@@ -26,6 +26,7 @@ class PrivateChatsScreen extends StatefulWidget {
 
 class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   Stream<List<PrivateChatInfo>>? _stream;
+  List<PrivateChatInfo>? _initial;
   int _page = 1;
   static const int _pageSize = 20;
   final ScrollController _scrollCtrl = ScrollController();
@@ -38,6 +39,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     super.initState();
     final auth = context.read<AuthProvider>();
     if (auth.uid != null) {
+      _initial = context.read<ChatProvider>().lastPrivateChatsSnapshot(auth.uid!);
       _stream = context.read<ChatProvider>().getMyPrivateChats(auth.uid!);
     }
     _scrollCtrl.addListener(_onScroll);
@@ -120,8 +122,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
           Expanded(
             child: StreamBuilder<List<PrivateChatInfo>>(
         stream: _stream,
+        initialData: _initial,
         builder: (_, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && snap.data == null) {
             return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
           }
           final chats = (snap.data ?? []).toList();

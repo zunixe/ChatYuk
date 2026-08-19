@@ -139,6 +139,9 @@ class ChatProvider extends ChangeNotifier {
     return _service.getMyPrivateChats(myUid);
   }
 
+  List<PrivateChatInfo>? lastPrivateChatsSnapshot(String myUid) =>
+      _service.lastPrivateChatsSnapshot(myUid);
+
   /// Refresh paksa list private chat (dipanggil saat tab Pesan di-mount ulang
   /// supaya tidak stuck spinner pada broadcast stream yang di-cache).
   void refreshMyPrivateChats(String myUid) =>

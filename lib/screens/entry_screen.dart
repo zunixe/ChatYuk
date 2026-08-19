@@ -246,7 +246,8 @@ class _EntryScreenState extends State<EntryScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-              SizedBox(height: 4),
+              // Spacer elastis atas (mode wajib daftar) — grup utama tepat di tengah layar
+              if (requireRegistration) const Spacer() else const SizedBox(height: 4),
 
               // Logo — animasi halus dalam lingkaran transparan
               // (komposisi sama dengan halaman login).
@@ -468,13 +469,17 @@ class _EntryScreenState extends State<EntryScreen> {
                   child: Text(s.btnLoginEmail, style: TextStyle(color: AppTheme.primary)),
                 ),
               ),
-              // Spacer elastis — menyerap ruang ekstra (maks 32px), menyusut saat layar sempit
-              Expanded(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 32),
-                  child: const SizedBox.shrink(),
+              // Spacer elastis — menyerap ruang ekstra (maks 32px), menyusut saat layar sempit.
+              // Mode wajib daftar: spacer penuh simetris dengan atas → grup utama di tengah persis.
+              if (requireRegistration)
+                const Spacer()
+              else
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 32),
+                    child: const SizedBox.shrink(),
+                  ),
                 ),
-              ),
 
               // Donasi
               Center(

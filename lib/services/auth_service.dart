@@ -273,8 +273,7 @@ class AuthService {
       schema: 'public',
       table: 'app_settings',
       callback: (payload) {
-        final rec = payload.newRecord;
-        if (rec != null) controller.add(Map<String, dynamic>.from(rec));
+        controller.add(Map<String, dynamic>.from(payload.newRecord));
       },
     );
     channel.subscribe();
