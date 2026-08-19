@@ -27,3 +27,7 @@
 
 # app_links / deep link
 -keep class com.llfbandit.app_links.** { *; }
+
+# flutter_webrtc
+-keep class org.webrtc.** { *; }
+-dontwarn org.webrtc.**

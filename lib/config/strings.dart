@@ -386,10 +386,46 @@ class S {
       isId ? 'mengirim permintaan teman' : 'sent you a friend request';
   String get notifSubscribeBody =>
       isId ? 'berlangganan ke kamu' : 'subscribed to you';
+  String get notifCallingBody => isId ? 'menelpon kamu...' : 'is calling you...';
   String get labelNotifications => isId ? 'Notifikasi' : 'Notifications';
   String get notifEnabledDesc => isId
       ? 'Terima notifikasi pesan baru'
       : 'Receive new message notifications';
+
+  // ── Call 1:1 (audio/video) ──
+  String get callAudio => isId ? 'Panggilan Audio' : 'Audio Call';
+  String get callVideo => isId ? 'Panggilan Video' : 'Video Call';
+  String get callIncomingAudio =>
+      isId ? 'Panggilan audio masuk...' : 'Incoming audio call...';
+  String get callIncomingVideo =>
+      isId ? 'Panggilan video masuk...' : 'Incoming video call...';
+  String get callOutgoingAudio =>
+      isId ? 'Panggilan audio...' : 'Calling (audio)...';
+  String get callOutgoingVideo =>
+      isId ? 'Panggilan video...' : 'Calling (video)...';
+  String get callRinging => isId ? 'Menunggu jawaban...' : 'Ringing...';
+  String get callConnecting => isId ? 'Menghubungkan...' : 'Connecting...';
+  String get btnAcceptCall => isId ? 'Terima' : 'Accept';
+  String get btnDeclineCall => isId ? 'Tolak' : 'Decline';
+  String get btnEndCall => isId ? 'Akhiri' : 'End';
+  String get btnMute => isId ? 'Bisukan' : 'Mute';
+  String get btnUnmute => isId ? 'Bunyikan' : 'Unmute';
+  String get btnSpeaker => isId ? 'Speaker' : 'Speaker';
+  String get btnSwitchCamera => isId ? 'Balik Kamera' : 'Flip';
+  String get msgCallEnded => isId ? 'Panggilan berakhir' : 'Call ended';
+  String get msgCallDeclined =>
+      isId ? 'Panggilan ditolak' : 'Call declined';
+  String get msgCallBusy => isId ? 'Sedang sibuk' : 'Busy';
+  String get msgCallMissed =>
+      isId ? 'Panggilan tidak dijawab' : 'Missed call';
+  String get msgCallError =>
+      isId ? 'Panggilan gagal terhubung' : 'Call failed to connect';
+  String get msgCallRegisterOnly => isId
+      ? 'Hanya akun terdaftar yang bisa melakukan panggilan.'
+      : 'Only registered accounts can make calls.';
+  String get msgCallInProgress => isId
+      ? 'Kamu sedang dalam panggilan lain.'
+      : 'You are in another call.';
 
   // ── Errors / Generic ──
   String get btnCancel => isId ? 'Batal' : 'Cancel';
@@ -1291,7 +1327,7 @@ const _privacyId = <LegalSection>[
         'Dalam rangka penyelenggaraan Aplikasi, Kami memproses kategori-kategori Data Pribadi sebagai berikut:',
       ),
       LegalItem(
-        '(1) **Data Akun dan Profil**, meliputi: nama pengguna (*username*), nama tampilan, jenis kelamin, tanggal lahir/umur, negara dan kota domisili, foto profil, foto sampul, biografi atau deskripsi diri, alamat surat elektronik (surel) dalam hal pendaftaran dilakukan melalui surel atau melalui fasilitas *Google Sign-In*, serta kata sandi yang disimpan dalam bentuk terenkripsi/*hash* satu arah dan tidak pernah disimpan maupun ditampilkan dalam bentuk teks biasa (*plaintext*).',
+        '(1) **Data Akun dan Profil**, meliputi: nama pengguna (*username*), nama tampilan, jenis kelamin, tanggal lahir/umur, negara dan kota domisili, foto profil, foto sampul, biografi atau deskripsi diri, alamat surat elektronik (surel) dalam hal pendaftaran dilakukan melalui surel atau melalui fasilitas masuk dengan akun pihak ketiga, serta kata sandi yang disimpan dalam bentuk terenkripsi/*hash* satu arah dan tidak pernah disimpan maupun ditampilkan dalam bentuk teks biasa (*plaintext*).',
       ),
       LegalItem(
         '(2) **Data Lokasi**, meliputi: (a) negara dan kota yang diturunkan secara otomatis dari alamat Protokol Internet (IP), yang dikumpulkan untuk keperluan lokalisasi konten dan mitigasi risiko keamanan; dan (b) koordinat titik lokasi global (GPS) presisi, yang **hanya** dikumpulkan apabila Anda memberikan izin akses lokasi perangkat secara eksplisit, tegas, dan terpisah dari persetujuan umum penggunaan Aplikasi, serta yang dapat Anda cabut sewaktu-waktu melalui pengaturan sistem operasi perangkat maupun pengaturan dalam Aplikasi.',
@@ -1317,7 +1353,7 @@ const _privacyId = <LegalSection>[
         '2. **Diperoleh secara otomatis melalui sistem elektronik**, yaitu meliputi alamat IP dan data teknis perangkat sebagaimana dimaksud dalam Pasal 5 ayat (5).',
       ),
       LegalItem(
-        '3. **Diperoleh dari Pihak Ketiga**, yaitu meliputi data yang diteruskan oleh penyedia layanan *Google Sign-In* (sebatas nama, alamat surel, dan foto profil dasar sesuai izin yang Anda berikan pada saat proses masuk/*login*), serta penyedia layanan geolokasi berbasis IP.',
+        '3. **Diperoleh dari Pihak Ketiga**, yaitu meliputi data yang diteruskan oleh penyedia layanan masuk (login) pihak ketiga (sebatas nama, alamat surel, dan foto profil dasar sesuai izin yang Anda berikan pada saat proses masuk/*login*), serta penyedia layanan geolokasi berbasis IP.',
       ),
     ],
   ),
@@ -1395,12 +1431,12 @@ const _privacyId = <LegalSection>[
         table: [
           ['Pihak Ketiga', 'Kedudukan', 'Cakupan Data yang Diproses'],
           [
-            'Supabase',
-            'Penyedia infrastruktur basis data, autentikasi, dan penyimpanan awan (cloud), bertindak selaku Prosesor Data Pribadi',
+            'Penyedia infrastruktur data (basis data, autentikasi, dan penyimpanan awan)',
+            'Bertindak selaku Prosesor Data Pribadi',
             'Seluruh Data Pribadi dan konten yang tersimpan pada server, dengan penerapan kontrol akses tingkat baris (Row-Level Security)',
           ],
           [
-            'Google (fasilitas Google Sign-In)',
+            'Penyedia layanan masuk (login) pihak ketiga',
             'Penyedia jasa autentikasi pihak ketiga',
             'Token autentikasi; data profil dasar sesuai cakupan izin yang Anda berikan pada saat proses masuk',
           ],
@@ -1697,6 +1733,26 @@ const _privacyId = <LegalSection>[
       ),
     ],
   ),
+  LegalSection(
+    article: 'Pasal 30 — Panggilan Audio dan Video',
+    items: [
+      LegalItem(
+        '1. Fitur panggilan audio dan video (1:1) tersedia bagi Pengguna yang telah terdaftar. Saat Anda melakukan atau menerima panggilan, akses mikrofon dan/atau kamera diperlukan dan media panggilan dikirim secara **point-to-point (P2P)** antar perangkat, dengan bantuan server sinyal hanya untuk mengatur koneksi awal.',
+      ),
+      LegalItem(
+        '2. Saat memulai panggilan, Kami menyimpan data teknis panggilan (identitas pemanggil, identitas penerima, jenis panggilan, waktu mulai, waktu selesai, dan status panggilan) sebagai catatan transaksi internal guna keperluan dukungan teknis, penanganan keluhan, dan moderasi.',
+      ),
+      LegalItem(
+        '3. Isi percakapan audio/video tidak direkam, tidak disimpan, dan tidak diproses oleh Kami. Panggilan bersifat langsung (*real-time*) antar Pengguna.',
+      ),
+      LegalItem(
+        '4. Dalam kondisi jaringan tertentu (misalnya NAT simetris atau koneksi tidak stabil), sinyal koneksi panggilan dapat dialihkan melalui server relai (*TURN*) pihak ketiga demi kelancaran panggilan. Server relai hanya meneruskan paket media secara enkripsi dan tidak menyimpan isi panggilan.',
+      ),
+      LegalItem(
+        '5. Fitur panggilan tidak boleh digunakan untuk mengirim konten yang melanggar Syarat Layanan, termasuk konten ilegal atau pelecehan. Pelanggaran dapat berakibat pada pembatasan atau penghentian akun.',
+      ),
+    ],
+  ),
 ];
 
 const _privacyEn = <LegalSection>[
@@ -1802,7 +1858,7 @@ const _privacyEn = <LegalSection>[
         'In the course of operating the Application, We process the following categories of Personal Data:',
       ),
       LegalItem(
-        '(1) **Account and Profile Data**, including: username, display name, gender, date of birth/age, country and city of domicile, profile photo, cover photo, bio or self-description, email address where registration is done via email or via the Google Sign-In facility, and passwords stored in encrypted/one-way hash form and never stored or displayed in plaintext.',
+        '(1) **Account and Profile Data**, including: username, display name, gender, date of birth/age, country and city of domicile, profile photo, cover photo, bio or self-description, email address where registration is done via email or via a third-party login facility, and passwords stored in encrypted/one-way hash form and never stored or displayed in plaintext.',
       ),
       LegalItem(
         '(2) **Location Data**, including: (a) country and city derived automatically from the Internet Protocol (IP) address, collected for content localization and security risk mitigation purposes; and (b) precise Global Positioning System (GPS) location coordinates, which are **only** collected if You give explicit, unambiguous device location access permission, separate from the general consent to use the Application, and which You may revoke at any time through the operating system settings of Your device or through the settings in the Application.',
@@ -1828,7 +1884,7 @@ const _privacyEn = <LegalSection>[
         '2. **Obtained automatically through electronic systems**, namely including IP addresses and technical device data as referred to in Article 5 paragraph (5).',
       ),
       LegalItem(
-        '3. **Obtained from Third Parties**, namely including data forwarded by the Google Sign-In service provider (limited to name, email address, and basic profile photo in accordance with the permissions You grant at login), and IP-based geolocation service providers.',
+        '3. **Obtained from Third Parties**, namely including data forwarded by a third-party login service provider (limited to name, email address, and basic profile photo in accordance with the permissions You grant at login), and IP-based geolocation service providers.',
       ),
     ],
   ),
@@ -1906,12 +1962,12 @@ const _privacyEn = <LegalSection>[
         table: [
           ['Third Party', 'Position', 'Scope of Data Processed'],
           [
-            'Supabase',
-            'Database, authentication, and cloud storage infrastructure provider, acting as a Personal Data Processor',
+            'Data infrastructure provider (database, authentication, and cloud storage)',
+            'Acting as a Personal Data Processor',
             'All Personal Data and content stored on the servers, with the application of Row-Level Security access controls',
           ],
           [
-            'Google (Google Sign-In facility)',
+            'Third-party login service provider',
             'Third-party authentication service provider',
             'Authentication tokens; basic profile data in accordance with the scope of permissions You grant at login',
           ],
@@ -2208,6 +2264,26 @@ const _privacyEn = <LegalSection>[
       ),
     ],
   ),
+  LegalSection(
+    article: 'Article 30 — Audio and Video Calls',
+    items: [
+      LegalItem(
+        '1. The audio and video calling feature (1:1) is available to registered Users. When You make or receive a call, microphone and/or camera access is required, and call media is transmitted **point-to-point (P2P)** between devices, with signaling servers used only to establish the initial connection.',
+      ),
+      LegalItem(
+        '2. When a call is initiated, We store call technical data (caller identity, recipient identity, call type, start time, end time, and call status) as an internal transaction record for technical support, complaint handling, and moderation purposes.',
+      ),
+      LegalItem(
+        '3. The content of audio/video conversations is not recorded, stored, or processed by Us. Calls are real-time and direct between Users.',
+      ),
+      LegalItem(
+        '4. Under certain network conditions (for example symmetric NAT or unstable connections), call connection traffic may be relayed through a third-party relay server (TURN) to keep the call working. Relay servers only forward encrypted media packets and do not store call content.',
+      ),
+      LegalItem(
+        '5. The calling feature must not be used to send content that violates the Terms of Service, including illegal content or harassment. Violations may result in account restrictions or termination.',
+      ),
+    ],
+  ),
 ];
 
 const _termsId = <LegalSection>[
@@ -2286,7 +2362,7 @@ const _termsId = <LegalSection>[
     article: 'Pasal 4 — Pendaftaran dan Keamanan Akun',
     items: [
       LegalItem(
-        '1. Untuk menggunakan fitur tertentu dalam Aplikasi, Anda diwajibkan membuat Akun melalui pendaftaran dengan surat elektronik atau melalui fasilitas *Google Sign-In*.',
+        '1. Untuk menggunakan fitur tertentu dalam Aplikasi, Anda diwajibkan membuat Akun melalui pendaftaran dengan surat elektronik atau melalui fasilitas masuk dengan akun pihak ketiga.',
       ),
       LegalItem(
         '2. Anda bertanggung jawab penuh untuk memberikan informasi pendaftaran yang benar, akurat, terkini, dan lengkap, serta memperbarui informasi tersebut apabila terjadi perubahan.',
@@ -2417,7 +2493,7 @@ const _termsId = <LegalSection>[
     article: 'Pasal 12 — Integrasi Pihak Ketiga',
     items: [
       LegalItem(
-        '1. Aplikasi terintegrasi dengan sejumlah layanan pihak ketiga untuk mendukung operasionalnya, termasuk namun tidak terbatas pada Supabase (infrastruktur basis data dan autentikasi) dan Google Sign-In (autentikasi), sebagaimana diuraikan lebih rinci dalam Kebijakan Privasi ChatYuk.',
+        '1. Aplikasi terintegrasi dengan sejumlah layanan pihak ketiga untuk mendukung operasionalnya, termasuk namun tidak terbatas pada penyedia infrastruktur basis data dan autentikasi, serta penyedia layanan masuk (login) pihak ketiga, sebagaimana diuraikan lebih rinci dalam Kebijakan Privasi ChatYuk.',
       ),
       LegalItem(
         '2. Penggunaan layanan pihak ketiga tersebut oleh Anda dapat tunduk pada syarat dan ketentuan serta kebijakan privasi masing-masing penyedia layanan, yang berada di luar kendali Kami. Kami menganjurkan Anda untuk membaca dan memahami ketentuan masing-masing pihak ketiga dimaksud.',
@@ -2710,7 +2786,7 @@ const _termsEn = <LegalSection>[
     article: 'Article 4 — Registration and Account Security',
     items: [
       LegalItem(
-        '1. To use certain features in the Application, You are required to create an Account by registering with an email address or through the Google Sign-In facility.',
+        '1. To use certain features in the Application, You are required to create an Account by registering with an email address or through a third-party login facility.',
       ),
       LegalItem(
         '2. You are fully responsible for providing true, accurate, current, and complete registration information, and for updating such information when changes occur.',
@@ -2841,7 +2917,7 @@ const _termsEn = <LegalSection>[
     article: 'Article 12 — Third-Party Integrations',
     items: [
       LegalItem(
-        '1. The Application is integrated with a number of third-party services to support its operations, including but not limited to Supabase (database infrastructure and authentication) and Google Sign-In (authentication), as described in more detail in the ChatYuk Privacy Policy.',
+        '1. The Application is integrated with a number of third-party services to support its operations, including but not limited to database and authentication infrastructure providers, and third-party login service providers, as described in more detail in the ChatYuk Privacy Policy.',
       ),
       LegalItem(
         '2. Your use of such third-party services may be subject to the terms and conditions and privacy policies of each service provider, which are outside Our control. We recommend that You read and understand the terms of each such third party.',

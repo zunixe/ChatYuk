@@ -11,6 +11,7 @@ import 'providers/points_provider.dart';
 import 'providers/social_provider.dart';
 import 'providers/admin_provider.dart';
 import 'providers/locale_provider.dart';
+import 'providers/call_provider.dart';
 import 'providers/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
@@ -220,6 +221,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     final auth = context.read<AuthProvider>();
     auth.goOnline();
     auth.resetIdleTimer();
+    // Hanya user terdaftar yang menerima panggilan masuk (anon: tidak).
+    CallProvider.instance
+        .ensureListening(registered: auth.profile?.isRegistered ?? false);
     final uid = auth.uid;
     if (uid != null) {
       context.read<ChatProvider>().loadBlockedUids(uid);

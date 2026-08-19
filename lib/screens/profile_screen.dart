@@ -1916,70 +1916,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                       Divider(height: 1, indent: 52),
-                      // Password: set (akun Google) / change (akun email)
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 4,
-                        ),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
-                          onTap: () => _showPasswordDialog(
-                            context,
-                            isSet: !auth.hasPassword,
+                      // Password: set (akun Google) / change (akun email) —
+                      // hanya untuk user terdaftar (email/Google), bukan anon.
+                      if (!isAnon) ...[
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
                           ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primary.withValues(
-                                    alpha: 0.1,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => _showPasswordDialog(
+                              context,
+                              isSet: !auth.hasPassword,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    shape: BoxShape.circle,
                                   ),
-                                  shape: BoxShape.circle,
+                                  child: Icon(
+                                    auth.hasPassword
+                                        ? Icons.password
+                                        : Icons.lock_outline,
+                                    color: AppTheme.primary,
+                                    size: 20,
+                                  ),
                                 ),
-                                child: Icon(
-                                  auth.hasPassword
-                                      ? Icons.password
-                                      : Icons.lock_outline,
-                                  color: AppTheme.primary,
-                                  size: 20,
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      auth.hasPassword
-                                          ? s.btnChangePassword
-                                          : s.btnSetPassword,
-                                      style: AppText.bodyStrong.copyWith(
-                                        fontWeight: FontWeight.w500,
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        auth.hasPassword
+                                            ? s.btnChangePassword
+                                            : s.btnSetPassword,
+                                        style: AppText.bodyStrong.copyWith(
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
-                                    ),
-                                    Text(
-                                      auth.hasPassword
-                                          ? s.descChangePassword
-                                          : s.descSetPassword,
-                                      style: AppText.bodySmall.copyWith(
-                                        color: AppTheme.textSecondary,
+                                      Text(
+                                        auth.hasPassword
+                                            ? s.descChangePassword
+                                            : s.descSetPassword,
+                                        style: AppText.bodySmall.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              Icon(
-                                Icons.chevron_right,
-                                color: AppTheme.textSecondary,
-                              ),
-                            ],
+                                Icon(
+                                  Icons.chevron_right,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      Divider(height: 1, indent: 52),
+                        Divider(height: 1, indent: 52),
+                      ],
                       // Bahasa
                       Padding(
                         padding: EdgeInsets.symmetric(
