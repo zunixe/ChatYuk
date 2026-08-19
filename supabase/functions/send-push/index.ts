@@ -1,8 +1,7 @@
 // Supabase Edge Function: send-push
 // Dipanggil oleh DB trigger saat ada message baru.
 // Mengirim FCM V1 push notification via Firebase Cloud Messaging.
-
-const crypto = await import('https://deno.land/std@0.203.0/crypto/mod.ts');
+// WebCrypto global (crypto.subtle) tersedia di Supabase Edge Runtime.
 
 const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 const FCM_ENDPOINT = 'https://fcm.googleapis.com/v1/projects/chatyuk-8470e/messages:send';
@@ -51,7 +50,9 @@ function parsePem(pem) {
   const b64 = pem
     .replace('-----BEGIN PRIVATE KEY-----', '')
     .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\s/g, '');
+    // Buang semua karakter non-base64 — melindungi dari newline yang
+    // ter-escape (\n literal) saat env var di-copy dari dashboard.
+    .replace(/[^A-Za-z0-9+/=]/g, '');
   const raw = atob(b64);
   const bytes = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
