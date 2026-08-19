@@ -159,7 +159,7 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
        flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
        --obfuscate --split-debug-info=build/app/symbols
      ```
-   - Flavor **play** (Google Play; appId `com.chatyuk.chatyuk.play`; `google-services.json` khusus di `android/app/src/play/`):
+   - Flavor **play** (Google Play; appId `com.chatyuk.chatyuk` — sama dengan apkpure; `google-services.json` khusus di `android/app/src/play/`):
      ```bash
      KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
        flutter build apk --release --flavor play --dart-define=APP_FLAVOR=play \
