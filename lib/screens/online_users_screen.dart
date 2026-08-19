@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -485,12 +486,23 @@ class _UserCard extends StatelessWidget {
     return AppTheme.online;
   }
 
+  String _idleDurationLabel(DateTime lastSeen) {
+    final diff = DateTime.now().difference(lastSeen.toLocal());
+    if (diff.inMinutes < 1) return '1m';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    if (diff.inDays < 7) return '${diff.inDays}d';
+    return DateFormat('d MMM').format(lastSeen.toLocal());
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final color = user.gender == 'male' ? AppTheme.male : user.gender == 'female' ? AppTheme.female : AppTheme.accent;
     final genderLabel = user.gender == 'male' ? s.genderMale : user.gender == 'female' ? s.genderFemale : s.genderOther;
-    final statusLabel = user.status == 'idle' ? s.statusIdle : user.status == 'offline' ? s.statusOffline : s.statusOnline;
+    final statusLabel = user.status == 'idle'
+        ? '${s.statusIdle} · ${_idleDurationLabel(user.lastSeen)}'
+        : user.status == 'offline' ? s.statusOffline : s.statusOnline;
 
     return Container(
       margin: EdgeInsets.only(bottom: 8),
@@ -550,10 +562,18 @@ class _UserCard extends StatelessWidget {
                         Flexible(
                           child: Text(user.nickname, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis),
                         ),
+                        if (user.gender == 'male' || user.gender == 'female') ...[
+                          SizedBox(width: 4),
+                          Icon(
+                            user.gender == 'male' ? Icons.male : Icons.female,
+                            size: 15,
+                            color: user.gender == 'male' ? AppTheme.male : AppTheme.female,
+                          ),
+                        ],
                         if (user.isRegistered) ...[
                           SizedBox(width: 4),
-Tooltip(
-    message: s.labelVerified,
+                          Tooltip(
+                              message: s.labelVerified,
                             child: Icon(Icons.verified, size: 15, color: Color(0xFF4A90E2)),
                           ),
                         ],
@@ -570,37 +590,39 @@ Tooltip(
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      Consumer<SocialProvider>(
-                        builder: (_, sp, __) {
-                          final following = sp.isFollowing(user.uid);
-                          return GestureDetector(
-                            onTap: () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              final ok = following
-                                  ? await sp.unfollow(user.uid)
-                                  : await sp.follow(user.uid);
-                              if (ok) {
-                                messenger.showSnackBar(SnackBar(
-                                  content: Text(following ? s.btnUnfollow : s.btnFollow)));
-                              }
-                            },
-                            child: Container(
-                              width: 30, height: 30,
-                              decoration: BoxDecoration(
-                                color: following
-                                    ? AppTheme.primary.withValues(alpha: 0.12)
-                                    : AppTheme.textSecondary.withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(8),
+                      // Tombol ikuti hanya untuk user yang ter-registrasi email.
+                      if (user.isRegistered)
+                        Consumer<SocialProvider>(
+                          builder: (_, sp, __) {
+                            final following = sp.isFollowing(user.uid);
+                            return GestureDetector(
+                              onTap: () async {
+                                final messenger = ScaffoldMessenger.of(context);
+                                final ok = following
+                                    ? await sp.unfollow(user.uid)
+                                    : await sp.follow(user.uid);
+                                if (ok) {
+                                  messenger.showSnackBar(SnackBar(
+                                    content: Text(following ? s.btnUnfollow : s.btnFollow)));
+                                }
+                              },
+                              child: Container(
+                                width: 30, height: 30,
+                                decoration: BoxDecoration(
+                                  color: following
+                                      ? AppTheme.primary.withValues(alpha: 0.12)
+                                      : AppTheme.textSecondary.withValues(alpha: 0.10),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  following ? Icons.person_remove : Icons.person_add,
+                                  size: 17,
+                                  color: following ? AppTheme.primary : AppTheme.textSecondary,
+                                ),
                               ),
-                              child: Icon(
-                                following ? Icons.person_remove : Icons.person_add,
-                                size: 17,
-                                color: following ? AppTheme.primary : AppTheme.textSecondary,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                            );
+                          },
+                        ),
                       const SizedBox(width: 6),
                       Container(
                         width: 30, height: 30,

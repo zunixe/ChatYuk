@@ -66,6 +66,26 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  // ── Bar chart registrasi email per hari ──
+  Map<int, int> _regDaily = {};
+  bool _regLoading = false;
+
+  Map<int, int> get regDaily => _regDaily;
+  bool get regLoading => _regLoading;
+
+  Future<void> fetchRegistrationsDaily(int year, int month) async {
+    _regLoading = true;
+    if (!_disposed) notifyListeners();
+    try {
+      _regDaily = await _service.fetchRegistrationsDaily(year, month);
+    } catch (e) {
+      debugPrint('[ADMIN] fetchRegistrationsDaily error: $e');
+      _regDaily = {};
+    }
+    _regLoading = false;
+    if (!_disposed) notifyListeners();
+  }
+
   Future<Map<String, dynamic>?> massBonus(int bonus) async {
     try {
       final result = await _service.massBonus(bonus);

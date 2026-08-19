@@ -93,6 +93,17 @@ class SocialService {
     }
   }
 
+  /// Hapus semua relasi sosial (follow, subscribe, friend request) milik
+  /// user anon — dipanggil saat anon logout supaya counter user lain
+  /// (followers/subscribers) ikut berkurang via trigger.
+  Future<void> clearAnonSocial() async {
+    try {
+      await _sb.rpc('clear_anon_social');
+    } catch (e) {
+      debugPrint('[SocialService] clearAnonSocial error: $e');
+    }
+  }
+
   /// Realtime friend request inbox (pending) untuk badge unread.
   Stream<int> watchFriendRequestCount(String uid) {
     if (uid.isEmpty) return const Stream.empty();

@@ -104,6 +104,8 @@ class _EntryScreenState extends State<EntryScreen> {
     try {
       final result = await context.read<AuthProvider>().signInWithGoogle();
       if (!mounted) return;
+      // User membatalkan dialog Google — kembali diam-diam.
+      if (result == 'canceled') return;
       if (result == 'link_prompt') {
         // Email sudah ada di akun lain — tanya apakah mau link
         final auth = context.read<AuthProvider>();
@@ -152,8 +154,10 @@ class _EntryScreenState extends State<EntryScreen> {
           SnackBar(content: Text('${s.errGoogleSignIn}$e')),
         );
       }
+    } finally {
+      // Reset spinner di semua path (sukses, batal, error).
+      if (mounted) setState(() => _googleLoading = false);
     }
-    if (mounted) setState(() => _googleLoading = false);
   }
 
   Future<void> _enter() async {
@@ -184,9 +188,19 @@ class _EntryScreenState extends State<EntryScreen> {
     // Cek duplicate sebelum submit
     final available = await context.read<AuthProvider>().isNicknameAvailable(nick);
     if (!available) {
-      setState(() => _nicknameError = s.errNicknameTaken);
-      _nicknameFocus.requestFocus();
-      return;
+      // Nick milik akun anon yang sudah lama tak aktif (dummy di-uninstall)
+      // → coba ambil alih. Kalau gagal, baru anggap dipakai.
+      var claimed = false;
+      try {
+        claimed = await context.read<AuthProvider>().claimNickname(nick);
+      } catch (e) {
+        debugPrint('[ENTRY] claimNickname error: $e');
+      }
+      if (!claimed) {
+        setState(() => _nicknameError = s.errNicknameTaken);
+        _nicknameFocus.requestFocus();
+        return;
+      }
     }
 
     _entered = true;
@@ -238,7 +252,16 @@ class _EntryScreenState extends State<EntryScreen> {
     final requireRegistration = context.watch<AuthProvider>().requireRegistration;
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: SafeArea(
+      body: Stack(
+        children: [
+          // Background gambar "people chat" — semi transparan (opacity 20%).
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.2,
+              child: Image.asset('assets/people_chat.jpg', fit: BoxFit.cover),
+            ),
+          ),
+          SafeArea(
         child: Center(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -263,8 +286,22 @@ class _EntryScreenState extends State<EntryScreen> {
               ),
               SizedBox(height: 4),
 
-              // Title
-              ShaderMask(
+              // Title — light mode: gradient cerah; dark mode: solid redup (tidak
+                // seterang ikon/putih) supaya nyaman & tetap terbaca.
+                if (AppTheme.isDark)
+                  Text(
+                    s.appTagline,
+                    textAlign: TextAlign.center,
+                    style: AppText.display.copyWith(
+                      color: const Color(0xFFAEB9C4),
+                      letterSpacing: 0.5,
+                      shadows: [
+                        Shadow(blurRadius: 10, color: Colors.black.withValues(alpha: 0.7), offset: Offset(0, 2)),
+                      ],
+                    ),
+                  )
+                else
+                  ShaderMask(
                 shaderCallback: (bounds) => AppTheme.headerGradient.createShader(bounds),
                 child: Text(
                   s.appTagline,
@@ -272,6 +309,10 @@ class _EntryScreenState extends State<EntryScreen> {
                   style: AppText.display.copyWith(
                     color: Colors.white,
                     letterSpacing: 0.5,
+                    shadows: [
+                      Shadow(blurRadius: 10, color: Colors.black.withValues(alpha: 0.65), offset: Offset(0, 2)),
+                      Shadow(blurRadius: 20, color: Colors.black.withValues(alpha: 0.45)),
+                    ],
                   ),
                 ),
               ),
@@ -281,6 +322,9 @@ class _EntryScreenState extends State<EntryScreen> {
                 textAlign: TextAlign.center,
                 style: AppText.bodySmall.copyWith(
                   color: AppTheme.textSecondary,
+                  shadows: [
+                    Shadow(blurRadius: 6, color: Colors.black.withValues(alpha: 0.8), offset: Offset(0, 1)),
+                  ],
                 ),
               ),
               SizedBox(height: 6),
@@ -542,6 +586,8 @@ class _EntryScreenState extends State<EntryScreen> {
             ),
           ),
         ),
+        ),
+        ],
       ),
     );
   }
@@ -627,7 +673,7 @@ class _EntryScreenState extends State<EntryScreen> {
         labelText: s.labelAge,
       ),
       items: [
-        for (int i = 17; i <= 60; i++)
+        for (int i = 18; i <= 60; i++)
           DropdownMenuItem(value: i, child: Text('$i')),
       ],
       onChanged: (v) {

@@ -39,6 +39,21 @@ class SocialProvider extends ChangeNotifier {
     });
   }
 
+  /// Bersihkan relasi sosial anon (follow/subscribe/friend request) di
+  /// server lalu state lokal — dipanggil sebelum anon signOut.
+  Future<void> clearAnonSocial() async {
+    try {
+      await _service.clearAnonSocial();
+      _following.clear();
+      _friends.clear();
+      _subscribed.clear();
+      _friendRequestCount = 0;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[SocialProvider] clearAnonSocial error: $e');
+    }
+  }
+
   /// Realtime: setiap perubahan follows/friend_requests yang melibatkan uid
   /// sendiri → refresh set (following/friends) + counter di profil ikut
   /// ter-update lewat AuthProvider.onMyProfileUpdates (profiles realtime).
