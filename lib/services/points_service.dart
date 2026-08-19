@@ -68,6 +68,11 @@ class PointsService {
     return (res as num).toInt();
   }
 
+  Future<int> refundChatPoint(String msgType) async {
+    final res = await _sb.rpc('refund_chat_point', params: {'msg_type': msgType});
+    return (res as num).toInt();
+  }
+
   Future<int> newChatBonus(String otherUid) async {
     final res = await _sb.rpc('new_chat_bonus', params: {'other_uid': otherUid});
     return (res as num).toInt();

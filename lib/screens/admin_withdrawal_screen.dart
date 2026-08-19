@@ -14,16 +14,29 @@ class AdminWithdrawalScreen extends StatefulWidget {
   State<AdminWithdrawalScreen> createState() => _AdminWithdrawalScreenState();
 }
 
-class _AdminWithdrawalScreenState extends State<AdminWithdrawalScreen> {
+class _AdminWithdrawalScreenState extends State<AdminWithdrawalScreen>
+    with SingleTickerProviderStateMixin {
   final _txCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   String _tab = 'pending';
+  static const _tabs = ['pending', 'paid', 'rejected'];
+  late final TabController _tabCtrl;
 
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: _tabs.length, vsync: this);
+    _tabCtrl.addListener(_onTabChanged);
+    _load();
+  }
+
+  void _onTabChanged() {
+    if (_tabCtrl.indexIsChanging) return;
+    final tab = _tabs[_tabCtrl.index];
+    if (tab == _tab) return;
+    _tab = tab;
     _load();
   }
 
@@ -107,6 +120,8 @@ class _AdminWithdrawalScreenState extends State<AdminWithdrawalScreen> {
 
   @override
   void dispose() {
+    _tabCtrl.removeListener(_onTabChanged);
+    _tabCtrl.dispose();
     _txCtrl.dispose();
     _noteCtrl.dispose();
     super.dispose();
@@ -123,6 +138,7 @@ class _AdminWithdrawalScreenState extends State<AdminWithdrawalScreen> {
         appBar: AppBar(
           title: Text(s.adminWithdrawTitle),
           bottom: TabBar(
+            controller: _tabCtrl,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             indicatorColor: Colors.white,
@@ -143,7 +159,8 @@ class _AdminWithdrawalScreenState extends State<AdminWithdrawalScreen> {
           ),
         ),
         body: TabBarView(
-          children: ['pending', 'paid', 'rejected'].map((t) => _listTab(s, t)).toList(),
+          controller: _tabCtrl,
+          children: _tabs.map((t) => _listTab(s, t)).toList(),
         ),
       ),
     );

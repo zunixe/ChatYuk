@@ -9,12 +9,14 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/supabase_config.dart';
 import '../providers/admin_provider.dart';
+import '../providers/auth_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_service.dart';
 import '../services/geo_service.dart';
 import '../utils.dart';
 import 'admin_chat_list_screen.dart';
+import 'admin_contact_tab.dart';
 import 'admin_dummy_tab.dart';
 import 'admin_kyc_screen.dart';
 import 'admin_revenue_screen.dart';
@@ -152,7 +154,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final stats = admin.stats;
 
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         backgroundColor: AppTheme.bgScreen,
         appBar: AppBar(
@@ -182,11 +184,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
           ],
           bottom: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             indicatorColor: Colors.white,
             indicatorWeight: 3,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+            labelPadding: const EdgeInsets.symmetric(horizontal: 14),
             labelStyle: AppText.bodySmall.copyWith(
               fontWeight: FontWeight.w800,
               color: Colors.white,
@@ -201,6 +205,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               Tab(text: s.adminPointTab),
               Tab(text: s.adminChatMonitor),
               Tab(text: s.adminDummyTab),
+              Tab(text: s.adminContactTab),
             ],
           ),
         ),
@@ -231,6 +236,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         _UserMapCard(),
                         const SizedBox(height: 12),
                         _reportedUsers(stats, s),
+                        const SizedBox(height: 12),
+                        _requireRegistrationCard(s),
                         const SizedBox(height: 12),
                         _forceLogout(s),
                         const SizedBox(height: 12),
@@ -280,6 +287,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   ),
             const AdminChatListScreen(),
             const AdminDummyTab(),
+            const AdminContactTab(),
           ],
         ),
       ),
@@ -1269,6 +1277,46 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     ]);
   }
 
+  Widget _requireRegistrationCard(S s) {
+    final auth = context.watch<AuthProvider>();
+    return _card(
+      s.labelRequireRegistration,
+      Icons.how_to_reg_outlined,
+      AppTheme.primary,
+      [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.labelRequireRegistration,
+                    style: AppText.bodyStrong.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    s.descRequireRegistration,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: auth.requireRegistration,
+              onChanged: (v) =>
+                  context.read<AuthProvider>().setRequireRegistration(v),
+              activeThumbColor: AppTheme.primary,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _forceLogout(S s) {
     return _card(s.adminForceLogout, Icons.logout, Colors.orange, [
       Row(
@@ -1295,11 +1343,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           ),
           const SizedBox(width: 10),
           OutlinedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               final uid = _logoutCtrl.text.trim();
               if (uid.isEmpty) return;
               try {
-                context.read<AdminProvider>().forceLogout(uid);
+                // Await — forceLogout melempar saat gagal; tanpa await
+                // error jadi unhandled dan toast "sukses" tampil keliru.
+                await context.read<AdminProvider>().forceLogout(uid);
                 _toast('Force logout: ${uid.substring(0, 8)}...');
                 _logoutCtrl.clear();
               } catch (e) {

@@ -23,6 +23,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   StreamSubscription<bool>? _enabledSub;
   StreamSubscription<int>? _pointsSub;
   StreamSubscription<AuthState>? _authSub;
+  Timer? _walletDebounce;
 
   int get points => _points;
 
@@ -170,10 +171,18 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
         if (_disposed) return;
         // profiles.points = cache total ledger. Saat berubah, tarik rincian
         // bucket dari server supaya bonus/topup/earned ikut ter-update.
+        // Debounce: bonus online/chunk pesan bisa memicu banyak event
+        // beruntun — cukup 1 RPC get_wallet untuk burst tersebut.
         final changed = value != _points;
         _points = value;
         notifyListeners();
-        if (changed) refreshWallet();
+        if (changed) {
+          _walletDebounce?.cancel();
+          _walletDebounce = Timer(const Duration(milliseconds: 800), () {
+            if (_disposed) return;
+            refreshWallet();
+          });
+        }
       });
       // Ambil rincian awal saat subscribe
       refreshWallet();
@@ -480,6 +489,10 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Potong poin sebelum kirim pesan. Return:
+  ///   >= 0  saldo baru (sukses)
+  ///   -1    poin tidak cukup
+  ///   -2    error tak dikenal (RPC/network) — JANGAN kirim pesan
   Future<int> deductBeforeSend(String msgType) async {
     if (!_enabled) return _points;
     try {
@@ -490,10 +503,22 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     } on PostgrestException catch (e) {
       if (e.message.contains('Not enough points')) return -1;
       debugPrint('[POINTS] deduct error: $e');
-      return _points;
+      return -2;
     } catch (e) {
       debugPrint('[POINTS] deduct error: $e');
-      return _points;
+      return -2;
+    }
+  }
+
+  /// Refund biaya chat saat kirim gagal (upload/blocked/network) — mencegah
+  /// koin hilang percuma. Fire-and-forget; kegagalan refund tidak fatal.
+  Future<void> refundChatPoint(String msgType) async {
+    if (!_enabled) return;
+    try {
+      _points = await _service.refundChatPoint(msgType);
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      debugPrint('[POINTS] refundChatPoint error: $e');
     }
   }
 
@@ -543,7 +568,12 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (res['points'] != null) setPoints((res['points'] as num).toInt());
       return res['ok'] == true;
     } on PostgrestException catch (e) {
-      if (e.message.contains('Not enough topup')) throw 'topup';
+      // Server (ledger_spend_dual) melempar 'Not enough points' — bukan
+      // 'Not enough topup' (pesan lama) — saat saldo bonus pun tidak cukup.
+      if (e.message.contains('Not enough points') ||
+          e.message.contains('Not enough topup')) {
+        throw 'topup';
+      }
       debugPrint('[POINTS] unlockPhoto error: $e');
       rethrow;
     }
@@ -703,6 +733,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     _enabledSub?.cancel();
     _pointsSub?.cancel();
     _authSub?.cancel();
+    _walletDebounce?.cancel();
     _onlineTickTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

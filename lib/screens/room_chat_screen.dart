@@ -116,10 +116,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         state == AppLifecycleState.detached) {
       // App di-background/ditutup → keluar dari room supaya tidak jadi
       // ghost "online" di daftar member room.
+      // Hentikan heartbeat presence juga — kalau tidak, timer terus
+      // re-join tiap 60s dan membangkitkan row presence ghost.
+      _presenceTimer?.cancel();
       _chat.leaveRoom(widget.room.id, uid);
     } else if (state == AppLifecycleState.resumed) {
       if (mounted && _auth.profile != null) {
         _chat.joinRoom(widget.room.id, _auth.profile!);
+        _startPresenceHeartbeat();
       }
     }
   }
@@ -194,7 +198,19 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (uid == null || profile == null) { _isSending = false; return; }
     final pp = context.read<PointsProvider>();
     final remaining = await pp.deductBeforeSend('text');
-    if (remaining < 0) { _isSending = false; if (mounted) { final ss = context.read<LocaleProvider>().s; pp.showOutOfPointsDialog(context, ss.isId); } return; }
+    if (remaining < 0) {
+      _isSending = false;
+      if (!mounted) return;
+      final ss = context.read<LocaleProvider>().s;
+      if (remaining == -1) {
+        pp.showOutOfPointsDialog(context, ss.isId);
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(ss.errSendFailed)));
+      }
+      return;
+    }
     try {
       await chat.sendRoomMessage(
         roomId: widget.room.id,
@@ -216,6 +232,15 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         });
       }
       _scrollToBottom();
+    } catch (e) {
+      // Kirim gagal → kembalikan koin yang sudah terpotong.
+      safeUnawaited(pp.refundChatPoint('text'));
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errSendFailed)));
+      }
     } finally {
       _isSending = false;
     }
@@ -255,7 +280,17 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (uid == null || profile == null) return;
     final pp = context.read<PointsProvider>();
     final r = await pp.deductBeforeSend('image');
-    if (r < 0) { if (mounted) { pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId); } return; }
+    if (r < 0) {
+      if (!mounted) return;
+      if (r == -1) {
+        pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.read<LocaleProvider>().s.errSendPhoto),
+        ));
+      }
+      return;
+    }
     try {
       final path = await StoragePhotoService.instance.upload(chatId: 'room_${widget.room.id}', base64: base64);
       final stored = path ?? base64;
@@ -270,6 +305,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       );
       _scrollToBottom();
     } catch (e) {
+      safeUnawaited(pp.refundChatPoint('image'));
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
@@ -282,13 +318,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
     final auth = context.read<AuthProvider>();
-    final results = await Future.wait([
-      auth.watermarkEnabled
-          ? compute(_roomViewOnceImage, (bytes, widget.room.id))
-          : compute(_roomPassthroughImage, bytes),
-      context.read<PointsProvider>().deductBeforeSend('view_once'),
-    ]);
-    final base64 = results[0] as String?;
+    // Proses gambar DULU, baru potong poin (jangan paralel) — mencegah
+    // koin terpotong saat decode/resize gagal.
+    final base64 = await (auth.watermarkEnabled
+        ? compute(_roomViewOnceImage, (bytes, widget.room.id))
+        : compute(_roomPassthroughImage, bytes));
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
@@ -297,8 +331,18 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       return;
     }
     if (!mounted) return;
-    final rView = results[1] as int;
-    if (rView < 0) { if (mounted) { context.read<PointsProvider>().showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId); } return; }
+    final pp = context.read<PointsProvider>();
+    final rView = await pp.deductBeforeSend('view_once');
+    if (rView < 0) {
+      if (rView == -1) {
+        pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.read<LocaleProvider>().s.errSendPhoto),
+        ));
+      }
+      return;
+    }
     final chat = context.read<ChatProvider>();
     final uid = auth.uid;
     final profile = auth.profile;
@@ -317,6 +361,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       );
       _scrollToBottom();
     } catch (e) {
+      safeUnawaited(pp.refundChatPoint('view_once'));
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));

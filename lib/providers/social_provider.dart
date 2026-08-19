@@ -17,6 +17,7 @@ class SocialProvider extends ChangeNotifier {
   StreamSubscription<AuthState>? _authSub;
   StreamSubscription? _rtSub;
   RealtimeChannel? _rtChannel;
+  Timer? _refreshDebounce;
 
   Set<String> get following => Set.unmodifiable(_following);
   Set<String> get friends => Set.unmodifiable(_friends);
@@ -67,7 +68,15 @@ class SocialProvider extends ChangeNotifier {
   void _subscribe() {
     _frSub?.cancel();
     final uid = _service.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      // Logout: bersihkan state akun lama supaya tidak bocor ke akun baru.
+      _following.clear();
+      _friends.clear();
+      _subscribed.clear();
+      _friendRequestCount = 0;
+      notifyListeners();
+      return;
+    }
     // Realtime channel dibuat ulang di sini (bukan hanya constructor) —
     // setelah logout, removeAllChannels men-teardown channel lama, jadi
     // login berikutnya harus membuat channel baru dengan uid yang baru.
@@ -79,10 +88,20 @@ class SocialProvider extends ChangeNotifier {
       }
     });
     // Muat set awal (following/friends/subscribed) untuk uid sendiri.
-    _refreshSelfSets();
+    _refreshSelfSetsNow();
   }
 
+  /// Coalesce burst event realtime (follow/unfollow beruntun) jadi satu
+  /// refresh — tiap event = 3 query, debounce 400ms mencegah storm RPC.
   Future<void> _refreshSelfSets() async {
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(
+      const Duration(milliseconds: 400),
+      _refreshSelfSetsNow,
+    );
+  }
+
+  Future<void> _refreshSelfSetsNow() async {
     final uid = _service.uid;
     if (uid == null) return;
     try {
@@ -190,6 +209,7 @@ class SocialProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _refreshDebounce?.cancel();
     _frSub?.cancel();
     _authSub?.cancel();
     _rtSub?.cancel();

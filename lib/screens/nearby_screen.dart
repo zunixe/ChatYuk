@@ -10,8 +10,13 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 
 import '../services/location_service.dart';
+import '../utils/bounded_cache.dart';
 import 'private_chat_screen.dart';
 import '../providers/theme_provider.dart';
+
+/// Cache bytes avatar hasil decode base64 — decode cukup sekali per avatar
+/// (bukan setiap rebuild kartu), kapasitas dibatasi supaya tidak bocor.
+final _avatarBytesCache = BoundedCache<String, Uint8List>(80);
 
 /// Fitur "Orang Sekitar": cari user online/idle dalam radius tertentu
 /// berdasarkan lokasi (GPS bila diizinkan, else perkiraan IP), tampilkan
@@ -435,10 +440,16 @@ class _NearbyCard extends StatelessWidget {
     final color = gender == 'male' ? AppTheme.male : gender == 'female' ? AppTheme.female : AppTheme.accent;
     final genderLabel = gender == 'male' ? s.genderMale : gender == 'female' ? s.genderFemale : s.genderOther;
 
-    Uint8List? avatarBytes;
-    if (avatar.isNotEmpty) {
-      try { avatarBytes = base64Decode(avatar); } catch (_) {}
-    }
+    final avatarBytes = avatar.isNotEmpty
+        ? _avatarBytesCache.putIfAbsent(avatar, () {
+            try {
+              return base64Decode(avatar);
+            } catch (_) {
+              return Uint8List(0);
+            }
+          })
+        : null;
+    final hasAvatar = avatarBytes?.isNotEmpty == true;
 
     return Container(
       margin: EdgeInsets.only(bottom: 8),
@@ -464,11 +475,11 @@ class _NearbyCard extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: color.withValues(alpha: 0.15),
                         border: Border.all(color: color, width: 1.5),
-                        image: avatarBytes != null
-                            ? DecorationImage(image: MemoryImage(avatarBytes), fit: BoxFit.cover)
+                        image: hasAvatar
+                            ? DecorationImage(image: MemoryImage(avatarBytes!), fit: BoxFit.cover)
                             : null,
                       ),
-                      child: avatarBytes != null
+                      child: hasAvatar
                           ? null
                           : Center(child: Text(
                               nickname.isNotEmpty ? nickname[0].toUpperCase() : '?',

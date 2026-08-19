@@ -189,6 +189,81 @@ class AdminProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  // ── Pesan Kontak (Hubungi Kami) ──
+  List<Map<String, dynamic>> _contactMessages = [];
+  bool _contactLoading = false;
+  bool _contactHasMore = true;
+  bool _contactFetchingMore = false;
+  int _contactTotal = 0;
+  String? _contactError;
+
+  List<Map<String, dynamic>> get contactMessages => _contactMessages;
+  bool get contactLoading => _contactLoading;
+  bool get contactHasMore => _contactHasMore;
+  int get contactTotal => _contactTotal;
+  String? get contactError => _contactError;
+
+  Future<void> fetchContactMessages() async {
+    _contactLoading = true;
+    _contactError = null;
+    if (!_disposed) notifyListeners();
+    try {
+      final res = await _service.listContactMessages(limit: chatPageSize, offset: 0);
+      _contactMessages = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      _contactTotal = (res['total'] as num?)?.toInt() ?? 0;
+      _contactHasMore = _contactMessages.length < _contactTotal;
+    } catch (e) {
+      _contactError = e.toString();
+      debugPrint('[ADMIN] fetchContactMessages error: $e');
+    }
+    _contactLoading = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Muat halaman berikutnya (infinite scroll list pesan kontak).
+  Future<void> fetchMoreContactMessages() async {
+    if (_contactFetchingMore || !_contactHasMore || _contactLoading) return;
+    _contactFetchingMore = true;
+    try {
+      final res = await _service.listContactMessages(
+        limit: chatPageSize,
+        offset: _contactMessages.length,
+      );
+      final more = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      _contactTotal = (res['total'] as num?)?.toInt() ?? _contactTotal;
+      _contactMessages = [..._contactMessages, ...more];
+      _contactHasMore = _contactMessages.length < _contactTotal;
+    } catch (e) {
+      debugPrint('[ADMIN] fetchMoreContactMessages error: $e');
+    }
+    _contactFetchingMore = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> setContactRead(String id, {bool read = true}) async {
+    try {
+      await _service.setContactRead(id, read: read);
+      final i = _contactMessages.indexWhere((m) => m['id'] == id);
+      if (i >= 0) {
+        _contactMessages[i] = {..._contactMessages[i], 'is_read': read};
+        if (!_disposed) notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[ADMIN] setContactRead error: $e');
+    }
+  }
+
+  Future<void> deleteContactMessage(String id) async {
+    try {
+      await _service.deleteContactMessage(id);
+      _contactMessages.removeWhere((m) => m['id'] == id);
+      if (_contactTotal > 0) _contactTotal--;
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      debugPrint('[ADMIN] deleteContactMessage error: $e');
+    }
+  }
+
   bool _chatMessagesHasMore = true;
   bool _chatMessagesFetchingMore = false;
   bool get chatMessagesHasMore => _chatMessagesHasMore;

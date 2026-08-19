@@ -17,33 +17,12 @@ import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
 import '../services/chat_service.dart';
 import '../services/location_service.dart';
+import '../utils/bounded_cache.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
 import '../providers/theme_provider.dart';
 
-class _BoundedCache<T> {
-  final int maxSize;
-  final _map = <String, T>{};
-  final _order = <String>[];
-  _BoundedCache(this.maxSize);
-  T? get(String key) {
-    final i = _order.indexOf(key);
-    if (i >= 0) { _order.removeAt(i); _order.add(key); }
-    return _map[key];
-  }
-  T putIfAbsent(String key, T ifAbsent()) {
-    final existing = _map[key];
-    if (existing != null) return existing;
-    if (_order.length >= maxSize) { _map.remove(_order.removeAt(0)); }
-    final val = ifAbsent();
-    _map[key] = val;
-    _order.add(key);
-    return val;
-  }
-  void clear() { _map.clear(); _order.clear(); }
-}
-
-final _avatarCache = _BoundedCache<Uint8List>(80);
+final _avatarCache = BoundedCache<String, Uint8List>(80);
 
 void clearAllAvatarCaches() {
   _avatarCache.clear();

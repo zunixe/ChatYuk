@@ -174,7 +174,7 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
   ```
 - Debug symbols disimpan di `build/app/symbols` (jangan dihapus) — dipakai `flutter symbolize` untuk baca stack trace saat crash.
 - **JANGAN build flavor `play` / AAB untuk Google Play tanpa instruksi eksplisit dari user.** Default build = flavor `apkpure`. Kalau ragu, tanya dulu.
-- Sebelum selesai, selalu: `flutter analyze` → `flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols` → install & test
+- Sebelum selesai, selalu: `flutter analyze` → `flutter clean` (WAJIB — build incremental sering tidak memasukkan perubahan terbaru) → `flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols` → copy ke `~/Downloads/chatyuk.apk` → push ke HP (lihat "Build & Push ke HP")
 - Keamanan: jangan pernah simpan secret server (password DB, Supabase service_role key) di app — hanya `publishableKey` di `lib/config/supabase_config.dart`. Data dilindungi RLS per-user.
 
 ## Fastlane Upload ke Google Play
@@ -203,34 +203,99 @@ Catatan penting:
 VersionCode hanya boleh dipakai ulang sekali untuk Google Play; kalau di-bump tiap build sesi, akan boros & bisa bentrok dengan versionCode yang sudah pernah di-upload.
 
 Aturan:
-- Build untuk **install ke HP / APKPure** → **tidak usah bump**. Pakai versi yang sedang aktif (saat ini `1.2.0+8`, versi terakhir yang di-upload ke Google Play).
-- **Hanya sebelum `fastlane play track:...`** → bump `version:` (mis. `1.2.0+8` → `1.2.1+9`), lalu `flutter clean` → `flutter build appbundle --flavor play` → upload.
+- Build untuk **install ke HP / APKPure** → **tidak usah bump**. Pakai versi yang sedang aktif di `pubspec.yaml`.
+- **Hanya sebelum `fastlane play track:...`** → bump `version:` lalu `flutter clean` → `flutter build appbundle --flavor play` → upload.
 - Setelah upload, biarkan versi baru itu tetap aktif sampai upload berikutnya.
-- Referensi versi Google Play terakhir: cek `git log --oneline --all -- pubspec.yaml` (cari commit dengan keterangan "upload Google Play").
 
-## Install ke Device (WAJIB clean install, bukan `-r`)
+### Cara menentukan versi berikutnya (WAJIB — agar berurutan walau AI beda)
 
-Saat install ke HP, **selalu hapus cache/data dulu** (uninstall → install fresh).
-Jangan pakai `adb install -r` karena APK lama bisa bikin UI tidak ter-update.
+`pubspec.yaml` adalah **sumber kebenaran tunggal**. Format `version: X.Y.Z+N`:
+- `X.Y.Z` = **versionName** (tampil ke user; di Play jadi `X.Y.Z-play`).
+- `N` = **versionCode** (integer monoton naik, tidak boleh dipakai ulang).
+
+Algoritma bump untuk upload Google Play — selalu jalankan urutan ini, TANPA mengira-ngira:
+
+1. Baca `grep -n "^version:" pubspec.yaml` → dapat versi aktif, mis. `1.2.4+18`.
+2. Cek versionCode terakhir yang benar-benar sudah di-upload ke Play:
+   ```bash
+   git log --all --format='%h %s' -- pubspec.yaml | head -20
+   ```
+   Cari commit paling atas yang mengandung `upload Google Play` → pastikan `N` aktif > versionCode commit itu. Kalau `N` aktif masih SAMA dengan yang sudah di-upload → WAJIB bump `N+1`.
+3. Bump **keduanya** (jangan cuma salah satu):
+   - versionCode: `N` → `N + 1` (selalu).
+   - versionName: naikkan **minimal patch** `Z + 1` (mis. `1.2.4` → `1.2.5`), atau lebih tinggi kalau diminta. Jangan pernah turun.
+4. Tulis ke `pubspec.yaml`, lalu `flutter clean` (agar `android/local.properties` ter-refresh), lalu build/upload.
+
+Contoh berurutan yang benar:
+```
+1.2.3+17  (upload Play alpha)  → commit
+1.2.4+18  (upload Play alpha)  → commit
+1.2.5+19  (upload Play alpha)  → commit
+```
+
+Kalau ragu apakah suatu versionCode sudah terpakai di Play: **jangan dipakai**, ambil `N+1` dari versi aktif sekarang. Lebih aman naik 2 daripada bentrok di Play Console.
+
+Catatan lintas-sesi: setelah upload selesai, **jangan** revert/bump `pubspec.yaml` lagi — biarkan versi terbaru tetap tertulis di file sebagai titik awal sesi AI berikutnya. Referensi versi Play terakhir selalu: `git log --oneline --all -- pubspec.yaml` (cari commit ber-keterangan "upload Google Play").
+
+## Build & Push ke HP (WAJIB clean rebuild + push ke Downloads)
+
+**Build WAJIB pakai `flutter clean` dulu** — build incremental sering tidak
+memasukkan perubahan terbaru ke APK (sudah pernah terjadi: string baru tidak
+masuk sampai di-clean). Selalu: `flutter clean` → `flutter build` → copy ke
+`~/Downloads/chatyuk.apk` → push ke folder Downloads HP → user install manual
+dari file manager (MIUI menolak `adb install`).
 
 ```bash
 export PATH="$PATH:$HOME/Library/Android/sdk/platform-tools"
 APK="build/app/outputs/flutter-apk/app-apkpure-release.apk"
 
+flutter clean
+KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+  flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+  --obfuscate --split-debug-info=build/app/symbols
+
+cp "$APK" "$HOME/Downloads/chatyuk.apk"
+
 # Device wireless debugging (ganti IP:port sesuai `adb devices`):
-for d in 192.168.18.242:42205 192.168.18.33:40591; do
-  adb -s "$d" uninstall com.chatyuk.chatyuk
-  adb -s "$d" install "$APK"
+for d in 192.168.18.242:42205 192.168.18.33:44607; do
+  adb -s "$d" push "$HOME/Downloads/chatyuk.apk" /sdcard/Download/chatyuk.apk
 done
 ```
 
 Catatan:
-- MIUI/Xiaomi sering menolak `adb install` dengan `INSTALL_FAILED_USER_RESTRICTED`
-  → user harus tap **"Ijinkan"** di layar HP saat popup muncul, lalu jalankan
-  `adb install` sekali lagi.
+- User install manual dari **File Manager → Download → `chatyuk.apk`**. Jangan
+  pakai `adb install` — MIUI/Xiaomi menolak dengan `INSTALL_FAILED_USER_RESTRICTED`
+  (kecuali user tap "Ijinkan" saat popup muncul, baru `adb install` sekali lagi).
+- App lama di HP tidak otomatis ter-uninstall saat install APK baru — kalau
+  butuh fresh, uninstall dulu dari HP atau jalankan `adb uninstall com.chatyuk.chatyuk`.
 - `adb shell pm clear com.chatyuk.chatyuk` **tidak bisa** via wireless adb
-  di MIUI (SecurityException). Cara bersih = `uninstall` → `install` fresh.
-- Setelah install, launch: `adb -s <device> shell monkey -p com.chatyuk.chatyuk -c android.intent.category.LAUNCHER 1`
+  di MIUI (SecurityException). Cara bersih = uninstall → install fresh.
+- Jika perlu launch dari adb: `adb -s <device> shell monkey -p com.chatyuk.chatyuk -c android.intent.category.LAUNCHER 1`
+  (kalau monkey gagal, cek nama activity via `cmd package resolve-activity`).
+
+## Upload ke Store (APKPure / Uptodown)
+
+**Saat menulis deskripsi / "what's new" / changelog untuk upload ke store, JANGAN berbau dating / jasa pertemanan / transaksi.** Uptodown pernah menolak & men-banned ChatYuk karena deskripsi yang terlalu berbau dating ("meet new people", "nearby people finder", "filter gender") dan fitur koin/gift.
+
+### DILARANG (frasa yang memicu penolakan):
+- `meet new people` / `make new friends` (dalam konteks pencarian orang asing)
+- `nearby people` / `location-based discovery` / `people finder`
+- `filter by gender, age, city` / `find nearby users`
+- `send coins and gifts to your favorite people` / `top up coins` / `withdraw`
+- Kata `dating`, `match`, `profile browsing`, `flirt`
+
+### DISARANKAN (ganti dengan framing chat & privasi):
+- `chat with your friends, family, and communities`
+- `join topic-based chat rooms`
+- `share photos` / `photo sharing`
+- `private and secure` / `built-in moderation and reporting tools`
+- `online, idle, and offline status`
+
+### Aturan tambahan:
+- Deskripsi full body minimal 100 kata, short description maks 70 karakter.
+- **Jangan upload versi yang LEBIH RENDAH dari versi terakhir** di Uptodown — setelah app di-reject, upload versi lebih rendah dianggap "circumvent review" → app BANNED. Kalau perlu versi baru, bump ke angka lebih tinggi.
+- Kalau app di-reject: kirim ticket via "Contact Us" (kanan bawah console, https://www.uptodown.dev) minta alasan spesifik, perbaiki, baru submit ulang. Jangan submit ulang tanpa tahu alasan.
+- Support Uptodown hanya menjawab dalam Bahasa Inggris atau Spanyol.
 
 ## Fitur Khusus
 

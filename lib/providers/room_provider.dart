@@ -26,6 +26,9 @@ class RoomProvider extends ChangeNotifier {
 
   RoomProvider() {
     _countsSub = _chat.getRoomOnlineCounts().listen((counts) {
+      // Event presence (heartbeat 60s tiap user) tidak mengubah count —
+      // lewati notify supaya lobby tidak rebuild tiap detik.
+      if (_countsEquals(counts, _counts)) return;
       _counts = counts;
       _applyCounts();
       notifyListeners();
@@ -134,6 +137,14 @@ class RoomProvider extends ChangeNotifier {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
       if (a[i].id != b[i].id || a[i].onlineCount != b[i].onlineCount) return false;
+    }
+    return true;
+  }
+
+  bool _countsEquals(Map<String, int> a, Map<String, int> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
     }
     return true;
   }

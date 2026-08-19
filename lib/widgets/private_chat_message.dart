@@ -379,8 +379,19 @@ class _MessageImageState extends State<MessageImage> {
   }
 
   Future<void> _decode(int key) async {
-    final decoded = await compute(decodeImageB64, widget.imageData);
-    decodedImageCache[key] = decoded!;
+    var data = widget.imageData;
+    // PATH storage (belum base64) → download dulu. decodeImageB64 melempar
+    // null untuk input non-base64, jadi jangan memanggilnya dengan path.
+    if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
+      data = await StoragePhotoService.instance.download(data) ?? '';
+    }
+    if (data.isEmpty) return;
+    final decoded = await compute(decodeImageB64, data);
+    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
+      // Decode gagal — jangan cache null (dipaksa `!` dulu bikin crash).
+      return;
+    }
+    decodedImageCache[key] = decoded;
     if (!mounted) return;
     setState(() => _decoded = decoded);
   }
@@ -577,12 +588,21 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       setState(() {});
       return;
     }
+    // Data bisa berupa PATH storage → download dulu sebelum decode.
+    if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
+      data = await StoragePhotoService.instance.download(data) ?? '';
+      if (data.isEmpty) return;
+    }
     final decoded = await compute(decodeImageB64, data);
+    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
+      // Decode gagal — jangan set _tick.decoded ke null/rusak.
+      return;
+    }
     _tick.decoded = decoded;
     if (!mounted) return;
     setState(() => _decoded = decoded);
     // Kalau user sudah tap "Lihat" sebelum gambar siap → mulai timer sekarang
-    if (_tick.state == ViewOnceState.viewing && _tick.timer == null && decoded != null) {
+    if (_tick.state == ViewOnceState.viewing && _tick.timer == null) {
       _beginCountdown();
     }
   }

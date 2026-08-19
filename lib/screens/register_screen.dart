@@ -531,13 +531,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       decoration: InputDecoration(labelText: s.labelAge),
       isExpanded: true,
       menuMaxHeight: 300,
-      items: [for (int i = 13; i <= 80; i++) DropdownMenuItem(value: i, child: Text('$i'))],
+      items: [for (int i = 17; i <= 80; i++) DropdownMenuItem(value: i, child: Text('$i'))],
       onChanged: (v) { if (v != null) setState(() => _age = v); },
     );
   }
 
   Widget _countryDropdown(s) {
     return DropdownButtonFormField<String>(
+      // Key memaksa rebuild saat deteksi geo mengubah _negara — tanpa ini
+      // initialValue (dibaca sekali) tidak ikut ter-update setelah _detectGeo.
+      key: ValueKey('country-$_negara'),
       initialValue: _negara,
       decoration: InputDecoration(labelText: s.labelCountry),
       isExpanded: true,
@@ -559,6 +562,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (cities.isEmpty) return const SizedBox.shrink();
     final validKota = cities.contains(_kota) ? _kota : cities.first;
     return DropdownButtonFormField<String>(
+      key: ValueKey('city-$validKota'),
       initialValue: validKota,
       decoration: InputDecoration(labelText: s.labelCity),
       isExpanded: true,
