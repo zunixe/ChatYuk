@@ -166,10 +166,13 @@ class AuthProvider extends ChangeNotifier {
         _listenProfile();
         // Setting admin (screenshot/watermark/invisible) di-fire-and-forget:
         // tidak wajib tunggu sebelum masuk app — loading cuma butuh login + profil.
+        // Wajib registrasi HARUS di-await sebelum loading selesai — kalau
+        // fire-and-forget, halaman pertama blink (form guest muncul dulu lalu
+        // hilang saat fetch selesai). Setting lain boleh async.
+        await _loadRequireRegistration();
         safeUnawaited(_loadScreenshotSetting());
         safeUnawaited(_loadWatermarkSetting());
         safeUnawaited(_loadInvisibleSetting());
-        safeUnawaited(_loadRequireRegistration());
         _listenAppSettings();
         lastError = null;
         break;
