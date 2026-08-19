@@ -69,19 +69,18 @@ android {
         }
     }
 
-    // Flavor distribusi: apkpure (default, fitur penuh) vs play (kepatuhan Play).
-    // applicationId berbeda agar bisa terpasang bersamaan untuk pengujian.
+    // Flavor distribusi: apkpure (default) vs play (Google Play).
+    // Keduanya memakai applicationId & versionName yang SAMA (com.chatyuk.chatyuk),
+    // hanya dibedakan oleh `--dart-define=APP_FLAVOR` + google-services.json.
     flavorDimensions += "store"
     productFlavors {
         create("apkpure") {
             dimension = "store"
             applicationId = "com.chatyuk.chatyuk"
-            versionNameSuffix = "-apkpure"
         }
         create("play") {
             dimension = "store"
             applicationId = "com.chatyuk.chatyuk"
-            versionNameSuffix = "-play"
         }
     }
 }

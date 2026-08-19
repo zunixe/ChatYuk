@@ -2,7 +2,7 @@
 ///
 /// Dibedakan lewat `--dart-define=APP_FLAVOR=...`:
 ///   - apkpure (default): appId `com.chatyuk.chatyuk`.
-///   - play (Google Play): appId `com.chatyuk.chatyuk.play`, `google-services.json`
+///   - play (Google Play): appId `com.chatyuk.chatyuk` (sama dengan apkpure), `google-services.json`
 ///     khusus di `android/app/src/play/`.
 ///
 /// Kedua flavor sekarang memiliki PERILAKU YANG SAMA (app chat + koin sebagai
