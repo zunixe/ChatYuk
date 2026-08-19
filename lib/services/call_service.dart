@@ -241,6 +241,25 @@ class CallSession extends ChangeNotifier {
 
     await _setupMediaAndPeer();
 
+    // Callee: cek status terakhir — caller bisa sudah membatalkan sebelum
+    // kita subscribe status (Realtime tidak replay event lama).
+    if (!isCaller && !_closed) {
+      try {
+        final row = await _service.getCall(callId);
+        final st = row?['status'] as String?;
+        if (st == 'canceled' || st == 'ended') {
+          _finish(CallEndReason.canceled);
+          return;
+        }
+        if (st == 'declined' || st == 'busy') {
+          _finish(st == 'declined'
+              ? CallEndReason.declined
+              : CallEndReason.busy);
+          return;
+        }
+      } catch (_) {}
+    }
+
     if (isCaller) {
       _phase = CallPhase.ringing;
       // Caller menyerah setelah 30 detik tidak dijawab → cancel.
