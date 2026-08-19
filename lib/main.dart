@@ -61,7 +61,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await plugin.initialize(settings: settings);
 
   await plugin.show(
-    id: notifIdForKey(data['chatId'] ?? data['roomId'] ?? 'bg'),
+    id: notifIdForKey(data['chatId'] ?? data['roomId'] ?? data['callId'] ?? 'bg'),
     title: title,
     body: body,
     notificationDetails: lpn.NotificationDetails(
@@ -103,7 +103,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       : message.notification?.body ?? s.notifNewMessageBody;
 
   await localNotifications.show(
-    id: notifIdForKey(data['chatId'] ?? data['roomId'] ?? 'local'),
+    id: notifIdForKey(data['chatId'] ?? data['roomId'] ?? data['callId'] ?? 'local'),
     title: title,
     body: body,
     notificationDetails: lpn.NotificationDetails(
