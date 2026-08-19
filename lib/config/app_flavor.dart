@@ -1,14 +1,16 @@
 /// Konfigurasi flavor distribusi aplikasi.
 ///
 /// Dibedakan lewat `--dart-define=APP_FLAVOR=...`:
-///   - apkpure (default): fitur penuh — top-up iPaymu + KYC + pencairan.
-///   - play (Google Play): kepatuhan Play — top-up & pencairan disembunyikan
-///     sampai Google Play Billing dipasang (cash-out virtual currency tidak
-///     diizinkan Play untuk app berisi digital goods).
+///   - apkpure (default): appId `com.chatyuk.chatyuk`.
+///   - play (Google Play): appId `com.chatyuk.chatyuk.play`, `google-services.json`
+///     khusus di `android/app/src/play/`.
 ///
-/// Catatan keamanan: Play & APKPure berbagi satu Supabase project saat ini.
-/// Untuk kepatuhan penuh Play, sebaiknya pisahkan project/DB per store agar
-/// coin tidak bisa dipindah lintas store (celah laundering).
+/// Kedua flavor sekarang memiliki PERILAKU YANG SAMA (app chat + koin sebagai
+/// digital goods murni). Fitur finansial (top-up iPaymu/Midtrans, KYC,
+/// pencairan/withdraw) telah dihapus total — termasuk dari server.
+///
+/// Catatan: kode finansial lama masih tersimpan di git tag
+/// `archive/financial-features` — lihat `docs/restore-financial-features.md`.
 class AppFlavor {
   AppFlavor._();
 
@@ -20,14 +22,4 @@ class AppFlavor {
   static const String adminEmail = 'zunixe@gmail.com';
 
   static bool get isPlay => name == 'play';
-
-  /// Tampilkan menu pencairan (KYC + Withdraw). Play menyembunyikannya.
-  static bool get showCashOut => !isPlay;
-
-  /// Tampilkan menu top-up coin.
-  /// Play: belum aktif sampai Google Play Billing terpasang.
-  static bool get topupEnabled => !isPlay;
-
-  /// Provider top-up: 'ipaymu' (apkpure) vs 'play_billing' (play, mendatang).
-  static String get topupProvider => isPlay ? 'play_billing' : 'ipaymu';
 }

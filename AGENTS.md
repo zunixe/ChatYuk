@@ -153,18 +153,24 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
 
 - Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass `chatyuk2024secure`)
 - **WAJIB** pakai obfuscation + split debug info supaya kode Dart sulit di-reverse engineering:
-  - Flavor **apkpure** (default, fitur penuh — Midtrans topup, KYC, withdraw; appId `com.chatyuk.chatyuk`):
-    ```bash
-    KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-      flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
-      --obfuscate --split-debug-info=build/app/symbols
-    ```
-  - Flavor **play** (Google Play — topup & cash-out disembunyikan via `lib/config/app_flavor.dart`; appId `com.chatyuk.chatyuk.play`; `google-services.json` khusus di `android/app/src/play/`):
-    ```bash
-    KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-      flutter build apk --release --flavor play --dart-define=APP_FLAVOR=play \
-      --obfuscate --split-debug-info=build/app/symbols
-    ```
+   - Flavor **apkpure** (default; appId `com.chatyuk.chatyuk`):
+     ```bash
+     KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+       flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+       --obfuscate --split-debug-info=build/app/symbols
+     ```
+   - Flavor **play** (Google Play; appId `com.chatyuk.chatyuk.play`; `google-services.json` khusus di `android/app/src/play/`):
+     ```bash
+     KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+       flutter build apk --release --flavor play --dart-define=APP_FLAVOR=play \
+       --obfuscate --split-debug-info=build/app/symbols
+     ```
+   - **Kedua flavor memiliki PERILAKU SAMA** — app chat + koin sebagai digital
+     goods murni (bonus/quest/gift → fitur premium). Fitur finansial (top-up
+     iPaymu/Midtrans, KYC, withdraw/cash-out) **telah dihapus total** — dari
+     kode maupun server. Flavor hanya membedakan appId & google-services.
+     Kode finansial lama tersimpan di git tag `archive/financial-features`
+     (lihat `docs/restore-financial-features.md`).
   - Build TANPA `--flavor` akan gagal (dua flavor terdaftar).
 - AAB untuk Google Play juga pakai flag yang sama (flavor play):
   ```bash

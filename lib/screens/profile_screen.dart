@@ -10,7 +10,6 @@ import 'package:share_plus/share_plus.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../config/strings.dart';
-import '../config/app_flavor.dart';
 import '../models/user_photo.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
@@ -27,9 +26,6 @@ import 'donate_screen.dart';
 import 'leaderboard_screen.dart';
 import 'missions_screen.dart';
 import 'point_history_screen.dart';
-import 'top_up_screen.dart';
-import 'kyc_screen.dart';
-import 'withdraw_screen.dart';
 import 'social_list_screen.dart';
 import 'friend_requests_screen.dart';
 import 'subscriptions_screen.dart';
@@ -467,7 +463,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       prefixIcon: const Icon(Icons.cake_outlined, size: 20),
                     ),
                     items: [
-                      for (int i = 17; i <= 60; i++)
+                      for (int i = 18; i <= 60; i++)
                         DropdownMenuItem(value: i, child: Text('$i')),
                     ],
                     onChanged: (v) => setSheet(() => age = v ?? age),
@@ -653,7 +649,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // ── Header Gradient ──
           SliverAppBar(
             backgroundColor: AppTheme.headerGradient.colors.first,
-            expandedHeight: 220,
+            expandedHeight: 280,
             pinned: true,
             leading: IconButton(
               padding: EdgeInsets.zero,
@@ -722,7 +718,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      SizedBox(height: 32),
+                      SizedBox(height: 20),
                       // Avatar
                       Stack(
                         children: [
@@ -1612,29 +1608,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ],
                           ),
-                        ] else ...[
-                          // Rincian 3 bucket (bonus / pro / bisa dicairkan)
-                          _BucketRow(
-                            icon: Icons.card_giftcard,
-                            color: Colors.blueGrey,
-                            label: s.walletBucketBonus,
-                            hint: s.walletBonusHint,
-                            value: pp.bonusBalance,
-                          ),
-                          _BucketRow(
-                            icon: Icons.shopping_cart_outlined,
-                            color: Colors.green,
-                            label: s.walletBucketTopup,
-                            hint: s.walletTopupHint,
-                            value: pp.topupBalance,
-                          ),
-                          _BucketRow(
-                            icon: Icons.currency_exchange,
-                            color: Color(0xFF2E7D32),
-                            label: s.walletBucketEarned,
-                            hint: s.walletEarnedHint,
-                            value: pp.earnedBalance,
-                          ),
                         ],
                         SizedBox(height: 4),
                         Divider(height: 1),
@@ -1654,42 +1627,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                 ),
                               ),
-                            if (!isAnon && AppFlavor.topupEnabled)
-                              _ActionItem(
-                                icon: Icons.add_card,
-                                color: Colors.green,
-                                label: s.topupTitle,
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => TopUpScreen(),
-                                  ),
-                                ),
-                              ),
-                            if (!isAnon && AppFlavor.showCashOut) ...[
-                              _ActionItem(
-                                icon: Icons.verified_user_outlined,
-                                color: Colors.teal,
-                                label: s.menuKyc,
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => KycScreen(),
-                                  ),
-                                ),
-                              ),
-                              _ActionItem(
-                                icon: Icons.currency_exchange,
-                                color: Color(0xFF2E7D32),
-                                label: s.withdrawTitle,
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => WithdrawScreen(),
-                                  ),
-                                ),
-                              ),
-                            ],
                             _ActionItem(
                               icon: Icons.leaderboard_outlined,
                               color: AppTheme.primary,
@@ -2493,7 +2430,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Row(
           children: [
-            Icon(Icons.logout_rounded, color: AppTheme.danger, size: 24),
+            Icon(Icons.power_settings_new, color: AppTheme.danger, size: 24),
             SizedBox(width: 10),
             Expanded(child: Text(s.btnLogout, style: AppText.title)),
           ],
@@ -2526,6 +2463,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (confirmed != true || !mounted) return;
     setState(() => _loggingOut = true);
+    // Anon logout: hapus relasi sosialnya (follow/subscribe/friend request)
+    // supaya followers/subscribers user lain berkurang sesuai data yang
+    // sebenarnya.
+    if (auth.isAnonymous) {
+      await context.read<SocialProvider>().clearAnonSocial();
+    }
     await auth.signOut();
     chat.reset();
   }
@@ -2735,62 +2678,6 @@ String _fmtPoints(int n) {
     if (rem > 0 && rem % 3 == 0) buf.write('.');
   }
   return buf.toString();
-}
-
-class _BucketRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String hint;
-  final int value;
-  const _BucketRow({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.hint,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 15, color: color),
-          ),
-          SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: AppText.label.copyWith(letterSpacing: 0)),
-                Text(
-                  hint,
-                  style: AppText.micro.copyWith(
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _fmtPoints(value),
-            style: AppText.bodySmall.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ActionItem {
