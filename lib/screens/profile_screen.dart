@@ -22,6 +22,7 @@ import '../services/auth_service.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
 import 'admin_panel_screen.dart';
+import 'contact_screen.dart';
 import 'donate_screen.dart';
 import 'leaderboard_screen.dart';
 import 'missions_screen.dart';
@@ -466,7 +467,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       prefixIcon: const Icon(Icons.cake_outlined, size: 20),
                     ),
                     items: [
-                      for (int i = 13; i <= 60; i++)
+                      for (int i = 17; i <= 60; i++)
                         DropdownMenuItem(value: i, child: Text('$i')),
                     ],
                     onChanged: (v) => setSheet(() => age = v ?? age),
@@ -2148,7 +2149,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 16),
+                  SizedBox(height: 12),
+                  Center(
+                    child: GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ContactScreen()),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.mail_outline,
+                            size: 20,
+                            color: AppTheme.textSecondary,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            s.titleContact,
+                            style: AppText.body.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 12),
                   Center(
                     child: GestureDetector(
                       onTap: () => Navigator.push(

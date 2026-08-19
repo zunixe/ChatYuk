@@ -31,7 +31,9 @@ class MessageModel {
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
     return MessageModel(
-      id: id,
+      // Prefer id dari map — bisa int (dari server PostgREST) atau String
+      // (dari cache). Fallback ke argumen kalau null/kosong.
+      id: (map['id']?.toString() ?? '').isNotEmpty ? map['id'].toString() : id,
       senderId: map['senderId'] ?? '',
       senderName: map['senderName'] ?? 'Anon',
       senderGender: map['senderGender'] ?? 'other',
@@ -48,6 +50,7 @@ class MessageModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'senderId': senderId,
       'senderName': senderName,
       'senderGender': senderGender,
@@ -56,6 +59,9 @@ class MessageModel {
       'type': type,
       'imageData': imageData,
       'timestamp': timestamp.toUtc().toIso8601String(),
+      'repliedToId': repliedToId,
+      'repliedToText': repliedToText,
+      'repliedToSenderName': repliedToSenderName,
     };
   }
 

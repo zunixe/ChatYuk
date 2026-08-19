@@ -602,15 +602,22 @@ class _PostCardState extends State<PostCard> {
 
   void _openViewer(int index) {
     final paths = _imagePaths();
+    // Pasangkan thumb yang SUKSES dengan path-nya masing-masing (bukan
+    // sublist N pertama) — kalau ada foto gagal load, full-res di viewer
+    // bisa tertukar (bug: paths.sublist(0, thumbs.length)).
+    final loadedPaths = <String>[];
     final thumbs = <Uint8List>[];
     for (var i = 0; i < _imageThumbs.length; i++) {
       final t = _imageThumbs[i];
-      if (t != null && i < paths.length) thumbs.add(t);
+      if (t != null && i < paths.length) {
+        loadedPaths.add(paths[i]);
+        thumbs.add(t);
+      }
     }
     if (thumbs.isEmpty) return;
     PostPhotoViewer.show(
       context,
-      paths: paths.sublist(0, thumbs.length),
+      paths: loadedPaths,
       thumbs: thumbs,
       initialIndex: index,
     );

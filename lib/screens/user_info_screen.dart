@@ -78,8 +78,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         : await social.follow(widget.userId);
     if (!mounted) return;
     setState(() {
-      _following = !_following;
-      if (!_following) _friend = false;
+      // Hanya toggle kalau RPC sukses — kalau gagal, biarkan state tetap
+      // sinkron dengan server (tidak menampilkan tombol yang menyesatkan).
+      if (ok) {
+        _following = !_following;
+        if (!_following) _friend = false;
+      }
       _busySocial = false;
     });
     if (ok) {

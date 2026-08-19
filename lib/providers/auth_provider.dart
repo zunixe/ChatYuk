@@ -41,7 +41,7 @@ class AuthProvider extends ChangeNotifier {
   bool _manualSignOut = false;
   bool _isIdle = false;
   static const Duration idleTimeout = Duration(minutes: 3);
-  static const Duration heartbeatInterval = Duration(seconds: 60);
+  static const Duration heartbeatInterval = Duration(seconds: 120);
 
   static const String _notifPrefKey = 'notif_enabled';
   bool _notificationsEnabled = true;
@@ -54,6 +54,8 @@ class AuthProvider extends ChangeNotifier {
   bool _screenshotEnabled = true;
   bool _watermarkEnabled = false;
   bool _invisibleEnabled = false;
+  bool _requireRegistration = false;
+  StreamSubscription<Map<String, dynamic>>? _appSettingsSub;
 
   UserModel? get profile => _profile;
   bool get loading => _loading;
@@ -61,6 +63,7 @@ class AuthProvider extends ChangeNotifier {
   bool get screenshotEnabled => _screenshotEnabled;
   bool get watermarkEnabled => _watermarkEnabled;
   bool get invisibleEnabled => _invisibleEnabled;
+  bool get requireRegistration => _requireRegistration;
   bool get isSignedIn => _auth.isSignedIn;
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
@@ -166,6 +169,8 @@ class AuthProvider extends ChangeNotifier {
         safeUnawaited(_loadScreenshotSetting());
         safeUnawaited(_loadWatermarkSetting());
         safeUnawaited(_loadInvisibleSetting());
+        safeUnawaited(_loadRequireRegistration());
+        _listenAppSettings();
         lastError = null;
         break;
       } catch (e) {
@@ -205,6 +210,7 @@ class AuthProvider extends ChangeNotifier {
     await _auth.signInAnonymously();
     _profile = await _auth.getProfile();
     _listenProfile();
+    _restartPresenceTimers();
     if (!_disposed) notifyListeners();
   }
 
@@ -223,9 +229,6 @@ class AuthProvider extends ChangeNotifier {
       _manualSignOut = false;
     }
     final googleEmail = result.googleEmail;
-    print(
-      '[AUTH-PROVIDER] signInWithGoogle result uid=${result.response.user?.id} email=$googleEmail',
-    );
 
     // Bersihkan semua cache lama setelah login Google
     MessageCache.instance.clearAllLegacy().catchError((_) {});
@@ -233,20 +236,20 @@ class AuthProvider extends ChangeNotifier {
     // Cek apakah email ini sudah punya profile di akun lain
     if (googleEmail != null) {
       final existing = await _auth.checkEmailExists(googleEmail);
-      print('[AUTH-PROVIDER] checkEmailExists result=$existing');
       if (existing != null) {
         _pendingLinkProfileId = existing['profile_id'] as String?;
         _pendingLinkNickname = existing['nickname'] as String?;
         _profile = await _auth.getProfile();
         _listenProfile();
+        _restartPresenceTimers();
         if (!_disposed) notifyListeners();
         return 'link_prompt';
       }
     }
 
     _profile = await _auth.getProfile();
-    print('[AUTH-PROVIDER] getProfile after google -> ${_profile?.uid}');
     _listenProfile();
+    _restartPresenceTimers();
     if (!_disposed) notifyListeners();
     if (_profile != null) return 'exists';
     return 'new';
@@ -419,6 +422,39 @@ class AuthProvider extends ChangeNotifier {
     return _auth.cleanupStaleAnonymous(minAgeDays: minAgeDays);
   }
 
+  /// Ambil setting admin global (wajib registrasi sebelum masuk?).
+  Future<void> _loadRequireRegistration() async {
+    _requireRegistration = await _auth.fetchRequireRegistration();
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Admin toggle wajib registrasi. Realtime: semua device ikut update
+  /// lewat subscription app_settings (tidak perlu polling).
+  Future<void> setRequireRegistration(bool enabled) async {
+    _requireRegistration = enabled;
+    if (!_disposed) notifyListeners();
+    try {
+      await _auth.updateRequireRegistration(enabled);
+    } catch (e) {
+      debugPrint('[AUTH] updateRequireRegistration error: $e');
+    }
+  }
+
+  /// Subscribe realtime app_settings — toggle admin langsung berdampak di
+  /// semua device (mis. wajib registrasi, screenshot, watermark, invisible).
+  void _listenAppSettings() {
+    if (_appSettingsSub != null) return;
+    _appSettingsSub = _auth.onAppSettingsUpdated().listen((row) {
+      if (_disposed) return;
+      if (row.containsKey('require_registration')) {
+        final next = row['require_registration'] == true;
+        if (next == _requireRegistration) return;
+        _requireRegistration = next;
+        notifyListeners();
+      }
+    });
+  }
+
   /// Bersihkan presence room yang basi di server (fire-and-forget).
   Future<void> cleanupStalePresence({int minAgeMinutes = 10}) {
     return _auth.cleanupStalePresence(minAgeMinutes: minAgeMinutes);
@@ -500,6 +536,7 @@ class AuthProvider extends ChangeNotifier {
     await _auth.signInWithEmail(email, password);
     _profile = await _auth.getProfile();
     _listenProfile();
+    _restartPresenceTimers();
     if (_profile != null) await updateFcmToken();
     if (!_disposed) notifyListeners();
   }
@@ -642,6 +679,7 @@ class AuthProvider extends ChangeNotifier {
       '[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners',
     );
     resetIdleTimer();
+    _restartPresenceTimers();
     updateFcmToken();
     // Ikat referrer (bila ada) — sekali saja, setelah profil terdaftar.
     _bindAndClaimReferrer();
@@ -724,6 +762,7 @@ class AuthProvider extends ChangeNotifier {
     _profileSub?.cancel();
     _profile = await _auth.getProfile();
     _listenProfile();
+    _restartPresenceTimers();
     if (!_disposed) notifyListeners();
   }
 
@@ -792,7 +831,7 @@ class AuthProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  /// Heartbeat berkala: update last_seen di server tiap 60 detik.
+  /// Heartbeat berkala: update last_seen di server tiap 120 detik.
   /// Kalau app di-kill/force-stop, heartbeat berhenti dan last_seen
   /// jadi basi sehingga admin bisa menandai user offline.
   void _startHeartbeat() {
@@ -812,6 +851,17 @@ class AuthProvider extends ChangeNotifier {
       if (_disposed || dummySessionActive) return;
       safeUnawaited(LocationService().updateMyLocation());
     });
+  }
+
+  /// Arm ulang timer presence (heartbeat + lokasi) setelah (re)login.
+  /// signOut / signedOut men-cancel keduanya, dan _init hanya jalan sekali
+  /// saat konstruksi — tanpa ini, user aktif tetap tampil offline setelah
+  /// ganti akun (last_seen basi > 30 menit).
+  void _restartPresenceTimers() {
+    if (_disposed) return;
+    _startHeartbeat();
+    _startLocationPing();
+    safeUnawaited(_initLocation());
   }
 
   /// Minta izin lokasi saat app start (dialog native) lalu update lokasi.
@@ -893,6 +943,7 @@ class AuthProvider extends ChangeNotifier {
     _locationTimer?.cancel();
     _profileSub?.cancel();
     _authStateSub?.cancel();
+    _appSettingsSub?.cancel();
     super.dispose();
   }
 }

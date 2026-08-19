@@ -7,6 +7,7 @@ import '../models/user_model.dart';
 import '../models/user_photo.dart';
 import '../config/supabase_config.dart';
 import '../services/storage_photo_service.dart';
+import '../services/avatar_service.dart';
 import '../utils.dart';
 
 /// Dilempar saat email tidak terdaftar di Auth (cek via RPC sebelum kirim reset).
@@ -45,29 +46,21 @@ class AuthService {
         '688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com';
 
     final googleSignIn = GoogleSignIn(serverClientId: webClientId);
-    print('[GOOGLE] calling signIn()');
     final googleUser = await googleSignIn.signIn();
-    print('[GOOGLE] signIn() returned: ${googleUser?.email}');
     if (googleUser == null) throw Exception('Google sign in dibatalkan');
 
     final googleEmail = googleUser.email;
-    print('[GOOGLE] getting authentication');
     final googleAuth = await googleUser.authentication;
     final idToken = googleAuth.idToken;
     final accessToken = googleAuth.accessToken;
-    print(
-      '[GOOGLE] idToken=${idToken != null} accessToken=${accessToken != null}',
-    );
 
     if (idToken == null) throw Exception('Google idToken null');
 
-    print('[GOOGLE] calling signInWithIdToken');
     final response = await _sb.auth.signInWithIdToken(
       provider: OAuthProvider.google,
       idToken: idToken,
       accessToken: accessToken,
     );
-    print('[GOOGLE] signInWithIdToken OK, uid=${response.user?.id}');
 
     // Simpan email ke profile jika belum ada
     final id = _sb.auth.currentUser?.id;
@@ -245,6 +238,50 @@ class AuthService {
     }, onConflict: 'id');
   }
 
+  /// Ambil setting admin global: apakah wajib registrasi sebelum masuk.
+  /// Default false (bisa mulai chat tanpa daftar) jika gagal / belum ada data.
+  Future<bool> fetchRequireRegistration() async {
+    try {
+      final res = await _sb
+          .from('app_settings')
+          .select('require_registration')
+          .eq('id', 'global')
+          .maybeSingle();
+      return res?['require_registration'] == true;
+    } catch (e) {
+      debugPrint('[AUTH] fetchRequireRegistration error: $e');
+      return false;
+    }
+  }
+
+  /// Update setting admin global. RLS membatasi hanya admin.
+  Future<void> updateRequireRegistration(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'require_registration': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
+  }
+
+  /// Stream perubahan setting app_settings (realtime) — dipakai AuthProvider
+  /// supaya toggle admin langsung berdampak di semua device tanpa polling.
+  Stream<Map<String, dynamic>> onAppSettingsUpdated() {
+    final channel = _sb.channel('auth-app-settings');
+    final controller = StreamController<Map<String, dynamic>>.broadcast();
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'app_settings',
+      callback: (payload) {
+        final rec = payload.newRecord;
+        if (rec != null) controller.add(Map<String, dynamic>.from(rec));
+      },
+    );
+    channel.subscribe();
+    controller.onCancel = () => _sb.removeChannel(channel);
+    return controller.stream;
+  }
+
   /// Login dengan email + password.
   /// Setelah ini, getProfile() akan mengembalikan profile user.
   Future<void> signInWithEmail(String email, String password) async {
@@ -325,12 +362,12 @@ class AuthService {
   /// Verifikasi kode OTP 6 digit. Return true bila sukses.
   Future<bool> verifyEmailOtp(String email, String token) async {
     try {
-      // type 'email' (bukan 'signup' yang deprecated) — dipakai untuk
-      // verifikasi OTP yang dikirim saat sign-up/sign-in.
+      // type harus SAMA dengan yang dipakai resend (OtpType.signup) —
+      // kalau beda (mis. 'email'), server menolak kode yang valid.
       await _sb.auth.verifyOTP(
         email: email,
         token: token,
-        type: OtpType.email,
+        type: OtpType.signup,
       );
       return true;
     } catch (e) {
@@ -474,10 +511,11 @@ class AuthService {
     if (res == null) return null;
     final model = UserModel.fromMap(id, snakeToCamel(res));
     // avatar berupa PATH storage → download → isi base64 (UI tetap pakai base64).
+    // Pakai AvatarB64Service yang punya cache per path — getProfile dipanggil
+    // sering (startup, sign-in, reload) tanpa download berulang.
     if (model.avatar.isNotEmpty &&
         StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-      final b64 =
-          await StoragePhotoService.instance.download(model.avatar) ?? '';
+      final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
       return model.copyWith(avatar: b64);
     }
     return model;
@@ -497,8 +535,7 @@ class AuthService {
     final model = UserModel.fromMap(id, snakeToCamel(res));
     if (model.avatar.isNotEmpty &&
         StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-      final b64 =
-          await StoragePhotoService.instance.download(model.avatar) ?? '';
+      final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
       return model.copyWith(avatar: b64);
     }
     return model;
@@ -527,10 +564,10 @@ class AuthService {
           final row = payload.newRecord;
           var model = UserModel.fromMap(id, snakeToCamel(row));
           // avatar PATH storage → download → base64 (UI tetap pakai base64).
+          // Pakai cache supaya update profil tidak download avatar berulang.
           if (model.avatar.isNotEmpty &&
               StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-            final b64 =
-                await StoragePhotoService.instance.download(model.avatar) ?? '';
+            final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
             model = model.copyWith(avatar: b64);
           }
           controller.add(model);

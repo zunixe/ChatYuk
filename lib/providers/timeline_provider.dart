@@ -15,6 +15,8 @@ class TimelineProvider extends ChangeNotifier {
   bool _cursorBoosted = false;
   String _scope = 'all';
   Set<String> _followedIds = {};
+  Set<String> _subscribedIds = {};
+  Set<String> _blockedIds = {};
 
   int _boostPaid = 50;
   int _boostBonus = 150;
@@ -24,6 +26,7 @@ class TimelineProvider extends ChangeNotifier {
   int get postsDailyLimit => _postsDailyLimit;
 
   StreamSubscription<Map<String, dynamic>>? _rtSub;
+  StreamSubscription<AuthState>? _authSub;
 
   /// View yang di-cache — identity berubah HANYA saat data berubah,
   /// supaya `context.select` tidak rebuild tiap notify.
@@ -34,6 +37,14 @@ class TimelineProvider extends ChangeNotifier {
   TimelineProvider() {
     _listenRealtime();
     refreshPricing();
+    // Supabase signOut men-teardown semua channel realtime — subscribe
+    // ulang saat user baru login supaya live-update timeline tetap jalan.
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+      if (state.event == AuthChangeEvent.signedIn) {
+        _listenRealtime();
+        _refreshVisibilitySets();
+      }
+    });
   }
 
   void _listenRealtime() {
@@ -83,6 +94,22 @@ class TimelineProvider extends ChangeNotifier {
       // Hanya post dari yang DI-FOLLOW — post sendiri tidak tampil di sini.
       if (authorId == null || authorId == me) return;
       if (!_followedIds.contains('$authorId')) return;
+    } else {
+      // scope 'all': cek visibilitas & blokir (sama seperti SQL list_posts).
+      final author = '$authorId';
+      if (_blockedIds.contains(author)) return;
+      final visibility = row['visibility'] ?? 'public';
+      if (visibility == 'subscribers' &&
+          author != me &&
+          !_subscribedIds.contains(author)) {
+        return;
+      }
+      if (visibility == 'followers' &&
+          author != me &&
+          !_followedIds.contains(author) &&
+          !_subscribedIds.contains(author)) {
+        return;
+      }
     }
     _posts.insert(0, p);
     _invalidateView();
@@ -134,6 +161,33 @@ class TimelineProvider extends ChangeNotifier {
     }
   }
 
+  /// Set subscriber + blokir user aktif — dipakai filter realtime supaya
+  /// post ber-visibilitas `subscribers`/`followers` dan post dari user yang
+  /// di-blokir TIDAK bocor ke feed (SQL list_posts memfilter, realtime tidak).
+  Future<void> _refreshVisibilitySets() async {
+    try {
+      final me = Supabase.instance.client.auth.currentUser?.id;
+      if (me == null) return;
+      final subs = await Supabase.instance.client
+          .from('subscriptions')
+          .select('creator_id')
+          .eq('subscriber_id', me)
+          .gt('expires_at', DateTime.now().toUtc().toIso8601String());
+      _subscribedIds = subs.map((r) => '${r['creator_id']}').toSet();
+      final blocks = await Supabase.instance.client
+          .from('blocks')
+          .select('blocker_id,blocked_id')
+          .or('blocker_id.eq.$me,blocked_id.eq.$me');
+      _blockedIds = blocks.map((r) {
+        final b = '${r['blocker_id']}';
+        final d = '${r['blocked_id']}';
+        return b == me ? d : b;
+      }).toSet();
+    } catch (e) {
+      debugPrint('[TimelineProvider] visibility sets error: $e');
+    }
+  }
+
   Future<void> refreshPricing() async {    try {
       final p = await _service.pricing();
       _boostPaid = (p['boost_paid'] as num?)?.toInt() ?? _boostPaid;
@@ -155,6 +209,12 @@ class TimelineProvider extends ChangeNotifier {
       // Cache daftar followee — dipakai filter realtime untuk scope
       // 'following' (payload realtime tidak membawa is_following).
       if (scope == 'following') _refreshFollowedIds();
+      // Cache subscriber + blokir (dan followee) untuk filter visibilitas
+      // feed realtime di scope 'all'/'following'.
+      if (scope == 'all') {
+        _refreshFollowedIds();
+        _refreshVisibilitySets();
+      }
       // Refresh APA PUN (tab switch, pull-to-refresh, habis posting): JANGAN
       // clear dulu — konten lama tetap tampil selama fetch, lalu diganti
       // atomically. List hanya dikosongkan kalau hasil fetch memang kosong
@@ -190,7 +250,12 @@ class TimelineProvider extends ChangeNotifier {
         // Cursor keyset konsisten dengan ORDER BY (is_boosted desc, created_at desc).
         final last = list.last;
         final lastCreated = last['createdAt'];
-        _cursor = lastCreated is DateTime ? lastCreated : now;
+        // RPC list_posts mengembalikan createdAt sebagai String ISO-8601
+        // (jsonb_build_object), BUKAN DateTime — parse dulu, kalau gagal
+        // fallback now (halaman berikutnya tetap jalan, bukan stuck).
+        _cursor = lastCreated is DateTime
+            ? lastCreated
+            : (DateTime.tryParse('$lastCreated') ?? now);
         _cursorBoosted = last['isBoosted'] == true;
         // Halaman lebih pendek dari limit → sudah ujung feed.
         if (list.length < 30) _hasMore = false;
@@ -224,6 +289,7 @@ class TimelineProvider extends ChangeNotifier {
   @override
   void dispose() {
     _rtSub?.cancel();
+    _authSub?.cancel();
     super.dispose();
   }
 }

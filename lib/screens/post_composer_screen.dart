@@ -236,6 +236,14 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
             PostPhotoCache.instance.save(p, _images[i]);
           }
         }
+        // Foto gagal upload → jangan naikkan post diam-diam dengan foto
+        // yang hilang. Beri tahu user dan batalkan.
+        if (paths.length != _images.length) {
+          if (!mounted) return;
+          messenger.showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+          setState(() => _posting = false);
+          return;
+        }
       }
       await TimelineService().createPost(text: text, imagePaths: paths, visibility: _visibility);
       if (!mounted) return;

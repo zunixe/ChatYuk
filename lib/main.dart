@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as lpn;
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 import 'models/room_model.dart';
+import 'providers/auth_provider.dart';
 import 'providers/locale_provider.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
@@ -233,11 +235,21 @@ void _handleDeepLink(Uri uri) {
     if (uri.host == 'referral') {
       final referrer = uri.queryParameters['u'];
       if (referrer != null && referrer.isNotEmpty) {
-        // Simpan ke SharedPreferences; AuthProvider membacanya saat register.
+        // Update AuthProvider in-memory supaya referral juga ter-ikat saat
+        // app sudah berjalan (bukan cuma cold start). Kalau AuthProvider
+        // belum tersedia (loading), fallback ke prefs (dibaca saat konstruktor).
         try {
+          final ctx = navigatorKey.currentContext;
+          if (ctx != null) {
+            Provider.of<AuthProvider>(ctx, listen: false).setPendingReferrer(referrer);
+          } else {
+            SharedPreferences.getInstance()
+                .then((p) => p.setString('pending_referrer_uid', referrer));
+          }
+        } catch (_) {
           SharedPreferences.getInstance()
               .then((p) => p.setString('pending_referrer_uid', referrer));
-        } catch (_) {}
+        }
       }
     }
 

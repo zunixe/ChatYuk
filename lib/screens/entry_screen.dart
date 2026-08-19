@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -13,6 +14,7 @@ import '../utils.dart';
 import 'register_screen.dart';
 import 'login_screen.dart';
 import 'donate_screen.dart';
+import 'legal_screen.dart';
 import '../providers/theme_provider.dart';
 
 class EntryScreen extends StatefulWidget {
@@ -233,27 +235,24 @@ class _EntryScreenState extends State<EntryScreen> {
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
+    final requireRegistration = context.watch<AuthProvider>().requireRegistration;
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - 24),
-                child: IntrinsicHeight(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-              SizedBox(height: 8),
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+              SizedBox(height: 4),
 
               // Logo — animasi halus dalam lingkaran transparan
               // (komposisi sama dengan halaman login).
               Center(
                 child: Container(
-                  padding: EdgeInsets.all(10),
+                  padding: EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
@@ -261,7 +260,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   child: _AnimatedLogo(),
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 4),
 
               // Title
               ShaderMask(
@@ -275,7 +274,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 2),
+              SizedBox(height: 1),
               Text(
                 s.appSubtagline,
                 textAlign: TextAlign.center,
@@ -283,11 +282,12 @@ class _EntryScreenState extends State<EntryScreen> {
                   color: AppTheme.textSecondary,
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 6),
 
               // Kartu form — satu grup utuh, komposisi sama dengan login
+              if (!requireRegistration)
               Container(
-                padding: EdgeInsets.all(16),
+                padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppTheme.bgCard,
                   borderRadius: BorderRadius.circular(16),
@@ -303,8 +303,9 @@ class _EntryScreenState extends State<EntryScreen> {
                 onChanged: _onNicknameChanged,
                 style: TextStyle(color: AppTheme.textPrimary),
                 decoration: InputDecoration(
-                  hintText: s.hintNickname,
+                  prefixIcon: Icon(Icons.person_outline, size: 20, color: AppTheme.textSecondary),
                   labelText: s.labelUsername,
+                  hintText: s.hintNickname,
                   suffixIcon: _nicknameError != null
                       ? Icon(Icons.cancel, color: AppTheme.danger)
                       : _nicknameCtrl.text.length >= 3
@@ -342,7 +343,7 @@ class _EntryScreenState extends State<EntryScreen> {
                     ],
                   ),
                 ),
-              SizedBox(height: 6),
+              SizedBox(height: 10),
 
               // Gender
               Row(
@@ -352,21 +353,22 @@ class _EntryScreenState extends State<EntryScreen> {
                   Expanded(child: _genderCard('male', '👨', AppTheme.male, s.labelGenderMale)),
                 ],
               ),
-              SizedBox(height: 6),
+              SizedBox(height: 10),
 
-              // Age & Country
+              // Umur & Negara — proporsi sama seperti kartu gender
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: _ageDropdown(s)),
-                  SizedBox(width: 12),
+                  SizedBox(width: 10),
                   Expanded(child: _countryDropdown(s)),
                 ],
               ),
-              SizedBox(height: 6),
+              SizedBox(height: 10),
 
-              // City
+              // Kota
               _cityDropdown(s),
-              SizedBox(height: 8),
+              SizedBox(height: 12),
 
               // Button
               SizedBox(
@@ -391,18 +393,25 @@ class _EntryScreenState extends State<EntryScreen> {
                   ],
                 ),
               ),
-              SizedBox(height: 8),
+              // Spacer elastis — menyerap ruang ekstra (maks 32px), menyusut saat layar sempit
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 32),
+                  child: const SizedBox.shrink(),
+                ),
+              ),
 
               // Divider
+              if (!requireRegistration)
               Row(children: [
                 Expanded(child: Divider()),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 10),
                   child: Text(s.labelOr, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ),
                 Expanded(child: Divider()),
               ]),
-              SizedBox(height: 8),
+              SizedBox(height: 4),
 
               // Login dengan Google
               SizedBox(
@@ -412,7 +421,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: AppTheme.divider, width: 1.5),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: EdgeInsets.symmetric(vertical: 12),
+                    padding: EdgeInsets.symmetric(vertical: 10),
                     backgroundColor: AppTheme.bgCard,
                   ),
                   child: _googleLoading
@@ -431,7 +440,7 @@ class _EntryScreenState extends State<EntryScreen> {
                         ),
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 6),
 
               // Daftar dengan Email
               SizedBox(
@@ -443,11 +452,11 @@ class _EntryScreenState extends State<EntryScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppTheme.primary,
                     side: BorderSide(color: AppTheme.primary),
-                    padding: EdgeInsets.symmetric(vertical: 12),
+                    padding: EdgeInsets.symmetric(vertical: 10),
                   ),
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 6),
 
               // Sudah punya akun
               Center(
@@ -456,7 +465,13 @@ class _EntryScreenState extends State<EntryScreen> {
                   child: Text(s.btnLoginEmail, style: TextStyle(color: AppTheme.primary)),
                 ),
               ),
-              SizedBox(height: 8),
+              // Spacer elastis — menyerap ruang ekstra (maks 32px), menyusut saat layar sempit
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 32),
+                  child: const SizedBox.shrink(),
+                ),
+              ),
 
               // Donasi
               Center(
@@ -472,13 +487,52 @@ class _EntryScreenState extends State<EntryScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 8),
-                ],
+              SizedBox(height: 4),
+
+              // Persetujuan kebijakan privasi & perjanjian layanan
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text.rich(
+                  textAlign: TextAlign.center,
+                  style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+                  TextSpan(
+                    children: [
+                      TextSpan(text: s.legalAgreementPre),
+                      TextSpan(
+                        text: s.legalPrivacyPolicy,
+                        style: TextStyle(
+                          color: AppTheme.primary,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppTheme.primary,
+                        ),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const LegalScreen(kind: LegalKind.privacy)),
+                              ),
+                      ),
+                      TextSpan(text: s.legalAgreementAnd),
+                      TextSpan(
+                        text: s.legalServiceAgreement,
+                        style: TextStyle(
+                          color: AppTheme.primary,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppTheme.primary,
+                        ),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const LegalScreen(kind: LegalKind.terms)),
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
+              SizedBox(height: 4),
+              ],
             ),
           ),
-        );
-          },
         ),
       ),
     );
@@ -489,7 +543,7 @@ class _EntryScreenState extends State<EntryScreen> {
     return GestureDetector(
       onTap: () => setState(() => _gender = value),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(12),
@@ -557,9 +611,15 @@ class _EntryScreenState extends State<EntryScreen> {
     return DropdownButtonFormField<int>(
       initialValue: _age,
       style: AppText.body,
-      decoration: InputDecoration(labelText: s.labelAge),
+      isExpanded: true,
+      menuMaxHeight: 350,
+      decoration: InputDecoration(
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        labelText: s.labelAge,
+      ),
       items: [
-        for (int i = 13; i <= 60; i++)
+        for (int i = 17; i <= 60; i++)
           DropdownMenuItem(value: i, child: Text('$i')),
       ],
       onChanged: (v) {
@@ -570,11 +630,16 @@ class _EntryScreenState extends State<EntryScreen> {
 
   Widget _countryDropdown(S s) {
     return DropdownButtonFormField<String>(
+      key: ValueKey('country-$_negara'),
       initialValue: _negara,
       style: AppText.body,
-      decoration: InputDecoration(labelText: s.labelCountry),
       isExpanded: true,
       menuMaxHeight: 350,
+      decoration: InputDecoration(
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        labelText: s.labelCountry,
+      ),
       items: [
         for (final n in kotaByNegara.keys)
           DropdownMenuItem(value: n, child: Text(n, overflow: TextOverflow.ellipsis)),
@@ -596,11 +661,17 @@ class _EntryScreenState extends State<EntryScreen> {
     // Ensure _kota is valid for current country
     final validKota = cities.contains(_kota) ? _kota : cities.first;
     return DropdownButtonFormField<String>(
+      key: ValueKey('city-$validKota'),
       initialValue: validKota,
       style: AppText.body,
-      decoration: InputDecoration(labelText: s.labelCity),
       isExpanded: true,
       menuMaxHeight: 350,
+      decoration: InputDecoration(
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        labelText: s.labelCity,
+        prefixIcon: Icon(Icons.location_city_outlined, size: 20, color: AppTheme.textSecondary),
+      ),
       items: [
         for (final k in cities)
           DropdownMenuItem(value: k, child: Text(k, overflow: TextOverflow.ellipsis)),
@@ -655,8 +726,8 @@ class _AnimatedLogoState extends State<_AnimatedLogo>
         borderRadius: BorderRadius.circular(16),
         child: Image.asset(
           'assets/app_icon.png',
-          width: 72,
-          height: 72,
+          width: 56,
+          height: 56,
         ),
       ),
     );

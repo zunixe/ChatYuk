@@ -64,12 +64,10 @@ class AdminService {
     int limit = 100,
     int offset = 0,
   }) async {
-    print('[ADMIN-SVC] getChatMessages chatId=$chatId limit=$limit offset=$offset');
     final res = await _sb.rpc(
       'admin_get_chat_messages_page',
       params: {'p_chat_id': chatId, 'p_limit': limit, 'p_offset': offset},
     );
-    print('[ADMIN-SVC] getChatMessages result type=${res.runtimeType} len=${(res is List ? res.length : 'not list')}');
     final list = res is List ? res : <dynamic>[];
     return list.cast<Map<String, dynamic>>();
   }
@@ -154,5 +152,25 @@ class AdminService {
   Future<Map<String, dynamic>> deleteDummy(String uid) async {
     final res = await _sb.rpc('admin_delete_dummy', params: {'p_uid': uid});
     return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  // ── Pesan Kontak (Hubungi Kami) ──
+  /// List pesan kontak dengan pagination. Return {'total': int, 'items': [...]}.
+  Future<Map<String, dynamic>> listContactMessages({int limit = 50, int offset = 0}) async {
+    final res = await _sb.rpc(
+      'admin_contact_messages_page',
+      params: {'p_limit': limit, 'p_offset': offset},
+    );
+    return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Tandai pesan terbaca / belum terbaca.
+  Future<void> setContactRead(String id, {bool read = true}) async {
+    await _sb.rpc('admin_contact_set_read', params: {'p_id': id, 'p_read': read});
+  }
+
+  /// Hapus pesan kontak.
+  Future<void> deleteContactMessage(String id) async {
+    await _sb.rpc('admin_contact_delete', params: {'p_id': id});
   }
 }

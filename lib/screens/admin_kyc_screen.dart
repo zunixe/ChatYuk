@@ -14,15 +14,28 @@ class AdminKycScreen extends StatefulWidget {
   State<AdminKycScreen> createState() => _AdminKycScreenState();
 }
 
-class _AdminKycScreenState extends State<AdminKycScreen> {
+class _AdminKycScreenState extends State<AdminKycScreen>
+    with SingleTickerProviderStateMixin {
   final _rejectCtrl = TextEditingController();
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   String _tab = 'pending';
+  static const _tabs = ['pending', 'approved', 'rejected', 'all'];
+  late final TabController _tabCtrl;
 
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: _tabs.length, vsync: this);
+    _tabCtrl.addListener(_onTabChanged);
+    _load();
+  }
+
+  void _onTabChanged() {
+    if (_tabCtrl.indexIsChanging) return;
+    final tab = _tabs[_tabCtrl.index];
+    if (tab == _tab) return;
+    _tab = tab;
     _load();
   }
 
@@ -73,6 +86,8 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
 
   @override
   void dispose() {
+    _tabCtrl.removeListener(_onTabChanged);
+    _tabCtrl.dispose();
     _rejectCtrl.dispose();
     super.dispose();
   }
@@ -88,6 +103,7 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
         appBar: AppBar(
           title: Text(s.adminKycTitle),
           bottom: TabBar(
+            controller: _tabCtrl,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             indicatorColor: Colors.white,
@@ -109,7 +125,8 @@ class _AdminKycScreenState extends State<AdminKycScreen> {
           ),
         ),
         body: TabBarView(
-          children: ['pending', 'approved', 'rejected', 'all'].map((t) => _listTab(s, t)).toList(),
+          controller: _tabCtrl,
+          children: _tabs.map((t) => _listTab(s, t)).toList(),
         ),
       ),
     );

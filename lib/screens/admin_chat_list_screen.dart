@@ -276,13 +276,6 @@ class _AdminChatCard extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) {
-          final delMe = myUids[0];
-          final delOther = myUids[1];
-          final isAdminMe = adminUids.contains(delMe);
-          final isAdminOther = adminUids.contains(delOther);
-          final nameMe = '${names[delMe] ?? 'User'}' + (isAdminMe ? ' ${s.adminCannotDeleteAdmin}' : '');
-          final nameOther = '${names[delOther] ?? 'User'}' + (isAdminOther ? ' ${s.adminCannotDeleteAdmin}' : '');
-
           return AlertDialog(
             backgroundColor: AppTheme.bgCard,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -298,28 +291,25 @@ class _AdminChatCard extends StatelessWidget {
                 children: [
                   Text(s.adminDeleteChatBody, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                   const SizedBox(height: 12),
-                  CheckboxListTile(
-                    value: selected.contains(delMe),
-                    onChanged: isAdminMe ? null : (v) => setState(() {
-                      v == true ? selected.add(delMe) : selected.remove(delMe);
-                    }),
-                    title: Text('${s.adminDeleteUser}: $nameMe',
-                      style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                    activeColor: AppTheme.danger,
-                  ),
-                  CheckboxListTile(
-                    value: selected.contains(delOther),
-                    onChanged: isAdminOther ? null : (v) => setState(() {
-                      v == true ? selected.add(delOther) : selected.remove(delOther);
-                    }),
-                    title: Text('${s.adminDeleteUser}: $nameOther',
-                      style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                    activeColor: AppTheme.danger,
-                  ),
+                  // Tampilkan SEMUA peserta — sebelumnya hanya 2 pertama yang
+                  // muncul di dialog, padahal `selected` berisi semua non-admin
+                  // → peserta ke-3+ terhapus diam-diam tanpa persetujuan.
+                  for (final uid in myUids)
+                    CheckboxListTile(
+                      value: selected.contains(uid),
+                      onChanged: adminUids.contains(uid)
+                          ? null
+                          : (v) => setState(() {
+                              v == true ? selected.add(uid) : selected.remove(uid);
+                            }),
+                      title: Text(
+                        '${s.adminDeleteUser}: ${names[uid] ?? 'User'}${adminUids.contains(uid) ? ' ${s.adminCannotDeleteAdmin}' : ''}',
+                        style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                      ),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      dense: true,
+                      activeColor: AppTheme.danger,
+                    ),
                   SizedBox(height: 4),
                   Text(s.adminDeleteChatOnly, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
                 ],

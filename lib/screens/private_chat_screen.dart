@@ -369,9 +369,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final remaining = await pp.deductBeforeSend('text');
     if (remaining < 0) {
       _isSending = false;
-      if (mounted) {
-        final ss = context.read<LocaleProvider>().s;
+      if (!mounted) return;
+      final ss = context.read<LocaleProvider>().s;
+      if (remaining == -1) {
         pp.showOutOfPointsDialog(context, ss.isId);
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(ss.errSendFailed)));
       }
       return;
     }
@@ -398,6 +403,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       );
       _maybeNewChatBonus();
     } catch (e) {
+      // Kirim gagal → kembalikan koin yang sudah terpotong.
+      safeUnawaited(pp.refundChatPoint('text'));
       if (mounted) {
         setState(() => _pending.remove(pending));
         final s = context.read<LocaleProvider>().s;
@@ -453,11 +460,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final ppPhoto = context.read<PointsProvider>();
     final rPhoto = await ppPhoto.deductBeforeSend('image');
     if (rPhoto < 0) {
-      if (mounted) {
+      if (!mounted) return;
+      if (rPhoto == -1) {
         ppPhoto.showOutOfPointsDialog(
           context,
           context.read<LocaleProvider>().s.isId,
         );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.read<LocaleProvider>().s.errSendPhoto),
+        ));
       }
       return;
     }
@@ -493,6 +505,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       }
       _scrollToBottom();
     } catch (e) {
+      // Upload/kirim gagal → kembalikan koin yang sudah terpotong.
+      safeUnawaited(ppPhoto.refundChatPoint('image'));
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
         ScaffoldMessenger.of(
@@ -507,14 +521,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
     final auth = context.read<AuthProvider>();
-    // Resize + potong poin paralel — potong ~2 detik
-    final results = await Future.wait([
-      auth.watermarkEnabled
-          ? compute(_processViewOnceImage, (bytes, widget.otherUid))
-          : compute(_passthroughImage, bytes),
-      context.read<PointsProvider>().deductBeforeSend('view_once'),
-    ]);
-    final base64 = results[0] as String?;
+    // Proses gambar DULU, baru potong poin — jangan paralel, supaya poin
+    // tidak terpotong saat decode/resize gagal (koin hilang percuma).
+    final base64 = await (auth.watermarkEnabled
+        ? compute(_processViewOnceImage, (bytes, widget.otherUid))
+        : compute(_passthroughImage, bytes));
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
@@ -525,13 +536,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       return;
     }
     if (!mounted) return;
-    final rView = results[1] as int;
+    final pp = context.read<PointsProvider>();
+    final rView = await pp.deductBeforeSend('view_once');
     if (rView < 0) {
-      if (mounted) {
-        context.read<PointsProvider>().showOutOfPointsDialog(
+      if (rView == -1) {
+        pp.showOutOfPointsDialog(
           context,
           context.read<LocaleProvider>().s.isId,
         );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.read<LocaleProvider>().s.errSendPhoto),
+        ));
       }
       return;
     }
@@ -573,6 +589,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _maybeNewChatBonus();
       _scrollToBottom();
     } catch (e) {
+      // Upload/kirim gagal → kembalikan koin yang sudah terpotong.
+      safeUnawaited(pp.refundChatPoint('view_once'));
       if (mounted) {
         setState(() => _pending.remove(pending));
         final s = context.read<LocaleProvider>().s;
