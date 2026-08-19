@@ -112,160 +112,11 @@ class S {
   String coinBubbleReceived(int n) =>
       isId ? '🪙 Menerima $n koin' : '🪙 Received $n coins';
   String get errSendCoin => isId ? 'Gagal kirim koin' : 'Failed to send coins';
-
-  // ── KYC (verifikasi identitas) ──
-  String get kycTitle =>
-      isId ? 'Verifikasi Identitas' : 'Identity Verification';
-  String get kycFullName => isId
-      ? 'Nama Lengkap (sesuai KTP/Paspor)'
-      : 'Full Name (as on ID/Passport)';
-  String get kycIdType => isId ? 'Jenis Identitas' : 'ID Type';
-  String get kycIdTypeKtp => isId ? 'KTP' : 'KTP';
-  String get kycIdTypePassport => isId ? 'Paspor' : 'Passport';
-  String get kycIdNumber => isId ? 'Nomor Identitas' : 'ID Number';
-  String get kycBirthDate => isId ? 'Tanggal Lahir' : 'Birth Date';
-  String get kycOptional => isId ? 'opsional' : 'optional';
-  String get kycIdPhoto => isId ? 'Foto KTP/Identitas' : 'ID Photo';
-  String get kycSelfie => isId ? 'Foto Selfie' : 'Selfie';
-  String get kycHint => isId
-      ? 'Selfie harus jelas memperlihatkan wajah & kartu identitas di tangan.'
-      : 'Selfie must clearly show your face and hold your ID card.';
-  String get kycSubmit => isId ? 'Kirim Permohonan' : 'Submit Request';
-  String get kycSubmitted => isId ? 'Permohonan terkirim' : 'Request submitted';
-  String get kycAlreadySubmitted => isId
-      ? 'Permohonan sudah ada, tunggu review'
-      : 'Request exists, waiting for review';
-  String get kycSubmitFailed =>
-      isId ? 'Gagal mengirim permohonan' : 'Failed to submit request';
-  String get kycErrName => isId ? 'Nama terlalu pendek' : 'Name too short';
-  String get kycErrIdNumber =>
-      isId ? 'Nomor identitas tidak valid' : 'Invalid ID number';
-  String get kycErrPhotos =>
-      isId ? 'Foto KTP & selfie wajib diisi' : 'ID photo & selfie are required';
-  String get kycStatusNone => isId
-      ? 'Belum verifikasi. Lengkapi untuk bisa mencairkan koin.'
-      : 'Not verified. Complete this to be able to cash out coins.';
-  String get kycStatusPending =>
-      isId ? 'Menunggu review admin.' : 'Pending admin review.';
-  String get kycStatusApproved => isId ? 'Terverifikasi ✓' : 'Verified ✓';
-  String get kycStatusRejected => isId ? 'Ditolak:' : 'Rejected:';
-  String get menuKyc => isId ? 'Verifikasi (KYC)' : 'Verification (KYC)';
-  // ── Admin KYC review ──
-  String get adminKycTitle => isId ? 'Review KYC' : 'KYC Review';
-  String get adminKycDesc => isId
-      ? 'Tinjau & setujui verifikasi identitas user'
-      : 'Review & approve user identity verification';
-  String get kycRejectTitle => isId ? 'Tolak Permohonan' : 'Reject Request';
-  String get kycRejectReason => isId ? 'Alasan penolakan' : 'Rejection reason';
-  String get kycApprovedToast =>
-      isId ? 'Permohonan disetujui' : 'Request approved';
-  String get kycRejectedToast =>
-      isId ? 'Permohonan ditolak' : 'Request rejected';
-  String get kycNoRequests => isId ? 'Tidak ada permohonan' : 'No requests';
-  String get btnApprove => isId ? 'Setujui' : 'Approve';
-  String get btnReject => isId ? 'Tolak' : 'Reject';
-  String get btnRefresh => isId ? 'Muat ulang' : 'Refresh';
-  // ── Withdrawal (pencairan) ──
-  String get withdrawTitle => isId ? 'Cairkan Koin' : 'Withdraw Coins';
-  String get withdrawBalance =>
-      isId ? 'Saldo bisa dicairkan' : 'Withdrawable balance';
-  String get withdrawRate => isId ? 'Nilai tukar' : 'Exchange rate';
-  String get withdrawOnlyEarned => isId
-      ? 'Hanya koin earned (hasil gift/transfer uang) yang bisa dicairkan. Koin bonus & topup tidak.'
-      : 'Only earned coins (from gifts/paid transfers) are withdrawable. Bonus & topup coins are not.';
-  String get withdrawAmount => isId ? 'Jumlah koin' : 'Coin amount';
-  String get withdrawMethod => isId ? 'Metode Pencairan' : 'Withdrawal Method';
-  String get withdrawMethodQris => isId ? 'QRIS' : 'QRIS';
-  String get withdrawMethodBank => isId ? 'Transfer Bank' : 'Bank Transfer';
-  String get withdrawMethodEwallet => isId ? 'E-Wallet' : 'E-Wallet';
-  String get withdrawQrisId =>
-      isId ? 'ID QRIS / Nama tujuan' : 'QRIS ID / Destination name';
-  String get withdrawAccountNo =>
-      isId ? 'Nomor Rekening / ID' : 'Account Number / ID';
-  String get withdrawHolder => isId ? 'Nama Pemilik' : 'Account Holder Name';
-  String get withdrawSubmit => isId ? 'Ajukan Pencairan' : 'Request Withdrawal';
-  String withdrawPreview(int rp) =>
-      isId ? '💰 Kamu akan terima ±Rp$rp' : '💰 You will receive ~Rp$rp';
-  String withdrawPreviewHint(int min) => isId
-      ? 'Minimal $min koin ($min × 7) untuk mencairkan'
-      : 'Minimum $min coins to withdraw';
-  String withdrawBelowMin(int min) =>
-      isId ? 'Minimal pencairan $min koin' : 'Minimum withdrawal is $min coins';
-  String get withdrawInsufficient =>
-      isId ? 'Saldo earned tidak cukup' : 'Insufficient earned balance';
-  String get withdrawInvalidPayout =>
-      isId ? 'Data metode pembayaran tidak valid' : 'Invalid payout details';
-  String get withdrawConfirmTitle =>
-      isId ? 'Konfirmasi Pencairan' : 'Confirm Withdrawal';
-  String withdrawConfirmBody(int coin, int rp) => isId
-      ? 'Tarik $coin koin dengan nilai ±Rp$rp? Koin akan ditahan sampai admin membayar.'
-      : 'Withdraw $coin coins worth ~Rp$rp? Coins are held until admin pays.';
+  // ── Umum ──
   String get btnConfirm => isId ? 'Konfirmasi' : 'Confirm';
-  String get withdrawRequested =>
-      isId ? 'Pencairan diajukan' : 'Withdrawal requested';
-  String get withdrawKycRequired => isId
-      ? 'Verifikasi identitas (KYC) wajib untuk mencairkan.'
-      : 'Identity verification (KYC) is required to withdraw.';
-  String get withdrawFailed =>
-      isId ? 'Gagal mengajukan pencairan' : 'Failed to request withdrawal';
-  String get withdrawHistory =>
-      isId ? 'Riwayat Pencairan' : 'Withdrawal History';
-  String get withdrawNoHistory =>
-      isId ? 'Belum ada pencairan' : 'No withdrawals yet';
-  String get withdrawStatusPending => isId ? 'Menunggu' : 'Pending';
-  String get withdrawStatusPaid => isId ? 'Dibayar' : 'Paid';
-  String get withdrawStatusRejected => isId ? 'Ditolak' : 'Rejected';
-  String get withdrawTxId => isId ? 'Referensi' : 'Reference';
-  String get withdrawNote => isId ? 'Catatan' : 'Note';
   String get errCoinDisabled => isId
       ? 'Sistem koin sedang dinonaktifkan'
       : 'Coin system is currently disabled';
-  // ── Admin Withdrawal review ──
-  String get adminWithdrawTitle =>
-      isId ? 'Review Pencairan' : 'Withdrawal Review';
-  String get adminWithdrawDesc => isId
-      ? 'Tinjau & proses permintaan pencairan'
-      : 'Review & process withdrawal requests';
-  String get withdrawPay => isId ? 'Tandai Dibayar' : 'Mark as Paid';
-  String get withdrawPayTxId =>
-      isId ? 'ID transaksi (opsional)' : 'Transaction ID (optional)';
-  String get withdrawPayConfirm => isId
-      ? 'Yakin sudah membayar ke user?'
-      : 'Confirm you have paid this user?';
-  String get withdrawPaidToast => isId ? 'Ditandai dibayar' : 'Marked as paid';
-  String get withdrawRejectedToast => isId
-      ? 'Pencairan ditolak & dana dikembalikan'
-      : 'Withdrawal rejected & funds returned';
-  String get withdrawRejectTitle =>
-      isId ? 'Tolak Pencairan' : 'Reject Withdrawal';
-  String get withdrawNoRequests =>
-      isId ? 'Tidak ada permintaan' : 'No requests';
-  // ── Admin Revenue Dashboard ──
-  String get adminRevenueTitle =>
-      isId ? 'Pendapatan Platform' : 'Platform Revenue';
-  String get adminRevenueDesc => isId
-      ? 'Ringkasan pendapatan dari gift & pencairan'
-      : 'Revenue summary from gifts & withdrawals';
-  String get adminRevenueGift => isId ? 'Pendapatan Gift' : 'Gift Revenue';
-  String get adminRevenueCutTotal =>
-      isId ? 'Total potongan platform' : 'Total platform cut';
-  String get adminRevenueCutToday => isId ? 'Potongan hari ini' : "Today's cut";
-  String get adminRevenueGross =>
-      isId ? 'Total nominal gift' : 'Total gift value';
-  String get adminRevenueGiftCount => isId ? 'Gift terkirim' : 'Gifts sent';
-  String get adminRevenueTopGifts => isId ? 'Gift Terpopuler' : 'Top Gifts';
-  String get adminRevenueWithdraw =>
-      isId ? 'Ringkasan Pencairan' : 'Withdrawal Summary';
-  String get adminRevenuePending =>
-      isId ? 'Menunggu dibayar' : 'Pending payout';
-  String get adminRevenuePaid => isId ? 'Sudah dibayar' : 'Paid out';
-  String get adminRevenueRejected => isId ? 'Ditolak' : 'Rejected';
-  String get adminRevenueSettings =>
-      isId ? 'Pengaturan Ekonomi' : 'Economy Settings';
-  String get adminRevenueCutPct => isId ? 'Potongan gift' : 'Gift cut';
-  String get adminRevenueRate =>
-      isId ? 'Nilai tukar (Rp/koin)' : 'Exchange rate (Rp/coin)';
-  String get adminRevenueNoData => isId ? 'Belum ada data' : 'No data yet';
 
   /// Nama room berdasarkan id (fallback ke nama DB jika tidak ada translasi)
   String roomName(String id) {
@@ -847,8 +698,8 @@ List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
   String photoUnlockPerm(int c) =>
       isId ? 'Buka permanen · $c koin' : 'Unlock forever · $c coins';
   String get photoUnlockNeedTopup => isId
-      ? 'Koin pro tidak cukup. Top up dulu untuk membuka foto.'
-      : 'Not enough pro coins. Top up to unlock photos.';
+      ? 'Koin tidak cukup. Dapatkan koin dari bonus harian & aktivitas.'
+      : 'Not enough coins. Earn coins from daily bonuses & activities.';
   String get photoUnlockFailed =>
       isId ? 'Gagal membuka foto' : 'Failed to unlock photo';
   String get photoUnlockedToast => isId ? 'Foto terbuka' : 'Photo unlocked';
@@ -894,46 +745,13 @@ List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
   String get pointHistoryAdminReset => isId ? 'Reset poin' : 'Points reset';
   String get pointHistoryOther =>
       isId ? 'Transaksi poin' : 'Points transaction';
-  // ── Wallet (bucket saldo) ──
+  // ── Wallet (saldo koin) ──
   String get walletBucketBonus => isId ? 'Koin bonus' : 'Bonus coins';
   String get walletBucketTopup => isId ? 'Koin pro' : 'Pro coins';
   String get walletBucketEarned =>
-      isId ? 'Koin bisa dicairkan' : 'Withdrawable coins';
+      isId ? 'Koin hadiah' : 'Gift coins';
   String get walletTitle => isId ? 'Dompet Koin' : 'Coin Wallet';
   String get walletTotal => isId ? 'Total koin' : 'Total coins';
-  String get walletWithdrawable => isId ? 'Bisa dicairkan' : 'Withdrawable';
-  String get walletBonusHint => isId
-      ? 'Hanya untuk chat & fitur, tidak bisa dicairkan'
-      : 'For chat & features only, not withdrawable';
-  String get walletTopupHint => isId
-      ? 'Hasil pembelian, untuk belanja di app'
-      : 'From purchases, for spending in-app';
-  String get walletEarnedHint => isId
-      ? 'Hasil kiriman koin pro, bisa dicairkan'
-      : 'From pro-coin transfers, can be withdrawn';
-  // ── Top-Up (iPaymu) ──
-  String get topupTitle => isId ? 'Isi Koin' : 'Top Up Coins';
-  String get topupPickPackage =>
-      isId ? 'Pilih paket koin:' : 'Choose a coin package:';
-  String get topupBuy => isId ? 'Beli' : 'Buy';
-  String get topupInfo => isId
-      ? 'Pembayaran diproses aman via iPaymu (VA, QRIS, e-wallet). Koin masuk otomatis setelah pembayaran terkonfirmasi.'
-      : 'Payments processed securely via iPaymu (VA, QRIS, e-wallet). Coins are added automatically once confirmed.';
-  String get topupWaitingTitle =>
-      isId ? 'Menunggu pembayaran' : 'Waiting for payment';
-  String get topupWaitingBody => isId
-      ? 'Selesaikan pembayaran di halaman yang terbuka, lalu tekan Cek Status.'
-      : 'Complete payment on the opened page, then tap Check Status.';
-  String get topupCheckStatus => isId ? 'Cek Status' : 'Check Status';
-  String get topupSuccess => isId
-      ? 'Pembayaran berhasil! Koin sudah ditambahkan.'
-      : 'Payment successful! Coins added.';
-  String get topupStillPending => isId
-      ? 'Pembayaran belum terkonfirmasi. Coba lagi sebentar.'
-      : 'Payment not confirmed yet. Try again shortly.';
-  String get topupFailed => isId
-      ? 'Pembayaran gagal atau dibatalkan.'
-      : 'Payment failed or cancelled.';
   // ── Gift (hadiah) ──
   String get giftTitle => isId ? 'Kirim Hadiah' : 'Send Gift';
   String get giftPick =>
@@ -1074,6 +892,14 @@ List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
 
   // ── Admin Chat Monitor ──
   String get adminOverview => isId ? 'Ringkasan' : 'Overview';
+  String get adminRegTitle => isId ? 'Registrasi Email' : 'Email Registrations';
+  String get adminRegPerDay => isId ? 'Per hari' : 'Per day';
+  String get adminRegTotal => isId ? 'Total' : 'Total';
+  String get adminRegEmpty =>
+      isId ? 'Tidak ada pendaftaran bulan ini' : 'No registrations this month';
+  List<String> get monthShort => isId
+      ? const ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+      : const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   String get adminPointTab => isId ? 'Poin' : 'Points';
   String get adminChatMonitor => isId ? 'Monitor Chat' : 'Chat Monitor';
   String get adminChatNoChats =>

@@ -37,18 +37,16 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int _loginStreak = 0;
   int _lastStreakBonus = 0;
 
-  // Wallet 3 bucket (Fase 1). _points tetap = total (kompat UI lama).
+  // Wallet bucket (Fase 1). _points tetap = total (kompat UI lama).
   int _bonusBalance = 0;
-  int _topupBalance = 0;
   int _earnedBalance = 0;
   int get bonusBalance => _bonusBalance;
-  int get topupBalance => _topupBalance;
   int get earnedBalance => _earnedBalance;
-  int get withdrawableBalance => _earnedBalance;
 
-  /// Saldo "pro" (topup + earned) — koin yang bisa dipakai untuk fitur
-  /// berbayar (kirim koin, gift, room private, subscribe, buka foto).
-  int get paidBalance => _topupBalance + _earnedBalance;
+  /// Saldo "pro" (earned) — koin yang bisa dipakai untuk fitur berbayar
+  /// (kirim koin, gift, room private, subscribe, buka foto). Bucket topup
+  /// dihapus bersama fitur finansial.
+  int get paidBalance => _earnedBalance;
 
   // Biaya buka foto terkunci (dari app_settings; default sesuai server).
   int _photoUnlockOnce = 5;
@@ -95,12 +93,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Ambil saldo wallet 3 bucket dari server (RPC get_wallet).
+  /// Ambil saldo wallet bucket dari server (RPC get_wallet).
   Future<void> refreshWallet() async {
     try {
       final w = await _service.getWallet();
       _bonusBalance = (w['bonus'] as num?)?.toInt() ?? 0;
-      _topupBalance = (w['topup'] as num?)?.toInt() ?? 0;
       _earnedBalance = (w['earned'] as num?)?.toInt() ?? 0;
       _points = (w['total'] as num?)?.toInt() ?? _points;
       if (!_disposed) notifyListeners();
@@ -561,15 +558,14 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Buka foto terkunci. mode 'once' | 'perm'. Return true jika sukses.
-  /// Lempar 'topup' bila koin topup kurang (untuk dialog top up).
   Future<bool> unlockPhoto(String photoId, String mode) async {
     try {
       final res = await _service.unlockPhoto(photoId, mode);
       if (res['points'] != null) setPoints((res['points'] as num).toInt());
       return res['ok'] == true;
     } on PostgrestException catch (e) {
-      // Server (ledger_spend_dual) melempar 'Not enough points' — bukan
-      // 'Not enough topup' (pesan lama) — saat saldo bonus pun tidak cukup.
+      // Server (ledger_spend_dual) melempar 'Not enough points' saat saldo
+      // tidak cukup. Fitur topup dihapus — UI menampilkan dialog poin kurang.
       if (e.message.contains('Not enough points') ||
           e.message.contains('Not enough topup')) {
         throw 'topup';

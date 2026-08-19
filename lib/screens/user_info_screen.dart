@@ -304,6 +304,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final s = context.watch<LocaleProvider>().s;
     final profile = _profile;
     final pointsEnabled = context.watch<PointsProvider>().enabled;
+    // Viewer anon: card sosial (pengikut/mengikuti/subscriber + tombol
+    // ikuti/tambah teman) disembunyikan — fitur butuh akun terdaftar.
+    final isAnonViewer = context.watch<AuthProvider>().isAnonymous;
 
     final name = profile?.nickname ?? widget.fallbackName;
     final genderLabel = profile?.gender == 'male'
@@ -328,7 +331,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       body: _loading
           ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : SingleChildScrollView(
-              padding: EdgeInsets.all(24),
+              // padding bawah + tinggi nav bar Android supaya card galeri
+              // (terakhir) tidak tertutup gesture bar / 3-tombol.
+              padding: EdgeInsets.fromLTRB(
+                24, 24, 24, 24 + MediaQuery.paddingOf(context).bottom),
               child: Column(
                 children: [
                   SizedBox(height: 20),
@@ -427,8 +433,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   ),
                   SizedBox(height: 16),
 
-                  // Sosial: angka + tombol Follow / Friend / Subscribe
-                  if (profile != null) ...[
+                  // Sosial: angka + tombol Follow / Friend / Subscribe.
+                  // Sembunyikan seluruh card bagi viewer anon.
+                  if (profile != null && !isAnonViewer) ...[
                     Container(
                       decoration: BoxDecoration(
                         color: AppTheme.bgCard,
