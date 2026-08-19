@@ -111,6 +111,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   String _otherCountry = '';
   String _otherCity = '';
   List<String> _otherHashtags = const [];
+  bool _otherRegistered = false;
   bool _wasBlocked = false;
 
   static const List<Color> _hashColors = [
@@ -246,6 +247,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         _otherCity = city;
         _otherCountry = country;
         _otherHashtags = p.hashtags;
+        // Fix: profil lawan di-fetch live — bukan cuma dari param,
+        // supaya chat yang dibuka lewat notifikasi ikut tahu status
+        // terdaftar lawan (tombol call & icon verified).
+        _otherRegistered = p.isRegistered;
       });
     });
   }
