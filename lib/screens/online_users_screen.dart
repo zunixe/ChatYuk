@@ -218,14 +218,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          IconButton(
-            tooltip: s.nearbyTitle,
-            icon: const Icon(Icons.explore_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const NearbyScreen()),
+          // "Orang Sekitar" (nearby) hanya untuk akun terdaftar — kombinasi
+          // lokasi + anon paling sering memicu flag kebijakan Play.
+          if (!auth.isAnonymous)
+            IconButton(
+              tooltip: s.nearbyTitle,
+              icon: const Icon(Icons.explore_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NearbyScreen()),
+              ),
             ),
-          ),
         ],
       ),
       body: Stack(
