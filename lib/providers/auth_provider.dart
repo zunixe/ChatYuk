@@ -225,12 +225,14 @@ class AuthProvider extends ChangeNotifier {
   ///   'exists'  — profile sudah ada (login ulang)
   Future<String> signInWithGoogle() async {
     _manualSignOut = true;
-    final ({AuthResponse response, String? googleEmail}) result;
+    final ({AuthResponse response, String? googleEmail})? result;
     try {
       result = await _auth.signInWithGoogle();
     } finally {
       _manualSignOut = false;
     }
+    // User membatalkan dialog Google — tanpa pesan error.
+    if (result == null) return 'canceled';
     final googleEmail = result.googleEmail;
 
     // Bersihkan semua cache lama setelah login Google
@@ -413,6 +415,7 @@ class AuthProvider extends ChangeNotifier {
         await _auth.goOnline();
         _profile = _profile?.copyWith(status: 'online');
         resetIdleTimer();
+        safeUnawaited(_updateLocationOnOnline());
       }
     } catch (e) {
       debugPrint('[AUTH] updateInvisibleEnabled error: $e');
@@ -621,6 +624,10 @@ class AuthProvider extends ChangeNotifier {
     return _auth.isNicknameAvailable(nickname);
   }
 
+  Future<bool> claimNickname(String nickname) {
+    return _auth.claimNickname(nickname);
+  }
+
   Future<void> registerProfile({
     required String nickname,
     required String gender,
@@ -779,6 +786,7 @@ class AuthProvider extends ChangeNotifier {
       _isIdle = false;
       _auth.goOnline();
       _profile = _profile?.copyWith(status: 'online');
+      safeUnawaited(_updateLocationOnOnline());
       notifyListeners();
     }
     _idleTimer?.cancel();
@@ -811,6 +819,7 @@ class AuthProvider extends ChangeNotifier {
     _profile = _profile?.copyWith(status: 'online');
     if (!_disposed) notifyListeners();
     resetIdleTimer();
+    safeUnawaited(_updateLocationOnOnline());
   }
 
   /// Set status idle — dipakai saat app di-background/tutup (bukan logout).
@@ -854,6 +863,18 @@ class AuthProvider extends ChangeNotifier {
       if (_disposed || dummySessionActive) return;
       safeUnawaited(LocationService().updateMyLocation());
     });
+  }
+
+  /// Update + catat history posisi saat status berubah jadi online
+  /// (idle→online, invisible→online, panggil goOnline). Fire-and-forget,
+  /// GPS dipakai kalau izin ada, else perkiraan IP.
+  Future<void> _updateLocationOnOnline() async {
+    if (_disposed || dummySessionActive) return;
+    try {
+      await LocationService().updateMyLocation();
+    } catch (e) {
+      debugPrint('[AUTH] location on online error: $e');
+    }
   }
 
   /// Arm ulang timer presence (heartbeat + lokasi) setelah (re)login.

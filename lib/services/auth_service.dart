@@ -40,14 +40,17 @@ class AuthService {
   /// Native google_sign_in — butuh Android OAuth client (keystore v2)
   /// dan Web client untuk serverClientId.
   /// Return AuthResponse + email Google yang digunakan.
-  Future<({AuthResponse response, String? googleEmail})>
+  Future<({AuthResponse response, String? googleEmail})?>
   signInWithGoogle() async {
     const webClientId =
         '688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com';
 
     final googleSignIn = GoogleSignIn(serverClientId: webClientId);
+    // google_sign_in: user batal → signIn() mengembalikan null (tidak
+    // melempar). Null dikembalikan ke atas supaya UI diam-diam kembali
+    // tanpa snackbar error.
     final googleUser = await googleSignIn.signIn();
-    if (googleUser == null) throw Exception('Google sign in dibatalkan');
+    if (googleUser == null) return null;
 
     final googleEmail = googleUser.email;
     final googleAuth = await googleUser.authentication;
@@ -431,6 +434,13 @@ class AuthService {
     if (id != null) query = query.neq('id', id);
     final res = await query.maybeSingle();
     return res == null; // null = tidak ada yang pakai
+  }
+
+  /// Ambil alih nickname milik akun anon yang tidak aktif > 7 hari
+  /// (dummy yang di-uninstall tidak terhapus di server).
+  Future<bool> claimNickname(String nickname) async {
+    final res = await _sb.rpc('claim_nickname', params: {'p_nickname': nickname});
+    return res == true;
   }
 
   Future<UserModel> registerProfile({

@@ -16,6 +16,19 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? {};
   }
 
+  /// Jumlah registrasi email per hari di bulan tertentu (bar chart Ringkasan).
+  Future<Map<int, int>> fetchRegistrationsDaily(int year, int month) async {
+    final res = await _sb.rpc(
+      'admin_registrations_daily',
+      params: {'p_year': year, 'p_month': month},
+    );
+    final map = <int, int>{};
+    for (final r in (res as List? ?? const [])) {
+      map[(r['day'] as num).toInt()] = (r['count'] as num).toInt();
+    }
+    return map;
+  }
+
   Future<Map<String, dynamic>> massBonus(int bonus) async {
     final res = await _sb.rpc('admin_mass_bonus', params: {'bonus': bonus});
     return res as Map<String, dynamic>;

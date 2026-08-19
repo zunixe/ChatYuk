@@ -33,7 +33,7 @@ begin
   if p_gender not in ('male', 'female') then
     raise exception 'Gender tidak valid';
   end if;
-  if p_age < 13 or p_age > 80 then
+  if p_age < 18 or p_age > 80 then
     raise exception 'Umur tidak valid';
   end if;
   insert into public.profiles (id, nickname, gender, age, country, city, status, is_registered, last_seen)

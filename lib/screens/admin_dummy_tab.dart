@@ -355,7 +355,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       decoration: InputDecoration(labelText: s.labelAge),
       isExpanded: true,
       menuMaxHeight: 300,
-      items: [for (int i = 17; i <= 80; i++) DropdownMenuItem(value: i, child: Text('$i'))],
+      items: [for (int i = 18; i <= 80; i++) DropdownMenuItem(value: i, child: Text('$i'))],
       onChanged: (v) {
         if (v != null) setState(() => _age = v);
       },
