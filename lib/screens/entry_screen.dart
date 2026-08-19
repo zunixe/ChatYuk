@@ -394,12 +394,15 @@ class _EntryScreenState extends State<EntryScreen> {
                 ),
               ),
               // Spacer elastis — menyerap ruang ekstra (maks 32px), menyusut saat layar sempit
-              Expanded(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 32),
-                  child: const SizedBox.shrink(),
+              if (requireRegistration)
+                const SizedBox(height: 24)
+              else
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 32),
+                    child: const SizedBox.shrink(),
+                  ),
                 ),
-              ),
 
               // Divider
               if (!requireRegistration)
