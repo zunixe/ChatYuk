@@ -1021,6 +1021,14 @@ class AuthService {
     }
   }
 
+  /// Ada token admin (dummy) tersimpan di SharedPreferences? Dipakai untuk
+  /// recovery otomatis saat sesi dummy mati server-side.
+  Future<bool> hasStoredAdminTokens() async {
+    final prefs = await SharedPreferences.getInstance();
+    final refresh = prefs.getString(_kAdminRefreshToken);
+    return refresh != null && refresh.isNotEmpty;
+  }
+
   Stream<bool> get authState {
     return _sb.auth.onAuthStateChange.map((data) {
       final session = data.session;

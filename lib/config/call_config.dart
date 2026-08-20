@@ -1,5 +1,3 @@
-import 'package:flutter_webrtc/flutter_webrtc.dart';
-
 /// Konfigurasi ICE untuk WebRTC call.
 ///
 /// TODO(zunixe): isi credential TURN Cloudflare dari dashboard

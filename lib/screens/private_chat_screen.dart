@@ -1234,7 +1234,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           ],
         ),
         actions: [
-          if ((auth.profile?.isRegistered ?? false) && widget.otherRegistered) ...[
+          if ((auth.profile?.isRegistered ?? false) &&
+              (_otherRegistered || widget.otherRegistered)) ...[
             IconButton(
               icon: Icon(Icons.call, color: Colors.white, size: 22),
               tooltip: s.callAudio,

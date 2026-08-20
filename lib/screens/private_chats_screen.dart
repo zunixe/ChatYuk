@@ -27,6 +27,7 @@ class PrivateChatsScreen extends StatefulWidget {
 class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   Stream<List<PrivateChatInfo>>? _stream;
   List<PrivateChatInfo>? _initial;
+  String? _boundUid;
   int _page = 1;
   static const int _pageSize = 20;
   final ScrollController _scrollCtrl = ScrollController();
@@ -37,12 +38,25 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   @override
   void initState() {
     super.initState();
-    final auth = context.read<AuthProvider>();
-    if (auth.uid != null) {
-      _initial = context.read<ChatProvider>().lastPrivateChatsSnapshot(auth.uid!);
-      _stream = context.read<ChatProvider>().getMyPrivateChats(auth.uid!);
-    }
     _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // List chat hidup di IndexedStack → initState hanya sekali, padahal
+    // swap akun (dummy ⇄ admin) mengganti auth.uid. Re-bind stream/snapshot
+    // saat uid berubah supaya otherUid di-resolve ke akun yang benar.
+    final uid = context.watch<AuthProvider>().uid;
+    if (uid == _boundUid) return;
+    _boundUid = uid;
+    if (uid != null) {
+      _initial = context.read<ChatProvider>().lastPrivateChatsSnapshot(uid);
+      _stream = context.read<ChatProvider>().getMyPrivateChats(uid);
+    } else {
+      _initial = null;
+      _stream = null;
+    }
   }
 
   Future<void> _deleteChat(String uid, String chatId) async {

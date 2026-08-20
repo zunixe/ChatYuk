@@ -20,6 +20,10 @@ create table if not exists public.calls (
 create index if not exists calls_callee_idx on public.calls (callee_id, created_at desc);
 create index if not exists calls_caller_idx on public.calls (caller_id, created_at desc);
 
+-- WAJIB: tanpa ini Realtime Postgres Changes tidak pernah mengirim event
+-- (call masuk tidak muncul di callee meski app terbuka).
+alter publication supabase_realtime add table public.calls;
+
 alter table public.calls enable row level security;
 
 create policy calls_select on public.calls
