@@ -122,10 +122,25 @@ class AuthProvider extends ChangeNotifier {
   /// (mis. user anon dihapus di server / refresh token gagal), reset profile
   /// lokal agar tidak jadi "zombie" (user ID kosong & tidak online).
   void _listenAuthState() {
-    _authStateSub = _auth.authStateChanges.listen((state) {
+    _authStateSub = _auth.authStateChanges.listen((state) async {
       if (_disposed) return;
       if (state.event != AuthChangeEvent.signedOut) return;
       if (_manualSignOut) return; // logout manual — sudah di-handle signOut()
+      // Sesi dummy bisa mati di server (admin_renew_dummy_token menghapus
+      // SEMUA session dummy, termasuk yang aktif di HP ini). Kalau token
+      // admin masih tersimpan, pulihkan otomatis — jangan langsung reset.
+      if (dummySessionActive || await _auth.hasStoredAdminTokens()) {
+        try {
+          final restored = await _auth.backToAdmin();
+          if (restored && !_disposed) {
+            debugPrint('[AUTH] signedOut tapi admin dipulihkan, re-init');
+            await _init();
+            return;
+          }
+        } catch (e) {
+          debugPrint('[AUTH] signedOut recovery error: $e');
+        }
+      }
       debugPrint(
         '[AUTH] SIGNED_OUT unexpected, resetting profile (session hilang)',
       );
@@ -284,11 +299,18 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> updateFcmToken() async {
     if (!_notificationsEnabled) return;
-    try {
-      final token = await FirebaseMessaging.instance.getToken();
-      await _auth.updateFcmToken(token);
-    } catch (_) {
-      // token tidak tersedia: abaikan
+    // Jaringan HP sering flaky saat app baru buka (DNS/radio belum stabil) —
+    // retry supaya token FCM fresh selalu tersimpan, kalau tidak push call
+    // dan chat akan ditolak FCM (NotRegistered).
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final token = await FirebaseMessaging.instance.getToken();
+        await _auth.updateFcmToken(token);
+        return;
+      } catch (_) {
+        // token tidak tersedia: coba lagi sebentar lagi
+        await Future<void>.delayed(Duration(seconds: 5 * (attempt + 1)));
+      }
     }
   }
 

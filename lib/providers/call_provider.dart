@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
 import '../screens/incoming_call_screen.dart';
 import '../services/call_service.dart';

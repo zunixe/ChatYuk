@@ -288,10 +288,10 @@ class CallSession extends ChangeNotifier {
       _pc!.onTrack = (event) async {
         if (event.streams.isNotEmpty) {
           _remoteStream = event.streams.first;
-        } else if (event.track != null) {
+        } else {
           // Jarang terjadi — sebagian implementasi tidak mengirim streams.
           final stream = await createLocalMediaStream('remote');
-          await stream.addTrack(event.track!);
+          await stream.addTrack(event.track);
           _remoteStream = stream;
         }
         if (_remoteStream != null) {
