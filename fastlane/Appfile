@@ -1,4 +1,5 @@
 # fastlane configuration
 # Jangan commit google-play.json (service account) — rahasia.
 
-default_platform(:android)
+json_key_file("fastlane/google-play.json")
+package_name("com.chatyuk.chatyuk")
