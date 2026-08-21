@@ -307,6 +307,30 @@ void _handleDeepLink(Uri uri) {
     }
 }
 
+// Decode & simpan background chat ke ImageCache SEKALI di startup (dengan DPR
+// device asli). Setelah ini, setiap PrivateChatScreen langsung paint gambar
+// tanpa jeda decode → tidak ada blink hitam saat buka chat.
+Future<void> _warmChatBackground() async {
+  try {
+    final dpr =
+        WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
+    const asset = AssetImage('assets/chat_bg.jpg');
+    final completer = Completer<void>();
+    final stream = asset.resolve(ImageConfiguration(devicePixelRatio: dpr));
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (_, __) {
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (_, __) {
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
+    stream.addListener(listener);
+    await completer.future;
+  } catch (_) {}
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
@@ -327,5 +351,6 @@ void main() async {
   PhotoCache.instance.cleanOldPhotos(); // fire-and-forget, hapus foto >7 hari
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await _initNotifications();
+  await _warmChatBackground();
   runApp(const ChatYukApp());
 }
