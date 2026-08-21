@@ -1304,14 +1304,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           Expanded(
             child: Stack(
               children: [
-                // Background chat — 30% transparan supaya konten tetap terbaca
+                // Background chat — gambar 30% transparan. Pakai DecorationImage
+                // supaya paint di frame pertama, tidak ada blink hitam.
                 Positioned.fill(
-                  child: Opacity(
-                    opacity: 0.3,
-                    child: Image.asset(
-                      'assets/chat_bg.jpg',
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgScreen,
+                      image: DecorationImage(
+                        image: const AssetImage('assets/chat_bg.jpg'),
+                        fit: BoxFit.cover,
+                        opacity: 0.3,
+                      ),
                     ),
                   ),
                 ),
