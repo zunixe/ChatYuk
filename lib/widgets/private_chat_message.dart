@@ -153,9 +153,14 @@ class MessageBubble extends StatelessWidget {
               ),
               padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
+                // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard
                 color: msg.type == 'coin'
                     ? Color(0xFFFFF3C4)
-                    : (isMe ? AppTheme.primary.withValues(alpha: 0.25) : AppTheme.bgInput),
+                    : (isMe
+                          ? Color.alphaBlend(
+                              AppTheme.primary.withValues(alpha: 0.25),
+                              AppTheme.bgCard)
+                          : AppTheme.bgInput),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),

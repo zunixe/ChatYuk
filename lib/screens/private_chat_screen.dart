@@ -1302,6 +1302,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           Expanded(
             child: Stack(
               children: [
+                // Background chat — 30% transparan supaya konten tetap terbaca
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: 0.3,
+                    child: Image.asset(
+                      'assets/chat_bg.jpg',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
                 StreamBuilder<List<MessageModel>>(
                   stream: _msgsStream,
                   builder: (_, snap) {
