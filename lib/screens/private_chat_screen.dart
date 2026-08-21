@@ -16,6 +16,7 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../services/chat_service.dart';
+import '../services/chat_background.dart';
 import '../services/call_service.dart';
 import '../services/forensic_watermark.dart';
 import '../services/storage_photo_service.dart';
@@ -135,8 +136,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Preload background image supaya tidak ada blink hitam saat buka chat
-    precacheImage(const AssetImage('assets/chat_bg.jpg'), context);
     _openedAt = DateTime.now();
     activeChatId.value = widget.chatId;
     // Buka keyboard → tutup baris menu attach (mirip WhatsApp)
@@ -1304,18 +1303,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           Expanded(
             child: Stack(
               children: [
-                // Background chat — gambar 30% transparan. Pakai DecorationImage
-                // supaya paint di frame pertama, tidak ada blink hitam.
+                // Background chat — gambar 30% transparan, di-decode sekali di
+                // startup (warmChatBackground) lalu render sinkron via RawImage
+                // supaya frame pertama langsung final → tidak ada blink.
                 Positioned.fill(
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.bgScreen,
-                      image: DecorationImage(
-                        image: const AssetImage('assets/chat_bg.jpg'),
-                        fit: BoxFit.cover,
-                        opacity: 0.3,
-                      ),
-                    ),
+                    color: AppTheme.bgScreen,
+                    child: chatBackgroundImage == null
+                        ? const SizedBox.shrink()
+                        : Opacity(
+                            opacity: 0.3,
+                            child: RawImage(
+                              image: chatBackgroundImage,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                   ),
                 ),
                 StreamBuilder<List<MessageModel>>(
