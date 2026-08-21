@@ -135,6 +135,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   @override
   void initState() {
     super.initState();
+    // Preload background image supaya tidak ada blink hitam saat buka chat
+    precacheImage(const AssetImage('assets/chat_bg.jpg'), context);
     _openedAt = DateTime.now();
     activeChatId.value = widget.chatId;
     // Buka keyboard → tutup baris menu attach (mirip WhatsApp)
@@ -1309,6 +1311,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     child: Image.asset(
                       'assets/chat_bg.jpg',
                       fit: BoxFit.cover,
+                      gaplessPlayback: true,
                     ),
                   ),
                 ),
