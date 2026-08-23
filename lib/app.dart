@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme.dart';
@@ -53,10 +54,12 @@ class ChatYukApp extends StatelessWidget {
           navigatorKey: navigatorKey,
           // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
           // tapi tetap menghormati preferensi aksesibilitas user.
-          builder: (context, child) => MediaQuery.withClampedTextScaling(
-            minScaleFactor: 0.9,
-            maxScaleFactor: 1.3,
-            child: child ?? const SizedBox.shrink(),
+          builder: (context, child) => WithForegroundTask(
+            child: MediaQuery.withClampedTextScaling(
+              minScaleFactor: 0.9,
+              maxScaleFactor: 1.3,
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
           home: _AuthGate(),
         ),

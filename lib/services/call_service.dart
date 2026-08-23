@@ -336,6 +336,9 @@ class CallSession extends ChangeNotifier {
           _finish(CallEndReason.busy);
         case 'canceled':
           _finish(isCaller ? CallEndReason.ended : CallEndReason.canceled);
+        case 'ended':
+          // Lawan bicara menutup call → tutup sesi ini segera juga.
+          _finish(CallEndReason.ended);
         case 'answered':
           // Caller: callee sudah terima → pastikan offer sudah dibuat.
           if (isCaller && _phase == CallPhase.ringing) {

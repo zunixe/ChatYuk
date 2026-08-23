@@ -72,9 +72,21 @@ Deno.serve(async (req) => {
 
     const accessToken = await getAccessToken();
     // Data-only untuk tipe yang teksnya dirender client (bilingual):
-    // online, follow, friend_request, subscribe. Lainnya pakai notification block.
+    // online, follow, friend_request, subscribe.
+    // 'call' juga data-only → ditangani background handler Flutter yang
+    // menampilkan notifikasi full-screen + suara ringtone (gaya panggilan telp).
     const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call'];
     const isDataOnly = dataOnlyTypes.includes(body.data?.type);
+
+    // Untuk call, susun teks dari data (nama caller + tipe).
+    const isCall = body.data?.type === 'call';
+    const notifTitle = isCall
+      ? (body.data?.fromName || title || 'Panggilan')
+      : (title || 'Pesan baru');
+    const notifBody = isCall
+      ? (body.data?.callType === 'video' ? 'Panggilan video' : 'Panggilan suara')
+      : (msgBody || 'Ada pesan baru');
+
     const message = {
       message: {
         token,
@@ -82,8 +94,8 @@ Deno.serve(async (req) => {
           ? {}
           : {
               notification: {
-                title: title || 'Pesan baru',
-                body: msgBody || 'Ada pesan baru',
+                title: notifTitle,
+                body: notifBody,
               },
             }),
         data: data || {},

@@ -459,7 +459,22 @@ class ChatService {
           } else if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired') {
             queuePhotoDownload(msg);
           }
-          _current = [..._current, msg];
+          // Sisipkan di posisi kronologis yang benar (ascending by timestamp),
+          // bukan selalu di akhir — pesan realtime bisa tiba tidak urut
+          // (mis. pesan riwayat call datang SETELAH user kirim chat baru).
+          var insertAt = _current.length;
+          for (var i = _current.length - 1; i >= 0; i--) {
+            if (_current[i].timestamp.isAfter(msg.timestamp)) {
+              insertAt = i;
+            } else {
+              break;
+            }
+          }
+          _current = [
+            ..._current.sublist(0, insertAt),
+            msg,
+            ..._current.sublist(insertAt),
+          ];
           lastRealtime = DateTime.now();
           debugPrint('[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal');
           controller.add(_current);
