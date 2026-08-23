@@ -205,6 +205,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           });
         }
       }
+      // Call (Call ended dll) — optimistic: hapus pending-call tertua saat
+      // pesan call terkonfirmasi tiba (durasi bisa beda 1 detik, jadi FIFO).
+      for (final m in msgs) {
+        if (mySenderIds.contains(m.senderId) &&
+            m.type == 'call' &&
+            m.timestamp.isAfter(_openedAt)) {
+          final idx = _pending.indexWhere((p) => p.type == 'call');
+          if (idx != -1) {
+            setState(() => _pending.removeAt(idx));
+            break;
+          }
+        }
+      }
       // Foto & view-once: FIFO via id pesan server. ImageData di stream berupa
       // THUMBNAIL (bukan base64 penuh seperti pending), jadi tidak bisa
       // cocokkan konten — setiap pesan foto terkonfirmasi menghapus satu
@@ -294,7 +307,51 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     super.dispose();
   }
 
+  CallPhase? _prevCallPhase;
   void _onCallChanged() {
+    final sess = CallProvider.instance.activeSession;
+    // Call baru berakhir di chat ini → tampilkan bubble "Call ended" INSTAN
+    // (optimistic) agar tidak nunggu Realtime 1-2 detik. Nanti saat pesan
+    // server tiba, dedup di _msgsSub akan hapus pending.
+    if (sess != null &&
+        sess.remoteUid == widget.otherUid &&
+        sess.phase == CallPhase.ended &&
+        _prevCallPhase != CallPhase.ended) {
+      final auth = context.read<AuthProvider>();
+      final uid = auth.uid;
+      final profile = auth.profile;
+      if (uid != null && profile != null) {
+        final dur = sess.connectedAt != null
+            ? DateTime.now().difference(sess.connectedAt!).inSeconds
+            : 0;
+        final statusText = switch (sess.endReason) {
+          CallEndReason.ended => 'Call ended',
+          CallEndReason.declined => 'Call declined',
+          CallEndReason.missed => 'Missed call',
+          CallEndReason.canceled => 'Call canceled',
+          CallEndReason.busy => 'Busy',
+          CallEndReason.error => 'Call failed',
+        };
+        final durText = dur > 0
+            ? ' (${dur ~/ 60}:${(dur % 60).toString().padLeft(2, '0')})'
+            : '';
+        final text = '${sess.callType == 'video' ? '📹' : '📞'} $statusText$durText';
+        final pendingCall = MessageModel(
+          id: 'pending-call-${DateTime.now().microsecondsSinceEpoch}',
+          senderId: uid,
+          senderName: profile.nickname,
+          senderGender: profile.gender,
+          isRegistered: profile.isRegistered,
+          text: text,
+          type: 'call',
+          imageData: '',
+          timestamp: DateTime.now(),
+        );
+        setState(() => _pending.add(pendingCall));
+        _scrollToBottom();
+      }
+    }
+    _prevCallPhase = sess?.phase ?? _prevCallPhase;
     if (mounted) setState(() {});
   }
 
@@ -1917,7 +1974,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               child: ChatCallOverlay(
                 session: CallProvider.instance.activeSession!,
                 onExpand: _expandCall,
-                onEnd: () => unawaited(CallProvider.instance.clearSession()),
+                onEnd: () async {
+                    final sess = CallProvider.instance.activeSession;
+                    if (sess != null) await sess.end();
+                    unawaited(CallProvider.instance.clearSession());
+                  },
               ),
             ),
         ],

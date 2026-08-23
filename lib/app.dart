@@ -26,6 +26,7 @@ import 'screens/timeline_screen.dart';
 import 'screens/chats_screen.dart';
 import 'screens/post_composer_screen.dart';
 import 'widgets/anon_prompt_dialog.dart';
+import 'widgets/call_banner.dart';
 
 class ChatYukApp extends StatelessWidget {
   const ChatYukApp({super.key});
@@ -43,6 +44,7 @@ class ChatYukApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => NavProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => localeProvider),
+        ChangeNotifierProvider.value(value: CallProvider.instance),
       ],
       child: Consumer2<LocaleProvider, ThemeProvider>(
         builder: (context, _, theme, _) => MaterialApp(
@@ -55,10 +57,20 @@ class ChatYukApp extends StatelessWidget {
           // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
           // tapi tetap menghormati preferensi aksesibilitas user.
           builder: (context, child) => WithForegroundTask(
-            child: MediaQuery.withClampedTextScaling(
-              minScaleFactor: 0.9,
-              maxScaleFactor: 1.3,
-              child: child ?? const SizedBox.shrink(),
+            child: Stack(
+              children: [
+                MediaQuery.withClampedTextScaling(
+                  minScaleFactor: 0.9,
+                  maxScaleFactor: 1.3,
+                  child: child ?? const SizedBox.shrink(),
+                ),
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: CallBanner(),
+                ),
+              ],
             ),
           ),
           home: _AuthGate(),

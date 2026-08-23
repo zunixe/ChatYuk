@@ -9,9 +9,10 @@ import '../services/call_service.dart';
 import 'profile_avatar.dart';
 
 /// Overlay panggilan video dalam chat (gaya OmeTV, split setengah):
-/// - Video lawan mengisi setengah layar ATAS — tidak bisa di-drag.
+/// - Video lawan mengisi layar ATAS (default 50%) — BISA di-drag vertikal
+///   lewat handle di bawahnya untuk mengecil/membesar (25%–78%).
 /// - Video sendiri jadi bubble kecil yang BISA di-drag ke mana saja.
-/// - Chat tetap tampil & aktif di setengah bawah di belakang overlay.
+/// - Chat tetap tampil & aktif di bawah di belakang overlay.
 ///
 /// Dipasang sebagai anak [Stack] body chat via Positioned.fill.
 class ChatCallOverlay extends StatefulWidget {
@@ -32,6 +33,7 @@ class ChatCallOverlay extends StatefulWidget {
 
 class _ChatCallOverlayState extends State<ChatCallOverlay> {
   Offset? _bubblePos;
+  double? _remoteH;
 
   @override
   void initState() {
@@ -71,19 +73,32 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
     final showLocal =
         inCall && isVideo && sess.cameraOn && sess.localRenderer.srcObject != null;
 
-    // Hitung dimensi dari MediaQuery — aman di build(), tidak memicu
-    // !_debugDoingThisLayout yang terjadi saat MediaQuery dipanggil di LayoutBuilder.
     final mq = MediaQuery.of(context);
     final appBarH = Scaffold.maybeOf(context)?.appBarMaxHeight ?? kToolbarHeight;
     final maxW = mq.size.width;
-    final bodyH = mq.size.height - mq.padding.top - appBarH - mq.padding.bottom;
-    final halfH = bodyH * 0.5;
+    // Tinggi body efektif: kurangi viewInsets (keyboard) supaya hitungan
+    // akurat saat keyboard muncul — body Stack sudah di-resize Scaffold.
+    final bodyHFull = mq.size.height - mq.padding.top - appBarH - mq.padding.bottom;
+    final keyboardH = mq.viewInsets.bottom;
+    final bodyH = (bodyHFull - keyboardH).clamp(200.0, double.infinity);
+    // Keyboard terbuka → video HARUS mengecil agar 1-2 baris chat + composer keliatan.
+    final keyboardOpen = keyboardH > 40;
+    const minChatVisible = 110.0; // composer ~50 + 1-2 bubble ~60
+    final maxRemoteWhenKeyboard = (bodyH - minChatVisible).clamp(bodyH * 0.18, bodyH * 0.45);
+    final halfH = bodyHFull * 0.5;
+    _remoteH ??= halfH;
+    // Tinggi tampil: jika keyboard buka, batasi ke maxRemoteWhenKeyboard tapi jangan
+    // overwrite _remoteH (preferensi user tetap 50% saat keyboard tutup).
+    final userRemoteH = _remoteH!.clamp(bodyHFull * 0.25, bodyHFull * 0.78);
+    final remoteH = keyboardOpen
+        ? userRemoteH.clamp(bodyH * 0.18, maxRemoteWhenKeyboard)
+        : userRemoteH.clamp(bodyH * 0.25, bodyH * 0.78);
     final bubbleW = maxW * 0.3;
     final bubbleH = bubbleW * 1.4;
-    _bubblePos ??= Offset(maxW - bubbleW - 12, halfH - bubbleH - 12);
+    _bubblePos ??= Offset(maxW - bubbleW - 12, remoteH - bubbleH - 12);
     final pos = Offset(
       _bubblePos!.dx.clamp(8.0, maxW - bubbleW - 8),
-      // Clamp Y ke tinggi penuh body — bubble boleh didrag ke area chat juga.
+      // Clamp Y ke tinggi efektif body — bubble boleh didrag ke area chat juga.
       _bubblePos!.dy.clamp(8.0, bodyH - bubbleH - 8),
     );
 
@@ -97,10 +112,58 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
 
     // SizedBox.expand memastikan Stack mendapat tight constraints dari parent
     // (Positioned top/left/right/bottom=0), mencegah RenderStack NEEDS-PAINT.
+    // Animasi halus saat keyboard buka/tutup atau drag.
     return SizedBox.expand(
       child: Stack(
         children: [
-          _remotePanel(s, sess, isVideo, inCall, halfH),
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            top: 0,
+            left: 0,
+            right: 0,
+            height: remoteH,
+            child: _remotePanel(s, sess, isVideo, inCall, remoteH),
+          ),
+          // Handle drag untuk resize tinggi video — di bawah panel remote.
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            top: remoteH - 14,
+            left: 0,
+            right: 0,
+            height: 28,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (d) {
+                setState(() {
+                  // Update preferensi user (pakai bodyHFull agar tidak terpengaruh keyboard)
+                  _remoteH = (_remoteH! + d.delta.dy).clamp(bodyHFull * 0.25, bodyHFull * 0.78);
+                });
+              },
+              onPanEnd: (_) {
+                setState(() {
+                  _bubblePos = Offset(
+                    _bubblePos!.dx.clamp(8.0, maxW - bubbleW - 8),
+                    _bubblePos!.dy.clamp(8.0, bodyH - bubbleH - 8),
+                  );
+                });
+              },
+              child: Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white70,
+                    borderRadius: BorderRadius.circular(2),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 4),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
           if (showLocal)
             _localBubble(sess, pos, bubbleW, bubbleH, maxW, bodyH),
         ],
@@ -118,12 +181,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   ) {
     final showRemote = inCall && isVideo && sess.hasRemoteVideo;
 
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      height: height,
-      child: Stack(
+    return Stack(
         children: [
           // Selalu di-mount supaya audio remote jalan & video langsung tampil.
           // Positioned.fill wajib — di dalam Stack tanpa ini RTCVideoView dapat
@@ -181,8 +239,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
           ),
           Positioned(bottom: 10, left: 0, right: 0, child: _controls(s, sess, isVideo)),
         ],
-      ),
-    );
+      );
   }
 
   Widget _controls(S s, CallSession sess, bool isVideo) {

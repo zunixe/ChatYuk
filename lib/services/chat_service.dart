@@ -201,9 +201,10 @@ class ChatService {
 
     // Kolom tanpa image_data — foto diambil terpisah (PhotoCache / download
     // lazy) supaya buka chat tetap cepat walau ada ratusan foto.
-    const baseCols = 'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted';
+    const privateCols = 'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted';
+    const roomCols = 'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at';
     const replyCols = 'replied_to_id,replied_to_text,replied_to_sender_name';
-    final cols = isPrivate ? '$baseCols,$replyCols' : baseCols;
+    final cols = isPrivate ? '$privateCols,$replyCols' : roomCols;
 
     // Sync foto otomatis: server → file lokal terenkripsi. Download lazy
     // (paralel) hanya untuk pesan yang fotonya belum ada di lokal.
@@ -380,15 +381,24 @@ class ChatService {
         if (_hiddenCutoff != null) {
           server.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
         }
-        // MERGE: server DESC (newest dulu) → reverse jadi ASC (oldest dulu).
-        // _current (realtime) yang belum ada di server ditambahkan di akhir
-        // (paling baru). JANGAN sort by timestamp: parseDate antara REST API
-        // (string → .toLocal()) dan realtime payload (DateTime → UTC) bisa
-        // berbeda 7 jam sehingga urutan kacau.
+        // MERGE: server DESC → ASC. _current yang belum ada di server
+        // disisipkan kronologis (bukan selalu di akhir) — realtime bisa
+        // datang tidak urut & cache bisa berisi pesan lama di luar window
+        // fetch 100 terbaru.
         final merged = List<MessageModel>.from(server.reversed);
         final seenIds = merged.map((m) => m.id).toSet();
         for (final m in _current) {
-          if (seenIds.add(m.id)) merged.add(m);
+          if (seenIds.add(m.id)) {
+            var idx = merged.length;
+            for (var i = merged.length - 1; i >= 0; i--) {
+              if (merged[i].timestamp.isAfter(m.timestamp)) {
+                idx = i;
+              } else {
+                break;
+              }
+            }
+            merged.insert(idx, m);
+          }
         }
         if (_hiddenCutoff != null) {
           merged.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));

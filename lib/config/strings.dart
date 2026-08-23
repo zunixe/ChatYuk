@@ -444,6 +444,9 @@ class S {
   String get msgCallInProgress => isId
       ? 'Kamu sedang dalam panggilan lain.'
       : 'You are in another call.';
+  String get callBannerTap => isId
+      ? 'Ketuk untuk kembali ke panggilan'
+      : 'Tap to return to call';
 
   // ── Errors / Generic ──
   String get btnCancel => isId ? 'Batal' : 'Cancel';

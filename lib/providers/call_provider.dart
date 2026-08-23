@@ -32,6 +32,8 @@ class CallProvider extends ChangeNotifier {
   CallSession? get activeSession => _activeSession;
   CallMode? _activeMode;
   CallMode? get activeMode => _activeMode;
+  String? _activeChatId;
+  String? get activeChatId => _activeChatId;
 
   Timer? _clearTimer;
 
@@ -115,6 +117,7 @@ class CallProvider extends ChangeNotifier {
     );
     _activeSession = session;
     _activeMode = mode;
+    _activeChatId = chatId;
     _activeCallId = callId;
     session.addListener(_onActiveSession);
     unawaited(session.init());
@@ -147,6 +150,7 @@ class CallProvider extends ChangeNotifier {
     final sess = _activeSession!;
     _activeSession = null;
     _activeMode = null;
+    _activeChatId = null;
     _activeCallId = null;
     sess.removeListener(_onActiveSession);
     await CallNotification.cancel();

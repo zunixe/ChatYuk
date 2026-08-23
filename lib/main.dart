@@ -275,6 +275,14 @@ Future<void> _initNotifications() async {
   }
   if (token != null) {
     debugPrint('FCM token: ${token.substring(0, 20)}...');
+    final auth = AuthService();
+    if (auth.isSignedIn) {
+      unawaited(auth.updateFcmToken(token));
+    } else {
+      unawaited(_waitForSession().then((ready) {
+        if (ready) unawaited(AuthService().updateFcmToken(token!));
+      }));
+    }
   }
 
   // Token bisa dirotasi FCM kapan saja (umumnya setelah reinstall app).
@@ -284,6 +292,10 @@ Future<void> _initNotifications() async {
     final auth = AuthService();
     if (auth.isSignedIn) {
       unawaited(auth.updateFcmToken(newToken));
+    } else {
+      unawaited(_waitForSession().then((ready) {
+        if (ready) unawaited(AuthService().updateFcmToken(newToken));
+      }));
     }
   });
 
