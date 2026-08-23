@@ -125,6 +125,13 @@ class MessageBubble extends StatelessWidget {
   final bool isAdminView;
   // Room chat pakai tabel 'messages' untuk clear view-once.
   final bool isRoom;
+  // Long-press untuk buka menu (Balas / Edit / Hapus) seperti WhatsApp.
+  // LayerLink dipakai agar action bar (icon) bisa di-anchor tepat di atas
+  // bubble dan ikut mengikuti posisi bubble saat list di-scroll.
+  final void Function(LongPressStartDetails, MessageModel, LayerLink)? onLongPressMenu;
+  // Link anchor milik bubble ini (dibuat & dikelola oleh screen agar stabil
+  // antar rebuild ListView — lihat _msgLinks di private_chat_screen).
+  final LayerLink link;
   const MessageBubble({
     super.key,
     required this.msg,
@@ -136,12 +143,38 @@ class MessageBubble extends StatelessWidget {
     this.onRetryImage,
     this.isAdminView = false,
     this.isRoom = false,
+    this.onLongPressMenu,
+    required this.link,
   });
 
   @override
   Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    // Pesan yang dihapus (soft delete) → tampilkan teks redup, bukan isinya.
+    if (msg.isDeleted) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            Text(
+              s.messageDeleted,
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     final timeStr = DateFormat.Hm().format(msg.timestamp.toLocal());
-    return Padding(
+    return CompositedTransformTarget(
+      link: link,
+      child: GestureDetector(
+        onLongPressStart: (d) => onLongPressMenu?.call(d, msg, link),
+        behavior: HitTestBehavior.opaque,
+      child: Padding(
       padding: EdgeInsets.only(bottom: 8),
       child: Row(
         mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -153,14 +186,23 @@ class MessageBubble extends StatelessWidget {
               ),
               padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard
+                // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
+                // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
+                // halus supaya tetap kontras di atas wallpaper chat apa pun.
                 color: msg.type == 'coin'
                     ? Color(0xFFFFF3C4)
                     : (isMe
                           ? Color.alphaBlend(
                               AppTheme.primary.withValues(alpha: 0.25),
                               AppTheme.bgCard)
-                          : AppTheme.bgInput),
+                          : AppTheme.bgCard),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.22),
+                    blurRadius: 6,
+                    offset: const Offset(0, 1.5),
+                  ),
+                ],
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),
@@ -171,6 +213,34 @@ class MessageBubble extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
+                  if (msg.repliedToText != null && msg.repliedToText!.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isMe
+                            ? Colors.white.withValues(alpha: 0.15)
+                            : AppTheme.bgScreen.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border(
+                          left: BorderSide(color: AppTheme.primary, width: 3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            msg.repliedToSenderName ?? '',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            msg.repliedToText!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
                   if (msg.type == 'image' && msg.imageData.isNotEmpty)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
@@ -293,10 +363,41 @@ class MessageBubble extends StatelessWidget {
                         ],
                       );
                     })
+                  else if (msg.type == 'call')
+                    Builder(builder: (context) {
+                      final isVideoCall = msg.text.contains('📹');
+                      // Hapus emoji awal (📹/📞) dari teks karena ikon sudah
+                      // ditampilkan terpisah — hindari ikon ganda. Pakai
+                      // replace literal (bukan regex) supaya surrogate emoji
+                      // tidak rusak jadi karakter '?'.
+                      final displayText = msg.text
+                          .replaceFirst('📹', '')
+                          .replaceFirst('📞', '')
+                          .trimLeft();
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isVideoCall ? Icons.videocam : Icons.call,
+                            size: 16,
+                            color: AppTheme.textSecondary,
+                          ),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              displayText,
+                              style: AppText.body.copyWith(color: AppTheme.textSecondary),
+                            ),
+                          ),
+                          SizedBox(width: 6),
+                          Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                        ],
+                      );
+                    })
                   else
                     MessageTextWithTime(
                       text: msg.text,
-                      timeStr: timeStr,
+                      timeStr: msg.edited ? '$timeStr ${s.msgEdited}' : timeStr,
                       textStyle: AppText.body,
                       timeStyle: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400),
                       alignRight: isMe,
@@ -313,6 +414,8 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

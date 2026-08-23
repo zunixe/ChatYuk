@@ -4,9 +4,11 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
+import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
+import '../services/call_notification.dart';
 import '../widgets/profile_avatar.dart';
 
 /// Layar panggilan 1:1 — dipakai caller (menelpon) dan callee (menerima).
@@ -15,8 +17,9 @@ class CallScreen extends StatefulWidget {
   final String callId;
   final String remoteUid;
   final String remoteName;
-  final String callType; // 'audio' | 'video'
+  final String callType;
   final bool isCaller;
+  final List<Map<String, dynamic>> pendingSignals;
 
   const CallScreen({
     super.key,
@@ -25,6 +28,7 @@ class CallScreen extends StatefulWidget {
     required this.remoteName,
     required this.callType,
     required this.isCaller,
+    this.pendingSignals = const [],
   });
 
   @override
@@ -40,12 +44,24 @@ class _CallScreenState extends State<CallScreen> {
   void initState() {
     super.initState();
     CallProvider.instance.registerCall(widget.callId);
+    final profile = context.read<AuthProvider>().profile;
+    final s = context.read<LocaleProvider>().s;
+    unawaited(CallNotification.showActive(
+      body: widget.callType == 'video'
+          ? s.callNotifActiveVideo
+          : s.callNotifActiveAudio,
+      channelName: s.callNotifActiveAudio,
+      channelDesc: s.callNotifActiveAudio,
+    ));
     _session = CallSession(
       callId: widget.callId,
       remoteUid: widget.remoteUid,
       remoteName: widget.remoteName,
       callType: widget.callType,
       isCaller: widget.isCaller,
+      myName: profile?.nickname ?? '',
+      myGender: profile?.gender ?? 'other',
+      pendingSignals: widget.pendingSignals,
     );
     _session.addListener(_onSession);
     unawaited(_session.init());
@@ -56,6 +72,7 @@ class _CallScreenState extends State<CallScreen> {
     _session.removeListener(_onSession);
     _autoClose?.cancel();
     unawaited(_session.close());
+    unawaited(CallNotification.cancel());
     CallProvider.instance.unregisterCall(widget.callId);
     super.dispose();
   }
@@ -63,8 +80,10 @@ class _CallScreenState extends State<CallScreen> {
   void _onSession() {
     if (!mounted) return;
     setState(() {});
+    if (_session.phase == CallPhase.ended) {
+      unawaited(CallNotification.cancel());
+    }
     if (_session.phase == CallPhase.ended && _autoClose == null) {
-      // Tampilkan alasan berakhir 2 detik, lalu tutup layar.
       _autoClose = Timer(const Duration(milliseconds: 2200), () {
         if (mounted) Navigator.of(context).pop();
       });
@@ -113,28 +132,36 @@ class _CallScreenState extends State<CallScreen> {
     final s = context.watch<LocaleProvider>().s;
     final isVideo = widget.callType == 'video';
     final inCall = _session.phase == CallPhase.inCall;
-    final videoOn = inCall && isVideo && _session.cameraOn;
+    final showRemoteVideo =
+        inCall && isVideo && _session.hasRemoteVideo;
+    final showLocalPreview =
+        inCall && isVideo && _session.cameraOn && _session.localRenderer.srcObject != null;
 
     return Scaffold(
       backgroundColor: const Color(0xFF10201A),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Video remote / avatar fallback
-          if (inCall && videoOn && _session.remoteStream != null)
-            RTCVideoView(
-              _session.remoteRenderer,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-            )
-          else
-            _RemoteFallback(
-              uid: widget.remoteUid,
-              name: widget.remoteName,
-              muted: inCall && !_session.micOn,
+          // Remote stream — SELALU di-mount supaya Android memutar audio
+          // remote meski tak ada video track (panggilan audio, atau video
+          // masih negosiasi). Tanpa view terpasang, audio remote diam.
+          RTCVideoView(
+            _session.remoteRenderer,
+            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          ),
+          // Overlay avatar untuk panggilan audio / sebelum video tiba.
+          if (!showRemoteVideo)
+            Container(
+              color: const Color(0xFF10201A),
+              child: _RemoteFallback(
+                uid: widget.remoteUid,
+                name: widget.remoteName,
+                muted: inCall && !_session.micOn,
+              ),
             ),
 
           // Preview lokal (video, overlay kecil di pojok)
-          if (inCall && videoOn && _session.localRenderer.srcObject != null)
+          if (showLocalPreview)
             Positioned(
               top: 40,
               right: 16,
@@ -191,7 +218,7 @@ class _CallScreenState extends State<CallScreen> {
                     onTap: _session.toggleMic,
                   ),
                   if (isVideo) ...[
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 16),
                     _ControlButton(
                       icon: _session.cameraOn
                           ? Icons.videocam
@@ -200,13 +227,13 @@ class _CallScreenState extends State<CallScreen> {
                       tooltip: s.btnSwitchCamera,
                       onTap: _session.toggleCamera,
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 16),
                     _ControlButton(
                       icon: Icons.cameraswitch,
                       tooltip: s.btnSwitchCamera,
                       onTap: _session.switchCamera,
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 16),
                     _ControlButton(
                       icon: _session.speakerOn
                           ? Icons.volume_up
@@ -217,7 +244,7 @@ class _CallScreenState extends State<CallScreen> {
                       onTap: _session.toggleSpeaker,
                     ),
                   ],
-                  const SizedBox(width: 20),
+                  const SizedBox(width: 16),
                   _ControlButton(
                     icon: Icons.call_end,
                     color: Colors.redAccent,
@@ -338,9 +365,9 @@ class _ControlButton extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: 56,
-            height: 56,
-            child: Icon(icon, color: Colors.white, size: 26),
+            width: 50,
+            height: 50,
+            child: Icon(icon, color: Colors.white, size: 24),
           ),
         ),
       ),

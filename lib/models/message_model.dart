@@ -10,6 +10,8 @@ class MessageModel {
   final String type;
   final String imageData;
   final DateTime timestamp;
+  final bool edited;
+  final bool isDeleted;
   final String? repliedToId;
   final String? repliedToText;
   final String? repliedToSenderName;
@@ -24,7 +26,9 @@ class MessageModel {
     required this.type,
     required this.imageData,
     required this.timestamp,
-    this.repliedToId,
+      this.edited = false,
+      this.isDeleted = false,
+      this.repliedToId,
     this.repliedToText,
     this.repliedToSenderName,
   });
@@ -40,6 +44,8 @@ class MessageModel {
       isRegistered: map['isRegistered'] == true,
       text: map['text'] ?? '',
       type: map['type'] ?? 'text',
+      edited: map['edited'] == true,
+      isDeleted: map['isDeleted'] == true,
       imageData: map['imageData'] ?? '',
       timestamp: parseDate(map['timestamp'] ?? map['createdAt']),
       repliedToId: map['repliedToId'] is String ? map['repliedToId'] : null,
@@ -68,6 +74,9 @@ class MessageModel {
   MessageModel copyWith({
     String? imageData,
     String? type,
+    String? text,
+    bool? edited,
+    bool? isDeleted,
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
@@ -78,10 +87,12 @@ class MessageModel {
       senderName: senderName,
       senderGender: senderGender,
       isRegistered: isRegistered,
-      text: text,
+      text: text ?? this.text,
       type: type ?? this.type,
       imageData: imageData ?? this.imageData,
       timestamp: timestamp,
+      edited: edited ?? this.edited,
+      isDeleted: isDeleted ?? this.isDeleted,
       repliedToId: repliedToId ?? this.repliedToId,
       repliedToText: repliedToText ?? this.repliedToText,
       repliedToSenderName: repliedToSenderName ?? this.repliedToSenderName,

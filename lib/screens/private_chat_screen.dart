@@ -126,6 +126,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   Color _hashColor(int i) => _hashColors[i % _hashColors.length];
   final List<MessageModel> _pending = [];
+  // LayerLink per pesan — dipakai anchor action bar (icon Balas/Edit/Hapus)
+  // tepat di atas bubble. CompositedTransformFollower ikut mengikuti bubble
+  // saat list di-scroll, jadi action bar tidak "menempel" di layar.
+  final Map<String, LayerLink> _msgLinks = {};
+  OverlayEntry? _actionBar;
+
+  LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
   // Foto yang sudah dikonfirmasi server (id pesan server) — dipakai dedupe
   // FIFO karena imageData di stream berupa thumbnail, bukan base64 penuh.
   // Hanya foto dengan timestamp setelah screen dibuka yang diproses, supaya
@@ -256,8 +263,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     });
   }
 
+  void _hideActionBar() {
+    _actionBar?.remove();
+    _actionBar = null;
+  }
+
   @override
   void dispose() {
+    _hideActionBar();
     _chatInfoSub?.cancel();
     _msgsSub?.cancel();
     _statusSub?.cancel();
@@ -307,6 +320,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   bool _isSending = false;
+  MessageModel? _editingMessage;
+  MessageModel? _replyingTo;
   StreamSubscription<void>? _typingSub;
   Timer? _typingClearTimer;
   DateTime _lastTypingSent = DateTime(2000);
@@ -352,6 +367,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty || _isSending) return;
+
+    // Mode edit: kirim langsung mengubah pesan lama (bukan pesan baru).
+    if (_editingMessage != null) {
+      final id = _editingMessage!.id;
+      final original = _editingMessage!.text;
+      _msgCtrl.clear();
+      setState(() => _editingMessage = null);
+      if (text != original) {
+        await ChatService().editPrivateMessage(id, text);
+      }
+      return;
+    }
+
     _msgCtrl.clear();
     _isSending = true;
 
@@ -409,7 +437,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         senderName: profile.nickname,
         senderGender: profile.gender,
         text: text,
+        repliedToId: _replyingTo?.id,
+        repliedToText: _replyingTo?.text,
+        repliedToSenderName: _replyingTo?.senderName,
       );
+      if (_replyingTo != null) setState(() => _replyingTo = null);
       _maybeNewChatBonus();
     } catch (e) {
       // Kirim gagal → kembalikan koin yang sudah terpotong.
@@ -432,6 +464,115 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _isSending = false;
     }
     _scrollToBottom();
+  }
+
+  /// Mulai edit pesan teks sendiri — teks dimasukkan ke composer bawah,
+  /// lalu kirim (tombol send) akan langsung mengubah pesan ini, bukan
+  /// membuat pesan baru.
+  void _editMessage(MessageModel msg) {
+    setState(() {
+      _editingMessage = msg;
+      _msgCtrl.text = msg.text;
+      _msgCtrl.selection = TextSelection.collapsed(offset: msg.text.length);
+    });
+    _inputFocus.requestFocus();
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _editingMessage = null;
+      _msgCtrl.clear();
+    });
+  }
+
+  /// Hold pesan → action bar icon (Balas / Edit / Hapus) tepat di atas
+  /// bubble. Diposisikan pakai CompositedTransformFollower + LayerLink milik
+  /// bubble, jadi saat list di-scroll bar tetap nempel di atas bubble yang
+  /// sama (Overlay, bukan bagian dari scroll).
+  void _onMessageLongPress(
+      LongPressStartDetails details, MessageModel msg, LayerLink link) {
+    if (msg.isDeleted) return;
+    _hideActionBar();
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final isMe = msg.senderId == (auth.uid ?? '');
+    final isPending = msg.id.startsWith('pending-');
+    final canEdit = isMe && msg.type == 'text' && !isPending;
+
+    Widget iconBtn(IconData icon, String tooltip, VoidCallback onTap,
+        {bool danger = false}) {
+      return IconButton(
+        icon: Icon(icon,
+            size: 20,
+            color: danger ? AppTheme.danger : AppTheme.textPrimary),
+        tooltip: tooltip,
+        splashRadius: 20,
+        onPressed: () {
+          _hideActionBar();
+          onTap();
+        },
+      );
+    }
+
+    _actionBar = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _hideActionBar,
+              behavior: HitTestBehavior.translucent,
+              child: const SizedBox.expand(),
+            ),
+          ),
+          CompositedTransformFollower(
+            link: link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.topCenter,
+            followerAnchor: Alignment.bottomCenter,
+            offset: const Offset(0, -8),
+            child: Material(
+              color: AppTheme.bgCard,
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              shadowColor: Colors.black.withValues(alpha: 0.25),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    iconBtn(Icons.reply, s.menuReply,
+                        () => _replyMessage(msg)),
+                    if (canEdit)
+                      iconBtn(Icons.edit, s.editMessageTitle,
+                          () => _editMessage(msg)),
+                    if (isMe)
+                      iconBtn(Icons.delete_outline, s.btnDelete,
+                          () => _deleteMessage(msg),
+                          danger: true),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    Overlay.of(context).insert(_actionBar!);
+  }
+
+  void _replyMessage(MessageModel msg) {
+    setState(() => _replyingTo = msg);
+    _inputFocus.requestFocus();
+    _scrollToBottom();
+  }
+
+  void _cancelReply() {
+    setState(() => _replyingTo = null);
+  }
+
+  Future<void> _deleteMessage(MessageModel msg) async {
+    await ChatService().deletePrivateMessage(msg.id);
   }
 
   Future<void> _sendPhoto() async {
@@ -1109,6 +1250,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     });
 
     return Scaffold(
+      extendBody: true,
+      backgroundColor: Colors.transparent,
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         titleSpacing: 0,
         title: Row(
@@ -1236,18 +1380,31 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         ),
         actions: [
           if ((auth.profile?.isRegistered ?? false) &&
-              (_otherRegistered || widget.otherRegistered)) ...[
-            IconButton(
+              (_otherRegistered || widget.otherRegistered))
+            PopupMenuButton(
               icon: Icon(Icons.call, color: Colors.white, size: 22),
+              color: AppTheme.bgCard,
               tooltip: s.callAudio,
-              onPressed: () => _startCall(context, 'audio'),
+              onSelected: (val) {
+                if (val == 'audio') {
+                  _startCall(context, 'audio');
+                } else if (val == 'video') {
+                  _startCall(context, 'video');
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'audio',
+                  child: Text(s.callAudio,
+                      style: TextStyle(color: AppTheme.textPrimary)),
+                ),
+                PopupMenuItem(
+                  value: 'video',
+                  child: Text(s.callVideo,
+                      style: TextStyle(color: AppTheme.textPrimary)),
+                ),
+              ],
             ),
-            IconButton(
-              icon: Icon(Icons.videocam, color: Colors.white, size: 22),
-              tooltip: s.callVideo,
-              onPressed: () => _startCall(context, 'video'),
-            ),
-          ],
           PopupMenuButton(
             icon: Icon(Icons.more_vert, color: Colors.white),
             color: AppTheme.bgCard,
@@ -1298,28 +1455,33 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: Stack(
+          // Background chat — gambar 30% transparan, di-decode sekali di
+          // startup (warmChatBackground) lalu render sinkron via RawImage
+          // supaya frame pertama langsung final → tidak ada blink.
+          // Ditaruh di layer terluar (Positioned.fill) agar TIDAK ikut
+          // bergeser saat keyboard muncul (resizeToAvoidBottomInset: false).
+          Positioned.fill(
+            child: Container(
+              color: AppTheme.bgScreen,
+              child: chatBackgroundImage == null
+                  ? const SizedBox.shrink()
+                  : Opacity(
+                      opacity: 0.55,
+                      child: RawImage(
+                        image: chatBackgroundImage,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+            ),
+          ),
+          Positioned.fill(
+            child: Column(
               children: [
-                // Background chat — gambar 30% transparan, di-decode sekali di
-                // startup (warmChatBackground) lalu render sinkron via RawImage
-                // supaya frame pertama langsung final → tidak ada blink.
-                Positioned.fill(
-                  child: Container(
-                    color: AppTheme.bgScreen,
-                    child: chatBackgroundImage == null
-                        ? const SizedBox.shrink()
-                        : Opacity(
-                            opacity: 0.3,
-                            child: RawImage(
-                              image: chatBackgroundImage,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                  ),
-                ),
+                Expanded(
+                  child: Stack(
+                    children: [
                 StreamBuilder<List<MessageModel>>(
                   stream: _msgsStream,
                   builder: (_, snap) {
@@ -1388,6 +1550,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                             i >= 50;
                         return MessageBubble(
                           key: ValueKey(msg.id),
+                          link: _linkFor(msg.id),
                           msg: msg,
                           chatKey: cacheKeyFor(widget.chatId),
                           isMe: isMe,
@@ -1395,6 +1558,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           isPending: isPending,
                           isImageDeferred: isImageDeferred,
                           onRetryImage: _msgsHandleFetchImage,
+                          onLongPressMenu: _onMessageLongPress,
                         );
                       },
                     );
@@ -1441,9 +1605,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               ),
             ),
           Container(
-            padding: EdgeInsets.fromLTRB(8, 6, 8, 6),
+            padding: EdgeInsets.fromLTRB(
+              8,
+              6,
+              8,
+              6 + MediaQuery.of(context).viewInsets.bottom,
+            ),
             decoration: BoxDecoration(
-              color: AppTheme.bgScreen,
+              color: Colors.transparent,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
@@ -1457,6 +1626,66 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (_replyingTo != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                      child: Row(
+                        children: [
+                          Icon(Icons.reply, size: 16, color: AppTheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.replyingTo,
+                                  style: AppText.caption
+                                      .copyWith(color: AppTheme.primary),
+                                ),
+                                Text(
+                                  _replyingTo!.text,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.bodySmall.copyWith(
+                                      color: AppTheme.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close,
+                                size: 18, color: AppTheme.textSecondary),
+                            onPressed: _cancelReply,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_editingMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 16, color: AppTheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              s.editingMessage,
+                              style: AppText.bodySmall
+                                  .copyWith(color: AppTheme.primary),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close,
+                                size: 18, color: AppTheme.textSecondary),
+                            onPressed: _cancelEdit,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -1629,6 +1858,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 ],
               ),
             ),
+          ),
+        ],
+      ),
           ),
         ],
       ),

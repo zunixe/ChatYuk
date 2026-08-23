@@ -29,6 +29,8 @@ final LocaleProvider localeProvider = LocaleProvider();
 
 final ValueNotifier<String?> activeChatId = ValueNotifier(null);
 
+bool _firebaseReady = false;
+
 final lpn.FlutterLocalNotificationsPlugin localNotifications =
     lpn.FlutterLocalNotificationsPlugin();
 
@@ -175,7 +177,8 @@ Future<void> _initNotifications() async {
   await localeProvider.init();
 
   final androidInit = const lpn.AndroidInitializationSettings('@mipmap/ic_launcher');
-  final settings = lpn.InitializationSettings(android: androidInit);
+  final iosInit = const lpn.DarwinInitializationSettings();
+  final settings = lpn.InitializationSettings(android: androidInit, iOS: iosInit);
   await localNotifications.initialize(
     settings: settings,
     onDidReceiveNotificationResponse: (response) {
@@ -186,6 +189,12 @@ Future<void> _initNotifications() async {
       } catch (_) {}
     },
   );
+
+  if (!_firebaseReady) {
+    debugPrint('[FCM] dilewati, Firebase belum init');
+    _initDeepLinks();
+    return;
+  }
 
   final messaging = FirebaseMessaging.instance;
 
@@ -320,13 +329,24 @@ void main() async {
   };
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    _firebaseReady = true;
+  } on UnsupportedError catch (e) {
+    debugPrint('[FIREBASE] iOS belum dikonfigurasi, lewati: $e');
   } on FirebaseException catch (e) {
-    if (e.code != 'duplicate-app') rethrow;
+    if (e.code == 'duplicate-app') {
+      _firebaseReady = true;
+    } else {
+      debugPrint('[FIREBASE] init gagal: $e');
+    }
+  } catch (e) {
+    debugPrint('[FIREBASE] init error: $e');
   }
   await SupabaseConfig.init();
   await MessageCache.instance.clearAllLegacy(); // bersihkan semua cache lama
   PhotoCache.instance.cleanOldPhotos(); // fire-and-forget, hapus foto >7 hari
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  if (_firebaseReady) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
   await _initNotifications();
   await warmChatBackground();
   runApp(const ChatYukApp());

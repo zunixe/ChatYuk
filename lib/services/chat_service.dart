@@ -116,6 +116,44 @@ class ChatService {
     return _cachedMessagesStream(cacheKey: 'private_$chatId');
   }
 
+  /// Edit teks pesan sendiri di private chat. RLS menjamin hanya sender_id
+  /// (auth.uid) yang boleh mengubah pesannya. `edited` ditandai true bila
+  /// kolom migrasi sudah ada; kalau belum, fallback hanya ubah `text`.
+  Future<bool> editPrivateMessage(String messageId, String newText) async {
+    try {
+      await _sb.from('private_messages').update({
+        'text': newText,
+        'edited': true,
+      }).eq('id', messageId);
+      return true;
+    } catch (e) {
+      debugPrint('[ChatService] editPrivateMessage (with edited) error: $e');
+      try {
+        await _sb.from('private_messages').update({
+          'text': newText,
+        }).eq('id', messageId);
+        return true;
+      } catch (e2) {
+        debugPrint('[ChatService] editPrivateMessage (text only) error: $e2');
+        return false;
+      }
+    }
+  }
+
+  /// Hapus pesan sendiri (soft delete) — tandai is_deleted = true.
+  /// RLS menjamin hanya sender_id (auth.uid) yang boleh mengubah pesannya.
+  Future<bool> deletePrivateMessage(String messageId) async {
+    try {
+      await _sb.from('private_messages').update({
+        'is_deleted': true,
+      }).eq('id', messageId);
+      return true;
+    } catch (e) {
+      debugPrint('[ChatService] deletePrivateMessage error: $e');
+      return false;
+    }
+  }
+
   /// - loadCache dan fetchServer jalan PARALEL untuk tampilan secepat mungkin.
   /// - INSERT event langsung di-append ke list tanpa refetch (0 network round-trip).
   /// - UPDATE/DELETE tetap refetch karena perlu reorder.
@@ -163,7 +201,7 @@ class ChatService {
 
     // Kolom tanpa image_data — foto diambil terpisah (PhotoCache / download
     // lazy) supaya buka chat tetap cepat walau ada ratusan foto.
-    const baseCols = 'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at';
+    const baseCols = 'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted';
     const replyCols = 'replied_to_id,replied_to_text,replied_to_sender_name';
     final cols = isPrivate ? '$baseCols,$replyCols' : baseCols;
 
@@ -444,8 +482,21 @@ class ChatService {
           final idx = _current.indexWhere((x) => x.id == newRecord['id']);
           if (idx < 0) { reload(); return; }
           final updated = _current[idx].copyWith(
-            imageData: newRecord['image_data'] as String?,
-            type: newRecord['type'] as String?,
+            text: newRecord.containsKey('text')
+                ? (newRecord['text'] as String? ?? _current[idx].text)
+                : _current[idx].text,
+            edited: newRecord.containsKey('edited')
+                ? (newRecord['edited'] as bool? ?? false)
+                : _current[idx].edited,
+            imageData: newRecord.containsKey('image_data')
+                ? (newRecord['image_data'] as String? ?? _current[idx].imageData)
+                : _current[idx].imageData,
+            type: newRecord.containsKey('type')
+                ? (newRecord['type'] as String? ?? _current[idx].type)
+                : _current[idx].type,
+            isDeleted: newRecord.containsKey('is_deleted')
+                ? (newRecord['is_deleted'] as bool? ?? false)
+                : _current[idx].isDeleted,
           );
           _current[idx] = updated;
           controller.add(List.unmodifiable(_current));
@@ -622,11 +673,11 @@ class ChatService {
     String? repliedToSenderName,
   }) async {
     // Validasi tipe pesan
-    if (!['text', 'image', 'view_once'].contains(type)) {
+    if (!['text', 'image', 'view_once', 'call'].contains(type)) {
       throw Exception('Invalid message type');
     }
     // Validasi image data jika ada — boleh base64 (lama) ATAU path storage (baru)
-    if (imageData.isNotEmpty &&
+    if (type != 'call' && imageData.isNotEmpty &&
         !isValidImageBase64(imageData) &&
         !StoragePhotoService.instance.isPath(imageData)) {
       throw Exception('Invalid image data');
