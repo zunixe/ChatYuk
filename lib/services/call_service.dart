@@ -85,6 +85,7 @@ class CallService {
         'text': text,
         'type': 'call',
         'image_data': '',
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     } catch (e) {
       debugPrint('[CallService] sendCallMessage error: $e');
@@ -300,6 +301,7 @@ class CallSession extends ChangeNotifier {
   CallEndReason _endReason = CallEndReason.ended;
   bool _micOn = true;
   bool _cameraOn = true;
+  bool _remoteCameraOn = true;
   bool _speakerOn = true;
   DateTime? _connectedAt;
 
@@ -307,11 +309,17 @@ class CallSession extends ChangeNotifier {
   CallEndReason get endReason => _endReason;
   bool get micOn => _micOn;
   bool get cameraOn => _cameraOn;
+  bool get remoteCameraOn => _remoteCameraOn;
   bool get speakerOn => _speakerOn;
   DateTime? get connectedAt => _connectedAt;
   MediaStream? get remoteStream => _remoteStream;
-  bool get hasRemoteVideo =>
-      _remoteStream?.getVideoTracks().isNotEmpty ?? false;
+  bool get hasRemoteVideo {
+    final tracks = _remoteStream?.getVideoTracks();
+    if (tracks == null || tracks.isEmpty) return false;
+    if (!_remoteCameraOn) return false;
+    // Fallback: jika track dimatikan via muted/disabled (platform beda-beda)
+    return tracks.any((t) => t.enabled && !(t.muted ?? false));
+  }
 
   /// Siapkan renderer + media lokal + peer connection + listener sinyal.
   /// Belum membuat offer — caller menunggu callee jawab.
@@ -631,6 +639,14 @@ class CallSession extends ChangeNotifier {
               rethrow;
             }
           }
+        case 'camera':
+          final en = msg['enabled'];
+          if (en is bool) {
+            _remoteCameraOn = en;
+            debugPrint('[CallSession] remoteCameraOn=$_remoteCameraOn');
+            notifyListeners();
+          }
+          break;
         case 'bye':
           _finish(CallEndReason.ended);
       }
@@ -642,11 +658,25 @@ class CallSession extends ChangeNotifier {
   /// Re-fetch semua call_signals (offer/candidates) dari DB dan proses
   /// yang belum diproses. Menjamin tidak ada kandidat yang terlewat akibat
   /// race antara realtime broadcast dan catch-up SELECT.
+  /// Juga cek status call di DB sebagai fallback bila realtime statusSub miss.
   Future<void> _syncAll() async {
+    if (_closed) return;
+    try {
+      // Fallback status check — tangkap ended/canceled yang miss dari realtime
+      final row = await _service.getCall(callId);
+      if (!_closed) {
+        final st = row?['status'] as String?;
+        if (st == 'ended' || st == 'canceled') {
+          _finish(CallEndReason.ended);
+          return;
+        }
+      }
+    } catch (_) {}
     if (_closed) return;
     try {
       final rows = await _service.syncCallSignals(callId);
       for (final row in rows) {
+        if (_closed) return;
         if (row['from_uid'] == _service.uid) continue;
         final id = row['id']?.toString();
         if (id != null && _processedSignalIds.contains(id)) continue;
@@ -672,6 +702,9 @@ class CallSession extends ChangeNotifier {
     final track = _localStream?.getVideoTracks().firstOrNull;
     if (track != null) track.enabled = _cameraOn;
     notifyListeners();
+    try {
+      await _service.sendSignal(callId, 'camera', payload: {'enabled': _cameraOn});
+    } catch (_) {}
   }
 
   Future<void> switchCamera() async {
