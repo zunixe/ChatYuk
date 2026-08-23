@@ -10,6 +10,11 @@
     <!-- Lokasi: hanya FINE supaya dialog izin TIDAK menawarkan opsi
          "kira-kira" (approximate) — user langsung pilih presisi. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <!-- Foreground service: call tetap jalan walau app di-swipe (gaya WhatsApp) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- Notifikasi panggilan masuk tampil full-screen di atas lockscreen -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <application
         android:label="ChatYuk"
         android:name="${applicationName}"
@@ -56,6 +61,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Jangan ubah nama service ini (syarat flutter_foreground_task) -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

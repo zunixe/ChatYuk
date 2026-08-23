@@ -374,24 +374,44 @@ class MessageBubble extends StatelessWidget {
                           .replaceFirst('📹', '')
                           .replaceFirst('📞', '')
                           .trimLeft();
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isVideoCall ? Icons.videocam : Icons.call,
-                            size: 16,
-                            color: AppTheme.textSecondary,
-                          ),
-                          SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              displayText,
-                              style: AppText.body.copyWith(color: AppTheme.textSecondary),
+                      // Warna ikon mengikuti hasil panggilan (teks status
+                      // disimpan berbahasa Inggris — stabil antar locale):
+                      // hijau = panggilan terhubung, merah = gagal/tak dijawab.
+                      const successMarkers = ['Call ended'];
+                      const failMarkers = [
+                        'Missed call',
+                        'Call declined',
+                        'Call canceled',
+                        'Busy',
+                        'Call failed',
+                      ];
+                      final callIconColor = successMarkers.any(displayText.contains)
+                          ? Colors.greenAccent
+                          : failMarkers.any(displayText.contains)
+                              ? Colors.redAccent
+                              : AppTheme.textSecondary;
+                      return RichText(
+                        text: TextSpan(
+                          style: AppText.body.copyWith(color: AppTheme.textSecondary),
+                          children: [
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.middle,
+                              child: Icon(
+                                isVideoCall ? Icons.videocam : Icons.call,
+                                size: 16,
+                                color: callIconColor,
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 6),
-                          Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
-                        ],
+                            const WidgetSpan(child: SizedBox(width: 6)),
+                            TextSpan(text: displayText),
+                            const TextSpan(text: '  '),
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.belowBaseline,
+                              baseline: TextBaseline.alphabetic,
+                              child: Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                            ),
+                          ],
+                        ),
                       );
                     })
                   else

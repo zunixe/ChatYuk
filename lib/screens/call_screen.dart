@@ -20,6 +20,8 @@ class CallScreen extends StatefulWidget {
   final String callType;
   final bool isCaller;
   final List<Map<String, dynamic>> pendingSignals;
+  final CallSession? session;
+  final String chatId;
 
   const CallScreen({
     super.key,
@@ -29,6 +31,8 @@ class CallScreen extends StatefulWidget {
     required this.callType,
     required this.isCaller,
     this.pendingSignals = const [],
+    this.session,
+    this.chatId = '',
   });
 
   @override
@@ -37,8 +41,10 @@ class CallScreen extends StatefulWidget {
 
 class _CallScreenState extends State<CallScreen> {
   late final CallSession _session;
+  bool _ownsSession = true;
   Timer? _autoClose;
   String _elapsed = '00:00';
+  Offset? _localPreviewPos;
 
   @override
   void initState() {
@@ -46,34 +52,48 @@ class _CallScreenState extends State<CallScreen> {
     CallProvider.instance.registerCall(widget.callId);
     final profile = context.read<AuthProvider>().profile;
     final s = context.read<LocaleProvider>().s;
-    unawaited(CallNotification.showActive(
-      body: widget.callType == 'video'
-          ? s.callNotifActiveVideo
-          : s.callNotifActiveAudio,
-      channelName: s.callNotifActiveAudio,
-      channelDesc: s.callNotifActiveAudio,
-    ));
-    _session = CallSession(
-      callId: widget.callId,
-      remoteUid: widget.remoteUid,
-      remoteName: widget.remoteName,
-      callType: widget.callType,
-      isCaller: widget.isCaller,
-      myName: profile?.nickname ?? '',
-      myGender: profile?.gender ?? 'other',
-      pendingSignals: widget.pendingSignals,
-    );
+    if (widget.session != null) {
+      // Session sudah dibuat & di-init oleh CallProvider (mode chat / expand).
+      _session = widget.session!;
+      _ownsSession = false;
+    } else {
+      _session = CallSession(
+        callId: widget.callId,
+        remoteUid: widget.remoteUid,
+        remoteName: widget.remoteName,
+        callType: widget.callType,
+        isCaller: widget.isCaller,
+        myName: profile?.nickname ?? '',
+        myGender: profile?.gender ?? 'other',
+        pendingSignals: widget.pendingSignals,
+      );
+      _ownsSession = true;
+    }
     _session.addListener(_onSession);
-    unawaited(_session.init());
+    if (_ownsSession) {
+      unawaited(CallNotification.showActive(
+        body: widget.callType == 'video'
+            ? s.callNotifActiveVideo
+            : s.callNotifActiveAudio,
+        channelName: s.callNotifActiveAudio,
+        channelDesc: s.callNotifActiveAudio,
+        chatId: widget.chatId,
+        otherUid: widget.remoteUid,
+        otherName: widget.remoteName,
+      ));
+      unawaited(_session.init());
+    }
   }
 
   @override
   void dispose() {
     _session.removeListener(_onSession);
     _autoClose?.cancel();
-    unawaited(_session.close());
-    unawaited(CallNotification.cancel());
-    CallProvider.instance.unregisterCall(widget.callId);
+    if (_ownsSession) {
+      unawaited(_session.close());
+      unawaited(CallNotification.cancel());
+      CallProvider.instance.unregisterCall(widget.callId);
+    }
     super.dispose();
   }
 
@@ -160,27 +180,49 @@ class _CallScreenState extends State<CallScreen> {
               ),
             ),
 
-          // Preview lokal (video, overlay kecil di pojok)
+          // Preview lokal (video) — kecil dan BISA di-drag ke mana saja.
           if (showLocalPreview)
-            Positioned(
-              top: 40,
-              right: 16,
-              child: Container(
-                width: 100,
-                height: 150,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white24, width: 2),
+            Builder(builder: (ctx) {
+              const bubbleW = 100.0;
+              const bubbleH = 150.0;
+              final mq = MediaQuery.of(ctx);
+              _localPreviewPos ??= Offset(mq.size.width - bubbleW - 16, 40);
+              final pos = Offset(
+                _localPreviewPos!.dx.clamp(8.0, mq.size.width - bubbleW - 8),
+                _localPreviewPos!.dy.clamp(8.0, mq.size.height - bubbleH - 8),
+              );
+              return Positioned(
+                left: pos.dx,
+                top: pos.dy,
+                child: GestureDetector(
+                  onPanUpdate: (d) {
+                    setState(() {
+                      _localPreviewPos = Offset(
+                        (_localPreviewPos!.dx + d.delta.dx)
+                            .clamp(8.0, mq.size.width - bubbleW - 8),
+                        (_localPreviewPos!.dy + d.delta.dy)
+                            .clamp(8.0, mq.size.height - bubbleH - 8),
+                      );
+                    });
+                  },
+                  child: Container(
+                    width: bubbleW,
+                    height: bubbleH,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white24, width: 2),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: RTCVideoView(
+                      _session.localRenderer,
+                      mirror: true,
+                      objectFit:
+                          RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                    ),
+                  ),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: RTCVideoView(
-                  _session.localRenderer,
-                  mirror: true,
-                  objectFit:
-                      RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                ),
-              ),
-            ),
+              );
+            }),
 
           // Info atas
           Positioned(

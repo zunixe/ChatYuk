@@ -24,6 +24,7 @@ import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/profile_avatar.dart';
+import '../widgets/chat_call_overlay.dart';
 import '../main.dart';
 import 'call_screen.dart';
 import 'user_info_screen.dart';
@@ -132,6 +133,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   final Map<String, LayerLink> _msgLinks = {};
   OverlayEntry? _actionBar;
 
+  // Call video dalam chat: overlay panel draggable di atas layar chat.
+  bool _callExpanded = false;
+
   LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
   // Foto yang sudah dikonfirmasi server (id pesan server) — dipakai dedupe
   // FIFO karena imageData di stream berupa thumbnail, bukan base64 penuh.
@@ -145,6 +149,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     super.initState();
     _openedAt = DateTime.now();
     activeChatId.value = widget.chatId;
+    // Rebuild saat status call berubah (overlay video dalam chat muncul/hilang).
+    CallProvider.instance.addListener(_onCallChanged);
     // Buka keyboard → tutup baris menu attach (mirip WhatsApp)
     _inputFocus.addListener(() {
       if (_inputFocus.hasFocus && _showAttachRow) {
@@ -271,6 +277,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   @override
   void dispose() {
     _hideActionBar();
+    CallProvider.instance.removeListener(_onCallChanged);
+    // Keluar chat TIDAK memutus panggilan — call lanjut berjalan dan notifikasi
+    // ongoing "sedang call" tetap tampil. Tap notifikasi → kembali ke chat ini.
     _chatInfoSub?.cancel();
     _msgsSub?.cancel();
     _statusSub?.cancel();
@@ -283,6 +292,40 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _scrollCtrl.dispose();
     _inputFocus.dispose();
     super.dispose();
+  }
+
+  void _onCallChanged() {
+    if (mounted) setState(() {});
+  }
+
+  bool get _showCallOverlay {
+    final prov = CallProvider.instance;
+    final sess = prov.activeSession;
+    return sess != null &&
+        prov.activeMode == CallMode.chat &&
+        sess.remoteUid == widget.otherUid &&
+        !_callExpanded;
+  }
+
+  Future<void> _expandCall() async {
+    final sess = CallProvider.instance.activeSession;
+    if (sess == null) return;
+    setState(() => _callExpanded = true);
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => CallScreen(
+          callId: sess.callId,
+          remoteUid: sess.remoteUid,
+          remoteName: sess.remoteName,
+          callType: sess.callType,
+          isCaller: sess.isCaller,
+          pendingSignals: const [],
+          session: sess,
+        ),
+      ),
+    );
+    if (mounted) setState(() => _callExpanded = false);
   }
 
   void _subscribeStatus() {
@@ -1252,7 +1295,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     return Scaffold(
       extendBody: true,
       backgroundColor: Colors.transparent,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         titleSpacing: 0,
         title: Row(
@@ -1387,9 +1430,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               tooltip: s.callAudio,
               onSelected: (val) {
                 if (val == 'audio') {
-                  _startCall(context, 'audio');
-                } else if (val == 'video') {
-                  _startCall(context, 'video');
+                  _startCall(context, 'audio', CallMode.fullscreen);
+                } else if (val == 'video_full') {
+                  _startCall(context, 'video', CallMode.fullscreen);
+                } else if (val == 'video_chat') {
+                  _startCall(context, 'video', CallMode.chat);
                 }
               },
               itemBuilder: (_) => [
@@ -1399,8 +1444,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                       style: TextStyle(color: AppTheme.textPrimary)),
                 ),
                 PopupMenuItem(
-                  value: 'video',
-                  child: Text(s.callVideo,
+                  value: 'video_full',
+                  child: Text(s.callVideoFullscreen,
+                      style: TextStyle(color: AppTheme.textPrimary)),
+                ),
+                PopupMenuItem(
+                  value: 'video_chat',
+                  child: Text(s.callVideoInChat,
                       style: TextStyle(color: AppTheme.textPrimary)),
                 ),
               ],
@@ -1609,7 +1659,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               8,
               6,
               8,
-              6 + MediaQuery.of(context).viewInsets.bottom,
+              6,
             ),
             decoration: BoxDecoration(
               color: Colors.transparent,
@@ -1862,13 +1912,26 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         ],
       ),
           ),
+          if (_showCallOverlay)
+            Positioned.fill(
+              child: ChatCallOverlay(
+                session: CallProvider.instance.activeSession!,
+                onExpand: _expandCall,
+                onEnd: () => unawaited(CallProvider.instance.clearSession()),
+              ),
+            ),
         ],
       ),
     );
   }
 
   /// Mulai panggilan audio/video ke lawan bicara.
-  Future<void> _startCall(BuildContext ctx, String callType) async {
+  /// [mode] menentukan fullscreen atau video dalam chat (overlay).
+  Future<void> _startCall(
+    BuildContext ctx,
+    String callType,
+    CallMode mode,
+  ) async {
     final s = context.read<LocaleProvider>().s;
     if (CallProvider.instance.inCall) {
       ScaffoldMessenger.of(ctx)
@@ -1876,25 +1939,47 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       return;
     }
     final messenger = ScaffoldMessenger.of(ctx);
+    final auth = context.read<AuthProvider>();
+    final profile = auth.profile;
     try {
       final callId = await CallService.instance.startCall(
         widget.otherUid,
         callType,
       );
       if (!mounted) return;
-      CallProvider.instance.registerCall(callId);
-      Navigator.of(ctx).push(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => CallScreen(
-            callId: callId,
-            remoteUid: widget.otherUid,
-            remoteName: widget.otherName,
-            callType: callType,
-            isCaller: true,
-          ),
-        ),
+      final session = await CallProvider.instance.startSession(
+        callId: callId,
+        remoteUid: widget.otherUid,
+        remoteName: widget.otherName,
+        callType: callType,
+        isCaller: true,
+        mode: mode,
+        myName: profile?.nickname ?? '',
+        myGender: profile?.gender ?? 'other',
+        notifBody: callType == 'video'
+            ? s.callNotifActiveVideo
+            : s.callNotifActiveAudio,
+        notifChannel: s.callNotifActiveAudio,
+        notifDesc: s.callNotifActiveAudio,
+        chatId: widget.chatId,
       );
+      if (!mounted) return;
+      if (mode == CallMode.fullscreen) {
+        Navigator.of(ctx).push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => CallScreen(
+              callId: callId,
+              remoteUid: widget.otherUid,
+              remoteName: widget.otherName,
+              callType: callType,
+              isCaller: true,
+              session: session,
+            ),
+          ),
+        );
+      }
+      // Mode chat: overlay muncul otomatis dari provider.activeSession.
     } catch (_) {
       messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
     }
@@ -1943,7 +2028,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 }
-
 // Tombol ikon kecil untuk input bar
 class _InputIconBtn extends StatelessWidget {
   final IconData icon;

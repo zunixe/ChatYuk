@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../screens/incoming_call_screen.dart';
 import '../services/call_service.dart';
+import '../services/call_notification.dart';
+
+enum CallMode { fullscreen, chat }
 
 /// CallProvider: pendengar global panggilan masuk + penanda call aktif.
 /// Dipakai supaya panggilan masuk muncul sebagai screen overlay di mana pun
@@ -21,6 +24,16 @@ class CallProvider extends ChangeNotifier {
   String? get activeCallId => _activeCallId;
 
   bool get inCall => _activeCallId != null;
+
+  /// Session panggilan aktif (shared) — dipakai CallScreen (fullscreen) maupun
+  /// overlay video dalam chat. Kepemilikan session ada di provider ini, bukan
+  /// di widget, supaya stream tetap hidup saat layar diganti (expand↔collapse).
+  CallSession? _activeSession;
+  CallSession? get activeSession => _activeSession;
+  CallMode? _activeMode;
+  CallMode? get activeMode => _activeMode;
+
+  Timer? _clearTimer;
 
   /// Mulai mendengarkan panggilan masuk — hanya untuk user terdaftar
   /// (anon tidak menerima call sama sekali).
@@ -56,6 +69,7 @@ class CallProvider extends ChangeNotifier {
           callId: callId,
           callerUid: callerUid,
           callType: callType,
+          chatId: row['chat_id'] as String? ?? '',
         ),
       ),
     );
@@ -69,6 +83,75 @@ class CallProvider extends ChangeNotifier {
   /// Bersihkan saat call selesai / screen ditutup.
   void unregisterCall(String callId) {
     if (_activeCallId == callId) _activeCallId = null;
+  }
+
+  /// Buat + inisialisasi session panggilan, simpan sebagai active session
+  /// (shared) yang dipakai CallScreen fullscreen maupun overlay video chat.
+  /// Session tidak ditutup di sini — lihat [clearSession].
+  Future<CallSession> startSession({
+    required String callId,
+    required String remoteUid,
+    required String remoteName,
+    required String callType,
+    required bool isCaller,
+    required CallMode mode,
+    required String myName,
+    required String myGender,
+    required String notifBody,
+    required String notifChannel,
+    required String notifDesc,
+    required String chatId,
+    List<Map<String, dynamic>> pendingSignals = const [],
+  }) async {
+    final session = CallSession(
+      callId: callId,
+      remoteUid: remoteUid,
+      remoteName: remoteName,
+      callType: callType,
+      isCaller: isCaller,
+      myName: myName,
+      myGender: myGender,
+      pendingSignals: pendingSignals,
+    );
+    _activeSession = session;
+    _activeMode = mode;
+    _activeCallId = callId;
+    session.addListener(_onActiveSession);
+    unawaited(session.init());
+    unawaited(CallNotification.showActive(
+      body: notifBody,
+      channelName: notifChannel,
+      channelDesc: notifDesc,
+      chatId: chatId,
+      otherUid: remoteUid,
+      otherName: remoteName,
+    ));
+    notifyListeners();
+    return session;
+  }
+
+  void _onActiveSession() {
+    if (_activeSession?.phase == CallPhase.ended && _clearTimer == null) {
+      _clearTimer = Timer(const Duration(milliseconds: 2200), () {
+        _clearTimer = null;
+        unawaited(clearSession());
+      });
+    }
+  }
+
+  /// Tutup session aktif + bersihkan state. Idempoten.
+  Future<void> clearSession() async {
+    if (_activeSession == null) return;
+    _clearTimer?.cancel();
+    _clearTimer = null;
+    final sess = _activeSession!;
+    _activeSession = null;
+    _activeMode = null;
+    _activeCallId = null;
+    sess.removeListener(_onActiveSession);
+    await CallNotification.cancel();
+    await sess.close();
+    notifyListeners();
   }
 
   @override

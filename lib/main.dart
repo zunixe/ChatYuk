@@ -19,6 +19,7 @@ import 'screens/incoming_call_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/supabase_config.dart';
+import 'services/auth_service.dart';
 import 'utils.dart';
 import 'services/message_cache.dart';
 import 'services/photo_cache.dart';
@@ -63,25 +64,47 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final plugin = lpn.FlutterLocalNotificationsPlugin();
   await plugin.initialize(settings: settings);
 
+  // Panggilan masuk → notifikasi gaya telepon: suara alarm (loop channel),
+  // full-screen intent, tampil di lockscreen. Channel 'chatyuk_calls' dibuat
+  // sekali oleh sistem dengan suara raw/ringtone.mp3.
+  final isCall = type == 'call';
+  final androidDetails = isCall
+      ? lpn.AndroidNotificationDetails(
+          'chatyuk_calls',
+          'Incoming Calls',
+          channelDescription: 'Incoming call alerts with ringtone',
+          importance: lpn.Importance.max,
+          priority: lpn.Priority.max,
+          sound: const lpn.RawResourceAndroidNotificationSound('ringtone'),
+          audioAttributesUsage: lpn.AudioAttributesUsage.alarm,
+          fullScreenIntent: true,
+          ongoing: true,
+          autoCancel: false,
+          category: lpn.AndroidNotificationCategory.call,
+          visibility: lpn.NotificationVisibility.public,
+        )
+      : lpn.AndroidNotificationDetails(
+          _channelId,
+          'Chat Notifications',
+          channelDescription: 'New message notifications from chat',
+          importance: lpn.Importance.high,
+          priority: lpn.Priority.high,
+        );
+
   await plugin.show(
     id: notifIdForKey(data['chatId'] ?? data['roomId'] ?? data['callId'] ?? 'bg'),
     title: title,
     body: body,
-    notificationDetails: lpn.NotificationDetails(
-      android: lpn.AndroidNotificationDetails(
-        _channelId,
-        'Chat Notifications',
-        channelDescription: 'New message notifications from chat',
-        importance: lpn.Importance.high,
-        priority: lpn.Priority.high,
-      ),
-    ),
+    notificationDetails: lpn.NotificationDetails(android: androidDetails),
     payload: jsonEncode(data),
   );
 }
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
+  // Panggilan masuk saat app TERBUKA ditangani Supabase Realtime
+  // (IncomingCallScreen dengan ringtone sendiri) — jangan tampilkan notif.
+  if (data['type'] == 'call') return;
   final chatKey = data['chatId'] ?? data['roomId'] ?? '';
   if (chatKey.isNotEmpty && activeChatId.value == chatKey) return;
 
@@ -122,25 +145,63 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   );
 }
 
+/// Tunggu sampai sesi Supabase dipulihkan (maks [timeout]).
+/// Dipakai untuk tap notifikasi dari cold start — tanpa ini layar panggilan
+/// bisa terbuka sebelum login siap dan tombol terima gagal oleh RLS.
+Future<bool> _waitForSession({Duration timeout = const Duration(seconds: 6)}) async {
+  final deadline = DateTime.now().add(timeout);
+  try {
+    while (DateTime.now().isBefore(deadline)) {
+      if (Supabase.instance.client.auth.currentSession != null) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+  } catch (_) {}
+  return false;
+}
+
 void _openFromData(Map<String, dynamic> data) {
   final nav = navigatorKey.currentState;
   if (nav == null || data.isEmpty) return;
   final s = localeProvider.s;
+  // Panggilan aktif (tap notifikasi ongoing) → kembali ke chat yang sedang call.
+  if (data['type'] == 'active_call') {
+    final chatId = data['chatId'] ?? '';
+    final otherUid = data['otherUid'] ?? '';
+    final otherName = data['otherName'] ?? s.unknownUser;
+    if (chatId.isNotEmpty) {
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => PrivateChatScreen(
+            chatId: chatId,
+            otherName: otherName,
+            otherUid: otherUid,
+          ),
+        ),
+        (route) => route.isFirst,
+      );
+    }
+    return;
+  }
   // Panggilan masuk → buka IncomingCallScreen (tanpa reset stack, dan
   // dedupe kalau layar panggilan yang sama sudah terbuka).
+  // Tunggu sesi login pulih dulu (cold start) supaya tombol terima tidak gagal.
   if (data['type'] == 'call') {
     final callId = data['callId'] ?? '';
     if (callId.isNotEmpty && CallProvider.instance.activeCallId != callId) {
-      nav.push(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => IncomingCallScreen(
-            callId: callId,
-            callerUid: data['callerUid'] ?? '',
-            callType: data['callType'] ?? 'video',
+      unawaited(_waitForSession().then((ready) {
+        if (!ready || navigatorKey.currentState == null) return;
+        navigatorKey.currentState!.push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => IncomingCallScreen(
+              callId: callId,
+              callerUid: data['callerUid'] ?? '',
+              callType: data['callType'] ?? 'video',
+              chatId: data['chatId'] ?? '',
+            ),
           ),
-        ),
-      );
+        );
+      }));
     }
     return;
   }
@@ -215,6 +276,16 @@ Future<void> _initNotifications() async {
   if (token != null) {
     debugPrint('FCM token: ${token.substring(0, 20)}...');
   }
+
+  // Token bisa dirotasi FCM kapan saja (umumnya setelah reinstall app).
+  // Simpan otomatis ke profiles supaya push call/chat tidak ditolak
+  // FCM dengan error NotRegistered (token mati di DB).
+  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    final auth = AuthService();
+    if (auth.isSignedIn) {
+      unawaited(auth.updateFcmToken(newToken));
+    }
+  });
 
   FirebaseMessaging.onMessage.listen(_showLocalNotification);
   FirebaseMessaging.onMessageOpenedApp.listen(_openFromMessage);

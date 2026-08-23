@@ -397,6 +397,11 @@ verify_jwt = true
 [functions.r]
 verify_jwt = false
 
+# send-push dipanggil oleh DB trigger (net.http_post) tanpa JWT user.
+# Tanpa ini semua push dari trigger gagal 401 diam-diam.
+[functions.send-push]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

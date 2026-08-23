@@ -181,6 +181,45 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
 - Debug symbols disimpan di `build/app/symbols` (jangan dihapus) — dipakai `flutter symbolize` untuk baca stack trace saat crash.
 - **JANGAN build flavor `play` / AAB untuk Google Play tanpa instruksi eksplisit dari user.** Default build = flavor `apkpure`. Kalau ragu, tanya dulu.
 - Sebelum selesai, selalu: `flutter analyze` → `flutter clean` (WAJIB — build incremental sering tidak memasukkan perubahan terbaru) → `flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols` → copy ke `~/Downloads/chatyuk.apk` → push ke HP (lihat "Build & Push ke HP")
+
+### Build cepat — LEWATI iOS (WAJIB untuk kerja Android-only)
+Kita HANYA rilis Android (flavor `apkpure`); iOS tidak pernah di-build untuk distribusi.
+`flutter clean` utuh membuang waktu ~210 detik cuma untuk fetch Xcode workspace iOS
+yang tidak kita butuhkan. Ganti `flutter clean` dengan pembersihan Android saja:
+
+```bash
+rm -rf build/app/outputs build/app/symbols build/app/intermediates \
+  build/app/tmp .dart_tool/flutter_build
+# lalu langsung build apkpure (tanpa `flutter clean`):
+flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+  --obfuscate --split-debug-info=build/app/symbols
+```
+
+### Build diagnosis TANPA obfuscation (WAJIB saat cari crash)
+
+Saat debug/nelusuri crash di HP, **JANGAN pakai `--obfuscate`**. Obfuscation membuat
+nama class jadi `kr`/`Ew` dan stack trace tidak bisa di-symbolize ke file:line
+(kecuali simbol cocok PERSIS per build_id, yang sering tidak cocok karena build_id
+berubah tiap build). Akibatnya jam terbuang cuma untuk nebak lokasi error.
+
+Untuk build diagnosis, lewati `--obfuscate` DAN `--split-debug-info` agar nama
+class asli (`FlexParentData`, `StackParentData`, dll) dan pesan Flutter
+("Incorrect use of ParentDataWidget ... parent: Column") tetap utuh di APK:
+
+```bash
+rm -rf build/app/outputs build/app/symbols build/app/intermediates \
+  build/app/tmp .dart_tool/flutter_build
+flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure
+cp build/app/outputs/flutter-apk/app-apkpure-release.apk ~/Downloads/chatyuk_dbg.apk
+```
+
+- Nama file `chatyuk_dbg.apk` (bukan `chatyuk.apk`) supaya tidak tertukar dengan
+  build rilis. User install `chatyuk_dbg.apk`, lalu baca log — error sudah jelas
+  sebut file:line + parent widget.
+- Build diagnosis TIDAK boleh diupload ke store/Play (tidak diobfuskasi).
+
+Catatan: `flutter clean` tetap wajib KALAU ada perubahan di `pubspec.yaml` (dependency
+baru) atau plugin native berubah. Untuk perubahan kode Dart murni, pakai cara di atas.
 - Keamanan: jangan pernah simpan secret server (password DB, Supabase service_role key) di app — hanya `publishableKey` di `lib/config/supabase_config.dart`. Data dilindungi RLS per-user.
 
 ## Fastlane Upload ke Google Play

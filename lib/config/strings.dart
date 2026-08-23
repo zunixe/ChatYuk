@@ -401,6 +401,14 @@ class S {
   // ── Call 1:1 (audio/video) ──
   String get callAudio => isId ? 'Panggilan Audio' : 'Audio Call';
   String get callVideo => isId ? 'Panggilan Video' : 'Video Call';
+  String get callVideoFullscreen =>
+      isId ? 'Video (layar penuh)' : 'Video (full screen)';
+  String get callVideoInChat => isId ? 'Video (dalam chat)' : 'Video (in chat)';
+  String get callAcceptInChat =>
+      isId ? 'Terima (dalam chat)' : 'Accept (in chat)';
+  String get callExpand => isId ? 'Layar penuh' : 'Full screen';
+  String get callInChatHint =>
+      isId ? 'Tarik video ke mana saja' : 'Drag the video anywhere';
   String get callIncomingAudio =>
       isId ? 'Panggilan audio masuk...' : 'Incoming audio call...';
   String get callIncomingVideo =>
