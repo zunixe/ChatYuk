@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -30,6 +31,7 @@ class IncomingCallScreen extends StatefulWidget {
 class _IncomingCallScreenState extends State<IncomingCallScreen> {
   final CallService _service = CallService.instance;
   StreamSubscription<String>? _statusSub;
+  final AudioPlayer _ringtonePlayer = AudioPlayer();
   String _callerName = '';
   bool _busy = false;
 
@@ -38,10 +40,29 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     super.initState();
     CallProvider.instance.registerCall(widget.callId);
     _loadCaller();
-    // Caller membatalkan → tutup layar ini.
+    _startRingtone();
     _statusSub = _service.onCallStatus(widget.callId).listen((status) {
       if (status == 'canceled' || status == 'ended') _close();
     });
+  }
+
+  Future<void> _startRingtone() async {
+    await _ringtonePlayer.setAudioContext(AudioContext(
+      android: AudioContextAndroid(
+        audioFocus: AndroidAudioFocus.gainTransientExclusive,
+        usageType: AndroidUsageType.notificationRingtone,
+        contentType: AndroidContentType.music,
+        isSpeakerphoneOn: true,
+      ),
+    ));
+    await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
+    await _ringtonePlayer.play(AssetSource('audio/ringtone.mp3'));
+  }
+
+  Future<void> _stopRingtone() async {
+    try {
+      await _ringtonePlayer.stop();
+    } catch (_) {}
   }
 
   Future<void> _loadCaller() async {
@@ -54,12 +75,15 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   void dispose() {
     CallProvider.instance.unregisterCall(widget.callId);
     _statusSub?.cancel();
+    _ringtonePlayer.stop();
+    _ringtonePlayer.dispose();
     super.dispose();
   }
 
   Future<void> _accept() async {
     if (_busy) return;
     _busy = true;
+    await _stopRingtone();
     try {
       await _service.updateStatus(widget.callId, 'answered');
     } catch (_) {
@@ -75,6 +99,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
           remoteName: _callerName.isEmpty ? 'User' : _callerName,
           callType: widget.callType,
           isCaller: false,
+          pendingSignals: const [],
         ),
       ),
     );
@@ -83,6 +108,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   Future<void> _decline() async {
     if (_busy) return;
     _busy = true;
+    await _stopRingtone();
     try {
       await _service.updateStatus(widget.callId, 'declined');
       await _service.sendSignal(widget.callId, 'bye');

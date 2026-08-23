@@ -45,6 +45,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   RealtimeChannel? _channel;
   final _photoLoading = <String>{};
   final _scrollCtrl = ScrollController();
+  final Map<String, LayerLink> _msgLinks = {};
+  LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
 
   // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
   // pola WhatsApp — sama seperti room chat. _msgs datang DESC (terbaru dulu),
@@ -360,6 +362,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                             msg.type == 'image' && msg.imageData.isEmpty;
                         return MessageBubble(
                           key: ValueKey(msg.id),
+                          link: _linkFor(msg.id),
                           msg: msg,
                           chatKey: _chatKey,
                           isMe: isMe,

@@ -325,6 +325,12 @@ class S {
   String get genderLabelOther => isId ? '🧑 Lainnya' : '🧑 Other';
   String get btnEditProfile => isId ? 'Edit Profil' : 'Edit Profile';
   String get btnSave => isId ? 'Simpan' : 'Save';
+  String get msgEdited => isId ? '(diedit)' : '(edited)';
+  String get editMessageTitle => isId ? 'Edit Pesan' : 'Edit Message';
+  String get editingMessage => isId ? 'Sedang mengedit pesan' : 'Editing message';
+  String get menuReply => isId ? 'Balas' : 'Reply';
+  String get messageDeleted => isId ? 'Pesan dihapus' : 'Message deleted';
+  String get replyingTo => isId ? 'Membalas' : 'Replying to';
   String get errProfileSave =>
       isId ? 'Gagal simpan profil: ' : 'Failed to save profile: ';
   String get msgProfileSaved =>
@@ -412,6 +418,10 @@ class S {
   String get btnUnmute => isId ? 'Bunyikan' : 'Unmute';
   String get btnSpeaker => isId ? 'Speaker' : 'Speaker';
   String get btnSwitchCamera => isId ? 'Balik Kamera' : 'Flip';
+  String get callNotifActiveAudio =>
+      isId ? 'Panggilan suara aktif' : 'Active voice call';
+  String get callNotifActiveVideo =>
+      isId ? 'Panggilan video aktif' : 'Active video call';
   String get msgCallEnded => isId ? 'Panggilan berakhir' : 'Call ended';
   String get msgCallDeclined =>
       isId ? 'Panggilan ditolak' : 'Call declined';

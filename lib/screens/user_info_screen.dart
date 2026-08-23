@@ -368,15 +368,33 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         title: Text(s.titleProfile),
         actions: [
           if (!isAnonViewer && profile?.isRegistered == true) ...[
-            IconButton(
+            PopupMenuButton<String>(
               icon: Icon(Icons.call, size: 22),
+              color: AppTheme.bgCard,
               tooltip: s.callAudio,
-              onPressed: () => _startCall(context, 'audio'),
-            ),
-            IconButton(
-              icon: Icon(Icons.videocam, size: 22),
-              tooltip: s.callVideo,
-              onPressed: () => _startCall(context, 'video'),
+              onSelected: (val) => _startCall(context, val),
+              itemBuilder: (ctx) => [
+                PopupMenuItem(
+                  value: 'audio',
+                  child: Row(
+                    children: [
+                      Icon(Icons.call, size: 18),
+                      const SizedBox(width: 12),
+                      Text(s.callAudio),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'video',
+                  child: Row(
+                    children: [
+                      Icon(Icons.videocam, size: 18),
+                      const SizedBox(width: 12),
+                      Text(s.callVideo),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ],
