@@ -165,6 +165,7 @@ class CallProvider extends ChangeNotifier {
       myGender: myGender,
       pendingSignals: pendingSignals,
     );
+    debugPrint('[PROVIDER] startSession#${session.hashCode} call=$callId mode=$mode isCaller=$isCaller (prev=${_activeSession?.hashCode})');
     _activeSession = session;
     _activeMode = mode;
     _activeChatId = chatId;
@@ -198,6 +199,7 @@ class CallProvider extends ChangeNotifier {
     _clearTimer?.cancel();
     _clearTimer = null;
     final sess = _activeSession!;
+    debugPrint('[PROVIDER] clearSession#${sess.hashCode} call=${sess.callId}');
     _activeSession = null;
     _activeMode = null;
     _activeChatId = null;
