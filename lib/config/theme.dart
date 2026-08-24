@@ -9,78 +9,88 @@ class AppText {
 
   // 10 — timestamp, badge unread, counter overlay
   static TextStyle get micro => TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w500,
-        height: 1.2,
-        color: AppTheme.textPrimary);
+    fontSize: 10,
+    fontWeight: FontWeight.w500,
+    height: 1.2,
+    color: AppTheme.textPrimary,
+  );
 
   // 11 — label di atas nilai, helper text, chip status
   static TextStyle get caption => TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w400,
-        height: 1.3,
-        color: AppTheme.textPrimary);
+    fontSize: 11,
+    fontWeight: FontWeight.w400,
+    height: 1.3,
+    color: AppTheme.textPrimary,
+  );
 
   // 12 w600 — section label, tab, chip/badge
   static TextStyle get label => TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        height: 1.2,
-        letterSpacing: 0.3,
-        color: AppTheme.textPrimary);
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    height: 1.2,
+    letterSpacing: 0.3,
+    color: AppTheme.textPrimary,
+  );
 
   // 12 w400 — subtitle list, deskripsi, teks sekunder
   static TextStyle get bodySmall => TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-        height: 1.35,
-        color: AppTheme.textPrimary);
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    height: 1.35,
+    color: AppTheme.textPrimary,
+  );
 
   // 14 w400 — bubble chat, isi dialog, composer, paragraf
   static TextStyle get body => TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-        height: 1.35,
-        color: AppTheme.textPrimary);
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.35,
+    color: AppTheme.textPrimary,
+  );
 
   // 14 w600 — judul list tile, label setting, nilai info
   static TextStyle get bodyStrong => TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        height: 1.35,
-        color: AppTheme.textPrimary);
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    height: 1.35,
+    color: AppTheme.textPrimary,
+  );
 
   // 16 w700 — label tombol CTA (warna ikut foregroundColor tombol)
-  static TextStyle get button => const TextStyle(
-        fontSize: 16, fontWeight: FontWeight.w700, height: 1.2);
+  static TextStyle get button =>
+      const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.2);
 
   // 16 w700 — judul kartu / section (admin)
   static TextStyle get titleEmphasis => TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
-        height: 1.25,
-        color: AppTheme.textPrimary);
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+    height: 1.25,
+    color: AppTheme.textPrimary,
+  );
 
   // 17 w700 — judul AppBar, dialog, bottom sheet
   static TextStyle get title => TextStyle(
-        fontSize: 17,
-        fontWeight: FontWeight.w700,
-        height: 1.25,
-        color: AppTheme.textPrimary);
+    fontSize: 17,
+    fontWeight: FontWeight.w700,
+    height: 1.25,
+    color: AppTheme.textPrimary,
+  );
 
   // 20 w800 — nama user di header profil
   static TextStyle get headline => TextStyle(
-        fontSize: 20,
-        fontWeight: FontWeight.w800,
-        height: 1.2,
-        color: AppTheme.textPrimary);
+    fontSize: 20,
+    fontWeight: FontWeight.w800,
+    height: 1.2,
+    color: AppTheme.textPrimary,
+  );
 
   // 24 w800 — saldo wallet, angka hero, tagline
   static TextStyle get display => TextStyle(
-        fontSize: 24,
-        fontWeight: FontWeight.w800,
-        height: 1.15,
-        color: AppTheme.textPrimary);
+    fontSize: 24,
+    fontWeight: FontWeight.w800,
+    height: 1.15,
+    color: AppTheme.textPrimary,
+  );
 }
 
 /// Ukuran emoji & ikon dekoratif (bukan teks). Lihat AGENTS.md.
@@ -135,7 +145,8 @@ class AppTheme {
 
   // ── Teks (dinamis) ──
   static Color get textPrimary => isDark ? _textPrimaryDark : _textPrimaryLight;
-  static Color get textSecondary => isDark ? _textSecondaryDark : _textSecondaryLight;
+  static Color get textSecondary =>
+      isDark ? _textSecondaryDark : _textSecondaryLight;
 
   // ── Status (konstan) ──
   static const Color online = Color(0xFF4CAF50);
@@ -147,32 +158,32 @@ class AppTheme {
 
   /// Gradient header/AppBar — ikut mode (gelap di dark mode).
   static LinearGradient get headerGradient => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: isDark
-            ? const [Color(0xFF1B2A3A), Color(0xFF223447), Color(0xFF2A3E54)]
-            : const [primaryDark, primary, accent],
-      );
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: isDark
+        ? const [Color(0xFF1B2A3A), Color(0xFF223447), Color(0xFF2A3E54)]
+        : const [primaryDark, primary, accent],
+  );
 
   static ThemeData get lightTheme => _buildTheme(
-        brightness: Brightness.light,
-        bgScreen: _bgScreenLight,
-        bgCard: _bgCardLight,
-        bgInput: _bgInputLight,
-        divider: _dividerLight,
-        textPrimary: _textPrimaryLight,
-        textSecondary: _textSecondaryLight,
-      );
+    brightness: Brightness.light,
+    bgScreen: _bgScreenLight,
+    bgCard: _bgCardLight,
+    bgInput: _bgInputLight,
+    divider: _dividerLight,
+    textPrimary: _textPrimaryLight,
+    textSecondary: _textSecondaryLight,
+  );
 
   static ThemeData get darkTheme => _buildTheme(
-        brightness: Brightness.dark,
-        bgScreen: _bgScreenDark,
-        bgCard: _bgCardDark,
-        bgInput: _bgInputDark,
-        divider: _dividerDark,
-        textPrimary: _textPrimaryDark,
-        textSecondary: _textSecondaryDark,
-      );
+    brightness: Brightness.dark,
+    bgScreen: _bgScreenDark,
+    bgCard: _bgCardDark,
+    bgInput: _bgInputDark,
+    divider: _dividerDark,
+    textPrimary: _textPrimaryDark,
+    textSecondary: _textSecondaryDark,
+  );
 
   static ThemeData _buildTheme({
     required Brightness brightness,
@@ -243,7 +254,10 @@ class AppTheme {
         ),
         hintStyle: AppText.body.copyWith(color: textSecondary),
         labelStyle: AppText.body.copyWith(color: textSecondary),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -264,16 +278,19 @@ class AppTheme {
         type: BottomNavigationBarType.fixed,
         elevation: 8,
         selectedLabelStyle: AppText.label,
-        unselectedLabelStyle: AppText.label.copyWith(fontWeight: FontWeight.w400),
+        unselectedLabelStyle: AppText.label.copyWith(
+          fontWeight: FontWeight.w400,
+        ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: bgInput,
         selectedColor: primary.withValues(alpha: 0.15),
-        labelStyle: AppText.label.copyWith(color: textPrimary, letterSpacing: 0),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+        labelStyle: AppText.label.copyWith(
+          color: textPrimary,
+          letterSpacing: 0,
         ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       listTileTheme: ListTileThemeData(
         titleTextStyle: AppText.bodyStrong,
@@ -294,7 +311,9 @@ class AppTheme {
         elevation: 6,
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: isLight ? const Color(0xFF424242) : const Color(0xFF37474F),
+        backgroundColor: isLight
+            ? const Color(0xFF424242)
+            : const Color(0xFF37474F),
         contentTextStyle: AppText.body.copyWith(color: Colors.white),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -304,9 +323,7 @@ class AppTheme {
         color: bgCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: bgCard,
-      ),
+      bottomSheetTheme: BottomSheetThemeData(backgroundColor: bgCard),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStatePropertyAll(Colors.white),
         trackColor: WidgetStatePropertyAll(

@@ -4,7 +4,16 @@
 // WebCrypto global (crypto.subtle) tersedia di Supabase Edge Runtime.
 
 const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
-const FCM_ENDPOINT = 'https://fcm.googleapis.com/v1/projects/chatyuk-8470e/messages:send';
+
+// Dua project Firebase:
+// - Utama (lama): semua app user mendaftar FCM di sini.
+// - Admin (baru): ChatYuk Admin (appId .admin) mendaftar di sini sejak
+//   flavor-gate. Server mencoba utama dulu; jika ditolak (sender mismatch),
+//   dicoba lagi dengan kredensial admin supaya notifikasi tetap sampai.
+const FCM_PROJECTS = [
+  { id: 'chatyuk-8470e', envKey: 'FIREBASE_SERVICE_ACCOUNT' },
+  { id: 'chatyuk-7c9e4', envKey: 'FIREBASE_SERVICE_ACCOUNT_ADMIN' },
+];
 
 function base64UrlEncode(data) {
   const bytes = new TextEncoder().encode(data);
@@ -13,8 +22,8 @@ function base64UrlEncode(data) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-async function getAccessToken() {
-  const sa = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT') || '{}');
+async function getAccessToken(saJson: Record<string, unknown>) {
+  const sa = saJson;
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT' };
   const payload = {
@@ -70,7 +79,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'no token' }), { status: 400 });
     }
 
-    const accessToken = await getAccessToken();
     // Data-only untuk tipe yang teksnya dirender client (bilingual):
     // online, follow, friend_request, subscribe.
     // 'call' juga data-only → ditangani background handler Flutter yang
@@ -111,18 +119,39 @@ Deno.serve(async (req) => {
       },
     };
 
-    const res = await fetch(FCM_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(message),
-    });
-
-    const resBody = await res.text();
-    return new Response(resBody, {
-      status: res.ok ? 200 : res.status,
+    let lastStatus = 500;
+    let lastBody = '{"error":"no project attempted"}';
+    for (const proj of FCM_PROJECTS) {
+      const saRaw = Deno.env.get(proj.envKey);
+      if (!saRaw) continue;
+      try {
+        const sa = JSON.parse(saRaw);
+        const accessToken = await getAccessToken(sa);
+        const endpoint =
+          `https://fcm.googleapis.com/v1/projects/${proj.id}/messages:send`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(message),
+        });
+        const resBody = await res.text();
+        if (res.ok) {
+          return new Response(resBody, {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        lastStatus = res.status;
+        lastBody = resBody;
+      } catch (projErr) {
+        lastBody = JSON.stringify({ error: String(projErr), project: proj.id });
+      }
+    }
+    return new Response(lastBody, {
+      status: lastStatus,
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (e) {

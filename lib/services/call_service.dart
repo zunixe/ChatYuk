@@ -51,6 +51,15 @@ class CallService {
     return _sb.from('calls').select('*').eq('id', callId).maybeSingle();
   }
 
+  /// Heartbeat peserta call (fire-and-forget) — dipakai admin monitor
+  /// untuk membedakan call hidup vs zombie.
+  void touchCall(String callId) {
+    _sb
+        .rpc('touch_call', params: {'p_call_id': callId})
+        .then((_) {})
+        .catchError((_) {});
+  }
+
   Future<String?> getNickname(String uid) async {
     final row = await _sb
         .from('profiles')
@@ -148,7 +157,9 @@ class CallService {
       ),
       callback: (payload) {
         if (controller.isClosed) return;
-        debugPrint('[CallService] onCallStatus -> ${payload.newRecord['status']}');
+        debugPrint(
+          '[CallService] onCallStatus -> ${payload.newRecord['status']}',
+        );
         controller.add(payload.newRecord['status'] as String? ?? '');
       },
     );
@@ -215,8 +226,11 @@ class CallService {
     controller.add({'id': row['id']?.toString(), 'type': type, ...payload});
   }
 
-  Future<void> sendSignal(String callId, String type,
-      {Map<String, dynamic>? payload}) async {
+  Future<void> sendSignal(
+    String callId,
+    String type, {
+    Map<String, dynamic>? payload,
+  }) async {
     debugPrint('[CallService] sendSignal callId=$callId type=$type');
     try {
       await _sb.from('call_signals').insert({
@@ -335,16 +349,24 @@ class CallSession extends ChangeNotifier {
     final tracks = _remoteStream?.getVideoTracks();
     if (tracks == null || tracks.isEmpty) return false;
     if (!_remoteCameraOn) return false;
-    // Fallback: jika track dimatikan via muted/disabled (platform beda-beda)
-    return tracks.any((t) => t.enabled && !(t.muted ?? false));
+    // Device beda-beda cara melaporkan state track: sebagian menandai
+    // muted=true sampai frame pertama tiba sehingga syarat lama
+    // (enabled && !muted) membuat video lawan tak pernah tampil walau
+    // media sudah mengalir. Cukup track enabled → anggap ada video;
+    // kamera lawan mati tetap terdeteksi lewat sinyal 'camera'.
+    return tracks.any((t) => t.enabled);
   }
 
   /// Siapkan renderer + media lokal + peer connection + listener sinyal.
   /// Belum membuat offer — caller menunggu callee jawab.
   Future<void> init() async {
-    debugPrint('[ICE] ===== init#${hashCode} start isCaller=$isCaller callId=$callId (pc=${_pc != null}) =====');
+    debugPrint(
+      '[ICE] ===== init#${hashCode} start isCaller=$isCaller callId=$callId (pc=${_pc != null}) =====',
+    );
     if (_pc != null) {
-      debugPrint('[ICE] init() already ran (pc exists) -> skip to avoid phase reset');
+      debugPrint(
+        '[ICE] init() already ran (pc exists) -> skip to avoid phase reset',
+      );
       return;
     }
     await localRenderer.initialize();
@@ -390,9 +412,9 @@ class CallSession extends ChangeNotifier {
           return;
         }
         if (st == 'declined' || st == 'busy') {
-          _finish(st == 'declined'
-              ? CallEndReason.declined
-              : CallEndReason.busy);
+          _finish(
+            st == 'declined' ? CallEndReason.declined : CallEndReason.busy,
+          );
           return;
         }
       } catch (_) {}
@@ -400,7 +422,9 @@ class CallSession extends ChangeNotifier {
 
     if (isCaller) {
       _phase = CallPhase.ringing;
-      debugPrint('[SESSION] init#${hashCode} tail -> ringing (caller)');      // Caller menyerah setelah 30 detik tidak dijawab → cancel.
+      debugPrint(
+        '[SESSION] init#${hashCode} tail -> ringing (caller)',
+      ); // Caller menyerah setelah 30 detik tidak dijawab → cancel.
       _ringTimer = Timer(const Duration(seconds: 30), () {
         if (_closed || _phase != CallPhase.ringing) return;
         _service.sendSignal(callId, 'bye');
@@ -426,8 +450,7 @@ class CallSession extends ChangeNotifier {
     try {
       _localStream = await navigator.mediaDevices.getUserMedia({
         'audio': true,
-        'video':
-            callType == 'video' ? {'facingMode': 'user'} : false,
+        'video': callType == 'video' ? {'facingMode': 'user'} : false,
       });
       localRenderer.srcObject = _localStream;
 
@@ -463,8 +486,11 @@ class CallSession extends ChangeNotifier {
       };
       _pc!.onIceCandidate = (candidate) {
         debugPrint('[ICE] local candidate: ${candidate.candidate}');
-        _service.sendSignal(callId, 'candidate',
-            payload: {'candidate': candidate.toMap()});
+        _service.sendSignal(
+          callId,
+          'candidate',
+          payload: {'candidate': candidate.toMap()},
+        );
       };
       _pc!.onConnectionState = (state) {
         debugPrint('[ICE] connectionState: $state');
@@ -482,7 +508,8 @@ class CallSession extends ChangeNotifier {
             if (_closed) return;
             try {
               final cur = _pc?.connectionState;
-              if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) return;
+              if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected)
+                return;
               if (cur == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
                   cur == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
                 debugPrint('[ICE] grace-timeout still $cur -> bye + _finish');
@@ -490,9 +517,11 @@ class CallSession extends ChangeNotifier {
                   await _service.sendSignal(callId, 'bye');
                   await _service.updateStatus(callId, 'ended');
                 } catch (_) {}
-                _finish(_phase == CallPhase.inCall
-                    ? CallEndReason.ended
-                    : CallEndReason.error);
+                _finish(
+                  _phase == CallPhase.inCall
+                      ? CallEndReason.ended
+                      : CallEndReason.error,
+                );
               }
             } catch (_) {
               if (!_closed) {
@@ -500,9 +529,11 @@ class CallSession extends ChangeNotifier {
                   await _service.sendSignal(callId, 'bye');
                   await _service.updateStatus(callId, 'ended');
                 } catch (_) {}
-                _finish(_phase == CallPhase.inCall
-                    ? CallEndReason.ended
-                    : CallEndReason.error);
+                _finish(
+                  _phase == CallPhase.inCall
+                      ? CallEndReason.ended
+                      : CallEndReason.error,
+                );
               }
             }
           });
@@ -512,8 +543,11 @@ class CallSession extends ChangeNotifier {
         if (_closed) return;
         if (_phase == CallPhase.inCall) return;
         final cur = _pc?.connectionState;
-        if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) return;
-        debugPrint('[ICE] 15s timeout still $cur phase=$_phase -> bye + _finish error');
+        if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected)
+          return;
+        debugPrint(
+          '[ICE] 15s timeout still $cur phase=$_phase -> bye + _finish error',
+        );
         try {
           await _service.sendSignal(callId, 'bye');
           await _service.updateStatus(callId, 'ended');
@@ -571,8 +605,11 @@ class CallSession extends ChangeNotifier {
     try {
       final offer = await _pc!.createOffer();
       await _pc!.setLocalDescription(offer);
-      await _service.sendSignal(callId, 'offer',
-          payload: {'sdp': offer.toMap()});
+      await _service.sendSignal(
+        callId,
+        'offer',
+        payload: {'sdp': offer.toMap()},
+      );
     } catch (e) {
       debugPrint('[CallSession] createOffer failed: $e');
     }
@@ -584,7 +621,9 @@ class CallSession extends ChangeNotifier {
       if (_processedSignalIds.contains(id)) return;
       _processedSignalIds.add(id);
     }
-    debugPrint('[CallSession] onSignal type=${msg['type']} isCaller=$isCaller pc=${_pc != null}');
+    debugPrint(
+      '[CallSession] onSignal type=${msg['type']} isCaller=$isCaller pc=${_pc != null}',
+    );
     if (_closed) return;
     if (_pc == null) {
       _pendingSignals.add(msg);
@@ -620,35 +659,48 @@ class CallSession extends ChangeNotifier {
             return;
           }
           await _pc!.setRemoteDescription(
-              RTCSessionDescription(sdp['sdp'], sdp['type']));
+            RTCSessionDescription(sdp['sdp'], sdp['type']),
+          );
           // Flush candidate yang sudah antri sebelum offer diproses
-          for (final cand in List<Map<String, dynamic>>.from(_pendingCandidates)) {
+          for (final cand in List<Map<String, dynamic>>.from(
+            _pendingCandidates,
+          )) {
             try {
-              await _pc!.addCandidate(RTCIceCandidate(
-                cand['candidate'] ?? '',
-                cand['sdpMid'],
-                (cand['sdpMLineIndex'] as num?)?.toInt(),
-              ));
+              await _pc!.addCandidate(
+                RTCIceCandidate(
+                  cand['candidate'] ?? '',
+                  cand['sdpMid'],
+                  (cand['sdpMLineIndex'] as num?)?.toInt(),
+                ),
+              );
             } catch (_) {}
           }
           _pendingCandidates.clear();
           final answer = await _pc!.createAnswer();
           await _pc!.setLocalDescription(answer);
-          await _service.sendSignal(callId, 'answer',
-              payload: {'sdp': answer.toMap()});
+          await _service.sendSignal(
+            callId,
+            'answer',
+            payload: {'sdp': answer.toMap()},
+          );
           await _syncAll();
         case 'answer':
           final sdp = msg['sdp'] as Map<String, dynamic>?;
           if (sdp == null) return;
           await _pc!.setRemoteDescription(
-              RTCSessionDescription(sdp['sdp'], sdp['type']));
-          for (final cand in List<Map<String, dynamic>>.from(_pendingCandidates)) {
+            RTCSessionDescription(sdp['sdp'], sdp['type']),
+          );
+          for (final cand in List<Map<String, dynamic>>.from(
+            _pendingCandidates,
+          )) {
             try {
-              await _pc!.addCandidate(RTCIceCandidate(
-                cand['candidate'] ?? '',
-                cand['sdpMid'],
-                (cand['sdpMLineIndex'] as num?)?.toInt(),
-              ));
+              await _pc!.addCandidate(
+                RTCIceCandidate(
+                  cand['candidate'] ?? '',
+                  cand['sdpMid'],
+                  (cand['sdpMLineIndex'] as num?)?.toInt(),
+                ),
+              );
             } catch (_) {}
           }
           _pendingCandidates.clear();
@@ -661,12 +713,15 @@ class CallSession extends ChangeNotifier {
             _pendingCandidates.add(c);
             debugPrint('[ICE] queue candidate (remoteDescription null)');
             return;
-          }          try {
-            await _pc!.addCandidate(RTCIceCandidate(
-              c['candidate'] ?? '',
-              c['sdpMid'],
-              (c['sdpMLineIndex'] as num?)?.toInt(),
-            ));
+          }
+          try {
+            await _pc!.addCandidate(
+              RTCIceCandidate(
+                c['candidate'] ?? '',
+                c['sdpMid'],
+                (c['sdpMLineIndex'] as num?)?.toInt(),
+              ),
+            );
           } catch (e) {
             // Jika masih gagal karena belum siap, queue dan coba lagi setelah answer
             if ((e.toString().contains('remoteDescription') ||
@@ -721,9 +776,10 @@ class CallSession extends ChangeNotifier {
     }
     _lastWatchReply[watcher] = DateTime.now();
     try {
-      final isAdmin =
-          await (_watcherAdminChecks.putIfAbsent(
-              watcher, () => _service.isAdminUid(watcher)));
+      final isAdmin = await (_watcherAdminChecks.putIfAbsent(
+        watcher,
+        () => _service.isAdminUid(watcher),
+      ));
       if (!isAdmin) return;
       final old = _watchPcs.remove(watcher);
       if (old != null) {
@@ -735,21 +791,28 @@ class CallSession extends ChangeNotifier {
       final pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _watchPcs[watcher] = pc;
       pc.onIceCandidate = (c) {
-        _service.sendSignal(callId, 'watch_candidate',
-            payload: {'candidate': c.toMap(), 'to': watcher, 'from': me});
+        _service.sendSignal(
+          callId,
+          'watch_candidate',
+          payload: {'candidate': c.toMap(), 'to': watcher, 'from': me},
+        );
       };
       for (final track in _localStream!.getTracks()) {
         await pc.addTrack(track, _localStream!);
       }
       final offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await _service.sendSignal(callId, 'watch_offer', payload: {
-        'sdp': offer.toMap(),
-        'to': watcher,
-        'from': me,
-        'micOn': _micOn,
-        'cameraOn': callType == 'video' ? _cameraOn : false,
-      });
+      await _service.sendSignal(
+        callId,
+        'watch_offer',
+        payload: {
+          'sdp': offer.toMap(),
+          'to': watcher,
+          'from': me,
+          'micOn': _micOn,
+          'cameraOn': callType == 'video' ? _cameraOn : false,
+        },
+      );
       debugPrint('[WATCH] offer sent to watcher=$watcher');
     } catch (e) {
       debugPrint('[WATCH] handle watch_request failed: $e');
@@ -769,15 +832,19 @@ class CallSession extends ChangeNotifier {
     if (pc == null || sdp == null) return;
     try {
       await pc.setRemoteDescription(
-          RTCSessionDescription(sdp['sdp'], sdp['type']));
+        RTCSessionDescription(sdp['sdp'], sdp['type']),
+      );
       for (final c in List<Map<String, dynamic>>.from(
-          _watchPendingCands[watcher] ?? const [])) {
+        _watchPendingCands[watcher] ?? const [],
+      )) {
         try {
-          await pc.addCandidate(RTCIceCandidate(
-            c['candidate'] ?? '',
-            c['sdpMid'],
-            (c['sdpMLineIndex'] as num?)?.toInt(),
-          ));
+          await pc.addCandidate(
+            RTCIceCandidate(
+              c['candidate'] ?? '',
+              c['sdpMid'],
+              (c['sdpMLineIndex'] as num?)?.toInt(),
+            ),
+          );
         } catch (_) {}
       }
       _watchPendingCands.remove(watcher);
@@ -800,11 +867,13 @@ class CallSession extends ChangeNotifier {
         _watchPendingCands.putIfAbsent(watcher, () => []).add(c);
         return;
       }
-      await pc.addCandidate(RTCIceCandidate(
-        c['candidate'] ?? '',
-        c['sdpMid'],
-        (c['sdpMLineIndex'] as num?)?.toInt(),
-      ));
+      await pc.addCandidate(
+        RTCIceCandidate(
+          c['candidate'] ?? '',
+          c['sdpMid'],
+          (c['sdpMLineIndex'] as num?)?.toInt(),
+        ),
+      );
     } catch (e) {
       debugPrint('[WATCH] candidate error: $e');
     }
@@ -815,12 +884,16 @@ class CallSession extends ChangeNotifier {
     final me = _service.uid;
     if (me == null) return;
     for (final watcher in _watchPcs.keys.toList()) {
-      _service.sendSignal(callId, 'watch_state', payload: {
-        'micOn': _micOn,
-        'cameraOn': callType == 'video' ? _cameraOn : false,
-        'to': watcher,
-        'from': me,
-      });
+      _service.sendSignal(
+        callId,
+        'watch_state',
+        payload: {
+          'micOn': _micOn,
+          'cameraOn': callType == 'video' ? _cameraOn : false,
+          'to': watcher,
+          'from': me,
+        },
+      );
     }
   }
 
@@ -828,8 +901,21 @@ class CallSession extends ChangeNotifier {
   /// yang belum diproses. Menjamin tidak ada kandidat yang terlewat akibat
   /// race antara realtime broadcast dan catch-up SELECT.
   /// Juga cek status call di DB sebagai fallback bila realtime statusSub miss.
+  DateTime? _lastTouch;
+
+  /// Heartbeat ke server — admin monitor pakai ini untuk membedakan call
+  /// yang masih hidup vs call zombie (app ditutup paksa di tengah call).
+  void _touchHeartbeat() {
+    final now = DateTime.now();
+    if (_lastTouch != null && now.difference(_lastTouch!).inSeconds < 15)
+      return;
+    _lastTouch = now;
+    _service.touchCall(callId);
+  }
+
   Future<void> _syncAll() async {
     if (_closed) return;
+    _touchHeartbeat();
     try {
       // Fallback status check — tangkap ended/canceled yang miss dari realtime
       final row = await _service.getCall(callId);
@@ -842,6 +928,17 @@ class CallSession extends ChangeNotifier {
       }
     } catch (_) {}
     if (_closed) return;
+    // Safety-net fase: kadang callback onConnectionState/onIceConnectionState
+    // tidak dipanggil di sebagian device sehingga UI nyangkut "Menghubungkan"
+    // padahal media sudah mengalir. Cek state PC langsung tiap sync.
+    final curState = _pc?.connectionState;
+    if (curState == RTCPeerConnectionState.RTCPeerConnectionStateConnected &&
+        _phase != CallPhase.inCall) {
+      debugPrint('[ICE] sync safety-net -> SET inCall');
+      _phase = CallPhase.inCall;
+      _connectedAt = _connectedAt ?? DateTime.now();
+      notifyListeners();
+    }
     try {
       final rows = await _service.syncCallSignals(callId);
       for (final row in rows) {
@@ -850,8 +947,7 @@ class CallSession extends ChangeNotifier {
         final id = row['id']?.toString();
         if (id != null && _processedSignalIds.contains(id)) continue;
         final type = row['type'] as String?;
-        final payload =
-            (row['payload'] as Map?)?.cast<String, dynamic>() ?? {};
+        final payload = (row['payload'] as Map?)?.cast<String, dynamic>() ?? {};
         await _onSignal({'id': id, 'type': type, ...payload});
       }
     } catch (_) {}
@@ -874,7 +970,11 @@ class CallSession extends ChangeNotifier {
     _notifyWatchersState();
     notifyListeners();
     try {
-      await _service.sendSignal(callId, 'camera', payload: {'enabled': _cameraOn});
+      await _service.sendSignal(
+        callId,
+        'camera',
+        payload: {'enabled': _cameraOn},
+      );
     } catch (_) {}
   }
 

@@ -165,21 +165,25 @@ class CallProvider extends ChangeNotifier {
       myGender: myGender,
       pendingSignals: pendingSignals,
     );
-    debugPrint('[PROVIDER] startSession#${session.hashCode} call=$callId mode=$mode isCaller=$isCaller (prev=${_activeSession?.hashCode})');
+    debugPrint(
+      '[PROVIDER] startSession#${session.hashCode} call=$callId mode=$mode isCaller=$isCaller (prev=${_activeSession?.hashCode})',
+    );
     _activeSession = session;
     _activeMode = mode;
     _activeChatId = chatId;
     _activeCallId = callId;
     session.addListener(_onActiveSession);
     unawaited(session.init());
-    unawaited(CallNotification.showActive(
-      body: notifBody,
-      channelName: notifChannel,
-      channelDesc: notifDesc,
-      chatId: chatId,
-      otherUid: remoteUid,
-      otherName: remoteName,
-    ));
+    unawaited(
+      CallNotification.showActive(
+        body: notifBody,
+        channelName: notifChannel,
+        channelDesc: notifDesc,
+        chatId: chatId,
+        otherUid: remoteUid,
+        otherName: remoteName,
+      ),
+    );
     notifyListeners();
     return session;
   }

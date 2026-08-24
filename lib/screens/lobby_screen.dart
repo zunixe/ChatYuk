@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/admin_gate.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
@@ -487,7 +488,9 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
   final s = context.read<LocaleProvider>().s;
   final points = context.read<PointsProvider>();
   final auth = context.read<AuthProvider>();
-  final isAdmin = auth.userEmail == 'zunixe@gmail.com';
+  // Admin privilege hanya ada di build admin (flavor-gate) —
+  // bukan lagi cek email runtime.
+  final isAdmin = AdminGate.enabled;
   final nameCtrl = TextEditingController();
   final pwCtrl = TextEditingController();
   String icon = '🔒';
@@ -919,7 +922,9 @@ class _PrivateRoomCard extends StatelessWidget {
     final auth = context.read<AuthProvider>();
     final roomProvider = context.watch<RoomProvider>();
     final isOwner = room.ownerId == auth.uid;
-    final isAdmin = auth.userEmail == 'zunixe@gmail.com';
+    // Admin privilege hanya ada di build admin (flavor-gate) —
+    // bukan lagi cek email runtime.
+    final isAdmin = AdminGate.enabled;
     final canManage = isOwner || isAdmin;
     final isMember = roomProvider.memberRoomIds.contains(room.id) || isOwner;
     final days = _daysLeft;

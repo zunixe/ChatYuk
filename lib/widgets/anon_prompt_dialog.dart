@@ -47,8 +47,11 @@ void showAnonPromptDialog(BuildContext context) {
               ],
             ),
             SizedBox(height: 16),
-            Text(s.promptCompleteEmailTitle,
-                style: AppText.bodyStrong, textAlign: TextAlign.center),
+            Text(
+              s.promptCompleteEmailTitle,
+              style: AppText.bodyStrong,
+              textAlign: TextAlign.center,
+            ),
             SizedBox(height: 6),
             Text(
               s.promptCompleteEmailMsg,

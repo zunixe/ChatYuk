@@ -135,12 +135,18 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined, color: AppTheme.primary),
+              leading: const Icon(
+                Icons.photo_library_outlined,
+                color: AppTheme.primary,
+              ),
               title: Text(s.btnGallery, style: AppText.bodyStrong),
               onTap: () => Navigator.of(ctx).pop(_MediaSource.gallery),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined, color: AppTheme.primary),
+              leading: const Icon(
+                Icons.photo_camera_outlined,
+                color: AppTheme.primary,
+              ),
               title: Text(s.btnCamera, style: AppText.bodyStrong),
               onTap: () => Navigator.of(ctx).pop(_MediaSource.camera),
             ),
@@ -158,7 +164,10 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
 
   /// Parse hashtag dari teks — tampil sebagai chip badge.
   List<String> _extractHashtags(String text) {
-    final matches = RegExp(r'#([\p{L}\p{N}_]+)', unicode: true).allMatches(text);
+    final matches = RegExp(
+      r'#([\p{L}\p{N}_]+)',
+      unicode: true,
+    ).allMatches(text);
     final seen = <String>{};
     for (final m in matches) {
       seen.add('#${m.group(1)}');
@@ -178,8 +187,11 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.mark_email_unread_outlined,
-                size: 48, color: AppTheme.primary),
+            const Icon(
+              Icons.mark_email_unread_outlined,
+              size: 48,
+              color: AppTheme.primary,
+            ),
             const SizedBox(height: 12),
             Text(s.promptCompleteEmailMsg, textAlign: TextAlign.center),
           ],
@@ -222,10 +234,12 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       final uid = context.read<AuthProvider>().uid;
       final paths = <String>[];
       if (uid != null && _images.isNotEmpty) {
-        final uploads = _images.map((b64) => StoragePhotoService.instance.uploadPostImage(
-              uid: uid,
-              base64: base64Encode(b64),
-            ));
+        final uploads = _images.map(
+          (b64) => StoragePhotoService.instance.uploadPostImage(
+            uid: uid,
+            base64: base64Encode(b64),
+          ),
+        );
         final results = await Future.wait(uploads);
         // Seed cache lokal tiap foto yang sukses diupload (fire-and-forget)
         // supaya feed refresh langsung tampil tanpa re-download.
@@ -245,7 +259,11 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
           return;
         }
       }
-      await TimelineService().createPost(text: text, imagePaths: paths, visibility: _visibility);
+      await TimelineService().createPost(
+        text: text,
+        imagePaths: paths,
+        visibility: _visibility,
+      );
       if (!mounted) return;
       context.read<TimelineProvider>().load('all', refresh: true);
       Navigator.of(context).pop();
@@ -277,11 +295,12 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       appBar: AppBar(
         backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: AppTheme.headerGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
-        title: Text(s.btnPost, style: AppText.title.copyWith(color: Colors.white)),
+        title: Text(
+          s.btnPost,
+          style: AppText.title.copyWith(color: Colors.white),
+        ),
         iconTheme: IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
@@ -292,7 +311,12 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
             // ── Header profil — avatar + nama + "Posting sebagai" ──
             Row(
               children: [
-                ProfileAvatar(uid: auth.uid ?? '', name: myName, size: 44, borderRadius: 22),
+                ProfileAvatar(
+                  uid: auth.uid ?? '',
+                  name: myName,
+                  size: 44,
+                  borderRadius: 22,
+                ),
                 SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -302,7 +326,9 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                       SizedBox(height: 2),
                       Text(
                         s.postingAs,
-                        style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -331,20 +357,31 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                       style: AppText.body,
                       decoration: InputDecoration(
                         hintText: s.hintWritePost,
-                        hintStyle: AppText.body.copyWith(color: AppTheme.textSecondary),
+                        hintStyle: AppText.body.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
                         filled: true,
                         fillColor: AppTheme.bgCard,
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(14)),
-                          borderSide: BorderSide(color: AppTheme.bgCard, width: 1.5),
+                          borderSide: BorderSide(
+                            color: AppTheme.bgCard,
+                            width: 1.5,
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(14)),
-                          borderSide: BorderSide(color: AppTheme.bgCard, width: 1.5),
+                          borderSide: BorderSide(
+                            color: AppTheme.bgCard,
+                            width: 1.5,
+                          ),
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(14)),
-                          borderSide: BorderSide(color: AppTheme.bgCard, width: 1.5),
+                          borderSide: BorderSide(
+                            color: AppTheme.bgCard,
+                            width: 1.5,
+                          ),
                         ),
                         counterText: '',
                         isDense: true,
@@ -370,16 +407,23 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                           message: s.tooltipResize,
                           child: GestureDetector(
                             onVerticalDragUpdate: (d) => setState(
-                              () => _fieldHeight = (_fieldHeight + d.delta.dy).clamp(80, 320),
+                              () => _fieldHeight = (_fieldHeight + d.delta.dy)
+                                  .clamp(80, 320),
                             ),
                             child: Container(
                               width: 32,
                               height: 32,
                               decoration: BoxDecoration(
-                                color: AppTheme.textSecondary.withValues(alpha: 0.08),
+                                color: AppTheme.textSecondary.withValues(
+                                  alpha: 0.08,
+                                ),
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(Icons.unfold_more, size: 18, color: AppTheme.textSecondary),
+                              child: Icon(
+                                Icons.unfold_more,
+                                size: 18,
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
                           ),
                         ),
@@ -407,18 +451,33 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                 children: [
                   for (final tag in hashtags)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                        border: Border.all(
+                          color: AppTheme.primary.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.tag, size: 14, color: AppTheme.primary),
+                          const Icon(
+                            Icons.tag,
+                            size: 14,
+                            color: AppTheme.primary,
+                          ),
                           const SizedBox(width: 4),
-                          Text(tag, style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                          Text(
+                            tag,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -462,7 +521,11 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                                 color: Colors.black.withValues(alpha: 0.55),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.close, color: Colors.white, size: 16),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 16,
+                              ),
                             ),
                           ),
                         ),
@@ -488,7 +551,11 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                 color: AppTheme.bgCard,
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2)),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
                 ],
               ),
               child: Column(
@@ -503,7 +570,11 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                           color: AppTheme.primary.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.visibility_outlined, size: 18, color: AppTheme.primary),
+                        child: Icon(
+                          Icons.visibility_outlined,
+                          size: 18,
+                          color: AppTheme.primary,
+                        ),
                       ),
                       SizedBox(width: 10),
                       Expanded(
@@ -514,7 +585,9 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                             SizedBox(height: 1),
                             Text(
                               _visDesc(s),
-                              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                              style: AppText.bodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
                           ],
                         ),
@@ -526,9 +599,19 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                     children: [
                       _visChip(s, 'public', Icons.public, s.visPublic),
                       SizedBox(width: 8),
-                      _visChip(s, 'followers', Icons.people_outline_rounded, s.visFollowers),
+                      _visChip(
+                        s,
+                        'followers',
+                        Icons.people_outline_rounded,
+                        s.visFollowers,
+                      ),
                       SizedBox(width: 8),
-                      _visChip(s, 'subscribers', Icons.star_outline_rounded, s.visSubscribers),
+                      _visChip(
+                        s,
+                        'subscribers',
+                        Icons.star_outline_rounded,
+                        s.visSubscribers,
+                      ),
                     ],
                   ),
                 ],
@@ -540,7 +623,13 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, -2))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
+          ],
         ),
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         child: SafeArea(
@@ -551,12 +640,21 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
             child: ElevatedButton.icon(
               onPressed: _posting ? null : _post,
               icon: _posting
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Icon(Icons.send_rounded, size: 18),
               label: Text(s.btnPost, style: AppText.button),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
           ),
@@ -568,7 +666,12 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
   /// Tombol media ikon bulat (galeri/kamera) — tanpa spinner, hanya
   /// fade saat picker sedang diproses supaya UI tetap tenang.
   /// [color] ikon & latar mengikuti komposisi warna ala menu profil.
-  Widget _mediaIconButton(IconData icon, Color color, String label, VoidCallback onTap) {
+  Widget _mediaIconButton(
+    IconData icon,
+    Color color,
+    String label,
+    VoidCallback onTap,
+  ) {
     return Tooltip(
       message: label,
       child: GestureDetector(
@@ -613,7 +716,10 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
         decoration: BoxDecoration(
           color: AppTheme.primary.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4), width: 1.2),
+          border: Border.all(
+            color: AppTheme.primary.withValues(alpha: 0.4),
+            width: 1.2,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -638,20 +744,28 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
         decoration: BoxDecoration(
           color: AppTheme.primary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4), width: 1.2),
+          border: Border.all(
+            color: AppTheme.primary.withValues(alpha: 0.4),
+            width: 1.2,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _images.length >= _maxImages ? Icons.check_circle : Icons.add_photo_alternate_outlined,
+              _images.length >= _maxImages
+                  ? Icons.check_circle
+                  : Icons.add_photo_alternate_outlined,
               color: AppTheme.primary,
               size: 24,
             ),
             const SizedBox(height: 4),
             Text(
               _images.length >= _maxImages ? '$_maxImages' : s.btnAdd,
-              style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600),
+              style: AppText.caption.copyWith(
+                color: AppTheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -661,9 +775,12 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
 
   String _visDesc(S s) {
     switch (_visibility) {
-      case 'followers': return s.visFollowersDesc;
-      case 'subscribers': return s.visSubscribersDesc;
-      default: return s.visPublicDesc;
+      case 'followers':
+        return s.visFollowersDesc;
+      case 'subscribers':
+        return s.visSubscribersDesc;
+      default:
+        return s.visPublicDesc;
     }
   }
 
@@ -675,14 +792,23 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
         child: Container(
           padding: EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.primary.withValues(alpha: 0.1) : AppTheme.bgCard,
+            color: selected
+                ? AppTheme.primary.withValues(alpha: 0.1)
+                : AppTheme.bgCard,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: selected ? AppTheme.primary : AppTheme.divider, width: selected ? 1.4 : 1),
+            border: Border.all(
+              color: selected ? AppTheme.primary : AppTheme.divider,
+              width: selected ? 1.4 : 1,
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: selected ? AppTheme.primary : AppTheme.textSecondary),
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? AppTheme.primary : AppTheme.textSecondary,
+              ),
               SizedBox(width: 5),
               Flexible(
                 child: Text(

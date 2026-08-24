@@ -25,16 +25,19 @@ class RoomProvider extends ChangeNotifier {
   String? get error => _error;
 
   RoomProvider() {
-    _countsSub = _chat.getRoomOnlineCounts().listen((counts) {
-      // Event presence (heartbeat 60s tiap user) tidak mengubah count —
-      // lewati notify supaya lobby tidak rebuild tiap detik.
-      if (_countsEquals(counts, _counts)) return;
-      _counts = counts;
-      _applyCounts();
-      notifyListeners();
-    }, onError: (e) {
-      debugPrint('[RoomProvider] counts stream error: $e');
-    });
+    _countsSub = _chat.getRoomOnlineCounts().listen(
+      (counts) {
+        // Event presence (heartbeat 60s tiap user) tidak mengubah count —
+        // lewati notify supaya lobby tidak rebuild tiap detik.
+        if (_countsEquals(counts, _counts)) return;
+        _counts = counts;
+        _applyCounts();
+        notifyListeners();
+      },
+      onError: (e) {
+        debugPrint('[RoomProvider] counts stream error: $e');
+      },
+    );
     _subscribePrivateRooms();
     reload();
   }
@@ -43,13 +46,18 @@ class RoomProvider extends ChangeNotifier {
   /// Saat ada room dibuat/dihapus di device manapun, list langsung sinkron.
   void _subscribePrivateRooms() {
     _privateSub?.cancel();
-    _privateSub = _service.watchPrivateRooms(_country).listen((rooms) {
-      _privateRooms = rooms;
-      _applyCounts();
-      notifyListeners();
-    }, onError: (e) {
-      debugPrint('[RoomProvider] private rooms stream error: $e');
-    });
+    _privateSub = _service
+        .watchPrivateRooms(_country)
+        .listen(
+          (rooms) {
+            _privateRooms = rooms;
+            _applyCounts();
+            notifyListeners();
+          },
+          onError: (e) {
+            debugPrint('[RoomProvider] private rooms stream error: $e');
+          },
+        );
   }
 
   /// Ganti negara & muat room-nya.
@@ -91,7 +99,9 @@ class RoomProvider extends ChangeNotifier {
       await _service.cleanupExpired();
       final priv = await _service.fetchPrivateRooms(_country);
       final uid = Supabase.instance.client.auth.currentUser?.id;
-      final members = uid != null ? await _service.fetchMyMemberships(uid) : <String>{};
+      final members = uid != null
+          ? await _service.fetchMyMemberships(uid)
+          : <String>{};
       _privateRooms = priv;
       _memberRoomIds = members;
       _applyCounts();
@@ -108,12 +118,19 @@ class RoomProvider extends ChangeNotifier {
     String? password,
   }) async {
     final res = await _service.createPrivateRoom(
-      name: name, icon: icon, country: _country, password: password);
+      name: name,
+      icon: icon,
+      country: _country,
+      password: password,
+    );
     await reloadPrivate();
     return res;
   }
 
-  Future<Map<String, dynamic>> joinPrivateRoom(String roomId, {String? password}) async {
+  Future<Map<String, dynamic>> joinPrivateRoom(
+    String roomId, {
+    String? password,
+  }) async {
     final res = await _service.joinPrivateRoom(roomId, password: password);
     if (res['ok'] == true) {
       _memberRoomIds = {..._memberRoomIds, roomId};
@@ -136,7 +153,8 @@ class RoomProvider extends ChangeNotifier {
   bool _roomsEqual(List<RoomModel> a, List<RoomModel> b) {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id || a[i].onlineCount != b[i].onlineCount) return false;
+      if (a[i].id != b[i].id || a[i].onlineCount != b[i].onlineCount)
+        return false;
     }
     return true;
   }

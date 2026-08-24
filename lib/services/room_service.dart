@@ -7,8 +7,18 @@ import '../config/supabase_config.dart';
 const List<Map<String, String>> roomCategories = [
   {'id': 'general', 'name': 'General', 'icon': '💬', 'desc': 'Chat umum'},
   {'id': 'curhat', 'name': 'Curhat', 'icon': '💭', 'desc': 'Cerita & curhat'},
-  {'id': 'pertemanan', 'name': 'Pertemanan', 'icon': '🤝', 'desc': 'Cari teman baru'},
-  {'id': 'teknologi', 'name': 'Teknologi', 'icon': '💻', 'desc': 'Diskusi tech'},
+  {
+    'id': 'pertemanan',
+    'name': 'Pertemanan',
+    'icon': '🤝',
+    'desc': 'Cari teman baru',
+  },
+  {
+    'id': 'teknologi',
+    'name': 'Teknologi',
+    'icon': '💻',
+    'desc': 'Diskusi tech',
+  },
   {'id': 'gaming', 'name': 'Gaming', 'icon': '🎮', 'desc': 'Main & bahas game'},
   {'id': 'musik', 'name': 'Musik', 'icon': '🎵', 'desc': 'Sharing musik'},
   {'id': 'film', 'name': 'Film & TV', 'icon': '🎬', 'desc': 'Review film'},
@@ -41,9 +51,7 @@ class RoomService {
         .eq('country', country)
         .eq('is_private', false)
         .order('order');
-    return rows
-        .map((row) => RoomModel.fromMap('${row['id']}', row))
-        .toList();
+    return rows.map((row) => RoomModel.fromMap('${row['id']}', row)).toList();
   }
 
   /// Buat/lengkapi room kategori untuk satu negara via RPC security definer.
@@ -59,7 +67,9 @@ class RoomService {
 
   Future<void> updateOnlineCount(String roomId, int count) async {
     // Online count dihitung dari room_presence — tidak perlu simpan, tapi pertahankan API.
-    debugPrint('[room] updateOnlineCount deprecation: roomId=$roomId count=$count');
+    debugPrint(
+      '[room] updateOnlineCount deprecation: roomId=$roomId count=$count',
+    );
   }
 
   // ── Private Rooms ──
@@ -88,7 +98,10 @@ class RoomService {
   /// Room mana saja yang sudah jadi member (lolos password / owner).
   Future<Set<String>> fetchMyMemberships(String uid) async {
     try {
-      final rows = await _sb.from('room_members').select('room_id').eq('user_id', uid);
+      final rows = await _sb
+          .from('room_members')
+          .select('room_id')
+          .eq('user_id', uid);
       return rows.map((r) => '${r['room_id']}').toSet();
     } catch (e) {
       debugPrint('[room] fetchMyMemberships error: $e');
@@ -103,27 +116,36 @@ class RoomService {
     required String country,
     String? password,
   }) async {
-    final res = await _sb.rpc('create_private_room', params: {
-      'p_name': name,
-      'p_icon': icon,
-      'p_country': country,
-      'p_password': password,
-    });
+    final res = await _sb.rpc(
+      'create_private_room',
+      params: {
+        'p_name': name,
+        'p_icon': icon,
+        'p_country': country,
+        'p_password': password,
+      },
+    );
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
   /// Masuk private room. Return {ok, charged, points}.
-  Future<Map<String, dynamic>> joinPrivateRoom(String roomId, {String? password}) async {
-    final res = await _sb.rpc('join_private_room', params: {
-      'p_room_id': roomId,
-      'p_password': password,
-    });
+  Future<Map<String, dynamic>> joinPrivateRoom(
+    String roomId, {
+    String? password,
+  }) async {
+    final res = await _sb.rpc(
+      'join_private_room',
+      params: {'p_room_id': roomId, 'p_password': password},
+    );
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
   /// Perpanjang masa aktif room. Return {ok, points, expires_at}.
   Future<Map<String, dynamic>> extendRoom(String roomId) async {
-    final res = await _sb.rpc('extend_private_room', params: {'p_room_id': roomId});
+    final res = await _sb.rpc(
+      'extend_private_room',
+      params: {'p_room_id': roomId},
+    );
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
@@ -136,25 +158,24 @@ class RoomService {
   /// tersinkron di semua device tanpa reload manual. Mengembalikan daftar
   /// private room terbaru setiap ada perubahan.
   Stream<List<RoomModel>> watchPrivateRooms(String country) {
-    return _sb
-        .from('rooms')
-        .stream(primaryKey: ['id'])
-        .map((rows) {
-          final now = DateTime.now().toUtc();
-          return rows
-              .where((row) =>
-                  row['is_private'] == true &&
-                  row['country'] == country &&
-                  row['expires_at'] != null &&
-                  DateTime.tryParse('${row['expires_at']}')?.isAfter(now) == true)
-              .map((row) => RoomModel.fromMap('${row['id']}', row))
-              .toList()
-            ..sort((a, b) {
-              final ax = a.expiresAt;
-              final bx = b.expiresAt;
-              if (ax == null || bx == null) return 0;
-              return bx.compareTo(ax);
-            });
+    return _sb.from('rooms').stream(primaryKey: ['id']).map((rows) {
+      final now = DateTime.now().toUtc();
+      return rows
+          .where(
+            (row) =>
+                row['is_private'] == true &&
+                row['country'] == country &&
+                row['expires_at'] != null &&
+                DateTime.tryParse('${row['expires_at']}')?.isAfter(now) == true,
+          )
+          .map((row) => RoomModel.fromMap('${row['id']}', row))
+          .toList()
+        ..sort((a, b) {
+          final ax = a.expiresAt;
+          final bx = b.expiresAt;
+          if (ax == null || bx == null) return 0;
+          return bx.compareTo(ax);
         });
+    });
   }
 }

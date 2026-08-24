@@ -75,7 +75,9 @@ class _MissionsScreenState extends State<MissionsScreen>
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
       }
     } finally {
       if (mounted) setState(() => _claiming = null);
@@ -89,8 +91,14 @@ class _MissionsScreenState extends State<MissionsScreen>
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final current = _tab.index == 0 ? _daily : _tab.index == 1 ? _weekly : _oneTime;
-    final claimableCount = _weekly.where((e) => (e as Map)['claimable'] == true).length;
+    final current = _tab.index == 0
+        ? _daily
+        : _tab.index == 1
+        ? _weekly
+        : _oneTime;
+    final claimableCount = _weekly
+        .where((e) => (e as Map)['claimable'] == true)
+        .length;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -101,7 +109,10 @@ class _MissionsScreenState extends State<MissionsScreen>
             pinned: true,
             backgroundColor: AppTheme.primary,
             iconTheme: const IconThemeData(color: Colors.white),
-            title: Text(s.missionsTitle, style: const TextStyle(color: Colors.white)),
+            title: Text(
+              s.missionsTitle,
+              style: const TextStyle(color: Colors.white),
+            ),
             flexibleSpace: FlexibleSpaceBar(
               background: _Header(points: _points, streak: _streak, s: s),
             ),
@@ -116,7 +127,9 @@ class _MissionsScreenState extends State<MissionsScreen>
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white70,
                   labelStyle: AppText.bodyStrong,
-                  unselectedLabelStyle: AppText.body.copyWith(fontWeight: FontWeight.w500),
+                  unselectedLabelStyle: AppText.body.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                   tabs: [
                     _tabWithBadge(s.missionsDaily, 0),
                     _tabWithBadge(s.missionsWeekly, claimableCount),
@@ -128,7 +141,9 @@ class _MissionsScreenState extends State<MissionsScreen>
           ),
         ],
         body: _loading
-            ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+            ? const Center(
+                child: CircularProgressIndicator(color: AppTheme.primary),
+              )
             : Column(
                 children: [
                   _ProgressBanner(
@@ -137,8 +152,8 @@ class _MissionsScreenState extends State<MissionsScreen>
                     hint: _tab.index == 0
                         ? s.missionsDailyHint
                         : _tab.index == 1
-                            ? s.missionsWeeklyHint
-                            : s.missionsOnceHint,
+                        ? s.missionsWeeklyHint
+                        : s.missionsOnceHint,
                     s: s,
                   ),
                   Expanded(
@@ -167,8 +182,17 @@ class _MissionsScreenState extends State<MissionsScreen>
             const SizedBox(width: 5),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(color: AppTheme.danger, borderRadius: BorderRadius.circular(10)),
-              child: Text('$badge', style: AppText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+              decoration: BoxDecoration(
+                color: AppTheme.danger,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$badge',
+                style: AppText.micro.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ],
         ],
@@ -178,7 +202,12 @@ class _MissionsScreenState extends State<MissionsScreen>
 
   Widget _list(List<dynamic> items, S s) {
     if (items.isEmpty) {
-      return Center(child: Text(s.missionsEmpty, style: TextStyle(color: AppTheme.textSecondary)));
+      return Center(
+        child: Text(
+          s.missionsEmpty,
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+      );
     }
     return RefreshIndicator(
       onRefresh: _load,
@@ -222,29 +251,47 @@ class _Header extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               Container(
-                width: 56, height: 56,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.18),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.stars_rounded, color: Colors.amber, size: 32),
+                child: const Icon(
+                  Icons.stars_rounded,
+                  color: Colors.amber,
+                  size: 32,
+                ),
               ),
               const SizedBox(width: 16),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(s.missionsMyPoints,
-                      style: AppText.bodySmall.copyWith(color: Colors.white70, fontWeight: FontWeight.w500)),
+                  Text(
+                    s.missionsMyPoints,
+                    style: AppText.bodySmall.copyWith(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text('$points',
-                      style: AppText.display.copyWith(color: Colors.white, height: 1)),
+                  Text(
+                    '$points',
+                    style: AppText.display.copyWith(
+                      color: Colors.white,
+                      height: 1,
+                    ),
+                  ),
                 ],
               ),
               const Spacer(),
               if (streak > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(16),
@@ -253,8 +300,14 @@ class _Header extends StatelessWidget {
                     children: [
                       const Text('🔥', style: TextStyle(fontSize: AppGlyph.sm)),
                       const SizedBox(height: 2),
-                      Text('$streak',
-                          style: AppText.bodyStrong.copyWith(color: Colors.white, fontWeight: FontWeight.w800, height: 1)),
+                      Text(
+                        '$streak',
+                        style: AppText.bodyStrong.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -272,7 +325,12 @@ class _ProgressBanner extends StatelessWidget {
   final int total;
   final String hint;
   final S s;
-  const _ProgressBanner({required this.done, required this.total, required this.hint, required this.s});
+  const _ProgressBanner({
+    required this.done,
+    required this.total,
+    required this.hint,
+    required this.s,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -284,26 +342,38 @@ class _ProgressBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
           SizedBox(
-            width: 44, height: 44,
+            width: 44,
+            height: 44,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 SizedBox(
-                  width: 44, height: 44,
+                  width: 44,
+                  height: 44,
                   child: CircularProgressIndicator(
                     value: pct,
                     strokeWidth: 5,
                     backgroundColor: AppTheme.divider,
-                    valueColor: AlwaysStoppedAnimation(allDone ? AppTheme.online : AppTheme.primary),
+                    valueColor: AlwaysStoppedAnimation(
+                      allDone ? AppTheme.online : AppTheme.primary,
+                    ),
                   ),
                 ),
-                Text('${(pct * 100).round()}%',
-                    style: AppText.micro.copyWith(fontWeight: FontWeight.w800)),
+                Text(
+                  '${(pct * 100).round()}%',
+                  style: AppText.micro.copyWith(fontWeight: FontWeight.w800),
+                ),
               ],
             ),
           ),
@@ -314,10 +384,17 @@ class _ProgressBanner extends StatelessWidget {
               children: [
                 Text(
                   allDone ? s.missionsAllDone : s.missionsProgress(done, total),
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700),
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 SizedBox(height: 2),
-                Text(hint, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+                Text(
+                  hint,
+                  style: AppText.caption.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -333,7 +410,12 @@ class _MissionCard extends StatelessWidget {
   final String? claimingKey;
   final void Function(String key, int reward) onClaim;
   final int index;
-  const _MissionCard({required this.data, required this.claimingKey, required this.onClaim, required this.index});
+  const _MissionCard({
+    required this.data,
+    required this.claimingKey,
+    required this.onClaim,
+    required this.index,
+  });
 
   static const _meta = <String, ({IconData icon, Color color})>{
     'daily_login': (icon: Icons.wb_sunny_rounded, color: Color(0xFFFFA000)),
@@ -346,33 +428,56 @@ class _MissionCard extends StatelessWidget {
     'w_login': (icon: Icons.calendar_month_rounded, color: Color(0xFF8E24AA)),
     'w_social': (icon: Icons.groups_rounded, color: Color(0xFF1E88E5)),
     'w_active': (icon: Icons.forum_rounded, color: Color(0xFFE53935)),
-    'registered': (icon: Icons.mark_email_read_rounded, color: Color(0xFF43A047)),
+    'registered': (
+      icon: Icons.mark_email_read_rounded,
+      color: Color(0xFF43A047),
+    ),
     'rated_app': (icon: Icons.star_rounded, color: Color(0xFFFFB300)),
     'completed_profile': (icon: Icons.badge_rounded, color: Color(0xFFFB8C00)),
     'invited_friend': (icon: Icons.share_rounded, color: Color(0xFF00ACC1)),
     'first_photo': (icon: Icons.photo_camera_rounded, color: Color(0xFFD81B60)),
-    'first_room_chat': (icon: Icons.chat_bubble_rounded, color: Color(0xFF3949AB)),
+    'first_room_chat': (
+      icon: Icons.chat_bubble_rounded,
+      color: Color(0xFF3949AB),
+    ),
   };
 
   String _label(S s, String key) {
     switch (key) {
-      case 'daily_login': return s.mDailyLogin;
-      case 'room_read': return s.mRoomRead;
-      case 'new_chat': return s.mNewChat;
-      case 'online_5min': return s.mOnline5;
-      case 'online_30min': return s.mOnline30;
-      case 'online_60min': return s.mOnline60;
-      case 'online_120min': return s.mOnline120;
-      case 'w_login': return s.mwLogin;
-      case 'w_social': return s.mwSocial;
-      case 'w_active': return s.mwActive;
-      case 'registered': return s.mRegistered;
-      case 'rated_app': return s.mRatedApp;
-      case 'completed_profile': return s.mCompletedProfile;
-      case 'invited_friend': return s.mInvitedFriend;
-      case 'first_photo': return s.mFirstPhoto;
-      case 'first_room_chat': return s.mFirstRoomChat;
-      default: return key;
+      case 'daily_login':
+        return s.mDailyLogin;
+      case 'room_read':
+        return s.mRoomRead;
+      case 'new_chat':
+        return s.mNewChat;
+      case 'online_5min':
+        return s.mOnline5;
+      case 'online_30min':
+        return s.mOnline30;
+      case 'online_60min':
+        return s.mOnline60;
+      case 'online_120min':
+        return s.mOnline120;
+      case 'w_login':
+        return s.mwLogin;
+      case 'w_social':
+        return s.mwSocial;
+      case 'w_active':
+        return s.mwActive;
+      case 'registered':
+        return s.mRegistered;
+      case 'rated_app':
+        return s.mRatedApp;
+      case 'completed_profile':
+        return s.mCompletedProfile;
+      case 'invited_friend':
+        return s.mInvitedFriend;
+      case 'first_photo':
+        return s.mFirstPhoto;
+      case 'first_room_chat':
+        return s.mFirstRoomChat;
+      default:
+        return key;
     }
   }
 
@@ -387,7 +492,9 @@ class _MissionCard extends StatelessWidget {
     final current = (data['current'] as num?)?.toInt() ?? 0;
     final hasProgress = target > 1;
     final isClaiming = claimingKey == key;
-    final meta = _meta[key] ?? (icon: Icons.emoji_events_rounded, color: AppTheme.primary);
+    final meta =
+        _meta[key] ??
+        (icon: Icons.emoji_events_rounded, color: AppTheme.primary);
 
     return TweenAnimationBuilder<double>(
       duration: Duration(milliseconds: 260 + index * 45),
@@ -395,7 +502,10 @@ class _MissionCard extends StatelessWidget {
       tween: Tween(begin: 0, end: 1),
       builder: (_, t, child) => Opacity(
         opacity: t,
-        child: Transform.translate(offset: Offset(0, (1 - t) * 16), child: child),
+        child: Transform.translate(
+          offset: Offset(0, (1 - t) * 16),
+          child: child,
+        ),
       ),
       child: Container(
         margin: EdgeInsets.only(bottom: 10),
@@ -421,19 +531,35 @@ class _MissionCard extends StatelessWidget {
             children: [
               // Ikon berwarna
               Container(
-                width: 46, height: 46,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: done
-                        ? [AppTheme.online.withValues(alpha: 0.85), AppTheme.online]
+                        ? [
+                            AppTheme.online.withValues(alpha: 0.85),
+                            AppTheme.online,
+                          ]
                         : [meta.color.withValues(alpha: 0.85), meta.color],
                   ),
                   borderRadius: BorderRadius.circular(13),
-                  boxShadow: [BoxShadow(color: (done ? AppTheme.online : meta.color).withValues(alpha: 0.3), blurRadius: 6, offset: Offset(0, 2))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: (done ? AppTheme.online : meta.color).withValues(
+                        alpha: 0.3,
+                      ),
+                      blurRadius: 6,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: Icon(done ? Icons.check_rounded : meta.icon, color: Colors.white, size: 24),
+                child: Icon(
+                  done ? Icons.check_rounded : meta.icon,
+                  color: Colors.white,
+                  size: 24,
+                ),
               ),
               SizedBox(width: 13),
               Expanded(
@@ -443,11 +569,13 @@ class _MissionCard extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(_label(s, key),
-                              style: AppText.bodyStrong.copyWith(
-                                fontWeight: FontWeight.w700,
-                                decoration: done ? TextDecoration.none : null,
-                              )),
+                          child: Text(
+                            _label(s, key),
+                            style: AppText.bodyStrong.copyWith(
+                              fontWeight: FontWeight.w700,
+                              decoration: done ? TextDecoration.none : null,
+                            ),
+                          ),
                         ),
                         _RewardChip(reward: reward, done: done),
                       ],
@@ -462,25 +590,42 @@ class _MissionCard extends StatelessWidget {
                               child: TweenAnimationBuilder<double>(
                                 duration: Duration(milliseconds: 600),
                                 curve: Curves.easeOut,
-                                tween: Tween(begin: 0, end: target == 0 ? 0 : (current / target).clamp(0.0, 1.0)),
+                                tween: Tween(
+                                  begin: 0,
+                                  end: target == 0
+                                      ? 0
+                                      : (current / target).clamp(0.0, 1.0),
+                                ),
                                 builder: (_, v, __) => LinearProgressIndicator(
                                   value: v,
                                   minHeight: 7,
                                   backgroundColor: AppTheme.divider,
-                                  valueColor: AlwaysStoppedAnimation(done ? AppTheme.online : meta.color),
+                                  valueColor: AlwaysStoppedAnimation(
+                                    done ? AppTheme.online : meta.color,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                           SizedBox(width: 8),
-                          Text('$current/$target',
-                              style: AppText.caption.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w700)),
+                          Text(
+                            '$current/$target',
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ],
                       ),
                     ] else if (claimable) ...[
                       const SizedBox(height: 4),
-                      Text(s.missionsReadyClaim,
-                          style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                      Text(
+                        s.missionsReadyClaim,
+                        style: AppText.caption.copyWith(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -494,7 +639,14 @@ class _MissionCard extends StatelessWidget {
     );
   }
 
-  Widget _trailing(S s, String key, int reward, bool done, bool claimable, bool isClaiming) {
+  Widget _trailing(
+    S s,
+    String key,
+    int reward,
+    bool done,
+    bool claimable,
+    bool isClaiming,
+  ) {
     if (claimable) {
       return ElevatedButton(
         onPressed: isClaiming ? null : () => onClaim(key, reward),
@@ -503,19 +655,41 @@ class _MissionCard extends StatelessWidget {
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           minimumSize: const Size(0, 36),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           elevation: 0,
         ),
         child: isClaiming
-            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Text(s.missionClaim, style: AppText.label.copyWith(letterSpacing: 0, fontWeight: FontWeight.w800)),
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Text(
+                s.missionClaim,
+                style: AppText.label.copyWith(
+                  letterSpacing: 0,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
       );
     }
     if (done) {
       return Container(
         padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(color: AppTheme.online.withValues(alpha: 0.12), shape: BoxShape.circle),
-        child: const Icon(Icons.done_all_rounded, color: AppTheme.online, size: 18),
+        decoration: BoxDecoration(
+          color: AppTheme.online.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.done_all_rounded,
+          color: AppTheme.online,
+          size: 18,
+        ),
       );
     }
     return const SizedBox.shrink();
@@ -534,7 +708,10 @@ class _RewardChip extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: done
-              ? [AppTheme.online.withValues(alpha: 0.15), AppTheme.online.withValues(alpha: 0.15)]
+              ? [
+                  AppTheme.online.withValues(alpha: 0.15),
+                  AppTheme.online.withValues(alpha: 0.15),
+                ]
               : [const Color(0xFFFFF3E0), const Color(0xFFFFE0B2)],
         ),
         borderRadius: BorderRadius.circular(10),
@@ -542,14 +719,19 @@ class _RewardChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.monetization_on_rounded,
-              size: 12, color: done ? AppTheme.online : const Color(0xFFF57C00)),
+          Icon(
+            Icons.monetization_on_rounded,
+            size: 12,
+            color: done ? AppTheme.online : const Color(0xFFF57C00),
+          ),
           const SizedBox(width: 3),
-          Text('+$reward',
-              style: AppText.caption.copyWith(
-                color: done ? AppTheme.online : const Color(0xFFE65100),
-                fontWeight: FontWeight.w800,
-              )),
+          Text(
+            '+$reward',
+            style: AppText.caption.copyWith(
+              color: done ? AppTheme.online : const Color(0xFFE65100),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );

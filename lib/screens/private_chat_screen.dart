@@ -335,7 +335,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         final durText = dur > 0
             ? ' (${dur ~/ 60}:${(dur % 60).toString().padLeft(2, '0')})'
             : '';
-        final text = '${sess.callType == 'video' ? '📹' : '📞'} $statusText$durText';
+        final text =
+            '${sess.callType == 'video' ? '📹' : '📞'} $statusText$durText';
         final pendingCall = MessageModel(
           id: 'pending-call-${DateTime.now().microsecondsSinceEpoch}',
           senderId: uid,
@@ -593,7 +594,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   /// bubble, jadi saat list di-scroll bar tetap nempel di atas bubble yang
   /// sama (Overlay, bukan bagian dari scroll).
   void _onMessageLongPress(
-      LongPressStartDetails details, MessageModel msg, LayerLink link) {
+    LongPressStartDetails details,
+    MessageModel msg,
+    LayerLink link,
+  ) {
     if (msg.isDeleted) return;
     _hideActionBar();
     final s = context.read<LocaleProvider>().s;
@@ -602,12 +606,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final isPending = msg.id.startsWith('pending-');
     final canEdit = isMe && msg.type == 'text' && !isPending;
 
-    Widget iconBtn(IconData icon, String tooltip, VoidCallback onTap,
-        {bool danger = false}) {
+    Widget iconBtn(
+      IconData icon,
+      String tooltip,
+      VoidCallback onTap, {
+      bool danger = false,
+    }) {
       return IconButton(
-        icon: Icon(icon,
-            size: 20,
-            color: danger ? AppTheme.danger : AppTheme.textPrimary),
+        icon: Icon(
+          icon,
+          size: 20,
+          color: danger ? AppTheme.danger : AppTheme.textPrimary,
+        ),
         tooltip: tooltip,
         splashRadius: 20,
         onPressed: () {
@@ -639,20 +649,24 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               borderRadius: BorderRadius.circular(12),
               shadowColor: Colors.black.withValues(alpha: 0.25),
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    iconBtn(Icons.reply, s.menuReply,
-                        () => _replyMessage(msg)),
+                    iconBtn(Icons.reply, s.menuReply, () => _replyMessage(msg)),
                     if (canEdit)
-                      iconBtn(Icons.edit, s.editMessageTitle,
-                          () => _editMessage(msg)),
+                      iconBtn(
+                        Icons.edit,
+                        s.editMessageTitle,
+                        () => _editMessage(msg),
+                      ),
                     if (isMe)
-                      iconBtn(Icons.delete_outline, s.btnDelete,
-                          () => _deleteMessage(msg),
-                          danger: true),
+                      iconBtn(
+                        Icons.delete_outline,
+                        s.btnDelete,
+                        () => _deleteMessage(msg),
+                        danger: true,
+                      ),
                   ],
                 ),
               ),
@@ -720,9 +734,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           context.read<LocaleProvider>().s.isId,
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(context.read<LocaleProvider>().s.errSendPhoto),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.read<LocaleProvider>().s.errSendPhoto),
+          ),
+        );
       }
       return;
     }
@@ -798,9 +814,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           context.read<LocaleProvider>().s.isId,
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(context.read<LocaleProvider>().s.errSendPhoto),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.read<LocaleProvider>().s.errSendPhoto),
+          ),
+        );
       }
       return;
     }
@@ -868,11 +886,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
     // Hanya akun terdaftar & email terverifikasi yang boleh kirim koin.
     if (!auth.canUsePaid) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(
-        auth.profile?.isRegistered != true ? s.errCoinRegisterOnly : s.msgVerifyToUsePaid,
-      )));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            auth.profile?.isRegistered != true
+                ? s.errCoinRegisterOnly
+                : s.msgVerifyToUsePaid,
+          ),
+        ),
+      );
       return;
     }
 
@@ -1178,10 +1200,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final auth = context.read<AuthProvider>();
 
     if (!auth.canUsePaid) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(
-            auth.profile?.isRegistered != true ? s.errCoinRegisterOnly : s.msgVerifyToUsePaid,
-          )));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            auth.profile?.isRegistered != true
+                ? s.errCoinRegisterOnly
+                : s.msgVerifyToUsePaid,
+          ),
+        ),
+      );
       return;
     }
 
@@ -1231,8 +1258,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   itemCount: kGiftCatalog.length,
                   itemBuilder: (ctx, i) {
                     final g = kGiftCatalog[i];
-                    final afford = g.coins <= points.paidBalance ||
-                        (g.coins * points.bonusMultiplier) <= points.bonusBalance;
+                    final afford =
+                        g.coins <= points.paidBalance ||
+                        (g.coins * points.bonusMultiplier) <=
+                            points.bonusBalance;
                     return InkWell(
                       onTap: afford ? () => Navigator.pop(ctx, g) : null,
                       borderRadius: BorderRadius.circular(12),
@@ -1498,13 +1527,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               itemBuilder: (_) => [
                 PopupMenuItem(
                   value: 'audio',
-                  child: Text(s.callAudio,
-                      style: TextStyle(color: AppTheme.textPrimary)),
+                  child: Text(
+                    s.callAudio,
+                    style: TextStyle(color: AppTheme.textPrimary),
+                  ),
                 ),
                 PopupMenuItem(
                   value: 'video',
-                  child: Text(s.callVideo,
-                      style: TextStyle(color: AppTheme.textPrimary)),
+                  child: Text(
+                    s.callVideo,
+                    style: TextStyle(color: AppTheme.textPrimary),
+                  ),
                 ),
               ],
             ),
@@ -1515,13 +1548,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               if (val == 'follow') {
                 final social = context.read<SocialProvider>();
                 social.follow(widget.otherUid);
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text(s.btnFollow)));
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(s.btnFollow)));
               } else if (val == 'friend') {
                 final social = context.read<SocialProvider>();
                 social.sendFriendRequest(widget.otherUid);
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
               } else if (val == 'block') {
                 chat.blockUser(auth.uid!, widget.otherUid);
                 ScaffoldMessenger.of(
@@ -1534,11 +1569,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'follow',
-                child: Text(s.menuFollow, style: TextStyle(color: AppTheme.textPrimary)),
+                child: Text(
+                  s.menuFollow,
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
               ),
               PopupMenuItem(
                 value: 'friend',
-                child: Text(s.menuAddFriend, style: TextStyle(color: AppTheme.textPrimary)),
+                child: Text(
+                  s.menuAddFriend,
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
               ),
               PopupMenuItem(
                 value: 'block',
@@ -1585,385 +1626,421 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 Expanded(
                   child: Stack(
                     children: [
-                StreamBuilder<List<MessageModel>>(
-                  stream: _msgsStream,
-                  builder: (_, snap) {
-                    final msgs = snap.data ?? [];
-                    final all = [...msgs, ..._pending];
-                    if (all.isEmpty) {
-                      // Stream belum emit (data == null) → jangan tampilkan empty state —
-                      // mencegah flash "Mulai percakapan!" saat buka chat yang ada isinya.
-                      // Hanya tampilkan empty state setelah stream selesai (data != null).
-                      if (snap.data == null) return const SizedBox.shrink();
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '👋',
-                              style: TextStyle(fontSize: AppGlyph.xl),
+                      StreamBuilder<List<MessageModel>>(
+                        stream: _msgsStream,
+                        builder: (_, snap) {
+                          final msgs = snap.data ?? [];
+                          final all = [...msgs, ..._pending];
+                          if (all.isEmpty) {
+                            // Stream belum emit (data == null) → jangan tampilkan empty state —
+                            // mencegah flash "Mulai percakapan!" saat buka chat yang ada isinya.
+                            // Hanya tampilkan empty state setelah stream selesai (data != null).
+                            if (snap.data == null)
+                              return const SizedBox.shrink();
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '👋',
+                                    style: TextStyle(fontSize: AppGlyph.xl),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    s.startConversation,
+                                    style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
+                          // pola WhatsApp — item list berisi pesan + separator tanggal.
+                          final items = <ChatItem>[];
+                          String? prevDateKey;
+                          for (final m in all) {
+                            final local = m.timestamp.toLocal();
+                            final dateKey =
+                                '${local.year}-${local.month}-${local.day}';
+                            if (prevDateKey != dateKey) {
+                              items.add(
+                                ChatItem.date(dateChipLabel(m.timestamp, s)),
+                              );
+                            }
+                            prevDateKey = dateKey;
+                            items.add(ChatItem.message(m));
+                          }
+                          return ListView.builder(
+                            controller: _scrollCtrl,
+                            reverse: true,
+                            padding: const EdgeInsets.all(12),
+                            itemCount: items.length,
+                            itemBuilder: (_, i) {
+                              final item = items[items.length - 1 - i];
+                              if (item.dateLabel != null) {
+                                return DateChip(label: item.dateLabel!);
+                              }
+                              final msg = item.msg!;
+                              final isMe = msg.senderId == auth.uid;
+                              final isPending = msg.id.startsWith('pending-');
+                              final isRead =
+                                  isMe &&
+                                  !isPending &&
+                                  _otherLastRead != null &&
+                                  msg.timestamp.isBefore(_otherLastRead!);
+                              // Image kosong & pesan lama (> 50 dari terbaru) → deferred (icon refresh)
+                              final isImageDeferred =
+                                  msg.type == 'image' &&
+                                  msg.imageData.isEmpty &&
+                                  i >= 50;
+                              return MessageBubble(
+                                key: ValueKey(msg.id),
+                                link: _linkFor(msg.id),
+                                msg: msg,
+                                chatKey: cacheKeyFor(widget.chatId),
+                                isMe: isMe,
+                                isRead: isRead,
+                                isPending: isPending,
+                                isImageDeferred: isImageDeferred,
+                                onRetryImage: _msgsHandleFetchImage,
+                                onLongPressMenu: _onMessageLongPress,
+                              );
+                            },
+                          );
+                        },
+                      ),
+                      if (context.watch<PointsProvider>().enabled)
+                        Positioned(
+                          top: 8,
+                          right: 12,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
                             ),
-                            SizedBox(height: 8),
-                            Text(
-                              s.startConversation,
-                              style: TextStyle(
+                            decoration: BoxDecoration(
+                              color: AppTheme.bgCard,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 8,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              '🪙 $points',
+                              style: AppText.label.copyWith(
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (_showTyping)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(14, 6, 0, 10),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _TypingBubble(),
+                    ),
+                  ),
+                Container(
+                  padding: EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 4,
+                        offset: Offset(0, -1),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_replyingTo != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.reply,
+                                  size: 16,
+                                  color: AppTheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        s.replyingTo,
+                                        style: AppText.caption.copyWith(
+                                          color: AppTheme.primary,
+                                        ),
+                                      ),
+                                      Text(
+                                        _replyingTo!.text,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppText.bodySmall.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  onPressed: _cancelReply,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (_editingMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.edit,
+                                  size: 16,
+                                  color: AppTheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    s.editingMessage,
+                                    style: AppText.bodySmall.copyWith(
+                                      color: AppTheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  onPressed: _cancelEdit,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: IconButton(
+                                onPressed: () =>
+                                    EmojiPickerSheet.show(context, _msgCtrl),
+                                icon: Icon(
+                                  Icons.emoji_emotions_outlined,
+                                  size: 22,
+                                ),
                                 color: AppTheme.textSecondary,
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                            SizedBox(width: 2),
+                            Expanded(
+                              child: Container(
+                                constraints: BoxConstraints(maxHeight: 132),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.bgCard,
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: AppTheme.bgCard,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    SizedBox(width: 16),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _msgCtrl,
+                                        focusNode: _inputFocus,
+                                        style: AppText.body,
+                                        decoration: InputDecoration(
+                                          hintText: s.hintTypeMessage,
+                                          hintStyle: AppText.body.copyWith(
+                                            color: AppTheme.textSecondary,
+                                          ),
+                                          filled: false,
+                                          border: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                vertical: 12,
+                                              ),
+                                        ),
+                                        textInputAction:
+                                            TextInputAction.newline,
+                                        onSubmitted: (_) => _send(),
+                                        onChanged: (_) => _sendTypingSignal(),
+                                        minLines: 1,
+                                        maxLines: 4,
+                                        keyboardType: TextInputType.multiline,
+                                        textCapitalization:
+                                            TextCapitalization.sentences,
+                                      ),
+                                    ),
+                                    _InputIconBtn(
+                                      icon: _showAttachRow
+                                          ? Icons.close
+                                          : Icons.add_circle_outline,
+                                      color: AppTheme.primary,
+                                      onTap: _toggleAttachRow,
+                                      tooltip: s.menuSendPhoto,
+                                    ),
+                                    const SizedBox(width: 10),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _msgCtrl,
+                              builder: (context, value, _) => AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 180),
+                                switchInCurve: Curves.easeOut,
+                                switchOutCurve: Curves.easeIn,
+                                transitionBuilder: (child, anim) =>
+                                    SizeTransition(
+                                      sizeFactor: anim,
+                                      axis: Axis.horizontal,
+                                      axisAlignment: -1,
+                                      child: FadeTransition(
+                                        opacity: anim,
+                                        child: child,
+                                      ),
+                                    ),
+                                child: value.text.trim().isEmpty
+                                    ? const SizedBox(
+                                        width: 0,
+                                        key: ValueKey('empty'),
+                                      )
+                                    : SizedBox(
+                                        key: const ValueKey('send'),
+                                        width: 48,
+                                        height: 48,
+                                        child: IconButton(
+                                          onPressed: _send,
+                                          icon: const Icon(
+                                            Icons.send_rounded,
+                                            size: 22,
+                                          ),
+                                          color: Colors.white,
+                                          padding: EdgeInsets.zero,
+                                          style: IconButton.styleFrom(
+                                            backgroundColor: AppTheme.primary,
+                                            shape: const CircleBorder(),
+                                          ),
+                                        ),
+                                      ),
                               ),
                             ),
                           ],
                         ),
-                      );
-                    }
-                    // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
-                    // pola WhatsApp — item list berisi pesan + separator tanggal.
-                    final items = <ChatItem>[];
-                    String? prevDateKey;
-                    for (final m in all) {
-                      final local = m.timestamp.toLocal();
-                      final dateKey =
-                          '${local.year}-${local.month}-${local.day}';
-                      if (prevDateKey != dateKey) {
-                        items.add(ChatItem.date(dateChipLabel(m.timestamp, s)));
-                      }
-                      prevDateKey = dateKey;
-                      items.add(ChatItem.message(m));
-                    }
-                    return ListView.builder(
-                      controller: _scrollCtrl,
-                      reverse: true,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: items.length,
-                      itemBuilder: (_, i) {
-                        final item = items[items.length - 1 - i];
-                        if (item.dateLabel != null) {
-                          return DateChip(label: item.dateLabel!);
-                        }
-                        final msg = item.msg!;
-                        final isMe = msg.senderId == auth.uid;
-                        final isPending = msg.id.startsWith('pending-');
-                        final isRead =
-                            isMe &&
-                            !isPending &&
-                            _otherLastRead != null &&
-                            msg.timestamp.isBefore(_otherLastRead!);
-                        // Image kosong & pesan lama (> 50 dari terbaru) → deferred (icon refresh)
-                        final isImageDeferred =
-                            msg.type == 'image' &&
-                            msg.imageData.isEmpty &&
-                            i >= 50;
-                        return MessageBubble(
-                          key: ValueKey(msg.id),
-                          link: _linkFor(msg.id),
-                          msg: msg,
-                          chatKey: cacheKeyFor(widget.chatId),
-                          isMe: isMe,
-                          isRead: isRead,
-                          isPending: isPending,
-                          isImageDeferred: isImageDeferred,
-                          onRetryImage: _msgsHandleFetchImage,
-                          onLongPressMenu: _onMessageLongPress,
-                        );
-                      },
-                    );
-                  },
-                ),
-                if (context.watch<PointsProvider>().enabled)
-                  Positioned(
-                    top: 8,
-                    right: 12,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.bgCard,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        '🪙 $points',
-                        style: AppText.label.copyWith(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (_showTyping)
-            Padding(
-              padding: EdgeInsets.fromLTRB(14, 6, 0, 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _TypingBubble(),
-              ),
-            ),
-          Container(
-            padding: EdgeInsets.fromLTRB(
-              8,
-              6,
-              8,
-              6,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 4,
-                  offset: Offset(0, -1),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_replyingTo != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-                      child: Row(
-                        children: [
-                          Icon(Icons.reply, size: 16, color: AppTheme.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  s.replyingTo,
-                                  style: AppText.caption
-                                      .copyWith(color: AppTheme.primary),
-                                ),
-                                Text(
-                                  _replyingTo!.text,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppText.bodySmall.copyWith(
-                                      color: AppTheme.textSecondary),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.close,
-                                size: 18, color: AppTheme.textSecondary),
-                            onPressed: _cancelReply,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  if (_editingMessage != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit, size: 16, color: AppTheme.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              s.editingMessage,
-                              style: AppText.bodySmall
-                                  .copyWith(color: AppTheme.primary),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.close,
-                                size: 18, color: AppTheme.textSecondary),
-                            onPressed: _cancelEdit,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: IconButton(
-                          onPressed: () =>
-                              EmojiPickerSheet.show(context, _msgCtrl),
-                          icon: Icon(
-                            Icons.emoji_emotions_outlined,
-                            size: 22,
-                          ),
-                          color: AppTheme.textSecondary,
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                      SizedBox(width: 2),
-                      Expanded(
-                        child: Container(
-                          constraints: BoxConstraints(maxHeight: 132),
-                          decoration: BoxDecoration(
-                            color: AppTheme.bgCard,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: AppTheme.bgCard,
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              SizedBox(width: 16),
-                              Expanded(
-                                child: TextField(
-                                  controller: _msgCtrl,
-                                  focusNode: _inputFocus,
-                                  style: AppText.body,
-                                  decoration: InputDecoration(
-                                    hintText: s.hintTypeMessage,
-                                    hintStyle: AppText.body.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                    filled: false,
-                                    border: InputBorder.none,
-                                    enabledBorder: InputBorder.none,
-                                    focusedBorder: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                  ),
-                                  textInputAction: TextInputAction.newline,
-                                  onSubmitted: (_) => _send(),
-                                  onChanged: (_) => _sendTypingSignal(),
-                                  minLines: 1,
-                                  maxLines: 4,
-                                  keyboardType: TextInputType.multiline,
-                                  textCapitalization:
-                                      TextCapitalization.sentences,
-                                ),
-                              ),
-                              _InputIconBtn(
-                                icon: _showAttachRow
-                                    ? Icons.close
-                                    : Icons.add_circle_outline,
-                                color: AppTheme.primary,
-                                onTap: _toggleAttachRow,
-                                tooltip: s.menuSendPhoto,
-                              ),
-                              const SizedBox(width: 10),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: _msgCtrl,
-                        builder: (context, value, _) => AnimatedSwitcher(
+                        AnimatedSize(
                           duration: const Duration(milliseconds: 180),
-                          switchInCurve: Curves.easeOut,
-                          switchOutCurve: Curves.easeIn,
-                          transitionBuilder: (child, anim) => SizeTransition(
-                            sizeFactor: anim,
-                            axis: Axis.horizontal,
-                            axisAlignment: -1,
-                            child: FadeTransition(opacity: anim, child: child),
-                          ),
-                          child: value.text.trim().isEmpty
-                              ? const SizedBox(width: 0, key: ValueKey('empty'))
-                              : SizedBox(
-                                  key: const ValueKey('send'),
-                                  width: 48,
-                                  height: 48,
-                                  child: IconButton(
-                                    onPressed: _send,
-                                    icon: const Icon(
-                                      Icons.send_rounded,
-                                      size: 22,
-                                    ),
-                                    color: Colors.white,
-                                    padding: EdgeInsets.zero,
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: AppTheme.primary,
-                                      shape: const CircleBorder(),
-                                    ),
+                          curve: Curves.easeOut,
+                          child: _showAttachRow
+                              ? Padding(
+                                  padding: const EdgeInsets.only(
+                                    top: 8,
+                                    left: 4,
                                   ),
-                                ),
+                                  child: Row(
+                                    children: [
+                                      _AttachChip(
+                                        icon: Icons.image_outlined,
+                                        color: AppTheme.primary,
+                                        label: s.menuSendPhoto,
+                                        onTap: () {
+                                          setState(
+                                            () => _showAttachRow = false,
+                                          );
+                                          _sendPhoto();
+                                        },
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _AttachChip(
+                                        icon: Icons.timer_outlined,
+                                        color: Colors.orange,
+                                        label: s.menuViewOnce,
+                                        onTap: () {
+                                          setState(
+                                            () => _showAttachRow = false,
+                                          );
+                                          _sendViewOncePhoto();
+                                        },
+                                      ),
+                                      // Kirim koin — sembunyikan saat sistem poin OFF
+                                      if (context
+                                          .watch<PointsProvider>()
+                                          .enabled) ...[
+                                        const SizedBox(width: 8),
+                                        _AttachChip(
+                                          icon: Icons.paid_outlined,
+                                          color: Colors.amber,
+                                          label: s.menuSendCoin,
+                                          onTap: () {
+                                            setState(
+                                              () => _showAttachRow = false,
+                                            );
+                                            _showSendCoinDialog();
+                                          },
+                                        ),
+                                        const SizedBox(width: 8),
+                                        _AttachChip(
+                                          icon: Icons.card_giftcard,
+                                          color: Colors.pinkAccent,
+                                          label: s.menuSendGift,
+                                          onTap: () {
+                                            setState(
+                                              () => _showAttachRow = false,
+                                            );
+                                            _showGiftPicker();
+                                          },
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    child: _showAttachRow
-                        ? Padding(
-                            padding: const EdgeInsets.only(top: 8, left: 4),
-                            child: Row(
-                              children: [
-                                _AttachChip(
-                                  icon: Icons.image_outlined,
-                                  color: AppTheme.primary,
-                                  label: s.menuSendPhoto,
-                                  onTap: () {
-                                    setState(() => _showAttachRow = false);
-                                    _sendPhoto();
-                                  },
-                                ),
-                                const SizedBox(width: 8),
-                                _AttachChip(
-                                  icon: Icons.timer_outlined,
-                                  color: Colors.orange,
-                                  label: s.menuViewOnce,
-                                  onTap: () {
-                                    setState(() => _showAttachRow = false);
-                                    _sendViewOncePhoto();
-                                  },
-                                ),
-                                // Kirim koin — sembunyikan saat sistem poin OFF
-                                if (context
-                                    .watch<PointsProvider>()
-                                    .enabled) ...[
-                                  const SizedBox(width: 8),
-                                  _AttachChip(
-                                    icon: Icons.paid_outlined,
-                                    color: Colors.amber,
-                                    label: s.menuSendCoin,
-                                    onTap: () {
-                                      setState(() => _showAttachRow = false);
-                                      _showSendCoinDialog();
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _AttachChip(
-                                    icon: Icons.card_giftcard,
-                                    color: Colors.pinkAccent,
-                                    label: s.menuSendGift,
-                                    onTap: () {
-                                      setState(() => _showAttachRow = false);
-                                      _showGiftPicker();
-                                    },
-                                  ),
-                                ],
-                              ],
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
           ),
           if (_showCallOverlay)
             Positioned.fill(
@@ -1971,10 +2048,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 session: CallProvider.instance.activeSession!,
                 onExpand: _expandCall,
                 onEnd: () async {
-                    final sess = CallProvider.instance.activeSession;
-                    if (sess != null) await sess.end();
-                    unawaited(CallProvider.instance.clearSession());
-                  },
+                  final sess = CallProvider.instance.activeSession;
+                  if (sess != null) await sess.end();
+                  unawaited(CallProvider.instance.clearSession());
+                },
               ),
             ),
         ],
@@ -1991,8 +2068,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   ) async {
     final s = context.read<LocaleProvider>().s;
     if (CallProvider.instance.inCall) {
-      ScaffoldMessenger.of(ctx)
-          .showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
+      ScaffoldMessenger.of(
+        ctx,
+      ).showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
       return;
     }
     final messenger = ScaffoldMessenger.of(ctx);
@@ -2086,6 +2164,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 }
+
 // Tombol ikon kecil untuk input bar
 class _InputIconBtn extends StatelessWidget {
   final IconData icon;

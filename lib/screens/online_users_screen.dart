@@ -61,11 +61,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     super.initState();
     _scrollCtrl.addListener(_onScroll);
     _loadFilter();
-    _sharePulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
-      ..repeat(reverse: true);
-    _shareScale = Tween<double>(begin: 1.0, end: 1.06).animate(
-      CurvedAnimation(parent: _sharePulse, curve: Curves.easeInOut),
-    );
+    _sharePulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _shareScale = Tween<double>(
+      begin: 1.0,
+      end: 1.06,
+    ).animate(CurvedAnimation(parent: _sharePulse, curve: Curves.easeInOut));
     _requestGpsOnce();
   }
 
@@ -84,18 +87,24 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     _unreadSub?.cancel();
     final auth = context.read<AuthProvider>();
     if (auth.uid != null) {
-      _unreadSub = context.read<ChatProvider>().getMyPrivateChats(auth.uid!).listen((chats) {
-        if (!mounted) return;
-        final map = <String, int>{};
-        for (final c in chats) {
-          final otherUid = c.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-          if (otherUid.isNotEmpty) {
-            final count = c.unreadCounts[auth.uid] ?? 0;
-            if (count > 0) map[otherUid] = count;
-          }
-        }
-        setState(() => _unreadMap = map);
-      });
+      _unreadSub = context
+          .read<ChatProvider>()
+          .getMyPrivateChats(auth.uid!)
+          .listen((chats) {
+            if (!mounted) return;
+            final map = <String, int>{};
+            for (final c in chats) {
+              final otherUid = c.participants.firstWhere(
+                (p) => p != auth.uid,
+                orElse: () => '',
+              );
+              if (otherUid.isNotEmpty) {
+                final count = c.unreadCounts[auth.uid] ?? 0;
+                if (count > 0) map[otherUid] = count;
+              }
+            }
+            setState(() => _unreadMap = map);
+          });
     }
   }
 
@@ -135,7 +144,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
   void _onScroll() {
     if (_scrollDebounce) return;
-    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 100) {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 100) {
       _scrollDebounce = true;
       _page++;
       setState(() {});
@@ -196,9 +206,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       if (!active) {
         if (context.mounted) {
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(s.errUserNotFound)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(s.errUserNotFound)));
         }
         return;
       }
@@ -216,19 +226,21 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       );
     } catch (e) {
       final msg = e.toString().toLowerCase();
-      if (msg.contains('23503') || msg.contains('foreign key') || msg.contains('42501')) {
+      if (msg.contains('23503') ||
+          msg.contains('foreign key') ||
+          msg.contains('42501')) {
         if (context.mounted) {
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(s.errUserNotFound)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(s.errUserNotFound)));
         }
         return;
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${s.errGeneric}$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
       }
     }
   }
@@ -244,18 +256,21 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       appBar: AppBar(
         backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: AppTheme.headerGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
         title: Consumer<OnlineUsersProvider>(
           builder: (_, prov, __) => Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(s.titleOnline, style: AppText.title.copyWith(color: Colors.white)),
-              Text('${prov.users.length} ${s.onlineActiveUsers}',
-                style: AppText.bodySmall.copyWith(color: Colors.white70)),
+              Text(
+                s.titleOnline,
+                style: AppText.title.copyWith(color: Colors.white),
+              ),
+              Text(
+                '${prov.users.length} ${s.onlineActiveUsers}',
+                style: AppText.bodySmall.copyWith(color: Colors.white70),
+              ),
             ],
           ),
         ),
@@ -278,20 +293,22 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         children: [
           Consumer<OnlineUsersProvider>(
             builder: (_, provider, __) {
-          final chat = context.read<ChatProvider>();
-          final allUsers = provider.users.where((u) => u.uid != auth.uid && !chat.isBlocked(u.uid)).toList();
+              final chat = context.read<ChatProvider>();
+              final allUsers = provider.users
+                  .where((u) => u.uid != auth.uid && !chat.isBlocked(u.uid))
+                  .toList();
 
-          final users = allUsers.where((u) {
-            if (_negara != 'all' && u.country != _negara) return false;
-            if (_gender != 'all' && u.gender != _gender) return false;
-            if (_search.isNotEmpty &&
-                !u.nickname.toLowerCase().contains(_search.toLowerCase())) {
-              return false;
-            }
-            return true;
-          }).toList();
+              final users = allUsers.where((u) {
+                if (_negara != 'all' && u.country != _negara) return false;
+                if (_gender != 'all' && u.gender != _gender) return false;
+                if (_search.isNotEmpty &&
+                    !u.nickname.toLowerCase().contains(_search.toLowerCase())) {
+                  return false;
+                }
+                return true;
+              }).toList();
 
-          final unreadMap = _unreadMap;
+              final unreadMap = _unreadMap;
 
               final paged = users.take(_page * _pageSize).toList();
               final hasMore = paged.length < users.length;
@@ -302,20 +319,38 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: TextField(
                       controller: _searchCtrl,
-                      onChanged: (v) => setState(() { _search = v; _page = 1; }),
+                      onChanged: (v) => setState(() {
+                        _search = v;
+                        _page = 1;
+                      }),
                       decoration: InputDecoration(
                         isDense: true,
                         hintText: s.searchHint,
-                        prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary),
+                        prefixIcon: Icon(
+                          Icons.search,
+                          color: AppTheme.textSecondary,
+                        ),
                         suffixIcon: _search.isNotEmpty
                             ? IconButton(
-                                icon: Icon(Icons.clear, size: 18, color: AppTheme.textSecondary),
-                                onPressed: () { _searchCtrl.clear(); setState(() { _search = ''; _page = 1; }); },
+                                icon: Icon(
+                                  Icons.clear,
+                                  size: 18,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() {
+                                    _search = '';
+                                    _page = 1;
+                                  });
+                                },
                               )
                             : null,
                         filled: true,
                         fillColor: AppTheme.bgCard,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -335,7 +370,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                             items: ['all', ...allCountries],
                             labels: [s.filterAll, ...allCountries],
                             onChanged: (v) {
-                              setState(() { _negara = v; _page = 1; });
+                              setState(() {
+                                _negara = v;
+                                _page = 1;
+                              });
                               _saveFilter();
                             },
                           ),
@@ -349,7 +387,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                             items: const ['all', 'male', 'female'],
                             labels: [s.filterAll, s.filterMale, s.filterFemale],
                             onChanged: (v) {
-                              setState(() { _gender = v; _page = 1; });
+                              setState(() {
+                                _gender = v;
+                                _page = 1;
+                              });
                               _saveFilter();
                             },
                           ),
@@ -359,7 +400,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   ),
                   Expanded(
                     child: !provider.hasLoaded
-                        ? Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2))
+                        ? Center(
+                            child: CircularProgressIndicator(
+                              color: AppTheme.primary,
+                              strokeWidth: 2,
+                            ),
+                          )
                         : users.isEmpty
                         ? Center(
                             child: Column(
@@ -372,19 +418,30 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                       width: 88,
                                       height: 88,
                                       decoration: BoxDecoration(
-                                        color: AppTheme.primary.withValues(alpha: 0.08),
+                                        color: AppTheme.primary.withValues(
+                                          alpha: 0.08,
+                                        ),
                                         shape: BoxShape.circle,
                                       ),
                                     ),
-                                    Icon(Icons.group_add_rounded, size: 48, color: AppTheme.primary),
+                                    Icon(
+                                      Icons.group_add_rounded,
+                                      size: 48,
+                                      color: AppTheme.primary,
+                                    ),
                                     Positioned(
-                                      right: 4, bottom: 4,
+                                      right: 4,
+                                      bottom: 4,
                                       child: Container(
-                                        width: 22, height: 22,
+                                        width: 22,
+                                        height: 22,
                                         decoration: BoxDecoration(
                                           color: AppTheme.online,
                                           shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 3),
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 3,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -392,9 +449,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 ),
                                 SizedBox(height: 16),
                                 Text(
-                                  _search.isNotEmpty ? s.searchNoResult : s.noOnlineUsers,
+                                  _search.isNotEmpty
+                                      ? s.searchNoResult
+                                      : s.noOnlineUsers,
                                   textAlign: TextAlign.center,
-                                  style: AppText.body.copyWith(color: AppTheme.textSecondary),
+                                  style: AppText.body.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
                                 ),
                               ],
                             ),
@@ -408,7 +469,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 return const Center(
                                   child: Padding(
                                     padding: EdgeInsets.all(16),
-                                    child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      color: AppTheme.primary,
+                                      strokeWidth: 2,
+                                    ),
                                   ),
                                 );
                               }
@@ -422,8 +486,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   ),
                 ],
               );
-          },
-        ),
+            },
+          ),
           Positioned(
             right: 16,
             bottom: 16,
@@ -437,7 +501,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     borderRadius: BorderRadius.circular(30),
                     onTap: _shareApp,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         gradient: AppTheme.headerGradient,
                         borderRadius: BorderRadius.circular(22),
@@ -452,9 +519,18 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.ios_share, color: Colors.white, size: 18),
+                          const Icon(
+                            Icons.ios_share,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                           const SizedBox(width: 6),
-                          Text(s.shareTooltip, style: AppText.bodyStrong.copyWith(color: Colors.white)),
+                          Text(
+                            s.shareTooltip,
+                            style: AppText.bodyStrong.copyWith(
+                              color: Colors.white,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -513,7 +589,9 @@ class _FilterDropdown extends StatelessWidget {
                 ),
               ),
           ],
-          onChanged: (v) { if (v != null) onChanged(v); },
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
         ),
       ),
     );
@@ -524,7 +602,11 @@ class _UserCard extends StatelessWidget {
   final UserModel user;
   final VoidCallback onTap;
   final int unreadCount;
-  const _UserCard({required this.user, required this.onTap, this.unreadCount = 0});
+  const _UserCard({
+    required this.user,
+    required this.onTap,
+    this.unreadCount = 0,
+  });
 
   Color _statusColor(String status) {
     if (status == 'idle') return AppTheme.idle;
@@ -544,18 +626,34 @@ class _UserCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final color = user.gender == 'male' ? AppTheme.male : user.gender == 'female' ? AppTheme.female : AppTheme.accent;
-    final genderLabel = user.gender == 'male' ? s.genderMale : user.gender == 'female' ? s.genderFemale : s.genderOther;
+    final color = user.gender == 'male'
+        ? AppTheme.male
+        : user.gender == 'female'
+        ? AppTheme.female
+        : AppTheme.accent;
+    final genderLabel = user.gender == 'male'
+        ? s.genderMale
+        : user.gender == 'female'
+        ? s.genderFemale
+        : s.genderOther;
     final statusLabel = user.status == 'idle'
         ? '${s.statusIdle} · ${_idleDurationLabel(user.lastSeen)}'
-        : user.status == 'offline' ? s.statusOffline : s.statusOnline;
+        : user.status == 'offline'
+        ? s.statusOffline
+        : s.statusOnline;
 
     return Container(
       margin: EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -564,125 +662,208 @@ class _UserCard extends StatelessWidget {
           onTap: onTap,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Stack(
-                children: [
-                  Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: color.withValues(alpha: 0.15),
-                      border: Border.all(color: color, width: 1.5),
-                      image: user.avatar.isNotEmpty
-                          ? DecorationImage(
-                              image: MemoryImage(_avatarCache.putIfAbsent(user.avatar, () => base64Decode(user.avatar))),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                    ),
-                    child: user.avatar.isNotEmpty ? null : Center(child: Text(user.initial, style: TextStyle(color: color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700))),
-                  ),
-                  Positioned(right: 0, bottom: 0,
-                    child: Container(width: 11, height: 11,
-                      decoration: BoxDecoration(color: _statusColor(user.status), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 1.5)),
-                    ),
-                  ),
-                  if (unreadCount > 0)
-                    Positioned(right: -2, top: -2,
-                      child: Container(
-                        padding: EdgeInsets.all(3),
-                        decoration: BoxDecoration(color: AppTheme.danger, shape: BoxShape.circle),
-                        child: Text('$unreadCount', style: AppText.micro.copyWith(color: Colors.white)),
-                      ),
-                    ),
-                ],
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              children: [
+                Stack(
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(user.nickname, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis),
-                        ),
-                        if (user.gender == 'male' || user.gender == 'female') ...[
-                          SizedBox(width: 4),
-                          Icon(
-                            user.gender == 'male' ? Icons.male : Icons.female,
-                            size: 15,
-                            color: user.gender == 'male' ? AppTheme.male : AppTheme.female,
-                          ),
-                        ],
-                        if (user.isRegistered) ...[
-                          SizedBox(width: 4),
-                          Tooltip(
-                              message: s.labelVerified,
-                            child: Icon(Icons.verified, size: 15, color: Color(0xFF4A90E2)),
-                          ),
-                        ],
-                      ],
-                    ),
-                        Text('$genderLabel ${user.age} · ${user.city}, ${user.country}', style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              Column(
-                children: [
-                  Text(statusLabel, style: AppText.caption.copyWith(color: _statusColor(user.status), fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      // Tombol ikuti hanya untuk user yang ter-registrasi email.
-                      if (user.isRegistered)
-                        Consumer<SocialProvider>(
-                          builder: (_, sp, __) {
-                            final following = sp.isFollowing(user.uid);
-                            return GestureDetector(
-                              onTap: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                final ok = following
-                                    ? await sp.unfollow(user.uid)
-                                    : await sp.follow(user.uid);
-                                if (ok) {
-                                  messenger.showSnackBar(SnackBar(
-                                    content: Text(following ? s.btnUnfollow : s.btnFollow)));
-                                }
-                              },
-                              child: Container(
-                                width: 30, height: 30,
-                                decoration: BoxDecoration(
-                                  color: following
-                                      ? AppTheme.primary.withValues(alpha: 0.12)
-                                      : AppTheme.textSecondary.withValues(alpha: 0.10),
-                                  borderRadius: BorderRadius.circular(8),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color.withValues(alpha: 0.15),
+                        border: Border.all(color: color, width: 1.5),
+                        image: user.avatar.isNotEmpty
+                            ? DecorationImage(
+                                image: MemoryImage(
+                                  _avatarCache.putIfAbsent(
+                                    user.avatar,
+                                    () => base64Decode(user.avatar),
+                                  ),
                                 ),
-                                child: Icon(
-                                  following ? Icons.person_remove : Icons.person_add,
-                                  size: 17,
-                                  color: following ? AppTheme.primary : AppTheme.textSecondary,
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: user.avatar.isNotEmpty
+                          ? null
+                          : Center(
+                              child: Text(
+                                user.initial,
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: AppGlyph.avatarInitial(40),
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                            );
-                          },
+                            ),
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 11,
+                        height: 11,
+                        decoration: BoxDecoration(
+                          color: _statusColor(user.status),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
                         ),
-                      const SizedBox(width: 6),
-                      Container(
-                        width: 30, height: 30,
-                        decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.chat_bubble_outline, color: AppTheme.primary, size: 17),
+                      ),
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          padding: EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.danger,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '$unreadCount',
+                            style: AppText.micro.copyWith(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              user.nickname,
+                              style: AppText.bodyStrong,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (user.gender == 'male' ||
+                              user.gender == 'female') ...[
+                            SizedBox(width: 4),
+                            Icon(
+                              user.gender == 'male' ? Icons.male : Icons.female,
+                              size: 15,
+                              color: user.gender == 'male'
+                                  ? AppTheme.male
+                                  : AppTheme.female,
+                            ),
+                          ],
+                          if (user.isRegistered) ...[
+                            SizedBox(width: 4),
+                            Tooltip(
+                              message: s.labelVerified,
+                              child: Icon(
+                                Icons.verified,
+                                size: 15,
+                                color: Color(0xFF4A90E2),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      Text(
+                        '$genderLabel ${user.age} · ${user.city}, ${user.country}',
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(width: 6),
+                Column(
+                  children: [
+                    Text(
+                      statusLabel,
+                      style: AppText.caption.copyWith(
+                        color: _statusColor(user.status),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        // Tombol ikuti hanya untuk user yang ter-registrasi email.
+                        if (user.isRegistered)
+                          Consumer<SocialProvider>(
+                            builder: (_, sp, __) {
+                              final following = sp.isFollowing(user.uid);
+                              return GestureDetector(
+                                onTap: () async {
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  final ok = following
+                                      ? await sp.unfollow(user.uid)
+                                      : await sp.follow(user.uid);
+                                  if (ok) {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          following
+                                              ? s.btnUnfollow
+                                              : s.btnFollow,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    color: following
+                                        ? AppTheme.primary.withValues(
+                                            alpha: 0.12,
+                                          )
+                                        : AppTheme.textSecondary.withValues(
+                                            alpha: 0.10,
+                                          ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    following
+                                        ? Icons.person_remove
+                                        : Icons.person_add,
+                                    size: 17,
+                                    color: following
+                                        ? AppTheme.primary
+                                        : AppTheme.textSecondary,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.chat_bubble_outline,
+                            color: AppTheme.primary,
+                            size: 17,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

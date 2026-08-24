@@ -44,7 +44,9 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
     try {
       await _service.respondFriendRequest(id, accept);
       if (accept && mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(s.friendRequestAccepted)));
+        messenger.showSnackBar(
+          SnackBar(content: Text(s.friendRequestAccepted)),
+        );
       }
       await _load();
       if (mounted) context.read<SocialProvider>().refreshInbox();
@@ -62,34 +64,50 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
       body: _loading
           ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : _inbox.isEmpty && _outbox.isEmpty
-              ? Center(
-                  child: Text(s.friendRequestEmpty,
-                      style: TextStyle(color: AppTheme.textSecondary)),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: EdgeInsets.all(12),
-                    children: [
-                      if (_inbox.isNotEmpty) ...[
-                        Text(s.socialFollowers, style: AppText.label.copyWith(color: AppTheme.textSecondary)),
-                        SizedBox(height: 6),
-                        ..._inbox.map((r) => _RequestTile(
-                              entry: r,
-                              pending: true,
-                              onAccept: () => _respond(r, true),
-                              onReject: () => _respond(r, false),
-                            )),
-                        SizedBox(height: 16),
-                      ],
-                      if (_outbox.isNotEmpty) ...[
-                        Text(s.btnFriendRequested, style: AppText.label.copyWith(color: AppTheme.textSecondary)),
-                        const SizedBox(height: 6),
-                        ..._outbox.map((r) => _RequestTile(entry: r, pending: false)),
-                      ],
-                    ],
-                  ),
-                ),
+          ? Center(
+              child: Text(
+                s.friendRequestEmpty,
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: EdgeInsets.all(12),
+                children: [
+                  if (_inbox.isNotEmpty) ...[
+                    Text(
+                      s.socialFollowers,
+                      style: AppText.label.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    ..._inbox.map(
+                      (r) => _RequestTile(
+                        entry: r,
+                        pending: true,
+                        onAccept: () => _respond(r, true),
+                        onReject: () => _respond(r, false),
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                  ],
+                  if (_outbox.isNotEmpty) ...[
+                    Text(
+                      s.btnFriendRequested,
+                      style: AppText.label.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ..._outbox.map(
+                      (r) => _RequestTile(entry: r, pending: false),
+                    ),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 }
@@ -126,7 +144,13 @@ class _RequestTile extends StatelessWidget {
           Expanded(
             child: Row(
               children: [
-                Flexible(child: Text(name, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis)),
+                Flexible(
+                  child: Text(
+                    name,
+                    style: AppText.bodyStrong,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 if (registered) ...[
                   SizedBox(width: 4),
                   Icon(Icons.verified, size: 14, color: Color(0xFF4A90E2)),
@@ -135,10 +159,22 @@ class _RequestTile extends StatelessWidget {
             ),
           ),
           if (pending) ...[
-            TextButton(onPressed: onReject, child: Text(s.btnCancel, style: TextStyle(color: AppTheme.textSecondary))),
-            FilledButton(onPressed: onAccept, child: Text(s.btnConfirm, style: TextStyle(color: Colors.white))),
+            TextButton(
+              onPressed: onReject,
+              child: Text(
+                s.btnCancel,
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            ),
+            FilledButton(
+              onPressed: onAccept,
+              child: Text(s.btnConfirm, style: TextStyle(color: Colors.white)),
+            ),
           ] else
-            Text(s.btnFriendRequested, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+            Text(
+              s.btnFriendRequested,
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+            ),
         ],
       ),
     );

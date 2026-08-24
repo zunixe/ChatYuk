@@ -6,7 +6,10 @@ import '../services/chat_service.dart';
 bool _usersEqual(List<UserModel> a, List<UserModel> b) {
   if (a.length != b.length) return false;
   for (int i = 0; i < a.length; i++) {
-    if (a[i].uid != b[i].uid || a[i].status != b[i].status || a[i].lastSeen != b[i].lastSeen) return false;
+    if (a[i].uid != b[i].uid ||
+        a[i].status != b[i].status ||
+        a[i].lastSeen != b[i].lastSeen)
+      return false;
   }
   return true;
 }
@@ -23,21 +26,24 @@ class OnlineUsersProvider extends ChangeNotifier {
   bool get hasLoaded => _loaded;
 
   OnlineUsersProvider() {
-    _sub = _service.getOnlineUsers().listen((users) {
-      _loaded = true;
-      // Dedupe by uid — pertahanan kedua terhadap duplikat dari stream.
-      final seen = <String>{};
-      final deduped = users.where((u) => seen.add(u.uid)).toList();
-      if (_usersEqual(_users, deduped)) return;
-      _users = deduped;
-      _error = null;
-      notifyListeners();
-    }, onError: (e) {
-      debugPrint('[OnlineUsersProvider] stream error: $e');
-      _loaded = true;
-      _error = e.toString();
-      notifyListeners();
-    });
+    _sub = _service.getOnlineUsers().listen(
+      (users) {
+        _loaded = true;
+        // Dedupe by uid — pertahanan kedua terhadap duplikat dari stream.
+        final seen = <String>{};
+        final deduped = users.where((u) => seen.add(u.uid)).toList();
+        if (_usersEqual(_users, deduped)) return;
+        _users = deduped;
+        _error = null;
+        notifyListeners();
+      },
+      onError: (e) {
+        debugPrint('[OnlineUsersProvider] stream error: $e');
+        _loaded = true;
+        _error = e.toString();
+        notifyListeners();
+      },
+    );
   }
 
   @override

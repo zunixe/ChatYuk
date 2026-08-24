@@ -34,7 +34,8 @@ class _PostCardState extends State<PostCard> {
   final PageController _pageCtrl = PageController();
   int _page = 0;
   // GlobalKey untuk akses _CommentsListState saat kirim komentar (optimistic).
-  final GlobalKey<_CommentsListState> _commentsKey = GlobalKey<_CommentsListState>();
+  final GlobalKey<_CommentsListState> _commentsKey =
+      GlobalKey<_CommentsListState>();
 
   String get _id => '${_p['id']}';
 
@@ -144,8 +145,10 @@ class _PostCardState extends State<PostCard> {
                     child: _CommentsList(
                       key: _commentsKey,
                       postId: _id,
-                      onReply: (id, name) =>
-                          setSheet(() { replyToId = id; replyToName = name; }),
+                      onReply: (id, name) => setSheet(() {
+                        replyToId = id;
+                        replyToName = name;
+                      }),
                     ),
                   ),
                   Divider(height: 1),
@@ -154,8 +157,11 @@ class _PostCardState extends State<PostCard> {
                       padding: EdgeInsets.fromLTRB(16, 6, 8, 0),
                       child: Row(
                         children: [
-                          Icon(Icons.subdirectory_arrow_right,
-                              size: 16, color: AppTheme.primary),
+                          Icon(
+                            Icons.subdirectory_arrow_right,
+                            size: 16,
+                            color: AppTheme.primary,
+                          ),
                           SizedBox(width: 4),
                           Expanded(
                             child: Text(
@@ -168,8 +174,11 @@ class _PostCardState extends State<PostCard> {
                           ),
                           IconButton(
                             visualDensity: VisualDensity.compact,
-                            icon: Icon(Icons.close,
-                                size: 16, color: AppTheme.textSecondary),
+                            icon: Icon(
+                              Icons.close,
+                              size: 16,
+                              color: AppTheme.textSecondary,
+                            ),
                             onPressed: () => setSheet(() {
                               replyToId = 0;
                               replyToName = '';
@@ -188,7 +197,9 @@ class _PostCardState extends State<PostCard> {
                               color: AppTheme.bgCard,
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
-                                  color: AppTheme.bgCard, width: 1),
+                                color: AppTheme.bgCard,
+                                width: 1,
+                              ),
                             ),
                             child: TextField(
                               controller: ctrl,
@@ -207,18 +218,14 @@ class _PostCardState extends State<PostCard> {
                                 isDense: true,
                               ),
                               textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _sendComment(
-                                ctx2,
-                                ctrl,
-                                replyToId,
-                              ),
+                              onSubmitted: (_) =>
+                                  _sendComment(ctx2, ctrl, replyToId),
                             ),
                           ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.send, color: AppTheme.primary),
-                          onPressed: () =>
-                              _sendComment(ctx2, ctrl, replyToId),
+                          onPressed: () => _sendComment(ctx2, ctrl, replyToId),
                         ),
                       ],
                     ),
@@ -277,15 +284,17 @@ class _PostCardState extends State<PostCard> {
       final cur = (_p['commentCount'] as num?)?.toInt() ?? 0;
       if (mounted) {
         tp.updatePost(_id, {'commentCount': cur + 1});
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(s.msgCommented)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.msgCommented)));
       }
     } catch (_) {
       // Rollback optimistic insert jika gagal.
       tp.removeCommentFromCache(_id, optimisticId);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(s.errGeneric)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     }
   }
@@ -801,7 +810,9 @@ class _CommentsListState extends State<_CommentsList> {
   void initState() {
     super.initState();
     // Baca cache dulu — tampil instant tanpa network.
-    final cached = context.read<TimelineProvider>().getCachedComments(widget.postId);
+    final cached = context.read<TimelineProvider>().getCachedComments(
+      widget.postId,
+    );
     if (cached != null) _items = List.from(cached);
     _load();
   }
@@ -843,8 +854,7 @@ class _CommentsListState extends State<_CommentsList> {
       final res = await TimelineService().toggleCommentLike(id);
       if (!mounted) return;
       final liked = res['liked'] == true;
-      final count =
-          ((c['likeCount'] as num?)?.toInt() ?? 0) + (liked ? 1 : -1);
+      final count = ((c['likeCount'] as num?)?.toInt() ?? 0) + (liked ? 1 : -1);
       setState(() {
         c['isLiked'] = liked;
         c['likeCount'] = count < 0 ? 0 : count;
@@ -876,8 +886,7 @@ class _CommentsListState extends State<_CommentsList> {
       itemBuilder: (_, i) {
         final c = items[i];
         final isReply = ((c['parentId'] as num?)?.toInt() ?? 0) > 0;
-        final createdAt =
-            DateTime.tryParse(c['createdAt'] as String? ?? '');
+        final createdAt = DateTime.tryParse(c['createdAt'] as String? ?? '');
         final likeCount = (c['likeCount'] as num?)?.toInt() ?? 0;
         final shareCount = (c['shareCount'] as num?)?.toInt() ?? 0;
         final isLiked = c['isLiked'] == true;

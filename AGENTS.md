@@ -151,6 +151,13 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
 
 ## Build & Signing
 
+- **FLAVOR-GATE ADMIN (WAJIB dipahami sebelum build):**
+  - Kode admin TERPISAH dari build rilis. Entry rilis = default `lib/main.dart`
+    (TIDAK mengandung kode admin — dijamin tree-shaking via `lib/core/admin_gate.dart`).
+  - Entry admin = `-t lib/main_admin.dart` + flavor `admin` (appId
+    `com.chatyuk.chatyuk.admin`) — HANYA untuk HP pribadi, DILARANG upload store.
+  - Gerbang wajib SEBELUM upload rilis: `./scripts/check_release_apk.sh <apk>`
+    → harus "OK bersih". Kalau DITOLAK, build salah target.
 - Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass `chatyuk2024secure`)
 - **WAJIB** pakai obfuscation + split debug info supaya kode Dart sulit di-reverse engineering:
    - Flavor **apkpure** (default; appId `com.chatyuk.chatyuk`):
@@ -180,6 +187,7 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
   ```
 - Debug symbols disimpan di `build/app/symbols` (jangan dihapus) — dipakai `flutter symbolize` untuk baca stack trace saat crash.
 - **JANGAN build flavor `play` / AAB untuk Google Play tanpa instruksi eksplisit dari user.** Default build = flavor `apkpure`. Kalau ragu, tanya dulu.
+- Build flavor `admin` (internal): `-t lib/main_admin.dart` + `--flavor admin` — output `app-admin-release.apk`, appId `com.chatyuk.chatyuk.admin`. DILARANG upload ke store mana pun.
 - Sebelum selesai, selalu: `flutter analyze` → `flutter clean` (WAJIB — build incremental sering tidak memasukkan perubahan terbaru) → `flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols` → copy ke `~/Downloads/chatyuk.apk` → push ke HP (lihat "Build & Push ke HP")
 
 ### Build cepat — LEWATI iOS (WAJIB untuk kerja Android-only)

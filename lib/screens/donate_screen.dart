@@ -14,7 +14,8 @@ class DonateScreen extends StatefulWidget {
   State<DonateScreen> createState() => _DonateScreenState();
 }
 
-class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderStateMixin {
+class _DonateScreenState extends State<DonateScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tab;
 
   static const _networks = [
@@ -67,7 +68,9 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
   void _copy(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label${context.read<LocaleProvider>().s.msgCopied}')),
+      SnackBar(
+        content: Text('$label${context.read<LocaleProvider>().s.msgCopied}'),
+      ),
     );
   }
 
@@ -77,7 +80,7 @@ class _DonateScreenState extends State<DonateScreen> with SingleTickerProviderSt
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(
-          title: Text(s.titleDonate),
+        title: Text(s.titleDonate),
         bottom: TabBar(
           controller: _tab,
           labelColor: Colors.white,
@@ -119,11 +122,7 @@ class _QrisTab extends StatelessWidget {
         children: [
           SizedBox(height: 8),
           // Nama merchant
-          Text(
-            'OneHeart',
-            textAlign: TextAlign.center,
-            style: AppText.title,
-          ),
+          Text('OneHeart', textAlign: TextAlign.center, style: AppText.title),
           SizedBox(height: 4),
           Text(
             'NMID: ID1026566504126A01',
@@ -168,10 +167,7 @@ class _QrisTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          _InfoCard(
-            icon: Icons.info_outline,
-            text: s.donateQrisInfo,
-          ),
+          _InfoCard(icon: Icons.info_outline, text: s.donateQrisInfo),
           const SizedBox(height: 16),
           _ThankYouNote(),
         ],
@@ -184,7 +180,11 @@ class _UsdtTab extends StatelessWidget {
   final List<_UsdtNetwork> networks;
   final void Function(String text, String label) onCopy;
   final S s;
-  const _UsdtTab({required this.networks, required this.onCopy, required this.s});
+  const _UsdtTab({
+    required this.networks,
+    required this.onCopy,
+    required this.s,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +200,9 @@ class _UsdtTab extends StatelessWidget {
             style: AppText.body.copyWith(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 20),
-          ...networks.map((n) => _NetworkCard(network: n, onCopy: onCopy, s: s)),
+          ...networks.map(
+            (n) => _NetworkCard(network: n, onCopy: onCopy, s: s),
+          ),
           const SizedBox(height: 16),
           _InfoCard(
             icon: Icons.warning_amber_rounded,
@@ -218,7 +220,11 @@ class _NetworkCard extends StatelessWidget {
   final _UsdtNetwork network;
   final void Function(String, String) onCopy;
   final S s;
-  const _NetworkCard({required this.network, required this.onCopy, required this.s});
+  const _NetworkCard({
+    required this.network,
+    required this.onCopy,
+    required this.s,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -246,11 +252,15 @@ class _NetworkCard extends StatelessWidget {
                   children: [
                     Text(
                       'USDT ${network.label}',
-                      style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w700),
+                      style: AppText.bodyStrong.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     Text(
                       network.subtitle,
-                      style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                      style: AppText.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -276,8 +286,15 @@ class _NetworkCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   GestureDetector(
-                    onTap: () => onCopy(network.address, '${s.donateCopyAddress}${network.label}'),
-                    child: const Icon(Icons.copy, size: 18, color: AppTheme.primary),
+                    onTap: () => onCopy(
+                      network.address,
+                      '${s.donateCopyAddress}${network.label}',
+                    ),
+                    child: const Icon(
+                      Icons.copy,
+                      size: 18,
+                      color: AppTheme.primary,
+                    ),
                   ),
                 ],
               ),
@@ -286,7 +303,8 @@ class _NetworkCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => onCopy(network.address, 'Alamat ${network.label}'),
+                onPressed: () =>
+                    onCopy(network.address, 'Alamat ${network.label}'),
                 icon: const Icon(Icons.copy, size: 16),
                 label: Text('${s.btnCopyAddress}${network.label}'),
                 style: OutlinedButton.styleFrom(
@@ -354,10 +372,7 @@ class _ThankYouNote extends StatelessWidget {
         children: [
           Icon(Icons.favorite, color: AppTheme.primary, size: 28),
           SizedBox(height: 8),
-          Text(
-            s.donateThankYou,
-            style: AppText.titleEmphasis,
-          ),
+          Text(s.donateThankYou, style: AppText.titleEmphasis),
           SizedBox(height: 4),
           Text(
             s.donateThanksMsg,

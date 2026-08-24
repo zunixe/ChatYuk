@@ -35,6 +35,17 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   Offset? _bubblePos;
   double? _remoteH;
 
+  /// True → kamera saya di panel besar, video lawan jadi bubble kecil.
+  bool _swapped = false;
+
+  /// Skala ukuran bubble (resize lewat pojok kanan bawah).
+  double _bubbleScale = 1.0;
+
+  /// Mode gesture aktif di bubble: geser posisi atau resize dari pojok.
+  bool _resizingBubble = false;
+  double _resizeStartScale = 1.0;
+  Offset _resizeStartLocal = Offset.zero;
+
   @override
   void initState() {
     super.initState();
@@ -46,7 +57,9 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   void didUpdateWidget(covariant ChatCallOverlay old) {
     super.didUpdateWidget(old);
     if (old.session != widget.session) {
-      debugPrint('[OVERLAY-LIFE] swap#${old.session.hashCode}->#${widget.session.hashCode}');
+      debugPrint(
+        '[OVERLAY-LIFE] swap#${old.session.hashCode}->#${widget.session.hashCode}',
+      );
       old.session.removeListener(_onSession);
       widget.session.addListener(_onSession);
     }
@@ -61,6 +74,13 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
 
   void _onSession() {
     if (mounted) setState(() {});
+  }
+
+  /// Tukar video besar ↔ kecil (double tap).
+  void _toggleSwap() {
+    if (!mounted) return;
+    setState(() => _swapped = !_swapped);
+    // Posisi bubble di-clamp ulang terhadap ukuran barunya di build berikutnya.
   }
 
   String _statusText(S s, CallSession sess) {
@@ -83,20 +103,28 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
     final isVideo = sess.callType == 'video';
     final inCall = sess.phase == CallPhase.inCall;
     final showLocal =
-        inCall && isVideo && sess.cameraOn && sess.localRenderer.srcObject != null;
+        inCall &&
+        isVideo &&
+        sess.cameraOn &&
+        sess.localRenderer.srcObject != null;
 
     final mq = MediaQuery.of(context);
-    final appBarH = Scaffold.maybeOf(context)?.appBarMaxHeight ?? kToolbarHeight;
+    final appBarH =
+        Scaffold.maybeOf(context)?.appBarMaxHeight ?? kToolbarHeight;
     final maxW = mq.size.width;
     // Tinggi body efektif: kurangi viewInsets (keyboard) supaya hitungan
     // akurat saat keyboard muncul — body Stack sudah di-resize Scaffold.
-    final bodyHFull = mq.size.height - mq.padding.top - appBarH - mq.padding.bottom;
+    final bodyHFull =
+        mq.size.height - mq.padding.top - appBarH - mq.padding.bottom;
     final keyboardH = mq.viewInsets.bottom;
     final bodyH = (bodyHFull - keyboardH).clamp(200.0, double.infinity);
     // Keyboard terbuka → video HARUS mengecil agar 1-2 baris chat + composer keliatan.
     final keyboardOpen = keyboardH > 40;
     const minChatVisible = 110.0; // composer ~50 + 1-2 bubble ~60
-    final maxRemoteWhenKeyboard = (bodyH - minChatVisible).clamp(bodyH * 0.18, bodyH * 0.45);
+    final maxRemoteWhenKeyboard = (bodyH - minChatVisible).clamp(
+      bodyH * 0.18,
+      bodyH * 0.45,
+    );
     final halfH = bodyHFull * 0.5;
     _remoteH ??= halfH;
     // Tinggi tampil: jika keyboard buka, batasi ke maxRemoteWhenKeyboard tapi jangan
@@ -105,14 +133,21 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
     final remoteH = keyboardOpen
         ? userRemoteH.clamp(bodyH * 0.18, maxRemoteWhenKeyboard)
         : userRemoteH.clamp(bodyH * 0.25, bodyH * 0.78);
-    final bubbleW = maxW * 0.3;
+    final bubbleW = (maxW * 0.3 * _bubbleScale).clamp(maxW * 0.18, maxW * 0.66);
     final bubbleH = bubbleW * 1.4;
-    _bubblePos ??= Offset(maxW - bubbleW - 12, remoteH - bubbleH - 12);
+    // Muncul pertama di KANAN ATAS area chat — di bawah AppBar,
+    // tidak menutupi composer & tombol end call.
+    _bubblePos ??= Offset(
+      (maxW - bubbleW - 12).clamp(8.0, maxW - bubbleW - 8),
+      10,
+    );
     final pos = Offset(
       _bubblePos!.dx.clamp(8.0, maxW - bubbleW - 8),
       // Clamp Y ke tinggi efektif body — bubble boleh didrag ke area chat juga.
       _bubblePos!.dy.clamp(8.0, bodyH - bubbleH - 8),
     );
+    final showRemote = inCall && isVideo && sess.hasRemoteVideo;
+    final effSwap = _swapped && showLocal && showRemote;
 
     debugPrint(
       '[OVERLAY] sess#${sess.hashCode} phase=${sess.phase} call=${sess.callType} cam=${sess.cameraOn} '
@@ -134,7 +169,14 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
             left: 0,
             right: 0,
             height: remoteH,
-            child: _remotePanel(s, sess, isVideo, inCall, remoteH),
+            child: _remotePanel(
+              s,
+              sess,
+              isVideo,
+              inCall,
+              remoteH,
+              effSwap: effSwap,
+            ),
           ),
           // Handle drag untuk resize tinggi video — di bawah panel remote.
           AnimatedPositioned(
@@ -149,7 +191,10 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
               onPanUpdate: (d) {
                 setState(() {
                   // Update preferensi user (pakai bodyHFull agar tidak terpengaruh keyboard)
-                  _remoteH = (_remoteH! + d.delta.dy).clamp(bodyHFull * 0.25, bodyHFull * 0.78);
+                  _remoteH = (_remoteH! + d.delta.dy).clamp(
+                    bodyHFull * 0.25,
+                    bodyHFull * 0.78,
+                  );
                 });
               },
               onPanEnd: (_) {
@@ -168,7 +213,10 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
                     color: Colors.white70,
                     borderRadius: BorderRadius.circular(2),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 4),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 4,
+                      ),
                     ],
                   ),
                 ),
@@ -176,81 +224,99 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
             ),
           ),
           if (showLocal)
-            _localBubble(sess, pos, bubbleW, bubbleH, maxW, bodyH),
+            _localBubble(
+              sess,
+              pos,
+              bubbleW,
+              bubbleH,
+              maxW,
+              bodyH,
+              effSwap: effSwap,
+              canSwap: showLocal && showRemote,
+            ),
         ],
       ),
     );
   }
 
   /// Setengah layar atas: video lawan + bar info + bar kontrol.
+  /// Saat [effSwap], kamera saya yang tampil di sini (video lawan pindah
+  /// ke bubble kecil).
   Widget _remotePanel(
     S s,
     CallSession sess,
     bool isVideo,
     bool inCall,
-    double height,
-  ) {
+    double height, {
+    required bool effSwap,
+  }) {
     final showRemote = inCall && isVideo && sess.hasRemoteVideo;
 
     return Stack(
-        children: [
-          // Selalu di-mount supaya audio remote jalan & video langsung tampil.
-          // Positioned.fill wajib — di dalam Stack tanpa ini RTCVideoView dapat
-          // ukuran 0 dan video tidak tampil.
+      children: [
+        // Selalu di-mount supaya audio remote jalan & video langsung tampil.
+        // Positioned.fill wajib — di dalam Stack tanpa ini RTCVideoView dapat
+        // ukuran 0 dan video tidak tampil.
+        Positioned.fill(
+          child: RTCVideoView(
+            effSwap ? sess.localRenderer : sess.remoteRenderer,
+            mirror: effSwap,
+            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          ),
+        ),
+        if (!effSwap && !showRemote)
           Positioned.fill(
-            child: RTCVideoView(
-              sess.remoteRenderer,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-            ),
-          ),
-          if (!showRemote)
-            Positioned.fill(
-              child: Container(
-                color: const Color(0xFF10201A),
-                child: Center(
-                  child: ProfileAvatar(
-                    uid: sess.remoteUid,
-                    name: sess.remoteName,
-                    size: 80,
-                    borderRadius: 40,
-                  ),
-                ),
-              ),
-            ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black54, Colors.transparent],
+              color: const Color(0xFF10201A),
+              child: Center(
+                child: ProfileAvatar(
+                  uid: sess.remoteUid,
+                  name: sess.remoteName,
+                  size: 80,
+                  borderRadius: 40,
                 ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      sess.remoteName,
-                      style: AppText.caption.copyWith(color: Colors.white),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    _statusText(s, sess),
-                    style: AppText.micro.copyWith(color: Colors.white70),
-                  ),
-                ],
               ),
             ),
           ),
-          Positioned(bottom: 10, left: 0, right: 0, child: _controls(s, sess, isVideo)),
-        ],
-      );
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.black54, Colors.transparent],
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    sess.remoteName,
+                    style: AppText.caption.copyWith(color: Colors.white),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  _statusText(s, sess),
+                  style: AppText.micro.copyWith(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 10,
+          left: 0,
+          right: 0,
+          child: _controls(s, sess, isVideo),
+        ),
+      ],
+    );
   }
 
   Widget _controls(S s, CallSession sess, bool isVideo) {
@@ -272,10 +338,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
           color: sess.speakerOn ? null : Colors.redAccent,
           onTap: sess.toggleSpeaker,
         ),
-        _CallControlButton(
-          icon: Icons.aspect_ratio,
-          onTap: widget.onExpand,
-        ),
+        _CallControlButton(icon: Icons.aspect_ratio, onTap: widget.onExpand),
         _CallControlButton(
           icon: Icons.call_end,
           color: Colors.redAccent,
@@ -286,39 +349,87 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
     );
   }
 
-  /// Bubble video sendiri — kecil dan bisa di-drag ke seluruh area layar.
+  /// Bubble video kecil — bisa digeser, di-resize dari pojok kanan bawah,
+  /// dan double tap untuk tukar dengan video besar.
   Widget _localBubble(
     CallSession sess,
     Offset pos,
     double w,
     double h,
     double maxW,
-    double maxH,
-  ) {
+    double maxH, {
+    required bool effSwap,
+    required bool canSwap,
+  }) {
     return Positioned(
       left: pos.dx,
       top: pos.dy,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onDoubleTap: canSwap ? _toggleSwap : null,
+        onPanStart: (d) {
+          _resizingBubble =
+              d.localPosition.dx > w - 44 && d.localPosition.dy > h - 44;
+          _resizeStartScale = _bubbleScale;
+          _resizeStartLocal = d.localPosition;
+        },
         onPanUpdate: (d) {
           setState(() {
-            _bubblePos = Offset(
-              (_bubblePos!.dx + d.delta.dx).clamp(8.0, maxW - w - 8),
-              (_bubblePos!.dy + d.delta.dy).clamp(8.0, maxH - h - 8),
-            );
+            if (_resizingBubble) {
+              // Skala mengikuti perubahan lebar drag (rasio bubble tetap).
+              _bubbleScale =
+                  (_resizeStartScale *
+                          (w + d.localPosition.dx - _resizeStartLocal.dx) /
+                          w)
+                      .clamp(0.6, 2.2);
+            } else {
+              _bubblePos = Offset(
+                (_bubblePos!.dx + d.delta.dx).clamp(8.0, maxW - w - 8),
+                (_bubblePos!.dy + d.delta.dy).clamp(8.0, maxH - h - 8),
+              );
+            }
           });
         },
+        onPanEnd: (_) => _resizingBubble = false,
         child: Container(
           width: w,
           height: h,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white30, width: 1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.65),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: RTCVideoView(
-            sess.localRenderer,
-            mirror: true,
-            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: RTCVideoView(
+                  effSwap ? sess.remoteRenderer : sess.localRenderer,
+                  mirror: !effSwap,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                ),
+              ),
+              const Align(
+                alignment: Alignment.bottomRight,
+                child: Padding(
+                  padding: EdgeInsets.only(right: 4, bottom: 4),
+                  child: Icon(
+                    Icons.open_in_full_rounded,
+                    size: 20,
+                    color: Colors.white70,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

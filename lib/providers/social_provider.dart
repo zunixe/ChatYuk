@@ -192,7 +192,10 @@ class SocialProvider extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> subscribe(String creatorUid, {int periods = 1}) async {
+  Future<Map<String, dynamic>> subscribe(
+    String creatorUid, {
+    int periods = 1,
+  }) async {
     try {
       final res = await _service.subscribeCreator(creatorUid, periods: periods);
       if (res['ok'] == true) {

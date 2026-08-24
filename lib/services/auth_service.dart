@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
 import '../config/supabase_config.dart';
+import '../core/admin_gate.dart';
 import '../services/storage_photo_service.dart';
 import '../services/avatar_service.dart';
 import '../utils.dart';
@@ -25,6 +25,14 @@ class EmailAlreadyRegisteredException implements Exception {
 class AuthService {
   final SupabaseClient _sb = SupabaseConfig.client;
 
+  /// Instance terakhir — dipakai modul admin (build admin saja) untuk
+  /// meng-update state dummy tanpa import dua arah.
+  static AuthService? instance;
+
+  AuthService() {
+    instance = this;
+  }
+
   User? get currentUser => _sb.auth.currentUser;
   String? get uid => _sb.auth.currentUser?.id;
   bool get isSignedIn => _sb.auth.currentUser != null;
@@ -33,8 +41,16 @@ class AuthService {
   String? get userEmail => _sb.auth.currentUser?.email;
 
   /// Email sudah terverifikasi? (null = anonymous / belum terverifikasi)
-  bool get emailConfirmed =>
-      _sb.auth.currentUser?.emailConfirmedAt != null;
+  bool get emailConfirmed => _sb.auth.currentUser?.emailConfirmedAt != null;
+
+  /// Web client ID untuk Google Sign-In (audience ID token).
+  /// Build rilis memakai web client project lama; build admin meng-override
+  /// nilai ini via [googleWebClientIdOverride] karena Android client-nya
+  /// berada di project Firebase yang berbeda — Google mewajibkan keduanya
+  /// satu project.
+  static const String googleWebClientIdDefault =
+      '688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com';
+  static String? googleWebClientIdOverride;
 
   /// Sign in dengan Google via Supabase OAuth.
   /// Native google_sign_in — butuh Android OAuth client (keystore v2)
@@ -42,8 +58,7 @@ class AuthService {
   /// Return AuthResponse + email Google yang digunakan.
   Future<({AuthResponse response, String? googleEmail})?>
   signInWithGoogle() async {
-    const webClientId =
-        '688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com';
+    final webClientId = googleWebClientIdOverride ?? googleWebClientIdDefault;
 
     final googleSignIn = GoogleSignIn(serverClientId: webClientId);
     // google_sign_in: user batal → signIn() mengembalikan null (tidak
@@ -377,16 +392,22 @@ class AuthService {
       return false;
     }
   }
+
   /// Ikat diri sendiri ke referrer (sekali). Return {ok}.
   Future<bool> bindReferrer(String referrerUid) async {
     try {
-      final res = await _sb.rpc('bind_referrer', params: {'p_referrer': referrerUid});
+      final res = await _sb.rpc(
+        'bind_referrer',
+        params: {'p_referrer': referrerUid},
+      );
       return res is Map && res['ok'] == true;
     } catch (e) {
       debugPrint('[AUTH] bindReferrer error: $e');
       return false;
     }
-  }  /// Kirim email reset password.
+  }
+
+  /// Kirim email reset password.
   Future<void> sendPasswordResetEmail(String email) async {
     await _sb.auth.resetPasswordForEmail(
       email,
@@ -404,8 +425,7 @@ class AuthService {
 
   /// Akun punya password? Akun Google (sign-in via Google) tidak punya
   /// password — user harus "set password" dulu sebelum bisa ganti.
-  bool get hasPassword =>
-      currentUser?.appMetadata['provider'] != 'google';
+  bool get hasPassword => currentUser?.appMetadata['provider'] != 'google';
 
   /// Set password baru (untuk akun Google yang belum punya password).
   Future<void> setPassword(String newPassword) async {
@@ -415,15 +435,14 @@ class AuthService {
   /// Ganti password: verifikasi password lama dulu, lalu update.
   /// Lempar error bila password lama salah.
   Future<void> changePassword(
-      String currentPassword, String newPassword) async {
+    String currentPassword,
+    String newPassword,
+  ) async {
     final email = userEmail;
     if (email == null || email.isEmpty) {
       throw Exception('No email on account');
     }
-    await _sb.auth.signInWithPassword(
-      email: email,
-      password: currentPassword,
-    );
+    await _sb.auth.signInWithPassword(email: email, password: currentPassword);
     await _sb.auth.updateUser(UserAttributes(password: newPassword));
   }
 
@@ -439,7 +458,10 @@ class AuthService {
   /// Ambil alih nickname milik akun anon yang tidak aktif > 7 hari
   /// (dummy yang di-uninstall tidak terhapus di server).
   Future<bool> claimNickname(String nickname) async {
-    final res = await _sb.rpc('claim_nickname', params: {'p_nickname': nickname});
+    final res = await _sb.rpc(
+      'claim_nickname',
+      params: {'p_nickname': nickname},
+    );
     return res == true;
   }
 
@@ -857,7 +879,11 @@ class AuthService {
   Future<void> signOut() async {
     _dummySessionActive = false;
     _dummyUid = null;
-    await _clearAdminTokens();
+    // Pembersihan token admin tersimpan ditangani modul admin
+    // (AdminGate.onSignOut) — di build rilis hook ini tidak pernah terisi.
+    try {
+      await AdminGate.onSignOut?.call();
+    } catch (_) {}
     try {
       // Teardown total realtime: cegah socket/channel lama nyangkut saat
       // login ulang di proses yang sama (race disconnect/connect di
@@ -870,13 +896,9 @@ class AuthService {
     await _sb.auth.signOut();
   }
 
-  // ── Dummy session (admin berpindah akun tanpa login manual) ──
-  String? _adminAccessToken;
-  String? _adminRefreshToken;
+  // ── State sesi dummy (isi diatur modul admin via setDummyState) ──
   String? _dummyUid;
   bool _dummySessionActive = false;
-  static const _kAdminAccessToken = 'dummy_admin_access_token';
-  static const _kAdminRefreshToken = 'dummy_admin_refresh_token';
 
   /// True saat sesi aktif adalah akun dummy (bukan admin).
   bool get dummySessionActive => _dummySessionActive;
@@ -884,149 +906,10 @@ class AuthService {
   /// UID dummy yang sedang aktif (null jika bukan sesi dummy).
   String? get activeDummyUid => _dummyUid;
 
-  Future<void> _saveAdminTokens(
-    String? accessToken,
-    String? refreshToken,
-  ) async {
-    if (accessToken == null || refreshToken == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kAdminAccessToken, accessToken);
-    await prefs.setString(_kAdminRefreshToken, refreshToken);
-  }
-
-  Future<void> _clearAdminTokens() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kAdminAccessToken);
-    await prefs.remove(_kAdminRefreshToken);
-  }
-
-  /// Pulihkan state dummy setelah app restart: sesi aktif anonymous milik
-  /// dummy → restore flag + token admin dari SharedPreferences.
-  Future<void> restoreDummyIfNeeded() async {
-    final user = _sb.auth.currentUser;
-    if (user == null || !user.isAnonymous) return;
-    final uid = user.id;
-    try {
-      final isDummy =
-          await _sb.rpc('is_dummy_account', params: {'p_uid': uid}) as bool? ??
-          false;
-      if (!isDummy) return;
-    } catch (e) {
-      debugPrint('[AUTH] restoreDummyIfNeeded check error: $e');
-      return;
-    }
-    final prefs = await SharedPreferences.getInstance();
-    final refresh = prefs.getString(_kAdminRefreshToken);
-    final access = prefs.getString(_kAdminAccessToken);
-    if (refresh == null || refresh.isEmpty) return;
-    _adminRefreshToken = refresh;
-    _adminAccessToken = access;
-    _dummyUid = uid;
-    _dummySessionActive = true;
-    debugPrint('[AUTH] dummy session restored: $uid');
-  }
-
-  /// Pindah ke akun dummy: tukar session ke refresh_token dummy
-  /// (GoTrue memutar token tiap swap → simpan token baru di DB).
-  /// Kembali ke admin via [backToAdmin].
-  Future<void> becomeDummy(String uid) async {
-    final session = _sb.auth.currentSession;
-    _adminAccessToken = session?.accessToken;
-    _adminRefreshToken = session?.refreshToken;
-    _dummyUid = uid;
-    await _saveAdminTokens(_adminAccessToken, _adminRefreshToken);
-    // Token lama bisa basi (GoTrue me-revoke saat auto-refresh client).
-    // Fallback: regenerasi sesi dummy lewat RPC supaya swap selalu berhasil.
-    var refreshToken =
-        await _sb.rpc('admin_get_dummy_token', params: {'p_uid': uid})
-            as String?;
-    if (refreshToken == null || refreshToken.isEmpty) {
-      refreshToken =
-          await _sb.rpc('admin_renew_dummy_token', params: {'p_uid': uid})
-              as String?;
-    }
-    if (refreshToken == null || refreshToken.isEmpty) {
-      throw Exception('dummy_token_missing');
-    }
-    try {
-      await _sb.auth.setSession(refreshToken);
-    } catch (e) {
-      // Token dummy mati/invalid → regenerasi lalu coba sekali lagi.
-      debugPrint('[AUTH] becomeDummy setSession failed: $e — renewing');
-      try {
-        final renewed =
-            await _sb.rpc('admin_renew_dummy_token', params: {'p_uid': uid})
-                as String?;
-        if (renewed != null && renewed.isNotEmpty) {
-          await _sb.auth.setSession(renewed);
-        } else {
-          throw Exception('dummy_token_invalid');
-        }
-      } catch (e2) {
-        // JANGAN biarkan sesi rusak (user jadi logout) — pulihkan admin.
-        debugPrint('[AUTH] becomeDummy renew failed: $e2 — restoring admin');
-        final a = _adminAccessToken;
-        final r = _adminRefreshToken;
-        _adminAccessToken = null;
-        _adminRefreshToken = null;
-        _dummyUid = null;
-        _dummySessionActive = false;
-        if (r != null && a != null) {
-          try {
-            await _sb.auth.setSession(r, accessToken: a);
-          } catch (_) {}
-        }
-        await _clearAdminTokens();
-        throw Exception('dummy_token_invalid');
-      }
-    }
-    final newToken = _sb.auth.currentSession?.refreshToken;
-    if (newToken != null) {
-      try {
-        await _sb.rpc(
-          'admin_update_dummy_token',
-          params: {'p_uid': uid, 'p_refresh_token': newToken},
-        );
-      } catch (e) {
-        debugPrint('[AUTH] admin_update_dummy_token error: $e');
-      }
-    }
-    _dummySessionActive =
-        _adminAccessToken != null && _adminRefreshToken != null;
-  }
-
-  /// Kembali ke akun admin. Sesi dummy TIDAK di-logout dan statusnya
-  /// TIDAK diubah — apa pun status dummy (online/idle/offline) yang di-set
-  /// admin panel tetap dipertahankan. Hanya user aktif yang balik ke admin.
-  /// Return false jika token admin kedaluwarsa (perlu login manual).
-  Future<bool> backToAdmin() async {
-    _dummySessionActive = false;
-    var adminAccess = _adminAccessToken;
-    var adminRefresh = _adminRefreshToken;
-    _adminAccessToken = null;
-    _adminRefreshToken = null;
-    _dummyUid = null;
-    if (adminAccess == null || adminRefresh == null) {
-      final prefs = await SharedPreferences.getInstance();
-      adminAccess = prefs.getString(_kAdminAccessToken);
-      adminRefresh = prefs.getString(_kAdminRefreshToken);
-    }
-    if (adminRefresh == null || adminAccess == null) return false;
-    try {
-      await _sb.auth.setSession(adminRefresh, accessToken: adminAccess);
-      await _clearAdminTokens();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Ada token admin (dummy) tersimpan di SharedPreferences? Dipakai untuk
-  /// recovery otomatis saat sesi dummy mati server-side.
-  Future<bool> hasStoredAdminTokens() async {
-    final prefs = await SharedPreferences.getInstance();
-    final refresh = prefs.getString(_kAdminRefreshToken);
-    return refresh != null && refresh.isNotEmpty;
+  /// Update flag sesi dummy. Hanya dipanggil dari mekanisme swap dummy.
+  void markDummyState({required bool active, String? uid}) {
+    _dummySessionActive = active;
+    _dummyUid = active ? uid : null;
   }
 
   Stream<bool> get authState {

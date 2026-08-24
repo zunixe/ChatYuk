@@ -62,7 +62,9 @@ class UserModel {
       loginAt: parseDate(map['loginAt']),
       createdAt: parseDate(map['createdAt']),
       lastSeen: parseDate(map['lastSeen']),
-      hashtags: map['hashtags'] is List ? (map['hashtags'] as List).cast<String>() : const [],
+      hashtags: map['hashtags'] is List
+          ? (map['hashtags'] as List).cast<String>()
+          : const [],
       points: map['points'] ?? 50,
       shareLocation: map['shareLocation'] == true,
       followersCount: (map['followersCount'] as num?)?.toInt() ?? 0,

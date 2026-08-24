@@ -23,7 +23,11 @@ import 'private_chat_screen.dart';
 class UserInfoScreen extends StatefulWidget {
   final String userId;
   final String fallbackName;
-  const UserInfoScreen({super.key, required this.userId, required this.fallbackName});
+  const UserInfoScreen({
+    super.key,
+    required this.userId,
+    required this.fallbackName,
+  });
 
   @override
   State<UserInfoScreen> createState() => _UserInfoScreenState();
@@ -107,8 +111,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       if (status == 'pending') _friendRequestSent = true;
       _busySocial = false;
     });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
   }
 
   Future<void> _subscribe() async {
@@ -119,8 +124,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     if (price <= 0) return;
     final auth = context.read<AuthProvider>();
     if (!auth.canUsePaid) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.msgVerifyToUsePaid)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.msgVerifyToUsePaid)));
       return;
     }
     final points = context.read<PointsProvider>();
@@ -128,28 +134,40 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
-        title: Row(children: [
-          Icon(Icons.star_rounded, color: Color(0xFFB8860B)),
-          SizedBox(width: 8),
-          Expanded(child: Text(s.subscribeConfirmTitle)),
-        ]),
+        title: Row(
+          children: [
+            Icon(Icons.star_rounded, color: Color(0xFFB8860B)),
+            SizedBox(width: 8),
+            Expanded(child: Text(s.subscribeConfirmTitle)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(s.subscribeConfirmBody(profile.nickname, price, 1),
-                style: AppText.bodyStrong),
+            Text(
+              s.subscribeConfirmBody(profile.nickname, price, 1),
+              style: AppText.bodyStrong,
+            ),
             SizedBox(height: 12),
-            Text(s.subscribeFansHint,
-                style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+            Text(
+              s.subscribeFansHint,
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s.btnSubscribe, style: const TextStyle(color: Colors.white)),
+            child: Text(
+              s.btnSubscribe,
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -161,12 +179,15 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       if (!mounted) return;
       setState(() => _subscribed = true);
       points.refreshWallet();
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.subscribeSuccess)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.subscribeSuccess)));
     } catch (e) {
       final msg = e.toString();
-      final show = msg.contains('registered') ? s.subscribeNeedRegister
-          : msg.contains('Not enough paid') || msg.contains('Not enough') ? s.subscribeNeedPaid
+      final show = msg.contains('registered')
+          ? s.subscribeNeedRegister
+          : msg.contains('Not enough paid') || msg.contains('Not enough')
+          ? s.subscribeNeedPaid
           : s.errGeneric;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(show)));
     } finally {
@@ -182,8 +203,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final profile = auth.profile;
     final name = _profile?.nickname ?? widget.fallbackName;
     if (CallProvider.instance.inCall) {
-      ScaffoldMessenger.of(ctx)
-          .showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
+      ScaffoldMessenger.of(
+        ctx,
+      ).showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
       return;
     }
     final messenger = ScaffoldMessenger.of(ctx);
@@ -253,11 +275,17 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     _statusSub?.cancel();
     final known = fresh == null
         ? null
-        : ChatService.effectiveStatusOf(fresh.status, fresh.lastSeen.toIso8601String());
-    _statusSub = context.read<ChatProvider>().getUserStatus(widget.userId, initialStatus: known).listen((status) {
-      if (!mounted) return;
-      setState(() => _status = status);
-    });
+        : ChatService.effectiveStatusOf(
+            fresh.status,
+            fresh.lastSeen.toIso8601String(),
+          );
+    _statusSub = context
+        .read<ChatProvider>()
+        .getUserStatus(widget.userId, initialStatus: known)
+        .listen((status) {
+          if (!mounted) return;
+          setState(() => _status = status);
+        });
   }
 
   Future<void> _load() async {
@@ -304,8 +332,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final pp = context.read<PointsProvider>();
     final auth = context.read<AuthProvider>();
     if (!auth.canUsePaid) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.msgVerifyToUsePaid)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.msgVerifyToUsePaid)));
       return;
     }
     final onceCost = pp.photoUnlockOnce;
@@ -313,28 +342,39 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final mode = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppTheme.bgScreen,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
       builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(height: 12),
-          Icon(Icons.lock_outline, size: 36, color: AppTheme.primary),
-          SizedBox(height: 8),
-          Text(s.photoLockedTitle, style: AppText.title),
-          SizedBox(height: 4),
-          Text(s.photoLockedHint, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
-          const SizedBox(height: 16),
-          ListTile(
-            leading: const Icon(Icons.visibility_outlined, color: AppTheme.primary),
-            title: Text(s.photoUnlockOnce(onceCost)),
-            onTap: () => Navigator.pop(ctx, 'once'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.lock_open, color: AppTheme.primary),
-            title: Text(s.photoUnlockPerm(permCost)),
-            onTap: () => Navigator.pop(ctx, 'perm'),
-          ),
-          const SizedBox(height: 12),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(height: 12),
+            Icon(Icons.lock_outline, size: 36, color: AppTheme.primary),
+            SizedBox(height: 8),
+            Text(s.photoLockedTitle, style: AppText.title),
+            SizedBox(height: 4),
+            Text(
+              s.photoLockedHint,
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(
+                Icons.visibility_outlined,
+                color: AppTheme.primary,
+              ),
+              title: Text(s.photoUnlockOnce(onceCost)),
+              onTap: () => Navigator.pop(ctx, 'once'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.lock_open, color: AppTheme.primary),
+              title: Text(s.photoUnlockPerm(permCost)),
+              onTap: () => Navigator.pop(ctx, 'perm'),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
     if (mode == null || !mounted) return;
@@ -345,16 +385,22 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         if (mode == 'perm') {
           // Reload supaya foto asli ikut terbuka permanen.
           await _loadPhotos();
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.photoUnlockedToast)));
+          if (mounted)
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(s.photoUnlockedToast)));
         } else {
           // Lihat sekali: ambil foto asli sementara & tampilkan viewer.
           final full = await AuthService().getPhotos(widget.userId);
           if (!mounted) return;
           final match = full.where((p) => p.id == photo.id).toList();
           if (match.isNotEmpty) {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => _UserPhotoViewer(photos: match, initialIndex: 0),
-            ));
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    _UserPhotoViewer(photos: match, initialIndex: 0),
+              ),
+            );
           }
         }
       }
@@ -366,11 +412,18 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           builder: (ctx) => AlertDialog(
             title: Text(s.photoLockedTitle),
             content: Text(s.photoUnlockNeedTopup),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.btnClose))],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(s.btnClose),
+              ),
+            ],
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.photoUnlockFailed)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.photoUnlockFailed)));
       }
     }
   }
@@ -389,19 +442,19 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final genderLabel = profile?.gender == 'male'
         ? s.genderLabelMale
         : profile?.gender == 'female'
-            ? s.genderLabelFemale
-            : s.genderLabelOther;
+        ? s.genderLabelFemale
+        : s.genderLabelOther;
     final status = _status;
     final statusLabel = status == 'online'
         ? s.statusOnline
         : status == 'idle'
-            ? s.statusIdle
-            : s.statusOffline;
+        ? s.statusIdle
+        : s.statusOffline;
     final statusColor = status == 'online'
         ? AppTheme.online
         : status == 'idle'
-            ? AppTheme.idle
-            : AppTheme.textSecondary;
+        ? AppTheme.idle
+        : AppTheme.textSecondary;
 
     return Scaffold(
       appBar: AppBar(
@@ -445,7 +498,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               // padding bawah + tinggi nav bar Android supaya card galeri
               // (terakhir) tidak tertutup gesture bar / 3-tombol.
               padding: EdgeInsets.fromLTRB(
-                24, 24, 24, 24 + MediaQuery.paddingOf(context).bottom),
+                24,
+                24,
+                24,
+                24 + MediaQuery.paddingOf(context).bottom,
+              ),
               child: Column(
                 children: [
                   SizedBox(height: 20),
@@ -458,14 +515,27 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           ? AsyncCircleAvatar(
                               base64: profile!.avatar,
                               radius: 50,
-                              bgColor: profile.gender == 'male' ? AppTheme.male : profile.gender == 'female' ? AppTheme.female : AppTheme.accent,
+                              bgColor: profile.gender == 'male'
+                                  ? AppTheme.male
+                                  : profile.gender == 'female'
+                                  ? AppTheme.female
+                                  : AppTheme.accent,
                             )
                           : CircleAvatar(
                               radius: 50,
                               backgroundColor: profile?.gender == 'male'
-                                  ? AppTheme.male : profile?.gender == 'female' ? AppTheme.female : AppTheme.accent,
-                              child: Text((name.isNotEmpty ? name[0] : '?').toUpperCase(),
-                                style: TextStyle(color: Colors.white, fontSize: AppGlyph.avatarInitial(100), fontWeight: FontWeight.w800)),
+                                  ? AppTheme.male
+                                  : profile?.gender == 'female'
+                                  ? AppTheme.female
+                                  : AppTheme.accent,
+                              child: Text(
+                                (name.isNotEmpty ? name[0] : '?').toUpperCase(),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: AppGlyph.avatarInitial(100),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
                       Container(
                         width: 18,
@@ -484,11 +554,20 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Flexible(
-                        child: Text(name, style: AppText.headline.copyWith(color: AppTheme.textPrimary)),
+                        child: Text(
+                          name,
+                          style: AppText.headline.copyWith(
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
                       ),
                       if (profile?.isRegistered == true) ...[
                         SizedBox(width: 5),
-                        Icon(Icons.verified, size: 20, color: Color(0xFF4A90E2)),
+                        Icon(
+                          Icons.verified,
+                          size: 20,
+                          color: Color(0xFF4A90E2),
+                        ),
                       ],
                     ],
                   ),
@@ -496,10 +575,20 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(genderLabel, style: AppText.bodyStrong.copyWith(color: AppTheme.textSecondary)),
+                      Text(
+                        genderLabel,
+                        style: AppText.bodyStrong.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
                       if (profile?.age != null && profile!.age > 0) ...[
                         SizedBox(width: 12),
-                        Text('${profile.age} ${s.labelYears}', style: AppText.bodyStrong.copyWith(color: AppTheme.textSecondary)),
+                        Text(
+                          '${profile.age} ${s.labelYears}',
+                          style: AppText.bodyStrong.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -510,15 +599,27 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       alignment: WrapAlignment.center,
-                      children: profile.hashtags.map((tag) => Container(
-                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
-                        ),
-                        child: Text('#$tag', style: AppText.label.copyWith(letterSpacing: 0)),
-                      )).toList(),
+                      children: profile.hashtags
+                          .map(
+                            (tag) => Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accent.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppTheme.accent.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                '#$tag',
+                                style: AppText.label.copyWith(letterSpacing: 0),
+                              ),
+                            ),
+                          )
+                          .toList(),
                     ),
                     SizedBox(height: 24),
                   ],
@@ -532,12 +633,21 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           _infoRow(s.labelStatus, statusLabel),
                           if (profile != null) ...[
                             Divider(color: AppTheme.divider),
-                            _infoRow(s.labelCountry, profile.country.isEmpty ? '-' : profile.country),
+                            _infoRow(
+                              s.labelCountry,
+                              profile.country.isEmpty ? '-' : profile.country,
+                            ),
                             Divider(color: AppTheme.divider),
-                            _infoRow(s.labelCity, profile.city.isEmpty ? '-' : profile.city),
+                            _infoRow(
+                              s.labelCity,
+                              profile.city.isEmpty ? '-' : profile.city,
+                            ),
                           ],
                           Divider(color: AppTheme.divider),
-                          _infoRow(s.labelUserId, widget.userId.substring(0, 8)),
+                          _infoRow(
+                            s.labelUserId,
+                            widget.userId.substring(0, 8),
+                          ),
                         ],
                       ),
                     ),
@@ -625,29 +735,31 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                               onTap: () {},
                                             )
                                           : _friendRequestSent
-                                              ? _SocialActionButton(
-                                                  active: true,
-                                                  activeIcon: Icons.schedule_rounded,
-                                                  activeLabel: s.btnFriendRequested,
-                                                  activeColor: Colors.orange,
-                                                  icon: Icons.group_add_rounded,
-                                                  label: s.btnFriendRequested,
-                                                  color: Colors.orange,
-                                                  loading: false,
-                                                  onTap: () {},
-                                                )
-                                              : _SocialActionButton(
-                                                  active: false,
-                                                  icon: Icons.group_add_rounded,
-                                                  label: s.btnAddFriend,
-                                                  color: Colors.green,
-                                                  loading: _busySocial,
-                                                  onTap: _addFriend,
-                                                ),
+                                          ? _SocialActionButton(
+                                              active: true,
+                                              activeIcon:
+                                                  Icons.schedule_rounded,
+                                              activeLabel: s.btnFriendRequested,
+                                              activeColor: Colors.orange,
+                                              icon: Icons.group_add_rounded,
+                                              label: s.btnFriendRequested,
+                                              color: Colors.orange,
+                                              loading: false,
+                                              onTap: () {},
+                                            )
+                                          : _SocialActionButton(
+                                              active: false,
+                                              icon: Icons.group_add_rounded,
+                                              label: s.btnAddFriend,
+                                              color: Colors.green,
+                                              loading: _busySocial,
+                                              onTap: _addFriend,
+                                            ),
                                     ),
                                   ],
                                 ),
-                                if (pointsEnabled && profile.subscriptionPrice > 0) ...[
+                                if (pointsEnabled &&
+                                    profile.subscriptionPrice > 0) ...[
                                   SizedBox(height: 10),
                                   SizedBox(
                                     width: double.infinity,
@@ -666,7 +778,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                         : _SocialActionButton(
                                             active: false,
                                             icon: Icons.star_rounded,
-                                            label: '${s.btnSubscribe} · ${s.subscribePrice(profile.subscriptionPrice)}',
+                                            label:
+                                                '${s.btnSubscribe} · ${s.subscribePrice(profile.subscriptionPrice)}',
                                             color: Color(0xFFB8860B),
                                             loading: _busySocial,
                                             onTap: _subscribe,
@@ -689,27 +802,44 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(s.labelOthersGallery, style: AppText.titleEmphasis),
+                          Text(
+                            s.labelOthersGallery,
+                            style: AppText.titleEmphasis,
+                          ),
                           SizedBox(height: 8),
                           if (_loadingPhotos)
                             Padding(
                               padding: EdgeInsets.symmetric(vertical: 20),
-                              child: Center(child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: AppTheme.primary,
+                                  strokeWidth: 2,
+                                ),
+                              ),
                             )
                           else if (_photos.isEmpty)
                             Padding(
                               padding: EdgeInsets.symmetric(vertical: 20),
-                              child: Center(child: Text(s.labelGalleryEmpty, textAlign: TextAlign.center, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary))),
+                              child: Center(
+                                child: Text(
+                                  s.labelGalleryEmpty,
+                                  textAlign: TextAlign.center,
+                                  style: AppText.bodySmall.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
                             )
                           else
                             GridView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                mainAxisSpacing: 8,
-                                crossAxisSpacing: 8,
-                              ),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 3,
+                                    mainAxisSpacing: 8,
+                                    crossAxisSpacing: 8,
+                                  ),
                               itemCount: _photos.length,
                               itemBuilder: (ctx, i) {
                                 final photo = _photos[i];
@@ -718,7 +848,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                     onTap: () => _showPhotoViewer(_photos, i),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(10),
-                                      child: AsyncPhotoThumbnail(base64: photo.photo),
+                                      child: AsyncPhotoThumbnail(
+                                        base64: photo.photo,
+                                      ),
                                     ),
                                   );
                                 }
@@ -732,26 +864,50 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                       children: [
                                         if (photo.preview.isNotEmpty)
                                           ImageFiltered(
-                                            imageFilter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                                            child: AsyncPhotoThumbnail(base64: photo.preview),
+                                            imageFilter: ui.ImageFilter.blur(
+                                              sigmaX: 8,
+                                              sigmaY: 8,
+                                            ),
+                                            child: AsyncPhotoThumbnail(
+                                              base64: photo.preview,
+                                            ),
                                           )
                                         else
                                           Container(color: AppTheme.bgCard),
-                                        Container(color: Colors.black.withValues(alpha: 0.35)),
+                                        Container(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                        ),
                                         Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
-                                            const Icon(Icons.lock, color: Colors.white, size: 24),
+                                            const Icon(
+                                              Icons.lock,
+                                              color: Colors.white,
+                                              size: 24,
+                                            ),
                                             const SizedBox(height: 4),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: Colors.black.withValues(alpha: 0.5),
-                                                borderRadius: BorderRadius.circular(8),
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
                                               ),
                                               child: Text(
                                                 '${context.read<PointsProvider>().photoUnlockOnce} 🪙',
-                                                style: AppText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+                                                style: AppText.micro.copyWith(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -779,7 +935,13 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: AppTheme.textSecondary)),
-          Text(value, style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500)),
+          Text(
+            value,
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );
@@ -820,11 +982,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   }
 
   Widget _statDivider() {
-    return Container(
-      width: 1,
-      height: 38,
-      color: AppTheme.divider,
-    );
+    return Container(width: 1, height: 38, color: AppTheme.divider);
   }
 }
 

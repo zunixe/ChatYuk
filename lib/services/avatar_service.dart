@@ -26,7 +26,8 @@ class AvatarB64Service {
           .eq('id', uid)
           .maybeSingle();
       var avatar = (res?['avatar'] as String?) ?? '';
-      if (avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(avatar)) {
+      if (avatar.isNotEmpty &&
+          StoragePhotoService.instance.isAvatarPath(avatar)) {
         avatar = await StoragePhotoService.instance.download(avatar) ?? '';
       }
       if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
@@ -50,7 +51,8 @@ class AvatarB64Service {
     _inflight.add(path);
     try {
       var b64 = await StoragePhotoService.instance.download(path) ?? '';
-      if (_pathCache.length >= _maxCache) _pathCache.remove(_pathCache.keys.first);
+      if (_pathCache.length >= _maxCache)
+        _pathCache.remove(_pathCache.keys.first);
       _pathCache[path] = b64;
       return b64;
     } catch (_) {

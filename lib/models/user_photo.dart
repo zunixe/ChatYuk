@@ -25,8 +25,8 @@ class UserPhoto {
       createdAt: map['createdAt'] is DateTime
           ? map['createdAt'] as DateTime
           : map['createdAt'] != null
-              ? DateTime.parse('${map['createdAt']}')
-              : DateTime.now(),
+          ? DateTime.parse('${map['createdAt']}')
+          : DateTime.now(),
       unlocked: map['unlocked'] == null ? true : map['unlocked'] == true,
       preview: map['preview'] ?? '',
     );

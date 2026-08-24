@@ -55,7 +55,8 @@ class _TimelineScreenState extends State<TimelineScreen>
     }
   }
 
-  String get _scope => _current == 0 ? 'all' : (_current == 1 ? 'following' : 'mine');
+  String get _scope =>
+      _current == 0 ? 'all' : (_current == 1 ? 'following' : 'mine');
 
   Future<void> _load({bool refresh = false}) async {
     final auth = context.read<AuthProvider>();
@@ -70,7 +71,9 @@ class _TimelineScreenState extends State<TimelineScreen>
     final s = context.watch<LocaleProvider>().s;
     // Rebuild granular: hanya rebuild saat daftar post / hasMore benar-benar
     // berubah (bukan tiap notifyListeners — mis. pricing, loading).
-    final posts = context.select<TimelineProvider, List<Map<String, dynamic>>>((t) => t.posts);
+    final posts = context.select<TimelineProvider, List<Map<String, dynamic>>>(
+      (t) => t.posts,
+    );
     final hasMore = context.select<TimelineProvider, bool>((t) => t.hasMore);
     final loading = context.select<TimelineProvider, bool>((t) => t.loading);
     final scope = _scope;
@@ -80,16 +83,17 @@ class _TimelineScreenState extends State<TimelineScreen>
       appBar: AppBar(
         backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: AppTheme.headerGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('ChatYuk', style: AppText.title.copyWith(color: Colors.white)),
-            Text(s.titleTimeline, style: AppText.bodySmall.copyWith(color: Colors.white70)),
+            Text(
+              s.titleTimeline,
+              style: AppText.bodySmall.copyWith(color: Colors.white70),
+            ),
           ],
         ),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -120,13 +124,13 @@ class _TimelineScreenState extends State<TimelineScreen>
                       title: scope == 'all'
                           ? s.emptyTimeline
                           : scope == 'following'
-                              ? s.emptyFollowing
-                              : s.emptyMine,
+                          ? s.emptyFollowing
+                          : s.emptyMine,
                       hint: scope == 'all'
                           ? s.emptyTimelineHint
                           : scope == 'following'
-                              ? s.emptyFollowingHint
-                              : s.emptyMineHint,
+                          ? s.emptyFollowingHint
+                          : s.emptyMineHint,
                       // Postinganku: "Ketuk +" bisa diklik — sama seperti menu "+": anon
                       // dapat popup lengkapi email, registered langsung composer.
                       actionLabel: scope == 'mine' ? s.emptyTimelineCta : null,
@@ -138,7 +142,9 @@ class _TimelineScreenState extends State<TimelineScreen>
                                 return;
                               }
                               Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const PostComposerScreen()),
+                                MaterialPageRoute(
+                                  builder: (_) => const PostComposerScreen(),
+                                ),
                               );
                             }
                           : null,
@@ -152,18 +158,24 @@ class _TimelineScreenState extends State<TimelineScreen>
                 padding: const EdgeInsets.only(top: 4, bottom: 88),
                 itemCount: posts.isEmpty
                     ? 1
-                    : posts.length + (loading && hasMore ? 1 : 0) + (!hasMore ? 1 : 0),
+                    : posts.length +
+                          (loading && hasMore ? 1 : 0) +
+                          (!hasMore ? 1 : 0),
                 itemBuilder: (_, i) {
                   if (posts.isEmpty) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                     );
                   }
                   if (i >= posts.length && loading && hasMore) {
                     return const Padding(
                       padding: EdgeInsets.all(16),
-                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                     );
                   }
                   if (i >= posts.length) {
@@ -172,7 +184,9 @@ class _TimelineScreenState extends State<TimelineScreen>
                       child: Center(
                         child: Text(
                           s.noMorePosts,
-                          style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
                       ),
                     );
@@ -196,8 +210,12 @@ class _EmptyState extends StatelessWidget {
   final String hint;
   final String? actionLabel;
   final VoidCallback? onAction;
-  const _EmptyState(
-      {required this.title, required this.hint, this.actionLabel, this.onAction});
+  const _EmptyState({
+    required this.title,
+    required this.hint,
+    this.actionLabel,
+    this.onAction,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -220,7 +238,11 @@ class _EmptyState extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                 ),
-                Icon(Icons.dynamic_feed_rounded, size: 48, color: AppTheme.primary),
+                Icon(
+                  Icons.dynamic_feed_rounded,
+                  size: 48,
+                  color: AppTheme.primary,
+                ),
                 Positioned(
                   right: 4,
                   bottom: 4,
@@ -247,14 +269,14 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             if (actionLabel != null)
-              FilledButton(
-                onPressed: onAction,
-                child: Text(actionLabel!),
-              )
+              FilledButton(onPressed: onAction, child: Text(actionLabel!))
             else
               // Petunjuk tombol +
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(20),
@@ -269,12 +291,19 @@ class _EmptyState extends StatelessWidget {
                         color: AppTheme.primary,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.add, color: Colors.white, size: 16),
+                      child: const Icon(
+                        Icons.add,
+                        color: Colors.white,
+                        size: 16,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       s.emptyTimelineCta,
-                      style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                      style: AppText.caption.copyWith(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),

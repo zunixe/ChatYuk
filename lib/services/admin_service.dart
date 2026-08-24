@@ -42,7 +42,10 @@ class AdminService {
   }
 
   Future<bool> togglePointsSystem(bool enabled) async {
-    final res = await _sb.rpc('admin_toggle_points', params: {'enabled': enabled});
+    final res = await _sb.rpc(
+      'admin_toggle_points',
+      params: {'enabled': enabled},
+    );
     return res == true;
   }
 
@@ -53,7 +56,9 @@ class AdminService {
   }
 
   /// Simpan nominal pengaturan poin. p = {key: value} (int atau string).
-  Future<Map<String, dynamic>> updatePointSettings(Map<String, dynamic> p) async {
+  Future<Map<String, dynamic>> updatePointSettings(
+    Map<String, dynamic> p,
+  ) async {
     final res = await _sb.rpc('admin_update_point_settings', params: {'p': p});
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
@@ -64,7 +69,10 @@ class AdminService {
 
   // ── Admin Chat Monitor ──
   /// List chats dengan pagination. Return Map {'total': int, 'items': [...]}.
-  Future<Map<String, dynamic>> listChats({int limit = 50, int offset = 0}) async {
+  Future<Map<String, dynamic>> listChats({
+    int limit = 50,
+    int offset = 0,
+  }) async {
     final res = await _sb.rpc(
       'admin_list_chats_page',
       params: {'p_limit': limit, 'p_offset': offset},
@@ -89,12 +97,18 @@ class AdminService {
 
   /// Fetch image_data satu foto (untuk retry / view-once admin).
   Future<String> getMessageImage(int messageId) async {
-    final res = await _sb.rpc('admin_get_message_image', params: {'p_message_id': messageId});
+    final res = await _sb.rpc(
+      'admin_get_message_image',
+      params: {'p_message_id': messageId},
+    );
     return (res as String?) ?? '';
   }
 
   /// Hapus chat + (opsional) user. Return {'ok': bool, 'photo_paths': [...]}.
-  Future<Map<String, dynamic>> deleteChat(String chatId, List<String> deleteUserIds) async {
+  Future<Map<String, dynamic>> deleteChat(
+    String chatId,
+    List<String> deleteUserIds,
+  ) async {
     final res = await _sb.rpc(
       'admin_delete_chat',
       params: {'p_chat_id': chatId, 'p_delete_user_ids': deleteUserIds},
@@ -108,8 +122,17 @@ class AdminService {
     final res = await _sb.rpc('admin_active_calls');
     final list = res is List ? res : <dynamic>[];
     return list
-        .map((e) => ActiveCallInfo.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map(
+          (e) => ActiveCallInfo.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
         .toList();
+  }
+
+  /// Akhiri call zombie: ringing kadaluarsa & answered tanpa heartbeat.
+  /// Return jumlah row yang diakhiri. Hanya admin.
+  Future<int> sweepStaleCalls() async {
+    final res = await _sb.rpc('admin_sweep_calls');
+    return (res as num?)?.toInt() ?? 0;
   }
 
   // ── Admin Dummy Accounts ──
@@ -139,7 +162,9 @@ class AdminService {
     if (res.status >= 300) {
       throw Exception('create_failed');
     }
-    return res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    return res.data is Map
+        ? Map<String, dynamic>.from(res.data as Map)
+        : <String, dynamic>{};
   }
 
   /// Update profil dummy (gender/umur/negara/kota) — tanpa menyentuh status.
@@ -151,14 +176,17 @@ class AdminService {
     required String country,
     required String city,
   }) async {
-    await _sb.rpc('admin_update_dummy_profile', params: {
-      'p_uid': uid,
-      'p_nickname': nickname,
-      'p_gender': gender,
-      'p_age': age,
-      'p_country': country,
-      'p_city': city,
-    });
+    await _sb.rpc(
+      'admin_update_dummy_profile',
+      params: {
+        'p_uid': uid,
+        'p_nickname': nickname,
+        'p_gender': gender,
+        'p_age': age,
+        'p_country': country,
+        'p_city': city,
+      },
+    );
   }
 
   /// List semua akun dummy: uid, email, password, nickname, status, last_seen.
@@ -170,7 +198,10 @@ class AdminService {
 
   /// Set status dummy: 'online' | 'idle' | 'offline'.
   Future<void> setDummyStatus(String uid, String status) async {
-    await _sb.rpc('admin_set_dummy_status', params: {'p_uid': uid, 'p_status': status});
+    await _sb.rpc(
+      'admin_set_dummy_status',
+      params: {'p_uid': uid, 'p_status': status},
+    );
   }
 
   /// Hapus akun dummy + history chat-nya. Return {'ok': bool, 'chats_deleted': int}.
@@ -181,7 +212,10 @@ class AdminService {
 
   // ── Pesan Kontak (Hubungi Kami) ──
   /// List pesan kontak dengan pagination. Return {'total': int, 'items': [...]}.
-  Future<Map<String, dynamic>> listContactMessages({int limit = 50, int offset = 0}) async {
+  Future<Map<String, dynamic>> listContactMessages({
+    int limit = 50,
+    int offset = 0,
+  }) async {
     final res = await _sb.rpc(
       'admin_contact_messages_page',
       params: {'p_limit': limit, 'p_offset': offset},
@@ -191,7 +225,10 @@ class AdminService {
 
   /// Tandai pesan terbaca / belum terbaca.
   Future<void> setContactRead(String id, {bool read = true}) async {
-    await _sb.rpc('admin_contact_set_read', params: {'p_id': id, 'p_read': read});
+    await _sb.rpc(
+      'admin_contact_set_read',
+      params: {'p_id': id, 'p_read': read},
+    );
   }
 
   /// Hapus pesan kontak.
