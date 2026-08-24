@@ -69,7 +69,9 @@ class _CallBannerState extends State<CallBanner> {
         // termasuk CallScreen hasil expand). Session call tetap hidup di
         // provider, overlay video langsung tampil lagi. JANGAN push duplikat —
         // instance baru tanpa state membuat list kosong & kirim gagal RLS.
-        nav.popUntil((r) => r.settings.name == target);
+        // isFirst = pengaman agar predicate selalu berhenti meski rute
+        // target sempat tertutup di antara cek dan popUntil.
+        nav.popUntil((r) => r.isFirst || r.settings.name == target);
         return;
       }
       nav.push(MaterialPageRoute(
