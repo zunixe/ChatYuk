@@ -91,6 +91,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   Future<void> _accept({required CallMode mode}) async {
     if (_busy) return;
     _busy = true;
+    debugPrint('[ACCEPT] tap mode=$mode callId=${widget.callId}');
     await _stopRingtone();
     try {
       await _service.updateStatus(widget.callId, 'answered');

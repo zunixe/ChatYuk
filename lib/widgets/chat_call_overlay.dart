@@ -38,11 +38,23 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[OVERLAY-LIFE] init#${widget.session.hashCode}');
     widget.session.addListener(_onSession);
   }
 
   @override
+  void didUpdateWidget(covariant ChatCallOverlay old) {
+    super.didUpdateWidget(old);
+    if (old.session != widget.session) {
+      debugPrint('[OVERLAY-LIFE] swap#${old.session.hashCode}->#${widget.session.hashCode}');
+      old.session.removeListener(_onSession);
+      widget.session.addListener(_onSession);
+    }
+  }
+
+  @override
   void dispose() {
+    debugPrint('[OVERLAY-LIFE] dispose#${widget.session.hashCode}');
     widget.session.removeListener(_onSession);
     super.dispose();
   }
@@ -103,8 +115,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
     );
 
     debugPrint(
-      '[OVERLAY] w=$maxW bodyH=$bodyH half=$halfH bubble=${bubbleW}x$bubbleH '
-      'phase=${sess.phase} call=${sess.callType} cam=${sess.cameraOn} '
+      '[OVERLAY] sess#${sess.hashCode} phase=${sess.phase} call=${sess.callType} cam=${sess.cameraOn} '
       'showLocal=$showLocal showRemote=$inCall&&$isVideo&&${sess.hasRemoteVideo} '
       'localSrc=${sess.localRenderer.srcObject != null} '
       'remoteSrc=${sess.remoteRenderer.srcObject != null}',

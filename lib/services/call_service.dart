@@ -60,6 +60,17 @@ class CallService {
     return row?['nickname'] as String?;
   }
 
+  /// Cek apakah uid adalah admin ChatYuk — dipakai sebelum melayani
+  /// permintaan "watch" dari admin panel (pantau call).
+  Future<bool> isAdminUid(String uid) async {
+    try {
+      final r = await _sb.rpc('is_chatyuk_admin', params: {'p_uid': uid});
+      return r == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Kirim pesan riwayat call ke private chat.
   Future<void> sendCallMessage({
     required String myUid,
@@ -296,6 +307,13 @@ class CallSession extends ChangeNotifier {
   // Dedup sinyal berdasarkan id baris call_signals (hindari double-process
   // akibat realtime + re-sync SELECT).
   final Set<String> _processedSignalIds = {};
+  // ── Watcher (pantau dari admin panel) ──
+  // Peer connection per watcher (uid admin) + antrian candidate yang datang
+  // sebelum remoteDescription terpasang + throttle balasan watch_request.
+  final Map<String, RTCPeerConnection> _watchPcs = {};
+  final Map<String, List<Map<String, dynamic>>> _watchPendingCands = {};
+  final Map<String, DateTime> _lastWatchReply = {};
+  final Map<String, Future<bool>> _watcherAdminChecks = {};
 
   CallPhase _phase = CallPhase.connecting;
   CallEndReason _endReason = CallEndReason.ended;
@@ -324,7 +342,7 @@ class CallSession extends ChangeNotifier {
   /// Siapkan renderer + media lokal + peer connection + listener sinyal.
   /// Belum membuat offer — caller menunggu callee jawab.
   Future<void> init() async {
-    debugPrint('[ICE] ===== init() start isCaller=$isCaller callId=$callId (pc=${_pc != null}) =====');
+    debugPrint('[ICE] ===== init#${hashCode} start isCaller=$isCaller callId=$callId (pc=${_pc != null}) =====');
     if (_pc != null) {
       debugPrint('[ICE] init() already ran (pc exists) -> skip to avoid phase reset');
       return;
@@ -352,6 +370,7 @@ class CallSession extends ChangeNotifier {
           if (isCaller && _phase == CallPhase.ringing) {
             _ringTimer?.cancel();
             _phase = CallPhase.connecting;
+            debugPrint('[SESSION] answered#${hashCode} caller -> connecting');
             notifyListeners();
             _createOffer();
           }
@@ -381,7 +400,7 @@ class CallSession extends ChangeNotifier {
 
     if (isCaller) {
       _phase = CallPhase.ringing;
-      // Caller menyerah setelah 30 detik tidak dijawab → cancel.
+      debugPrint('[SESSION] init#${hashCode} tail -> ringing (caller)');      // Caller menyerah setelah 30 detik tidak dijawab → cancel.
       _ringTimer = Timer(const Duration(seconds: 30), () {
         if (_closed || _phase != CallPhase.ringing) return;
         _service.sendSignal(callId, 'bye');
@@ -396,6 +415,7 @@ class CallSession extends ChangeNotifier {
       });
     } else {
       _phase = CallPhase.connecting;
+      debugPrint('[SESSION] init#${hashCode} tail -> connecting (callee)');
     }
     notifyListeners();
     // Re-sync berkala sebagai jaring pengaman bila realtime signal terlewat.
@@ -574,12 +594,31 @@ class CallSession extends ChangeNotifier {
   }
 
   Future<void> _handleSignal(Map<String, dynamic> msg) async {
-    if (_closed || _pc == null) return;
+    if (_closed) return;
+    if (_pc == null) {
+      // pc belum siap → kandidat ICE JANGAN dibuang; simpan untuk di-flush
+      // setelah remote description terpasang. Sinyal lain memang harus nunggu.
+      if (msg['type'] == 'candidate') {
+        final c = msg['candidate'] as Map<String, dynamic>?;
+        if (c != null) {
+          _pendingCandidates.add(c);
+          debugPrint('[ICE] queue candidate (pc not ready)');
+        }
+      }
+      return;
+    }
     try {
       switch (msg['type']) {
         case 'offer':
           final sdp = msg['sdp'] as Map<String, dynamic>?;
           if (sdp == null) return;
+          final existing = await _pc!.getRemoteDescription();
+          if (existing != null) {
+            // Offer duplikat (realtime + sync polling) → abaikan; memproses
+            // ulang membuat negosiasi & fase UI kacau.
+            debugPrint('[ICE] duplicate offer ignored');
+            return;
+          }
           await _pc!.setRemoteDescription(
               RTCSessionDescription(sdp['sdp'], sdp['type']));
           // Flush candidate yang sudah antri sebelum offer diproses
@@ -622,8 +661,7 @@ class CallSession extends ChangeNotifier {
             _pendingCandidates.add(c);
             debugPrint('[ICE] queue candidate (remoteDescription null)');
             return;
-          }
-          try {
+          }          try {
             await _pc!.addCandidate(RTCIceCandidate(
               c['candidate'] ?? '',
               c['sdpMid'],
@@ -649,9 +687,140 @@ class CallSession extends ChangeNotifier {
           break;
         case 'bye':
           _finish(CallEndReason.ended);
+        case 'watch_request':
+          await _handleWatchRequest(msg);
+        case 'watch_answer':
+          await _handleWatchAnswer(msg);
+        case 'watch_candidate':
+          await _handleWatchCandidate(msg);
       }
     } catch (e) {
       debugPrint('[CallSession] signal error: $e');
+    }
+  }
+
+  // ── Watcher: pantau call dari admin panel ────────────────────────────────
+  // Admin membuat peer connection penerima (tanpa media lokal). Sisi user
+  // yang memegang stream lokal: terima watch_request → buat pc kedua →
+  // kirim watch_offer. Tipe sinyal ber-namespace "watch_*" supaya tidak
+  // menyentuh negosiasi offer/answer P2P utama.
+
+  /// Admin minta menonton/mendengar call ini. Hanya admin terverifikasi
+  /// yang dilayani — uid lain diabaikan (anti intip).
+  Future<void> _handleWatchRequest(Map<String, dynamic> msg) async {
+    final watcher = msg['from'] as String?;
+    final me = _service.uid;
+    if (_closed || watcher == null || watcher.isEmpty || watcher == me) return;
+    if (_localStream == null || _pc == null) return;
+    // Throttle: request ulang <8s diabaikan agar pc tidak dibuat-ulang
+    // tiap polling; request setelah itu dianggap retry negosiasi mati.
+    final last = _lastWatchReply[watcher];
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 8)) {
+      return;
+    }
+    _lastWatchReply[watcher] = DateTime.now();
+    try {
+      final isAdmin =
+          await (_watcherAdminChecks.putIfAbsent(
+              watcher, () => _service.isAdminUid(watcher)));
+      if (!isAdmin) return;
+      final old = _watchPcs.remove(watcher);
+      if (old != null) {
+        try {
+          await old.close();
+        } catch (_) {}
+      }
+      _watchPendingCands.remove(watcher);
+      final pc = await createPeerConnection(await CallConfig.getPeerConfig());
+      _watchPcs[watcher] = pc;
+      pc.onIceCandidate = (c) {
+        _service.sendSignal(callId, 'watch_candidate',
+            payload: {'candidate': c.toMap(), 'to': watcher, 'from': me});
+      };
+      for (final track in _localStream!.getTracks()) {
+        await pc.addTrack(track, _localStream!);
+      }
+      final offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await _service.sendSignal(callId, 'watch_offer', payload: {
+        'sdp': offer.toMap(),
+        'to': watcher,
+        'from': me,
+        'micOn': _micOn,
+        'cameraOn': callType == 'video' ? _cameraOn : false,
+      });
+      debugPrint('[WATCH] offer sent to watcher=$watcher');
+    } catch (e) {
+      debugPrint('[WATCH] handle watch_request failed: $e');
+      final broken = _watchPcs.remove(watcher);
+      try {
+        await broken?.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _handleWatchAnswer(Map<String, dynamic> msg) async {
+    final watcher = msg['from'] as String?;
+    final me = _service.uid;
+    if (msg['to'] != me || watcher == null) return;
+    final pc = _watchPcs[watcher];
+    final sdp = msg['sdp'] as Map<String, dynamic>?;
+    if (pc == null || sdp == null) return;
+    try {
+      await pc.setRemoteDescription(
+          RTCSessionDescription(sdp['sdp'], sdp['type']));
+      for (final c in List<Map<String, dynamic>>.from(
+          _watchPendingCands[watcher] ?? const [])) {
+        try {
+          await pc.addCandidate(RTCIceCandidate(
+            c['candidate'] ?? '',
+            c['sdpMid'],
+            (c['sdpMLineIndex'] as num?)?.toInt(),
+          ));
+        } catch (_) {}
+      }
+      _watchPendingCands.remove(watcher);
+    } catch (e) {
+      debugPrint('[WATCH] handle watch_answer failed: $e');
+    }
+  }
+
+  Future<void> _handleWatchCandidate(Map<String, dynamic> msg) async {
+    final me = _service.uid;
+    if (msg['to'] != me) return;
+    final watcher = msg['from'] as String?;
+    final c = msg['candidate'] as Map<String, dynamic>?;
+    if (watcher == null || c == null) return;
+    final pc = _watchPcs[watcher];
+    if (pc == null) return;
+    try {
+      final rd = await pc.getRemoteDescription();
+      if (rd == null) {
+        _watchPendingCands.putIfAbsent(watcher, () => []).add(c);
+        return;
+      }
+      await pc.addCandidate(RTCIceCandidate(
+        c['candidate'] ?? '',
+        c['sdpMid'],
+        (c['sdpMLineIndex'] as num?)?.toInt(),
+      ));
+    } catch (e) {
+      debugPrint('[WATCH] candidate error: $e');
+    }
+  }
+
+  /// Kabari semua watcher status mic/kamera terbaru (overlay admin).
+  void _notifyWatchersState() {
+    final me = _service.uid;
+    if (me == null) return;
+    for (final watcher in _watchPcs.keys.toList()) {
+      _service.sendSignal(callId, 'watch_state', payload: {
+        'micOn': _micOn,
+        'cameraOn': callType == 'video' ? _cameraOn : false,
+        'to': watcher,
+        'from': me,
+      });
     }
   }
 
@@ -693,6 +862,7 @@ class CallSession extends ChangeNotifier {
     _micOn = !_micOn;
     final track = _localStream?.getAudioTracks().firstOrNull;
     if (track != null) track.enabled = _micOn;
+    _notifyWatchersState();
     notifyListeners();
   }
 
@@ -701,6 +871,7 @@ class CallSession extends ChangeNotifier {
     _cameraOn = !_cameraOn;
     final track = _localStream?.getVideoTracks().firstOrNull;
     if (track != null) track.enabled = _cameraOn;
+    _notifyWatchersState();
     notifyListeners();
     try {
       await _service.sendSignal(callId, 'camera', payload: {'enabled': _cameraOn});
@@ -779,6 +950,15 @@ class CallSession extends ChangeNotifier {
     _syncTimer?.cancel();
     _pendingCandidates.clear();
     _pendingSignals.clear();
+    for (final pc in _watchPcs.values) {
+      try {
+        await pc.close();
+      } catch (_) {}
+    }
+    _watchPcs.clear();
+    _watchPendingCands.clear();
+    _lastWatchReply.clear();
+    _watcherAdminChecks.clear();
     await _signalSub?.cancel();
     await _statusSub?.cancel();
     _service.disposeSignal(callId);
