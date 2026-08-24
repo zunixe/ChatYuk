@@ -282,7 +282,9 @@ class TimelineProvider extends ChangeNotifier {
   }
 
   Future<void> load(String scope, {bool refresh = false}) async {
-    if (_loading) return;
+    // Kalau sedang loading scope LAIN, tetap emit cache scope baru dulu
+    // supaya tab switch terasa instant, lalu lanjut fetch setelah selesai.
+    if (_loading && _scope == scope) return;
     _scope = scope;
     if (refresh) {
       _cursor = null;
@@ -327,6 +329,8 @@ class TimelineProvider extends ChangeNotifier {
         if (refresh) {
           _posts.clear();
           _invalidateView();
+          // Hapus cache scope ini — memang kosong dari server.
+          _scopeCache.remove(scope);
         }
       } else {
         final now = DateTime.now();
