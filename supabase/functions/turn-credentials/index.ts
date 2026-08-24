@@ -1,10 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
-const TURN_TOKEN_ID = "TURN_TOKEN_ID_REDACTED"
-const TURN_API_TOKEN = "TURN_API_TOKEN_REDACTED"
+// Kredensial Cloudflare Realtime TURN dibaca dari Edge Function Secrets
+// (TURN_TOKEN_ID, TURN_API_TOKEN) — jangan hardcode di sini.
+const TURN_TOKEN_ID = Deno.env.get("TURN_TOKEN_ID") ?? ""
+const TURN_API_TOKEN = Deno.env.get("TURN_API_TOKEN") ?? ""
 
 serve(async (_req) => {
   try {
+    if (!TURN_TOKEN_ID || !TURN_API_TOKEN) {
+      return new Response(JSON.stringify({ error: "TURN secrets not configured" }), { status: 500 })
+    }
     const resp = await fetch(
       `https://rtc.live.cloudflare.com/v1/turn/keys/${TURN_TOKEN_ID}/credentials/generate`,
       {
