@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/active_call_model.dart';
+
 class AdminService {
   final SupabaseClient _sb;
 
@@ -98,6 +100,16 @@ class AdminService {
       params: {'p_chat_id': chatId, 'p_delete_user_ids': deleteUserIds},
     );
     return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Daftar call 1:1 yang sedang aktif (audio/video) — untuk badge monitor
+  /// dan fitur pantau call di admin panel.
+  Future<List<ActiveCallInfo>> getActiveCalls() async {
+    final res = await _sb.rpc('admin_active_calls');
+    final list = res is List ? res : <dynamic>[];
+    return list
+        .map((e) => ActiveCallInfo.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
   }
 
   // ── Admin Dummy Accounts ──

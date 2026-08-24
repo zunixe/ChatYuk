@@ -444,6 +444,19 @@ class S {
       ? 'Ketuk untuk kembali ke panggilan'
       : 'Tap to return to call';
 
+  // ── Admin: monitor panggilan ──
+  String get adminCallLive => isId ? 'Call aktif' : 'Live call';
+  String get adminCallRinging => isId ? 'Memanggil...' : 'Ringing...';
+  String get adminWatching => isId ? 'Memantau' : 'Monitoring';
+  String get adminListening => isId ? 'Mendengarkan...' : 'Listening...';
+  String get adminWaitingVideo =>
+      isId ? 'Menunggu video...' : 'Waiting for video...';
+  String get adminCameraOff => isId ? 'Kamera mati' : 'Camera off';
+  String get adminMicOff => isId ? 'Mikrofon mati' : 'Mic muted';
+  String get adminSwapView => isId ? 'Tukar tampilan' : 'Swap view';
+  String get adminWatchConnecting =>
+      isId ? 'Menyambungkan...' : 'Connecting...';
+
   // ── Errors / Generic ──
   String get btnCancel => isId ? 'Batal' : 'Cancel';
   String get btnClose => isId ? 'Tutup' : 'Close';

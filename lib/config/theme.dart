@@ -300,6 +300,10 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       dividerTheme: DividerThemeData(color: divider),
+      popupMenuTheme: PopupMenuThemeData(
+        color: bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: bgCard,
       ),

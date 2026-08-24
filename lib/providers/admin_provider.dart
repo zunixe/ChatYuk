@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/active_call_model.dart';
 import '../services/admin_service.dart';
 import '../services/storage_photo_service.dart';
 
@@ -206,6 +207,30 @@ class AdminProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[ADMIN] refreshChats error: $e');
     }
+    if (!_disposed) notifyListeners();
+  }
+
+  // ── Call aktif (badge monitor + pantau call) ──
+  List<ActiveCallInfo> _activeCalls = [];
+  bool _activeCallsLoading = false;
+
+  List<ActiveCallInfo> get activeCalls => _activeCalls;
+  bool get activeCallsLoading => _activeCallsLoading;
+
+  /// Peta chatId → call aktif, untuk badge di kartu list monitor.
+  Map<String, ActiveCallInfo> get activeCallsByChat => {
+        for (final c in _activeCalls) c.chatId: c,
+      };
+
+  Future<void> fetchActiveCalls() async {
+    if (_activeCallsLoading) return;
+    _activeCallsLoading = true;
+    try {
+      _activeCalls = await _service.getActiveCalls();
+    } catch (e) {
+      debugPrint('[ADMIN] fetchActiveCalls error: $e');
+    }
+    _activeCallsLoading = false;
     if (!_disposed) notifyListeners();
   }
 

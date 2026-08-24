@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
+import '../models/active_call_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
@@ -19,6 +20,7 @@ class AdminChatListScreen extends StatefulWidget {
 
 class _AdminChatListScreenState extends State<AdminChatListScreen> {
   Timer? _refreshTimer;
+  Timer? _callTimer;
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   String _query = '';
@@ -26,10 +28,18 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<AdminProvider>().fetchChats());
+    final admin = context.read<AdminProvider>();
+    Future.microtask(() {
+      admin.fetchChats();
+      admin.fetchActiveCalls();
+    });
     // Polling berkala → daftar chat selalu fresh tanpa loading flash.
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      context.read<AdminProvider>().refreshChats();
+      admin.refreshChats();
+    });
+    // Polling call aktif lebih cepat — badge video/audio call harus live.
+    _callTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      admin.fetchActiveCalls();
     });
     _scrollCtrl.addListener(_onScroll);
   }
@@ -37,6 +47,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _callTimer?.cancel();
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -141,7 +152,12 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
                             );
                           }
                           final chat = filtered[i];
-                          return _AdminChatCard(chat: chat, s: s, adminUids: admin.adminUids);
+                          return _AdminChatCard(
+                            chat: chat,
+                            s: s,
+                            adminUids: admin.adminUids,
+                            activeCall: admin.activeCallsByChat[chat['chat_id']],
+                          );
                         },
                       ),
                     ),
@@ -155,7 +171,15 @@ class _AdminChatCard extends StatelessWidget {
   final Map<String, dynamic> chat;
   final S s;
   final List<String> adminUids;
-  const _AdminChatCard({required this.chat, required this.s, required this.adminUids});
+
+  /// Call aktif di chat ini (null = tidak sedang call).
+  final ActiveCallInfo? activeCall;
+  const _AdminChatCard({
+    required this.chat,
+    required this.s,
+    required this.adminUids,
+    this.activeCall,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -186,6 +210,9 @@ class _AdminChatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
+        border: activeCall != null
+            ? Border.all(color: const Color(0xFF2E9E5B), width: 1.2)
+            : null,
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
       ),
       child: Material(
@@ -204,13 +231,24 @@ class _AdminChatCard extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.forum_outlined, color: AppTheme.primary, size: 22),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: activeCall != null ? 0.18 : 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.forum_outlined, color: AppTheme.primary, size: 22),
+                    ),
+                    if (activeCall != null)
+                      Positioned(
+                        right: -4,
+                        bottom: -4,
+                        child: _CallActiveBadge(callType: activeCall!.callType),
+                      ),
+                  ],
                 ),
                 SizedBox(width: 12),
                 Expanded(
@@ -234,6 +272,23 @@ class _AdminChatCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    if (activeCall != null) ...[
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(activeCall!.callType == 'video'
+                                  ? Icons.videocam
+                                  : Icons.call,
+                              size: 14, color: const Color(0xFF2E9E5B)),
+                          const SizedBox(width: 3),
+                          Text(s.adminCallLive,
+                            style: AppText.micro.copyWith(
+                                color: const Color(0xFF2E9E5B),
+                                fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      SizedBox(height: 2),
+                    ],
                     if (count > 0)
                       Text('$count', style: AppText.bodySmall.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
                     if (ts != null) ...[
@@ -336,5 +391,57 @@ class _AdminChatCard extends StatelessWidget {
       SnackBar(content: Text(ok ? s.adminChatDeleted : s.adminDeleteFail)),
     );
     admin.fetchChats();
+  }
+}
+
+/// Badge call aktif — lingkaran hijau berdenyut dengan icon video/audio.
+class _CallActiveBadge extends StatefulWidget {
+  final String callType;
+  const _CallActiveBadge({required this.callType});
+
+  @override
+  State<_CallActiveBadge> createState() => _CallActiveBadgeState();
+}
+
+class _CallActiveBadgeState extends State<_CallActiveBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+      lowerBound: 0.55,
+      upperBound: 1.0,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _ctrl,
+      child: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: const Color(0xFF2E9E5B),
+          shape: BoxShape.circle,
+          border: Border.all(color: AppTheme.bgCard, width: 2),
+        ),
+        child: Icon(
+          widget.callType == 'video' ? Icons.videocam : Icons.call,
+          size: 10,
+          color: Colors.white,
+        ),
+      ),
+    );
   }
 }
