@@ -371,6 +371,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(
         fullscreenDialog: true,
+        settings: const RouteSettings(name: kCallScreenRoute),
         builder: (_) => CallScreen(
           callId: sess.callId,
           remoteUid: sess.remoteUid,
@@ -546,6 +547,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _maybeNewChatBonus();
     } catch (e) {
       // Kirim gagal → kembalikan koin yang sudah terpotong.
+      debugPrint('[send] gagal chat=${widget.chatId}: $e');
       safeUnawaited(pp.refundChatPoint('text'));
       if (mounted) {
         setState(() => _pending.remove(pending));
@@ -2023,6 +2025,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         Navigator.of(ctx).push(
           MaterialPageRoute(
             fullscreenDialog: true,
+            settings: const RouteSettings(name: kCallScreenRoute),
             builder: (_) => CallScreen(
               callId: callId,
               remoteUid: widget.otherUid,

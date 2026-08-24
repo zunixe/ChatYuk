@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../main.dart';
 import '../screens/incoming_call_screen.dart';
@@ -7,6 +6,49 @@ import '../services/call_service.dart';
 import '../services/call_notification.dart';
 
 enum CallMode { fullscreen, chat }
+
+/// Nama rute terdaftar di navigator — dipakai RouteTracker supaya banner
+/// call & handler notifikasi tidak menumpuk layar chat/call duplikat.
+const String kCallScreenRoute = 'call-screen';
+
+String privateChatRoute(String chatId) => 'private-chat:$chatId';
+
+/// Memantau rute bernama yang sedang aktif di stack navigator.
+class RouteTracker extends NavigatorObserver {
+  final Set<String> active = {};
+
+  bool contains(String name) => active.contains(name);
+
+  void _add(Route<dynamic> route) {
+    final n = route.settings.name;
+    if (n != null && n.isNotEmpty) active.add(n);
+  }
+
+  void _remove(Route<dynamic> route) {
+    final n = route.settings.name;
+    if (n != null && n.isNotEmpty) active.remove(n);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _add(route);
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _remove(route);
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _remove(route);
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (oldRoute != null) _remove(oldRoute);
+    if (newRoute != null) _add(newRoute);
+  }
+}
+
+final RouteTracker routeTracker = RouteTracker();
 
 /// CallProvider: pendengar global panggilan masuk + penanda call aktif.
 /// Dipakai supaya panggilan masuk muncul sebagai screen overlay di mana pun

@@ -217,6 +217,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       if (callType == 'video') {
         Navigator.of(ctx).push(
           MaterialPageRoute(
+            settings: RouteSettings(name: privateChatRoute(chatId)),
             builder: (_) => PrivateChatScreen(
               chatId: chatId,
               otherName: name,
@@ -228,6 +229,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         Navigator.of(ctx).push(
           MaterialPageRoute(
             fullscreenDialog: true,
+            settings: const RouteSettings(name: kCallScreenRoute),
             builder: (_) => CallScreen(
               callId: session.callId,
               remoteUid: widget.userId,

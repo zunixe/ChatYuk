@@ -169,16 +169,24 @@ void _openFromData(Map<String, dynamic> data) {
     final otherUid = data['otherUid'] ?? '';
     final otherName = data['otherName'] ?? s.unknownUser;
     if (chatId.isNotEmpty) {
-      nav.pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => PrivateChatScreen(
-            chatId: chatId,
-            otherName: otherName,
-            otherUid: otherUid,
+      final target = privateChatRoute(chatId);
+      if (routeTracker.contains(target)) {
+        // Chat sudah terbuka di stack → cukup angkat ke depan, jangan buat
+        // instance duplikat (list kosong & kirim gagal RLS).
+        nav.popUntil((r) => r.settings.name == target);
+      } else {
+        nav.pushAndRemoveUntil(
+          MaterialPageRoute(
+            settings: RouteSettings(name: target),
+            builder: (_) => PrivateChatScreen(
+              chatId: chatId,
+              otherName: otherName,
+              otherUid: otherUid,
+            ),
           ),
-        ),
-        (route) => route.isFirst,
-      );
+          (route) => route.isFirst,
+        );
+      }
     }
     return;
   }

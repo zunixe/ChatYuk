@@ -49,18 +49,12 @@ class _CallBannerState extends State<CallBanner> {
   bool _shouldShow(CallSession? sess, CallMode? mode, String? chatId, String? curChatId) {
     if (sess == null) return false;
     if (sess.phase == CallPhase.ended) return false;
+    // CallScreen fullscreen sedang terbuka → panggilan sudah terlihat penuh,
+    // banner hanya menghalangi (dan tap-nya bisa menumpuk layar duplikat).
+    if (routeTracker.contains(kCallScreenRoute)) return false;
     // Jika sedang di private chat yang sama (overlay sudah terlihat) → jangan tampil banner.
     if (mode == CallMode.chat && chatId != null && curChatId == chatId) {
       return false;
-    }
-    // Jika CallScreen fullscreen sedang di atas stack → jangan tampil (deteksi via navigator).
-    final nav = navigatorKey.currentState;
-    if (nav != null && nav.canPop()) {
-      // Cek route teratas mengandung CallScreen – lewat context tidak akurat,
-      // pakai flag: jika mode fullscreen dan ada route, tetap tampil banner saat di luar call.
-      // Sederhana: jika mode fullscreen, banner selalu tampil kecuali ada CallScreen di stack.
-      // Kita deteksi dengan melihat apakah ada Route dengan CallScreen type di navigator.
-      // Fallback: jangan sembunyikan – user bisa tap banner untuk kembali.
     }
     return true;
   }
@@ -69,16 +63,27 @@ class _CallBannerState extends State<CallBanner> {
     final nav = navigatorKey.currentState;
     if (nav == null) return;
     if (mode == CallMode.chat && chatId != null) {
+      final target = privateChatRoute(chatId);
+      if (routeTracker.contains(target)) {
+        // Chat sudah ada di stack → angkat ke depan (buang layar di atasnya,
+        // termasuk CallScreen hasil expand). Session call tetap hidup di
+        // provider, overlay video langsung tampil lagi. JANGAN push duplikat —
+        // instance baru tanpa state membuat list kosong & kirim gagal RLS.
+        nav.popUntil((r) => r.settings.name == target);
+        return;
+      }
       nav.push(MaterialPageRoute(
+        settings: RouteSettings(name: target),
         builder: (_) => PrivateChatScreen(
           chatId: chatId,
           otherUid: sess.remoteUid,
           otherName: sess.remoteName,
         ),
       ));
-    } else {
+    } else if (!routeTracker.contains(kCallScreenRoute)) {
       nav.push(MaterialPageRoute(
         fullscreenDialog: true,
+        settings: const RouteSettings(name: kCallScreenRoute),
         builder: (_) => CallScreen(
           callId: sess.callId,
           remoteUid: sess.remoteUid,

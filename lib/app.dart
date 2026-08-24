@@ -54,6 +54,7 @@ class ChatYukApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme,
           themeMode: theme.themeMode,
           navigatorKey: navigatorKey,
+          navigatorObservers: [routeTracker],
           // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
           // tapi tetap menghormati preferensi aksesibilitas user.
           builder: (context, child) => WithForegroundTask(
