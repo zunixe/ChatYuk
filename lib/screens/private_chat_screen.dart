@@ -379,6 +379,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           isCaller: sess.isCaller,
           pendingSignals: const [],
           session: sess,
+          onMinimize: () => Navigator.of(context).pop(),
         ),
       ),
     );
@@ -1488,9 +1489,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               onSelected: (val) {
                 if (val == 'audio') {
                   _startCall(context, 'audio', CallMode.fullscreen);
-                } else if (val == 'video_full') {
-                  _startCall(context, 'video', CallMode.fullscreen);
-                } else if (val == 'video_chat') {
+                } else if (val == 'video') {
                   _startCall(context, 'video', CallMode.chat);
                 }
               },
@@ -1501,13 +1500,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                       style: TextStyle(color: AppTheme.textPrimary)),
                 ),
                 PopupMenuItem(
-                  value: 'video_full',
-                  child: Text(s.callVideoFullscreen,
-                      style: TextStyle(color: AppTheme.textPrimary)),
-                ),
-                PopupMenuItem(
-                  value: 'video_chat',
-                  child: Text(s.callVideoInChat,
+                  value: 'video',
+                  child: Text(s.callVideo,
                       style: TextStyle(color: AppTheme.textPrimary)),
                 ),
               ],

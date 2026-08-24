@@ -23,6 +23,10 @@ class CallScreen extends StatefulWidget {
   final CallSession? session;
   final String chatId;
 
+  /// Dipanggil saat user minimize video ke dalam chat (tombol / back).
+  /// Null atau panggilan audio → layar tidak bisa diminimize.
+  final VoidCallback? onMinimize;
+
   const CallScreen({
     super.key,
     required this.callId,
@@ -33,6 +37,7 @@ class CallScreen extends StatefulWidget {
     this.pendingSignals = const [],
     this.session,
     this.chatId = '',
+    this.onMinimize,
   });
 
   @override
@@ -45,6 +50,15 @@ class _CallScreenState extends State<CallScreen> {
   Timer? _autoClose;
   String _elapsed = '00:00';
   Offset? _localPreviewPos;
+  bool _minimizing = false;
+
+  /// Video + ada callback minimize → bisa kecilkan ke overlay chat.
+  bool get _minimizable =>
+      widget.onMinimize != null && widget.callType == 'video';
+
+  /// Back sistem jadi minimize (bukan tutup) selama call belum berakhir.
+  bool get _backMinimizes =>
+      _minimizable && _session.phase != CallPhase.ended;
 
   @override
   void initState() {
@@ -147,6 +161,17 @@ class _CallScreenState extends State<CallScreen> {
     }
   }
 
+  /// Kecilkan video ke overlay dalam chat: pindahkan mode ke chat lalu
+  /// tutup layar ini — session tetap hidup di CallProvider.
+  void _minimize() {
+    if (!_minimizable || _minimizing) return;
+    setState(() => _minimizing = true);
+    CallProvider.instance.setMode(CallMode.chat);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
@@ -157,7 +182,12 @@ class _CallScreenState extends State<CallScreen> {
     final showLocalPreview =
         inCall && isVideo && _session.cameraOn && _session.localRenderer.srcObject != null;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_backMinimizes || _minimizing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _minimize();
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFF10201A),
       body: Stack(
         fit: StackFit.expand,
@@ -285,6 +315,14 @@ class _CallScreenState extends State<CallScreen> {
                       tooltip: s.btnSpeaker,
                       onTap: _session.toggleSpeaker,
                     ),
+                    if (_minimizable) ...[
+                      const SizedBox(width: 16),
+                      _ControlButton(
+                        icon: Icons.picture_in_picture_alt,
+                        tooltip: s.callMinimize,
+                        onTap: _minimize,
+                      ),
+                    ],
                   ],
                   const SizedBox(width: 16),
                   _ControlButton(
@@ -321,6 +359,7 @@ class _CallScreenState extends State<CallScreen> {
               child: _ElapsedTimer(onTick: _tick),
             ),
         ],
+      ),
       ),
     );
   }
