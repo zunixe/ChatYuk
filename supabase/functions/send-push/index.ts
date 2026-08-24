@@ -10,9 +10,11 @@ const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 // - Admin (baru): ChatYuk Admin (appId .admin) mendaftar di sini sejak
 //   flavor-gate. Server mencoba utama dulu; jika ditolak (sender mismatch),
 //   dicoba lagi dengan kredensial admin supaya notifikasi tetap sampai.
+// Setelah migrasi total, semua token baru lahir di 7c9e4 → utama.
+// Token lama milik user yang belum update app tetap dilayani fallback 8470e.
 const FCM_PROJECTS = [
-  { id: 'chatyuk-8470e', envKey: 'FIREBASE_SERVICE_ACCOUNT' },
   { id: 'chatyuk-7c9e4', envKey: 'FIREBASE_SERVICE_ACCOUNT_ADMIN' },
+  { id: 'chatyuk-8470e', envKey: 'FIREBASE_SERVICE_ACCOUNT' },
 ];
 
 function base64UrlEncode(data) {

@@ -53,11 +53,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyB56XbvTTbYrhUZHnrlHUlJTd2bRxG9Vsk',
-    appId: '1:990163663226:android:5c55da1eb791d5a244bec3',
-    messagingSenderId: '990163663226',
-    projectId: 'chatyuk-8470e',
-    storageBucket: 'chatyuk-8470e.firebasestorage.app',
-    databaseURL: 'https://chatyuk-8470e-default-rtdb.firebaseio.com',
+    apiKey: 'AIzaSyBWXDO4EGxsxoyz66B1Be2pMzruUK-zl6o',
+    appId: '1:599111437536:android:6675d2d16ee762474bd485',
+    messagingSenderId: '599111437536',
+    projectId: 'chatyuk-7c9e4',
+    storageBucket: 'chatyuk-7c9e4.firebasestorage.app',
+    databaseURL: 'https://chatyuk-7c9e4-default-rtdb.firebaseio.com',
   );
 }

@@ -49,7 +49,7 @@ class AuthService {
   /// berada di project Firebase yang berbeda — Google mewajibkan keduanya
   /// satu project.
   static const String googleWebClientIdDefault =
-      '688425181671-r38u670b2l6l5fvnionlcl5fu020h72n.apps.googleusercontent.com';
+      '599111437536-hg56bq0nc2m6kig6hg41lmrbtfel5n2c.apps.googleusercontent.com';
   static String? googleWebClientIdOverride;
 
   /// Sign in dengan Google via Supabase OAuth.
