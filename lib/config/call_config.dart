@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'supabase_config.dart';
 
 /// Konfigurasi ICE untuk WebRTC call.
 /// TURN credentials di-fetch dari Supabase Edge Function (Cloudflare TURN).
@@ -28,15 +29,29 @@ class CallConfig {
   };
 
   /// Fetch Cloudflare TURN credentials, return null kalau gagal.
+  /// Wajib kirim Bearer anon key — tanpa ini gateway Supabase tolak 401
+  /// (verify_jwt default true, tidak ada entri [functions.turn-credentials]
+  /// di config.toml).
   static Future<Map<String, dynamic>?> _fetchCloudflare() async {
     try {
       final resp = await http
-          .get(Uri.parse(_turnFunctionUrl))
+          .get(
+            Uri.parse(_turnFunctionUrl),
+            headers: {
+              'Authorization': 'Bearer ${SupabaseConfig.publishableKey}',
+            },
+          )
           .timeout(const Duration(seconds: 5));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        // Function proxy jawaban Cloudflare apa adanya — kalau key invalid,
+        // body berisi {"error": "..."} tanpa iceServers → anggap gagal.
         final iceData = data['iceServers'] as Map<String, dynamic>?;
-        if (iceData != null) return iceData;
+        if (iceData != null &&
+            iceData['urls'] != null &&
+            iceData['username'] != null) {
+          return iceData;
+        }
       }
     } catch (_) {}
     return null;
@@ -45,11 +60,15 @@ class CallConfig {
   /// Return peerConfig dengan Cloudflare TURN (+ backup relay openrelay).
   /// Dua provider relay independen → ICE punya cadangan kalau satu jalur gagal.
   ///
-  /// iceTransportPolicy 'relay' → HANYA kandidat relay yang digather.
+  /// Cloudflare OK → iceTransportPolicy 'relay' (HANYA kandidat relay).
   /// Host/srflx tidak pernah connect di NAT berbeda (log: cuma relay
   /// 104.30.x.x yang works), jadi lewati saja negosiasi host/srflx yang
   /// cuma buang waktu & bikin call kadang pending/timeout. Relay-only =
   /// koneksi deterministik & cepat (1-3 detik).
+  ///
+  /// Cloudflare GAGAL (401 / key mati) → JANGAN paksa relay-only; pakai
+  /// semua tipe kandidat (host/srflx/relay) supaya P2P langsung tetap bisa
+  /// connect — minimal di jaringan yang sama (WiFi/hotspot) tanpa TURN.
   static Future<Map<String, dynamic>> getPeerConfig() async {
     final cloudflare = await _fetchCloudflare();
     final iceServers = <Map<String, dynamic>>[
@@ -74,7 +93,7 @@ class CallConfig {
     });
     return {
       'iceServers': iceServers,
-      'iceTransportPolicy': 'relay',
+      if (cloudflare != null) 'iceTransportPolicy': 'relay',
       'iceCandidatePoolSize': 2,
       'sdpSemantics': 'unified-plan',
     };
