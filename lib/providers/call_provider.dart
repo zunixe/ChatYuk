@@ -35,6 +35,14 @@ class CallProvider extends ChangeNotifier {
   String? _activeChatId;
   String? get activeChatId => _activeChatId;
 
+  /// Ganti mode panggilan aktif (fullscreen ⇄ chat) — dipakai saat
+  /// expand/minimize supaya overlay & banner ikut bereaksi.
+  void setMode(CallMode mode) {
+    if (_activeMode == mode) return;
+    _activeMode = mode;
+    notifyListeners();
+  }
+
   Timer? _clearTimer;
 
   /// Mulai mendengarkan panggilan masuk — hanya untuk user terdaftar

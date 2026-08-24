@@ -201,7 +201,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
               style: AppText.body.copyWith(color: AppTheme.textSecondary),
             ),
             const Spacer(),
-            // Tombol terima / tolak
+            // Tombol terima / tolak — satu terima untuk semua jenis:
+            // video darat di dalam chat (overlay), audio di layar penuh.
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -210,27 +211,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                   color: AppTheme.danger,
                   onTap: _decline,
                 ),
-                if (isVideo) ...[
-                  const SizedBox(width: 24),
-                  _LabeledCallAction(
-                    icon: Icons.videocam,
-                    label: s.callVideoFullscreen,
-                    onTap: () => _accept(mode: CallMode.fullscreen),
+                const SizedBox(width: 60),
+                _CallAction(
+                  icon: isVideo ? Icons.videocam : Icons.call,
+                  color: const Color(0xFF2E9E5B),
+                  onTap: () => _accept(
+                    mode: isVideo ? CallMode.chat : CallMode.fullscreen,
                   ),
-                  const SizedBox(width: 16),
-                  _LabeledCallAction(
-                    icon: Icons.chat,
-                    label: s.callAcceptInChat,
-                    onTap: () => _accept(mode: CallMode.chat),
-                  ),
-                ] else ...[
-                  const SizedBox(width: 60),
-                  _CallAction(
-                    icon: Icons.call,
-                    color: const Color(0xFF2E9E5B),
-                    onTap: () => _accept(mode: CallMode.fullscreen),
-                  ),
-                ],
+                ),
               ],
             ),
             const SizedBox(height: 48),
@@ -266,49 +254,6 @@ class _CallAction extends StatelessWidget {
           child: Icon(icon, color: Colors.white, size: 32),
         ),
       ),
-    );
-  }
-}
-
-class _LabeledCallAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _LabeledCallAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          color: const Color(0xFF2E9E5B),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onTap,
-              child: SizedBox(
-                width: 60,
-                height: 60,
-                child: Icon(icon, color: Colors.white, size: 28),
-              ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 110),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: AppText.caption.copyWith(color: Colors.white),
-          ),
-        ),
-      ],
     );
   }
 }

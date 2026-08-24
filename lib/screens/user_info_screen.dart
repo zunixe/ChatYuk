@@ -18,6 +18,7 @@ import '../services/social_service.dart';
 import '../widgets/async_photo.dart';
 import '../providers/theme_provider.dart';
 import 'call_screen.dart';
+import 'private_chat_screen.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String userId;
@@ -174,8 +175,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   }
 
   /// Mulai panggilan audio/video (caller) ke user yang sedang dilihat.
+  /// Video darat di dalam chat (overlay), audio di layar penuh.
   Future<void> _startCall(BuildContext ctx, String callType) async {
     final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final profile = auth.profile;
     final name = _profile?.nickname ?? widget.fallbackName;
     if (CallProvider.instance.inCall) {
       ScaffoldMessenger.of(ctx)
@@ -184,24 +188,58 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     }
     final messenger = ScaffoldMessenger.of(ctx);
     try {
-      final callId = await CallService.instance.startCall(
-        widget.userId,
-        callType,
+      // Chat dibuat/diambil dulu supaya overlay & banner punya rumah.
+      final chatId = await context.read<ChatProvider>().startPrivateChat(
+        myUid: auth.uid!,
+        otherUid: widget.userId,
+        myName: profile?.nickname ?? '',
+        otherName: name,
+        myGender: profile?.gender ?? '',
       );
       if (!mounted) return;
-      CallProvider.instance.registerCall(callId);
-      Navigator.of(ctx).push(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => CallScreen(
-            callId: callId,
-            remoteUid: widget.userId,
-            remoteName: name,
-            callType: callType,
-            isCaller: true,
-          ),
-        ),
+      final session = await CallProvider.instance.startSession(
+        callId: await CallService.instance.startCall(widget.userId, callType),
+        remoteUid: widget.userId,
+        remoteName: name,
+        callType: callType,
+        isCaller: true,
+        mode: callType == 'video' ? CallMode.chat : CallMode.fullscreen,
+        myName: profile?.nickname ?? '',
+        myGender: profile?.gender ?? 'other',
+        notifBody: callType == 'video'
+            ? s.callNotifActiveVideo
+            : s.callNotifActiveAudio,
+        notifChannel: s.callNotifActiveAudio,
+        notifDesc: s.callNotifActiveAudio,
+        chatId: chatId,
       );
+      if (!mounted) return;
+      if (callType == 'video') {
+        Navigator.of(ctx).push(
+          MaterialPageRoute(
+            builder: (_) => PrivateChatScreen(
+              chatId: chatId,
+              otherName: name,
+              otherUid: widget.userId,
+            ),
+          ),
+        );
+      } else {
+        Navigator.of(ctx).push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => CallScreen(
+              callId: session.callId,
+              remoteUid: widget.userId,
+              remoteName: name,
+              callType: callType,
+              isCaller: true,
+              chatId: chatId,
+              session: session,
+            ),
+          ),
+        );
+      }
     } catch (_) {
       messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
     }
