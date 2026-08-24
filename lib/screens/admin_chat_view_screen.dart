@@ -6,13 +6,16 @@ import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
+import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../services/admin_call_watch_service.dart';
 import '../services/photo_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
+import '../widgets/admin_call_watch_overlay.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
 import '../providers/theme_provider.dart';
@@ -48,6 +51,72 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   final Map<String, LayerLink> _msgLinks = {};
   LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
 
+  // ── Pantau call aktif di chat ini ──
+  // WatchSession hidup hanya selama layar ini terbuka; dispose → stop()
+  // memutus semua koneksi (admin berhenti mendengar/melihat).
+  Timer? _callTimer;
+  WatchSession? _watch;
+  bool _startingWatch = false;
+
+  void _onWatchChanged() {
+    if (!mounted) return;
+    if (_watch?.stopped ?? false) setState(() {});
+  }
+
+  /// Samakan sesi pantau dengan call aktif dari provider.
+  Future<void> _syncCallWatch() async {
+    if (!mounted || _startingWatch) return;
+    final admin = context.read<AdminProvider>();
+    if (_watch != null && _watch!.stopped) {
+      final done = _watch!;
+      _watch = null;
+      done.removeListener(_onWatchChanged);
+      await done.stop();
+      if (mounted) setState(() {});
+    }
+    ActiveCallInfo? call;
+    for (final c in admin.activeCalls) {
+      if (c.chatId == widget.chatId) call = c;
+    }
+    if (call == null) return;
+    if (_watch != null && _watch!.call.id == call.id) return;
+    _startingWatch = true;
+    final old = _watch;
+    _watch = null;
+    old?.removeListener(_onWatchChanged);
+    await old?.stop();
+    final ws = WatchSession(call);
+    ws.addListener(_onWatchChanged);
+    try {
+      await ws.start();
+    } catch (_) {}
+    if (!mounted) {
+      await ws.stop();
+      _startingWatch = false;
+      return;
+    }
+    setState(() => _watch = ws);
+    _startingWatch = false;
+  }
+
+  Future<void> _stopWatch() async {
+    final ws = _watch;
+    _watch = null;
+    ws?.removeListener(_onWatchChanged);
+    await ws?.stop();
+  }
+
+  void _expandWatch() {
+    final ws = _watch;
+    if (ws == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => AdminCallWatchFullScreen(session: ws),
+      ),
+    );
+  }
+
   // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
   // pola WhatsApp — sama seperti room chat. _msgs datang DESC (terbaru dulu),
   // jadi iterasi dibalik supaya terbaru tampil di bawah.
@@ -73,13 +142,27 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     _subscribeRealtime();
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
     _scrollCtrl.addListener(_onScroll);
+    // Call aktif: fetch pertama + polling 5 detik selama layar terbuka.
+    final admin = context.read<AdminProvider>();
+    Future.microtask(() async {
+      await admin.fetchActiveCalls();
+      if (mounted) await _syncCallWatch();
+    });
+    _callTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted) return;
+      final admin = context.read<AdminProvider>();
+      await admin.fetchActiveCalls();
+      if (mounted) await _syncCallWatch();
+    });
   }
 
   @override
   void dispose() {
     _pollTimer.cancel();
+    _callTimer?.cancel();
     _channel?.unsubscribe();
     _scrollCtrl.dispose();
+    unawaited(_stopWatch());
     super.dispose();
   }
 
@@ -303,7 +386,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final admin = context.read<AdminProvider>();
+    final admin = context.watch<AdminProvider>();
+    final watchingVideo = _watch != null && _watch!.isVideo;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -331,49 +415,165 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
               child: Text(s.adminChatError, textAlign: TextAlign.center,
                 style: AppText.bodySmall.copyWith(color: AppTheme.danger)),
             ),
+          // Chip "mendengarkan" untuk call audio — masuk chat = mulai dengar,
+          // keluar dari layar ini = berhenti.
+          if (_watch != null && !_watch!.isVideo)
+            _AudioListenChip(session: _watch!),
           Expanded(
-            child: _msgs.isEmpty && !_loading
-                ? Center(
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.forum_outlined, size: 48, color: AppTheme.textSecondary),
-                      SizedBox(height: 12),
-                      Text(s.adminChatNoChats, style: TextStyle(color: AppTheme.textSecondary)),
-                    ]),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _fetch,
-                    child: ListView.builder(
-                      controller: _scrollCtrl,
-                      reverse: true,
-                      padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).padding.bottom + 16),
-                      itemCount: _items.length + (admin.chatMessagesHasMore ? 1 : 0),
-                      itemBuilder: (_, i) {
-                        if (i >= _items.length) {
-                          return const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
-                          );
-                        }
-                        final item = _items[_items.length - 1 - i];
-                        if (item.dateLabel != null) return DateChip(label: item.dateLabel!);
-                        final msg = item.msg!;
-                        final isMe = msg.senderId != _leftUid;
-                        final isImageDeferred =
-                            msg.type == 'image' && msg.imageData.isEmpty;
-                        return MessageBubble(
-                          key: ValueKey(msg.id),
-                          link: _linkFor(msg.id),
-                          msg: msg,
-                          chatKey: _chatKey,
-                          isMe: isMe,
-                          isRead: isMe,
-                          isAdminView: true,
-                          isImageDeferred: isImageDeferred,
-                          onRetryImage: isImageDeferred ? _retryImage : null,
-                        );
-                      },
+            child: Stack(
+              children: [
+                _msgs.isEmpty && !_loading
+                    ? Center(
+                        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(Icons.forum_outlined, size: 48, color: AppTheme.textSecondary),
+                          SizedBox(height: 12),
+                          Text(s.adminChatNoChats, style: TextStyle(color: AppTheme.textSecondary)),
+                        ]),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _fetch,
+                        child: ListView.builder(
+                          controller: _scrollCtrl,
+                          reverse: true,
+                          padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).padding.bottom + 16),
+                          itemCount: _items.length + (admin.chatMessagesHasMore ? 1 : 0),
+                          itemBuilder: (_, i) {
+                            if (i >= _items.length) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+                              );
+                            }
+                            final item = _items[_items.length - 1 - i];
+                            if (item.dateLabel != null) return DateChip(label: item.dateLabel!);
+                            final msg = item.msg!;
+                            final isMe = msg.senderId != _leftUid;
+                            final isImageDeferred =
+                                msg.type == 'image' && msg.imageData.isEmpty;
+                            return MessageBubble(
+                              key: ValueKey(msg.id),
+                              link: _linkFor(msg.id),
+                              msg: msg,
+                              chatKey: _chatKey,
+                              isMe: isMe,
+                              isRead: isMe,
+                              isAdminView: true,
+                              isImageDeferred: isImageDeferred,
+                              onRetryImage: isImageDeferred ? _retryImage : null,
+                            );
+                          },
+                        ),
+                      ),
+                // Call video aktif → overlay setengah layar seperti private
+                // chat; bisa di-expand ke fullscreen.
+                if (watchingVideo)
+                  Positioned.fill(
+                    child: AdminCallWatchOverlay(
+                      session: _watch!,
+                      onExpand: _expandWatch,
                     ),
                   ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Chip indikator mendengarkan panggilan audio di monitor chat admin.
+class _AudioListenChip extends StatefulWidget {
+  final WatchSession session;
+  const _AudioListenChip({required this.session});
+
+  @override
+  State<_AudioListenChip> createState() => _AudioListenChipState();
+}
+
+class _AudioListenChipState extends State<_AudioListenChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.session.addListener(_onSession);
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+      lowerBound: 0.55,
+      upperBound: 1.0,
+    )..repeat(reverse: true);
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _onSession() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_onSession);
+    _ctrl.dispose();
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final sess = widget.session;
+    final names =
+        sess.participants.map((p) => p.name).join(' & ');
+    final sec = sess.call.elapsedSeconds;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2E9E5B).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2E9E5B), width: 1),
+      ),
+      child: Row(
+        children: [
+          FadeTransition(
+            opacity: _ctrl,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                color: Color(0xFF2E9E5B),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.graphic_eq, size: 18, color: Colors.white),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(names,
+                  style: AppText.bodyStrong,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(s.adminListening,
+                  style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+              ],
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.call, size: 14, color: const Color(0xFF2E9E5B)),
+              const SizedBox(width: 4),
+              Text('${sec ~/ 60}:${(sec % 60).toString().padLeft(2, '0')}',
+                style: AppText.label.copyWith(color: const Color(0xFF2E9E5B))),
+            ],
           ),
         ],
       ),
