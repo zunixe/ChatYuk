@@ -3,6 +3,20 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/timeline_service.dart';
 
+/// Cache per-scope: posts + pagination state untuk tab Semua/Mengikuti/Postinganku.
+class _ScopeCache {
+  final List<Map<String, dynamic>> posts;
+  final DateTime? cursor;
+  final bool cursorBoosted;
+  final bool hasMore;
+  _ScopeCache({
+    required this.posts,
+    this.cursor,
+    this.cursorBoosted = false,
+    this.hasMore = true,
+  });
+}
+
 /// State timeline: feed, like/comment/share/boost, biaya boost.
 class TimelineProvider extends ChangeNotifier {
   final TimelineService _service = TimelineService(Supabase.instance.client);
@@ -17,6 +31,11 @@ class TimelineProvider extends ChangeNotifier {
   Set<String> _followedIds = {};
   Set<String> _subscribedIds = {};
   Set<String> _blockedIds = {};
+
+  // Cache per scope — emit instant saat tab switch, server menyusul.
+  final Map<String, _ScopeCache> _scopeCache = {};
+  // Cache komentar per postId — buka comment instant, server menyusul.
+  final Map<String, List<Map<String, dynamic>>> _commentCache = {};
 
   int _boostPaid = 50;
   int _boostBonus = 150;
@@ -113,6 +132,7 @@ class TimelineProvider extends ChangeNotifier {
     }
     _posts.insert(0, p);
     _invalidateView();
+    _syncScopeCache();
     notifyListeners();
   }
 
@@ -145,6 +165,68 @@ class TimelineProvider extends ChangeNotifier {
 
   void _invalidateView() {
     _postsView = List.unmodifiable(_posts);
+  }
+
+  /// Simpan state _posts + pagination ke cache scope aktif.
+  void _syncScopeCache() {
+    _scopeCache[_scope] = _ScopeCache(
+      posts: List.from(_posts),
+      cursor: _cursor,
+      cursorBoosted: _cursorBoosted,
+      hasMore: _hasMore,
+    );
+  }
+
+  // --- Comment cache API ---
+
+  /// Ambil cache komentar per postId (null = belum pernah di-load).
+  List<Map<String, dynamic>>? getCachedComments(String postId) =>
+      _commentCache[postId];
+
+  /// Simpan hasil fetch komentar ke cache.
+  void cacheComments(String postId, List<Map<String, dynamic>> comments) {
+    _commentCache[postId] = List.from(comments);
+  }
+
+  /// Tambah satu komentar baru ke cache (setelah submit berhasil).
+  void addCommentToCache(String postId, Map<String, dynamic> comment) {
+    final existing = _commentCache[postId];
+    if (existing != null) {
+      _commentCache[postId] = [...existing, comment];
+    }
+  }
+
+  /// Hapus komentar optimistic (rollback jika gagal) dari cache.
+  void removeCommentFromCache(String postId, dynamic commentId) {
+    final existing = _commentCache[postId];
+    if (existing != null) {
+      _commentCache[postId] =
+          existing.where((c) => c['id'] != commentId).toList();
+    }
+  }
+
+  /// Ganti komentar optimistic dengan data server (konfirmasi).
+  void replaceCommentInCache(
+      String postId, dynamic oldId, Map<String, dynamic> newComment) {
+    final existing = _commentCache[postId];
+    if (existing != null) {
+      _commentCache[postId] = [
+        for (final c in existing)
+          if (c['id'] == oldId) newComment else c,
+      ];
+    }
+  }
+
+  /// Hapus semua cache saat logout.
+  void resetCache() {
+    _scopeCache.clear();
+    _commentCache.clear();
+    _posts.clear();
+    _postsView = const [];
+    _cursor = null;
+    _cursorBoosted = false;
+    _hasMore = true;
+    _scope = 'all';
   }
 
   Future<void> _refreshFollowedIds() async {
@@ -215,18 +297,30 @@ class TimelineProvider extends ChangeNotifier {
         _refreshFollowedIds();
         _refreshVisibilitySets();
       }
-      // Refresh APA PUN (tab switch, pull-to-refresh, habis posting): JANGAN
-      // clear dulu — konten lama tetap tampil selama fetch, lalu diganti
-      // atomically. List hanya dikosongkan kalau hasil fetch memang kosong
-      // (di bawah), supaya tidak pernah blink ke empty state saat data ada.
+      // Emit cache scope baru DULU — instant tanpa network.
+      // Konten tab sebelumnya diganti atomik dengan cache tab baru.
+      // Server menyusul dan update feed dengan data fresh.
+      final cached = _scopeCache[scope];
+      if (cached != null && cached.posts.isNotEmpty) {
+        _posts
+          ..clear()
+          ..addAll(cached.posts);
+        _cursor = cached.cursor;
+        _cursorBoosted = cached.cursorBoosted;
+        _hasMore = cached.hasMore;
+        _invalidateView();
+        notifyListeners(); // frame pertama instant dari cache
+      }
+      // Kalau tidak ada cache: biarkan _posts apa adanya (konten scope lama
+      // tetap tampil selama fetch) supaya tidak pernah blink ke empty state.
     }
     _loading = true;
     notifyListeners();
     try {
       final list = await _service.listPosts(
         scope,
-        cursor: _cursor,
-        cursorBoosted: _cursorBoosted,
+        cursor: refresh ? null : _cursor,
+        cursorBoosted: refresh ? false : _cursorBoosted,
       );
       if (list.isEmpty) {
         _hasMore = false;
@@ -261,6 +355,8 @@ class TimelineProvider extends ChangeNotifier {
         if (list.length < 30) _hasMore = false;
         _invalidateView();
       }
+      // Simpan hasil fetch terbaru ke cache scope ini.
+      _syncScopeCache();
     } catch (e) {
       debugPrint('[TimelineProvider] load error: $e');
       _hasMore = false;
@@ -276,6 +372,7 @@ class TimelineProvider extends ChangeNotifier {
     if (i >= 0) {
       _posts[i] = {..._posts[i], ...patch};
       _invalidateView();
+      _syncScopeCache();
       notifyListeners();
     }
   }
@@ -283,6 +380,7 @@ class TimelineProvider extends ChangeNotifier {
   void removePost(String id) {
     _posts.removeWhere((p) => p['id'] == id);
     _invalidateView();
+    _syncScopeCache();
     notifyListeners();
   }
 

@@ -33,6 +33,8 @@ class _PostCardState extends State<PostCard> {
   final Set<String> _failedPaths = {};
   final PageController _pageCtrl = PageController();
   int _page = 0;
+  // GlobalKey untuk akses _CommentsListState saat kirim komentar (optimistic).
+  final GlobalKey<_CommentsListState> _commentsKey = GlobalKey<_CommentsListState>();
 
   String get _id => '${_p['id']}';
 
@@ -104,7 +106,6 @@ class _PostCardState extends State<PostCard> {
   Future<void> _comment() async {
     final s = context.read<LocaleProvider>().s;
     final ctrl = TextEditingController();
-    final commentsKey = GlobalKey<_CommentsListState>();
     var replyToId = 0;
     var replyToName = '';
     await showModalBottomSheet<void>(
@@ -140,7 +141,7 @@ class _PostCardState extends State<PostCard> {
                   SizedBox(height: 8),
                   Flexible(
                     child: _CommentsList(
-                      key: commentsKey,
+                      key: _commentsKey,
                       postId: _id,
                       onReply: (id, name) =>
                           setSheet(() { replyToId = id; replyToName = name; }),
@@ -243,26 +244,47 @@ class _PostCardState extends State<PostCard> {
 
   Future<void> _submitComment(String text, {int? parentId}) async {
     final s = context.read<LocaleProvider>().s;
+    final tp = context.read<TimelineProvider>();
+    final auth = context.read<AuthProvider>();
+    const optimisticId = -1;
+
+    // Optimistic insert — tampil instant tanpa tunggu server.
+    final optimistic = {
+      'id': optimisticId,
+      'postId': _id,
+      'parentId': parentId ?? 0,
+      'text': text,
+      'authorId': auth.uid ?? '',
+      'authorName': auth.profile?.nickname ?? 'Kamu',
+      'authorGender': auth.profile?.gender ?? '',
+      'likeCount': 0,
+      'shareCount': 0,
+      'isLiked': false,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    tp.addCommentToCache(_id, optimistic);
+
     try {
+      final Map<String, dynamic> result;
       if (parentId != null && parentId > 0) {
-        await TimelineService().replyComment(_id, parentId, text);
+        result = await TimelineService().replyComment(_id, parentId, text);
       } else {
-        await TimelineService().addComment(_id, text);
+        result = await TimelineService().addComment(_id, text);
       }
+      // Ganti optimistic dengan data server.
+      tp.replaceCommentInCache(_id, optimisticId, result);
       final cur = (_p['commentCount'] as num?)?.toInt() ?? 0;
       if (mounted) {
-        context.read<TimelineProvider>().updatePost(_id, {
-          'commentCount': cur + 1,
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.msgCommented)));
+        tp.updatePost(_id, {'commentCount': cur + 1});
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(s.msgCommented)));
       }
     } catch (_) {
+      // Rollback optimistic insert jika gagal.
+      tp.removeCommentFromCache(_id, optimisticId);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     }
   }
@@ -776,12 +798,39 @@ class _CommentsListState extends State<_CommentsList> {
   @override
   void initState() {
     super.initState();
+    // Baca cache dulu — tampil instant tanpa network.
+    final cached = context.read<TimelineProvider>().getCachedComments(widget.postId);
+    if (cached != null) _items = List.from(cached);
     _load();
   }
 
   Future<void> _load() async {
     final list = await TimelineService().comments(widget.postId);
-    if (mounted) setState(() => _items = list);
+    if (!mounted) return;
+    context.read<TimelineProvider>().cacheComments(widget.postId, list);
+    setState(() => _items = list);
+  }
+
+  /// Tambah komentar optimistic ke list lokal (dipanggil via GlobalKey).
+  void addItem(Map<String, dynamic> comment) {
+    setState(() => _items = [...?_items, comment]);
+  }
+
+  /// Ganti komentar optimistic dengan data server (dipanggil via GlobalKey).
+  void replaceItem(dynamic oldId, Map<String, dynamic> newComment) {
+    if (_items == null) return;
+    setState(() {
+      _items = [
+        for (final c in _items!)
+          if (c['id'] == oldId) newComment else c,
+      ];
+    });
+  }
+
+  /// Hapus komentar dari list lokal — rollback jika gagal (dipanggil via GlobalKey).
+  void removeItem(dynamic id) {
+    if (_items == null) return;
+    setState(() => _items = _items!.where((c) => c['id'] != id).toList());
   }
 
   Future<void> _like(Map<String, dynamic> c) async {
