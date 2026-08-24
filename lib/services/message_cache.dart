@@ -281,4 +281,14 @@ class MessageCache {
   }
 
   Future<void> clearAll() => clearAllLegacy();
+
+  /// Hapus HANYA cache format lama v1 — cache v2 aktif tetap utuh.
+  /// Dipanggil saat app startup agar pesan cached tetap tersedia.
+  Future<void> clearLegacyV1Only() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys()
+        .where((k) => k.startsWith('chat_cache_v1_'))
+        .toList();
+    for (final k in keys) await prefs.remove(k);
+  }
 }
