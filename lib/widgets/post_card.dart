@@ -86,6 +86,7 @@ class _PostCardState extends State<PostCard> {
     final s = context.read<LocaleProvider>().s;
     try {
       final res = await TimelineService().toggleLike(_id);
+      if (!mounted) return;
       final liked = res['liked'] == true;
       final cur = (_p['likeCount'] as num?)?.toInt() ?? 0;
       context.read<TimelineProvider>().updatePost(_id, {
@@ -293,6 +294,7 @@ class _PostCardState extends State<PostCard> {
     final s = context.read<LocaleProvider>().s;
     try {
       await TimelineService().sharePost(_id);
+      if (!mounted) return;
       final c = ((_p['shareCount'] as num?)?.toInt() ?? 0) + 1;
       context.read<TimelineProvider>().updatePost(_id, {'shareCount': c});
     } catch (_) {}

@@ -14,6 +14,7 @@ import '../services/social_service.dart';
 import '../utils.dart';
 import '../widgets/profile_avatar.dart';
 import 'private_chat_screen.dart';
+import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
@@ -252,6 +253,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         PageRouteBuilder(
                           transitionDuration: const Duration(milliseconds: 320),
                           reverseTransitionDuration: const Duration(milliseconds: 260),
+                          settings: RouteSettings(name: privateChatRoute(chat.chatId)),
                           pageBuilder: (_, __, ___) => PrivateChatScreen(
                             chatId: chat.chatId,
                             otherName: otherName,

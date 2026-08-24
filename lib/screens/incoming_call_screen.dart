@@ -124,6 +124,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
+          settings: const RouteSettings(name: kCallScreenRoute),
           builder: (_) => CallScreen(
             callId: widget.callId,
             remoteUid: widget.callerUid,
@@ -146,6 +147,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
+          settings: RouteSettings(name: privateChatRoute(chatId)),
           builder: (_) => PrivateChatScreen(
             chatId: chatId,
             otherName: session.remoteName,

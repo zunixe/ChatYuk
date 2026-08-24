@@ -21,6 +21,7 @@ import '../services/location_service.dart';
 import '../utils/bounded_cache.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
+import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
 
 final _avatarCache = BoundedCache<String, Uint8List>(80);
@@ -161,6 +162,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 320),
         reverseTransitionDuration: const Duration(milliseconds: 260),
+        settings: RouteSettings(name: privateChatRoute(chatId)),
         pageBuilder: (_, __, ___) => PrivateChatScreen(
           chatId: chatId,
           otherName: user.nickname,
