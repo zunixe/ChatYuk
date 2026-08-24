@@ -173,7 +173,7 @@ void _openFromData(Map<String, dynamic> data) {
       if (routeTracker.contains(target)) {
         // Chat sudah terbuka di stack → cukup angkat ke depan, jangan buat
         // instance duplikat (list kosong & kirim gagal RLS).
-        nav.popUntil((r) => r.settings.name == target);
+        nav.popUntil((r) => r.isFirst || r.settings.name == target);
       } else {
         nav.pushAndRemoveUntil(
           MaterialPageRoute(
