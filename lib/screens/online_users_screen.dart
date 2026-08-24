@@ -151,17 +151,56 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final myUid = auth.uid;
     final myName = auth.profile?.nickname ?? 'Anon';
     if (myUid == null || user.uid == myUid) return;
+
+    // Hitung chatId lokal (deterministik, tanpa network) → navigate instant.
+    final ids = [myUid, user.uid]..sort();
+    final chatId = '${ids[0]}_${ids[1]}';
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 320),
+        reverseTransitionDuration: const Duration(milliseconds: 260),
+        pageBuilder: (_, __, ___) => PrivateChatScreen(
+          chatId: chatId,
+          otherName: user.nickname,
+          otherUid: user.uid,
+          otherGender: user.gender,
+          otherCountry: user.country,
+          otherCity: user.city,
+          otherAge: user.age,
+          otherRegistered: user.isRegistered,
+        ),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          );
+        },
+      ),
+    );
+
+    // Validasi + upsert di background setelah screen sudah terbuka.
     try {
-      // User bisa saja sudah dihapus saat list masih tampil → cek dulu.
       final active = await chat.isUserActive(user.uid);
-      if (!context.mounted) return;
       if (!active) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.errUserNotFound)),
-        );
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.errUserNotFound)),
+          );
+        }
         return;
       }
-      final chatId = await chat.startPrivateChat(
+      await chat.startPrivateChat(
         myUid: myUid,
         otherUid: user.uid,
         myName: myName,
@@ -173,19 +212,21 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         myAge: auth.profile?.age ?? 0,
         otherAge: user.age,
       );
-      if (!context.mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: user.nickname, otherUid: user.uid, otherGender: user.gender, otherCountry: user.country, otherCity: user.city, otherAge: user.age, otherRegistered: user.isRegistered)));
     } catch (e) {
       final msg = e.toString().toLowerCase();
-      // TOCTOU: user dihapus antara isUserActive check dan startPrivateChat
       if (msg.contains('23503') || msg.contains('foreign key') || msg.contains('42501')) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errUserNotFound)));
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.errUserNotFound)),
+          );
         }
         return;
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${s.errGeneric}$e')),
+        );
       }
     }
   }
