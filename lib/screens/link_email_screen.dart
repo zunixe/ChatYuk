@@ -36,10 +36,22 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
     final password = _passwordCtrl.text;
     final confirm = _confirmCtrl.text;
 
-    if (email.isEmpty) { _snack(s.errEmailEmpty); return; }
-    if (!isValidEmail(email)) { _snack(s.errEmailInvalid); return; }
-    if (password.length < 8) { _snack(s.errPasswordShort); return; }
-    if (password != confirm) { _snack(s.errPasswordMismatch); return; }
+    if (email.isEmpty) {
+      _snack(s.errEmailEmpty);
+      return;
+    }
+    if (!isValidEmail(email)) {
+      _snack(s.errEmailInvalid);
+      return;
+    }
+    if (password.length < 8) {
+      _snack(s.errPasswordShort);
+      return;
+    }
+    if (password != confirm) {
+      _snack(s.errPasswordMismatch);
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -49,7 +61,12 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
       final pointsProvider = context.read<PointsProvider>();
       await pointsProvider.claimRegisterBonus();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${s.msgAccountLinked} ${s.pointsGain(100, s.reasonRegister)}')));
+        SnackBar(
+          content: Text(
+            '${s.msgAccountLinked} ${s.pointsGain(100, s.reasonRegister)}',
+          ),
+        ),
+      );
       Navigator.of(context).pop();
     } on Exception catch (e) {
       if (!mounted) return;
@@ -88,18 +105,37 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.3),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    Icon(Icons.person_outline, color: AppTheme.primary, size: 20),
-                    SizedBox(width: 8),
-                    Text(auth.profile?.nickname ?? '', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-                  ]),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.person_outline,
+                        color: AppTheme.primary,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        auth.profile?.nickname ?? '',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                   SizedBox(height: 6),
-                  Text(s.msgAnonymousWarning, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                  Text(
+                    s.msgAnonymousWarning,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -128,7 +164,9 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
                 hintText: s.hintPassword,
                 prefixIcon: Icon(Icons.lock_outlined),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
+                  icon: Icon(
+                    _obscurePass ? Icons.visibility_off : Icons.visibility,
+                  ),
                   onPressed: () => setState(() => _obscurePass = !_obscurePass),
                 ),
               ),
@@ -144,8 +182,11 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
                 labelText: s.labelConfirmPassword,
                 prefixIcon: const Icon(Icons.lock_outlined),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  icon: Icon(
+                    _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
               ),
             ),
@@ -155,7 +196,14 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
             ElevatedButton.icon(
               onPressed: _loading ? null : _link,
               icon: _loading
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Icon(Icons.security),
               label: Text(s.btnSecureAccount, style: AppText.button),
             ),

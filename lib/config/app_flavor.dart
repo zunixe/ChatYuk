@@ -14,7 +14,10 @@
 class AppFlavor {
   AppFlavor._();
 
-  static const String name = String.fromEnvironment('APP_FLAVOR', defaultValue: 'apkpure');
+  static const String name = String.fromEnvironment(
+    'APP_FLAVOR',
+    defaultValue: 'apkpure',
+  );
 
   /// Email admin (developer). Admin selalu bisa menguji sistem koin walau
   /// `app_settings.points_enabled = false` di production (server juga

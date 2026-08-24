@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
 Uint8List? _decodeBase64(String b64) {
-  try { return base64Decode(b64); } catch (_) { return null; }
+  try {
+    return base64Decode(b64);
+  } catch (_) {
+    return null;
+  }
 }
 
 // Top-level untuk compute() — decode + resize ke thumbnail kecil (~256px).
@@ -14,7 +18,11 @@ Uint8List? _decodeThumb(String b64) {
     final bytes = base64Decode(b64);
     final image = img.decodeImage(bytes);
     if (image == null) return null;
-    final thumb = img.copyResize(image, width: 256, interpolation: img.Interpolation.linear);
+    final thumb = img.copyResize(
+      image,
+      width: 256,
+      interpolation: img.Interpolation.linear,
+    );
     return img.encodeJpg(thumb, quality: 80);
   } catch (_) {
     return null;
@@ -27,7 +35,13 @@ class AsyncPhotoThumbnail extends StatefulWidget {
   final double? width;
   final double? height;
   final BoxFit fit;
-  const AsyncPhotoThumbnail({super.key, required this.base64, this.width, this.height, this.fit = BoxFit.cover});
+  const AsyncPhotoThumbnail({
+    super.key,
+    required this.base64,
+    this.width,
+    this.height,
+    this.fit = BoxFit.cover,
+  });
 
   @override
   State<AsyncPhotoThumbnail> createState() => _AsyncPhotoThumbnailState();
@@ -56,7 +70,10 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
   void _load() {
     if (widget.base64.isEmpty) return;
     final cached = _cache[widget.base64];
-    if (cached != null) { _bytes = cached; return; }
+    if (cached != null) {
+      _bytes = cached;
+      return;
+    }
     _decode();
   }
 
@@ -76,12 +93,19 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
         color: const Color(0xFFEDEDED),
         alignment: Alignment.center,
         child: const SizedBox(
-          width: 18, height: 18,
+          width: 18,
+          height: 18,
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       );
     }
-    return Image.memory(_bytes!, width: widget.width, height: widget.height, fit: widget.fit, gaplessPlayback: true);
+    return Image.memory(
+      _bytes!,
+      width: widget.width,
+      height: widget.height,
+      fit: widget.fit,
+      gaplessPlayback: true,
+    );
   }
 }
 
@@ -124,7 +148,13 @@ class AsyncCircleAvatar extends StatefulWidget {
   final double radius;
   final Color? bgColor;
   final Widget? fallback;
-  const AsyncCircleAvatar({super.key, required this.base64, this.radius = 40, this.bgColor, this.fallback});
+  const AsyncCircleAvatar({
+    super.key,
+    required this.base64,
+    this.radius = 40,
+    this.bgColor,
+    this.fallback,
+  });
 
   @override
   State<AsyncCircleAvatar> createState() => _AsyncCircleAvatarState();
@@ -138,7 +168,10 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar> {
   void initState() {
     super.initState();
     final cached = _cache[widget.base64];
-    if (cached != null) { _bytes = cached; return; }
+    if (cached != null) {
+      _bytes = cached;
+      return;
+    }
     _decode();
   }
 
@@ -152,6 +185,10 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar> {
   @override
   Widget build(BuildContext context) {
     if (_bytes == null) return widget.fallback ?? const SizedBox.shrink();
-    return CircleAvatar(radius: widget.radius, backgroundColor: widget.bgColor, backgroundImage: MemoryImage(_bytes!));
+    return CircleAvatar(
+      radius: widget.radius,
+      backgroundColor: widget.bgColor,
+      backgroundImage: MemoryImage(_bytes!),
+    );
   }
 }

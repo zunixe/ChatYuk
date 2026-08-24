@@ -11,7 +11,11 @@ Uint8List? _genPostThumb(Uint8List bytes) {
   try {
     final image = img.decodeImage(bytes);
     if (image == null) return null;
-    final thumb = img.copyResize(image, width: 1024, interpolation: img.Interpolation.linear);
+    final thumb = img.copyResize(
+      image,
+      width: 1024,
+      interpolation: img.Interpolation.linear,
+    );
     return img.encodeJpg(thumb, quality: 82);
   } catch (_) {
     return null;
@@ -227,6 +231,8 @@ class PostPhotoCache {
       if (await folder.exists()) {
         await folder.delete(recursive: true);
       }
-    } catch (e) { debugPrint('[PostPhotoCache] clearAll ignored: $e'); }
+    } catch (e) {
+      debugPrint('[PostPhotoCache] clearAll ignored: $e');
+    }
   }
 }

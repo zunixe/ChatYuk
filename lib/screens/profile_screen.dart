@@ -20,7 +20,7 @@ import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
-import 'admin_panel_screen.dart';
+import '../core/admin_gate.dart';
 import 'contact_screen.dart';
 import 'donate_screen.dart';
 import 'leaderboard_screen.dart';
@@ -840,103 +840,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Banner sesi dummy — kembali ke admin tanpa login manual
-                  if (auth.dummySessionActive) ...[
-                    Container(
-                      padding: EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.accent.withValues(alpha: 0.18),
-                            AppTheme.accent.withValues(alpha: 0.06),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppTheme.accent.withValues(alpha: 0.45),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.accent.withValues(
-                                    alpha: 0.18,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(
-                                  Icons.theater_comedy_rounded,
-                                  color: AppTheme.accent,
-                                  size: 20,
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      s.dummyBannerTitle,
-                                      style: AppText.bodyStrong.copyWith(
-                                        color: AppTheme.accent,
-                                      ),
-                                    ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      s.dummyBannerSubtitle.replaceFirst(
-                                        '%s',
-                                        profile?.nickname ?? '—',
-                                      ),
-                                      style: AppText.caption.copyWith(
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppTheme.accent,
-                                padding: EdgeInsets.symmetric(vertical: 11),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              onPressed: () => _backToAdmin(s),
-                              icon: Icon(
-                                Icons.admin_panel_settings_rounded,
-                                size: 18,
-                                color: Colors.white,
-                              ),
-                              label: Text(
-                                s.dummyBackToAdmin,
-                                style: AppText.label.copyWith(
-                                  letterSpacing: 0,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                  ],
+                  // Banner sesi dummy — widget di-inject build admin
+                  // (lib/admin/profile_sections.dart) lewat AdminGate.
+                  if (auth.dummySessionActive)
+                    AdminGate.dummySessionBanner?.call(
+                      context, profile?.nickname) ??
+                  const SizedBox.shrink(),
                   // Anonymous warning — prominent (sembunyikan saat sesi dummy)
                   if (isAnon && !dummyActive) ...[
                     Container(
@@ -1650,57 +1559,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(height: 6),
                   _SectionCard(
                     children: [
-                      // Admin Panel entry (hanya untuk zunixe@gmail.com)
-                      if (auth.userEmail == 'zunixe@gmail.com')
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: InkWell(
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AdminPanelScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primary.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.admin_panel_settings,
-                                    color: AppTheme.primary,
-                                    size: 20,
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    s.adminPanel,
-                                    style: TextStyle(
-                                      color: AppTheme.textPrimary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.chevron_right,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (auth.userEmail == 'zunixe@gmail.com')
-                        Divider(height: 1, indent: 52),
+                      // Admin: tile buka panel — hanya ada di build admin
+                      // (di-inject lewat AdminGate oleh entry lib/main_admin.dart).
+                      ...?AdminGate.profileSettingsHeader?.call(context),
                       // Notifikasi
                       Padding(
                         padding: EdgeInsets.symmetric(
@@ -1753,169 +1614,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       Divider(height: 1, indent: 52),
-                      // Admin: izin screenshot aplikasi (hanya untuk zunixe@gmail.com)
-                      if (auth.userEmail == 'zunixe@gmail.com')
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.online.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.screenshot_monitor,
-                                  color: AppTheme.online,
-                                  size: 20,
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      s.labelScreenshotAllow,
-                                      style: AppText.bodyStrong.copyWith(
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    Text(
-                                      s.descScreenshotAdmin,
-                                      style: AppText.bodySmall.copyWith(
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Switch(
-                                value: auth.screenshotEnabled,
-                                onChanged: (v) => context
-                                    .read<AuthProvider>()
-                                    .setScreenshotEnabled(v),
-                                activeThumbColor: AppTheme.primary,
-                              ),
-                            ],
-                          ),
-                        ),
-                      Divider(height: 1, indent: 52),
-                      // Admin: watermark forensik foto view-once (hanya untuk zunixe@gmail.com)
-                      if (auth.userEmail == 'zunixe@gmail.com')
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primary.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.fingerprint,
-                                  color: AppTheme.primary,
-                                  size: 20,
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      s.labelWatermarkAdmin,
-                                      style: AppText.bodyStrong.copyWith(
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    Text(
-                                      s.descWatermarkAdmin,
-                                      style: AppText.bodySmall.copyWith(
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Switch(
-                                value: auth.watermarkEnabled,
-                                onChanged: (v) => context
-                                    .read<AuthProvider>()
-                                    .setWatermarkEnabled(v),
-                                activeThumbColor: AppTheme.primary,
-                              ),
-                            ],
-                          ),
-                        ),
-                      Divider(height: 1, indent: 52),
-                      // Admin: invisible (tidak muncul di daftar online) — hanya zunixe@gmail.com
-                      if (auth.userEmail == 'zunixe@gmail.com')
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.withValues(alpha: 0.12),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.visibility_off_outlined,
-                                  color: Colors.purple,
-                                  size: 20,
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      s.labelInvisibleAdmin,
-                                      style: AppText.bodyStrong.copyWith(
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    Text(
-                                      s.descInvisibleAdmin,
-                                      style: AppText.bodySmall.copyWith(
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Switch(
-                                value: auth.invisibleEnabled,
-                                onChanged: (v) => context
-                                    .read<AuthProvider>()
-                                    .setInvisibleEnabled(v),
-                                activeThumbColor: Colors.purple,
-                              ),
-                            ],
-                          ),
-                        ),
-                      Divider(height: 1, indent: 52),
+                      // Admin: toggle screenshot/watermark/invisible —
+                      // hanya ada di build admin (via AdminGate).
+                      ...?AdminGate.profileSettingsTail?.call(context),
                       // Password: set (akun Google) / change (akun email) —
                       // hanya untuk user terdaftar (email/Google), bukan anon.
                       if (!isAnon) ...[
@@ -2175,45 +1876,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _backToAdmin(S s) async {
-    final auth = context.read<AuthProvider>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text(s.dummyBackConfirmTitle),
-        content: Text(s.dummyBackConfirmBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              s.btnCancel,
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              s.dummyBackToAdmin,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final ok = await auth.backToAdmin();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(content: Text(ok ? s.dummyBackDone : s.dummyBackFailed)),
-      );
-  }
 
   /// Dialog set password (akun Google) / ganti password (akun email).
   Future<void> _showPasswordDialog(

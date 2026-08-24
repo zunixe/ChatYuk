@@ -327,7 +327,8 @@ class S {
   String get btnSave => isId ? 'Simpan' : 'Save';
   String get msgEdited => isId ? '(diedit)' : '(edited)';
   String get editMessageTitle => isId ? 'Edit Pesan' : 'Edit Message';
-  String get editingMessage => isId ? 'Sedang mengedit pesan' : 'Editing message';
+  String get editingMessage =>
+      isId ? 'Sedang mengedit pesan' : 'Editing message';
   String get menuReply => isId ? 'Balas' : 'Reply';
   String get messageDeleted => isId ? 'Pesan dihapus' : 'Message deleted';
   String get replyingTo => isId ? 'Membalas' : 'Replying to';
@@ -392,7 +393,8 @@ class S {
       isId ? 'mengirim permintaan teman' : 'sent you a friend request';
   String get notifSubscribeBody =>
       isId ? 'berlangganan ke kamu' : 'subscribed to you';
-  String get notifCallingBody => isId ? 'menelpon kamu...' : 'is calling you...';
+  String get notifCallingBody =>
+      isId ? 'menelpon kamu...' : 'is calling you...';
   String get labelNotifications => isId ? 'Notifikasi' : 'Notifications';
   String get notifEnabledDesc => isId
       ? 'Terima notifikasi pesan baru'
@@ -427,35 +429,30 @@ class S {
   String get callNotifActiveVideo =>
       isId ? 'Panggilan video aktif' : 'Active video call';
   String get msgCallEnded => isId ? 'Panggilan berakhir' : 'Call ended';
-  String get msgCallDeclined =>
-      isId ? 'Panggilan ditolak' : 'Call declined';
+  String get msgCallDeclined => isId ? 'Panggilan ditolak' : 'Call declined';
   String get msgCallBusy => isId ? 'Sedang sibuk' : 'Busy';
-  String get msgCallMissed =>
-      isId ? 'Panggilan tidak dijawab' : 'Missed call';
+  String get msgCallMissed => isId ? 'Panggilan tidak dijawab' : 'Missed call';
   String get msgCallError =>
       isId ? 'Panggilan gagal terhubung' : 'Call failed to connect';
   String get msgCallRegisterOnly => isId
       ? 'Hanya akun terdaftar yang bisa melakukan panggilan.'
       : 'Only registered accounts can make calls.';
-  String get msgCallInProgress => isId
-      ? 'Kamu sedang dalam panggilan lain.'
-      : 'You are in another call.';
-  String get callBannerTap => isId
-      ? 'Ketuk untuk kembali ke panggilan'
-      : 'Tap to return to call';
+  String get msgCallInProgress =>
+      isId ? 'Kamu sedang dalam panggilan lain.' : 'You are in another call.';
+  String get callBannerTap =>
+      isId ? 'Ketuk untuk kembali ke panggilan' : 'Tap to return to call';
 
   // ── Admin: monitor panggilan ──
-  String get adminCallLive => isId ? 'Call aktif' : 'Live call';
-  String get adminCallRinging => isId ? 'Memanggil...' : 'Ringing...';
-  String get adminWatching => isId ? 'Memantau' : 'Monitoring';
-  String get adminListening => isId ? 'Mendengarkan...' : 'Listening...';
-  String get adminWaitingVideo =>
-      isId ? 'Menunggu video...' : 'Waiting for video...';
-  String get adminCameraOff => isId ? 'Kamera mati' : 'Camera off';
-  String get adminMicOff => isId ? 'Mikrofon mati' : 'Mic muted';
-  String get adminSwapView => isId ? 'Tukar tampilan' : 'Swap view';
-  String get adminWatchConnecting =>
-      isId ? 'Menyambungkan...' : 'Connecting...';
+  String get recStart =>
+      isId ? 'Mulai rekam panggilan' : 'Start recording call';
+  String get recStop => isId ? 'Hentikan rekaman' : 'Stop recording';
+  String get recSavedTo => isId ? 'Rekaman disimpan di' : 'Recording saved to';
+  String get recNoMedia => isId
+      ? 'Belum ada media untuk direkam'
+      : 'No media connected to record yet';
+  String get recStorageDenied => isId
+      ? 'Izin akses penyimpanan diperlukan untuk menyimpan rekaman'
+      : 'Storage access permission is required to save recordings';
 
   // ── Errors / Generic ──
   String get btnCancel => isId ? 'Batal' : 'Cancel';
@@ -640,11 +637,6 @@ class S {
       isId ? 'Gagal mengirim. Coba lagi.' : 'Failed to send. Try again.';
   String get contactEmpty =>
       isId ? 'Pesan tidak boleh kosong' : 'Message cannot be empty';
-  String get adminContactTab => isId ? 'Kontak' : 'Contact';
-  String get adminContactEmpty =>
-      isId ? 'Belum ada pesan kontak' : 'No contact messages yet';
-  String get adminContactDeleteMsg =>
-      isId ? 'Hapus pesan ini?' : 'Delete this message?';
   String get labelNew => isId ? 'Baru' : 'New';
   String get labelRead => isId ? 'Terbaca' : 'Read';
 
@@ -692,26 +684,12 @@ class S {
   String get legalTermsNoticeText => isId
       ? 'Dokumen ini disusun secara komprehensif dengan merujuk pada prinsip dan ketentuan sebagaimana diatur dalam Undang-Undang Republik Indonesia Nomor 11 Tahun 2008 sebagaimana diubah dengan Undang-Undang Nomor 19 Tahun 2016 tentang Informasi dan Transaksi Elektronik ("**UU ITE**"), Undang-Undang Republik Indonesia Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi ("**UU PDP**"), Kitab Undang-Undang Hukum Perdata ("**KUHPerdata**"), serta prinsip-prinsip hukum kontrak elektronik dan pelindungan konsumen yang bersifat lintas yurisdiksi bagi Pengguna di Uni Eropa, Inggris Raya, dan Amerika Serikat. Dokumen ini merupakan rancangan kerja (*working draft*) dan **tidak dimaksudkan serta tidak dapat dijadikan sebagai pengganti nasihat hukum profesional**. Penyelenggara dengan ini menyarankan agar dokumen ini ditelaah dan disahkan oleh konsultan hukum yang berkompeten sebelum dipublikasikan secara resmi kepada Pengguna.'
       : 'This document has been comprehensively drafted with reference to the principles and provisions set out in Law of the Republic of Indonesia Number 11 of 2008 as amended by Law Number 19 of 2016 on Electronic Information and Transactions (the "**EIT Law**"), Law of the Republic of Indonesia Number 27 of 2022 on Personal Data Protection (the "**PDP Law**"), the Indonesian Civil Code (the "**Civil Code**"), as well as cross-jurisdictional electronic contract and consumer protection principles for Users in the European Union, the United Kingdom, and the United States. This document is a working draft and is **not intended and cannot be used as a substitute for professional legal advice**. The Operator hereby recommends that this document be reviewed and validated by competent legal counsel before it is officially published to Users.';
-List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
+  List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
   // ── Screenshot admin ──
-  String get labelScreenshotAllow =>
-      isId ? 'Izinkan screenshot aplikasi' : 'Allow app screenshots';
-  String get descScreenshotAdmin => isId
-      ? 'Admin — kontrol screenshot untuk semua pengguna'
-      : 'Admin — control screenshots for all users';
 
   // ── Watermark admin ──
-  String get labelWatermarkAdmin =>
-      isId ? 'Aktifkan watermark forensik' : 'Enable forensic watermark';
-  String get descWatermarkAdmin => isId
-      ? 'Admin — foto sekali lihat ditandai identitas penerima'
-      : 'Admin — view-once photos tagged with receiver identity';
 
   // ── Invisible admin ──
-  String get labelInvisibleAdmin => isId ? 'Mode invisible' : 'Invisible mode';
-  String get descInvisibleAdmin => isId
-      ? 'Admin — tidak muncul di daftar pengguna online'
-      : 'Admin — hidden from online users list';
 
   // ── Wajib registrasi admin ──
   String get labelRequireRegistration => isId
@@ -814,8 +792,7 @@ List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
   // ── Wallet (saldo koin) ──
   String get walletBucketBonus => isId ? 'Koin bonus' : 'Bonus coins';
   String get walletBucketTopup => isId ? 'Koin pro' : 'Pro coins';
-  String get walletBucketEarned =>
-      isId ? 'Koin hadiah' : 'Gift coins';
+  String get walletBucketEarned => isId ? 'Koin hadiah' : 'Gift coins';
   String get walletTitle => isId ? 'Dompet Koin' : 'Coin Wallet';
   String get walletTotal => isId ? 'Total koin' : 'Total coins';
   // ── Gift (hadiah) ──
@@ -906,7 +883,6 @@ List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
   String get postDeleted => isId ? 'Postingan dihapus' : 'Post deleted';
   String get errDeletePost =>
       isId ? 'Gagal menghapus postingan' : 'Failed to delete post';
-  String get adminPanel => isId ? 'Admin Panel' : 'Admin Panel';
   String get statsUsers => isId ? 'Users' : 'Users';
   String get statsActive => isId ? 'Active' : 'Active';
   String get statsMsgs => isId ? 'Msgs' : 'Msgs';
@@ -915,40 +891,8 @@ List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
   String get statsAnon => isId ? 'Anon' : 'Anon';
   String get statsAvg => isId ? 'Avg' : 'Avg';
   String get statsTotal => isId ? 'Total' : 'Total';
-  String get adminNoUsers => isId ? 'Tidak ada user' : 'No users';
-  String get adminPointSettings =>
-      isId ? 'Pengaturan Nilai Poin' : 'Point Value Settings';
-  String get adminSavePointSettings =>
-      isId ? 'Simpan Pengaturan' : 'Save Settings';
-  String get adminViewOnMaps => isId ? 'Lihat di Maps' : 'View on Maps';
   String get roomPrivateLabel => isId ? 'Privat' : 'Private';
-  String get adminTopEarners => isId ? 'Top Earners' : 'Top Earners';
-  String get adminMassBonus => isId ? 'Bonus Massal' : 'Mass Bonus';
-  String get adminForceLogout => isId ? 'Force Logout' : 'Force Logout';
-  String get adminPointsSystem => isId ? 'Sistem Poin' : 'Points System';
-  String get adminReports => isId ? 'Laporan' : 'Reports';
-  String get adminNoReports => isId ? 'Tidak ada laporan' : 'No reports';
-  String get adminDangerZone => isId ? 'Zona Bahaya' : 'Danger Zone';
-  String get adminResetAllPoints =>
-      isId ? 'Reset semua user ke 50 poin' : 'Reset all users to 50 points';
-  String get adminResetAllTitle =>
-      isId ? 'Reset Semua Poin?' : 'Reset All Points?';
-  String get adminResetAllBody => isId
-      ? 'Semua user akan memiliki 50 poin.'
-      : 'All users will have 50 points.';
-  String get adminWipeAll => isId ? 'Reset Semua' : 'Wipe All';
-  String get adminReset => isId ? 'Reset' : 'Reset';
-  String get adminLogout => isId ? 'Keluar' : 'Logout';
-  String get adminRunning => isId ? 'Berjalan' : 'Running';
-  String get adminPaused => isId ? 'Dihentikan' : 'Paused';
-  String get adminRealtimeDesc => isId
-      ? 'Realtime — efek langsung ke semua device'
-      : 'Realtime — immediate effect on all devices';
-  String get adminRegisteredOnly =>
-      isId ? 'Hanya user registered' : 'Registered users only';
   String get btnSend => isId ? 'Kirim' : 'Send';
-  String get adminStuckUsers =>
-      isId ? 'user terjebak (0 poin)' : 'users stuck (0 points)';
   String get onlineActiveUsers => isId ? 'pengguna aktif' : 'active users';
   String get labelVerified => isId ? 'Terverifikasi' : 'Verified';
   String get lobbyCountryHint => isId ? 'Negara / Country' : 'Country / Negara';
@@ -957,45 +901,35 @@ List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
       isId ? 'Google sign in gagal: ' : 'Google sign in failed: ';
 
   // ── Admin Chat Monitor ──
-  String get adminOverview => isId ? 'Ringkasan' : 'Overview';
-  String get adminRegTitle => isId ? 'Registrasi Email' : 'Email Registrations';
-  String get adminRegPerDay => isId ? 'Per hari' : 'Per day';
-  String get adminRegTotal => isId ? 'Total' : 'Total';
-  String get adminRegEmpty =>
-      isId ? 'Tidak ada pendaftaran bulan ini' : 'No registrations this month';
   List<String> get monthShort => isId
-      ? const ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-      : const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  String get adminPointTab => isId ? 'Poin' : 'Points';
-  String get adminChatMonitor => isId ? 'Monitor Chat' : 'Chat Monitor';
-  String get adminChatNoChats =>
-      isId ? 'Belum ada percakapan' : 'No conversations yet';
-  String get adminChatMsgs => isId ? 'pesan' : 'messages';
-  String get adminChatOpen => isId ? 'Buka Percakapan' : 'Open Conversation';
-  String get adminChatLoading =>
-      isId ? 'Memuat percakapan...' : 'Loading conversation...';
-  String get adminChatError =>
-      isId ? 'Gagal memuat percakapan' : 'Failed to load conversation';
-  String get adminChatBack => isId ? 'Kembali' : 'Back';
-  String get adminViewOnce =>
-      isId ? 'Foto Sekali Lihat (Admin)' : 'View-Once Photo (Admin)';
-  String get adminLastUpdate => isId ? 'Update terakhir' : 'Last updated';
-  String get adminMapTitle => isId ? 'Peta User' : 'User Map';
-  String get adminMapSubtitle => isId
-      ? 'Posisi user realtime (GPS/IP)'
-      : 'Realtime user positions (GPS/IP)';
-  String get mapLive => isId ? 'Langsung' : 'Live';
-  String get mapSourceGps => isId ? 'GPS' : 'GPS';
-  String get mapSourceIp => isId ? 'IP' : 'IP';
-  String get mapSourceResolved => isId ? 'IP (online)' : 'IP (live)';
-  String get mapOpenMaps => isId ? 'Buka Google Maps' : 'Open Google Maps';
-  String get mapNoLocation => isId ? 'Tanpa lokasi' : 'No location';
-  String get mapResolving =>
-      isId ? 'Mencari lokasi dari IP...' : 'Locating from IP...';
-  String get mapTapHint =>
-      isId ? 'Ketuk pin untuk detail' : 'Tap a pin for details';
-  String get mapResolveFailed =>
-      isId ? 'IP gagal di-resolve' : 'IPs failed to resolve';
+      ? const [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'Mei',
+          'Jun',
+          'Jul',
+          'Agu',
+          'Sep',
+          'Okt',
+          'Nov',
+          'Des',
+        ]
+      : const [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
   String get locPrecisionTitle => isId ? 'Lokasi Presisi' : 'Precise Location';
   String get locPrecisionOff => isId
       ? 'Lokasi presisi nonaktif — posisi hanya perkiraan'
@@ -1008,92 +942,9 @@ List<LegalSection> get legalTermsSections => isId ? _termsId : _termsEn;
   String get locOnlinePromptBody => isId
       ? 'Izinkan akses lokasi supaya pengguna lain bisa melihat lokasimu dan fitur orang sekitar berfungsi.'
       : 'Allow location access so others can see your location and the nearby feature works.';
-  String get adminSearchChat =>
-      isId ? 'Cari percakapan...' : 'Search conversations...';
-  String get adminUserSingular => isId ? 'user' : 'user';
-  String get adminUsersPlural => isId ? 'user' : 'users';
   String get chatMsgCount => isId ? 'pesan' : 'messages';
-  String get adminDeleteChat => isId ? 'Hapus Chat' : 'Delete Chat';
-  String get adminDeleteChatTitle =>
-      isId ? 'Hapus Chat & User' : 'Delete Chat & Users';
-  String get adminDeleteChatBody => isId
-      ? 'Semua history chat antara kedua user akan dihapus permanen (termasuk foto di storage). Pilih user yang juga ingin dihapus akunnya:'
-      : 'All chat history between both users will be permanently deleted (including photos in storage). Select users to also delete their accounts:';
-  String get adminDeleteChatOnly =>
-      isId ? 'Hapus chat saja' : 'Delete chat only';
-  String get adminDeleteUser => isId ? 'Hapus akun' : 'Delete account';
-  String get adminCannotDeleteAdmin =>
-      isId ? '(admin, tidak bisa dihapus)' : '(admin, cannot be deleted)';
-  String get adminChatDeleted => isId ? 'Chat dihapus' : 'Chat deleted';
-  String get adminDeleteFail =>
-      isId ? 'Gagal menghapus chat' : 'Failed to delete chat';
 
   // ── Admin Dummy Accounts ──
-  String get adminDummyTab => isId ? 'Dummy' : 'Dummy';
-  String get dummyCreateTitle =>
-      isId ? 'Buat Akun Dummy' : 'Create Dummy Account';
-  String get dummyNicknameLabel => isId ? 'Nickname' : 'Nickname';
-  String get dummyRegisterBtn => isId ? 'Daftarkan Akun' : 'Register Account';
-  String get dummyRegisterHint => isId
-      ? 'Akun anonymous dibuat otomatis — cukup isi nickname.'
-      : 'An anonymous account is created automatically — just enter a nickname.';
-  String get dummyRegisterFail =>
-      isId ? 'Gagal membuat akun dummy' : 'Failed to create dummy account';
-  String get dummyEdit => isId ? 'Edit' : 'Edit';
-  String get dummySaveChanges => isId ? 'Simpan Perubahan' : 'Save Changes';
-  String get dummyCancelEdit => isId ? 'Batal Edit' : 'Cancel Edit';
-  String get dummyUpdated =>
-      isId ? 'Profil dummy diperbarui' : 'Dummy profile updated';
-  String get dummyUpdateFail =>
-      isId ? 'Gagal memperbarui profil' : 'Failed to update profile';
-  String get dummyListTitle => isId ? 'Akun Dummy' : 'Dummy Accounts';
-  String get dummyEmpty =>
-      isId ? 'Belum ada akun dummy' : 'No dummy accounts yet';
-  String get dummyChatAs => isId ? 'Chat Sebagai' : 'Chat As';
-  String get dummyChatAsTitle =>
-      isId ? 'Jadi Akun Ini?' : 'Become This Account?';
-  String get dummyChatAsBody => isId
-      ? 'Anda akan keluar dari akun admin dan masuk sebagai %s. Chat dengan siapa saja, lalu kembali ke admin lewat tombol di Profil.'
-      : 'You will sign out of admin and sign in as %s. Chat with anyone, then return to admin via the button on your Profile.';
-  String get dummyBackToAdmin => isId ? 'Kembali ke Admin' : 'Back to Admin';
-  String get dummyBackConfirmTitle =>
-      isId ? 'Kembali ke Admin?' : 'Back to Admin?';
-  String get dummyBackConfirmBody => isId
-      ? 'Kembali ke akun admin. Akun dummy tetap login & statusnya tidak berubah.'
-      : 'Return to the admin account. The dummy stays signed in and its status is unchanged.';
-  String get dummyDelete => isId ? 'Hapus' : 'Delete';
-  String get dummyDeleteTitle =>
-      isId ? 'Hapus Akun Dummy?' : 'Delete Dummy Account?';
-  String get dummyDeleteBody => isId
-      ? 'Akun %s beserta history chat-nya akan dihapus permanen.'
-      : 'Account %s and its chat history will be permanently deleted.';
-  String get dummyDeleted =>
-      isId ? 'Akun dummy dihapus' : 'Dummy account deleted';
-  String get dummyStatusSet => isId ? 'Status diset' : 'Status set';
-  String get dummyRegistered =>
-      isId ? 'Akun dummy terdaftar' : 'Dummy account registered';
-  String get dummySwapFailed =>
-      isId ? 'Gagal masuk sebagai dummy' : 'Failed to sign in as dummy';
-  String get dummyBackFailed => isId
-      ? 'Sesi admin kedaluwarsa — silakan login manual'
-      : 'Admin session expired — sign in manually';
-  String get dummyInvalidInput =>
-      isId ? 'Lengkapi nickname terlebih dahulu' : 'Fill in the nickname first';
-  String get dummySwapSuccess => isId
-      ? 'Sekarang kamu adalah %s — kembali ke admin lewat Profil'
-      : 'You are now %s — return to admin via Profile';
-  String get dummySetStatusFail =>
-      isId ? 'Gagal menyetel status' : 'Failed to set status';
-  String get dummyListFail =>
-      isId ? 'Gagal memuat akun dummy' : 'Failed to load dummy accounts';
-  String get dummyChatsDeleted =>
-      isId ? 'History chat terhapus' : 'Chat history deleted';
-  String get dummyBackDone =>
-      isId ? 'Kembali ke akun admin' : 'Back to admin account';
-  String get dummyBannerTitle =>
-      isId ? 'Mode Akun Dummy' : 'Dummy Account Mode';
-  String get dummyBannerSubtitle =>
-      isId ? 'Kamu sedang tampil sebagai %s' : 'You are appearing as %s';
 
   // ── Sosial (Follow / Friend / Subscribe) ──
   String get socialFollowers => isId ? 'Pengikut' : 'Followers';

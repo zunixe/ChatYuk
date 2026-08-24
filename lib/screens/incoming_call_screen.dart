@@ -8,6 +8,7 @@ import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
+import '../services/chat_service.dart';
 import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
@@ -53,14 +54,16 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   }
 
   Future<void> _startRingtone() async {
-    await _ringtonePlayer.setAudioContext(AudioContext(
-      android: AudioContextAndroid(
-        audioFocus: AndroidAudioFocus.gainTransientExclusive,
-        usageType: AndroidUsageType.notificationRingtone,
-        contentType: AndroidContentType.music,
-        isSpeakerphoneOn: true,
+    await _ringtonePlayer.setAudioContext(
+      AudioContext(
+        android: AudioContextAndroid(
+          audioFocus: AndroidAudioFocus.gainTransientExclusive,
+          usageType: AndroidUsageType.notificationRingtone,
+          contentType: AndroidContentType.music,
+          isSpeakerphoneOn: true,
+        ),
       ),
-    ));
+    );
     await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
     await _ringtonePlayer.play(AssetSource('audio/ringtone.mp3'));
   }
@@ -100,6 +103,38 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       return;
     }
     if (!mounted) return;
+
+    // Video call → mode setengah layar di atas chat. Butuh chatId valid:
+    // kalau payload incoming tidak membawa chatId (call dari luar chat),
+    // cari/buat chat 1:1 dengan caller sekarang. Kalau upsert ke DB gagal
+    // (RLS dsb), pakai id deterministik — jangan jatuh ke fullscreen.
+    var effMode = mode;
+    var chatId = widget.chatId;
+    final auth0 = context.read<AuthProvider>();
+    final profile0 = auth0.profile;
+    if (widget.callType == 'video' && chatId.isEmpty && auth0.uid != null) {
+      try {
+        chatId = await context.read<ChatProvider>().startPrivateChat(
+          myUid: auth0.uid!,
+          otherUid: widget.callerUid,
+          myName: profile0?.nickname ?? '',
+          otherName: _callerName,
+          myGender: profile0?.gender ?? '',
+        );
+      } catch (_) {}
+      if (chatId.isEmpty) {
+        chatId = ChatService().privateChatId(auth0.uid!, widget.callerUid);
+      }
+      if (!mounted) {
+        _busy = false;
+        return;
+      }
+    }
+    if (widget.callType == 'video') {
+      effMode = chatId.isNotEmpty ? CallMode.chat : CallMode.fullscreen;
+    }
+
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final profile = auth.profile;
     final s = context.read<LocaleProvider>().s;
@@ -109,7 +144,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       remoteName: _callerName.isEmpty ? 'User' : _callerName,
       callType: widget.callType,
       isCaller: false,
-      mode: mode,
+      mode: effMode,
       myName: profile?.nickname ?? '',
       myGender: profile?.gender ?? 'other',
       notifBody: widget.callType == 'video'
@@ -117,11 +152,11 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
           : s.callNotifActiveAudio,
       notifChannel: s.callNotifActiveAudio,
       notifDesc: s.callNotifActiveAudio,
-      chatId: widget.chatId,
+      chatId: chatId,
       pendingSignals: const [],
     );
     _accepted = true;
-    if (mode == CallMode.fullscreen) {
+    if (effMode == CallMode.fullscreen) {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -138,13 +173,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         ),
       );
     } else {
-      final chatId = await context.read<ChatProvider>().startPrivateChat(
-        myUid: auth.uid!,
-        otherUid: widget.callerUid,
-        myName: profile?.nickname ?? '',
-        otherName: session.remoteName,
-        myGender: profile?.gender ?? '',
-      );
+      // chatId sudah tervalidasi di atas (startPrivateChat / fallback id).
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -219,7 +248,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                   icon: isVideo ? Icons.videocam : Icons.call,
                   color: const Color(0xFF2E9E5B),
                   onTap: () => _accept(
-                    mode: isVideo ? CallMode.chat : CallMode.fullscreen,
+                    mode: (isVideo && widget.chatId.isNotEmpty)
+                        ? CallMode.chat
+                        : CallMode.fullscreen,
                   ),
                 ),
               ],

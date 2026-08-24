@@ -200,14 +200,18 @@ class TimelineProvider extends ChangeNotifier {
   void removeCommentFromCache(String postId, dynamic commentId) {
     final existing = _commentCache[postId];
     if (existing != null) {
-      _commentCache[postId] =
-          existing.where((c) => c['id'] != commentId).toList();
+      _commentCache[postId] = existing
+          .where((c) => c['id'] != commentId)
+          .toList();
     }
   }
 
   /// Ganti komentar optimistic dengan data server (konfirmasi).
   void replaceCommentInCache(
-      String postId, dynamic oldId, Map<String, dynamic> newComment) {
+    String postId,
+    dynamic oldId,
+    Map<String, dynamic> newComment,
+  ) {
     final existing = _commentCache[postId];
     if (existing != null) {
       _commentCache[postId] = [
@@ -270,11 +274,13 @@ class TimelineProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshPricing() async {    try {
+  Future<void> refreshPricing() async {
+    try {
       final p = await _service.pricing();
       _boostPaid = (p['boost_paid'] as num?)?.toInt() ?? _boostPaid;
       _boostBonus = (p['boost_bonus'] as num?)?.toInt() ?? _boostBonus;
-      _postsDailyLimit = (p['posts_daily_limit'] as num?)?.toInt() ?? _postsDailyLimit;
+      _postsDailyLimit =
+          (p['posts_daily_limit'] as num?)?.toInt() ?? _postsDailyLimit;
       notifyListeners();
     } catch (e) {
       debugPrint('[TimelineProvider] pricing error: $e');

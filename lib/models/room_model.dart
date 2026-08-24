@@ -43,7 +43,9 @@ class RoomModel {
       ownerId: map['owner_id'] ?? '',
       ownerName: map['owner_name'] ?? '',
       hasPassword: map['has_password'] == true,
-      expiresAt: map['expires_at'] != null ? DateTime.tryParse('${map['expires_at']}') : null,
+      expiresAt: map['expires_at'] != null
+          ? DateTime.tryParse('${map['expires_at']}')
+          : null,
     );
   }
 

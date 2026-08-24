@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
+import '../config/strings_admin.dart';
 import '../config/supabase_config.dart';
 import '../providers/admin_provider.dart';
 import '../providers/auth_provider.dart';
@@ -801,9 +802,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       ? Center(
                           child: Text(
                             s.adminNoUsers,
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                            ),
+                            style: TextStyle(color: AppTheme.textSecondary),
                           ),
                         )
                       : ListView(
@@ -987,10 +986,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             isDense: true,
             filled: true,
             fillColor: AppTheme.bgInput,
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
-            ),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -1251,11 +1247,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            size: 20,
-            color: AppTheme.danger,
-          ),
+          Icon(Icons.warning_amber_rounded, size: 20, color: AppTheme.danger),
           SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -1395,8 +1387,18 @@ class _UserMapCardState extends State<_UserMapCard> {
 
   // Kolom profiles yang dipantau realtime dan dipakai peta.
   static const _trackedFields = [
-    'nickname', 'gender', 'age', 'country', 'city', 'ip_address',
-    'status', 'is_registered', 'last_seen', 'lat', 'lon', 'loc_source',
+    'nickname',
+    'gender',
+    'age',
+    'country',
+    'city',
+    'ip_address',
+    'status',
+    'is_registered',
+    'last_seen',
+    'lat',
+    'lon',
+    'loc_source',
   ];
 
   @override
@@ -1417,20 +1419,19 @@ class _UserMapCardState extends State<_UserMapCard> {
   /// update lokasi/last_seen = UPDATE) supaya peta selalu segar
   /// tanpa refresh manual.
   void _subscribeRealtime() {
-    _channel = Supabase.instance.client
-        .channel('admin-user-map')
-        ..onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'profiles',
-          callback: _onProfileChange,
-        )
-        ..subscribe((status, _) {
-          if (!mounted) return;
-          setState(() {
-            _live = status == RealtimeSubscribeStatus.subscribed;
-          });
+    _channel = Supabase.instance.client.channel('admin-user-map')
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'profiles',
+        callback: _onProfileChange,
+      )
+      ..subscribe((status, _) {
+        if (!mounted) return;
+        setState(() {
+          _live = status == RealtimeSubscribeStatus.subscribed;
         });
+      });
   }
 
   void _onProfileChange(PostgresChangePayload payload) {
@@ -1652,10 +1653,7 @@ class _UserMapCardState extends State<_UserMapCard> {
                   ),
                 ),
                 Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
@@ -1828,10 +1826,7 @@ class _UserMapCardState extends State<_UserMapCard> {
               if (_live)
                 Container(
                   margin: EdgeInsets.only(right: 6),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.green.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
@@ -1985,9 +1980,9 @@ class _UserMapCardState extends State<_UserMapCard> {
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
+            ),
           ),
         ],
       ),
@@ -1999,7 +1994,8 @@ class _UserMapCardState extends State<_UserMapCard> {
 class _RegistrationsChartCard extends StatefulWidget {
   const _RegistrationsChartCard();
   @override
-  State<_RegistrationsChartCard> createState() => _RegistrationsChartCardState();
+  State<_RegistrationsChartCard> createState() =>
+      _RegistrationsChartCardState();
 }
 
 class _RegistrationsChartCardState extends State<_RegistrationsChartCard> {
@@ -2016,7 +2012,10 @@ class _RegistrationsChartCardState extends State<_RegistrationsChartCard> {
   }
 
   void _fetch() {
-    context.read<AdminProvider>().fetchRegistrationsDaily(_month.year, _month.month);
+    context.read<AdminProvider>().fetchRegistrationsDaily(
+      _month.year,
+      _month.month,
+    );
   }
 
   @override
@@ -2025,9 +2024,13 @@ class _RegistrationsChartCardState extends State<_RegistrationsChartCard> {
     final admin = context.watch<AdminProvider>();
     final data = admin.regDaily;
     final now = DateTime.now();
-    final months = [for (var i = 0; i < 12; i++) DateTime(now.year, now.month - i)];
+    final months = [
+      for (var i = 0; i < 12; i++) DateTime(now.year, now.month - i),
+    ];
     final days = DateTime(_month.year, _month.month + 1, 0).day;
-    final maxCount = data.isEmpty ? 1 : data.values.reduce((a, b) => a > b ? a : b);
+    final maxCount = data.isEmpty
+        ? 1
+        : data.values.reduce((a, b) => a > b ? a : b);
     final total = data.values.fold<int>(0, (a, b) => a + b);
 
     return Container(
@@ -2041,7 +2044,11 @@ class _RegistrationsChartCardState extends State<_RegistrationsChartCard> {
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart_rounded, size: 16, color: AppTheme.primary),
+              const Icon(
+                Icons.bar_chart_rounded,
+                size: 16,
+                color: AppTheme.primary,
+              ),
               const SizedBox(width: 8),
               Text(s.adminRegTitle, style: AppText.bodyStrong),
               const Spacer(),
@@ -2089,7 +2096,9 @@ class _RegistrationsChartCardState extends State<_RegistrationsChartCard> {
               child: Center(
                 child: Text(
                   s.adminRegEmpty,
-                  style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
               ),
             )
@@ -2110,7 +2119,9 @@ class _RegistrationsChartCardState extends State<_RegistrationsChartCard> {
   }
 
   Widget _bar(int day, int count, int maxCount, S s) {
-    final h = count == 0 ? 2.0 : (count / maxCount * _chartH).clamp(3.0, _chartH);
+    final h = count == 0
+        ? 2.0
+        : (count / maxCount * _chartH).clamp(3.0, _chartH);
     final showLabel = day == 1 || day % 5 == 0 || day == 31;
     return Padding(
       padding: const EdgeInsets.only(right: 3),
@@ -2134,14 +2145,21 @@ class _RegistrationsChartCardState extends State<_RegistrationsChartCard> {
                   AppTheme.primary,
                 ],
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(3),
+              ),
             ),
           ),
           const SizedBox(height: 2),
           SizedBox(
             height: 12,
             child: showLabel
-                ? Text('$day', style: AppText.micro.copyWith(color: AppTheme.textSecondary))
+                ? Text(
+                    '$day',
+                    style: AppText.micro.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  )
                 : null,
           ),
         ],

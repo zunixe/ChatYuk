@@ -34,7 +34,8 @@ class ActiveCallInfo {
       calleeName: '${j['callee_name'] ?? 'Unknown'}',
       callType: '${j['call_type'] ?? 'video'}',
       status: '${j['status'] ?? 'ringing'}',
-      createdAt: DateTime.tryParse('${j['created_at'] ?? ''}')?.toLocal() ??
+      createdAt:
+          DateTime.tryParse('${j['created_at'] ?? ''}')?.toLocal() ??
           DateTime.now(),
       answeredAt: DateTime.tryParse('${j['answered_at'] ?? ''}')?.toLocal(),
     );

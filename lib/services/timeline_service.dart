@@ -14,24 +14,30 @@ class TimelineService {
     List<String> imagePaths = const [],
     String visibility = 'public',
   }) async {
-    final res = await _sb.rpc('create_post', params: {
-      'p_text': text,
-      'p_image_paths': imagePaths,
-      'p_visibility': visibility,
-    });
+    final res = await _sb.rpc(
+      'create_post',
+      params: {
+        'p_text': text,
+        'p_image_paths': imagePaths,
+        'p_visibility': visibility,
+      },
+    );
     return _map(res);
   }
 
   Future<Map<String, dynamic>> toggleLike(String postId) async {
-    final res = await _sb.rpc('toggle_post_like', params: {'p_post_id': postId});
+    final res = await _sb.rpc(
+      'toggle_post_like',
+      params: {'p_post_id': postId},
+    );
     return _map(res);
   }
 
   Future<Map<String, dynamic>> addComment(String postId, String text) async {
-    final res = await _sb.rpc('add_post_comment', params: {
-      'p_post_id': postId,
-      'p_text': text,
-    });
+    final res = await _sb.rpc(
+      'add_post_comment',
+      params: {'p_post_id': postId, 'p_text': text},
+    );
     return _map(res);
   }
 
@@ -60,12 +66,15 @@ class TimelineService {
     bool cursorBoosted = false,
   }) async {
     try {
-      final res = await _sb.rpc('list_posts', params: {
-        'p_scope': scope,
-        'p_limit': limit,
-        'p_cursor': cursor?.toUtc().toIso8601String(),
-        'p_cursor_boosted': cursorBoosted,
-      });
+      final res = await _sb.rpc(
+        'list_posts',
+        params: {
+          'p_scope': scope,
+          'p_limit': limit,
+          'p_cursor': cursor?.toUtc().toIso8601String(),
+          'p_cursor_boosted': cursorBoosted,
+        },
+      );
       final posts = res is Map ? res['posts'] : null;
       if (posts is List) {
         return posts.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -80,9 +89,10 @@ class TimelineService {
   /// Komentar sebuah post (termasuk likeCount/shareCount/isLiked dari RPC).
   Future<List<Map<String, dynamic>>> comments(String postId) async {
     try {
-      final res = await _sb.rpc('list_post_comments', params: {
-        'p_post_id': postId,
-      });
+      final res = await _sb.rpc(
+        'list_post_comments',
+        params: {'p_post_id': postId},
+      );
       if (res is List) {
         return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
@@ -94,8 +104,10 @@ class TimelineService {
   }
 
   Future<Map<String, dynamic>> toggleCommentLike(int commentId) async {
-    final res = await _sb
-        .rpc('toggle_comment_like', params: {'p_comment_id': commentId});
+    final res = await _sb.rpc(
+      'toggle_comment_like',
+      params: {'p_comment_id': commentId},
+    );
     return _map(res);
   }
 
@@ -104,17 +116,18 @@ class TimelineService {
     int parentId,
     String text,
   ) async {
-    final res = await _sb.rpc('reply_post_comment', params: {
-      'p_post_id': postId,
-      'p_parent_id': parentId,
-      'p_text': text,
-    });
+    final res = await _sb.rpc(
+      'reply_post_comment',
+      params: {'p_post_id': postId, 'p_parent_id': parentId, 'p_text': text},
+    );
     return _map(res);
   }
 
   Future<Map<String, dynamic>> shareComment(int commentId) async {
-    final res = await _sb
-        .rpc('share_post_comment', params: {'p_comment_id': commentId});
+    final res = await _sb.rpc(
+      'share_post_comment',
+      params: {'p_comment_id': commentId},
+    );
     return _map(res);
   }
 

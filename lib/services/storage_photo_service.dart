@@ -37,7 +37,10 @@ class StoragePhotoService {
       'posts/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
 
   /// Upload foto post timeline → Storage. Return path atau null.
-  Future<String?> uploadPostImage({required String uid, required String base64}) async {
+  Future<String?> uploadPostImage({
+    required String uid,
+    required String base64,
+  }) async {
     try {
       final bytes = base64Decode(base64);
       final path = postImagePath(uid);
@@ -99,15 +102,20 @@ class StoragePhotoService {
   }
 
   /// Upload avatar → Storage. Return path atau null.
-  Future<String?> uploadAvatar({required String uid, required String base64}) async {
+  Future<String?> uploadAvatar({
+    required String uid,
+    required String base64,
+  }) async {
     try {
       final bytes = base64Decode(base64);
       final path = avatarPath(uid);
-      await _sb.storage.from(_bucket).uploadBinary(
-        path,
-        bytes,
-        fileOptions: const FileOptions(upsert: true),
-      );
+      await _sb.storage
+          .from(_bucket)
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(upsert: true),
+          );
       return path;
     } catch (e) {
       debugPrint('[StoragePhoto] uploadAvatar error: $e');
@@ -116,7 +124,10 @@ class StoragePhotoService {
   }
 
   /// Upload foto galeri → Storage. Return path atau null.
-  Future<String?> uploadPhoto({required String uid, required String base64}) async {
+  Future<String?> uploadPhoto({
+    required String uid,
+    required String base64,
+  }) async {
     try {
       final bytes = base64Decode(base64);
       final path = photoPath(uid);

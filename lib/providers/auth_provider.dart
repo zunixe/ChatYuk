@@ -8,6 +8,7 @@ import '../main.dart';
 import '../config/theme.dart';
 import '../models/user_model.dart';
 import '../providers/locale_provider.dart';
+import '../core/admin_gate.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
 import '../services/message_cache.dart';
@@ -129,9 +130,14 @@ class AuthProvider extends ChangeNotifier {
       // Sesi dummy bisa mati di server (admin_renew_dummy_token menghapus
       // SEMUA session dummy, termasuk yang aktif di HP ini). Kalau token
       // admin masih tersimpan, pulihkan otomatis — jangan langsung reset.
-      if (dummySessionActive || await _auth.hasStoredAdminTokens()) {
+      final canRecoverDummy =
+          AdminGate.backToAdminImpl != null &&
+          (dummySessionActive ||
+              (AdminGate.hasStoredDummyTokens != null &&
+                  await AdminGate.hasStoredDummyTokens!()));
+      if (canRecoverDummy) {
         try {
-          final restored = await _auth.backToAdmin();
+          final restored = await AdminGate.backToAdminImpl!();
           if (restored && !_disposed) {
             debugPrint('[AUTH] signedOut tapi admin dipulihkan, re-init');
             await _init();
@@ -174,8 +180,9 @@ class AuthProvider extends ChangeNotifier {
         debugPrint('[AUTH] signInAnonymously OK');
         _profile = await _auth.getProfile();
         debugPrint('[AUTH] getProfile -> ${_profile?.uid}');
-        // Restart saat sesi dummy aktif → pulihkan state dummy + token admin.
-        await _auth.restoreDummyIfNeeded();
+        // Restart saat sesi dummy aktif → pulihkan state dummy + token
+        // admin. Hook hanya terisi di build admin (lib/main_admin.dart).
+        await AdminGate.restoreDummySession?.call();
         // Realtime: profil sendiri (poin, status, email terdaftar, dll) —
         // badge poin di profil & private chat langsung update.
         _listenProfile();
@@ -776,14 +783,20 @@ class AuthProvider extends ChangeNotifier {
   /// Pindah ke akun dummy (swap sesi tanpa login manual). Profile di-reload
   /// supaya seluruh UI (lobby, profil) langsung memakai akun dummy.
   Future<void> becomeDummy(String uid) async {
-    await _auth.becomeDummy(uid);
+    final impl = AdminGate.becomeDummyImpl;
+    if (impl == null) {
+      throw StateError('becomeDummy hanya tersedia di build admin');
+    }
+    await impl(uid);
     await reloadProfile();
   }
 
   /// Kembali ke akun admin dari sesi dummy. Return false jika token admin
   /// kedaluwarsa (perlu login manual).
   Future<bool> backToAdmin() async {
-    final ok = await _auth.backToAdmin();
+    final impl = AdminGate.backToAdminImpl;
+    if (impl == null) return false;
+    final ok = await impl();
     await reloadProfile();
     return ok;
   }

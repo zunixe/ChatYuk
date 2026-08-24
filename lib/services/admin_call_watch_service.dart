@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../config/call_config.dart';
 import '../models/active_call_model.dart';
 import 'call_service.dart';
@@ -17,10 +21,10 @@ class WatchSession extends ChangeNotifier {
   final ActiveCallInfo call;
 
   WatchSession(this.call)
-      : participants = [
-          WatchParticipant(uid: call.callerId, name: call.callerName),
-          WatchParticipant(uid: call.calleeId, name: call.calleeName),
-        ];
+    : participants = [
+        WatchParticipant(uid: call.callerId, name: call.callerName),
+        WatchParticipant(uid: call.calleeId, name: call.calleeName),
+      ];
 
   final List<WatchParticipant> participants;
   final CallService _service = CallService.instance;
@@ -53,7 +57,9 @@ class WatchSession extends ChangeNotifier {
     // Ulangi permintaan sampai tiap peserta menjawab (callee belum accept
     // belum punya media/session → baru merespon setelah call diterima).
     _requestTimer = Timer.periodic(
-        const Duration(seconds: 3), (_) => _requestAll());
+      const Duration(seconds: 3),
+      (_) => _requestAll(),
+    );
     // Deteksi call berakhir → tutup otomatis.
     _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       if (_stopped) return;
@@ -121,19 +127,18 @@ class WatchSession extends ChangeNotifier {
       p.hasVideoTrack = false;
       pc.onTrack = (event) {
         if (_stopped) return;
-        final stream =
-            event.streams.isNotEmpty ? event.streams.first : null;
+        final stream = event.streams.isNotEmpty ? event.streams.first : null;
         if (stream == null) return;
         if (stream.getVideoTracks().isNotEmpty) p!.hasVideoTrack = true;
         p!.renderer.srcObject = stream;
         notifyListeners();
       };
       pc.onIceCandidate = (c) {
-        _service.sendSignal(call.id, 'watch_candidate', payload: {
-          'candidate': c.toMap(),
-          'to': p!.uid,
-          'from': myUid,
-        });
+        _service.sendSignal(
+          call.id,
+          'watch_candidate',
+          payload: {'candidate': c.toMap(), 'to': p!.uid, 'from': myUid},
+        );
       };
       pc.onConnectionState = (state) {
         if (_stopped || p == null) return;
@@ -143,22 +148,29 @@ class WatchSession extends ChangeNotifier {
         notifyListeners();
       };
       await pc.setRemoteDescription(
-          RTCSessionDescription(sdp['sdp'], sdp['type']));
+        RTCSessionDescription(sdp['sdp'], sdp['type']),
+      );
       for (final c in List<Map<String, dynamic>>.from(
-          _pendingCands[p.uid] ?? const [])) {
+        _pendingCands[p.uid] ?? const [],
+      )) {
         try {
-          await pc.addCandidate(RTCIceCandidate(
-            c['candidate'] ?? '',
-            c['sdpMid'],
-            (c['sdpMLineIndex'] as num?)?.toInt(),
-          ));
+          await pc.addCandidate(
+            RTCIceCandidate(
+              c['candidate'] ?? '',
+              c['sdpMid'],
+              (c['sdpMLineIndex'] as num?)?.toInt(),
+            ),
+          );
         } catch (_) {}
       }
       _pendingCands.remove(p.uid);
       final answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      await _service.sendSignal(call.id, 'watch_answer',
-          payload: {'sdp': answer.toMap(), 'to': p.uid, 'from': myUid});
+      await _service.sendSignal(
+        call.id,
+        'watch_answer',
+        payload: {'sdp': answer.toMap(), 'to': p.uid, 'from': myUid},
+      );
       p.connecting = false;
       // Status awal mic/kamera dikirim ikut offer — admin langsung tahu
       // kalau kamera peserta memang sudah off sejak awal.
@@ -190,11 +202,13 @@ class WatchSession extends ChangeNotifier {
         _pendingCands.putIfAbsent(p.uid, () => []).add(c);
         return;
       }
-      await p.pc?.addCandidate(RTCIceCandidate(
-        c['candidate'] ?? '',
-        c['sdpMid'],
-        (c['sdpMLineIndex'] as num?)?.toInt(),
-      ));
+      await p.pc?.addCandidate(
+        RTCIceCandidate(
+          c['candidate'] ?? '',
+          c['sdpMid'],
+          (c['sdpMLineIndex'] as num?)?.toInt(),
+        ),
+      );
     } catch (_) {}
   }
 
@@ -211,6 +225,91 @@ class WatchSession extends ChangeNotifier {
     }
   }
 
+  /// ── Rekam panggilan ke storage lokal admin ──
+  MediaRecorder? _recorder;
+  bool _recording = false;
+
+  bool get recording => _recording;
+
+  static String _safeName(String raw) {
+    final s = raw.trim().replaceAll(RegExp(r'[\\/:*?"<>|]+'), '');
+    return s.isEmpty ? 'Unknown' : s;
+  }
+
+  /// Folder tujuan sesuai tipe call:
+  /// ChatYuk Admin/Record/Video (video) | ChatYuk Admin/Record/call (audio).
+  Future<String> _recordPath() async {
+    final dir = Directory(
+      '/storage/emulated/0/ChatYuk Admin/Record/${isVideo ? 'Video' : 'call'}',
+    );
+    if (!await dir.exists()) await dir.create(recursive: true);
+    final ts = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+    final names = '${_safeName(call.callerName)}_${_safeName(call.calleeName)}';
+    return '${dir.path}/$names$ts.${isVideo ? 'mp4' : 'm4a'}';
+  }
+
+  /// Mulai rekam. Video call → mp4 (kamera peserta utama + audio keluaran
+  /// kedua peserta). Voice call → m4a (audio keluaran saja).
+  /// [onDone] dipanggil dengan path file setelah stop.
+  Future<String?> startRecording() async {
+    if (_recording || _stopped) return null;
+    try {
+      var granted = false;
+      if (await Permission.manageExternalStorage.isGranted ||
+          (await Permission.storage.request()).isGranted) {
+        granted = true;
+      } else {
+        final m = await Permission.manageExternalStorage.request();
+        granted = m.isGranted || m.isLimited;
+      }
+      if (!granted) return 'STORAGE_DENIED';
+      final path = await _recordPath();
+      final rec = MediaRecorder();
+      final main = participants[mainIndex];
+      MediaStreamTrack? vTrack;
+      if (isVideo) {
+        final st =
+            main.renderer.srcObject ?? main.pc?.getRemoteStreams().firstOrNull;
+        final tracks = st?.getVideoTracks() ?? const [];
+        if (tracks.isNotEmpty && _showTrackAlive(tracks.first)) {
+          vTrack = tracks.first;
+        }
+      }
+      await rec.start(
+        path,
+        videoTrack: vTrack,
+        audioChannel: RecorderAudioChannel.OUTPUT,
+      );
+      _recorder = rec;
+      _recording = true;
+      notifyListeners();
+      debugPrint('[ADMIN-WATCH] recording -> $path');
+      return path;
+    } catch (e) {
+      debugPrint('[ADMIN-WATCH] startRecording failed: $e');
+      _recording = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  bool _showTrackAlive(MediaStreamTrack t) => t.enabled;
+
+  /// Stop rekaman. Return path file hasil rekaman.
+  Future<String?> stopRecording() async {
+    if (!_recording) return null;
+    final rec = _recorder;
+    _recorder = null;
+    _recording = false;
+    notifyListeners();
+    try {
+      await rec?.stop();
+    } catch (e) {
+      debugPrint('[ADMIN-WATCH] stopRecording error: $e');
+    }
+    return null;
+  }
+
   /// Tutup semua koneksi + renderer. Setelah ini admin tidak lagi
   /// menerima audio/video dari peserta.
   Future<void> stop() async {
@@ -218,6 +317,13 @@ class WatchSession extends ChangeNotifier {
     _stopped = true;
     _requestTimer?.cancel();
     _statusTimer?.cancel();
+    if (_recording) {
+      try {
+        await stopRecording();
+      } catch (_) {}
+      // Beri waktu encoder menutup file sebelum renderer dibuang.
+      await Future.delayed(const Duration(milliseconds: 600));
+    }
     await _sub?.cancel();
     for (final p in participants) {
       try {

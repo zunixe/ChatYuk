@@ -13,14 +13,16 @@ DateTime parseDate(dynamic v) {
 
 /// Validasi format email — lebih strict dari sekedar cek @ dan .
 bool isValidEmail(String email) {
-  return RegExp(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
-      .hasMatch(email.trim());
+  return RegExp(
+    r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$',
+  ).hasMatch(email.trim());
 }
 
 /// Validasi nickname — boleh huruf Unicode, angka, spasi, underscore, dash.
 bool isValidNickname(String nickname) {
   final trimmed = nickname.trim();
-  if (trimmed.isEmpty || trimmed.length < 3 || trimmed.length > 20) return false;
+  if (trimmed.isEmpty || trimmed.length < 3 || trimmed.length > 20)
+    return false;
   return RegExp(r'^[\p{L}\p{N} _\-]+$', unicode: true).hasMatch(trimmed);
 }
 
@@ -33,9 +35,18 @@ int colorHashForUid(String uid) {
 }
 
 const userColorPalette = [
-  0xFFE53935, 0xFF1E88E5, 0xFF43A047, 0xFFFB8C00,
-  0xFF8E24AA, 0xFF00ACC1, 0xFFD81B60, 0xFF3949AB,
-  0xFF689F38, 0xFF6D4C41, 0xFF546E7A, 0xFFF4511E,
+  0xFFE53935,
+  0xFF1E88E5,
+  0xFF43A047,
+  0xFFFB8C00,
+  0xFF8E24AA,
+  0xFF00ACC1,
+  0xFFD81B60,
+  0xFF3949AB,
+  0xFF689F38,
+  0xFF6D4C41,
+  0xFF546E7A,
+  0xFFF4511E,
 ];
 
 /// Format jam pesan — HH:mm.
@@ -67,6 +78,7 @@ bool isValidImageBase64(String b64) {
   return clean.startsWith('/9j/') || // JPEG
       clean.startsWith('iVBORw0KGgo'); // PNG
 }
+
 String formatRelativeTime(DateTime dt, {bool isId = false}) {
   final diff = DateTime.now().difference(dt.toLocal());
   if (diff.inSeconds < 60) return isId ? 'Baru' : 'Now';
@@ -91,19 +103,25 @@ final _snakeKeyCache = <String, Map<String, String>>{};
 /// punya nilai berbeda, jadi cache seluruh Map<String, dynamic> akan merusak data.
 Map<String, dynamic> snakeToCamel(Map<String, dynamic> map) {
   final keyStr = map.keys.join(',');
-  final keyMap = _snakeKeyCache[keyStr] ?? (() {
-    final m = <String, String>{};
-    for (final k in map.keys) {
-      final parts = k.split('_');
-      if (parts.length <= 1) {
-        m[k] = k;
-      } else {
-        m[k] = parts.first +
-            parts.skip(1).where((p) => p.isNotEmpty)
-                .map((p) => p[0].toUpperCase() + p.substring(1)).join();
-      }
-    }
-    return _snakeKeyCache[keyStr] = m;
-  })();
+  final keyMap =
+      _snakeKeyCache[keyStr] ??
+      (() {
+        final m = <String, String>{};
+        for (final k in map.keys) {
+          final parts = k.split('_');
+          if (parts.length <= 1) {
+            m[k] = k;
+          } else {
+            m[k] =
+                parts.first +
+                parts
+                    .skip(1)
+                    .where((p) => p.isNotEmpty)
+                    .map((p) => p[0].toUpperCase() + p.substring(1))
+                    .join();
+          }
+        }
+        return _snakeKeyCache[keyStr] = m;
+      })();
   return map.map((k, v) => MapEntry(keyMap[k] ?? k, v));
 }

@@ -19,6 +19,7 @@ import '../widgets/admin_call_watch_overlay.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
 import '../providers/theme_provider.dart';
+import '../config/strings_admin.dart';
 
 class AdminChatViewScreen extends StatefulWidget {
   final String chatId;
@@ -127,7 +128,11 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       final local = m.timestamp.toLocal();
       final dateKey = '${local.year}-${local.month}-${local.day}';
       if (prevDateKey != dateKey) {
-        items.add(ChatItem.date(dateChipLabel(m.timestamp, context.read<LocaleProvider>().s)));
+        items.add(
+          ChatItem.date(
+            dateChipLabel(m.timestamp, context.read<LocaleProvider>().s),
+          ),
+        );
       }
       prevDateKey = dateKey;
       items.add(ChatItem.message(m));
@@ -170,7 +175,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     final admin = context.read<AdminProvider>();
     if (!_scrollCtrl.hasClients) return;
     // ListView( reverse:true → "atas" (pesan lebih lama) = maxScrollExtent.
-    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 300) {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 300) {
       if (admin.chatMessagesHasMore && !admin.chatsLoading) {
         admin.fetchMoreChatMessages(widget.chatId).then((_) {
           if (mounted) _applyMessages();
@@ -196,7 +202,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       }
     }
     final senders = <String>[];
-    for (final m in list) { if (!senders.contains(m.senderId)) senders.add(m.senderId); }
+    for (final m in list) {
+      if (!senders.contains(m.senderId)) senders.add(m.senderId);
+    }
     setState(() {
       _msgs = list;
       _leftUid = _computeLeftUid(senders);
@@ -211,7 +219,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   /// siapa yang terakhir kirim pesan. Fallback ke chatId (di-sort) bila
   /// urutan peserta tidak tersedia.
   String? _computeLeftUid(List<String> senders) {
-    if (widget.participantOrder.length >= 2) return widget.participantOrder.first;
+    if (widget.participantOrder.length >= 2)
+      return widget.participantOrder.first;
     final parts = widget.chatId.split('_');
     if (parts.length == 2) return parts.first;
     return senders.isNotEmpty ? senders.first : null;
@@ -240,14 +249,20 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       final ok = await admin.fetchChatMessages(widget.chatId);
       if (!mounted) return;
       if (!ok) {
-        setState(() { _loading = false; _error = 'fetchChatMessages returned false'; });
+        setState(() {
+          _loading = false;
+          _error = 'fetchChatMessages returned false';
+        });
         return;
       }
       _applyMessages();
       _loading = false;
     } catch (e) {
       if (!mounted) return;
-      setState(() { _loading = false; _error = 'EXCEPTION: $e'; });
+      setState(() {
+        _loading = false;
+        _error = 'EXCEPTION: $e';
+      });
     }
   }
 
@@ -259,17 +274,15 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   }
 
   List<MessageModel> _mapMessages(List<Map<String, dynamic>> raw) {
-    return raw
-        .map(_toMessageModel)
-        .where((m) => m.id.isNotEmpty)
-        .toList();
+    return raw.map(_toMessageModel).where((m) => m.id.isNotEmpty).toList();
   }
 
   // ── Photo Loading (lazy, background) ─────────────────────────────────────
 
   void _loadPhotos() {
     for (final m in _msgs) {
-      final isPhoto = m.type == 'image' ||
+      final isPhoto =
+          m.type == 'image' ||
           m.type == 'view_once' ||
           m.type == 'view_once_expired';
       if (isPhoto && m.imageData.isEmpty && !_photoLoading.contains(m.id)) {
@@ -315,7 +328,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         } catch (_) {}
       }
       if (thumb.isEmpty) thumb = '';
-      if (!mounted) { _photoLoading.remove(msg.id); return; }
+      if (!mounted) {
+        _photoLoading.remove(msg.id);
+        return;
+      }
       final idx = _msgs.indexWhere((m) => m.id == msg.id);
       if (idx >= 0) {
         // Gunakan thumbnail kalau ada, fallback ke full-res
@@ -394,13 +410,13 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       appBar: AppBar(
         backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: AppTheme.headerGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
-        title: Text(widget.chatLabel,
+        title: Text(
+          widget.chatLabel,
           style: AppText.titleEmphasis.copyWith(color: Colors.white),
-          overflow: TextOverflow.ellipsis),
+          overflow: TextOverflow.ellipsis,
+        ),
         iconTheme: IconThemeData(color: Colors.white),
       ),
       body: Column(
@@ -412,8 +428,11 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
               width: double.infinity,
               padding: EdgeInsets.symmetric(vertical: 6),
               color: AppTheme.danger.withValues(alpha: 0.1),
-              child: Text(s.adminChatError, textAlign: TextAlign.center,
-                style: AppText.bodySmall.copyWith(color: AppTheme.danger)),
+              child: Text(
+                s.adminChatError,
+                textAlign: TextAlign.center,
+                style: AppText.bodySmall.copyWith(color: AppTheme.danger),
+              ),
             ),
           // Chip "mendengarkan" untuk call audio — masuk chat = mulai dengar,
           // keluar dari layar ini = berhenti.
@@ -424,28 +443,51 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
               children: [
                 _msgs.isEmpty && !_loading
                     ? Center(
-                        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Icon(Icons.forum_outlined, size: 48, color: AppTheme.textSecondary),
-                          SizedBox(height: 12),
-                          Text(s.adminChatNoChats, style: TextStyle(color: AppTheme.textSecondary)),
-                        ]),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.forum_outlined,
+                              size: 48,
+                              color: AppTheme.textSecondary,
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              s.adminChatNoChats,
+                              style: TextStyle(color: AppTheme.textSecondary),
+                            ),
+                          ],
+                        ),
                       )
                     : RefreshIndicator(
                         onRefresh: _fetch,
                         child: ListView.builder(
                           controller: _scrollCtrl,
                           reverse: true,
-                          padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).padding.bottom + 16),
-                          itemCount: _items.length + (admin.chatMessagesHasMore ? 1 : 0),
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            12,
+                            12,
+                            MediaQuery.of(context).padding.bottom + 16,
+                          ),
+                          itemCount:
+                              _items.length +
+                              (admin.chatMessagesHasMore ? 1 : 0),
                           itemBuilder: (_, i) {
                             if (i >= _items.length) {
                               return const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
                               );
                             }
                             final item = _items[_items.length - 1 - i];
-                            if (item.dateLabel != null) return DateChip(label: item.dateLabel!);
+                            if (item.dateLabel != null)
+                              return DateChip(label: item.dateLabel!);
                             final msg = item.msg!;
                             final isMe = msg.senderId != _leftUid;
                             final isImageDeferred =
@@ -459,7 +501,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                               isRead: isMe,
                               isAdminView: true,
                               isImageDeferred: isImageDeferred,
-                              onRetryImage: isImageDeferred ? _retryImage : null,
+                              onRetryImage: isImageDeferred
+                                  ? _retryImage
+                                  : null,
                             );
                           },
                         ),
@@ -527,8 +571,7 @@ class _AudioListenChipState extends State<_AudioListenChip>
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final sess = widget.session;
-    final names =
-        sess.participants.map((p) => p.name).join(' & ');
+    final names = sess.participants.map((p) => p.name).join(' & ');
     final sec = sess.call.elapsedSeconds;
 
     return Container(
@@ -558,11 +601,18 @@ class _AudioListenChipState extends State<_AudioListenChip>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(names,
+                Text(
+                  names,
                   style: AppText.bodyStrong,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(s.adminListening,
-                  style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  s.adminListening,
+                  style: AppText.caption.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -571,8 +621,10 @@ class _AudioListenChipState extends State<_AudioListenChip>
             children: [
               Icon(Icons.call, size: 14, color: const Color(0xFF2E9E5B)),
               const SizedBox(width: 4),
-              Text('${sec ~/ 60}:${(sec % 60).toString().padLeft(2, '0')}',
-                style: AppText.label.copyWith(color: const Color(0xFF2E9E5B))),
+              Text(
+                '${sec ~/ 60}:${(sec % 60).toString().padLeft(2, '0')}',
+                style: AppText.label.copyWith(color: const Color(0xFF2E9E5B)),
+              ),
             ],
           ),
         ],

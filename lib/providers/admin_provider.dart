@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/active_call_model.dart';
@@ -213,25 +215,56 @@ class AdminProvider extends ChangeNotifier {
   // ── Call aktif (badge monitor + pantau call) ──
   List<ActiveCallInfo> _activeCalls = [];
   bool _activeCallsLoading = false;
+  RealtimeChannel? _callChannel;
+  Timer? _callRealtimeDebounce;
 
   List<ActiveCallInfo> get activeCalls => _activeCalls;
   bool get activeCallsLoading => _activeCallsLoading;
 
   /// Peta chatId → call aktif, untuk badge di kartu list monitor.
   Map<String, ActiveCallInfo> get activeCallsByChat => {
-        for (final c in _activeCalls) c.chatId: c,
-      };
+    for (final c in _activeCalls) c.chatId: c,
+  };
 
   Future<void> fetchActiveCalls() async {
+    ensureCallRealtime();
     if (_activeCallsLoading) return;
     _activeCallsLoading = true;
     try {
+      // Bersihkan zombie dulu (app dipaksa tutup saat call → row menggantung),
+      // lalu ambil daftar aktif. Hasil sweep juga memicu realtime UPDATE.
+      try {
+        await _service.sweepStaleCalls();
+      } catch (_) {}
       _activeCalls = await _service.getActiveCalls();
     } catch (e) {
       debugPrint('[ADMIN] fetchActiveCalls error: $e');
     }
     _activeCallsLoading = false;
     if (!_disposed) notifyListeners();
+  }
+
+  /// Realtime: dengarkan tabel calls — INSERT/UPDATE apapun langsung
+  /// menyegarkan daftar call aktif tanpa menunggu polling.
+  void ensureCallRealtime() {
+    if (_callChannel != null || _disposed) return;
+    final ch = Supabase.instance.client.channel('admin-calls-monitor');
+    ch.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'calls',
+      callback: (_) => _debouncedRefreshActiveCalls(),
+    );
+    ch.subscribe();
+    _callChannel = ch;
+  }
+
+  void _debouncedRefreshActiveCalls() {
+    _callRealtimeDebounce?.cancel();
+    _callRealtimeDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (_disposed) return;
+      fetchActiveCalls();
+    });
   }
 
   // ── Pesan Kontak (Hubungi Kami) ──
@@ -253,8 +286,13 @@ class AdminProvider extends ChangeNotifier {
     _contactError = null;
     if (!_disposed) notifyListeners();
     try {
-      final res = await _service.listContactMessages(limit: chatPageSize, offset: 0);
-      _contactMessages = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      final res = await _service.listContactMessages(
+        limit: chatPageSize,
+        offset: 0,
+      );
+      _contactMessages = List<Map<String, dynamic>>.from(
+        res['items'] ?? const [],
+      );
       _contactTotal = (res['total'] as num?)?.toInt() ?? 0;
       _contactHasMore = _contactMessages.length < _contactTotal;
     } catch (e) {
@@ -416,6 +454,12 @@ class AdminProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _callRealtimeDebounce?.cancel();
+    try {
+      _callChannel?.unsubscribe();
+      Supabase.instance.client.removeChannel(_callChannel!);
+    } catch (_) {}
+    _callChannel = null;
     super.dispose();
   }
 }

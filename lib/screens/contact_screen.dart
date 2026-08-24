@@ -28,8 +28,9 @@ class _ContactScreenState extends State<ContactScreen> {
     final s = context.read<LocaleProvider>().s;
     final message = _messageCtrl.text.trim();
     if (message.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.contactEmpty)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.contactEmpty)));
       return;
     }
     final messenger = ScaffoldMessenger.of(context);

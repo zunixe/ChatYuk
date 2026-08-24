@@ -2,7 +2,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseConfig {
   static const String url = 'https://fohcucyyejdryryoxitm.supabase.co';
-  static const String publishableKey = 'sb_publishable_aFQQbXscy1mqVq5jHX7p2w_wzs2GAKg';
+  static const String publishableKey =
+      'sb_publishable_aFQQbXscy1mqVq5jHX7p2w_wzs2GAKg';
 
   // Base URL edge function referral redirect (tracking share).
   static const String referralBase =

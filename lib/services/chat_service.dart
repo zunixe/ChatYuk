@@ -17,11 +17,15 @@ class _Semaphore {
   final _waiters = <Completer<void>>[];
   _Semaphore(this.max);
   Future<void> acquire() async {
-    if (_count < max) { _count++; return; }
+    if (_count < max) {
+      _count++;
+      return;
+    }
     final c = Completer<void>();
     _waiters.add(c);
     await c.future;
   }
+
   void release() {
     _count--;
     if (_waiters.isNotEmpty) {
@@ -29,10 +33,14 @@ class _Semaphore {
       _count++;
     }
   }
+
   Future<T> run<T>(Future<T> Function() fn) async {
     await acquire();
-    try { return await fn(); }
-    finally { release(); }
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
   }
 }
 
@@ -107,10 +115,14 @@ class ChatService {
 
   // ── Private Chat ──
 
-  String _chatId(String uid1, String uid2) {
+  /// Id chat 1:1 deterministik — urutan uid di-sort. Bisa dipanggil tanpa
+  /// DB (fallback saat upsert gagal), hasilnya selalu sama dgn sisi lain.
+  String privateChatId(String uid1, String uid2) {
     final ids = [uid1, uid2]..sort();
     return '${ids[0]}_${ids[1]}';
   }
+
+  String _chatId(String uid1, String uid2) => privateChatId(uid1, uid2);
 
   ChatMessageStream getPrivateChatMessages(String chatId) {
     return _cachedMessagesStream(cacheKey: 'private_$chatId');
@@ -121,17 +133,18 @@ class ChatService {
   /// kolom migrasi sudah ada; kalau belum, fallback hanya ubah `text`.
   Future<bool> editPrivateMessage(String messageId, String newText) async {
     try {
-      await _sb.from('private_messages').update({
-        'text': newText,
-        'edited': true,
-      }).eq('id', messageId);
+      await _sb
+          .from('private_messages')
+          .update({'text': newText, 'edited': true})
+          .eq('id', messageId);
       return true;
     } catch (e) {
       debugPrint('[ChatService] editPrivateMessage (with edited) error: $e');
       try {
-        await _sb.from('private_messages').update({
-          'text': newText,
-        }).eq('id', messageId);
+        await _sb
+            .from('private_messages')
+            .update({'text': newText})
+            .eq('id', messageId);
         return true;
       } catch (e2) {
         debugPrint('[ChatService] editPrivateMessage (text only) error: $e2');
@@ -144,9 +157,10 @@ class ChatService {
   /// RLS menjamin hanya sender_id (auth.uid) yang boleh mengubah pesannya.
   Future<bool> deletePrivateMessage(String messageId) async {
     try {
-      await _sb.from('private_messages').update({
-        'is_deleted': true,
-      }).eq('id', messageId);
+      await _sb
+          .from('private_messages')
+          .update({'is_deleted': true})
+          .eq('id', messageId);
       return true;
     } catch (e) {
       debugPrint('[ChatService] deletePrivateMessage error: $e');
@@ -159,9 +173,7 @@ class ChatService {
   /// - UPDATE/DELETE tetap refetch karena perlu reorder.
   /// - Poll fallback hanya jalan kalau realtime diam > 25s (event terlewat),
   ///   supaya tidak duplikasi pekerjaan realtime tiap 30 detik.
-  ChatMessageStream _cachedMessagesStream({
-    required String cacheKey,
-  }) {
+  ChatMessageStream _cachedMessagesStream({required String cacheKey}) {
     final isPrivate = cacheKey.startsWith('private_');
     final table = isPrivate ? 'private_messages' : 'messages';
     final filterKey = isPrivate ? 'chat_id' : 'room_id';
@@ -190,19 +202,25 @@ class ChatService {
       saveDebounce?.cancel();
       saveDebounce = Timer(const Duration(seconds: 2), () async {
         if (controller.isClosed) return;
-        final sig = _current.isEmpty ? '' : '${_current.length}:${_current.last.id}';
+        final sig = _current.isEmpty
+            ? ''
+            : '${_current.length}:${_current.last.id}';
         if (sig == lastSavedSig) return;
         lastSavedSig = sig;
         try {
           await MessageCache.instance.saveMessages(cacheKey, _current);
-        } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
+        } catch (e) {
+          debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+        }
       });
     }
 
     // Kolom tanpa image_data — foto diambil terpisah (PhotoCache / download
     // lazy) supaya buka chat tetap cepat walau ada ratusan foto.
-    const privateCols = 'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted';
-    const roomCols = 'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at';
+    const privateCols =
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted';
+    const roomCols =
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at';
     const replyCols = 'replied_to_id,replied_to_text,replied_to_sender_name';
     final cols = isPrivate ? '$privateCols,$replyCols' : roomCols;
 
@@ -231,37 +249,50 @@ class ChatService {
               .select('id,image_data')
               .inFilter('id', ids);
           final byId = {
-            for (final r in rows) '${r['id']}': (r['image_data'] as String? ?? ''),
+            for (final r in rows)
+              '${r['id']}': (r['image_data'] as String? ?? ''),
           };
           // Download path storage dibatasi paralelnya (4) supaya tidak
           // membuka banyak koneksi sekaligus.
           for (var i = 0; i < batch.length; i += 4) {
             final chunk = batch.skip(i).take(4).toList();
-            final results = await Future.wait(chunk.map((m) async {
-              var data = byId[m.id] ?? '';
-              if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
-                data = await StoragePhotoService.instance.download(data) ?? '';
-              }
-              return data;
-            }));
+            final results = await Future.wait(
+              chunk.map((m) async {
+                var data = byId[m.id] ?? '';
+                if (data.isNotEmpty &&
+                    StoragePhotoService.instance.isPath(data)) {
+                  data =
+                      await StoragePhotoService.instance.download(data) ?? '';
+                }
+                return data;
+              }),
+            );
             for (var j = 0; j < chunk.length; j++) {
               final m = chunk[j];
               final data = results[j];
               if (data.isEmpty) continue;
               // save() menyimpan full-res + membuat thumbnail (dikembalikan).
               // Bubble pakai thumbnail supaya decode cepat; full-res di PhotoCache.
-              final thumb = await PhotoCache.instance.save(cacheKey, m.id, data);
+              final thumb = await PhotoCache.instance.save(
+                cacheKey,
+                m.id,
+                data,
+              );
               if (controller.isClosed) return;
               final idx = _current.indexWhere((x) => x.id == m.id);
               if (idx >= 0 && _current[idx].imageData.isEmpty) {
-                _current[idx] = _current[idx].copyWith(imageData: thumb ?? data);
+                _current[idx] = _current[idx].copyWith(
+                  imageData: thumb ?? data,
+                );
                 controller.add(List.unmodifiable(_current));
                 scheduleCacheSave();
               }
             }
           }
         } catch (e) {
-          debugPrint('[photo download] ${batch.map((m) => m.id).join(',')} error: $e');
+          debugPrint(
+            '[photo download] ${batch.map((m) => m.id).join(',')} error: $e',
+          );
         } finally {
           downloading--;
         }
@@ -280,7 +311,9 @@ class ChatService {
     void loadPhotosAsync(List<MessageModel> models) {
       if (models.isEmpty) return;
       final photos = models.where((m) {
-        return m.type == 'image' || m.type == 'view_once' || m.type == 'view_once_expired';
+        return m.type == 'image' ||
+            m.type == 'view_once' ||
+            m.type == 'view_once_expired';
       }).toList();
       if (photos.isEmpty) return;
       _photoLoadGate.run(() async {
@@ -306,7 +339,10 @@ class ChatService {
       });
     }
 
-    Future<List<MessageModel>> fetchServer({DateTime? before, int limit = 100}) async {
+    Future<List<MessageModel>> fetchServer({
+      DateTime? before,
+      int limit = 100,
+    }) async {
       var query = _sb
           .from(table)
           .select(cols)
@@ -444,7 +480,8 @@ class ChatService {
           if (row[filterKey]?.toString() != filterVal) return;
           var msg = MessageModel.fromMap('${row['id']}', snakeToCamel(row));
           if (_current.any((m) => m.id == msg.id)) return; // dedupe
-          if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!)) return;
+          if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!))
+            return;
           // Foto dari realtime: buat thumbnail DULU sebelum emit — bubble langsung
           // pakai thumb (decode cepat, ala WhatsApp). Kalau thumb gagal dibuat,
           // fallback ke imageData penuh supaya gambar tetap muncul (tidak spinner
@@ -457,7 +494,11 @@ class ChatService {
                 data = await StoragePhotoService.instance.download(data) ?? '';
               }
               if (data.isNotEmpty) {
-                final thumb = await PhotoCache.instance.save(cacheKey, msg.id, data);
+                final thumb = await PhotoCache.instance.save(
+                  cacheKey,
+                  msg.id,
+                  data,
+                );
                 if (!controller.isClosed && thumb != null && thumb.isNotEmpty) {
                   msg = msg.copyWith(imageData: thumb);
                 }
@@ -465,7 +506,9 @@ class ChatService {
             } catch (e) {
               debugPrint('[photo save] ${msg.id} error: $e');
             }
-          } else if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired') {
+          } else if (msg.type == 'image' ||
+              msg.type == 'view_once' ||
+              msg.type == 'view_once_expired') {
             queuePhotoDownload(msg);
           }
           // Sisipkan di posisi kronologis yang benar (ascending by timestamp),
@@ -485,7 +528,9 @@ class ChatService {
             ..._current.sublist(insertAt),
           ];
           lastRealtime = DateTime.now();
-          debugPrint('[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal');
+          debugPrint(
+            '[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal',
+          );
           controller.add(_current);
           scheduleCacheSave();
         } catch (_) {
@@ -502,9 +547,15 @@ class ChatService {
         lastRealtime = DateTime.now();
         try {
           final newRecord = payload.newRecord;
-          if (newRecord['id'] == null) { reload(); return; }
+          if (newRecord['id'] == null) {
+            reload();
+            return;
+          }
           final idx = _current.indexWhere((x) => x.id == newRecord['id']);
-          if (idx < 0) { reload(); return; }
+          if (idx < 0) {
+            reload();
+            return;
+          }
           final updated = _current[idx].copyWith(
             text: newRecord.containsKey('text')
                 ? (newRecord['text'] as String? ?? _current[idx].text)
@@ -513,7 +564,8 @@ class ChatService {
                 ? (newRecord['edited'] as bool? ?? false)
                 : _current[idx].edited,
             imageData: newRecord.containsKey('image_data')
-                ? (newRecord['image_data'] as String? ?? _current[idx].imageData)
+                ? (newRecord['image_data'] as String? ??
+                      _current[idx].imageData)
                 : _current[idx].imageData,
             type: newRecord.containsKey('type')
                 ? (newRecord['type'] as String? ?? _current[idx].type)
@@ -552,7 +604,8 @@ class ChatService {
 
     // Load pesan lebih lama (pagination): ambil 100 pesan SEBELUM pesan tertua.
     Future<void> loadOlder() async {
-      if (_loadingOlder || !_hasMore || _current.isEmpty || controller.isClosed) return;
+      if (_loadingOlder || !_hasMore || _current.isEmpty || controller.isClosed)
+        return;
       _loadingOlder = true;
       try {
         final oldest = _current.first.timestamp;
@@ -561,7 +614,9 @@ class ChatService {
         // Pagination juga harus menghormati cutoff delete — pesan sebelum
         // cutoff tidak boleh muncul meski di-scroll ke atas.
         if (_hiddenCutoff != null) {
-          older = older.where((m) => m.timestamp.isAfter(_hiddenCutoff!)).toList();
+          older = older
+              .where((m) => m.timestamp.isAfter(_hiddenCutoff!))
+              .toList();
         }
         if (older.isEmpty) {
           _hasMore = false;
@@ -627,9 +682,13 @@ class ChatService {
       saveDebounce?.cancel();
       // Flush cache pending kalau ada data yang belum tersimpan.
       if (_current.isNotEmpty) {
-        final sig = _current.isEmpty ? '' : '${_current.length}:${_current.last.id}';
+        final sig = _current.isEmpty
+            ? ''
+            : '${_current.length}:${_current.last.id}';
         if (sig != lastSavedSig) {
-          MessageCache.instance.saveMessages(cacheKey, _current).catchError((_) {});
+          MessageCache.instance
+              .saveMessages(cacheKey, _current)
+              .catchError((_) {});
         }
       }
       _sb.removeChannel(channel);
@@ -655,16 +714,22 @@ class ChatService {
     int otherAge = 0,
   }) async {
     final chatId = _chatId(myUid, otherUid);
-    await _sb.from('private_chats').upsert({
-      'chat_id': chatId,
-      'participants': [myUid, otherUid],
-      'participant_names': {myUid: myName, otherUid: otherName},
-      'participant_genders': {myUid: myGender, otherUid: otherGender},
-      'participant_locations': {myUid: myCountry, otherUid: otherCountry},
-      'participant_ages': {myUid: myAge, otherUid: otherAge},
-      'last_message': '',
-      'last_message_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'chat_id', ignoreDuplicates: true);
+    await _sb
+        .from('private_chats')
+        .upsert(
+          {
+            'chat_id': chatId,
+            'participants': [myUid, otherUid],
+            'participant_names': {myUid: myName, otherUid: otherName},
+            'participant_genders': {myUid: myGender, otherUid: otherGender},
+            'participant_locations': {myUid: myCountry, otherUid: otherCountry},
+            'participant_ages': {myUid: myAge, otherUid: otherAge},
+            'last_message': '',
+            'last_message_at': DateTime.now().toUtc().toIso8601String(),
+          },
+          onConflict: 'chat_id',
+          ignoreDuplicates: true,
+        );
     return chatId;
   }
 
@@ -701,7 +766,8 @@ class ChatService {
       throw Exception('Invalid message type');
     }
     // Validasi image data jika ada — boleh base64 (lama) ATAU path storage (baru)
-    if (type != 'call' && imageData.isNotEmpty &&
+    if (type != 'call' &&
+        imageData.isNotEmpty &&
         !isValidImageBase64(imageData) &&
         !StoragePhotoService.instance.isPath(imageData)) {
       throw Exception('Invalid image data');
@@ -730,29 +796,44 @@ class ChatService {
       'image_data': imageData,
       if (repliedToId != null) 'replied_to_id': repliedToId,
       if (repliedToText != null) 'replied_to_text': repliedToText,
-      if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
+      if (repliedToSenderName != null)
+        'replied_to_sender_name': repliedToSenderName,
     });
   }
 
   /// Kirim koin ke lawan bicara. Server yang memvalidasi & memotong koin.
   /// Return {ok, points}. Lempar PostgrestException bila gagal.
-  Future<Map<String, dynamic>> sendCoins(String chatId, String receiverId, int amount) async {
-    final res = await _sb.rpc('send_coins', params: {
-      'p_chat_id': chatId,
-      'p_receiver_id': receiverId,
-      'p_amount': amount,
-    });
+  Future<Map<String, dynamic>> sendCoins(
+    String chatId,
+    String receiverId,
+    int amount,
+  ) async {
+    final res = await _sb.rpc(
+      'send_coins',
+      params: {
+        'p_chat_id': chatId,
+        'p_receiver_id': receiverId,
+        'p_amount': amount,
+      },
+    );
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
   /// Kirim hadiah (gift) ke lawan bicara. Server memotong koin pengirim,
   /// ambil platform cut, kredit net ke penerima. Return {ok, points, net, cut}.
-  Future<Map<String, dynamic>> sendGift(String chatId, String receiverId, String giftId) async {
-    final res = await _sb.rpc('send_gift', params: {
-      'p_chat_id': chatId,
-      'p_receiver_id': receiverId,
-      'p_gift_id': giftId,
-    });
+  Future<Map<String, dynamic>> sendGift(
+    String chatId,
+    String receiverId,
+    String giftId,
+  ) async {
+    final res = await _sb.rpc(
+      'send_gift',
+      params: {
+        'p_chat_id': chatId,
+        'p_receiver_id': receiverId,
+        'p_gift_id': giftId,
+      },
+    );
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
@@ -765,25 +846,40 @@ class ChatService {
       debugPrint('[ChatService] listGifts fallback local: $e');
     }
     return kGiftCatalog
-        .map((g) => {'id': g.id, 'emoji': g.emoji, 'name_id': g.nameId, 'name_en': g.nameEn, 'coins': g.coins})
+        .map(
+          (g) => {
+            'id': g.id,
+            'emoji': g.emoji,
+            'name_id': g.nameId,
+            'name_en': g.nameEn,
+            'coins': g.coins,
+          },
+        )
         .toList();
   }
 
   /// Tandai view_once message sebagai expired setelah dilihat.
   /// image_data DIKEEP di DB (admin masih bisa melihat) — hanya type yang
   /// diubah. Kontrol "boleh lihat/tidak" dilakukan di sisi UI.
-  Future<void> clearViewOnceImage(String messageId, {bool isRoom = false}) async {
+  Future<void> clearViewOnceImage(
+    String messageId, {
+    bool isRoom = false,
+  }) async {
     try {
-      await _sb.from(isRoom ? 'messages' : 'private_messages')
+      await _sb
+          .from(isRoom ? 'messages' : 'private_messages')
           .update({'type': 'view_once_expired'})
           .eq('id', messageId);
-    } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
+    } catch (e) {
+      debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+    }
   }
 
   // Map: userId -> list of reload callbacks untuk getMyPrivateChats streams
   final Map<String, List<void Function()>> _chatReloaders = {};
   // Cache stream per myUid agar tidak buat channel baru tiap subscribe
-  final Map<String, StreamController<List<PrivateChatInfo>>> _privateChatsStreams = {};
+  final Map<String, StreamController<List<PrivateChatInfo>>>
+  _privateChatsStreams = {};
   // Snapshot terakhir per myUid — dikirim ke subscriber baru (mis. balik ke
   // sub-tab Pesan) supaya list langsung tampil tanpa spinner broadcast-miss.
   final Map<String, List<PrivateChatInfo>> _privateChatsLast = {};
@@ -795,7 +891,10 @@ class ChatService {
 
   Future<void> markAsRead(String chatId, String uid) async {
     try {
-      await _sb.rpc('mark_chat_read', params: {'p_chat_id': chatId, 'p_uid': uid});
+      await _sb.rpc(
+        'mark_chat_read',
+        params: {'p_chat_id': chatId, 'p_uid': uid},
+      );
       // Update snapshot lokal langsung (tanpa refetch 500 row) — event
       // realtime dari RPC ini menyusul dan menyinkronkan via _applyChatEvent.
       _applyLocalRead(uid, chatId);
@@ -809,7 +908,10 @@ class ChatService {
   /// sehingga mark_chat_read biasa (RLS participants) tidak mengubah apa-apa.
   Future<void> markAsReadAdmin(String chatId, String uid) async {
     try {
-      await _sb.rpc('admin_mark_chat_read', params: {'p_chat_id': chatId, 'p_uid': uid});
+      await _sb.rpc(
+        'admin_mark_chat_read',
+        params: {'p_chat_id': chatId, 'p_uid': uid},
+      );
       _applyLocalRead(uid, chatId);
     } catch (e) {
       debugPrint('[DEBUG-READ-ADMIN] RPC FAIL chat=$chatId uid=$uid err=$e');
@@ -840,7 +942,9 @@ class ChatService {
   /// tanpa query tambahan. Row dikirim lengkap oleh Supabase Realtime.
   void _applyChatEvent(String myUid, Map<String, dynamic> row) {
     final chat = _rowToPrivateChat(row);
-    final hiddenBy = List<String>.from((row['hidden_by'] as List<dynamic>?) ?? []);
+    final hiddenBy = List<String>.from(
+      (row['hidden_by'] as List<dynamic>?) ?? [],
+    );
     if (hiddenBy.contains(myUid)) {
       _privateChatsHidden.putIfAbsent(myUid, () => {}).add(chat.chatId);
       _removeLocalChat(myUid, chat.chatId);
@@ -898,11 +1002,14 @@ class ChatService {
   Stream<void> getTypingStream(String chatId) {
     final controller = StreamController<void>.broadcast();
     final channel = _typingChannel(chatId);
-    channel.onBroadcast(event: 'typing', callback: (payload) {
-      final senderId = payload['sender_id'] as String?;
-      if (senderId == null || senderId == _sb.auth.currentUser?.id) return;
-      if (!controller.isClosed) controller.add(null);
-    });
+    channel.onBroadcast(
+      event: 'typing',
+      callback: (payload) {
+        final senderId = payload['sender_id'] as String?;
+        if (senderId == null || senderId == _sb.auth.currentUser?.id) return;
+        if (!controller.isClosed) controller.add(null);
+      },
+    );
     controller.onCancel = () {
       _typingChannels.remove(chatId);
       _sb.removeChannel(channel);
@@ -914,13 +1021,15 @@ class ChatService {
   void sendTyping(String chatId) {
     final uid = _sb.auth.currentUser?.id;
     if (uid == null) return;
-    _typingChannel(chatId).sendBroadcastMessage(
-      event: 'typing',
-      payload: {
-        'sender_id': uid,
-        'ts': DateTime.now().millisecondsSinceEpoch,
-      },
-    ).catchError((_) => ChannelResponse.error);
+    _typingChannel(chatId)
+        .sendBroadcastMessage(
+          event: 'typing',
+          payload: {
+            'sender_id': uid,
+            'ts': DateTime.now().millisecondsSinceEpoch,
+          },
+        )
+        .catchError((_) => ChannelResponse.error);
   }
 
   void _refreshChatStreams(String myUid) {
@@ -956,7 +1065,9 @@ class ChatService {
     Set<String> hiddenSet = {};
     try {
       hiddenSet = await getHiddenChats(myUid);
-    } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
+    } catch (e) {
+      debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+    }
     _privateChatsHidden[myUid] = hiddenSet;
     return rows
         .where((row) => !hiddenSet.contains(row['chat_id']))
@@ -971,19 +1082,27 @@ class ChatService {
       chatId: d['chatId'] ?? '',
       participants: List<String>.from(d['participants'] ?? []),
       participantNames: Map<String, String>.from(d['participantNames'] ?? {}),
-      participantGenders: Map<String, String>.from(d['participantGenders'] ?? {}),
-      participantLocations: Map<String, String>.from(d['participantLocations'] ?? {}),
+      participantGenders: Map<String, String>.from(
+        d['participantGenders'] ?? {},
+      ),
+      participantLocations: Map<String, String>.from(
+        d['participantLocations'] ?? {},
+      ),
       participantAges: (d['participantAges'] as Map<dynamic, dynamic>? ?? {})
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
-      participantRegistered: (d['participantRegistered'] as Map<dynamic, dynamic>? ?? {})
-          .map((k, v) => MapEntry(k.toString(), v == true)),
+      participantRegistered:
+          (d['participantRegistered'] as Map<dynamic, dynamic>? ?? {}).map(
+            (k, v) => MapEntry(k.toString(), v == true),
+          ),
       lastMessage: d['lastMessage'] ?? '',
       lastMessageAt: parseDate(d['lastMessageAt']),
       messageCount: (d['messageCount'] as num?)?.toInt() ?? 0,
-      unreadCounts: (d['unreadCounts'] as Map<dynamic, dynamic>? ?? {})
-          .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
-      lastReadAt: (d['lastReadAt'] as Map<dynamic, dynamic>? ?? {})
-          .map((k, v) => MapEntry(k.toString(), parseDate(v))),
+      unreadCounts: (d['unreadCounts'] as Map<dynamic, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+      ),
+      lastReadAt: (d['lastReadAt'] as Map<dynamic, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(k.toString(), parseDate(v)),
+      ),
     );
   }
 
@@ -1021,7 +1140,9 @@ class ChatService {
         final rows = await _fetchPrivateChatRows(myUid);
         _privateChatsLast[myUid] = rows;
         _lastChatReloadAt[myUid] = DateTime.now();
-        debugPrint('[getMyPrivateChats] fetched ${rows.length} chats for $myUid');
+        debugPrint(
+          '[getMyPrivateChats] fetched ${rows.length} chats for $myUid',
+        );
         if (!controller.isClosed) controller.add(rows);
       } catch (e) {
         debugPrint('[getMyPrivateChats] fetch error for $myUid: $e');
@@ -1073,7 +1194,9 @@ class ChatService {
               .eq('chat_id', chatId)
               .maybeSingle();
           if (row == null) return;
-          final hidden = List<String>.from((row['hidden_by'] as List<dynamic>?) ?? []);
+          final hidden = List<String>.from(
+            (row['hidden_by'] as List<dynamic>?) ?? [],
+          );
           if (!hidden.contains(myUid)) return;
           final hm = (row['hidden_at'] as Map<dynamic, dynamic>?) ?? {};
           final cutoffStr = hm[myUid];
@@ -1081,11 +1204,14 @@ class ChatService {
           if (cutoffStr != null && msgStr != null) {
             final cutoff = DateTime.tryParse('$cutoffStr');
             final msgAt = DateTime.tryParse(msgStr);
-            if (cutoff == null || msgAt == null || !msgAt.isAfter(cutoff)) return;
+            if (cutoff == null || msgAt == null || !msgAt.isAfter(cutoff))
+              return;
           }
           await unhideChat(myUid, chatId);
           // Row private_chats berubah → channel di atas yang apply ke list.
-        } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
+        } catch (e) {
+          debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+        }
       },
     );
     msgChannel.subscribe();
@@ -1118,8 +1244,8 @@ class ChatService {
     final lastSeen = DateTime.tryParse(lastSeenStr ?? '');
     if (lastSeen == null) return 'offline';
     final stale = lastSeen.toUtc().isBefore(
-          DateTime.now().toUtc().subtract(const Duration(minutes: 30)),
-        );
+      DateTime.now().toUtc().subtract(const Duration(minutes: 30)),
+    );
     return stale ? 'offline' : s;
   }
 
@@ -1146,7 +1272,10 @@ class ChatService {
             .eq('id', uid)
             .maybeSingle();
         if (row == null || controller.isClosed) return;
-        final s = ChatService.effectiveStatusOf(row['status'] as String?, row['last_seen'] as String?);
+        final s = ChatService.effectiveStatusOf(
+          row['status'] as String?,
+          row['last_seen'] as String?,
+        );
         if (s != _current) {
           _current = s;
           controller.add(_current);
@@ -1161,7 +1290,11 @@ class ChatService {
       event: PostgresChangeEvent.update,
       schema: 'public',
       table: 'profiles',
-      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: uid),
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'id',
+        value: uid,
+      ),
       callback: (payload) {
         if (controller.isClosed) return;
         final s = ChatService.effectiveStatusOf(
@@ -1207,11 +1340,15 @@ class ChatService {
           rethrow;
         } catch (_) {}
         // Exclude kolom sensitif: fcm_token, ip_address
-        const cols = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
+        const cols =
+            'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
         // Hanya user yang masih aktif: last_seen dalam 30 menit terakhir.
         // User yang uninstall app / akunnya hilang last_seen-nya tidak pernah
         // di-update lagi sehingga otomatis hilang dari daftar online.
-        final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 30)).toIso8601String();
+        final cutoff = DateTime.now()
+            .toUtc()
+            .subtract(const Duration(minutes: 30))
+            .toIso8601String();
         final rows = await _sb
             .from('profiles')
             .select(cols)
@@ -1242,13 +1379,15 @@ class ChatService {
         const avatarBatch = 6;
         for (var i = 0; i < pending.length; i += avatarBatch) {
           final chunk = pending.skip(i).take(avatarBatch).toList();
-          final results = await Future.wait(chunk.map((u) async {
-            if (u.avatar.isNotEmpty &&
-                StoragePhotoService.instance.isAvatarPath(u.avatar)) {
-              return u.copyWith(avatar: await _avatarB64(u.avatar));
-            }
-            return u;
-          }));
+          final results = await Future.wait(
+            chunk.map((u) async {
+              if (u.avatar.isNotEmpty &&
+                  StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+                return u.copyWith(avatar: await _avatarB64(u.avatar));
+              }
+              return u;
+            }),
+          );
           cached.addAll(results);
         }
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
@@ -1275,7 +1414,9 @@ class ChatService {
         DateTime? lastSeen;
         try {
           lastSeen = DateTime.tryParse(lastSeenStr ?? '');
-        } catch (e) { debugPrint('[ChatService] clearViewOnceImage ignored: $e'); }
+        } catch (e) {
+          debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+        }
         final idx = cached.indexWhere((u) => u.uid == id);
         if (idx >= 0) {
           // Status offline/invisible → hapus dari daftar online (langsung,
@@ -1283,7 +1424,10 @@ class ChatService {
           if (newStatus == 'offline' || newStatus == 'invisible') {
             cached = List.of(cached)..removeAt(idx);
           } else {
-            cached[idx] = cached[idx].copyWith(status: newStatus, lastSeen: lastSeen);
+            cached[idx] = cached[idx].copyWith(
+              status: newStatus,
+              lastSeen: lastSeen,
+            );
           }
           controller.add(List.unmodifiable(cached));
           // User sudah ada di cache — jangan refetch 500 row + avatar untuk
@@ -1309,7 +1453,10 @@ class ChatService {
     settingChannel.subscribe();
 
     // Poll setiap 30 detik — cukup responsif untuk status online/idle/offline
-    final timer = Timer.periodic(const Duration(seconds: 30), (_) => fetchOnline());
+    final timer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => fetchOnline(),
+    );
     fetchOnline();
 
     controller.onCancel = () {
@@ -1326,35 +1473,36 @@ class ChatService {
         .stream(primaryKey: ['room_id', 'user_id'])
         .eq('room_id', roomId)
         .map((rows) {
-      // Presensi basi (joined_at > 5 menit, heartbeat 60 detik tidak jalan
-      // lagi karena app di-kill/background) dianggap sudah keluar room.
-      final cutoff =
-          DateTime.now().toUtc().subtract(const Duration(minutes: 5));
-      return rows
-          .where((row) {
-            final joined = DateTime.tryParse('${row['joined_at']}');
-            return joined != null && joined.toUtc().isAfter(cutoff);
-          })
-          .map((row) {
-            final d = snakeToCamel(row);
-            return UserModel(
-              uid: d['userId'] ?? '',
-              nickname: d['nickname'] ?? 'Anon',
-              gender: d['gender'] ?? 'other',
-              age: (d['age'] as num?)?.toInt() ?? 0,
-              country: d['country'] ?? '',
-              city: d['city'] ?? '',
-              ipAddress: '',
-              status: 'online',
-              avatar: '',
-              isRegistered: d['isRegistered'] == true,
-              loginAt: DateTime.now(),
-              createdAt: DateTime.now(),
-              lastSeen: parseDate(d['joinedAt']),
-            );
-          })
-          .toList();
-    });
+          // Presensi basi (joined_at > 5 menit, heartbeat 60 detik tidak jalan
+          // lagi karena app di-kill/background) dianggap sudah keluar room.
+          final cutoff = DateTime.now().toUtc().subtract(
+            const Duration(minutes: 5),
+          );
+          return rows
+              .where((row) {
+                final joined = DateTime.tryParse('${row['joined_at']}');
+                return joined != null && joined.toUtc().isAfter(cutoff);
+              })
+              .map((row) {
+                final d = snakeToCamel(row);
+                return UserModel(
+                  uid: d['userId'] ?? '',
+                  nickname: d['nickname'] ?? 'Anon',
+                  gender: d['gender'] ?? 'other',
+                  age: (d['age'] as num?)?.toInt() ?? 0,
+                  country: d['country'] ?? '',
+                  city: d['city'] ?? '',
+                  ipAddress: '',
+                  status: 'online',
+                  avatar: '',
+                  isRegistered: d['isRegistered'] == true,
+                  loginAt: DateTime.now(),
+                  createdAt: DateTime.now(),
+                  lastSeen: parseDate(d['joinedAt']),
+                );
+              })
+              .toList();
+        });
   }
 
   Future<void> joinRoom(String roomId, UserModel user) async {
@@ -1371,7 +1519,8 @@ class ChatService {
   }
 
   Future<void> leaveRoom(String roomId, String uid) async {
-    await _sb.from('room_presence')
+    await _sb
+        .from('room_presence')
         .delete()
         .eq('room_id', roomId)
         .eq('user_id', uid);
@@ -1390,9 +1539,12 @@ class ChatService {
         .eq('chat_id', chatId)
         .maybeSingle();
     if (row == null) return;
-    final hidden = List<String>.from((row['hidden_by'] as List<dynamic>?) ?? []);
-    final hiddenAt =
-        Map<String, dynamic>.from((row['hidden_at'] as Map<dynamic, dynamic>?) ?? {});
+    final hidden = List<String>.from(
+      (row['hidden_by'] as List<dynamic>?) ?? [],
+    );
+    final hiddenAt = Map<String, dynamic>.from(
+      (row['hidden_at'] as Map<dynamic, dynamic>?) ?? {},
+    );
     if (!hidden.contains(myUid)) hidden.add(myUid);
     // Cutoff selalu di-refresh — pesan sebelum waktu delete terbaru
     // tetap tidak tampil walau chat sudah pernah muncul lagi sebelumnya.
@@ -1410,7 +1562,9 @@ class ChatService {
         .eq('chat_id', chatId)
         .maybeSingle();
     if (row == null) return;
-    final hidden = List<String>.from((row['hidden_by'] as List<dynamic>?) ?? []);
+    final hidden = List<String>.from(
+      (row['hidden_by'] as List<dynamic>?) ?? [],
+    );
     if (hidden.remove(myUid)) {
       await _sb
           .from('private_chats')
@@ -1421,7 +1575,10 @@ class ChatService {
 
   Future<Set<String>> getHiddenChats(String myUid) async {
     try {
-      final rows = await _sb.from('private_chats').select('chat_id').contains('hidden_by', [myUid]);
+      final rows = await _sb.from('private_chats').select('chat_id').contains(
+        'hidden_by',
+        [myUid],
+      );
       return rows.map((r) => r['chat_id'] as String).toSet();
     } catch (_) {
       return {};
@@ -1436,8 +1593,9 @@ class ChatService {
           final counts = <String, int>{};
           // Sama seperti daftar user room: presence basi (> 5 menit) tidak
           // dihitung supaya count online di lobby tidak ghost.
-          final cutoff =
-              DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+          final cutoff = DateTime.now().toUtc().subtract(
+            const Duration(minutes: 5),
+          );
           for (final row in rows) {
             final joined = DateTime.tryParse('${row['joined_at']}');
             if (joined == null || !joined.toUtc().isAfter(cutoff)) continue;
@@ -1458,7 +1616,8 @@ class ChatService {
   }
 
   Future<void> unblockUser(String myUid, String blockedUid) async {
-    await _sb.from('blocks')
+    await _sb
+        .from('blocks')
         .delete()
         .eq('blocker_id', myUid)
         .eq('blocked_id', blockedUid);
@@ -1477,7 +1636,9 @@ class ChatService {
   }
 
   Future<bool> isUserBlocked(String myUid, String otherUid) async {
-    final res = await _sb.from('blocks').select('blocker_id')
+    final res = await _sb
+        .from('blocks')
+        .select('blocker_id')
         .eq('blocker_id', myUid)
         .eq('blocked_id', otherUid)
         .maybeSingle();
@@ -1485,7 +1646,9 @@ class ChatService {
   }
 
   Future<List<String>> getBlockedUids(String myUid) async {
-    final res = await _sb.from('blocks').select('blocked_id')
+    final res = await _sb
+        .from('blocks')
+        .select('blocked_id')
         .eq('blocker_id', myUid);
     return res.map((r) => '${r['blocked_id']}').toList();
   }
@@ -1541,7 +1704,8 @@ class PrivateChatInfo {
       participantGenders: participantGenders ?? this.participantGenders,
       participantLocations: participantLocations ?? this.participantLocations,
       participantAges: participantAges ?? this.participantAges,
-      participantRegistered: participantRegistered ?? this.participantRegistered,
+      participantRegistered:
+          participantRegistered ?? this.participantRegistered,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       messageCount: messageCount ?? this.messageCount,

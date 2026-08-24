@@ -32,8 +32,11 @@ String? _roomProcessImage(Uint8List bytes) {
   final w = decoded.width, h = decoded.height;
   final img.Image resized = (w <= 800 && h <= 800)
       ? decoded
-      : img.copyResize(decoded,
-          width: w > h ? 800 : null, height: h >= w ? 800 : null);
+      : img.copyResize(
+          decoded,
+          width: w > h ? 800 : null,
+          height: h >= w ? 800 : null,
+        );
   return base64Encode(img.encodeJpg(resized, quality: 75));
 }
 
@@ -43,8 +46,11 @@ String? _roomPassthroughImage(Uint8List bytes) {
   final w = decoded.width, h = decoded.height;
   final img.Image resized = (w <= 1200 && h <= 1200)
       ? decoded
-      : img.copyResize(decoded,
-          width: w > h ? 1200 : null, height: h >= w ? 1200 : null);
+      : img.copyResize(
+          decoded,
+          width: w > h ? 1200 : null,
+          height: h >= w ? 1200 : null,
+        );
   return base64Encode(img.encodeJpg(resized, quality: 82));
 }
 
@@ -144,7 +150,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       _pointsProv?.roomReadBonus().then((_) {
         if (mounted && _pointsProv?.enabled == true) {
           final s = context.read<LocaleProvider>().s;
-          _pointsProv?.showPointsToast(context, s.pointsGain(2, s.reasonRoomRead));
+          _pointsProv?.showPointsToast(
+            context,
+            s.pointsGain(2, s.reasonRoomRead),
+          );
         }
       });
     }
@@ -195,7 +204,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final chat = context.read<ChatProvider>();
     final uid = auth.uid;
     final profile = auth.profile;
-    if (uid == null || profile == null) { _isSending = false; return; }
+    if (uid == null || profile == null) {
+      _isSending = false;
+      return;
+    }
     final pp = context.read<PointsProvider>();
     final remaining = await pp.deductBeforeSend('text');
     if (remaining < 0) {
@@ -220,14 +232,20 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         text: text,
       );
       if (pp.enabled) {
-        pp.showPointsToast(context, context.read<LocaleProvider>().s.pointsDeduct(1));
+        pp.showPointsToast(
+          context,
+          context.read<LocaleProvider>().s.pointsDeduct(1),
+        );
       }
       _roomSendCount++;
       if (_roomSendCount == 5) {
         _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
           if (earned && mounted) {
             final s = context.read<LocaleProvider>().s;
-            _pointsProv?.showPointsToast(context, s.pointsGain(5, s.reasonRoomChat));
+            _pointsProv?.showPointsToast(
+              context,
+              s.pointsGain(5, s.reasonRoomChat),
+            );
           }
         });
       }
@@ -260,7 +278,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (bytes.length > 10 * 1024 * 1024) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgFileTooLarge)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.msgFileTooLarge)));
       }
       return;
     }
@@ -268,7 +288,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
       }
       return;
     }
@@ -283,16 +305,24 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (r < 0) {
       if (!mounted) return;
       if (r == -1) {
-        pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
+        pp.showOutOfPointsDialog(
+          context,
+          context.read<LocaleProvider>().s.isId,
+        );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(context.read<LocaleProvider>().s.errSendPhoto),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.read<LocaleProvider>().s.errSendPhoto),
+          ),
+        );
       }
       return;
     }
     try {
-      final path = await StoragePhotoService.instance.upload(chatId: 'room_${widget.room.id}', base64: base64);
+      final path = await StoragePhotoService.instance.upload(
+        chatId: 'room_${widget.room.id}',
+        base64: base64,
+      );
       final stored = path ?? base64;
       await chat.sendRoomMessage(
         roomId: widget.room.id,
@@ -308,7 +338,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       safeUnawaited(pp.refundChatPoint('image'));
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
       }
     }
   }
@@ -326,7 +358,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
       }
       return;
     }
@@ -335,11 +369,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final rView = await pp.deductBeforeSend('view_once');
     if (rView < 0) {
       if (rView == -1) {
-        pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
+        pp.showOutOfPointsDialog(
+          context,
+          context.read<LocaleProvider>().s.isId,
+        );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(context.read<LocaleProvider>().s.errSendPhoto),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.read<LocaleProvider>().s.errSendPhoto),
+          ),
+        );
       }
       return;
     }
@@ -348,7 +387,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final profile = auth.profile;
     if (uid == null || profile == null) return;
     try {
-      final path = await StoragePhotoService.instance.upload(chatId: 'room_${widget.room.id}', base64: base64);
+      final path = await StoragePhotoService.instance.upload(
+        chatId: 'room_${widget.room.id}',
+        base64: base64,
+      );
       final stored = path ?? base64;
       await chat.sendRoomMessage(
         roomId: widget.room.id,
@@ -364,7 +406,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       safeUnawaited(pp.refundChatPoint('view_once'));
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
       }
     }
   }
@@ -400,12 +444,17 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               height: 120,
               color: AppTheme.bgCard,
               child: StreamBuilder<List<UserModel>>(
-              stream: _usersStream,
+                stream: _usersStream,
                 builder: (_, snap) {
                   final users = snap.data ?? [];
                   if (users.isEmpty) {
                     return Center(
-                      child: Text(s.noOnlineUsers, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                      child: Text(
+                        s.noOnlineUsers,
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
                     );
                   }
                   return ListView.builder(
@@ -415,7 +464,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     itemBuilder: (_, i) => _UserChip(
                       user: users[i],
                       myUid: auth.uid,
-                      color: Color(userColorPalette[colorHashForUid(users[i].uid) % userColorPalette.length]),
+                      color: Color(
+                        userColorPalette[colorHashForUid(users[i].uid) %
+                            userColorPalette.length],
+                      ),
                     ),
                   );
                 },
@@ -430,22 +482,29 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 final msgs = snap.data ?? [];
                 if (msgs.isEmpty) {
                   return Center(
-                    child: Builder(builder: (ctx) {
-                      final s = ctx.read<LocaleProvider>().s;
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('👋', style: TextStyle(fontSize: AppGlyph.xl)),
-                          SizedBox(height: 8),
-                          Text(s.msgStartConversation, style: TextStyle(color: AppTheme.textSecondary)),
-                        ],
-                      );
-                    }),
+                    child: Builder(
+                      builder: (ctx) {
+                        final s = ctx.read<LocaleProvider>().s;
+                        return Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('👋', style: TextStyle(fontSize: AppGlyph.xl)),
+                            SizedBox(height: 8),
+                            Text(
+                              s.msgStartConversation,
+                              style: TextStyle(color: AppTheme.textSecondary),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   );
                 }
                 if (msgs.length > _lastMsgCount && _isNearBottom) {
                   _lastMsgCount = msgs.length;
-                  WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                  WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => _scrollToBottom(),
+                  );
                 } else {
                   _lastMsgCount = msgs.length;
                 }
@@ -469,13 +528,17 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   itemCount: items.length,
                   itemBuilder: (_, i) {
                     final item = items[items.length - 1 - i];
-                    if (item.dateLabel != null) return DateChip(label: item.dateLabel!);
+                    if (item.dateLabel != null)
+                      return DateChip(label: item.dateLabel!);
                     final m = item.msg!;
                     return _MessageBubble(
                       key: ValueKey(m.id),
                       msg: m,
                       isMe: m.senderId == auth.uid,
-                      color: Color(userColorPalette[colorHashForUid(m.senderId) % userColorPalette.length]),
+                      color: Color(
+                        userColorPalette[colorHashForUid(m.senderId) %
+                            userColorPalette.length],
+                      ),
                       roomId: widget.room.id,
                       onTapUser: () => _onTapUser(m, auth),
                     );
@@ -490,8 +553,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             onSend: _send,
             showAttachRow: _showAttachRow,
             onToggleAttach: _toggleAttachRow,
-            onSendPhoto: () { setState(() => _showAttachRow = false); _sendPhoto(); },
-            onSendViewOnce: () { setState(() => _showAttachRow = false); _sendViewOncePhoto(); },
+            onSendPhoto: () {
+              setState(() => _showAttachRow = false);
+              _sendPhoto();
+            },
+            onSendViewOnce: () {
+              setState(() => _showAttachRow = false);
+              _sendViewOncePhoto();
+            },
           ),
         ],
       ),
@@ -503,9 +572,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (_sheetOpen) return;
     if (context.read<ChatProvider>().isBlocked(msg.senderId)) {
       final s = context.read<LocaleProvider>().s;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.msgBlocked)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.msgBlocked)));
       return;
     }
     _sheetOpen = true;
@@ -514,7 +583,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgCard,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -538,8 +609,19 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 child: Row(
                   children: [
                     CircleAvatar(
-                      backgroundColor: Color(userColorPalette[colorHashForUid(msg.senderId) % userColorPalette.length]),
-                      child: Text(msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      backgroundColor: Color(
+                        userColorPalette[colorHashForUid(msg.senderId) %
+                            userColorPalette.length],
+                      ),
+                      child: Text(
+                        msg.senderName.isNotEmpty
+                            ? msg.senderName[0].toUpperCase()
+                            : '?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                     SizedBox(width: 12),
                     Expanded(
@@ -547,19 +629,34 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(msg.senderName, style: AppText.bodyStrong),
-                          Text(msg.senderGender == 'male' ? s.genderMale : msg.senderGender == 'female' ? s.genderFemale : s.genderOther,
-                              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                          Text(
+                            msg.senderGender == 'male'
+                                ? s.genderMale
+                                : msg.senderGender == 'female'
+                                ? s.genderFemale
+                                : s.genderOther,
+                            style: AppText.bodySmall.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                    Icon(
+                      Icons.chevron_right,
+                      color: AppTheme.textSecondary,
+                      size: 20,
+                    ),
                   ],
                 ),
               ),
             ),
             ListTile(
               leading: Icon(Icons.chat_bubble, color: AppTheme.primary),
-              title: Text(s.titlePrivateChat, style: TextStyle(color: AppTheme.textPrimary)),
+              title: Text(
+                s.titlePrivateChat,
+                style: TextStyle(color: AppTheme.textPrimary),
+              ),
               onTap: () async {
                 final chat = context.read<ChatProvider>();
                 final locale = context.read<LocaleProvider>();
@@ -591,7 +688,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   );
                   if (mounted && screenContext.mounted) {
                     Navigator.of(screenContext).push(
-                      MaterialPageRoute(builder: (_) => PrivateChatScreen(chatId: chatId, otherName: msg.senderName, otherUid: msg.senderId, otherGender: msg.senderGender, otherCountry: '', otherRegistered: msg.isRegistered)),
+                      MaterialPageRoute(
+                        builder: (_) => PrivateChatScreen(
+                          chatId: chatId,
+                          otherName: msg.senderName,
+                          otherUid: msg.senderId,
+                          otherGender: msg.senderGender,
+                          otherCountry: '',
+                          otherRegistered: msg.isRegistered,
+                        ),
+                      ),
                     );
                   }
                 } catch (e) {
@@ -606,20 +712,29 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             ),
             ListTile(
               leading: const Icon(Icons.block, color: AppTheme.danger),
-              title: Text(s.btnBlock, style: const TextStyle(color: AppTheme.danger)),
+              title: Text(
+                s.btnBlock,
+                style: const TextStyle(color: AppTheme.danger),
+              ),
               onTap: () async {
                 Navigator.of(context).pop();
-                await context.read<ChatProvider>().blockUser(auth.uid!, msg.senderId);
+                await context.read<ChatProvider>().blockUser(
+                  auth.uid!,
+                  msg.senderId,
+                );
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(s.blockSuccess)),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(s.blockSuccess)));
                 }
               },
             ),
             ListTile(
               leading: const Icon(Icons.flag, color: Colors.orange),
-              title: Text(s.btnReport, style: const TextStyle(color: Colors.orange)),
+              title: Text(
+                s.btnReport,
+                style: const TextStyle(color: Colors.orange),
+              ),
               onTap: () {
                 Navigator.of(context).pop();
                 _showReportDialog(msg.senderId, msg.senderName);
@@ -640,21 +755,36 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
-        title: Text('${s.btnReport} $reportedName', style: TextStyle(color: AppTheme.textPrimary)),
+        title: Text(
+          '${s.btnReport} $reportedName',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
         content: TextField(
           style: TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(hintText: s.reportHint),
           onChanged: (v) => reason = v,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(context.read<LocaleProvider>().s.btnCancel)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(context.read<LocaleProvider>().s.btnCancel),
+          ),
           TextButton(
             onPressed: () {
-              context.read<ChatProvider>().reportUser(reporterId: context.read<AuthProvider>().uid!, reportedId: reportedId, reason: reason);
+              context.read<ChatProvider>().reportUser(
+                reporterId: context.read<AuthProvider>().uid!,
+                reportedId: reportedId,
+                reason: reason,
+              );
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.reportSuccess)));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(s.reportSuccess)));
             },
-            child: Text(s.btnReport, style: const TextStyle(color: AppTheme.danger)),
+            child: Text(
+              s.btnReport,
+              style: const TextStyle(color: AppTheme.danger),
+            ),
           ),
         ],
       ),
@@ -685,13 +815,22 @@ class _UserChip extends StatelessWidget {
                 backgroundColor: isMe ? AppTheme.primary : color,
                 child: Text(
                   user.initial,
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: AppGlyph.avatarInitial(44)),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: AppGlyph.avatarInitial(44),
+                  ),
                 ),
               ),
               if (user.isRegistered)
                 Positioned(
-                  right: -2, bottom: -2,
-                  child: Icon(Icons.verified, size: 14, color: Color(0xFF4A90E2)),
+                  right: -2,
+                  bottom: -2,
+                  child: Icon(
+                    Icons.verified,
+                    size: 14,
+                    color: Color(0xFF4A90E2),
+                  ),
                 ),
             ],
           ),
@@ -713,16 +852,30 @@ class _MessageBubble extends StatelessWidget {
   final Color color;
   final String roomId;
   final VoidCallback onTapUser;
-  const _MessageBubble({super.key, required this.msg, required this.isMe, required this.color, required this.roomId, required this.onTapUser});
+  const _MessageBubble({
+    super.key,
+    required this.msg,
+    required this.isMe,
+    required this.color,
+    required this.roomId,
+    required this.onTapUser,
+  });
 
   // Warna teks bubble mengikuti tema (gelap di light mode, terang di dark mode)
   // supaya sinkron dengan warna bubble (bgInput / primary alpha).
   static Color get _textColor => AppTheme.textPrimary;
 
-  bool get _isMedia => msg.type == 'image' || msg.type == 'view_once' || msg.type == 'view_once_expired';
+  bool get _isMedia =>
+      msg.type == 'image' ||
+      msg.type == 'view_once' ||
+      msg.type == 'view_once_expired';
 
   // Konten bubble: foto / view-once / teks — dipakai untuk pesan sendiri & orang lain.
-  Widget _content(BuildContext context, String timeStr, {required bool alignRight}) {
+  Widget _content(
+    BuildContext context,
+    String timeStr, {
+    required bool alignRight,
+  }) {
     final chatKey = 'room_$roomId';
     if (msg.type == 'image' && msg.imageData.isNotEmpty) {
       return ClipRRect(
@@ -730,13 +883,24 @@ class _MessageBubble extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            MessageImage(imageData: msg.imageData, chatKey: chatKey, messageId: msg.id),
+            MessageImage(
+              imageData: msg.imageData,
+              chatKey: chatKey,
+              messageId: msg.id,
+            ),
             Positioned(
-              right: 6, bottom: 6,
+              right: 6,
+              bottom: 6,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(8)),
-                child: Text(timeStr, style: AppText.micro.copyWith(color: Colors.white)),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  timeStr,
+                  style: AppText.micro.copyWith(color: Colors.white),
+                ),
               ),
             ),
           ],
@@ -755,11 +919,18 @@ class _MessageBubble extends StatelessWidget {
             isRoom: true,
           ),
           Positioned(
-            right: 6, bottom: 6,
+            right: 6,
+            bottom: 6,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(8)),
-              child: Text(timeStr, style: AppText.micro.copyWith(color: Colors.white)),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                timeStr,
+                style: AppText.micro.copyWith(color: Colors.white),
+              ),
             ),
           ),
         ],
@@ -769,7 +940,10 @@ class _MessageBubble extends StatelessWidget {
       text: msg.text,
       timeStr: timeStr,
       textStyle: AppText.body.copyWith(color: _textColor),
-      timeStyle: AppText.micro.copyWith(color: _textColor.withValues(alpha: 0.45), fontWeight: FontWeight.w400),
+      timeStyle: AppText.micro.copyWith(
+        color: _textColor.withValues(alpha: 0.45),
+        fontWeight: FontWeight.w400,
+      ),
       alignRight: alignRight,
     );
   }
@@ -788,8 +962,12 @@ class _MessageBubble extends StatelessWidget {
           children: [
             Flexible(
               child: Container(
-                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
-                padding: _isMedia ? const EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.8,
+                ),
+                padding: _isMedia
+                    ? const EdgeInsets.all(4)
+                    : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.25),
                   borderRadius: const BorderRadius.only(
@@ -826,8 +1004,14 @@ class _MessageBubble extends StatelessWidget {
               radius: 16,
               backgroundColor: color,
               child: Text(
-                msg.senderName.isNotEmpty ? msg.senderName[0].toUpperCase() : '?',
-                style: TextStyle(color: Colors.white, fontSize: AppGlyph.avatarInitial(32), fontWeight: FontWeight.w700),
+                msg.senderName.isNotEmpty
+                    ? msg.senderName[0].toUpperCase()
+                    : '?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: AppGlyph.avatarInitial(32),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
@@ -843,11 +1027,18 @@ class _MessageBubble extends StatelessWidget {
                     children: [
                       Text(
                         msg.senderName,
-                        style: AppText.label.copyWith(color: color, letterSpacing: 0),
+                        style: AppText.label.copyWith(
+                          color: color,
+                          letterSpacing: 0,
+                        ),
                       ),
                       if (msg.isRegistered) ...[
                         SizedBox(width: 3),
-                        Icon(Icons.verified, size: 13, color: Color(0xFF4A90E2)),
+                        Icon(
+                          Icons.verified,
+                          size: 13,
+                          color: Color(0xFF4A90E2),
+                        ),
                       ],
                     ],
                   ),
@@ -856,8 +1047,12 @@ class _MessageBubble extends StatelessWidget {
                 Container(
                   // Kurangi offset avatar (32) + gap (8) supaya tepi kanan bubble
                   // sama dengan bubble private chat (80% lebar layar).
-                  constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8 - 40),
-                  padding: _isMedia ? EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.sizeOf(context).width * 0.8 - 40,
+                  ),
+                  padding: _isMedia
+                      ? EdgeInsets.all(4)
+                      : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                   decoration: BoxDecoration(
                     color: AppTheme.bgInput,
                     borderRadius: const BorderRadius.only(
@@ -884,7 +1079,12 @@ class _MessageBubble extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(6),
-                            border: const Border(left: BorderSide(color: AppTheme.primary, width: 3)),
+                            border: const Border(
+                              left: BorderSide(
+                                color: AppTheme.primary,
+                                width: 3,
+                              ),
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -892,14 +1092,19 @@ class _MessageBubble extends StatelessWidget {
                             children: [
                               Text(
                                 msg.repliedToSenderName ?? '',
-                                style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                                style: AppText.caption.copyWith(
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 msg.repliedToText ?? '',
-                                style: AppText.caption.copyWith(color: _textColor.withValues(alpha: 0.6)),
+                                style: AppText.caption.copyWith(
+                                  color: _textColor.withValues(alpha: 0.6),
+                                ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -964,7 +1169,11 @@ class _ChatInputState extends State<_ChatInput> {
       decoration: BoxDecoration(
         color: AppTheme.bgScreen,
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: Offset(0, -1)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: Offset(0, -1),
+          ),
         ],
       ),
       child: SafeArea(
@@ -978,7 +1187,8 @@ class _ChatInputState extends State<_ChatInput> {
                   width: 44,
                   height: 44,
                   child: IconButton(
-                    onPressed: () => EmojiPickerSheet.show(context, widget.controller),
+                    onPressed: () =>
+                        EmojiPickerSheet.show(context, widget.controller),
                     icon: Icon(Icons.emoji_emotions_outlined, size: 22),
                     color: AppTheme.textSecondary,
                     padding: EdgeInsets.zero,
@@ -1004,12 +1214,16 @@ class _ChatInputState extends State<_ChatInput> {
                             style: AppText.body,
                             decoration: InputDecoration(
                               hintText: s.hintTypeMessage,
-                              hintStyle: AppText.body.copyWith(color: AppTheme.textSecondary),
+                              hintStyle: AppText.body.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
                               filled: false,
                               border: InputBorder.none,
                               enabledBorder: InputBorder.none,
                               focusedBorder: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                              ),
                             ),
                             textInputAction: TextInputAction.newline,
                             onSubmitted: (_) => widget.onSend(),
@@ -1020,7 +1234,9 @@ class _ChatInputState extends State<_ChatInput> {
                           ),
                         ),
                         _RoomInputIconBtn(
-                          icon: widget.showAttachRow ? Icons.close : Icons.add_circle_outline,
+                          icon: widget.showAttachRow
+                              ? Icons.close
+                              : Icons.add_circle_outline,
                           color: AppTheme.primary,
                           onTap: widget.onToggleAttach,
                           tooltip: s.menuSendPhoto,
@@ -1099,7 +1315,12 @@ class _RoomInputIconBtn extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
   final String tooltip;
-  const _RoomInputIconBtn({required this.icon, required this.color, required this.onTap, required this.tooltip});
+  const _RoomInputIconBtn({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    required this.tooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1108,7 +1329,11 @@ class _RoomInputIconBtn extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        child: SizedBox(width: 30, height: 48, child: Icon(icon, color: color, size: 22)),
+        child: SizedBox(
+          width: 30,
+          height: 48,
+          child: Icon(icon, color: color, size: 22),
+        ),
       ),
     );
   }
@@ -1119,7 +1344,12 @@ class _RoomAttachChip extends StatelessWidget {
   final Color color;
   final String label;
   final VoidCallback onTap;
-  const _RoomAttachChip({required this.icon, required this.color, required this.label, required this.onTap});
+  const _RoomAttachChip({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1130,12 +1360,19 @@ class _RoomAttachChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 48, height: 48,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
             child: Center(child: Icon(icon, color: color, size: 24)),
           ),
           SizedBox(height: 4),
-          Text(label, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            label,
+            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+          ),
         ],
       ),
     );

@@ -13,7 +13,8 @@ class ChatsScreen extends StatefulWidget {
   State<ChatsScreen> createState() => _ChatsScreenState();
 }
 
-class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStateMixin {
+class _ChatsScreenState extends State<ChatsScreen>
+    with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 2, vsync: this);
 
   @override
@@ -30,16 +31,17 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
       appBar: AppBar(
         backgroundColor: AppTheme.headerGradient.colors.first,
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: AppTheme.headerGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('ChatYuk', style: AppText.title.copyWith(color: Colors.white)),
-            Text(s.navChats, style: AppText.bodySmall.copyWith(color: Colors.white70)),
+            Text(
+              s.navChats,
+              style: AppText.bodySmall.copyWith(color: Colors.white70),
+            ),
           ],
         ),
         iconTheme: const IconThemeData(color: Colors.white),

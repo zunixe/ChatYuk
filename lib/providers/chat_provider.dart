@@ -9,8 +9,6 @@ class ChatProvider extends ChangeNotifier {
   List<String> _blockedUids = [];
   Future<List<String>>? _loadingBlockedUids;
 
-  
-
   List<String> get blockedUids => _blockedUids;
 
   // Room chat — TIDAK di-cache karena stream mati saat RoomChatScreen dispose.
@@ -43,12 +41,20 @@ class ChatProvider extends ChangeNotifier {
   Future<bool> isUserActive(String uid) => _service.isUserActive(uid);
 
   /// Kirim koin ke lawan bicara (via RPC server). Return {ok, points}.
-  Future<Map<String, dynamic>> sendCoins(String chatId, String receiverId, int amount) {
+  Future<Map<String, dynamic>> sendCoins(
+    String chatId,
+    String receiverId,
+    int amount,
+  ) {
     return _service.sendCoins(chatId, receiverId, amount);
   }
 
   /// Kirim hadiah ke lawan bicara (via RPC server). Return {ok, points, net, cut}.
-  Future<Map<String, dynamic>> sendGift(String chatId, String receiverId, String giftId) {
+  Future<Map<String, dynamic>> sendGift(
+    String chatId,
+    String receiverId,
+    String giftId,
+  ) {
     return _service.sendGift(chatId, receiverId, giftId);
   }
 
@@ -91,7 +97,8 @@ class ChatProvider extends ChangeNotifier {
   Stream<String> getUserStatus(String uid, {String? initialStatus}) =>
       _service.getUserStatus(uid, initialStatus: initialStatus);
 
-  Stream<void> getTypingStream(String chatId) => _service.getTypingStream(chatId);
+  Stream<void> getTypingStream(String chatId) =>
+      _service.getTypingStream(chatId);
 
   void sendTyping(String chatId) => _service.sendTyping(chatId);
 
@@ -131,7 +138,10 @@ class ChatProvider extends ChangeNotifier {
     await _service.markAsReadAdmin(chatId, uid);
   }
 
-  Future<void> clearViewOnceImage(String messageId, {bool isRoom = false}) async {
+  Future<void> clearViewOnceImage(
+    String messageId, {
+    bool isRoom = false,
+  }) async {
     await _service.clearViewOnceImage(messageId, isRoom: isRoom);
   }
 
@@ -192,7 +202,10 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> loadBlockedUids(String myUid) async {
-    if (_loadingBlockedUids != null) { await _loadingBlockedUids; return; }
+    if (_loadingBlockedUids != null) {
+      await _loadingBlockedUids;
+      return;
+    }
     _loadingBlockedUids = _service.getBlockedUids(myUid);
     try {
       _blockedUids = await _loadingBlockedUids!;

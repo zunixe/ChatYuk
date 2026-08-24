@@ -158,7 +158,9 @@ class _NearbyScreenState extends State<NearbyScreen> {
       final active = await chat.isUserActive(otherUid);
       if (!mounted) return;
       if (!active) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errUserNotFound)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errUserNotFound)));
         return;
       }
       final chatId = await chat.startPrivateChat(
@@ -174,19 +176,26 @@ class _NearbyScreenState extends State<NearbyScreen> {
         otherAge: (u['age'] as num?)?.toInt() ?? 0,
       );
       if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (_) => PrivateChatScreen(
-        chatId: chatId,
-        otherName: '${u['nickname'] ?? ''}',
-        otherUid: otherUid,
-        otherGender: '${u['gender'] ?? ''}',
-        otherCountry: '${u['country'] ?? ''}',
-        otherCity: '${u['city'] ?? ''}',
-        otherAge: (u['age'] as num?)?.toInt() ?? 0,
-        otherRegistered: u['is_registered'] == true,
-      )));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PrivateChatScreen(
+            chatId: chatId,
+            otherName: '${u['nickname'] ?? ''}',
+            otherUid: otherUid,
+            otherGender: '${u['gender'] ?? ''}',
+            otherCountry: '${u['country'] ?? ''}',
+            otherCity: '${u['city'] ?? ''}',
+            otherAge: (u['age'] as num?)?.toInt() ?? 0,
+            otherRegistered: u['is_registered'] == true,
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
       }
     }
   }
@@ -201,9 +210,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
         backgroundColor: AppTheme.headerGradient.colors.first,
         title: Text(s.nearbyTitle),
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: AppTheme.headerGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
         iconTheme: IconThemeData(color: Colors.white),
         titleTextStyle: AppText.title.copyWith(color: Colors.white),
@@ -217,7 +224,12 @@ class _NearbyScreenState extends State<NearbyScreen> {
               value: _shareOn,
               onChanged: _toggleShare,
               title: Text(s.nearbyShareToggle, style: AppText.bodyStrong),
-              subtitle: Text(s.nearbyShareDesc, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+              subtitle: Text(
+                s.nearbyShareDesc,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
               activeColor: AppTheme.primary,
             ),
           ),
@@ -226,9 +238,16 @@ class _NearbyScreenState extends State<NearbyScreen> {
             padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Row(
               children: [
-                Icon(Icons.social_distance, size: 18, color: AppTheme.textSecondary),
+                Icon(
+                  Icons.social_distance,
+                  size: 18,
+                  color: AppTheme.textSecondary,
+                ),
                 const SizedBox(width: 8),
-                Text('${s.nearbyRadius}: ${_radiusKm.round()} km', style: AppText.bodyStrong),
+                Text(
+                  '${s.nearbyRadius}: ${_radiusKm.round()} km',
+                  style: AppText.bodyStrong,
+                ),
               ],
             ),
           ),
@@ -256,46 +275,81 @@ class _NearbyScreenState extends State<NearbyScreen> {
       return _emptyState(Icons.location_off, s.nearbyNeedShare, null, s);
     }
     if (_error == 'no_location') {
-      return _emptyState(Icons.my_location, s.nearbyNoLocation, s.nearbyEnableLoc, s, onAction: () async {
-        await _loc.requestPermission();
-        await _loc.updateMyLocation();
-        await _refresh();
-      });
+      return _emptyState(
+        Icons.my_location,
+        s.nearbyNoLocation,
+        s.nearbyEnableLoc,
+        s,
+        onAction: () async {
+          await _loc.requestPermission();
+          await _loc.updateMyLocation();
+          await _refresh();
+        },
+      );
     }
     if (_error != null) {
-      return _emptyState(Icons.error_outline, s.errGeneric, s.nearbyRetry, s, onAction: _refresh);
+      return _emptyState(
+        Icons.error_outline,
+        s.errGeneric,
+        s.nearbyRetry,
+        s,
+        onAction: _refresh,
+      );
     }
     if (_users.isEmpty) {
-      return _emptyState(Icons.group_off, s.nearbyEmpty, s.nearbyRetry, s, onAction: _refresh, hint: s.nearbyEmptyHint);
+      return _emptyState(
+        Icons.group_off,
+        s.nearbyEmpty,
+        s.nearbyRetry,
+        s,
+        onAction: _refresh,
+        hint: s.nearbyEmptyHint,
+      );
     }
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
         itemCount: _users.length,
-        itemBuilder: (_, i) => _NearbyCard(
-          data: _users[i],
-          onTap: () => _startChat(_users[i]),
-        ),
+        itemBuilder: (_, i) =>
+            _NearbyCard(data: _users[i], onTap: () => _startChat(_users[i])),
       ),
     );
   }
 
-  Widget _emptyState(IconData icon, String title, String? actionLabel, dynamic s,
-      {VoidCallback? onAction, String? hint}) {
+  Widget _emptyState(
+    IconData icon,
+    String title,
+    String? actionLabel,
+    dynamic s, {
+    VoidCallback? onAction,
+    String? hint,
+  }) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 56, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+          Icon(
+            icon,
+            size: 56,
+            color: AppTheme.textSecondary.withValues(alpha: 0.5),
+          ),
           SizedBox(height: 16),
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 32),
-            child: Text(title, textAlign: TextAlign.center, style: AppText.body.copyWith(color: AppTheme.textSecondary)),
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: AppText.body.copyWith(color: AppTheme.textSecondary),
+            ),
           ),
           if (hint != null) ...[
             SizedBox(height: 6),
-            Text(hint, textAlign: TextAlign.center, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+            Text(
+              hint,
+              textAlign: TextAlign.center,
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
           ],
           if (actionLabel != null && onAction != null) ...[
             const SizedBox(height: 16),
@@ -322,8 +376,10 @@ class _RadarLoadingState extends State<_RadarLoading>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
-      ..repeat();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
   }
 
   @override
@@ -349,7 +405,10 @@ class _RadarLoadingState extends State<_RadarLoading>
             ),
           ),
           SizedBox(height: 18),
-          Text(widget.caption, style: AppText.body.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            widget.caption,
+            style: AppText.body.copyWith(color: AppTheme.textSecondary),
+          ),
         ],
       ),
     );
@@ -375,9 +434,15 @@ class _RadarPainter extends CustomPainter {
     }
     ring.color = AppTheme.primary.withValues(alpha: 0.10);
     canvas.drawLine(
-        Offset(center.dx - radius, center.dy), Offset(center.dx + radius, center.dy), ring);
+      Offset(center.dx - radius, center.dy),
+      Offset(center.dx + radius, center.dy),
+      ring,
+    );
     canvas.drawLine(
-        Offset(center.dx, center.dy - radius), Offset(center.dx, center.dy + radius), ring);
+      Offset(center.dx, center.dy - radius),
+      Offset(center.dx, center.dy + radius),
+      ring,
+    );
 
     // Sapuan radar (gradient menyala di belakang garis putar).
     final sweep = Paint()
@@ -437,8 +502,16 @@ class _NearbyCard extends StatelessWidget {
     final avatar = '${data['avatar'] ?? ''}';
     final isRegistered = data['is_registered'] == true;
     final distanceKm = (data['distance_km'] as num?)?.toDouble() ?? 0;
-    final color = gender == 'male' ? AppTheme.male : gender == 'female' ? AppTheme.female : AppTheme.accent;
-    final genderLabel = gender == 'male' ? s.genderMale : gender == 'female' ? s.genderFemale : s.genderOther;
+    final color = gender == 'male'
+        ? AppTheme.male
+        : gender == 'female'
+        ? AppTheme.female
+        : AppTheme.accent;
+    final genderLabel = gender == 'male'
+        ? s.genderMale
+        : gender == 'female'
+        ? s.genderFemale
+        : s.genderOther;
 
     final avatarBytes = avatar.isNotEmpty
         ? _avatarBytesCache.putIfAbsent(avatar, () {
@@ -456,7 +529,13 @@ class _NearbyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -470,24 +549,45 @@ class _NearbyCard extends StatelessWidget {
                 Stack(
                   children: [
                     Container(
-                      width: 44, height: 44,
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: color.withValues(alpha: 0.15),
                         border: Border.all(color: color, width: 1.5),
                         image: hasAvatar
-                            ? DecorationImage(image: MemoryImage(avatarBytes!), fit: BoxFit.cover)
+                            ? DecorationImage(
+                                image: MemoryImage(avatarBytes!),
+                                fit: BoxFit.cover,
+                              )
                             : null,
                       ),
                       child: hasAvatar
                           ? null
-                          : Center(child: Text(
-                              nickname.isNotEmpty ? nickname[0].toUpperCase() : '?',
-                              style: TextStyle(color: color, fontSize: AppGlyph.avatarInitial(44), fontWeight: FontWeight.w700))),
+                          : Center(
+                              child: Text(
+                                nickname.isNotEmpty
+                                    ? nickname[0].toUpperCase()
+                                    : '?',
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: AppGlyph.avatarInitial(44),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
                     ),
-                    Positioned(right: 0, bottom: 0,
-                      child: Container(width: 12, height: 12,
-                        decoration: BoxDecoration(color: _statusColor(status), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 1.5)),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: _statusColor(status),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
                       ),
                     ),
                   ],
@@ -497,30 +597,66 @@ class _NearbyCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(children: [
-                        Flexible(child: Text(nickname, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis)),
-                        if (isRegistered) ...[
-                          SizedBox(width: 4),
-                          Icon(Icons.verified, size: 15, color: Color(0xFF4A90E2)),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              nickname,
+                              style: AppText.bodyStrong,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isRegistered) ...[
+                            SizedBox(width: 4),
+                            Icon(
+                              Icons.verified,
+                              size: 15,
+                              color: Color(0xFF4A90E2),
+                            ),
+                          ],
                         ],
-                      ]),
-                      Text('$genderLabel $age · $city, $country',
-                          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Row(children: [
-                        const Icon(Icons.location_on, size: 12, color: AppTheme.primary),
-                        const SizedBox(width: 2),
-                        Text(_distanceLabel(s, distanceKm),
-                            style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
-                      ]),
+                      ),
+                      Text(
+                        '$genderLabel $age · $city, $country',
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 12,
+                            color: AppTheme.primary,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            _distanceLabel(s, distanceKm),
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-                  child: const Icon(Icons.chat_bubble_outline, color: AppTheme.primary, size: 18),
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.chat_bubble_outline,
+                    color: AppTheme.primary,
+                    size: 18,
+                  ),
                 ),
               ],
             ),

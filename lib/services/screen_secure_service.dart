@@ -8,7 +8,9 @@ import 'package:flutter/services.dart';
 /// 3. [screenshotEnabled] — setting admin global. true = bisa screenshot,
 ///    false = seluruh app anti-screenshot.
 class ScreenSecureService {
-  static const MethodChannel _channel = MethodChannel('com.chatyuk.chatyuk/window');
+  static const MethodChannel _channel = MethodChannel(
+    'com.chatyuk.chatyuk/window',
+  );
 
   static bool _screenshotEnabled = true;
   static bool _donationActive = false;

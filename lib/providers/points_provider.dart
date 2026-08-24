@@ -4,8 +4,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/points_service.dart';
-import '../config/app_flavor.dart';
 import '../config/theme.dart';
+import '../core/admin_gate.dart';
 
 class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   final PointsService _service = PointsService(Supabase.instance.client);
@@ -71,7 +71,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final p = await _service.roomPricing();
       _roomCreatePaid = (p['create_paid'] as num?)?.toInt() ?? _roomCreatePaid;
-      _roomCreatePwPaid = (p['create_pw_paid'] as num?)?.toInt() ?? _roomCreatePwPaid;
+      _roomCreatePwPaid =
+          (p['create_pw_paid'] as num?)?.toInt() ?? _roomCreatePwPaid;
       _roomJoinPaid = (p['join_paid'] as num?)?.toInt() ?? _roomJoinPaid;
       _roomExtendPaid = (p['extend_paid'] as num?)?.toInt() ?? _roomExtendPaid;
       _bonusMultiplier = (p['multiplier'] as num?)?.toInt() ?? _bonusMultiplier;
@@ -114,14 +115,18 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _sessionStart = DateTime.now();
     _onlineTickTimer = Timer.periodic(
-        const Duration(seconds: 30), (_) => _checkOnlineMilestones());
+      const Duration(seconds: 30),
+      (_) => _checkOnlineMilestones(),
+    );
     // Sinkron saldo koin via realtime profiles — koin masuk (transfer) &
     // keluar (belanja) langsung tampil tanpa reload.
     subscribeOwnPoints();
     // Saat user berganti (login/logout), stream poin harus di-resubscribe
     // supaya menunjuk ke row profiles yang benar.
     try {
-      _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+      _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((
+        state,
+      ) {
         if (_disposed) return;
         _refreshAdminDev();
         if (state.event == AuthChangeEvent.initialSession ||
@@ -151,8 +156,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Mode development: admin (developer) selalu bisa menguji sistem koin,
   /// termasuk saat points_enabled = false di production.
   void _refreshAdminDev() {
-    final email = Supabase.instance.client.auth.currentUser?.email;
-    final isAdmin = email == AppFlavor.adminEmail;
+    final isAdmin = AdminGate.enabled;
     if (isAdmin != _adminDev) {
       _adminDev = isAdmin;
       if (!_disposed) notifyListeners();
@@ -260,19 +264,29 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
                 gradient: AppTheme.headerGradient,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              child: Row(children: [
-                Text('🪙', style: TextStyle(fontSize: AppGlyph.lg)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s.pointsOnboardTitle, style: AppText.title.copyWith(color: Colors.white)),
-                      Text(s.pointsOnboardSub, style: AppText.caption.copyWith(color: Colors.white70)),
-                    ],
+              child: Row(
+                children: [
+                  Text('🪙', style: TextStyle(fontSize: AppGlyph.lg)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          s.pointsOnboardTitle,
+                          style: AppText.title.copyWith(color: Colors.white),
+                        ),
+                        Text(
+                          s.pointsOnboardSub,
+                          style: AppText.caption.copyWith(
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -286,14 +300,20 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
                   _onboardItem('📅', s.pointsOnboardDaily),
                   _onboardItem('⏱️', s.pointsOnboardOnline),
                   const SizedBox(height: 6),
-                  Row(children: [
-                    Text('🎉', style: TextStyle(fontSize: AppGlyph.sm)),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(s.pointsOnboardStart,
-                        style: AppText.bodySmall.copyWith(color: Colors.amber)),
-                    ),
-                  ]),
+                  Row(
+                    children: [
+                      Text('🎉', style: TextStyle(fontSize: AppGlyph.sm)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          s.pointsOnboardStart,
+                          style: AppText.bodySmall.copyWith(
+                            color: Colors.amber,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -306,7 +326,9 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF2ECC71),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   child: Text(s.pointsOnboardOk, style: AppText.button),
@@ -329,29 +351,39 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
             : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: highlight ? const Color(0xFF2ECC71).withValues(alpha: 0.5) : Colors.transparent,
+          color: highlight
+              ? const Color(0xFF2ECC71).withValues(alpha: 0.5)
+              : Colors.transparent,
           width: 1.2,
         ),
       ),
-      child: Row(children: [
-        Text(emoji, style: TextStyle(fontSize: AppGlyph.md)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(text, style: AppText.body.copyWith(
-            color: highlight ? Colors.white : Colors.white70,
-            fontWeight: highlight ? FontWeight.w700 : FontWeight.w400,
-          )),
-        ),
-        if (highlight)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2ECC71),
-              borderRadius: BorderRadius.circular(20),
+      child: Row(
+        children: [
+          Text(emoji, style: TextStyle(fontSize: AppGlyph.md)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: AppText.body.copyWith(
+                color: highlight ? Colors.white : Colors.white70,
+                fontWeight: highlight ? FontWeight.w700 : FontWeight.w400,
+              ),
             ),
-            child: Text('+100', style: AppText.label.copyWith(color: Colors.white)),
           ),
-      ]),
+          if (highlight)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2ECC71),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '+100',
+                style: AppText.label.copyWith(color: Colors.white),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -364,10 +396,16 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       refreshEnabled();
       _sessionStart = DateTime.now();
       _onlineTickTimer?.cancel();
-      _onlineTickTimer = Timer.periodic(const Duration(seconds: 30), (_) => _checkOnlineMilestones());
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _onlineTickTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _checkOnlineMilestones(),
+      );
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
       if (_sessionStart != null) {
-        _todayOnlineSeconds += DateTime.now().difference(_sessionStart!).inSeconds;
+        _todayOnlineSeconds += DateTime.now()
+            .difference(_sessionStart!)
+            .inSeconds;
         _sessionStart = null;
       }
       _onlineTickTimer?.cancel();
@@ -378,7 +416,9 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   void _checkOnlineMilestones() {
     if (!_enabled) return;
     if (_sessionStart != null) {
-      _todayOnlineSeconds += DateTime.now().difference(_sessionStart!).inSeconds;
+      _todayOnlineSeconds += DateTime.now()
+          .difference(_sessionStart!)
+          .inSeconds;
       _sessionStart = DateTime.now();
     }
     _tryClaimOnlineBonus();
@@ -430,9 +470,17 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (msg == null) return;
     final label = labels[msg] ?? '';
     if (label.isNotEmpty) {
-      final pts = {'online_5min': 5, 'online_30min': 5, 'online_60min': 5, 'online_120min': 5};
+      final pts = {
+        'online_5min': 5,
+        'online_30min': 5,
+        'online_60min': 5,
+        'online_120min': 5,
+      };
       final p = pts[msg] ?? 0;
-      showPointsToast(context, isId ? '+$p Poin — $label' : '+$p Points — $label');
+      showPointsToast(
+        context,
+        isId ? '+$p Poin — $label' : '+$p Points — $label',
+      );
     }
   }
 
@@ -455,7 +503,9 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       resetOnlineTrackers();
       if (!_disposed) notifyListeners();
       if (_points > old) {
-        debugPrint('[POINTS] dailyLoginBonus +${_points - old} streak=$_loginStreak -> $_points');
+        debugPrint(
+          '[POINTS] dailyLoginBonus +${_points - old} streak=$_loginStreak -> $_points',
+        );
       }
     } catch (e) {
       debugPrint('[POINTS] dailyLoginBonus error: $e');
@@ -468,8 +518,12 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     final bonus = _lastStreakBonus;
     final streak = _loginStreak;
     _lastStreakBonus = 0;
-    showPointsToast(context,
-        isId ? '🔥 Streak $streak hari — +$bonus Poin' : '🔥 $streak-day streak — +$bonus Points');
+    showPointsToast(
+      context,
+      isId
+          ? '🔥 Streak $streak hari — +$bonus Poin'
+          : '🔥 $streak-day streak — +$bonus Points',
+    );
   }
 
   /// Bonus chat orang baru (harian ber-limit, dikelola server).
@@ -589,7 +643,10 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Subscribe creator (paid-only). Lempar exception bila gagal.
-  Future<Map<String, dynamic>> subscribeCreator(String creatorUid, {int periods = 1}) async {
+  Future<Map<String, dynamic>> subscribeCreator(
+    String creatorUid, {
+    int periods = 1,
+  }) async {
     final res = await _service.subscribeCreator(creatorUid, periods: periods);
     await refreshWallet();
     return res;
@@ -602,20 +659,38 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     return res;
   }
 
-  void showPointsToast(BuildContext context, String message, {bool isError = false}) {
+  void showPointsToast(
+    BuildContext context,
+    String message, {
+    bool isError = false,
+  }) {
     try {
       final overlay = Overlay.of(context);
       late OverlayEntry entry;
       entry = OverlayEntry(
-        builder: (_) => _PointsToast(message: message, isError: isError, onDismiss: () {
-          try { entry.remove(); } catch (e) { debugPrint('[PointsProvider] showPointsToast ignored: $e'); }
-        }),
+        builder: (_) => _PointsToast(
+          message: message,
+          isError: isError,
+          onDismiss: () {
+            try {
+              entry.remove();
+            } catch (e) {
+              debugPrint('[PointsProvider] showPointsToast ignored: $e');
+            }
+          },
+        ),
       );
       overlay.insert(entry);
       Future.delayed(const Duration(milliseconds: 2000), () {
-        try { entry.remove(); } catch (e) { debugPrint('[PointsProvider] showPointsToast ignored: $e'); }
+        try {
+          entry.remove();
+        } catch (e) {
+          debugPrint('[PointsProvider] showPointsToast ignored: $e');
+        }
       });
-    } catch (e) { debugPrint('[PointsProvider] showPointsToast ignored: $e'); }
+    } catch (e) {
+      debugPrint('[PointsProvider] showPointsToast ignored: $e');
+    }
   }
 
   void showOutOfPointsDialog(BuildContext context, bool isId) {
@@ -623,70 +698,156 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2E),
-        title: Text(isId ? '😢 Poin Habis!' : '😢 Out of Points!', style: const TextStyle(color: Colors.white)),
+        title: Text(
+          isId ? '😢 Poin Habis!' : '😢 Out of Points!',
+          style: const TextStyle(color: Colors.white),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(isId ? 'Akun anonim: poin bisa hilang kapan saja!' : 'Anonymous account: points can be lost!',
-                style: AppText.bodySmall.copyWith(color: Colors.orange)),
+              Text(
+                isId
+                    ? 'Akun anonim: poin bisa hilang kapan saja!'
+                    : 'Anonymous account: points can be lost!',
+                style: AppText.bodySmall.copyWith(color: Colors.orange),
+              ),
               const SizedBox(height: 8),
-              Text(isId ? 'Dapatkan sekarang:' : 'Get now:',
-                style: AppText.bodySmall.copyWith(color: Colors.white70)),
+              Text(
+                isId ? 'Dapatkan sekarang:' : 'Get now:',
+                style: AppText.bodySmall.copyWith(color: Colors.white70),
+              ),
               const SizedBox(height: 6),
-              _dialogBtn(ctx, isId, '📧 ${isId ? "Daftar Email" : "Register Email"}', '+100', Colors.green, () {
-                Navigator.of(ctx).pop();
-              }),
-              _dialogBtn(ctx, isId, '⭐ ${isId ? "Rate ChatYuk" : "Rate ChatYuk"}', '+20', Colors.blue, () async {
-                Navigator.of(ctx).pop();
-                final earned = await oneTimeBonus('rated_app', 20);
-                if (earned && context.mounted) {
-                  showPointsToast(context, isId ? '+20 Poin — Rate app!' : '+20 Points — Rate app!');
-                }
-              }),
-              _dialogBtn(ctx, isId, '📢 ${isId ? "Share ke Teman" : "Share App"}', '+10', Colors.teal, () async {
-                Navigator.of(ctx).pop();
-                await Share.share(isId ? 'Ayo chat bareng di ChatYuk! Download di Play Store: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk' : 'Chat freely on ChatYuk! Download on Play Store: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk');
-                final earned = await oneTimeBonus('shared_app', 10);
-                if (earned && context.mounted) {
-                  showPointsToast(context, isId ? '+10 Poin — Share app!' : '+10 Points — Share app!');
-                }
-              }),
-              _dialogBtn(ctx, isId, '📝 ${isId ? "Lengkapi Profil" : "Complete Profile"}', '+10', Colors.orange, () async {
-                Navigator.of(ctx).pop();
-                final earned = await oneTimeBonus('completed_profile', 10);
-                if (earned && context.mounted) {
-                  showPointsToast(context, isId ? '+10 Poin — Profil!' : '+10 Points — Profile!');
-                }
-              }),
-              _dialogBtn(ctx, isId, '📸 ${isId ? "Kirim Foto Pertama" : "Send First Photo"}', '+10', Colors.pink, () async {
-                Navigator.of(ctx).pop();
-                final earned = await oneTimeBonus('first_photo', 10);
-                if (earned && context.mounted) {
-                  showPointsToast(context, isId ? '+10 Poin — Foto pertama!' : '+10 Points — First photo!');
-                }
-              }),
+              _dialogBtn(
+                ctx,
+                isId,
+                '📧 ${isId ? "Daftar Email" : "Register Email"}',
+                '+100',
+                Colors.green,
+                () {
+                  Navigator.of(ctx).pop();
+                },
+              ),
+              _dialogBtn(
+                ctx,
+                isId,
+                '⭐ ${isId ? "Rate ChatYuk" : "Rate ChatYuk"}',
+                '+20',
+                Colors.blue,
+                () async {
+                  Navigator.of(ctx).pop();
+                  final earned = await oneTimeBonus('rated_app', 20);
+                  if (earned && context.mounted) {
+                    showPointsToast(
+                      context,
+                      isId ? '+20 Poin — Rate app!' : '+20 Points — Rate app!',
+                    );
+                  }
+                },
+              ),
+              _dialogBtn(
+                ctx,
+                isId,
+                '📢 ${isId ? "Share ke Teman" : "Share App"}',
+                '+10',
+                Colors.teal,
+                () async {
+                  Navigator.of(ctx).pop();
+                  await Share.share(
+                    isId
+                        ? 'Ayo chat bareng di ChatYuk! Download di Play Store: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk'
+                        : 'Chat freely on ChatYuk! Download on Play Store: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk',
+                  );
+                  final earned = await oneTimeBonus('shared_app', 10);
+                  if (earned && context.mounted) {
+                    showPointsToast(
+                      context,
+                      isId
+                          ? '+10 Poin — Share app!'
+                          : '+10 Points — Share app!',
+                    );
+                  }
+                },
+              ),
+              _dialogBtn(
+                ctx,
+                isId,
+                '📝 ${isId ? "Lengkapi Profil" : "Complete Profile"}',
+                '+10',
+                Colors.orange,
+                () async {
+                  Navigator.of(ctx).pop();
+                  final earned = await oneTimeBonus('completed_profile', 10);
+                  if (earned && context.mounted) {
+                    showPointsToast(
+                      context,
+                      isId ? '+10 Poin — Profil!' : '+10 Points — Profile!',
+                    );
+                  }
+                },
+              ),
+              _dialogBtn(
+                ctx,
+                isId,
+                '📸 ${isId ? "Kirim Foto Pertama" : "Send First Photo"}',
+                '+10',
+                Colors.pink,
+                () async {
+                  Navigator.of(ctx).pop();
+                  final earned = await oneTimeBonus('first_photo', 10);
+                  if (earned && context.mounted) {
+                    showPointsToast(
+                      context,
+                      isId
+                          ? '+10 Poin — Foto pertama!'
+                          : '+10 Points — First photo!',
+                    );
+                  }
+                },
+              ),
               const Divider(color: Colors.white24),
-              Text(isId ? 'Gratis besok:' : 'Free tomorrow:',
-                style: AppText.bodySmall.copyWith(color: Colors.white70)),
+              Text(
+                isId ? 'Gratis besok:' : 'Free tomorrow:',
+                style: AppText.bodySmall.copyWith(color: Colors.white70),
+              ),
               const SizedBox(height: 4),
-              _dialogAction(isId, '📅 ${isId ? "Login Besok" : "Login Tomorrow"}', '+25', Colors.amber),
-              _dialogAction(isId, '📖 ${isId ? "Baca Room" : "Read Room"}', '+2', Colors.grey),
+              _dialogAction(
+                isId,
+                '📅 ${isId ? "Login Besok" : "Login Tomorrow"}',
+                '+25',
+                Colors.amber,
+              ),
+              _dialogAction(
+                isId,
+                '📖 ${isId ? "Baca Room" : "Read Room"}',
+                '+2',
+                Colors.grey,
+              ),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(isId ? 'Tutup' : 'Close', style: const TextStyle(color: Colors.white70)),
+            child: Text(
+              isId ? 'Tutup' : 'Close',
+              style: const TextStyle(color: Colors.white70),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _dialogBtn(BuildContext ctx, bool isId, String label, String pts, Color color, VoidCallback onTap) {
+  Widget _dialogBtn(
+    BuildContext ctx,
+    bool isId,
+    String label,
+    String pts,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: InkWell(
@@ -694,16 +855,33 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-          child: Row(children: [
-            Expanded(child: Text(label, style: AppText.bodySmall.copyWith(color: Colors.white))),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-              child: Text(pts, style: AppText.label.copyWith(color: color, letterSpacing: 0, fontWeight: FontWeight.w700)),
-            ),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
-          ]),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppText.bodySmall.copyWith(color: Colors.white),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  pts,
+                  style: AppText.label.copyWith(
+                    color: color,
+                    letterSpacing: 0,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -712,14 +890,32 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Widget _dialogAction(bool isId, String label, String pts, Color color) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Expanded(child: Text(label, style: AppText.bodySmall.copyWith(color: Colors.white))),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-          child: Text(pts, style: AppText.label.copyWith(color: color, letterSpacing: 0, fontWeight: FontWeight.w700)),
-        ),
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: AppText.bodySmall.copyWith(color: Colors.white),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              pts,
+              style: AppText.label.copyWith(
+                color: color,
+                letterSpacing: 0,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -740,23 +936,41 @@ class _PointsToast extends StatefulWidget {
   final String message;
   final bool isError;
   final VoidCallback onDismiss;
-  const _PointsToast({required this.message, this.isError = false, required this.onDismiss});
+  const _PointsToast({
+    required this.message,
+    this.isError = false,
+    required this.onDismiss,
+  });
 
   @override
   State<_PointsToast> createState() => _PointsToastState();
 }
 
-class _PointsToastState extends State<_PointsToast> with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
-  late final Animation<Offset> _slide = Tween<Offset>(begin: const Offset(0, -0.3), end: Offset.zero)
-    .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
-  late final Animation<double> _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+class _PointsToastState extends State<_PointsToast>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 400),
+  );
+  late final Animation<Offset> _slide = Tween<Offset>(
+    begin: const Offset(0, -0.3),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
+  late final Animation<double> _fade = CurvedAnimation(
+    parent: _ctrl,
+    curve: Curves.easeOut,
+  );
 
   @override
   void initState() {
     super.initState();
     _ctrl.forward();
-    Future.delayed(const Duration(seconds: 1), () => _ctrl.reverse().then((_) { if (mounted) widget.onDismiss(); }));
+    Future.delayed(
+      const Duration(seconds: 1),
+      () => _ctrl.reverse().then((_) {
+        if (mounted) widget.onDismiss();
+      }),
+    );
   }
 
   @override
@@ -768,7 +982,9 @@ class _PointsToastState extends State<_PointsToast> with SingleTickerProviderSta
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      top: 100, left: 0, right: 0,
+      top: 100,
+      left: 0,
+      right: 0,
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (_, __) => FadeTransition(
@@ -777,13 +993,30 @@ class _PointsToastState extends State<_PointsToast> with SingleTickerProviderSta
             position: _slide,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                decoration: BoxDecoration(
-                  color: widget.isError ? Colors.red.shade700 : const Color(0xFF2E7D32),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
                 ),
-                child: Text(widget.message, style: AppText.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
+                decoration: BoxDecoration(
+                  color: widget.isError
+                      ? Colors.red.shade700
+                      : const Color(0xFF2E7D32),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  widget.message,
+                  style: AppText.bodySmall.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ),

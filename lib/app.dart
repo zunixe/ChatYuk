@@ -10,7 +10,7 @@ import 'providers/chat_provider.dart';
 import 'providers/online_users_provider.dart';
 import 'providers/points_provider.dart';
 import 'providers/social_provider.dart';
-import 'providers/admin_provider.dart';
+import 'core/admin_gate.dart';
 import 'providers/locale_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/nav_provider.dart';
@@ -37,10 +37,15 @@ class ChatYukApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ChangeNotifierProvider(create: (_) => PointsProvider()..checkOnboarding()..refreshEnabled()..subscribeEnabled()),
+        ChangeNotifierProvider(
+          create: (_) => PointsProvider()
+            ..checkOnboarding()
+            ..refreshEnabled()
+            ..subscribeEnabled(),
+        ),
         ChangeNotifierProvider(create: (_) => SocialProvider()),
         ChangeNotifierProvider(create: (_) => TimelineProvider()),
-        ChangeNotifierProvider(create: (_) => AdminProvider()),
+        ...AdminGate.extraProviders,
         ChangeNotifierProvider(create: (_) => NavProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => localeProvider),
@@ -182,15 +187,14 @@ class _AuthGateState extends State<_AuthGate> {
               children: [
                 Icon(Icons.wifi_off, color: AppTheme.textSecondary, size: 48),
                 SizedBox(height: 16),
-                Text(
-                  s.msgServerError,
-                  style: AppText.title,
-                ),
+                Text(s.msgServerError, style: AppText.title),
                 SizedBox(height: 8),
                 Text(
                   s.msgServerErrorHint,
                   textAlign: TextAlign.center,
-                  style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
@@ -238,8 +242,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     auth.goOnline();
     auth.resetIdleTimer();
     // Hanya user terdaftar yang menerima panggilan masuk (anon: tidak).
-    CallProvider.instance
-        .ensureListening(registered: auth.profile?.isRegistered ?? false);
+    CallProvider.instance.ensureListening(
+      registered: auth.profile?.isRegistered ?? false,
+    );
     final uid = auth.uid;
     if (uid != null) {
       context.read<ChatProvider>().loadBlockedUids(uid);
@@ -306,10 +311,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
           behavior: HitTestBehavior.translucent,
           onTap: () => context.read<AuthProvider>().notifyActivity(),
           onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
-          child: IndexedStack(
-            index: tab,
-            children: _pages!,
-          ),
+          child: IndexedStack(index: tab, children: _pages!),
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () {
@@ -329,10 +331,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
           child: const Icon(Icons.add, color: Colors.white, size: 28),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: _BottomNav(
-          currentIndex: tab,
-          onTap: _onNavTap,
-        ),
+        bottomNavigationBar: _BottomNav(currentIndex: tab, onTap: _onNavTap),
       ),
     );
   }
@@ -387,7 +386,13 @@ class _BottomNav extends StatelessWidget {
           children: [
             _BadgedIcon(icon: icon, count: badge, color: color),
             const SizedBox(height: 2),
-            Text(label, style: AppText.caption.copyWith(color: color, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+            Text(
+              label,
+              style: AppText.caption.copyWith(
+                color: color,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),

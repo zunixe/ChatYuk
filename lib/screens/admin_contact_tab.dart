@@ -5,6 +5,7 @@ import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
+import '../config/strings_admin.dart';
 
 /// Admin: daftar pesan Hubungi Kami dari pengguna.
 class AdminContactTab extends StatefulWidget {
@@ -20,7 +21,9 @@ class _AdminContactTabState extends State<AdminContactTab> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<AdminProvider>().fetchContactMessages());
+    Future.microtask(
+      () => context.read<AdminProvider>().fetchContactMessages(),
+    );
     _scrollCtrl.addListener(_onScroll);
   }
 
@@ -33,7 +36,8 @@ class _AdminContactTabState extends State<AdminContactTab> {
   void _onScroll() {
     final admin = context.read<AdminProvider>();
     if (!_scrollCtrl.hasClients) return;
-    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 300) {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 300) {
       admin.fetchMoreContactMessages();
     }
   }
@@ -86,8 +90,10 @@ class _AdminContactTabState extends State<AdminContactTab> {
               ),
               if (unread > 0)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppTheme.danger,
                     borderRadius: BorderRadius.circular(10),
@@ -98,8 +104,11 @@ class _AdminContactTabState extends State<AdminContactTab> {
                   ),
                 ),
               IconButton(
-                icon: const Icon(Icons.refresh_rounded,
-                    size: 20, color: AppTheme.primary),
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  size: 20,
+                  color: AppTheme.primary,
+                ),
                 onPressed: () => admin.fetchContactMessages(),
               ),
             ],
@@ -109,47 +118,49 @@ class _AdminContactTabState extends State<AdminContactTab> {
           child: admin.contactLoading && admin.contactMessages.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : admin.contactError != null && admin.contactMessages.isEmpty
-                  ? Center(
-                      child: TextButton(
-                        onPressed: () => admin.fetchContactMessages(),
-                        child: Text('${admin.contactError}'),
-                      ),
-                    )
-                  : admin.contactMessages.isEmpty
-                      ? Center(
-                          child: Text(
-                            s.adminContactEmpty,
-                            style: AppText.bodySmall
-                                .copyWith(color: AppTheme.textSecondary),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: admin.fetchContactMessages,
-                          child: ListView.separated(
-                            controller: _scrollCtrl,
-                            padding: const EdgeInsets.all(16),
-                            itemCount: admin.contactMessages.length + 1,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (context, i) {
-                              if (i == admin.contactMessages.length) {
-                                return admin.contactHasMore
-                                    ? const Padding(
-                                        padding: EdgeInsets.all(12),
-                                        child: Center(
-                                            child: SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child:
-                                              CircularProgressIndicator(strokeWidth: 2),
-                                        )),
-                                      )
-                                    : const SizedBox(height: 12);
-                              }
-                              return _messageCard(context, admin.contactMessages[i]);
-                            },
-                          ),
-                        ),
+              ? Center(
+                  child: TextButton(
+                    onPressed: () => admin.fetchContactMessages(),
+                    child: Text('${admin.contactError}'),
+                  ),
+                )
+              : admin.contactMessages.isEmpty
+              ? Center(
+                  child: Text(
+                    s.adminContactEmpty,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: admin.fetchContactMessages,
+                  child: ListView.separated(
+                    controller: _scrollCtrl,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: admin.contactMessages.length + 1,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, i) {
+                      if (i == admin.contactMessages.length) {
+                        return admin.contactHasMore
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : const SizedBox(height: 12);
+                      }
+                      return _messageCard(context, admin.contactMessages[i]);
+                    },
+                  ),
+                ),
         ),
       ],
     );
@@ -167,7 +178,9 @@ class _AdminContactTabState extends State<AdminContactTab> {
 
     return Container(
       decoration: BoxDecoration(
-        color: read ? AppTheme.bgCard : AppTheme.primary.withValues(alpha: 0.05),
+        color: read
+            ? AppTheme.bgCard
+            : AppTheme.primary.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.divider, width: 1),
       ),
@@ -194,7 +207,9 @@ class _AdminContactTabState extends State<AdminContactTab> {
                       if (!read) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.danger,
                             borderRadius: BorderRadius.circular(8),
@@ -209,8 +224,9 @@ class _AdminContactTabState extends State<AdminContactTab> {
                       if (createdAt != null)
                         Text(
                           formatTime(createdAt),
-                          style: AppText.micro
-                              .copyWith(color: AppTheme.textSecondary),
+                          style: AppText.micro.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
                     ],
                   ),
@@ -232,13 +248,17 @@ class _AdminContactTabState extends State<AdminContactTab> {
                     color: AppTheme.textSecondary,
                   ),
                   tooltip: read ? s.labelNew : s.labelRead,
-                  onPressed: () => context
-                      .read<AdminProvider>()
-                      .setContactRead(msg['id'] as String, read: !read),
+                  onPressed: () => context.read<AdminProvider>().setContactRead(
+                    msg['id'] as String,
+                    read: !read,
+                  ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      size: 18, color: AppTheme.danger),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: AppTheme.danger,
+                  ),
                   tooltip: s.btnDelete,
                   onPressed: () => _confirmDelete(msg),
                 ),

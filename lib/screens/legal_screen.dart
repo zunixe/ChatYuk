@@ -17,10 +17,17 @@ class LegalScreen extends StatelessWidget {
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       appBar: AppBar(
-        title: Text(kind == LegalKind.privacy ? s.legalPrivacyTitle : s.legalTermsTitle),
+        title: Text(
+          kind == LegalKind.privacy ? s.legalPrivacyTitle : s.legalTermsTitle,
+        ),
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 32 + MediaQuery.paddingOf(context).bottom),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          32 + MediaQuery.paddingOf(context).bottom,
+        ),
         child: kind == LegalKind.privacy
             ? _LegalDocBody(
                 docTitle: s.legalPrivacyDocTitle,
@@ -96,7 +103,10 @@ class _LegalDocBody extends StatelessWidget {
             const SizedBox(height: 8),
           ],
           if (section.article != null) ...[
-            Text(section.article!, style: AppText.label.copyWith(color: AppTheme.textSecondary)),
+            Text(
+              section.article!,
+              style: AppText.label.copyWith(color: AppTheme.textSecondary),
+            ),
             const SizedBox(height: 8),
           ],
           for (final item in section.items) ...[
@@ -191,7 +201,9 @@ class _LegalTable extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     data[i].skip(1).join(' — '),
-                    style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
                     textAlign: TextAlign.justify,
                   ),
                 ],
@@ -210,15 +222,24 @@ List<InlineSpan> _rich(String text) {
   for (var i = 0; i < boldParts.length; i++) {
     if (boldParts[i].isEmpty) continue;
     if (i.isOdd) {
-      spans.add(TextSpan(text: boldParts[i], style: const TextStyle(fontWeight: FontWeight.w700)));
+      spans.add(
+        TextSpan(
+          text: boldParts[i],
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      );
     } else {
       final italicParts = boldParts[i].split('*');
       for (var j = 0; j < italicParts.length; j++) {
         if (italicParts[j].isEmpty) continue;
-        spans.add(TextSpan(
-          text: italicParts[j],
-          style: j.isOdd ? const TextStyle(fontStyle: FontStyle.italic) : null,
-        ));
+        spans.add(
+          TextSpan(
+            text: italicParts[j],
+            style: j.isOdd
+                ? const TextStyle(fontStyle: FontStyle.italic)
+                : null,
+          ),
+        );
       }
     }
   }

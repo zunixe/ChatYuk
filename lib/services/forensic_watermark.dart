@@ -127,8 +127,11 @@ class ForensicWatermark {
   static Float64List _idct2d(Float64List block, int n) =>
       _transform2d(block, n, _idct1d);
 
-  static Float64List _transform2d(Float64List block, int n,
-      Float64List Function(Float64List) axis) {
+  static Float64List _transform2d(
+    Float64List block,
+    int n,
+    Float64List Function(Float64List) axis,
+  ) {
     final tmp = Float64List(n * n);
     for (int r = 0; r < n; r++) {
       final row = Float64List(n);
@@ -155,8 +158,7 @@ class ForensicWatermark {
   }
 
   // ── Kanal luminance (Rec.601) ────────────────────────────────
-  static double _luma(num r, num g, num b) =>
-      0.299 * r + 0.587 * g + 0.114 * b;
+  static double _luma(num r, num g, num b) => 0.299 * r + 0.587 * g + 0.114 * b;
 
   static Float64List _luminance(img.Image im) {
     final w = im.width;
@@ -205,8 +207,12 @@ class ForensicWatermark {
     final scale = maxSide / (w > h ? w : h);
     final nw = (w * scale).round();
     final nh = (h * scale).round();
-    return img.copyResize(src,
-        width: nw, height: nh, interpolation: img.Interpolation.linear);
+    return img.copyResize(
+      src,
+      width: nw,
+      height: nh,
+      interpolation: img.Interpolation.linear,
+    );
   }
 
   static void _embedInto(img.Image im, String seed) {
@@ -262,7 +268,10 @@ class ForensicWatermark {
   // ── EXTRACT ──────────────────────────────────────────────────
   /// Deteksi watermark pada gambar (mis. foto bocor yang sudah di-crop).
   /// Kembalikan skor korelasi untuk tiap kandidat seed, urut menurun.
-  static List<WatermarkDetect> detect(Uint8List bytes, List<String> candidates) {
+  static List<WatermarkDetect> detect(
+    Uint8List bytes,
+    List<String> candidates,
+  ) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return const [];
 
@@ -281,8 +290,14 @@ class ForensicWatermark {
       final y = _luminance(resized);
       for (final dx in shifts) {
         for (final dy in shifts) {
-          final mean =
-              _extractMean(y, resized.width, resized.height, n, dx, dy);
+          final mean = _extractMean(
+            y,
+            resized.width,
+            resized.height,
+            n,
+            dx,
+            dy,
+          );
           means.add(mean);
         }
       }
@@ -304,24 +319,34 @@ class ForensicWatermark {
     // distribusi maxRho seed lain. Seed salah berkumpul di tingkat noise.
     final n = rhos.length;
     final mu = rhos.reduce((a, b) => a + b) / n;
-    final variance = rhos
-            .map((r) => (r - mu) * (r - mu))
-            .reduce((a, b) => a + b) /
-        (n - 1);
+    final variance =
+        rhos.map((r) => (r - mu) * (r - mu)).reduce((a, b) => a + b) / (n - 1);
     final sigma = math.sqrt(variance) + 1e-6;
 
     final results = <WatermarkDetect>[];
     for (int i = 0; i < candidates.length; i++) {
       final z = (rhos[i] - mu) / sigma;
-      results.add(WatermarkDetect(
-          seed: candidates[i], rho: rhos[i], z: z, matched: z > threshold));
+      results.add(
+        WatermarkDetect(
+          seed: candidates[i],
+          rho: rhos[i],
+          z: z,
+          matched: z > threshold,
+        ),
+      );
     }
     results.sort((a, b) => b.rho.compareTo(a.rho));
     return results;
   }
 
   static List<double> _extractMean(
-      Float64List y, int w, int h, int n, int dx, int dy) {
+    Float64List y,
+    int w,
+    int h,
+    int n,
+    int dx,
+    int dy,
+  ) {
     final gridX = w ~/ n;
     final gridY = h ~/ n;
     final acc = Float64List(coeffsPerBlock);

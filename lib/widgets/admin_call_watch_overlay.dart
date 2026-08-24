@@ -4,6 +4,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
 
 import '../config/strings.dart';
+import '../config/strings_admin.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_call_watch_service.dart';
@@ -52,15 +53,19 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
     final s = context.watch<LocaleProvider>().s;
     final sess = widget.session;
     final mq = MediaQuery.of(context);
-    final appBarH = Scaffold.maybeOf(context)?.appBarMaxHeight ?? kToolbarHeight;
+    final appBarH =
+        Scaffold.maybeOf(context)?.appBarMaxHeight ?? kToolbarHeight;
     final maxW = mq.size.width;
-    final bodyHFull = mq.size.height - mq.padding.top - appBarH - mq.padding.bottom;
+    final bodyHFull =
+        mq.size.height - mq.padding.top - appBarH - mq.padding.bottom;
     final keyboardH = mq.viewInsets.bottom;
     final bodyH = (bodyHFull - keyboardH).clamp(200.0, double.infinity);
     final keyboardOpen = keyboardH > 40;
     const minChatVisible = 110.0;
-    final maxRemoteWhenKeyboard =
-        (bodyH - minChatVisible).clamp(bodyH * 0.18, bodyH * 0.45);
+    final maxRemoteWhenKeyboard = (bodyH - minChatVisible).clamp(
+      bodyH * 0.18,
+      bodyH * 0.45,
+    );
     final halfH = bodyHFull * 0.5;
     _remoteH ??= halfH;
     final userRemoteH = _remoteH!.clamp(bodyHFull * 0.25, bodyHFull * 0.78);
@@ -101,8 +106,10 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
               behavior: HitTestBehavior.opaque,
               onPanUpdate: (d) {
                 setState(() {
-                  _remoteH =
-                      (_remoteH! + d.delta.dy).clamp(bodyHFull * 0.25, bodyHFull * 0.78);
+                  _remoteH = (_remoteH! + d.delta.dy).clamp(
+                    bodyHFull * 0.25,
+                    bodyHFull * 0.78,
+                  );
                 });
               },
               onPanEnd: (_) {
@@ -121,7 +128,10 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
                     color: Colors.white70,
                     borderRadius: BorderRadius.circular(2),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 4),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 4,
+                      ),
                     ],
                   ),
                 ),
@@ -137,9 +147,7 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
   Widget _mainPanel(S s, WatchSession sess, WatchParticipant p) {
     return Stack(
       children: [
-        Positioned.fill(
-          child: Container(color: const Color(0xFF10201A)),
-        ),
+        Positioned.fill(child: Container(color: const Color(0xFF10201A))),
         Positioned.fill(
           child: RTCVideoView(
             p.renderer,
@@ -152,10 +160,17 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ProfileAvatar(uid: p.uid, name: p.name, size: 80, borderRadius: 40),
+                  ProfileAvatar(
+                    uid: p.uid,
+                    name: p.name,
+                    size: 80,
+                    borderRadius: 40,
+                  ),
                   SizedBox(height: 10),
-                  Text(_placeholderText(s, sess, p),
-                    style: AppText.caption.copyWith(color: Colors.white70)),
+                  Text(
+                    _placeholderText(s, sess, p),
+                    style: AppText.caption.copyWith(color: Colors.white70),
+                  ),
                 ],
               ),
             ),
@@ -176,9 +191,12 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(p.name,
+                  child: Text(
+                    p.name,
                     style: AppText.label.copyWith(color: Colors.white),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 _liveBadge(s),
               ],
@@ -208,11 +226,19 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
         Container(
           width: 7,
           height: 7,
-          decoration: const BoxDecoration(color: Color(0xFFFF4D4F), shape: BoxShape.circle),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFF4D4F),
+            shape: BoxShape.circle,
+          ),
         ),
         const SizedBox(width: 5),
-        Text(s.adminCallLive,
-          style: AppText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+        Text(
+          s.adminCallLive,
+          style: AppText.micro.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         const SizedBox(width: 8),
         _WatchDurationText(session: widget.session),
       ],
@@ -225,8 +251,9 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
       children: [
         _ControlButton(
           icon: Icons.cameraswitch,
-          onTap: () => setState(() => widget.session.mainIndex =
-              1 - widget.session.mainIndex),
+          onTap: () => setState(
+            () => widget.session.mainIndex = 1 - widget.session.mainIndex,
+          ),
           label: s.adminSwapView,
         ),
         _ControlButton(icon: Icons.aspect_ratio, onTap: widget.onExpand),
@@ -235,14 +262,21 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
   }
 
   /// Video peserta kedua sebagai bubble kecil yang bisa di-drag.
-  Widget _bubble(WatchParticipant p, Offset pos, double w, double h,
-      double maxW, double maxH) {
+  Widget _bubble(
+    WatchParticipant p,
+    Offset pos,
+    double w,
+    double h,
+    double maxW,
+    double maxH,
+  ) {
     return Positioned(
       left: pos.dx,
       top: pos.dy,
       child: GestureDetector(
-        onTap: () => setState(() => widget.session.mainIndex =
-            1 - widget.session.mainIndex),
+        onTap: () => setState(
+          () => widget.session.mainIndex = 1 - widget.session.mainIndex,
+        ),
         onPanUpdate: (d) {
           setState(() {
             _bubblePos = Offset(
@@ -270,7 +304,12 @@ class _AdminCallWatchOverlayState extends State<AdminCallWatchOverlay> {
               if (!_showVideo(p))
                 ColoredBox(
                   color: const Color(0xFF10201A),
-                  child: ProfileAvatar(uid: p.uid, name: p.name, size: 44, borderRadius: 22),
+                  child: ProfileAvatar(
+                    uid: p.uid,
+                    name: p.name,
+                    size: 44,
+                    borderRadius: 22,
+                  ),
                 ),
               if (!p.micOn)
                 Positioned(
@@ -297,6 +336,10 @@ class AdminCallWatchFullScreen extends StatefulWidget {
 }
 
 class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
+  Offset? _pipPos;
+  double _pipScale = 1.0;
+  bool _recording = false;
+
   @override
   void initState() {
     super.initState();
@@ -310,7 +353,38 @@ class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
   }
 
   void _onSession() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    if (_recording && widget.session.stopped) {
+      _recording = false;
+      widget.session.stopRecording();
+    }
+    setState(() {});
+  }
+
+  bool get _mediaConnected =>
+      widget.session.participants.any((p) => p.connected || p.connecting);
+
+  Future<void> _toggleRecord(S s) async {
+    final sess = widget.session;
+    if (_recording) {
+      setState(() => _recording = false);
+      await sess.stopRecording();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.recStop)));
+      }
+      return;
+    }
+    final path = await sess.startRecording();
+    if (!mounted) return;
+    if (path == 'STORAGE_DENIED') {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.recStorageDenied)));
+      return;
+    }
+    setState(() => _recording = true);
   }
 
   @override
@@ -337,45 +411,101 @@ class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ProfileAvatar(uid: main.uid, name: main.name, size: 96, borderRadius: 48),
-                      SizedBox(height: 10),
-                      Text(_placeholderText(s, sess, main),
-                        style: AppText.bodySmall.copyWith(color: Colors.white70)),
-                    ],
-                  ),
-                ),
-              ),
-            // PiP peserta kedua.
-            Positioned(
-              right: 12,
-              bottom: 24,
-              child: GestureDetector(
-                onTap: () => setState(() => sess.mainIndex = 1 - sess.mainIndex),
-                child: Container(
-                  width: 104,
-                  height: 146,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white30, width: 1),
-                    color: const Color(0xFF10201A),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      RTCVideoView(
-                        other.renderer,
-                        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      ProfileAvatar(
+                        uid: main.uid,
+                        name: main.name,
+                        size: 96,
+                        borderRadius: 48,
                       ),
-                      if (!_showVideo(other))
-                        ColoredBox(
-                          color: const Color(0xFF10201A),
-                          child: ProfileAvatar(uid: other.uid, name: other.name, size: 40, borderRadius: 20),
+                      SizedBox(height: 10),
+                      Text(
+                        _placeholderText(s, sess, main),
+                        style: AppText.bodySmall.copyWith(
+                          color: Colors.white70,
                         ),
+                      ),
                     ],
                   ),
                 ),
               ),
+            // PiP peserta kedua — bisa di-drag, double-tap expand/kecilkan,
+            // single-tap tukar dengan panel utama.
+            Builder(
+              builder: (ctx) {
+                final mq = MediaQuery.of(ctx);
+                const baseW = 104.0;
+                const baseH = 146.0;
+                final w = baseW * _pipScale;
+                final h = baseH * _pipScale;
+                _pipPos ??= Offset(
+                  mq.size.width - w - 12,
+                  mq.size.height * 0.55,
+                );
+                final pos = Offset(
+                  _pipPos!.dx.clamp(8.0, mq.size.width - w - 8),
+                  _pipPos!.dy.clamp(8.0, mq.size.height - h - 8),
+                );
+                return Positioned(
+                  left: pos.dx,
+                  top: pos.dy,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () =>
+                        setState(() => sess.mainIndex = 1 - sess.mainIndex),
+                    onDoubleTap: () => setState(
+                      () => _pipScale = _pipScale == 1.0 ? 1.45 : 1.0,
+                    ),
+                    onPanUpdate: (d) => setState(() {
+                      _pipPos = Offset(
+                        pos.dx + d.delta.dx,
+                        pos.dy + d.delta.dy,
+                      );
+                    }),
+                    child: Container(
+                      width: w,
+                      height: h,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.65),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                        color: const Color(0xFF10201A),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          RTCVideoView(
+                            other.renderer,
+                            objectFit: RTCVideoViewObjectFit
+                                .RTCVideoViewObjectFitCover,
+                          ),
+                          if (!_showVideo(other))
+                            ColoredBox(
+                              color: const Color(0xFF10201A),
+                              child: Center(
+                                child: ProfileAvatar(
+                                  uid: other.uid,
+                                  name: other.name,
+                                  size: (_pipScale > 1 ? 56 : 40),
+                                  borderRadius: (_pipScale > 1 ? 28 : 20),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
             Positioned(
               top: 0,
@@ -384,26 +514,55 @@ class _AdminCallWatchFullScreenState extends State<AdminCallWatchFullScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.arrow_back_rounded, color: Colors.white, size: 24),
+                    icon: Icon(
+                      Icons.arrow_back_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                     onPressed: () => Navigator.of(context).maybePop(),
                   ),
                   Expanded(
-                    child: Text('${main.name} & ${other.name}',
+                    child: Text(
+                      '${main.name} & ${other.name}',
                       style: AppText.label.copyWith(color: Colors.white),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (_mediaConnected)
+                        IconButton(
+                          tooltip: _recording ? s.recStop : s.recStart,
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            _recording
+                                ? Icons.stop_rounded
+                                : Icons.fiber_manual_record,
+                            color: _recording
+                                ? const Color(0xFFFF4D4F)
+                                : Colors.white70,
+                            size: 26,
+                          ),
+                          onPressed: () => _toggleRecord(s),
+                        ),
                       Container(
-                        width: 7, height: 7,
+                        width: 7,
+                        height: 7,
                         decoration: const BoxDecoration(
-                            color: Color(0xFFFF4D4F), shape: BoxShape.circle),
+                          color: Color(0xFFFF4D4F),
+                          shape: BoxShape.circle,
+                        ),
                       ),
                       SizedBox(width: 5),
-                      Text(s.adminCallLive,
+                      Text(
+                        s.adminCallLive,
                         style: AppText.micro.copyWith(
-                            color: Colors.white, fontWeight: FontWeight.w700)),
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       SizedBox(width: 8),
                       _WatchDurationText(session: sess),
                       SizedBox(width: 8),
@@ -458,9 +617,12 @@ class _ControlButton extends StatelessWidget {
       children: [
         btn,
         const SizedBox(height: 2),
-        Text(label!,
+        Text(
+          label!,
           style: AppText.micro.copyWith(color: Colors.white),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }
@@ -499,7 +661,6 @@ class _WatchDurationTextState extends State<_WatchDurationText> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(_text,
-      style: AppText.micro.copyWith(color: Colors.white70));
+    return Text(_text, style: AppText.micro.copyWith(color: Colors.white70));
   }
 }

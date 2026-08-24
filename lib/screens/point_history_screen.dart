@@ -49,28 +49,33 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
       body: _loading
           ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : _items.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.receipt_long_outlined, size: 48, color: AppTheme.textSecondary),
-                      SizedBox(height: 12),
-                      Text(s.pointHistoryEmpty, style: TextStyle(color: AppTheme.textSecondary)),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    size: 48,
+                    color: AppTheme.textSecondary,
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 40),
-                    itemCount: _items.length,
-                    separatorBuilder: (_, i) => const Divider(height: 1, indent: 64),
-                    itemBuilder: (_, i) => _HistoryTile(
-                      entry: _items[i],
-                      s: s,
-                    ),
+                  SizedBox(height: 12),
+                  Text(
+                    s.pointHistoryEmpty,
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
-                ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                padding: const EdgeInsets.only(bottom: 40),
+                itemCount: _items.length,
+                separatorBuilder: (_, i) =>
+                    const Divider(height: 1, indent: 64),
+                itemBuilder: (_, i) => _HistoryTile(entry: _items[i], s: s),
+              ),
+            ),
     );
   }
 }
@@ -124,7 +129,10 @@ class _HistoryTile extends StatelessWidget {
           SizedBox(height: 2),
           Text(
             DateFormat('dd MMM yyyy HH:mm').format(time),
-            style: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400),
+            style: AppText.micro.copyWith(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w400,
+            ),
           ),
         ],
       ),
@@ -151,12 +159,14 @@ class _HistoryTile extends StatelessWidget {
       case 'spend_chat':
         final t = '${metadata['msg_type'] ?? ref}';
         if (t == 'image') return s.pointHistoryDeductImage;
-        if (t == 'view_once' || t == 'view_once_expired') return s.pointHistoryDeductViewOnce;
+        if (t == 'view_once' || t == 'view_once_expired')
+          return s.pointHistoryDeductViewOnce;
         return s.pointHistoryDeductText;
       case 'deduct':
         final t = '${metadata['msg_type']}';
         if (t == 'image') return s.pointHistoryDeductImage;
-        if (t == 'view_once' || t == 'view_once_expired') return s.pointHistoryDeductViewOnce;
+        if (t == 'view_once' || t == 'view_once_expired')
+          return s.pointHistoryDeductViewOnce;
         return s.pointHistoryDeductText;
       case 'daily_login':
         return s.pointHistoryDailyLogin;

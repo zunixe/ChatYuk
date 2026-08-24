@@ -31,9 +31,18 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     final password = _passwordCtrl.text;
     final confirm = _confirmCtrl.text;
 
-    if (password.isEmpty) { _snack(s.errPasswordShort); return; }
-    if (password.length < 8) { _snack(s.errPasswordShort); return; }
-    if (password != confirm) { _snack(s.errPasswordMismatch); return; }
+    if (password.isEmpty) {
+      _snack(s.errPasswordShort);
+      return;
+    }
+    if (password.length < 8) {
+      _snack(s.errPasswordShort);
+      return;
+    }
+    if (password != confirm) {
+      _snack(s.errPasswordMismatch);
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -75,7 +84,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             Center(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Image.asset('assets/app_icon.png', width: 64, height: 64),
+                child: Image.asset(
+                  'assets/app_icon.png',
+                  width: 64,
+                  height: 64,
+                ),
               ),
             ),
             SizedBox(height: 20),
@@ -95,7 +108,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 hintText: s.hintPassword,
                 prefixIcon: Icon(Icons.lock_outlined),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                  icon: Icon(
+                    _obscure ? Icons.visibility_off : Icons.visibility,
+                  ),
                   onPressed: () => setState(() => _obscure = !_obscure),
                 ),
               ),
@@ -111,8 +126,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 hintText: s.hintPassword,
                 prefixIcon: const Icon(Icons.lock_outlined),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  icon: Icon(
+                    _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
               ),
               textInputAction: TextInputAction.done,
@@ -123,7 +141,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ElevatedButton(
               onPressed: _loading ? null : _submit,
               child: _loading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : Text(s.btnSavePassword, style: AppText.button),
             ),
           ],

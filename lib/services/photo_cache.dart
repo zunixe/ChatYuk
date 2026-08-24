@@ -13,7 +13,11 @@ Future<String?> _genThumb(Map<String, dynamic> args) async {
     final bytes = base64Decode(b64);
     final image = img.decodeImage(bytes);
     if (image == null) return null;
-    final thumb = img.copyResize(image, width: 512, interpolation: img.Interpolation.linear);
+    final thumb = img.copyResize(
+      image,
+      width: 512,
+      interpolation: img.Interpolation.linear,
+    );
     final jpg = img.encodeJpg(thumb, quality: 75);
     return base64Encode(jpg);
   } catch (_) {
@@ -95,7 +99,9 @@ class PhotoCache {
       final f = _fileFor(folder, chatKey, messageId);
       if (!await f.exists()) return null;
       // Decrypt di background isolate agar UI tidak freeze saat load banyak foto
-      final dec = await MessageCache.instance.decryptStringAsync(await f.readAsString());
+      final dec = await MessageCache.instance.decryptStringAsync(
+        await f.readAsString(),
+      );
       if (dec != null) _memPut(messageId, dec);
       return dec;
     } catch (_) {
@@ -111,14 +117,18 @@ class PhotoCache {
       final folder = await _folder();
       final tf = _thumbFileFor(folder, chatKey, messageId);
       if (await tf.exists()) {
-        final dec = await MessageCache.instance.decryptStringAsync(await tf.readAsString());
+        final dec = await MessageCache.instance.decryptStringAsync(
+          await tf.readAsString(),
+        );
         if (dec != null) _thumbPut(messageId, dec);
         return dec;
       }
       // Belum ada thumbnail (foto lama) → decrypt full, buat thumb, simpan.
       final f = _fileFor(folder, chatKey, messageId);
       if (!await f.exists()) return null;
-      final full = await MessageCache.instance.decryptStringAsync(await f.readAsString());
+      final full = await MessageCache.instance.decryptStringAsync(
+        await f.readAsString(),
+      );
       if (full == null) return null;
       final thumb = await compute(_genThumb, {'b64': full});
       if (thumb != null) {
@@ -135,7 +145,10 @@ class PhotoCache {
   /// Baca BANYAK thumbnail sekaligus untuk bubble — batch decrypt 1 isolate
   /// per batch. Hasil Map<messageId, thumbB64>; yang belum ada → tidak masuk.
   /// Foto lama (tanpa thumb) otomatis dibuatkan thumbnail-nya di sini.
-  Future<Map<String, String>> loadMany(String chatKey, List<String> messageIds) async {
+  Future<Map<String, String>> loadMany(
+    String chatKey,
+    List<String> messageIds,
+  ) async {
     final result = <String, String>{};
     if (messageIds.isEmpty) return result;
     final missing = <String>[];
@@ -191,7 +204,9 @@ class PhotoCache {
   }
 
   /// Generate thumbnail dari banyak foto — paralel (maks 5 isolate sekaligus).
-  Future<Map<String, String>> _genThumbsLimited(Map<String, String> images) async {
+  Future<Map<String, String>> _genThumbsLimited(
+    Map<String, String> images,
+  ) async {
     final result = <String, String>{};
     final entries = images.entries.toList();
     var next = 0;
@@ -224,7 +239,11 @@ class PhotoCache {
 
   /// Simpan foto full-res + buat thumbnail-nya. Mengembalikan thumbnail b64
   /// (untuk ditampilkan di bubble) atau null kalau gagal.
-  Future<String?> save(String chatKey, String messageId, String base64Image) async {
+  Future<String?> save(
+    String chatKey,
+    String messageId,
+    String base64Image,
+  ) async {
     final folder = await _folder();
     final f = _fileFor(folder, chatKey, messageId);
     final enc = await MessageCache.instance.encryptString(base64Image);
@@ -249,7 +268,9 @@ class PhotoCache {
       if (await folder.exists()) {
         await folder.delete(recursive: true);
       }
-    } catch (e) { debugPrint('[PhotoCache] clearAll ignored: $e'); }
+    } catch (e) {
+      debugPrint('[PhotoCache] clearAll ignored: $e');
+    }
   }
 
   /// Hapus foto lebih tua dari 7 hari — panggil sesekali (startup).
@@ -266,6 +287,8 @@ class PhotoCache {
           }
         }
       }
-    } catch (e) { debugPrint('[PhotoCache] clearAll ignored: $e'); }
+    } catch (e) {
+      debugPrint('[PhotoCache] clearAll ignored: $e');
+    }
   }
 }

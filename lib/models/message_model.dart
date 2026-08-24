@@ -26,9 +26,9 @@ class MessageModel {
     required this.type,
     required this.imageData,
     required this.timestamp,
-      this.edited = false,
-      this.isDeleted = false,
-      this.repliedToId,
+    this.edited = false,
+    this.isDeleted = false,
+    this.repliedToId,
     this.repliedToText,
     this.repliedToSenderName,
   });

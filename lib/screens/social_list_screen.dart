@@ -13,7 +13,12 @@ class SocialListScreen extends StatefulWidget {
   final String kind;
   final String? userId;
   final String? title;
-  const SocialListScreen({super.key, required this.kind, this.userId, this.title});
+  const SocialListScreen({
+    super.key,
+    required this.kind,
+    this.userId,
+    this.title,
+  });
 
   @override
   State<SocialListScreen> createState() => _SocialListScreenState();
@@ -48,7 +53,8 @@ class _SocialListScreenState extends State<SocialListScreen> {
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final title = widget.title ??
+    final title =
+        widget.title ??
         switch (widget.kind) {
           'followers' => s.socialFollowers,
           'following' => s.socialFollowing,
@@ -61,18 +67,20 @@ class _SocialListScreenState extends State<SocialListScreen> {
       body: _loading
           ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : _items.isEmpty
-              ? Center(
-                  child: Text(s.socialListEmpty,
-                      style: TextStyle(color: AppTheme.textSecondary)),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _items.length,
-                    itemBuilder: (_, i) => _SocialTile(entry: _items[i]),
-                  ),
-                ),
+          ? Center(
+              child: Text(
+                s.socialListEmpty,
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: _items.length,
+                itemBuilder: (_, i) => _SocialTile(entry: _items[i]),
+              ),
+            ),
     );
   }
 }
@@ -92,7 +100,11 @@ class _SocialTile extends StatelessWidget {
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Padding(
@@ -105,11 +117,19 @@ class _SocialTile extends StatelessWidget {
               child: Row(
                 children: [
                   Flexible(
-                    child: Text(name, style: AppText.bodyStrong, overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      name,
+                      style: AppText.bodyStrong,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   if (registered) ...[
                     const SizedBox(width: 4),
-                    const Icon(Icons.verified, size: 14, color: Color(0xFF4A90E2)),
+                    const Icon(
+                      Icons.verified,
+                      size: 14,
+                      color: Color(0xFF4A90E2),
+                    ),
                   ],
                 ],
               ),

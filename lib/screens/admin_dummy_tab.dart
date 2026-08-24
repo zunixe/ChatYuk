@@ -4,6 +4,7 @@ import '../config/regions.dart';
 import '../config/supabase_config.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
+import '../config/strings_admin.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_service.dart';
@@ -84,7 +85,11 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     _kota = item['city'] as String? ?? 'Jakarta';
     setState(() => _editingUid = item['uid'] as String);
     if (_scrollCtrl.hasClients) {
-      _scrollCtrl.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      _scrollCtrl.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -154,9 +159,17 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s.dummyChatAsTitle),
-        content: Text(s.dummyChatAsBody.replaceFirst('%s', item['nickname'] as String? ?? '')),
+        content: Text(
+          s.dummyChatAsBody.replaceFirst(
+            '%s',
+            item['nickname'] as String? ?? '',
+          ),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(s.dummyChatAs),
@@ -170,7 +183,13 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       await auth.becomeDummy(item['uid'] as String);
       if (!mounted) return;
       Navigator.of(context).popUntil((r) => r.isFirst);
-      _toast(s, s.dummySwapSuccess.replaceFirst('%s', item['nickname'] as String? ?? ''));
+      _toast(
+        s,
+        s.dummySwapSuccess.replaceFirst(
+          '%s',
+          item['nickname'] as String? ?? '',
+        ),
+      );
     } catch (e) {
       debugPrint('[DUMMY] chat as error: $e');
       _toast(s, s.dummySwapFailed);
@@ -182,9 +201,17 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s.dummyDeleteTitle),
-        content: Text(s.dummyDeleteBody.replaceFirst('%s', item['nickname'] as String? ?? '')),
+        content: Text(
+          s.dummyDeleteBody.replaceFirst(
+            '%s',
+            item['nickname'] as String? ?? '',
+          ),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
             onPressed: () => Navigator.pop(ctx, true),
@@ -205,10 +232,10 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
   }
 
   Color _statusColor(String status) => switch (status) {
-        'online' => Color(0xFF2E7D32),
-        'idle' => Color(0xFFF9A825),
-        _ => AppTheme.textSecondary,
-      };
+    'online' => Color(0xFF2E7D32),
+    'idle' => Color(0xFFF9A825),
+    _ => AppTheme.textSecondary,
+  };
 
   String _genderLabel(S s, String? gender) =>
       gender == 'female' ? s.labelGenderFemale : s.labelGenderMale;
@@ -221,81 +248,128 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       onRefresh: _load,
       child: ListView(
         controller: _scrollCtrl,
-        padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 24),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          MediaQuery.of(context).padding.bottom + 24,
+        ),
         children: [
           // ── Form pendaftaran / edit ──
-          Text(_editingUid != null ? s.dummyEdit : s.dummyCreateTitle, style: AppText.titleEmphasis),
+          Text(
+            _editingUid != null ? s.dummyEdit : s.dummyCreateTitle,
+            style: AppText.titleEmphasis,
+          ),
           SizedBox(height: 4),
-          Text(s.dummyRegisterHint, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            s.dummyRegisterHint,
+            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+          ),
           SizedBox(height: 10),
           _SectionCard(
-            child: Column(children: [
-              TextField(
-                controller: _nickCtrl,
-                decoration: InputDecoration(
-                  labelText: s.dummyNicknameLabel,
-                  prefixIcon: Icon(Icons.badge_outlined, size: 20),
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              SizedBox(height: 12),
-
-              // Gender
-              Row(children: [
-                Expanded(child: _genderCard('female', '👩', AppTheme.female, s.labelGenderFemale)),
-                SizedBox(width: 12),
-                Expanded(child: _genderCard('male', '👨', AppTheme.male, s.labelGenderMale)),
-              ]),
-              SizedBox(height: 12),
-
-              // Umur & Negara
-              Row(children: [
-                Expanded(child: _ageDropdown(s)),
-                SizedBox(width: 12),
-                Expanded(child: _countryDropdown(s)),
-              ]),
-              SizedBox(height: 12),
-
-              // Kota
-              _cityDropdown(s),
-              SizedBox(height: 12),
-
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _busy ? null : () => _register(s),
-                  icon: _busy
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Icon(
-                          _editingUid != null ? Icons.save_outlined : Icons.person_add_alt,
-                          size: 18),
-                  label: Text(_editingUid != null ? s.dummySaveChanges : s.dummyRegisterBtn),
-                ),
-              ),
-              if (_editingUid != null) ...[
-                SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: _busy ? null : _cancelEdit,
-                    child: Text(s.dummyCancelEdit),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _nickCtrl,
+                  decoration: InputDecoration(
+                    labelText: s.dummyNicknameLabel,
+                    prefixIcon: Icon(Icons.badge_outlined, size: 20),
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
                 ),
+                SizedBox(height: 12),
+
+                // Gender
+                Row(
+                  children: [
+                    Expanded(
+                      child: _genderCard(
+                        'female',
+                        '👩',
+                        AppTheme.female,
+                        s.labelGenderFemale,
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: _genderCard(
+                        'male',
+                        '👨',
+                        AppTheme.male,
+                        s.labelGenderMale,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+
+                // Umur & Negara
+                Row(
+                  children: [
+                    Expanded(child: _ageDropdown(s)),
+                    SizedBox(width: 12),
+                    Expanded(child: _countryDropdown(s)),
+                  ],
+                ),
+                SizedBox(height: 12),
+
+                // Kota
+                _cityDropdown(s),
+                SizedBox(height: 12),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _busy ? null : () => _register(s),
+                    icon: _busy
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            _editingUid != null
+                                ? Icons.save_outlined
+                                : Icons.person_add_alt,
+                            size: 18,
+                          ),
+                    label: Text(
+                      _editingUid != null
+                          ? s.dummySaveChanges
+                          : s.dummyRegisterBtn,
+                    ),
+                  ),
+                ),
+                if (_editingUid != null) ...[
+                  SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: _busy ? null : _cancelEdit,
+                      child: Text(s.dummyCancelEdit),
+                    ),
+                  ),
+                ],
               ],
-            ]),
+            ),
           ),
           SizedBox(height: 20),
 
           // ── Daftar akun dummy ──
-          Row(children: [
-            Text(s.dummyListTitle, style: AppText.titleEmphasis),
-            Spacer(),
-            Text('${_items.length}', style: AppText.label.copyWith(color: AppTheme.textSecondary)),
-          ]),
+          Row(
+            children: [
+              Text(s.dummyListTitle, style: AppText.titleEmphasis),
+              Spacer(),
+              Text(
+                '${_items.length}',
+                style: AppText.label.copyWith(color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           if (_loading)
             const Padding(
@@ -306,8 +380,10 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
-                child: Text('${s.dummyListFail}: $_error',
-                    style: AppText.bodySmall.copyWith(color: AppTheme.danger)),
+                child: Text(
+                  '${s.dummyListFail}: $_error',
+                  style: AppText.bodySmall.copyWith(color: AppTheme.danger),
+                ),
               ),
             )
           else if (_items.isEmpty)
@@ -333,16 +409,22 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? color : AppTheme.divider, width: selected ? 2 : 1.5),
+          border: Border.all(
+            color: selected ? color : AppTheme.divider,
+            width: selected ? 2 : 1.5,
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(emoji, style: TextStyle(fontSize: AppGlyph.sm)),
             SizedBox(width: 6),
-            Text(label,
-                style: AppText.label.copyWith(
-                    color: selected ? color : AppTheme.textSecondary)),
+            Text(
+              label,
+              style: AppText.label.copyWith(
+                color: selected ? color : AppTheme.textSecondary,
+              ),
+            ),
           ],
         ),
       ),
@@ -355,7 +437,10 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       decoration: InputDecoration(labelText: s.labelAge),
       isExpanded: true,
       menuMaxHeight: 300,
-      items: [for (int i = 18; i <= 80; i++) DropdownMenuItem(value: i, child: Text('$i'))],
+      items: [
+        for (int i = 18; i <= 80; i++)
+          DropdownMenuItem(value: i, child: Text('$i')),
+      ],
       onChanged: (v) {
         if (v != null) setState(() => _age = v);
       },
@@ -370,7 +455,10 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       menuMaxHeight: 350,
       items: [
         for (final n in kotaByNegara.keys)
-          DropdownMenuItem(value: n, child: Text(n, overflow: TextOverflow.ellipsis)),
+          DropdownMenuItem(
+            value: n,
+            child: Text(n, overflow: TextOverflow.ellipsis),
+          ),
       ],
       onChanged: (v) {
         if (v == null) return;
@@ -392,7 +480,13 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       decoration: InputDecoration(labelText: s.labelCity),
       isExpanded: true,
       menuMaxHeight: 350,
-      items: [for (final k in cities) DropdownMenuItem(value: k, child: Text(k, overflow: TextOverflow.ellipsis))],
+      items: [
+        for (final k in cities)
+          DropdownMenuItem(
+            value: k,
+            child: Text(k, overflow: TextOverflow.ellipsis),
+          ),
+      ],
       onChanged: (v) {
         if (v != null) setState(() => _kota = v);
       },
@@ -414,98 +508,140 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     return Padding(
       padding: EdgeInsets.only(bottom: 10),
       child: _SectionCard(
-        child: Column(children: [
-          Row(children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: AppTheme.primary.withValues(alpha: 0.12),
-              child: Text(
-                nickname.isEmpty ? '?' : nickname.characters.first.toUpperCase(),
-                style: AppText.label.copyWith(color: AppTheme.primary),
-              ),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(nickname,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.bodyStrong),
-                  if (info.isNotEmpty)
-                    Text(info,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AppTheme.primary.withValues(alpha: 0.12),
+                  child: Text(
+                    nickname.isEmpty
+                        ? '?'
+                        : nickname.characters.first.toUpperCase(),
+                    style: AppText.label.copyWith(color: AppTheme.primary),
+                  ),
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nickname,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
-                ],
-              ),
-            ),
-            if (unread > 0) ...[
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppTheme.danger,
-                  borderRadius: BorderRadius.circular(20),
+                        style: AppText.bodyStrong,
+                      ),
+                      if (info.isNotEmpty)
+                        Text(
+                          info,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.mark_chat_unread, size: 12, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text('$unread', style: AppText.label.copyWith(color: Colors.white)),
-                ]),
-              ),
-              SizedBox(width: 6),
-            ],
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: _statusColor(status).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                switch (status) {
-                  'online' => s.statusOnline,
-                  'idle' => s.statusIdle,
-                  _ => s.statusOffline,
-                },
-                style: AppText.label.copyWith(color: _statusColor(status)),
-              ),
-            ),
-          ]),
-          SizedBox(height: 8),
-          Row(children: [
-            Expanded(
-              child: Wrap(
-                spacing: 6,
-                children: [
-                  _statusChip(item, s.statusOnline, 'online', status, s),
-                  _statusChip(item, s.statusIdle, 'idle', status, s),
-                  _statusChip(item, s.statusOffline, 'offline', status, s),
+                if (unread > 0) ...[
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.danger,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.mark_chat_unread,
+                          size: 12,
+                          color: Colors.white,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          '$unread',
+                          style: AppText.label.copyWith(color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 6),
                 ],
-              ),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _statusColor(status).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    switch (status) {
+                      'online' => s.statusOnline,
+                      'idle' => s.statusIdle,
+                      _ => s.statusOffline,
+                    },
+                    style: AppText.label.copyWith(color: _statusColor(status)),
+                  ),
+                ),
+              ],
             ),
-            IconButton(
-              tooltip: s.dummyEdit,
-              onPressed: () => _startEdit(item),
-              icon: Icon(Icons.edit_outlined, size: 20, color: AppTheme.textSecondary),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    children: [
+                      _statusChip(item, s.statusOnline, 'online', status, s),
+                      _statusChip(item, s.statusIdle, 'idle', status, s),
+                      _statusChip(item, s.statusOffline, 'offline', status, s),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: s.dummyEdit,
+                  onPressed: () => _startEdit(item),
+                  icon: Icon(
+                    Icons.edit_outlined,
+                    size: 20,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                IconButton(
+                  tooltip: s.dummyChatAs,
+                  onPressed: () => _chatAs(item, s),
+                  icon: const Icon(
+                    Icons.chat_bubble_outline,
+                    size: 20,
+                    color: AppTheme.primary,
+                  ),
+                ),
+                IconButton(
+                  tooltip: s.dummyDelete,
+                  onPressed: () => _delete(item, s),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: AppTheme.danger,
+                  ),
+                ),
+              ],
             ),
-            IconButton(
-              tooltip: s.dummyChatAs,
-              onPressed: () => _chatAs(item, s),
-              icon: const Icon(Icons.chat_bubble_outline, size: 20, color: AppTheme.primary),
-            ),
-            IconButton(
-              tooltip: s.dummyDelete,
-              onPressed: () => _delete(item, s),
-              icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
-            ),
-          ]),
-        ]),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _statusChip(Map<String, dynamic> item, String label, String value, String current, S s) {
+  Widget _statusChip(
+    Map<String, dynamic> item,
+    String label,
+    String value,
+    String current,
+    S s,
+  ) {
     final active = current == value;
     return InkWell(
       onTap: () => _setStatus(item, value, s),
@@ -513,12 +649,17 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: active ? _statusColor(value) : _statusColor(value).withValues(alpha: 0.08),
+          color: active
+              ? _statusColor(value)
+              : _statusColor(value).withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(label,
-            style: AppText.label.copyWith(
-                color: active ? Colors.white : _statusColor(value))),
+        child: Text(
+          label,
+          style: AppText.label.copyWith(
+            color: active ? Colors.white : _statusColor(value),
+          ),
+        ),
       ),
     );
   }

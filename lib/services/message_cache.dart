@@ -37,7 +37,8 @@ Future<List<dynamic>?> _decLoad(Map<String, dynamic> args) async {
     final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
     final key = SecretKey(List<int>.from(keyBytes));
     final aes = AesGcm.with256bits();
-    final payload = jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
+    final payload =
+        jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
     final box = SecretBox(
       base64Decode(payload['c'] as String),
       nonce: base64Decode(payload['n'] as String),
@@ -58,7 +59,8 @@ Future<String?> _decStr(Map<String, dynamic> args) async {
     final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
     final key = SecretKey(List<int>.from(keyBytes));
     final aes = AesGcm.with256bits();
-    final payload = jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
+    final payload =
+        jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
     final box = SecretBox(
       base64Decode(payload['c'] as String),
       nonce: base64Decode(payload['n'] as String),
@@ -81,21 +83,25 @@ Future<Map<String, String>?> _decBatch(Map<String, dynamic> args) async {
     final key = SecretKey(List<int>.from(keyBytes));
     final aes = AesGcm.with256bits();
     final result = <String, String>{};
-    await Future.wait(paths.entries.map((e) async {
-      try {
-        final f = File(e.value);
-        if (!await f.exists()) return;
-        final encoded = await f.readAsString();
-        final payload = jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
-        final box = SecretBox(
-          base64Decode(payload['c'] as String),
-          nonce: base64Decode(payload['n'] as String),
-          mac: Mac(base64Decode(payload['m'] as String)),
-        );
-        final clear = await aes.decrypt(box, secretKey: key);
-        result[e.key] = utf8.decode(clear);
-      } catch (_) {}
-    }));
+    await Future.wait(
+      paths.entries.map((e) async {
+        try {
+          final f = File(e.value);
+          if (!await f.exists()) return;
+          final encoded = await f.readAsString();
+          final payload =
+              jsonDecode(utf8.decode(base64Decode(encoded)))
+                  as Map<String, dynamic>;
+          final box = SecretBox(
+            base64Decode(payload['c'] as String),
+            nonce: base64Decode(payload['n'] as String),
+            mac: Mac(base64Decode(payload['m'] as String)),
+          );
+          final clear = await aes.decrypt(box, secretKey: key);
+          result[e.key] = utf8.decode(clear);
+        } catch (_) {}
+      }),
+    );
     return result;
   } catch (_) {
     return null;
@@ -135,7 +141,10 @@ class MessageCache {
       _key = SecretKey(base64Decode(existing));
     } else {
       final newKey = await _aes.newSecretKey();
-      await _storage.write(key: keyId, value: base64Encode(await newKey.extractBytes()));
+      await _storage.write(
+        key: keyId,
+        value: base64Encode(await newKey.extractBytes()),
+      );
       _key = newKey;
     }
     return _key!;
@@ -157,7 +166,8 @@ class MessageCache {
   }
 
   Future<String> _decrypt(String encoded, SecretKey key) async {
-    final payload = jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
+    final payload =
+        jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
     final box = SecretBox(
       base64Decode(payload['c'] as String),
       nonce: base64Decode(payload['n'] as String),
@@ -242,10 +252,18 @@ class MessageCache {
       final key = await _getKey();
       final keyBytes = await key.extractBytes();
       // Decrypt + parse di isolate — jangan block UI saat cache besar.
-      final list = await compute(_decLoad, {'encoded': enc, 'keyBytes': keyBytes});
+      final list = await compute(_decLoad, {
+        'encoded': enc,
+        'keyBytes': keyBytes,
+      });
       if (list == null) return [];
       final msgs = list
-          .map((e) => MessageModel.fromMap('cached', Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) => MessageModel.fromMap(
+              'cached',
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
           .toList();
       _memCacheUpdate(chatKey, msgs);
       return msgs;
@@ -286,7 +304,8 @@ class MessageCache {
   /// Dipanggil saat app startup agar pesan cached tetap tersedia.
   Future<void> clearLegacyV1Only() async {
     final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys()
+    final keys = prefs
+        .getKeys()
         .where((k) => k.startsWith('chat_cache_v1_'))
         .toList();
     for (final k in keys) await prefs.remove(k);

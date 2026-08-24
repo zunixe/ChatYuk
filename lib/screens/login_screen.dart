@@ -279,13 +279,19 @@ class _LoginScreenState extends State<LoginScreen> {
           context.read<AuthProvider>().cancelLinkGoogle();
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const RegisterScreen(mode: RegisterMode.profileOnly)),
+            MaterialPageRoute(
+              builder: (_) =>
+                  const RegisterScreen(mode: RegisterMode.profileOnly),
+            ),
           );
         }
       } else if (result == 'new') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const RegisterScreen(mode: RegisterMode.profileOnly)),
+          MaterialPageRoute(
+            builder: (_) =>
+                const RegisterScreen(mode: RegisterMode.profileOnly),
+          ),
         );
       } else if (result == 'exists') {
         // Profile sudah ada — pop LoginScreen yang di-push di atas _AuthGate

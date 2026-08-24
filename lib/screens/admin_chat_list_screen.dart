@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
+import '../config/strings_admin.dart';
 import '../models/active_call_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
@@ -57,19 +58,25 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
     final admin = context.read<AdminProvider>();
     if (!_scrollCtrl.hasClients) return;
     // Load halaman berikutnya saat mendekati bawah list.
-    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 300) {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 300) {
       admin.fetchMoreChats();
     }
   }
 
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> chats) {
     // Sembunyikan chat kosong (belum ada percakapan) dari monitor.
-    final nonEmpty = chats.where((chat) => ((chat['message_count'] ?? 0) as num) > 0).toList();
+    final nonEmpty = chats
+        .where((chat) => ((chat['message_count'] ?? 0) as num) > 0)
+        .toList();
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return nonEmpty;
     return nonEmpty.where((chat) {
       final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
-      final label = names.values.where((e) => e != null && '$e'.isNotEmpty).join(' ').toLowerCase();
+      final label = names.values
+          .where((e) => e != null && '$e'.isNotEmpty)
+          .join(' ')
+          .toLowerCase();
       final lastMsg = (chat['last_message'] as String? ?? '').toLowerCase();
       return label.contains(q) || lastMsg.contains(q);
     }).toList();
@@ -88,8 +95,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
           child: Row(
             children: [
               Expanded(
-                child: Text(s.adminChatMonitor,
-                  style: AppText.titleEmphasis),
+                child: Text(s.adminChatMonitor, style: AppText.titleEmphasis),
               ),
               IconButton(
                 icon: Icon(Icons.refresh_rounded, color: AppTheme.primary),
@@ -106,61 +112,102 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
             style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: s.adminSearchChat,
-              prefixIcon: Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 20),
+              prefixIcon: Icon(
+                Icons.search_rounded,
+                color: AppTheme.textSecondary,
+                size: 20,
+              ),
               isDense: true,
               filled: true,
               fillColor: AppTheme.bgInput,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
         ),
         Expanded(
           child: admin.chatsLoading && admin.chats.isEmpty
-          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
-          : admin.chatsError != null
               ? Center(
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
-                    SizedBox(height: 8),
-                    Text(admin.chatsError!, style: TextStyle(color: AppTheme.danger)),
-                    SizedBox(height: 8),
-                    ElevatedButton(onPressed: () => admin.fetchChats(), child: Text(s.btnRetry)),
-                  ]),
+                  child: CircularProgressIndicator(color: AppTheme.primary),
+                )
+              : admin.chatsError != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: AppTheme.danger,
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        admin.chatsError!,
+                        style: TextStyle(color: AppTheme.danger),
+                      ),
+                      SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: () => admin.fetchChats(),
+                        child: Text(s.btnRetry),
+                      ),
+                    ],
+                  ),
                 )
               : _filtered(admin.chats).isEmpty
-                  ? Center(
-                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Icon(Icons.chat_bubble_outline, size: 48, color: AppTheme.textSecondary),
-                        SizedBox(height: 12),
-                        Text(_query.isEmpty ? s.adminChatNoChats : s.searchNoResult,
-                          style: TextStyle(color: AppTheme.textSecondary)),
-                      ]),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: () => admin.fetchChats(),
-                      child: ListView.builder(
-                        controller: _scrollCtrl,
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        itemCount: _filtered(admin.chats).length + (admin.chatsHasMore ? 1 : 0),
-                        itemBuilder: (_, i) {
-                          final filtered = _filtered(admin.chats);
-                          if (i >= filtered.length) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
-                            );
-                          }
-                          final chat = filtered[i];
-                          return _AdminChatCard(
-                            chat: chat,
-                            s: s,
-                            adminUids: admin.adminUids,
-                            activeCall: admin.activeCallsByChat[chat['chat_id']],
-                          );
-                        },
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: 48,
+                        color: AppTheme.textSecondary,
                       ),
-                    ),
+                      SizedBox(height: 12),
+                      Text(
+                        _query.isEmpty ? s.adminChatNoChats : s.searchNoResult,
+                        style: TextStyle(color: AppTheme.textSecondary),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: () => admin.fetchChats(),
+                  child: ListView.builder(
+                    controller: _scrollCtrl,
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    itemCount:
+                        _filtered(admin.chats).length +
+                        (admin.chatsHasMore ? 1 : 0),
+                    itemBuilder: (_, i) {
+                      final filtered = _filtered(admin.chats);
+                      if (i >= filtered.length) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        );
+                      }
+                      final chat = filtered[i];
+                      return _AdminChatCard(
+                        chat: chat,
+                        s: s,
+                        adminUids: admin.adminUids,
+                        activeCall: admin.activeCallsByChat[chat['chat_id']],
+                      );
+                    },
+                  ),
+                ),
         ),
       ],
     );
@@ -185,12 +232,14 @@ class _AdminChatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
     final participants = (chat['participants'] as List<dynamic>?) ?? const [];
-    final nameList = names.values.where((e) => e != null && '$e'.isNotEmpty).toList();
+    final nameList = names.values
+        .where((e) => e != null && '$e'.isNotEmpty)
+        .toList();
     final label = nameList.isNotEmpty
         ? nameList.join(' & ')
         : participants.length == 1
-            ? '${participants.length} ${s.adminUserSingular}'
-            : '${participants.length} ${s.adminUsersPlural}';
+        ? '${participants.length} ${s.adminUserSingular}'
+        : '${participants.length} ${s.adminUsersPlural}';
     // Urutan uid SAMA dengan urutan nama di judul (kiri → kanan).
     final orderUids = names.entries
         .where((e) => e.value != null && '${e.value}'.isNotEmpty)
@@ -213,7 +262,13 @@ class _AdminChatCard extends StatelessWidget {
         border: activeCall != null
             ? Border.all(color: const Color(0xFF2E9E5B), width: 1.2)
             : null,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -221,11 +276,13 @@ class _AdminChatCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => AdminChatViewScreen(
-              chatId: chat['chat_id'] as String? ?? '',
-              chatLabel: label,
-              participantOrder: orderUids,
-            )),
+            MaterialPageRoute(
+              builder: (_) => AdminChatViewScreen(
+                chatId: chat['chat_id'] as String? ?? '',
+                chatLabel: label,
+                participantOrder: orderUids,
+              ),
+            ),
           ),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -235,12 +292,19 @@ class _AdminChatCard extends StatelessWidget {
                   clipBehavior: Clip.none,
                   children: [
                     Container(
-                      width: 44, height: 44,
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: activeCall != null ? 0.18 : 0.12),
+                        color: AppTheme.primary.withValues(
+                          alpha: activeCall != null ? 0.18 : 0.12,
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.forum_outlined, color: AppTheme.primary, size: 22),
+                      child: Icon(
+                        Icons.forum_outlined,
+                        color: AppTheme.primary,
+                        size: 22,
+                      ),
                     ),
                     if (activeCall != null)
                       Positioned(
@@ -255,16 +319,23 @@ class _AdminChatCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(label,
+                      Text(
+                        label,
                         style: AppText.bodyStrong,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       SizedBox(height: 3),
                       Text(
                         lastMsg.isEmpty
                             ? (count > 0 ? '$count ${s.adminChatMsgs}' : '')
                             : lastMsg,
-                        style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),
@@ -276,25 +347,42 @@ class _AdminChatCard extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(activeCall!.callType == 'video'
-                                  ? Icons.videocam
-                                  : Icons.call,
-                              size: 14, color: const Color(0xFF2E9E5B)),
+                          Icon(
+                            activeCall!.callType == 'video'
+                                ? Icons.videocam
+                                : Icons.call,
+                            size: 14,
+                            color: const Color(0xFF2E9E5B),
+                          ),
                           const SizedBox(width: 3),
-                          Text(s.adminCallLive,
+                          Text(
+                            s.adminCallLive,
                             style: AppText.micro.copyWith(
-                                color: const Color(0xFF2E9E5B),
-                                fontWeight: FontWeight.w700)),
+                              color: const Color(0xFF2E9E5B),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ],
                       ),
                       SizedBox(height: 2),
                     ],
                     if (count > 0)
-                      Text('$count', style: AppText.bodySmall.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
+                      Text(
+                        '$count',
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     if (ts != null) ...[
                       SizedBox(height: 2),
-                      Text(formatRelativeTime(ts, isId: s.isId),
-                        style: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400)),
+                      Text(
+                        formatRelativeTime(ts, isId: s.isId),
+                        style: AppText.micro.copyWith(
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -304,7 +392,11 @@ class _AdminChatCard extends StatelessWidget {
                   onTap: () => _showDeleteDialog(context),
                   child: const Padding(
                     padding: EdgeInsets.all(4),
-                    child: Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
+                    child: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: AppTheme.danger,
+                    ),
                   ),
                 ),
               ],
@@ -333,18 +425,32 @@ class _AdminChatCard extends StatelessWidget {
         builder: (ctx, setState) {
           return AlertDialog(
             backgroundColor: AppTheme.bgCard,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-            title: Row(children: [
-              Icon(Icons.delete_forever, color: AppTheme.danger, size: 22),
-              SizedBox(width: 10),
-              Expanded(child: Text(s.adminDeleteChatTitle, style: AppText.titleEmphasis)),
-            ]),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.delete_forever, color: AppTheme.danger, size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    s.adminDeleteChatTitle,
+                    style: AppText.titleEmphasis,
+                  ),
+                ),
+              ],
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(s.adminDeleteChatBody, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                  Text(
+                    s.adminDeleteChatBody,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   // Tampilkan SEMUA peserta — sebelumnya hanya 2 pertama yang
                   // muncul di dialog, padahal `selected` berisi semua non-admin
@@ -355,27 +461,49 @@ class _AdminChatCard extends StatelessWidget {
                       onChanged: adminUids.contains(uid)
                           ? null
                           : (v) => setState(() {
-                              v == true ? selected.add(uid) : selected.remove(uid);
+                              v == true
+                                  ? selected.add(uid)
+                                  : selected.remove(uid);
                             }),
                       title: Text(
                         '${s.adminDeleteUser}: ${names[uid] ?? 'User'}${adminUids.contains(uid) ? ' ${s.adminCannotDeleteAdmin}' : ''}',
-                        style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       controlAffinity: ListTileControlAffinity.leading,
                       dense: true,
                       activeColor: AppTheme.danger,
                     ),
                   SizedBox(height: 4),
-                  Text(s.adminDeleteChatOnly, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                  Text(
+                    s.adminDeleteChatOnly,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel, style: TextStyle(color: AppTheme.textSecondary))),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(
+                  s.btnCancel,
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
+              ),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
-                child: Text(s.adminDeleteChat, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                child: Text(
+                  s.adminDeleteChat,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ],
           );
@@ -385,7 +513,10 @@ class _AdminChatCard extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
 
     final admin = context.read<AdminProvider>();
-    final ok = await admin.deleteChat(chat['chat_id'] as String? ?? '', selected.toList());
+    final ok = await admin.deleteChat(
+      chat['chat_id'] as String? ?? '',
+      selected.toList(),
+    );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(ok ? s.adminChatDeleted : s.adminDeleteFail)),

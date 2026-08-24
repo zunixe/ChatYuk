@@ -40,7 +40,11 @@ class DecodedImage {
 
 // Top-level untuk compute() — base64 → bytes (fullscreen viewer).
 Uint8List? b64ToBytes(String b64) {
-  try { return base64Decode(b64); } catch (_) { return null; }
+  try {
+    return base64Decode(b64);
+  } catch (_) {
+    return null;
+  }
 }
 
 // Cache decode agar scroll-back tidak resize (glitch). Key = hash imageData.
@@ -67,47 +71,66 @@ class MessageTextWithTime extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final available = constraints.maxWidth.isFinite
-          ? constraints.maxWidth
-          : MediaQuery.sizeOf(context).width * 0.8;
-      final tp = TextPainter(
-        text: TextSpan(text: text, style: textStyle),
-        maxLines: 1,
-        textDirection: Directionality.of(context),
-      )..layout();
-      final timeTp = TextPainter(
-        text: TextSpan(text: timeStr, style: timeStyle),
-        textDirection: Directionality.of(context),
-      )..layout();
-      final extra = timeTp.width + 8 + (trailing != null ? 16.0 : 0);
-      final wraps = tp.width + extra > available;
-      if (!wraps) {
-        return RichText(
-          text: TextSpan(style: textStyle, children: [
-            TextSpan(text: text),
-            const TextSpan(text: '  '),
-            WidgetSpan(alignment: PlaceholderAlignment.belowBaseline, baseline: TextBaseline.alphabetic, child: Text(timeStr, style: timeStyle)),
-            if (trailing != null) WidgetSpan(alignment: PlaceholderAlignment.belowBaseline, baseline: TextBaseline.alphabetic, child: Padding(padding: const EdgeInsets.only(left: 3), child: trailing)),
-          ]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width * 0.8;
+        final tp = TextPainter(
+          text: TextSpan(text: text, style: textStyle),
+          maxLines: 1,
+          textDirection: Directionality.of(context),
+        )..layout();
+        final timeTp = TextPainter(
+          text: TextSpan(text: timeStr, style: timeStyle),
+          textDirection: Directionality.of(context),
+        )..layout();
+        final extra = timeTp.width + 8 + (trailing != null ? 16.0 : 0);
+        final wraps = tp.width + extra > available;
+        if (!wraps) {
+          return RichText(
+            text: TextSpan(
+              style: textStyle,
+              children: [
+                TextSpan(text: text),
+                const TextSpan(text: '  '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.belowBaseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Text(timeStr, style: timeStyle),
+                ),
+                if (trailing != null)
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.belowBaseline,
+                    baseline: TextBaseline.alphabetic,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 3),
+                      child: trailing,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: alignRight
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(text, style: textStyle),
+            const SizedBox(height: 3),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(timeStr, style: timeStyle),
+                if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+              ],
+            ),
+          ],
         );
-      }
-      return Column(
-        crossAxisAlignment: alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(text, style: textStyle),
-          const SizedBox(height: 3),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(timeStr, style: timeStyle),
-              if (trailing != null) ...[const SizedBox(width: 3), trailing!],
-            ],
-          ),
-        ],
-      );
-    });
+      },
+    );
   }
 }
 
@@ -128,7 +151,8 @@ class MessageBubble extends StatelessWidget {
   // Long-press untuk buka menu (Balas / Edit / Hapus) seperti WhatsApp.
   // LayerLink dipakai agar action bar (icon) bisa di-anchor tepat di atas
   // bubble dan ikut mengikuti posisi bubble saat list di-scroll.
-  final void Function(LongPressStartDetails, MessageModel, LayerLink)? onLongPressMenu;
+  final void Function(LongPressStartDetails, MessageModel, LayerLink)?
+  onLongPressMenu;
   // Link anchor milik bubble ini (dibuat & dikelola oleh screen agar stabil
   // antar rebuild ListView — lihat _msgLinks di private_chat_screen).
   final LayerLink link;
@@ -155,7 +179,9 @@ class MessageBubble extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(
-          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          mainAxisAlignment: isMe
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
           children: [
             Text(
               s.messageDeleted,
@@ -174,267 +200,368 @@ class MessageBubble extends StatelessWidget {
       child: GestureDetector(
         onLongPressStart: (d) => onLongPressMenu?.call(d, msg, link),
         behavior: HitTestBehavior.opaque,
-      child: Padding(
-      padding: EdgeInsets.only(bottom: 8),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
-          Flexible(
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.sizeOf(context).width * 0.8,
-              ),
-              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
-                // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
-                // halus supaya tetap kontras di atas wallpaper chat apa pun.
-                color: msg.type == 'coin'
-                    ? Color(0xFFFFF3C4)
-                    : (isMe
-                          ? Color.alphaBlend(
-                              AppTheme.primary.withValues(alpha: 0.25),
-                              AppTheme.bgCard)
-                          : AppTheme.bgCard),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.22),
-                    blurRadius: 6,
-                    offset: const Offset(0, 1.5),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Row(
+            mainAxisAlignment: isMe
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
+            children: [
+              Flexible(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.sizeOf(context).width * 0.8,
                   ),
-                ],
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(14),
-                  topRight: const Radius.circular(14),
-                  bottomLeft: Radius.circular(isMe ? 14 : 4),
-                  bottomRight: Radius.circular(isMe ? 4 : 14),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  if (msg.repliedToText != null && msg.repliedToText!.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isMe
-                            ? Colors.white.withValues(alpha: 0.15)
-                            : AppTheme.bgScreen.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border(
-                          left: BorderSide(color: AppTheme.primary, width: 3),
-                        ),
+                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
+                    // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
+                    // halus supaya tetap kontras di atas wallpaper chat apa pun.
+                    color: msg.type == 'coin'
+                        ? Color(0xFFFFF3C4)
+                        : (isMe
+                              ? Color.alphaBlend(
+                                  AppTheme.primary.withValues(alpha: 0.25),
+                                  AppTheme.bgCard,
+                                )
+                              : AppTheme.bgCard),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.22),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1.5),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            msg.repliedToSenderName ?? '',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            msg.repliedToText!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                    ],
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(14),
+                      topRight: const Radius.circular(14),
+                      bottomLeft: Radius.circular(isMe ? 14 : 4),
+                      bottomRight: Radius.circular(isMe ? 4 : 14),
                     ),
-                  if (msg.type == 'image' && msg.imageData.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          MessageImage(
-                            imageData: msg.imageData,
-                            chatKey: chatKey,
-                            messageId: msg.id,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: isMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      if (msg.repliedToText != null &&
+                          msg.repliedToText!.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
                           ),
-                          Positioned(
-                            right: 6,
-                            bottom: 6,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.55),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(timeStr, style: AppText.micro.copyWith(color: Colors.white)),
-                                   if (isMe) ...[
-                                    const SizedBox(width: 3),
-                                    Icon(
-                                      isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
-                                      size: 12,
-                                      color: isPending ? Colors.white70 : (isRead ? const Color(0xFF7EC8FF) : Colors.white70),
-                                    ),
-                                  ],
-                                ],
+                          decoration: BoxDecoration(
+                            color: isMe
+                                ? Colors.white.withValues(alpha: 0.15)
+                                : AppTheme.bgScreen.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border(
+                              left: BorderSide(
+                                color: AppTheme.primary,
+                                width: 3,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    )
-                  else if (msg.type == 'image' && msg.imageData.isEmpty && isImageDeferred)
-                    DeferredImage(onTap: () => onRetryImage?.call(msg.id))
-                  else if (msg.type == 'view_once' || msg.type == 'view_once_expired')
-                    Stack(
-                      children: [
-                        ViewOnceImage(
-                          imageData: msg.imageData,
-                          chatKey: chatKey,
-                          isMe: isMe,
-                          messageId: msg.id,
-                          isExpired: msg.type == 'view_once_expired',
-                          isAdminView: isAdminView,
-                          isRoom: isRoom,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                msg.repliedToSenderName ?? '',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                msg.repliedToText!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                         ),
-                        Positioned(
-                          right: 6,
-                          bottom: 6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.55),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(timeStr, style: AppText.micro.copyWith(color: Colors.white)),
-                                if (isMe) ...[
-                                  const SizedBox(width: 3),
-                                  Icon(
-                                    isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
-                                    size: 12,
-                                    color: isPending ? Colors.white70 : (isRead ? const Color(0xFF7EC8FF) : Colors.white70),
+                      if (msg.type == 'image' && msg.imageData.isNotEmpty)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              MessageImage(
+                                imageData: msg.imageData,
+                                chatKey: chatKey,
+                                messageId: msg.id,
+                              ),
+                              Positioned(
+                                right: 6,
+                                bottom: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 2,
                                   ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  else if (msg.type == 'coin')
-                    Builder(builder: (context) {
-                      final s = context.read<LocaleProvider>().s;
-                      final amount = int.tryParse(msg.text) ?? 0;
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('🪙', style: TextStyle(fontSize: AppGlyph.sm)),
-                          SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              isMe ? s.coinBubbleSent(amount) : s.coinBubbleReceived(amount),
-                              style: AppText.bodyStrong.copyWith(color: Color(0xFFB8860B)),
-                            ),
-                          ),
-                          SizedBox(width: 6),
-                          Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
-                        ],
-                      );
-                    })
-                  else if (msg.type == 'gift')
-                    Builder(builder: (context) {
-                      final s = context.read<LocaleProvider>().s;
-                      final g = giftById(msg.text);
-                      final emoji = g?.emoji ?? '🎁';
-                      final name = g == null ? '' : (s.isId ? g.nameId : g.nameEn);
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(emoji, style: TextStyle(fontSize: AppGlyph.md)),
-                          SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              isMe ? s.giftBubbleSent(name) : s.giftBubbleReceived(name),
-                              style: AppText.bodyStrong.copyWith(color: Color(0xFFB8860B)),
-                            ),
-                          ),
-                          SizedBox(width: 6),
-                          Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
-                        ],
-                      );
-                    })
-                  else if (msg.type == 'call')
-                    Builder(builder: (context) {
-                      final isVideoCall = msg.text.contains('📹');
-                      // Hapus emoji awal (📹/📞) dari teks karena ikon sudah
-                      // ditampilkan terpisah — hindari ikon ganda. Pakai
-                      // replace literal (bukan regex) supaya surrogate emoji
-                      // tidak rusak jadi karakter '?'.
-                      final displayText = msg.text
-                          .replaceFirst('📹', '')
-                          .replaceFirst('📞', '')
-                          .trimLeft();
-                      // Warna ikon mengikuti hasil panggilan (teks status
-                      // disimpan berbahasa Inggris — stabil antar locale):
-                      // hijau = panggilan terhubung, merah = gagal/tak dijawab.
-                      const successMarkers = ['Call ended'];
-                      const failMarkers = [
-                        'Missed call',
-                        'Call declined',
-                        'Call canceled',
-                        'Busy',
-                        'Call failed',
-                      ];
-                      final callIconColor = successMarkers.any(displayText.contains)
-                          ? Colors.greenAccent
-                          : failMarkers.any(displayText.contains)
-                              ? Colors.redAccent
-                              : AppTheme.textSecondary;
-                      return RichText(
-                        text: TextSpan(
-                          style: AppText.body.copyWith(color: AppTheme.textSecondary),
-                          children: [
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.middle,
-                              child: Icon(
-                                isVideoCall ? Icons.videocam : Icons.call,
-                                size: 16,
-                                color: callIconColor,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.55),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        timeStr,
+                                        style: AppText.micro.copyWith(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      if (isMe) ...[
+                                        const SizedBox(width: 3),
+                                        Icon(
+                                          isPending
+                                              ? Icons.done
+                                              : (isRead
+                                                    ? Icons.done_all
+                                                    : Icons.done),
+                                          size: 12,
+                                          color: isPending
+                                              ? Colors.white70
+                                              : (isRead
+                                                    ? const Color(0xFF7EC8FF)
+                                                    : Colors.white70),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
                               ),
+                            ],
+                          ),
+                        )
+                      else if (msg.type == 'image' &&
+                          msg.imageData.isEmpty &&
+                          isImageDeferred)
+                        DeferredImage(onTap: () => onRetryImage?.call(msg.id))
+                      else if (msg.type == 'view_once' ||
+                          msg.type == 'view_once_expired')
+                        Stack(
+                          children: [
+                            ViewOnceImage(
+                              imageData: msg.imageData,
+                              chatKey: chatKey,
+                              isMe: isMe,
+                              messageId: msg.id,
+                              isExpired: msg.type == 'view_once_expired',
+                              isAdminView: isAdminView,
+                              isRoom: isRoom,
                             ),
-                            const WidgetSpan(child: SizedBox(width: 6)),
-                            TextSpan(text: displayText),
-                            const TextSpan(text: '  '),
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.belowBaseline,
-                              baseline: TextBaseline.alphabetic,
-                              child: Text(timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                            Positioned(
+                              right: 6,
+                              bottom: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      timeStr,
+                                      style: AppText.micro.copyWith(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    if (isMe) ...[
+                                      const SizedBox(width: 3),
+                                      Icon(
+                                        isPending
+                                            ? Icons.done
+                                            : (isRead
+                                                  ? Icons.done_all
+                                                  : Icons.done),
+                                        size: 12,
+                                        color: isPending
+                                            ? Colors.white70
+                                            : (isRead
+                                                  ? const Color(0xFF7EC8FF)
+                                                  : Colors.white70),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
+                        )
+                      else if (msg.type == 'coin')
+                        Builder(
+                          builder: (context) {
+                            final s = context.read<LocaleProvider>().s;
+                            final amount = int.tryParse(msg.text) ?? 0;
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '🪙',
+                                  style: TextStyle(fontSize: AppGlyph.sm),
+                                ),
+                                SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    isMe
+                                        ? s.coinBubbleSent(amount)
+                                        : s.coinBubbleReceived(amount),
+                                    style: AppText.bodyStrong.copyWith(
+                                      color: Color(0xFFB8860B),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  timeStr,
+                                  style: AppText.micro.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        )
+                      else if (msg.type == 'gift')
+                        Builder(
+                          builder: (context) {
+                            final s = context.read<LocaleProvider>().s;
+                            final g = giftById(msg.text);
+                            final emoji = g?.emoji ?? '🎁';
+                            final name = g == null
+                                ? ''
+                                : (s.isId ? g.nameId : g.nameEn);
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  emoji,
+                                  style: TextStyle(fontSize: AppGlyph.md),
+                                ),
+                                SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    isMe
+                                        ? s.giftBubbleSent(name)
+                                        : s.giftBubbleReceived(name),
+                                    style: AppText.bodyStrong.copyWith(
+                                      color: Color(0xFFB8860B),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  timeStr,
+                                  style: AppText.micro.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        )
+                      else if (msg.type == 'call')
+                        Builder(
+                          builder: (context) {
+                            final isVideoCall = msg.text.contains('📹');
+                            // Hapus emoji awal (📹/📞) dari teks karena ikon sudah
+                            // ditampilkan terpisah — hindari ikon ganda. Pakai
+                            // replace literal (bukan regex) supaya surrogate emoji
+                            // tidak rusak jadi karakter '?'.
+                            final displayText = msg.text
+                                .replaceFirst('📹', '')
+                                .replaceFirst('📞', '')
+                                .trimLeft();
+                            // Warna ikon mengikuti hasil panggilan (teks status
+                            // disimpan berbahasa Inggris — stabil antar locale):
+                            // hijau = panggilan terhubung, merah = gagal/tak dijawab.
+                            const successMarkers = ['Call ended'];
+                            const failMarkers = [
+                              'Missed call',
+                              'Call declined',
+                              'Call canceled',
+                              'Busy',
+                              'Call failed',
+                            ];
+                            final callIconColor =
+                                successMarkers.any(displayText.contains)
+                                ? Colors.greenAccent
+                                : failMarkers.any(displayText.contains)
+                                ? Colors.redAccent
+                                : AppTheme.textSecondary;
+                            return RichText(
+                              text: TextSpan(
+                                style: AppText.body.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                                children: [
+                                  WidgetSpan(
+                                    alignment: PlaceholderAlignment.middle,
+                                    child: Icon(
+                                      isVideoCall ? Icons.videocam : Icons.call,
+                                      size: 16,
+                                      color: callIconColor,
+                                    ),
+                                  ),
+                                  const WidgetSpan(child: SizedBox(width: 6)),
+                                  TextSpan(text: displayText),
+                                  const TextSpan(text: '  '),
+                                  WidgetSpan(
+                                    alignment:
+                                        PlaceholderAlignment.belowBaseline,
+                                    baseline: TextBaseline.alphabetic,
+                                    child: Text(
+                                      timeStr,
+                                      style: AppText.micro.copyWith(
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        )
+                      else
+                        MessageTextWithTime(
+                          text: msg.text,
+                          timeStr: msg.edited
+                              ? '$timeStr ${s.msgEdited}'
+                              : timeStr,
+                          textStyle: AppText.body,
+                          timeStyle: AppText.micro.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w400,
+                          ),
+                          alignRight: isMe,
+                          trailing: isMe
+                              ? Icon(
+                                  isPending
+                                      ? Icons.done
+                                      : (isRead ? Icons.done_all : Icons.done),
+                                  size: 12,
+                                  color: isPending
+                                      ? AppTheme.textSecondary
+                                      : (isRead
+                                            ? AppTheme.primary
+                                            : AppTheme.textSecondary),
+                                )
+                              : null,
                         ),
-                      );
-                    })
-                  else
-                    MessageTextWithTime(
-                      text: msg.text,
-                      timeStr: msg.edited ? '$timeStr ${s.msgEdited}' : timeStr,
-                      textStyle: AppText.body,
-                      timeStyle: AppText.micro.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w400),
-                      alignRight: isMe,
-                      trailing: isMe
-                          ? Icon(
-                              isPending ? Icons.done : (isRead ? Icons.done_all : Icons.done),
-                              size: 12,
-                              color: isPending ? AppTheme.textSecondary : (isRead ? AppTheme.primary : AppTheme.textSecondary),
-                            )
-                          : null,
-                    ),
-                ],
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
         ),
       ),
     );
@@ -461,7 +588,10 @@ class DeferredImage extends StatelessWidget {
           children: [
             Icon(Icons.refresh, color: AppTheme.textSecondary, size: 22),
             SizedBox(height: 4),
-            Text(s.msgPhotoTapToLoad, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+            Text(
+              s.msgPhotoTapToLoad,
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+            ),
           ],
         ),
       ),
@@ -499,7 +629,8 @@ class _MessageImageState extends State<MessageImage> {
   void didUpdateWidget(MessageImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     // imageData berubah (fetch awal kosong → photo download selesai) → re-decode
-    if (widget.imageData != oldWidget.imageData && widget.imageData.isNotEmpty) {
+    if (widget.imageData != oldWidget.imageData &&
+        widget.imageData.isNotEmpty) {
       final key = widget.imageData.hashCode;
       _decoded = decodedImageCache[key];
       if (_decoded == null) _decode(key);
@@ -530,30 +661,42 @@ class _MessageImageState extends State<MessageImage> {
     final decoded = _decoded;
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       return Container(
-        width: 200, height: 200,
+        width: 200,
+        height: 200,
         color: AppTheme.bgInput,
         alignment: Alignment.center,
-        child: Text(s.msgPhotoExpired, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+        child: Text(
+          s.msgPhotoExpired,
+          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        ),
       );
     }
     final aspect = decoded.width / decoded.height;
     var width = 200.0;
     var height = width / aspect;
-    if (height > 280) { height = 280; width = height * aspect; }
+    if (height > 280) {
+      height = 280;
+      width = height * aspect;
+    }
     return GestureDetector(
       onTap: () => _openFullscreen(),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: Image.memory(
           decoded.bytes,
-          width: width, height: height,
+          width: width,
+          height: height,
           fit: BoxFit.contain,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => Container(
-            width: 200, height: 200,
+            width: 200,
+            height: 200,
             color: AppTheme.bgInput,
             alignment: Alignment.center,
-            child: Text(s.msgPhotoExpired, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+            child: Text(
+              s.msgPhotoExpired,
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
           ),
         ),
       ),
@@ -567,7 +710,8 @@ class _MessageImageState extends State<MessageImage> {
       MaterialPageRoute(
         builder: (_) => PhotoViewerScreen(
           bytes: decoded.bytes,
-          fullLoader: () => PhotoCache.instance.load(widget.chatKey, widget.messageId),
+          fullLoader: () =>
+              PhotoCache.instance.load(widget.chatKey, widget.messageId),
         ),
       ),
     );
@@ -584,15 +728,24 @@ class ViewOnceTick {
   Timer? timer;
   final ValueNotifier<int> countdown = ValueNotifier<int>(10);
   ViewOnceState _state = ViewOnceState.idle;
-  final ValueNotifier<ViewOnceState> stateNotifier = ValueNotifier<ViewOnceState>(ViewOnceState.idle);
+  final ValueNotifier<ViewOnceState> stateNotifier =
+      ValueNotifier<ViewOnceState>(ViewOnceState.idle);
   bool viewerOpen = false;
   DecodedImage? decoded;
 
   ViewOnceState get state => _state;
-  set state(ViewOnceState s) { _state = s; stateNotifier.value = s; }
+  set state(ViewOnceState s) {
+    _state = s;
+    stateNotifier.value = s;
+  }
 
-  void dispose() { timer?.cancel(); countdown.dispose(); stateNotifier.dispose(); }
+  void dispose() {
+    timer?.cancel();
+    countdown.dispose();
+    stateNotifier.dispose();
+  }
 }
+
 final viewOnceStates = <String, ViewOnceTick>{};
 
 class ViewOnceImage extends StatefulWidget {
@@ -647,7 +800,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   void didUpdateWidget(ViewOnceImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isAdminView) {
-      if (widget.imageData.isNotEmpty && widget.imageData != oldWidget.imageData) {
+      if (widget.imageData.isNotEmpty &&
+          widget.imageData != oldWidget.imageData) {
         _decodeAdmin();
       }
       return;
@@ -659,7 +813,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       return;
     }
     if (_tick.state == ViewOnceState.expired) return;
-    if (widget.imageData != oldWidget.imageData && widget.imageData.isNotEmpty) {
+    if (widget.imageData != oldWidget.imageData &&
+        widget.imageData.isNotEmpty) {
       _decoded = _tick.decoded;
       if (_decoded == null) _decode();
     }
@@ -759,7 +914,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
         _tick.state = ViewOnceState.expired;
         ScreenSecureService.exitViewOnce();
         if (_tick.viewerOpen && mounted) Navigator.of(context).maybePop();
-        if (mounted) { setState(() {}); _clearFromServer(); }
+        if (mounted) {
+          setState(() {});
+          _clearFromServer();
+        }
         return;
       }
       if (mounted) setState(() {});
@@ -767,20 +925,24 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
   }
 
   void _openViewer() {
-    if (_decoded == null || _tick.state != ViewOnceState.viewing || !mounted) return;
+    if (_decoded == null || _tick.state != ViewOnceState.viewing || !mounted)
+      return;
     _tick.viewerOpen = true;
     Navigator.of(context)
-        .push(MaterialPageRoute(
-          builder: (_) => PhotoViewerScreen(
-            bytes: _decoded!.bytes,
-            fullLoader: () {
-              final id = widget.messageId;
-              if (id == null || id.startsWith('pending-')) return Future.value(null);
-              return PhotoCache.instance.load(widget.chatKey, id);
-            },
-            countdown: _tick.countdown,
+        .push(
+          MaterialPageRoute(
+            builder: (_) => PhotoViewerScreen(
+              bytes: _decoded!.bytes,
+              fullLoader: () {
+                final id = widget.messageId;
+                if (id == null || id.startsWith('pending-'))
+                  return Future.value(null);
+                return PhotoCache.instance.load(widget.chatKey, id);
+              },
+              countdown: _tick.countdown,
+            ),
           ),
-        ))
+        )
         .whenComplete(() => _tick.viewerOpen = false);
   }
 
@@ -788,7 +950,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     final id = widget.messageId;
     if (id == null || id.startsWith('pending-')) return;
     try {
-      await context.read<ChatProvider>().clearViewOnceImage(id, isRoom: widget.isRoom);
+      await context.read<ChatProvider>().clearViewOnceImage(
+        id,
+        isRoom: widget.isRoom,
+      );
     } catch (_) {}
   }
 
@@ -806,20 +971,51 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
           fit: StackFit.expand,
           children: [
             decoded != null
-                ? Image.memory(decoded.bytes, fit: BoxFit.contain, gaplessPlayback: true, filterQuality: FilterQuality.high)
-                : Container(color: AppTheme.bgInput, alignment: Alignment.center,
-                    child: const SizedBox(width: 28, height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70))),
+                ? Image.memory(
+                    decoded.bytes,
+                    fit: BoxFit.contain,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.high,
+                  )
+                : Container(
+                    color: AppTheme.bgInput,
+                    alignment: Alignment.center,
+                    child: const SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ),
             Positioned(
-              top: 6, right: 6,
+              top: 6,
+              right: 6,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(12)),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
-                  const SizedBox(width: 3),
-                  Text(s.msgViewOnce, style: AppText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
-                ]),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.timer_outlined,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      s.msgViewOnce,
+                      style: AppText.micro.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -829,17 +1025,37 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     if (decoded == null) return child;
     return GestureDetector(
       onTap: () {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => Scaffold(
-            backgroundColor: Colors.black,
-            body: SafeArea(
-              child: Stack(children: [
-                Center(child: InteractiveViewer(maxScale: 5, child: Image.memory(decoded.bytes, fit: BoxFit.contain))),
-                Positioned(top: 8, left: 8, child: IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 28), onPressed: () => Navigator.of(context).pop())),
-              ]),
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              backgroundColor: Colors.black,
+              body: SafeArea(
+                child: Stack(
+                  children: [
+                    Center(
+                      child: InteractiveViewer(
+                        maxScale: 5,
+                        child: Image.memory(decoded.bytes, fit: BoxFit.contain),
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ));
+        );
       },
       child: child,
     );
@@ -851,202 +1067,246 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     return ValueListenableBuilder<ViewOnceState>(
       valueListenable: _tick.stateNotifier,
       builder: (_, st, _) {
-    final s = context.read<LocaleProvider>().s;
+        final s = context.read<LocaleProvider>().s;
 
-    // Pengirim lihat foto asli + badge
-    if (widget.isMe) {
-      // View-once terkunci (data sudah tidak tersedia) → kartu terkunci, bukan spinner
-      if (_tick.state == ViewOnceState.expired) {
-        return ViewOnceLockedCard(title: s.viewOnceExpired, hint: s.viewOnceExpiredHint);
-      }
-      final decoded = _decoded;
-      final w = decoded != null ? _viewWidth(decoded) : 200.0;
-      final h = decoded != null ? _viewHeight(decoded) : 200.0;
-      return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: SizedBox(
-            width: w,
-            height: h,
-            child: Stack(
-            fit: StackFit.expand,
-            children: [
-              decoded != null
-                  ? Image.memory(
-                      decoded.bytes,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
-                      filterQuality: FilterQuality.high,
-                    )
-                  : Container(
-                      color: AppTheme.bgInput,
-                      alignment: Alignment.center,
-                      child: const SizedBox(
-                        width: 28, height: 28,
-                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70),
+        // Pengirim lihat foto asli + badge
+        if (widget.isMe) {
+          // View-once terkunci (data sudah tidak tersedia) → kartu terkunci, bukan spinner
+          if (_tick.state == ViewOnceState.expired) {
+            return ViewOnceLockedCard(
+              title: s.viewOnceExpired,
+              hint: s.viewOnceExpiredHint,
+            );
+          }
+          final decoded = _decoded;
+          final w = decoded != null ? _viewWidth(decoded) : 200.0;
+          final h = decoded != null ? _viewHeight(decoded) : 200.0;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: w,
+              height: h,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  decoded != null
+                      ? Image.memory(
+                          decoded.bytes,
+                          fit: BoxFit.contain,
+                          gaplessPlayback: true,
+                          filterQuality: FilterQuality.high,
+                        )
+                      : Container(
+                          color: AppTheme.bgInput,
+                          alignment: Alignment.center,
+                          child: const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ),
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.timer_outlined,
+                            color: Colors.white,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            s.msgViewOnce,
+                            style: AppText.micro.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
-                      const SizedBox(width: 3),
-                      Text(s.msgViewOnce,
-                        style: AppText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
+                ],
               ),
-            ],
             ),
-          ),
-      );
-    }
+          );
+        }
 
-    // Penerima — idle: kartu modern "tekan untuk melihat"
-    if (_tick.state == ViewOnceState.idle) {
-      return GestureDetector(
-        onTap: _startViewing,
-        child: Container(
-          width: 220,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF1E88E5), Color(0xFF00BCD4)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00BCD4).withValues(alpha: 0.18),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.22),
+        // Penerima — idle: kartu modern "tekan untuk melihat"
+        if (_tick.state == ViewOnceState.idle) {
+          return GestureDetector(
+            onTap: _startViewing,
+            child: Container(
+              width: 220,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1E88E5), Color(0xFF00BCD4)],
                 ),
-                child: const Icon(
-                  Icons.remove_red_eye_outlined,
-                  color: Colors.white,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                s.viewOnceTitle,
-                style: AppText.bodySmall.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                s.viewOnceTap,
-                textAlign: TextAlign.center,
-                style: AppText.caption.copyWith(
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgCard,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  s.btnView,
-                  style: AppText.label.copyWith(
-                    color: const Color(0xFF1E88E5),
-                    letterSpacing: 0,
-                    fontWeight: FontWeight.w700,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00BCD4).withValues(alpha: 0.18),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Expired — kartu terkunci (tanpa image — hemat memori & tidak load foto)
-    if (_tick.state == ViewOnceState.expired) {
-      return ViewOnceLockedCard(title: s.viewOnceExpired, hint: s.viewOnceExpiredHint);
-    }
-
-    // Viewing — tampilkan foto proporsional + countdown; tap untuk memperbesar
-    final decoded = _decoded;
-    final vw = decoded != null ? _viewWidth(decoded) : 200.0;
-    final vh = decoded != null ? _viewHeight(decoded) : 200.0;
-    return GestureDetector(
-      onTap: _openViewer,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: SizedBox(
-            width: vw,
-            height: vh,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                decoded != null
-                    ? Image.memory(
-                        decoded.bytes,
-                        fit: BoxFit.contain,
-                        gaplessPlayback: true)
-                    : Container(
-                        color: AppTheme.bgInput,
-                        alignment: Alignment.center,
-                        child: const SizedBox(
-                          width: 28, height: 28,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70),
-                        ),
-                      ),
-                Positioned(
-                  top: 6, right: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(12),
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.22),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.timer, color: Colors.white, size: 12),
-                        const SizedBox(width: 3),
-                        ValueListenableBuilder<int>(
-                          valueListenable: _tick.countdown,
-                          builder: (_, v, _) => Text('${v}s',
-                            style: AppText.label.copyWith(color: Colors.white, letterSpacing: 0, fontWeight: FontWeight.w700)),
-                        ),
-                      ],
+                    child: const Icon(
+                      Icons.remove_red_eye_outlined,
+                      color: Colors.white,
+                      size: 22,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 10),
+                  Text(
+                    s.viewOnceTitle,
+                    style: AppText.bodySmall.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    s.viewOnceTap,
+                    textAlign: TextAlign.center,
+                    style: AppText.caption.copyWith(
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgCard,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      s.btnView,
+                      style: AppText.label.copyWith(
+                        color: const Color(0xFF1E88E5),
+                        letterSpacing: 0,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // Expired — kartu terkunci (tanpa image — hemat memori & tidak load foto)
+        if (_tick.state == ViewOnceState.expired) {
+          return ViewOnceLockedCard(
+            title: s.viewOnceExpired,
+            hint: s.viewOnceExpiredHint,
+          );
+        }
+
+        // Viewing — tampilkan foto proporsional + countdown; tap untuk memperbesar
+        final decoded = _decoded;
+        final vw = decoded != null ? _viewWidth(decoded) : 200.0;
+        final vh = decoded != null ? _viewHeight(decoded) : 200.0;
+        return GestureDetector(
+          onTap: _openViewer,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: vw,
+              height: vh,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  decoded != null
+                      ? Image.memory(
+                          decoded.bytes,
+                          fit: BoxFit.contain,
+                          gaplessPlayback: true,
+                        )
+                      : Container(
+                          color: AppTheme.bgInput,
+                          alignment: Alignment.center,
+                          child: const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ),
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.timer,
+                            color: Colors.white,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 3),
+                          ValueListenableBuilder<int>(
+                            valueListenable: _tick.countdown,
+                            builder: (_, v, _) => Text(
+                              '${v}s',
+                              style: AppText.label.copyWith(
+                                color: Colors.white,
+                                letterSpacing: 0,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    },
+        );
+      },
     );
   }
 
@@ -1084,7 +1344,12 @@ class PhotoViewerScreen extends StatefulWidget {
   final Uint8List bytes;
   final Future<String?> Function()? fullLoader;
   final ValueNotifier<int>? countdown;
-  const PhotoViewerScreen({super.key, required this.bytes, this.fullLoader, this.countdown});
+  const PhotoViewerScreen({
+    super.key,
+    required this.bytes,
+    this.fullLoader,
+    this.countdown,
+  });
 
   @override
   State<PhotoViewerScreen> createState() => _PhotoViewerScreenState();
@@ -1134,7 +1399,10 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                   child: SizedBox(
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white54,
+                    ),
                   ),
                 ),
               ),
@@ -1154,7 +1422,10 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                 child: ValueListenableBuilder<int>(
                   valueListenable: widget.countdown!,
                   builder: (_, secs, _) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(20),
@@ -1164,8 +1435,13 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                       children: [
                         const Icon(Icons.timer, color: Colors.white, size: 16),
                         const SizedBox(width: 4),
-                        Text('${secs}s',
-                          style: AppText.bodyStrong.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                        Text(
+                          '${secs}s',
+                          style: AppText.bodyStrong.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1182,7 +1458,11 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
 class ViewOnceLockedCard extends StatelessWidget {
   final String title;
   final String hint;
-  const ViewOnceLockedCard({super.key, required this.title, required this.hint});
+  const ViewOnceLockedCard({
+    super.key,
+    required this.title,
+    required this.hint,
+  });
 
   @override
   Widget build(BuildContext context) {

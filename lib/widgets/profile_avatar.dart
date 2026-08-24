@@ -81,10 +81,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       child = Container(
         width: widget.size,
         height: widget.size,
-        decoration: BoxDecoration(
-          color: widget.bgColor,
-          borderRadius: shape,
-        ),
+        decoration: BoxDecoration(color: widget.bgColor, borderRadius: shape),
         child: Center(
           child: Text(
             widget.name.isNotEmpty ? widget.name[0].toUpperCase() : '?',

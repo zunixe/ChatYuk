@@ -72,15 +72,28 @@ android {
     // Flavor distribusi: apkpure (default) vs play (Google Play).
     // Keduanya memakai applicationId & versionName yang SAMA (com.chatyuk.chatyuk),
     // hanya dibedakan oleh `--dart-define=APP_FLAVOR` + google-services.json.
+    //
+    // Flavor `admin`: build internal (JANGAN pernah diupload store).
+    // Entry Dart: -t lib/main_admin.dart. AppId beda supaya bisa
+    // ter-install berdampingan dengan app user di satu HP.
     flavorDimensions += "store"
     productFlavors {
         create("apkpure") {
             dimension = "store"
             applicationId = "com.chatyuk.chatyuk"
+            manifestPlaceholders["appName"] = "ChatYuk"
         }
         create("play") {
             dimension = "store"
             applicationId = "com.chatyuk.chatyuk"
+            manifestPlaceholders["appName"] = "ChatYuk"
+        }
+        create("admin") {
+            dimension = "store"
+            applicationId = "com.chatyuk.chatyuk.admin"
+            versionNameSuffix = "-admin"
+            // Nama beda supaya gampang dibedakan di home screen.
+            manifestPlaceholders["appName"] = "ChatYuk Admin"
         }
     }
 }

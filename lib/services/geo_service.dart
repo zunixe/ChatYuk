@@ -57,7 +57,8 @@ class GeoService {
       if (places.isEmpty) return null;
       final p = places.first;
       final country = _countryNames[p.isoCountryCode] ?? p.country ?? '';
-      final city = (p.locality ?? p.subAdministrativeArea ?? p.administrativeArea ?? '');
+      final city =
+          (p.locality ?? p.subAdministrativeArea ?? p.administrativeArea ?? '');
       if (country.isEmpty) return null;
       return GeoInfo(
         country: country,

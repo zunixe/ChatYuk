@@ -50,6 +50,15 @@ class _CallScreenState extends State<CallScreen> {
   Timer? _autoClose;
   String _elapsed = '00:00';
   Offset? _localPreviewPos;
+  Size _localPreviewSize = const Size(100, 150);
+
+  /// True → kamera saya fullscreen, video remote jadi bubble kecil.
+  bool _swapped = false;
+
+  /// Mode gesture aktif di bubble: geser posisi atau resize dari pojok.
+  bool _resizingBubble = false;
+  Size _resizeStartSize = Size.zero;
+  Offset _resizeStartLocal = Offset.zero;
   bool _minimizing = false;
 
   /// Video + ada callback minimize → bisa kecilkan ke overlay chat.
@@ -57,8 +66,7 @@ class _CallScreenState extends State<CallScreen> {
       widget.onMinimize != null && widget.callType == 'video';
 
   /// Back sistem jadi minimize (bukan tutup) selama call belum berakhir.
-  bool get _backMinimizes =>
-      _minimizable && _session.phase != CallPhase.ended;
+  bool get _backMinimizes => _minimizable && _session.phase != CallPhase.ended;
 
   @override
   void initState() {
@@ -85,16 +93,18 @@ class _CallScreenState extends State<CallScreen> {
     }
     _session.addListener(_onSession);
     if (_ownsSession) {
-      unawaited(CallNotification.showActive(
-        body: widget.callType == 'video'
-            ? s.callNotifActiveVideo
-            : s.callNotifActiveAudio,
-        channelName: s.callNotifActiveAudio,
-        channelDesc: s.callNotifActiveAudio,
-        chatId: widget.chatId,
-        otherUid: widget.remoteUid,
-        otherName: widget.remoteName,
-      ));
+      unawaited(
+        CallNotification.showActive(
+          body: widget.callType == 'video'
+              ? s.callNotifActiveVideo
+              : s.callNotifActiveAudio,
+          channelName: s.callNotifActiveAudio,
+          channelDesc: s.callNotifActiveAudio,
+          chatId: widget.chatId,
+          otherUid: widget.remoteUid,
+          otherName: widget.remoteName,
+        ),
+      );
       unawaited(_session.init());
     }
   }
@@ -172,15 +182,23 @@ class _CallScreenState extends State<CallScreen> {
     });
   }
 
+  /// Tukar video besar ↔ kecil (double tap).
+  void _toggleSwap() {
+    if (!mounted) return;
+    setState(() => _swapped = !_swapped);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final isVideo = widget.callType == 'video';
     final inCall = _session.phase == CallPhase.inCall;
-    final showRemoteVideo =
-        inCall && isVideo && _session.hasRemoteVideo;
+    final showRemoteVideo = inCall && isVideo && _session.hasRemoteVideo;
     final showLocalPreview =
-        inCall && isVideo && _session.cameraOn && _session.localRenderer.srcObject != null;
+        inCall &&
+        isVideo &&
+        _session.cameraOn &&
+        _session.localRenderer.srcObject != null;
 
     return PopScope(
       canPop: !_backMinimizes || _minimizing,
@@ -188,178 +206,251 @@ class _CallScreenState extends State<CallScreen> {
         if (!didPop) _minimize();
       },
       child: Scaffold(
-      backgroundColor: const Color(0xFF10201A),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Remote stream — SELALU di-mount supaya Android memutar audio
-          // remote meski tak ada video track (panggilan audio, atau video
-          // masih negosiasi). Tanpa view terpasang, audio remote diam.
-          RTCVideoView(
-            _session.remoteRenderer,
-            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-          ),
-          // Overlay avatar untuk panggilan audio / sebelum video tiba.
-          if (!showRemoteVideo)
-            Container(
-              color: const Color(0xFF10201A),
-              child: _RemoteFallback(
-                uid: widget.remoteUid,
-                name: widget.remoteName,
-                muted: inCall && !_session.micOn,
+        backgroundColor: const Color(0xFF10201A),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Remote stream — SELALU di-mount supaya Android memutar audio
+            // remote meski tak ada video track (panggilan audio, atau video
+            // masih negosiasi). Tanpa view terpasang, audio remote diam.
+            // Double tap di fullscreen → tukar dengan bubble kecil.
+            RTCVideoView(
+              _swapped && showRemoteVideo
+                  ? _session.localRenderer
+                  : _session.remoteRenderer,
+              mirror: _swapped && showRemoteVideo,
+              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onDoubleTap: showLocalPreview && showRemoteVideo
+                  ? _toggleSwap
+                  : null,
+            ),
+            // Overlay avatar untuk panggilan audio / sebelum video tiba.
+            if (!showRemoteVideo)
+              Container(
+                color: const Color(0xFF10201A),
+                child: _RemoteFallback(
+                  uid: widget.remoteUid,
+                  name: widget.remoteName,
+                  muted: inCall && !_session.micOn,
+                ),
+              ),
+
+            // Bubble kecil — BISA digeser, di-resize dari pojok kanan bawah,
+            // dan double tap untuk tukar dengan video besar.
+            // Muncul pertama di KIRI ATAS supaya tidak menutupi tombol.
+            if (showLocalPreview)
+              Builder(
+                builder: (ctx) {
+                  final mq = MediaQuery.of(ctx);
+                  const minW = 70.0;
+                  const minH = 100.0;
+                  const handle = 44.0;
+                  final maxW = mq.size.width * 0.6;
+                  final maxH = mq.size.height * 0.6;
+                  final w = _localPreviewSize.width.clamp(minW, maxW);
+                  final h = _localPreviewSize.height.clamp(minH, maxH);
+                  // Default: KANAN ATAS layar, di bawah status bar.
+                  _localPreviewPos ??= Offset(mq.size.width - w - 12, 24);
+                  final pos = Offset(
+                    _localPreviewPos!.dx.clamp(8.0, mq.size.width - w - 8),
+                    _localPreviewPos!.dy.clamp(8.0, mq.size.height - h - 8),
+                  );
+                  return Positioned(
+                    left: pos.dx,
+                    top: pos.dy,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onDoubleTap: showRemoteVideo ? _toggleSwap : null,
+                      onPanStart: (d) {
+                        _resizingBubble =
+                            d.localPosition.dx > w - handle &&
+                            d.localPosition.dy > h - handle;
+                        _resizeStartSize = Size(w, h);
+                        _resizeStartLocal = d.localPosition;
+                      },
+                      onPanUpdate: (d) {
+                        setState(() {
+                          if (_resizingBubble) {
+                            _localPreviewSize = Size(
+                              (_resizeStartSize.width +
+                                      d.localPosition.dx -
+                                      _resizeStartLocal.dx)
+                                  .clamp(minW, maxW),
+                              (_resizeStartSize.height +
+                                      d.localPosition.dy -
+                                      _resizeStartLocal.dy)
+                                  .clamp(minH, maxH),
+                            );
+                          } else {
+                            _localPreviewPos = Offset(
+                              (_localPreviewPos!.dx + d.delta.dx).clamp(
+                                8.0,
+                                mq.size.width - w - 8,
+                              ),
+                              (_localPreviewPos!.dy + d.delta.dy).clamp(
+                                8.0,
+                                mq.size.height - h - 8,
+                              ),
+                            );
+                          }
+                        });
+                      },
+                      onPanEnd: (_) => _resizingBubble = false,
+                      child: Container(
+                        width: w,
+                        height: h,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: RTCVideoView(
+                                _swapped && showRemoteVideo
+                                    ? _session.remoteRenderer
+                                    : _session.localRenderer,
+                                mirror: !(_swapped && showRemoteVideo),
+                                objectFit: RTCVideoViewObjectFit
+                                    .RTCVideoViewObjectFitCover,
+                              ),
+                            ),
+                            // Handle resize di pojok kanan bawah.
+                            Align(
+                              alignment: Alignment.bottomRight,
+                              child: Icon(
+                                Icons.open_in_full_rounded,
+                                size: 22,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+            // Info atas
+            Positioned(
+              top: 40,
+              left: 0,
+              right: 0,
+              child: Column(
+                children: [
+                  Text(
+                    widget.remoteName,
+                    style: AppText.headline.copyWith(color: Colors.white),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _phaseText(s),
+                    style: AppText.body.copyWith(color: Colors.white70),
+                  ),
+                ],
               ),
             ),
 
-          // Preview lokal (video) — kecil dan BISA di-drag ke mana saja.
-          if (showLocalPreview)
-            Builder(builder: (ctx) {
-              const bubbleW = 100.0;
-              const bubbleH = 150.0;
-              final mq = MediaQuery.of(ctx);
-              _localPreviewPos ??= Offset(mq.size.width - bubbleW - 16, 40);
-              final pos = Offset(
-                _localPreviewPos!.dx.clamp(8.0, mq.size.width - bubbleW - 8),
-                _localPreviewPos!.dy.clamp(8.0, mq.size.height - bubbleH - 8),
-              );
-              return Positioned(
-                left: pos.dx,
-                top: pos.dy,
-                child: GestureDetector(
-                  onPanUpdate: (d) {
-                    setState(() {
-                      _localPreviewPos = Offset(
-                        (_localPreviewPos!.dx + d.delta.dx)
-                            .clamp(8.0, mq.size.width - bubbleW - 8),
-                        (_localPreviewPos!.dy + d.delta.dy)
-                            .clamp(8.0, mq.size.height - bubbleH - 8),
-                      );
-                    });
-                  },
-                  child: Container(
-                    width: bubbleW,
-                    height: bubbleH,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white24, width: 2),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: RTCVideoView(
-                      _session.localRenderer,
-                      mirror: true,
-                      objectFit:
-                          RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                    ),
-                  ),
-                ),
-              );
-            }),
-
-          // Info atas
-          Positioned(
-            top: 40,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                Text(
-                  widget.remoteName,
-                  style: AppText.headline.copyWith(color: Colors.white),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _phaseText(s),
-                  style: AppText.body.copyWith(color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-
-          // Kontrol bawah
-          if (inCall)
-            Positioned(
-              bottom: 48,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _ControlButton(
-                    icon: _session.micOn ? Icons.mic : Icons.mic_off,
-                    color: _session.micOn ? null : Colors.redAccent,
-                    tooltip: _session.micOn ? s.btnMute : s.btnUnmute,
-                    onTap: _session.toggleMic,
-                  ),
-                  if (isVideo) ...[
-                    const SizedBox(width: 16),
+            // Kontrol bawah
+            if (inCall)
+              Positioned(
+                bottom: 48,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
                     _ControlButton(
-                      icon: _session.cameraOn
-                          ? Icons.videocam
-                          : Icons.videocam_off,
-                      color: _session.cameraOn ? null : Colors.redAccent,
-                      tooltip: s.btnSwitchCamera,
-                      onTap: _session.toggleCamera,
+                      icon: _session.micOn ? Icons.mic : Icons.mic_off,
+                      color: _session.micOn ? null : Colors.redAccent,
+                      tooltip: _session.micOn ? s.btnMute : s.btnUnmute,
+                      onTap: _session.toggleMic,
                     ),
-                    const SizedBox(width: 16),
-                    _ControlButton(
-                      icon: Icons.cameraswitch,
-                      tooltip: s.btnSwitchCamera,
-                      onTap: _session.switchCamera,
-                    ),
-                    const SizedBox(width: 16),
-                    _ControlButton(
-                      icon: _session.speakerOn
-                          ? Icons.volume_up
-                          : Icons.volume_off,
-                      color:
-                          _session.speakerOn ? null : Colors.redAccent,
-                      tooltip: s.btnSpeaker,
-                      onTap: _session.toggleSpeaker,
-                    ),
-                    if (_minimizable) ...[
+                    if (isVideo) ...[
                       const SizedBox(width: 16),
                       _ControlButton(
-                        icon: Icons.picture_in_picture_alt,
-                        tooltip: s.callMinimize,
-                        onTap: _minimize,
+                        icon: _session.cameraOn
+                            ? Icons.videocam
+                            : Icons.videocam_off,
+                        color: _session.cameraOn ? null : Colors.redAccent,
+                        tooltip: s.btnSwitchCamera,
+                        onTap: _session.toggleCamera,
                       ),
+                      const SizedBox(width: 16),
+                      _ControlButton(
+                        icon: Icons.cameraswitch,
+                        tooltip: s.btnSwitchCamera,
+                        onTap: _session.switchCamera,
+                      ),
+                      const SizedBox(width: 16),
+                      _ControlButton(
+                        icon: _session.speakerOn
+                            ? Icons.volume_up
+                            : Icons.volume_off,
+                        color: _session.speakerOn ? null : Colors.redAccent,
+                        tooltip: s.btnSpeaker,
+                        onTap: _session.toggleSpeaker,
+                      ),
+                      if (_minimizable) ...[
+                        const SizedBox(width: 16),
+                        _ControlButton(
+                          icon: Icons.picture_in_picture_alt,
+                          tooltip: s.callMinimize,
+                          onTap: _minimize,
+                        ),
+                      ],
                     ],
+                    const SizedBox(width: 16),
+                    _ControlButton(
+                      icon: Icons.call_end,
+                      color: Colors.redAccent,
+                      tooltip: s.btnEndCall,
+                      onTap: _session.end,
+                    ),
                   ],
-                  const SizedBox(width: 16),
-                  _ControlButton(
+                ),
+              )
+            else if (_session.phase == CallPhase.ringing ||
+                _session.phase == CallPhase.connecting)
+              Positioned(
+                bottom: 48,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _ControlButton(
                     icon: Icons.call_end,
                     color: Colors.redAccent,
                     tooltip: s.btnEndCall,
                     onTap: _session.end,
                   ),
-                ],
-              ),
-            )
-          else if (_session.phase == CallPhase.ringing ||
-              _session.phase == CallPhase.connecting)
-            Positioned(
-              bottom: 48,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: _ControlButton(
-                  icon: Icons.call_end,
-                  color: Colors.redAccent,
-                  tooltip: s.btnEndCall,
-                  onTap: _session.end,
                 ),
               ),
-            ),
 
-          // Timer saat in-call (di atas kontrol)
-          if (inCall)
-            Positioned(
-              bottom: 130,
-              left: 0,
-              right: 0,
-              child: _ElapsedTimer(onTick: _tick),
-            ),
-        ],
-      ),
+            // Timer saat in-call (di atas kontrol)
+            if (inCall)
+              Positioned(
+                bottom: 130,
+                left: 0,
+                right: 0,
+                child: _ElapsedTimer(onTick: _tick),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -414,8 +505,7 @@ class _RemoteFallback extends StatelessWidget {
         children: [
           ProfileAvatar(uid: uid, name: name, size: 120, borderRadius: 60),
           const SizedBox(height: 24),
-          if (muted)
-            Icon(Icons.mic_off, color: Colors.white70, size: 28),
+          if (muted) Icon(Icons.mic_off, color: Colors.white70, size: 28),
         ],
       ),
     );

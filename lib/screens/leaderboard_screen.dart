@@ -96,35 +96,54 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
+                Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: AppTheme.textSecondary,
+                ),
                 SizedBox(width: 6),
-                Text(_scope == 'weekly' ? s.lbWeeklyHint : s.lbAllTimeHint,
-                    style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                Text(
+                  _scope == 'weekly' ? s.lbWeeklyHint : s.lbAllTimeHint,
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
           Expanded(
             child: _loading
-                ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                ? Center(
+                    child: CircularProgressIndicator(color: AppTheme.primary),
+                  )
                 : _entries.isEmpty
-                    ? Center(child: Text(s.lbEmpty, style: TextStyle(color: AppTheme.textSecondary)))
-                    : RefreshIndicator(
-                        onRefresh: _load,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.only(bottom: 80),
-                          itemCount: _entries.length,
-                          separatorBuilder: (_, otherIndex) => const Divider(height: 1, indent: 64),
-                          itemBuilder: (_, i) => _RankTile(
-                            entry: Map<String, dynamic>.from(_entries[i] as Map),
-                          ),
-                        ),
+                ? Center(
+                    child: Text(
+                      s.lbEmpty,
+                      style: TextStyle(color: AppTheme.textSecondary),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: _entries.length,
+                      separatorBuilder: (_, otherIndex) =>
+                          const Divider(height: 1, indent: 64),
+                      itemBuilder: (_, i) => _RankTile(
+                        entry: Map<String, dynamic>.from(_entries[i] as Map),
                       ),
+                    ),
+                  ),
           ),
         ],
       ),
       bottomNavigationBar: _me == null
           ? null
-          : _MyRankBar(rank: (_me!['rank'] as num?)?.toInt(), score: (_me!['score'] as num?)?.toInt() ?? 0),
+          : _MyRankBar(
+              rank: (_me!['rank'] as num?)?.toInt(),
+              score: (_me!['score'] as num?)?.toInt() ?? 0,
+            ),
     );
   }
 }
@@ -151,16 +170,27 @@ class _RankTile extends StatelessWidget {
       ),
       title: Row(
         children: [
-          Flexible(child: Text(nickname, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600))),
+          Flexible(
+            child: Text(
+              nickname,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
           if (registered) ...[
             const SizedBox(width: 4),
             const Icon(Icons.verified, size: 14, color: AppTheme.primary),
           ],
         ],
       ),
-      trailing: Text('$score',
-          style: AppText.bodyStrong.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w800)),
+      trailing: Text(
+        '$score',
+        style: AppText.bodyStrong.copyWith(
+          color: AppTheme.primary,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }
@@ -171,12 +201,32 @@ class _RankBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (rank == 1) return const Text('🥇', style: TextStyle(fontSize: AppGlyph.sm), textAlign: TextAlign.center);
-    if (rank == 2) return const Text('🥈', style: TextStyle(fontSize: AppGlyph.sm), textAlign: TextAlign.center);
-    if (rank == 3) return const Text('🥉', style: TextStyle(fontSize: AppGlyph.sm), textAlign: TextAlign.center);
-    return Text('$rank',
+    if (rank == 1)
+      return const Text(
+        '🥇',
+        style: TextStyle(fontSize: AppGlyph.sm),
         textAlign: TextAlign.center,
-        style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w700));
+      );
+    if (rank == 2)
+      return const Text(
+        '🥈',
+        style: TextStyle(fontSize: AppGlyph.sm),
+        textAlign: TextAlign.center,
+      );
+    if (rank == 3)
+      return const Text(
+        '🥉',
+        style: TextStyle(fontSize: AppGlyph.sm),
+        textAlign: TextAlign.center,
+      );
+    return Text(
+      '$rank',
+      textAlign: TextAlign.center,
+      style: AppText.bodySmall.copyWith(
+        color: AppTheme.textSecondary,
+        fontWeight: FontWeight.w700,
+      ),
+    );
   }
 }
 
@@ -192,7 +242,13 @@ class _Avatar extends StatelessWidget {
       return CircleAvatar(
         radius: 18,
         backgroundColor: AppTheme.accent.withValues(alpha: 0.2),
-        child: Text(initial, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.w700)),
+        child: Text(
+          initial,
+          style: const TextStyle(
+            color: AppTheme.accent,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       );
     }
     return FutureBuilder<Uint8List?>(
@@ -202,10 +258,19 @@ class _Avatar extends StatelessWidget {
           return CircleAvatar(
             radius: 18,
             backgroundColor: AppTheme.accent.withValues(alpha: 0.2),
-            child: Text(initial, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.w700)),
+            child: Text(
+              initial,
+              style: const TextStyle(
+                color: AppTheme.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           );
         }
-        return CircleAvatar(radius: 18, backgroundImage: MemoryImage(snap.data!));
+        return CircleAvatar(
+          radius: 18,
+          backgroundImage: MemoryImage(snap.data!),
+        );
       },
     );
   }
@@ -221,12 +286,20 @@ class _MyRankBar extends StatelessWidget {
     final s = context.watch<LocaleProvider>().s;
     return Container(
       padding: EdgeInsets.only(
-        left: 16, right: 16, top: 12,
+        left: 16,
+        right: 16,
+        top: 12,
         bottom: 12 + MediaQuery.of(context).padding.bottom,
       ),
       decoration: const BoxDecoration(
         color: AppTheme.primary,
-        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, -2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 8,
+            offset: Offset(0, -2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -235,11 +308,19 @@ class _MyRankBar extends StatelessWidget {
           Expanded(
             child: Text(
               rank == null ? s.lbUnranked : '${s.lbYourRank}: #$rank',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-          Text('$score',
-              style: AppText.titleEmphasis.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+          Text(
+            '$score',
+            style: AppText.titleEmphasis.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );
