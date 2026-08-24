@@ -352,28 +352,27 @@ class ChatService {
 
     Future<void> reload() async {
       try {
-        // Fetch cutoff delete + cache lokal PARALEL — tampilkan cache dulu
-        // supaya buka chat instan (mem-cache / decrypt isolate), server menyusul.
-        // Cutoff tetap diterapkan ke cache agar history pre-delete tidak pernah
-        // muncul walau sesaat.
+        // Emit cache lokal DULU tanpa tunggu cutoff network — frame pertama
+        // instant. Cutoff & server menyusul dan mengkoreksi di emit berikutnya.
         final cutoffF = fetchHiddenCutoff();
         final cacheF = _current.isEmpty
             ? MessageCache.instance.loadMessages(cacheKey)
             : Future<List<MessageModel>>.value(const <MessageModel>[]);
-        _hiddenCutoff = await cutoffF;
         final cached = await cacheF;
+        if (cached.isNotEmpty && !controller.isClosed) {
+          _current = cached;
+          controller.add(_current);
+          loadPhotosAsync(cached);
+        }
+        _hiddenCutoff = await cutoffF;
         if (controller.isClosed) return;
-        if (cached.isNotEmpty) {
-          var list = cached;
-          if (_hiddenCutoff != null) {
-            list = list
-                .where((m) => m.timestamp.isAfter(_hiddenCutoff!))
-                .toList();
-          }
-          if (list.isNotEmpty) {
-            _current = list;
+        if (_hiddenCutoff != null && _current.isNotEmpty) {
+          final filtered = _current
+              .where((m) => m.timestamp.isAfter(_hiddenCutoff!))
+              .toList();
+          if (filtered.length != _current.length) {
+            _current = filtered;
             controller.add(_current);
-            loadPhotosAsync(list);
           }
         }
         final server = await fetchServer(limit: 100);

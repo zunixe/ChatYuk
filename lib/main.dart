@@ -425,7 +425,7 @@ void main() async {
     debugPrint('[FIREBASE] init error: $e');
   }
   await SupabaseConfig.init();
-  await MessageCache.instance.clearAllLegacy(); // bersihkan semua cache lama
+  await MessageCache.instance.clearLegacyV1Only(); // bersihkan hanya cache format lama v1
   PhotoCache.instance.cleanOldPhotos(); // fire-and-forget, hapus foto >7 hari
   if (_firebaseReady) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
