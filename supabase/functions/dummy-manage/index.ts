@@ -103,6 +103,43 @@ Deno.serve(async (req) => {
       return json(data ?? { ok: true });
     }
 
+    if (action === 'renew') {
+      // Regenerasi sesi GoTrue ASLI untuk dummy yang tokennya mati:
+      // set password via Admin API -> login password -> refresh_token valid.
+      const { uid } = body;
+      if (!uid) return json({ error: 'uid required' }, 400);
+
+      const { data: uData, error: uErr } = await admin.auth.admin.getUserById(uid);
+      const user = uData?.user;
+      if (uErr || !user) return json({ error: 'user not found', detail: uErr?.message }, 404);
+      const email = user.email || `${crypto.randomUUID().slice(0, 8)}@dummy.chatyuk.local`;
+      if (!user.email) {
+        await admin.auth.admin.updateUserById(uid, { email, email_confirm: true });
+      }
+      const password = `dm-${crypto.randomUUID()}`;
+      const { error: pErr } = await admin.auth.admin.updateUserById(uid, { password });
+      if (pErr) return json({ error: 'set password failed', detail: pErr.message }, 500);
+
+      const loginRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          apikey: SERVICE_ROLE,
+          Authorization: `Bearer ${SERVICE_ROLE}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+      const login = await loginRes.json();
+      if (!loginRes.ok || !login.refresh_token) {
+        return json({ error: 'password login failed', detail: login }, 500);
+      }
+      await admin.rpc('admin_update_dummy_token', {
+        p_uid: uid,
+        p_refresh_token: login.refresh_token,
+      });
+      return json({ ok: true, refresh_token: login.refresh_token });
+    }
+
     return json({ error: 'Unknown action' }, 400);
   } catch (e) {
     return json({ error: String(e) }, 500);

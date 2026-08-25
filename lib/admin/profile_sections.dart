@@ -17,11 +17,17 @@ import '../config/strings_admin.dart';
 
 List<Widget> adminSettingsHeader(BuildContext context) {
   if (!AdminGate.enabled) return const [];
+  // Saat sesi dummy, panel admin tidak boleh terlihat/terbuka
+  // (semua RPC admin akan Unauthorized).
+  final isDummy = context.read<AuthProvider>().dummySessionActive;
+  if (isDummy) return const [];
   return const [_AdminPanelTile(), _AdminDivider()];
 }
 
 List<Widget> adminSettingsTail(BuildContext context) {
   if (!AdminGate.enabled) return const [];
+  final isDummy = context.read<AuthProvider>().dummySessionActive;
+  if (isDummy) return const [];
   return const [
     _ScreenshotToggle(),
     _AdminDivider(),
