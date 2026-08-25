@@ -44,10 +44,10 @@ class AuthService {
   bool get emailConfirmed => _sb.auth.currentUser?.emailConfirmedAt != null;
 
   /// Web client ID untuk Google Sign-In (audience ID token).
-  /// Build rilis memakai web client project lama; build admin meng-override
-  /// nilai ini via [googleWebClientIdOverride] karena Android client-nya
-  /// berada di project Firebase yang berbeda — Google mewajibkan keduanya
-  /// satu project.
+  /// ATURAN GOOGLE: Android OAuth client & Web client (serverClientId)
+  /// WAJIB satu project, dan kombinasi package+SHA1 bersifat unik global.
+  /// Semua client kini terkonsolidasi di chatyuk-7c9e4 (client lama icr5
+  /// sudah dihapus dari chatyuk-504910), jadi SATU nilai untuk semua build.
   static const String googleWebClientIdDefault =
       '599111437536-hg56bq0nc2m6kig6hg41lmrbtfel5n2c.apps.googleusercontent.com';
   static String? googleWebClientIdOverride;
@@ -877,6 +877,17 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    // Logout saat sesi dummy = KEMBALI ke admin, bukan menghancurkan sesi
+    // dummy di server (signOut GoTrue akan me-revoke refresh token dummy
+    // sehingga swap berikutnya gagal selamanya).
+    if (_dummySessionActive) {
+      final back = AdminGate.backToAdminImpl;
+      if (back != null) {
+        final ok = await back();
+        if (ok) return;
+      }
+      // Kalau restore admin gagal (token admin mati), lanjut logout normal.
+    }
     _dummySessionActive = false;
     _dummyUid = null;
     // Pembersihan token admin tersimpan ditangani modul admin

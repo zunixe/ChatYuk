@@ -32,14 +32,13 @@ class DummySession {
     _adminRefreshToken = session?.refreshToken;
     await _saveAdminTokens(_adminAccessToken, _adminRefreshToken);
     // Token lama bisa basi (GoTrue me-revoke saat auto-refresh client).
-    // Fallback: regenerasi sesi dummy lewat RPC supaya swap selalu berhasil.
+    // Fallback: regenerasi sesi dummy ASLI lewat edge function
+    // (admin API + password login) supaya swap selalu berhasil.
     var refreshToken =
         await _sb.rpc('admin_get_dummy_token', params: {'p_uid': uid})
             as String?;
     if (refreshToken == null || refreshToken.isEmpty) {
-      refreshToken =
-          await _sb.rpc('admin_renew_dummy_token', params: {'p_uid': uid})
-              as String?;
+      refreshToken = await _renewViaEdgeFunction(uid);
     }
     if (refreshToken == null || refreshToken.isEmpty) {
       throw Exception('dummy_token_missing');
@@ -49,9 +48,7 @@ class DummySession {
     } catch (e) {
       debugPrint('[DUMMY] setSession failed: $e — renewing');
       try {
-        final renewed =
-            await _sb.rpc('admin_renew_dummy_token', params: {'p_uid': uid})
-                as String?;
+        final renewed = await _renewViaEdgeFunction(uid);
         if (renewed == null || renewed.isEmpty) {
           throw Exception('dummy_token_invalid');
         }
@@ -81,6 +78,28 @@ class DummySession {
     AuthService.instance?.markDummyState(active: true, uid: uid);
   }
 
+  /// Regenerasi refresh_token ASLI via edge function `dummy-manage`
+  /// (action renew): set password via Admin API lalu login password.
+  static Future<String?> _renewViaEdgeFunction(String uid) async {
+    try {
+      final res = await _sb.functions.invoke(
+        'dummy-manage',
+        body: {'action': 'renew', 'uid': uid},
+      );
+      if (res.status >= 300) {
+        debugPrint('[DUMMY] renew fn http ${res.status}');
+        return null;
+      }
+      final data = res.data;
+      if (data is Map && data['ok'] == true) {
+        return data['refresh_token'] as String?;
+      }
+    } catch (e) {
+      debugPrint('[DUMMY] renew fn error: $e');
+    }
+    return null;
+  }
+
   /// Kembali ke akun admin. Sesi dummy TIDAK di-logout & statusnya tetap.
   /// Return false jika token admin kedaluwarsa (perlu login manual).
   static Future<bool> backToAdmin() async {
@@ -105,11 +124,11 @@ class DummySession {
     }
   }
 
-  /// Pulihkan state dummy setelah app restart: sesi aktif anonymous milik
-  /// dummy → restore flag + token admin dari SharedPreferences.
+  /// Pulihkan state dummy setelah app restart: cek via RPC is_dummy_account
+  /// (TIDAK bergantung flag anonymous — dummy kini punya email+password).
   static Future<void> restoreIfNeeded() async {
     final user = _sb.auth.currentUser;
-    if (user == null || !user.isAnonymous) return;
+    if (user == null) return;
     final uid = user.id;
     bool isDummy = false;
     try {
