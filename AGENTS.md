@@ -240,9 +240,9 @@ fastlane play track:production # upload ke production (release)
 ```
 
 Syarat:
-- `fastlane/google-play.json` — service account key (`chatyuk-play-upload@chatyuk-504910.iam.gserviceaccount.com`), JANGAN commit (sudah di `.gitignore`).
+- `fastlane/google-play.json` — service account key (`chatyuk-play-upload@chatyuk-7c9e4.iam.gserviceaccount.com`, project Firebase/GCP utama ChatYuk), JANGAN commit (sudah di `.gitignore`).
 - Service account harus terdaftar di Play Console → Pengguna dan izin (izin: rilis ke produksi + rilis ke track pengujian).
-- Google Play Android Developer API harus enabled di GCP project `chatyuk-504910`.
+- Google Play Android Developer API harus enabled di GCP project `chatyuk-7c9e4` (sudah aktif).
 
 Catatan penting:
 - **Wajib** bump `version: x.y.z+N` di `pubspec.yaml` sebelum upload (versionCode tidak boleh dipakai ulang).
