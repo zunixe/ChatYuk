@@ -639,7 +639,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? s.labelGenderFemale
         : '';
     final isAnon = auth.isAnonymous;
-    final dummyActive = auth.dummySessionActive;
+    // Sesi dummy aktif HANYA untuk admin sungguhan — login anon/user biasa
+    // di build admin tidak pernah dianggap sesi admin/dummy.
+    final dummyActive = auth.dummySessionActive && auth.isRealAdmin;
     final pp = context.watch<PointsProvider>();
 
     return Scaffold(
@@ -842,7 +844,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   // Banner sesi dummy — widget di-inject build admin
                   // (lib/admin/profile_sections.dart) lewat AdminGate.
-                  if (auth.dummySessionActive)
+                  if (auth.dummySessionActive && auth.isRealAdmin)
                     AdminGate.dummySessionBanner?.call(
                       context, profile?.nickname) ??
                   const SizedBox.shrink(),
@@ -1562,7 +1564,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       // Admin: tile buka panel — hanya ada di build admin
                       // (di-inject lewat AdminGate oleh entry lib/main_admin.dart).
                       // Sesi dummy → tile & toggles admin disembunyikan.
-                      if (!dummyActive) ...?AdminGate.profileSettingsHeader?.call(context),
+                      // UI admin hanya untuk admin sungguhan (bukan dummy,
+                      // bukan anon/user biasa yang login di build admin).
+                      if (!dummyActive && auth.isRealAdmin) ...?AdminGate.profileSettingsHeader?.call(context),
                       // Notifikasi
                       Padding(
                         padding: EdgeInsets.symmetric(
@@ -1617,7 +1621,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Divider(height: 1, indent: 52),
                       // Admin: toggle screenshot/watermark/invisible —
                       // hanya ada di build admin (via AdminGate).
-                      if (!dummyActive) ...?AdminGate.profileSettingsTail?.call(context),
+                      if (!dummyActive && auth.isRealAdmin) ...?AdminGate.profileSettingsTail?.call(context),
                       // Password: set (akun Google) / change (akun email) —
                       // hanya untuk user terdaftar (email/Google), bukan anon.
                       if (!isAnon) ...[

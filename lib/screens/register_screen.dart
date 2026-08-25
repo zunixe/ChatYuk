@@ -9,6 +9,7 @@ import '../providers/locale_provider.dart';
 import '../services/auth_service.dart';
 import '../services/geo_service.dart';
 import '../services/location_service.dart';
+import '../services/device_info_service.dart';
 import '../main.dart';
 import 'login_screen.dart';
 import '../providers/theme_provider.dart';
@@ -70,11 +71,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final finalInfo = info;
     final cities = getCitiesForCountry(finalInfo.country);
     if (cities.isEmpty) return;
+    // Kota: cocok nama -> terdekat dari koordinat -> kota pertama.
+    final kota = matchCity(finalInfo.city, cities) ??
+        ((finalInfo.lat != null && finalInfo.lon != null)
+            ? nearestCity(
+                finalInfo.lat!, finalInfo.lon!, finalInfo.country, cities)
+            : null) ??
+        cities.first;
     setState(() {
       _negara = finalInfo.country;
-      _kota = cities.contains(finalInfo.city) ? finalInfo.city : cities.first;
+      _kota = kota;
       _ipAddress = finalInfo.ipAddress;
     });
+    if (!mounted) return;
+    await context.read<LocaleProvider>().setLangFromCountry(finalInfo.country);
   }
 
   @override
@@ -263,6 +273,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
       }
     } finally {
+      // Catat identitas perangkat + install ID untuk pelacakan admin.
+      unawaited(
+        DeviceInfoService.instance.syncToServer(ipAddress: _ipAddress),
+      );
       if (mounted) setState(() => _loading = false);
     }
   }

@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Rekam panggilan oleh admin (folder publik ChatYuk Admin/Record)
+         butuh akses semua file di Android 11+ — hanya untuk build admin. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+</manifest>

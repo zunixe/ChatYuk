@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/room_model.dart';
 import '../services/room_service.dart';
 import '../services/chat_service.dart';
+import '../services/message_cache.dart';
 
 class RoomProvider extends ChangeNotifier {
   final RoomService _service = RoomService();
@@ -17,6 +18,7 @@ class RoomProvider extends ChangeNotifier {
   StreamSubscription? _countsSub;
   StreamSubscription? _privateSub;
   String? _error;
+  Timer? _diskSaveTimer;
 
   List<RoomModel> get rooms => _rooms;
   List<RoomModel> get privateRooms => _privateRooms;
@@ -39,7 +41,53 @@ class RoomProvider extends ChangeNotifier {
       },
     );
     _subscribePrivateRooms();
+    _loadDisk();
     reload();
+  }
+
+  // ── Persist list room ke disk (encrypted) — cold start tampil instan ────
+  Future<void> _loadDisk() async {
+    try {
+      final obj = await MessageCache.instance.loadRawObj('rooms_$_country');
+      if (obj.isEmpty) return;
+      final uid = Supabase.instance.client.auth.currentUser?.id ?? '';
+      final memObj = uid.isEmpty
+          ? <String, dynamic>{}
+          : await MessageCache.instance.loadRawObj('members_$uid');
+      if (_rooms.isNotEmpty) return; // server sudah lebih dulu
+      _rooms = ((obj['rooms'] as List?) ?? const [])
+          .map((e) => RoomModel.fromMap(
+              '${(e as Map)['id'] ?? ''}', Map<String, dynamic>.from(e)))
+          .toList();
+      _privateRooms = ((obj['private'] as List?) ?? const [])
+          .map((e) => RoomModel.fromMap(
+              '${(e as Map)['id'] ?? ''}', Map<String, dynamic>.from(e)))
+          .toList();
+      _memberRoomIds = ((memObj['ids'] as List?) ?? const [])
+          .map((e) => '$e')
+          .toSet();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[RoomProvider] disk load error: $e');
+    }
+  }
+
+  void _scheduleDiskSave() {
+    _diskSaveTimer?.cancel();
+    _diskSaveTimer = Timer(const Duration(seconds: 2), () {
+      if (_rooms.isEmpty && _privateRooms.isEmpty) return;
+      MessageCache.instance.saveRawObj('rooms_$_country', {
+        'rooms': _rooms.map((r) => r.toMap()).toList(),
+        'private': _privateRooms.map((r) => r.toMap()).toList(),
+      });
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid != null) {
+        MessageCache.instance.saveRawObj(
+          'members_$uid',
+          {'ids': _memberRoomIds.toList()},
+        );
+      }
+    });
   }
 
   /// Berlangganan realtime perubahan private room untuk negara aktif.
@@ -53,6 +101,7 @@ class RoomProvider extends ChangeNotifier {
             _privateRooms = rooms;
             _applyCounts();
             notifyListeners();
+            _scheduleDiskSave();
           },
           onError: (e) {
             debugPrint('[RoomProvider] private rooms stream error: $e');
@@ -66,6 +115,8 @@ class RoomProvider extends ChangeNotifier {
     _country = country;
     _subscribePrivateRooms(); // langganan ulang untuk negara baru
     notifyListeners();
+    // Tampilkan cache disk negara itu dulu kalau memori kosong.
+    if (_rooms.isEmpty && _privateRooms.isEmpty) _loadDisk();
     await reload();
   }
 
@@ -85,6 +136,7 @@ class RoomProvider extends ChangeNotifier {
       }
       _error = null;
       notifyListeners();
+      _scheduleDiskSave();
       await reloadPrivate();
     } catch (e) {
       debugPrint('[RoomProvider] fetch rooms error: $e');
@@ -106,6 +158,7 @@ class RoomProvider extends ChangeNotifier {
       _memberRoomIds = members;
       _applyCounts();
       notifyListeners();
+      _scheduleDiskSave();
     } catch (e) {
       debugPrint('[RoomProvider] fetch private rooms error: $e');
     }
@@ -193,6 +246,7 @@ class RoomProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _diskSaveTimer?.cancel();
     _countsSub?.cancel();
     _privateSub?.cancel();
     super.dispose();

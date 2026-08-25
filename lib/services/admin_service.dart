@@ -135,6 +135,78 @@ class AdminService {
     return (res as num?)?.toInt() ?? 0;
   }
 
+  /// Daftar semua device semua user (pelacakan admin).
+  Future<Map<String, dynamic>> listDevices({
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final res = await _sb.rpc('admin_list_devices', params: {
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+    return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
+  }
+
+  /// Detail lengkap satu user: profil + device + chat partners + lokasi.
+  Future<Map<String, dynamic>> getUserDetail(String uid) async {
+    final res = await _sb.rpc('admin_user_detail', params: {'p_uid': uid});
+    return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Daftar arsip user yang sudah dihapus.
+  Future<Map<String, dynamic>> listDeleted({
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final res = await _sb.rpc('admin_list_deleted', params: {
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+    return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
+  }
+
+  /// Riwayat device milik user yang sudah dihapus (via nickname snapshot).
+  Future<List<Map<String, dynamic>>> getDeletedDeviceHistory(
+    String nickname,
+  ) async {
+    final res = await _sb.rpc(
+      'admin_deleted_device_history',
+      params: {'p_nickname': nickname},
+    );
+    if (res is List) {
+      return res
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    }
+    return const [];
+  }
+
+  /// Statistik penggunaan data Supabase (DB/storage/kuota + pertumbuhan).
+  Future<Map<String, dynamic>> getStorageStats() async {
+    final res = await _sb.rpc('admin_storage_stats');
+    return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Daftar user terdaftar (registrasi email) — nickname + email + tgl.
+  Future<Map<String, dynamic>> listRegistrations({
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final res = await _sb.rpc('admin_registrations_list', params: {
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+    return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
+  }
+
+  /// Pemakaian Cloudflare Realtime TURN (kuota 1 TB/bulan free tier).
+  /// Return {configured: bool, day_bytes, week_bytes, month_bytes,
+  /// quota_bytes} atau {configured:false} bila secrets belum diset.
+  Future<Map<String, dynamic>> getCfUsage() async {
+    final res = await _sb.functions.invoke('admin-cf-usage');
+    return res.data is Map ? Map<String, dynamic>.from(res.data as Map) : {};
+  }
+
   // ── Admin Dummy Accounts ──
   /// Daftarkan akun dummy. Akun baru dibuat via signUp (email dikonfirmasi
   /// server); kalau email sudah ada, cukup diverifikasi password-nya.

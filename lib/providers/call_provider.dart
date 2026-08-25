@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../config/supabase_config.dart';
 import '../main.dart';
 import '../screens/incoming_call_screen.dart';
 import '../services/call_service.dart';
@@ -60,6 +61,8 @@ class CallProvider extends ChangeNotifier {
 
   final CallService _service = CallService.instance;
   StreamSubscription<Map<String, dynamic>>? _incomingSub;
+  StreamSubscription<dynamic>? _authSub;
+  bool _listening = false;
 
   /// callId call yang sedang aktif (CallScreen / IncomingCallScreen terbuka).
   String? _activeCallId;
@@ -87,13 +90,26 @@ class CallProvider extends ChangeNotifier {
 
   Timer? _clearTimer;
 
-  /// Mulai mendengarkan panggilan masuk — hanya untuk user terdaftar
-  /// (anon tidak menerima call sama sekali).
+  /// Mulai mendengarkan panggilan masuk. Semua akun dengan profil (terdaftar,
+  /// anon, dummy) menerima call — konsisten dengan toggle "call all users".
+  /// Otomatis re-subscribe saat sesi berganti (dummy ⇄ admin / logout) supaya
+  /// channel realtime menunjuk ke uid yang sedang aktif.
   void ensureListening({required bool registered}) {
-    if (!registered) return;
-    if (_incomingSub != null) return;
+    if (_listening) return;
+    _listening = true;
+    _subscribeIncoming();
+    // Re-subscribe otomatis ketika sesi berubah — event signedIn/tokenRefreshed
+    // ter-emit saat swap dummy (setSession) maupun login ulang.
+    _authSub ??= SupabaseConfig.client.auth.onAuthStateChange.listen((_) {
+      _subscribeIncoming();
+    });
+  }
+
+  void _subscribeIncoming() {
+    _incomingSub?.cancel();
+    _incomingSub = null;
     _incomingSub = _service.onIncomingCall().listen(_onIncoming);
-    debugPrint('[CallProvider] listening incoming calls');
+    debugPrint('[CallProvider] listening incoming calls (uid=${_service.uid})');
   }
 
   void _onIncoming(Map<String, dynamic> row) async {
@@ -218,6 +234,8 @@ class CallProvider extends ChangeNotifier {
   void dispose() {
     _incomingSub?.cancel();
     _incomingSub = null;
+    _authSub?.cancel();
+    _authSub = null;
     super.dispose();
   }
 }

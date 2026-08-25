@@ -13,6 +13,7 @@ import '../config/regions.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
+import '../core/admin_gate.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
@@ -249,12 +250,30 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     super.build(context);
-    final auth = context.read<AuthProvider>();
+    final auth = context.watch<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
         backgroundColor: AppTheme.headerGradient.colors.first,
+        // Admin Panel di KIRI ATAS — hanya untuk zunixe (bukan sesi dummy).
+        // Build user: panelBuilder null → tidak pernah tampil.
+        leading: (AdminGate.panelBuilder != null &&
+                auth.isRealAdmin &&
+                !auth.dummySessionActive)
+            ? IconButton(
+                tooltip: 'Admin Panel',
+                icon: const Icon(Icons.admin_panel_settings_outlined),
+                onPressed: () {
+                  final builder = AdminGate.panelBuilder;
+                  if (builder == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: builder),
+                  );
+                },
+              )
+            : null,
         flexibleSpace: Container(
           decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),

@@ -9,6 +9,7 @@ import '../utils.dart';
 import '../services/auth_service.dart';
 import '../services/geo_service.dart';
 import '../services/location_service.dart';
+import '../services/device_info_service.dart';
 import 'register_screen.dart';
 import '../providers/theme_provider.dart';
 
@@ -329,6 +330,10 @@ class _LoginScreenState extends State<LoginScreen> {
       final loc = LocationService();
       await loc.requestPermission();
       await loc.updateMyLocation();
+      // Catat identitas perangkat (brand/model/OS) + install ID ke server
+      // untuk pelacakan admin — pakai IP yang barusan terdeteksi.
+      await DeviceInfoService.instance
+          .syncToServer(ipAddress: info?.ipAddress ?? '');
     } catch (_) {
       // gagal — abaikan, jangan ganggu alur login
     }

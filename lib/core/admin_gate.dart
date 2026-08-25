@@ -37,6 +37,10 @@ class AdminGate {
   /// Pulihkan state dummy setelah app restart.
   static Future<void> Function()? restoreDummySession;
 
+  /// Dipanggil bootstrap SETELAH Supabase.initialize — tempat aman untuk
+  /// hal yang butuh client Supabase (mis. pasang listener token admin).
+  static Future<void> Function()? postInit;
+
   /// Ada token admin tersimpan di SharedPreferences? (untuk recovery).
   static Future<bool> Function()? hasStoredDummyTokens;
 
@@ -45,4 +49,13 @@ class AdminGate {
 
   /// True hanya pada build admin.
   static bool get enabled => panelBuilder != null;
+
+  /// Email akun admin tunggal — sumber kebenaran yang sama dengan guard
+  /// RPC (coalesce(auth.email()) = email ini).
+  static const String adminEmail = 'zunixe@gmail.com';
+
+  /// User sesi aktif adalah admin sungguhan? Anon/guest & user biasa =
+  /// false → seluruh UI admin (panel, toggle) disembunyikan walau di
+  /// build admin.
+  static bool isRealAdmin(String? email) => email == adminEmail;
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/timeline_service.dart';
+import '../services/message_cache.dart';
 
 /// Cache per-scope: posts + pagination state untuk tab Semua/Mengikuti/Postinganku.
 class _ScopeCache {
@@ -56,6 +57,7 @@ class TimelineProvider extends ChangeNotifier {
   TimelineProvider() {
     _listenRealtime();
     refreshPricing();
+    _loadDiskScope('all');
     // Supabase signOut men-teardown semua channel realtime — subscribe
     // ulang saat user baru login supaya live-update timeline tetap jalan.
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
@@ -64,6 +66,63 @@ class TimelineProvider extends ChangeNotifier {
         _refreshVisibilitySets();
       }
     });
+  }
+
+  // ── Persist feed ke disk (encrypted) — cold start tampil instan ──────────
+  Timer? _diskSaveTimer;
+
+  Map<String, dynamic> _postForDisk(Map<String, dynamic> p) => {
+    for (final e in p.entries)
+      e.key: (e.key == 'createdAt' && e.value is DateTime)
+          ? (e.value as DateTime).toIso8601String()
+          : e.value,
+  };
+
+  void _scheduleDiskSave() {
+    _diskSaveTimer?.cancel();
+    _diskSaveTimer = Timer(const Duration(seconds: 2), () {
+      final rows = _scopeCache[_scope]?.posts;
+      if (rows == null || rows.isEmpty) return;
+      MessageCache.instance.saveRawObj(
+        'timeline_$_scope',
+        {
+          'posts': rows.map(_postForDisk).toList(),
+          'cursor': _cursor?.toIso8601String(),
+          'cursorBoosted': _cursorBoosted,
+          'hasMore': _hasMore,
+        },
+      );
+    });
+  }
+
+  Future<void> _loadDiskScope(String scope, {bool notify = true}) async {
+    try {
+      final obj = await MessageCache.instance.loadRawObj('timeline_$scope');
+      final rawPosts = obj['posts'];
+      if (rawPosts is! List || rawPosts.isEmpty) return;
+      if (_scopeCache[scope] != null && _scopeCache[scope]!.posts.isNotEmpty) {
+        return; // sudah ada data lebih baru
+      }
+      final posts = rawPosts.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      _scopeCache[scope] = _ScopeCache(
+        posts: posts,
+        cursor: DateTime.tryParse('${obj['cursor']}'),
+        cursorBoosted: obj['cursorBoosted'] == true,
+        hasMore: obj['hasMore'] != false,
+      );
+      if (scope == _scope && _posts.isEmpty && notify) {
+        _posts
+          ..clear()
+          ..addAll(posts);
+        _cursor = _scopeCache[scope]!.cursor;
+        _cursorBoosted = _scopeCache[scope]!.cursorBoosted;
+        _hasMore = _scopeCache[scope]!.hasMore;
+        _invalidateView();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[TimelineProvider] disk load error: $e');
+    }
   }
 
   void _listenRealtime() {
@@ -223,6 +282,7 @@ class TimelineProvider extends ChangeNotifier {
 
   /// Hapus semua cache saat logout.
   void resetCache() {
+    _diskSaveTimer?.cancel();
     _scopeCache.clear();
     _commentCache.clear();
     _posts.clear();
@@ -231,6 +291,9 @@ class TimelineProvider extends ChangeNotifier {
     _cursorBoosted = false;
     _hasMore = true;
     _scope = 'all';
+    for (final s in const ['all', 'following', 'mine']) {
+      MessageCache.instance.removeRawObj('timeline_$s');
+    }
   }
 
   Future<void> _refreshFollowedIds() async {
@@ -318,6 +381,9 @@ class TimelineProvider extends ChangeNotifier {
         _hasMore = cached.hasMore;
         _invalidateView();
         notifyListeners(); // frame pertama instant dari cache
+      } else {
+        // Cache memori kosong (cold start) — coba disk.
+        _loadDiskScope(scope);
       }
       // Kalau tidak ada cache: biarkan _posts apa adanya (konten scope lama
       // tetap tampil selama fetch) supaya tidak pernah blink ke empty state.
@@ -367,6 +433,7 @@ class TimelineProvider extends ChangeNotifier {
       }
       // Simpan hasil fetch terbaru ke cache scope ini.
       _syncScopeCache();
+      _scheduleDiskSave();
     } catch (e) {
       debugPrint('[TimelineProvider] load error: $e');
       _hasMore = false;

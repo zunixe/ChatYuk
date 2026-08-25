@@ -17,7 +17,10 @@ import '../services/auth_service.dart';
 class DummySession {
   DummySession._();
 
-  static final SupabaseClient _sb = SupabaseConfig.client;
+  // Getter (bukan static final) — Supabase.instance.client baru ada setelah
+  // Supabase.initialize; kalau di-inisialisasi di static final, mereferensikan
+  // DummySession sekecil apa pun sebelum initialize = crash startup.
+  static SupabaseClient get _sb => SupabaseConfig.client;
   static const _kAdminAccessToken = 'dummy_admin_access_token';
   static const _kAdminRefreshToken = 'dummy_admin_refresh_token';
 
@@ -27,6 +30,14 @@ class DummySession {
   /// Pindah ke akun dummy [uid]. Lempar exception kalau gagal — sesi admin
   /// dipulihkan otomatis supaya tidak logout.
   static Future<void> becomeDummy(String uid) async {
+    // Sudah menjadi dummy ini? Tidak perlu swap ulang.
+    final cur = _sb.auth.currentUser;
+    if (cur != null &&
+        cur.id == uid &&
+        AuthService.instance.dummySessionActive) {
+      debugPrint('[DUMMY] already active as $uid — skip');
+      return;
+    }
     final session = _sb.auth.currentSession;
     _adminAccessToken = session?.accessToken;
     _adminRefreshToken = session?.refreshToken;
@@ -76,6 +87,8 @@ class DummySession {
       }
     }
     AuthService.instance.markDummyState(active: true, uid: uid);
+    debugPrint('[DUMMY] becomeDummy OK uid=$uid '
+        'sessionUid=${_sb.auth.currentUser?.id}');
   }
 
   /// Regenerasi refresh_token ASLI via edge function `dummy-manage`
@@ -155,6 +168,37 @@ class DummySession {
     final prefs = await SharedPreferences.getInstance();
     final refresh = prefs.getString(_kAdminRefreshToken);
     return refresh != null && refresh.isNotEmpty;
+  }
+
+  /// Simpan ulang token sesi ADMIN yang sedang aktif — dipanggil tiap
+  /// auth event (tokenRefreshed/signedIn) supaya token tersimpan TIDAK
+  /// pernah basi saat dibutuhkan backToAdmin.
+  static Future<void> persistAdminTokensIfAdmin() async {
+    if (AuthService.instance.dummySessionActive) return;
+    final s = _sb.auth.currentSession;
+    if (s == null) return;
+    await _saveAdminTokens(s.accessToken, s.refreshToken);
+  }
+
+  static bool _tokenPersistenceInstalled = false;
+
+  /// Pasang listener penyimpan token admin. WAJIB dipanggil setelah
+  /// Supabase.initialize (dari AdminGate.postInit) — memanggilnya terlalu
+  /// awal membuat `Supabase.instance.client` belum ada → crash startup.
+  static Future<void> installTokenPersistence() async {
+    if (_tokenPersistenceInstalled) return;
+    _tokenPersistenceInstalled = true;
+    try {
+      _sb.auth.onAuthStateChange.listen((d) {
+        if (d.event == AuthChangeEvent.tokenRefreshed ||
+            d.event == AuthChangeEvent.signedIn) {
+          persistAdminTokensIfAdmin();
+        }
+      });
+      await persistAdminTokensIfAdmin();
+    } catch (e) {
+      debugPrint('[DUMMY] installTokenPersistence error: $e');
+    }
   }
 
   /// Hapus token admin tersimpan (dipanggil saat logout total).

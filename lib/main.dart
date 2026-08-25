@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
+import 'core/admin_gate.dart';
 import 'app.dart';
 import 'models/room_model.dart';
 import 'providers/auth_provider.dart';
@@ -500,6 +501,7 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     debugPrint('[FIREBASE] init error: $e');
   }
   await SupabaseConfig.init();
+  await AdminGate.postInit?.call();
   await MessageCache.instance
       .clearLegacyV1Only(); // bersihkan hanya cache format lama v1
   PhotoCache.instance.cleanOldPhotos(); // fire-and-forget, hapus foto >7 hari

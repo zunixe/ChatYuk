@@ -436,7 +436,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final pointsEnabled = context.watch<PointsProvider>().enabled;
     // Viewer anon: card sosial (pengikut/mengikuti/subscriber + tombol
     // ikuti/tambah teman) disembunyikan — fitur butuh akun terdaftar.
-    final isAnonViewer = context.watch<AuthProvider>().isAnonymous;
+    final auth = context.watch<AuthProvider>();
+    final isAnonViewer = auth.isAnonymous;
 
     final name = profile?.nickname ?? widget.fallbackName;
     final genderLabel = profile?.gender == 'male'
@@ -460,7 +461,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       appBar: AppBar(
         title: Text(s.titleProfile),
         actions: [
-          if (!isAnonViewer && profile?.isRegistered == true) ...[
+          // Tombol call: default hanya untuk viewer terdaftar & target
+          // terdaftar. Admin bisa membukanya ke SEMUA user via panel
+          // (app_settings.call_all_enabled).
+          if (auth.callAllEnabled ||
+              (!isAnonViewer && profile?.isRegistered == true)) ...[
             PopupMenuButton<String>(
               icon: Icon(Icons.call, size: 22),
               color: AppTheme.bgCard,
