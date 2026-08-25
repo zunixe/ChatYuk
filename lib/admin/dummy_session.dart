@@ -75,7 +75,7 @@ class DummySession {
         debugPrint('[DUMMY] update token error: $e');
       }
     }
-    AuthService.instance?.markDummyState(active: true, uid: uid);
+    AuthService.instance.markDummyState(active: true, uid: uid);
   }
 
   /// Regenerasi refresh_token ASLI via edge function `dummy-manage`
@@ -146,7 +146,7 @@ class DummySession {
     if (refresh == null || refresh.isEmpty) return;
     _adminRefreshToken = refresh;
     _adminAccessToken = access;
-    AuthService.instance?.markDummyState(active: true, uid: uid);
+    AuthService.instance.markDummyState(active: true, uid: uid);
     debugPrint('[DUMMY] session restored: $uid');
   }
 

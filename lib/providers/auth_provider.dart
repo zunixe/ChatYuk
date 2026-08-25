@@ -788,6 +788,9 @@ class AuthProvider extends ChangeNotifier {
       throw StateError('becomeDummy hanya tersedia di build admin');
     }
     await impl(uid);
+    // Belt-and-suspenders: pastikan flag sesi dummy ter-set di service yang
+    // dipakai provider ini (impl juga set, tapi jangan bergantung binding).
+    _auth.markDummyState(active: true, uid: uid);
     await reloadProfile();
   }
 
@@ -797,6 +800,7 @@ class AuthProvider extends ChangeNotifier {
     final impl = AdminGate.backToAdminImpl;
     if (impl == null) return false;
     final ok = await impl();
+    if (ok) _auth.markDummyState(active: false);
     await reloadProfile();
     return ok;
   }
@@ -805,6 +809,14 @@ class AuthProvider extends ChangeNotifier {
   /// sesi dummy ⇄ admin, karena event signedIn tidak di-trigger manual).
   Future<void> reloadProfile() async {
     _profileSub?.cancel();
+    // Tahap cepat: identitas dasar TANPA download avatar → UI langsung
+    // pindah ke profil user baru saat swap sesi dummy ⇄ admin.
+    final lite = await _auth.getProfile(withAvatar: false);
+    if (lite != null && !_disposed) {
+      _profile = lite;
+      notifyListeners();
+    }
+    // Tahap lengkap: avatar (cache per path, biasanya instan).
     _profile = await _auth.getProfile();
     _listenProfile();
     _restartPresenceTimers();

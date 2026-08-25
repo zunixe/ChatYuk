@@ -1561,7 +1561,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       // Admin: tile buka panel — hanya ada di build admin
                       // (di-inject lewat AdminGate oleh entry lib/main_admin.dart).
-                      ...?AdminGate.profileSettingsHeader?.call(context),
+                      // Sesi dummy → tile & toggles admin disembunyikan.
+                      if (!dummyActive) ...?AdminGate.profileSettingsHeader?.call(context),
                       // Notifikasi
                       Padding(
                         padding: EdgeInsets.symmetric(
@@ -1616,7 +1617,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Divider(height: 1, indent: 52),
                       // Admin: toggle screenshot/watermark/invisible —
                       // hanya ada di build admin (via AdminGate).
-                      ...?AdminGate.profileSettingsTail?.call(context),
+                      if (!dummyActive) ...?AdminGate.profileSettingsTail?.call(context),
                       // Password: set (akun Google) / change (akun email) —
                       // hanya untuk user terdaftar (email/Google), bukan anon.
                       if (!isAnon) ...[

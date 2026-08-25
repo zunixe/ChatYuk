@@ -25,13 +25,16 @@ class EmailAlreadyRegisteredException implements Exception {
 class AuthService {
   final SupabaseClient _sb = SupabaseConfig.client;
 
-  /// Instance terakhir — dipakai modul admin (build admin saja) untuk
-  /// meng-update state dummy tanpa import dua arah.
-  static AuthService? instance;
+  /// Singleton sejati — semua pemanggil `AuthService()` (provider,
+  /// screen, FCM handler) dapat OBJEK YANG SAMA, sehingga flag sesi dummy
+  /// yang di-set modul admin selalu terlihat di seluruh app. Dulu
+  /// `instance = this` di konstruktor membuat objek terakhir-dibuat
+  /// "mencuri" instance dan flag dummy tidak pernah sampai ke provider.
+  static final AuthService instance = AuthService._();
 
-  AuthService() {
-    instance = this;
-  }
+  factory AuthService() => instance;
+
+  AuthService._();
 
   User? get currentUser => _sb.auth.currentUser;
   String? get uid => _sb.auth.currentUser?.id;
@@ -528,7 +531,7 @@ class AuthService {
     return profile;
   }
 
-  Future<UserModel?> getProfile() async {
+  Future<UserModel?> getProfile({bool withAvatar = true}) async {
     final id = uid;
     if (id == null) return null;
     // Exclude fcm_token dan ip_address — tidak dibutuhkan di model
@@ -541,11 +544,10 @@ class AuthService {
         .maybeSingle();
     if (res == null) return null;
     final model = UserModel.fromMap(id, snakeToCamel(res));
-    // avatar berupa PATH storage → download → isi base64 (UI tetap pakai base64).
-    // Pakai AvatarB64Service yang punya cache per path — getProfile dipanggil
-    // sering (startup, sign-in, reload) tanpa download berulang.
-    if (model.avatar.isNotEmpty &&
-        StoragePhotoService.instance.isAvatarPath(model.avatar)) {
+    if (!withAvatar || model.avatar.isEmpty) return model;
+    // avatar berupa PATH storage → download → isi base64 (UI tetap pakai
+    // base64). Pakai AvatarB64Service yang punya cache per path.
+    if (StoragePhotoService.instance.isAvatarPath(model.avatar)) {
       final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
       return model.copyWith(avatar: b64);
     }
