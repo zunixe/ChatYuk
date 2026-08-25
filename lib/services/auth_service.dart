@@ -23,7 +23,10 @@ class EmailAlreadyRegisteredException implements Exception {
 }
 
 class AuthService {
-  final SupabaseClient _sb = SupabaseConfig.client;
+  // Getter (bukan field) — mereferensikan AuthService sebelum
+  // Supabase.initialize (mis. set googleWebClientIdOverride di wireAdmin)
+  // TIDAK boleh memaksa evaluasi Supabase.instance.client.
+  SupabaseClient get _sb => SupabaseConfig.client;
 
   /// Singleton sejati — semua pemanggil `AuthService()` (provider,
   /// screen, FCM handler) dapat OBJEK YANG SAMA, sehingga flag sesi dummy
@@ -202,6 +205,41 @@ class AuthService {
     }, onConflict: 'id');
   }
 
+  /// Realtime row app_settings global — pola .stream(primaryKey) yang sama
+  /// dengan PointsService.watchEnabled() (terbukti realtime di device).
+  Stream<Map<String, dynamic>?> watchGlobalSettings() {
+    return _sb
+        .from('app_settings')
+        .stream(primaryKey: ['id'])
+        .eq('id', 'global')
+        .map((rows) => rows.isEmpty ? null : rows.first);
+  }
+
+  /// Setting admin: tombol call tampil ke SEMUA user (termasuk anon/guest).
+  /// Default false = hanya user terdaftar yang melihat tombol call.
+  Future<bool> fetchCallAllEnabled() async {
+    try {
+      final res = await _sb
+          .from('app_settings')
+          .select('call_all_enabled')
+          .eq('id', 'global')
+          .maybeSingle();
+      return res?['call_all_enabled'] == true;
+    } catch (e) {
+      debugPrint('[AUTH] fetchCallAllEnabled error: $e');
+      return false;
+    }
+  }
+
+  /// Update setting admin global. RLS membatasi hanya email admin (zunixe@gmail.com).
+  Future<void> updateCallAllEnabled(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'call_all_enabled': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
+  }
+
   /// Ambil setting admin global: apakah foto view-once di-watermark forensik.
   /// Default false (kirim biasa) jika gagal / belum ada data.
   Future<bool> fetchWatermarkEnabled() async {
@@ -319,11 +357,24 @@ class AuthService {
   }
 
   /// Tandai profile sebagai terdaftar (punya email).
+  /// GUARD: hanya bila sesi benar-benar punya email TERKONFIRMASI —
+  /// updateUser(email) bersifat pending di GoTrue (auth.email tetap null
+  /// sampai dikonfirmasi); tanpa ini akun anon bisa salah-mark registered.
   Future<void> markRegistered() async {
     final id = uid;
     if (id == null) return;
+    final user = _sb.auth.currentUser;
+    final email = user?.email ?? '';
+    if (email.isEmpty ||
+        (user!.emailConfirmedAt == null && user.phoneConfirmedAt == null)) {
+      debugPrint('[AUTH] markRegistered skip: email belum terkonfirmasi');
+      return;
+    }
     try {
-      await _sb.from('profiles').update({'is_registered': true}).eq('id', id);
+      await _sb.from('profiles').update({
+        'is_registered': true,
+        'email': email,
+      }).eq('id', id);
     } catch (e) {
       debugPrint('[AUTH] markRegistered error: $e');
     }
@@ -516,6 +567,9 @@ class AuthService {
       'age': age,
       'country': country,
       'city': city,
+      // Email dari sesi auth — wajib tersinkron agar admin panel melihat
+      // email user terdaftar (bug lama: kolom ini tidak pernah diisi).
+      if (hasEmail) 'email': user.email,
       // IP dicatat di server untuk keperluan keamanan/moderasi,
       // tidak disimpan di perangkat aplikasi.
       if (ipAddress.isNotEmpty) 'ip_address': ipAddress,

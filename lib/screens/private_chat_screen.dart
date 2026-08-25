@@ -1326,13 +1326,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
-    final auth = context.read<AuthProvider>();
+    // watch (bukan read): toggle callAllEnabled dari panel admin harus
+    // langsung memunculkan/menyembunyikan tombol call tanpa restart.
+    final auth = context.watch<AuthProvider>();
     final chat = context.read<ChatProvider>();
     // select: rebuild hanya saat isBlocked untuk UID lawan bicara berubah
     final isBlocked = context.select<ChatProvider, bool>(
       (c) => c.isBlocked(widget.otherUid),
     );
     final s = context.watch<LocaleProvider>().s;
+    debugPrint('[CHAT-BUILD] callAllEnabled=${auth.callAllEnabled} '
+        'meRegistered=${auth.profile?.isRegistered} '
+        'otherRegistered=$_otherRegistered/${widget.otherRegistered}');
     // Saat unblock: re-subscribe status realtime
     if (_wasBlocked && !isBlocked) {
       _wasBlocked = false;
@@ -1511,8 +1516,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           ],
         ),
         actions: [
-          if ((auth.profile?.isRegistered ?? false) &&
-              (_otherRegistered || widget.otherRegistered))
+          // Admin bisa membuka tombol call untuk SEMUA user (termasuk
+          // anon) via app_settings.call_all_enabled — realtime mengikuti
+          // perubahan toggle di panel admin.
+          if (auth.callAllEnabled ||
+              ((auth.profile?.isRegistered ?? false) &&
+                  (_otherRegistered || widget.otherRegistered)))
             PopupMenuButton(
               icon: Icon(Icons.call, color: Colors.white, size: 22),
               color: AppTheme.bgCard,

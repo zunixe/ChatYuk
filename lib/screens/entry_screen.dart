@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/geo_service.dart';
 import '../services/location_service.dart';
+import '../services/device_info_service.dart';
 import '../utils.dart';
 import 'register_screen.dart';
 import 'login_screen.dart';
@@ -64,12 +65,17 @@ class _EntryScreenState extends State<EntryScreen> {
     // IP selalu dicatat, walau negara tidak ada di daftar kota
     _ipAddress = finalInfo.ipAddress;
     final kotaList = kotaByNegara[finalInfo.country];
-    if (kotaList == null) return;
+    if (kotaList == null || kotaList.isEmpty) return;
+    // Kota: cocok nama -> terdekat dari koordinat -> kota pertama.
+    final kota = matchCity(finalInfo.city, kotaList) ??
+        ((finalInfo.lat != null && finalInfo.lon != null)
+            ? nearestCity(
+                finalInfo.lat!, finalInfo.lon!, finalInfo.country, kotaList)
+            : null) ??
+        kotaList.first;
     setState(() {
       _negara = finalInfo.country;
-      _kota = kotaList.contains(finalInfo.city)
-          ? finalInfo.city
-          : kotaList.first;
+      _kota = kota;
     });
     // Auto-set bahasa dari lokasi — hanya jika belum pernah disimpan
     if (mounted) {
@@ -267,6 +273,10 @@ class _EntryScreenState extends State<EntryScreen> {
       return;
     }
     debugPrint('[ENTRY] registerProfile returned OK');
+    // Catat identitas perangkat + install ID untuk pelacakan admin.
+    unawaited(
+      DeviceInfoService.instance.syncToServer(ipAddress: _ipAddress),
+    );
     if (mounted) setState(() => _loading = false);
     debugPrint('[ENTRY] _enter done, loading=false');
   }

@@ -918,6 +918,20 @@ class ChatService {
     }
   }
 
+  /// Persist list chat (debounced) — supaya setelah app ditutup lalu dibuka
+  /// lagi, list tampil instan dari cache sebelum fetch server menyusul.
+  final Map<String, Timer> _chatListSaveTimers = {};
+
+  void _scheduleChatListSave(String myUid) {
+    _chatListSaveTimers[myUid]?.cancel();
+    _chatListSaveTimers[myUid] = Timer(const Duration(seconds: 2), () {
+      final rows = _privateChatsLast[myUid];
+      if (rows == null || rows.isEmpty) return;
+      MessageCache.instance
+          .saveRawList(myUid, rows.map((c) => c.toMap()).toList());
+    });
+  }
+
   /// Update unread/lastRead di snapshot lokal list chat — UI instan tanpa
   /// refetch. Snapshot tetap akurat karena realtime mengirim row lengkap.
   void _applyLocalRead(String myUid, String chatId) {
@@ -934,6 +948,7 @@ class ChatService {
     final list = List.of(last)..[idx] = updated;
     _privateChatsLast[myUid] = list;
     _lastChatReloadAt[myUid] = DateTime.now();
+    _scheduleChatListSave(myUid);
     final controller = _privateChatsStreams[myUid];
     if (controller != null && !controller.isClosed) controller.add(list);
   }
@@ -967,6 +982,7 @@ class ChatService {
     list.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
     _privateChatsLast[myUid] = list;
     _lastChatReloadAt[myUid] = DateTime.now();
+    _scheduleChatListSave(myUid);
     final controller = _privateChatsStreams[myUid];
     if (controller != null && !controller.isClosed) controller.add(list);
   }
@@ -979,6 +995,7 @@ class ChatService {
     final list = List.of(last)..removeAt(idx);
     _privateChatsLast[myUid] = list;
     _lastChatReloadAt[myUid] = DateTime.now();
+    _scheduleChatListSave(myUid);
     final controller = _privateChatsStreams[myUid];
     if (controller != null && !controller.isClosed) controller.add(list);
   }
@@ -1144,12 +1161,31 @@ class ChatService {
           '[getMyPrivateChats] fetched ${rows.length} chats for $myUid',
         );
         if (!controller.isClosed) controller.add(rows);
+        if (rows.isNotEmpty) {
+          MessageCache.instance
+              .saveRawList(myUid, rows.map((c) => c.toMap()).toList());
+        }
       } catch (e) {
         debugPrint('[getMyPrivateChats] fetch error for $myUid: $e');
       }
     }
 
     _chatReloaders.putIfAbsent(myUid, () => []).add(reload);
+
+    // Cold start (app baru dibuka): tampilkan list dari cache disk DULU
+    // tanpa spinner — fetch server menyusul dan mengkoreksi.
+    MessageCache.instance.loadRawList(myUid).then((cachedRows) {
+      if (cachedRows.isEmpty) return;
+      final cached =
+          cachedRows.map(PrivateChatInfo.fromMap).toList()
+            ..sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+      if (_privateChatsLast[myUid] != null &&
+          _privateChatsLast[myUid]!.isNotEmpty) {
+        return; // sudah ada data lebih baru — jangan timpa
+      }
+      _privateChatsLast[myUid] = cached;
+      if (!controller.isClosed) controller.add(cached);
+    });
 
     // Nama channel harus UNIK per instance — getMyPrivateChats bisa disubscribe
     // dari 2 screen sekaligus (list chat + layar chat); nama sama = join gagal,
@@ -1682,6 +1718,52 @@ class PrivateChatInfo {
     this.unreadCounts = const {},
     this.lastReadAt = const {},
   });
+
+  Map<String, dynamic> toMap() => {
+    'chatId': chatId,
+    'participants': participants,
+    'participantNames': participantNames,
+    'participantGenders': participantGenders,
+    'participantLocations': participantLocations,
+    'participantAges': participantAges,
+    'participantRegistered': participantRegistered,
+    'lastMessage': lastMessage,
+    'lastMessageAt': lastMessageAt.toIso8601String(),
+    'messageCount': messageCount,
+    'unreadCounts': unreadCounts,
+    'lastReadAt': lastReadAt.map((k, v) => MapEntry(k, v.toIso8601String())),
+  };
+
+  static Map<String, String> _strMap(dynamic v) =>
+      ((v as Map?) ?? {}).map((k, e) => MapEntry('$k', '$e'));
+
+  factory PrivateChatInfo.fromMap(Map<String, dynamic> d) {
+    return PrivateChatInfo(
+      chatId: '${d['chatId'] ?? ''}',
+      participants: List<String>.from(d['participants'] ?? const []),
+      participantNames: _strMap(d['participantNames']),
+      participantGenders: _strMap(d['participantGenders']),
+      participantLocations: _strMap(d['participantLocations']),
+      participantAges: ((d['participantAges'] as Map?) ?? {}).map(
+        (k, v) => MapEntry('$k', (v as num).toInt()),
+      ),
+      participantRegistered: ((d['participantRegistered'] as Map?) ?? {}).map(
+        (k, v) => MapEntry('$k', v == true),
+      ),
+      lastMessage: '${d['lastMessage'] ?? ''}',
+      lastMessageAt:
+          DateTime.tryParse('${d['lastMessageAt'] ?? ''}') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      messageCount: (d['messageCount'] as num?)?.toInt() ?? 0,
+      unreadCounts: ((d['unreadCounts'] as Map?) ?? {}).map(
+        (k, v) => MapEntry('$k', (v as num).toInt()),
+      ),
+      lastReadAt: ((d['lastReadAt'] as Map?) ?? {}).map(
+        (k, v) =>
+            MapEntry('$k', DateTime.tryParse('$v') ?? DateTime(2000)),
+      ),
+    );
+  }
 
   PrivateChatInfo copyWith({
     String? chatId,

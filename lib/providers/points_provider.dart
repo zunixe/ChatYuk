@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/points_service.dart';
 import '../config/theme.dart';
-import '../core/admin_gate.dart';
 
 class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   final PointsService _service = PointsService(Supabase.instance.client);
@@ -27,12 +26,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   int get points => _points;
 
-  // Mode development: admin (developer) tetap melihat & bisa menguji sistem
-  // koin walau app_settings.points_enabled = false di production.
-  bool _adminDev = false;
-
-  /// Sistem koin aktif untuk user ini (nilai server ATAU admin/developer).
-  bool get enabled => _enabled || _adminDev;
+  /// Sistem koin aktif untuk user ini — murni mengikuti nilai server
+  /// (app_settings.points_enabled). Saat dimatikan, koin disembunyikan
+  /// untuk SEMUA user termasuk admin build. Dulu ada over-ride admin/dev
+  /// yang membuat koin selalu tampil di build admin padahal dimatikan.
+  bool get enabled => _enabled;
   int get loginStreak => _loginStreak;
   int _loginStreak = 0;
   int _lastStreakBonus = 0;
@@ -128,7 +126,6 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
         state,
       ) {
         if (_disposed) return;
-        _refreshAdminDev();
         if (state.event == AuthChangeEvent.initialSession ||
             state.event == AuthChangeEvent.signedIn ||
             state.event == AuthChangeEvent.tokenRefreshed ||
@@ -143,23 +140,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
           subscribeEnabled();
         }
       });
-      _refreshAdminDev();
     } catch (e) {
       debugPrint('[POINTS] auth listener error: $e');
-    }
-    // Sesi sudah direstore sebelum runApp (Supabase.initialize di main()),
-    // event initialSession bisa ter-emit sebelum listener terdaftar sehingga
-    // adminDev tidak pernah aktif — cek ulang setelah frame pertama.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAdminDev());
-  }
-
-  /// Mode development: admin (developer) selalu bisa menguji sistem koin,
-  /// termasuk saat points_enabled = false di production.
-  void _refreshAdminDev() {
-    final isAdmin = AdminGate.enabled;
-    if (isAdmin != _adminDev) {
-      _adminDev = isAdmin;
-      if (!_disposed) notifyListeners();
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import '../core/admin_gate.dart';
 
 /// Anti-screenshot terpusat.
 ///
@@ -47,6 +48,14 @@ class ScreenSecureService {
   }
 
   static Future<void> _apply() async {
+    // Build ADMIN selalu boleh screenshot — setting global anti-screenshot
+    // (untuk ChatYuk user) TIDAK berlaku di app admin.
+    if (AdminGate.enabled) {
+      try {
+        await _channel.invokeMethod('clearSecure');
+      } catch (_) {}
+      return;
+    }
     final secure = _viewOnceActive || (!_donationActive && !_screenshotEnabled);
     try {
       if (secure) {
@@ -56,6 +65,19 @@ class ScreenSecureService {
       }
     } catch (_) {
       // Platform selain Android (iOS/web) tidak punya channel ini — abaikan.
+    }
+  }
+
+  /// Android ID (Settings.Secure.ANDROID_ID) — unik & stabil per perangkat +
+  /// app-signing key, tetap sama walau app di-reinstall (kecuali factory reset).
+  /// Dipakai sebagai install_id untuk pelacakan device di panel admin.
+  /// Return '' di luar Android (iOS/web pakai fallback di DeviceInfoService).
+  static Future<String> androidId() async {
+    try {
+      final res = await _channel.invokeMethod<String>('androidId');
+      return res ?? '';
+    } catch (_) {
+      return '';
     }
   }
 }

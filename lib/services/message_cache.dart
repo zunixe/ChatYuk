@@ -29,6 +29,27 @@ Future<void> _encSave(Map<String, dynamic> args) async {
   await prefs.setString(prefsKey, enc);
 }
 
+// Top-level function untuk compute() — decrypt + parse OBJECT di background
+Future<Map<String, dynamic>?> _decLoadObj(Map<String, dynamic> args) async {
+  try {
+    final encoded = args['encoded'] as String;
+    final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
+    final key = SecretKey(List<int>.from(keyBytes));
+    final aes = AesGcm.with256bits();
+    final payload =
+        jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
+    final box = SecretBox(
+      base64Decode(payload['c'] as String),
+      nonce: base64Decode(payload['n'] as String),
+      mac: Mac(base64Decode(payload['m'] as String)),
+    );
+    final clear = await aes.decrypt(box, secretKey: key);
+    return jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Top-level function untuk compute() — decrypt + parse di background isolate
 // supaya buka chat tidak freeze saat mendekripsi cache besar.
 Future<List<dynamic>?> _decLoad(Map<String, dynamic> args) async {
@@ -236,6 +257,89 @@ class MessageCache {
     });
   }
 
+  // ── List private chat (persist antar restart app) ────────────────────────
+  static const _listPrefix = 'chats_list_v1_';
+
+  Future<void> saveRawList(String key, List<Map<String, dynamic>> rows) async {
+    try {
+      if (rows.isEmpty) return;
+      final aesKey = await _getKey();
+      final keyBytes = await aesKey.extractBytes();
+      await compute(_encSave, {
+        'prefsKey': '$_listPrefix$key',
+        'plaintext': jsonEncode(rows),
+        'keyBytes': keyBytes,
+      });
+    } catch (_) {}
+  }
+
+  Future<List<Map<String, dynamic>>> loadRawList(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enc = prefs.getString('$_listPrefix$key');
+      if (enc == null || enc.isEmpty) return [];
+      final aesKey = await _getKey();
+      final keyBytes = await aesKey.extractBytes();
+      final list = await compute(_decLoad, {
+        'encoded': enc,
+        'keyBytes': keyBytes,
+      });
+      if (list == null) return [];
+      return list
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> removeRawList(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('$_listPrefix$key');
+    } catch (_) {}
+  }
+
+  // ── Objek generic (timeline, rooms) ──────────────────────────────────────
+  static const _objPrefix = 'obj_v1_';
+
+  Future<void> saveRawObj(String key, Map<String, dynamic> obj) async {
+    try {
+      if (obj.isEmpty) return;
+      final aesKey = await _getKey();
+      final keyBytes = await aesKey.extractBytes();
+      await compute(_encSave, {
+        'prefsKey': '$_objPrefix$key',
+        'plaintext': jsonEncode(obj),
+        'keyBytes': keyBytes,
+      });
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>> loadRawObj(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enc = prefs.getString('$_objPrefix$key');
+      if (enc == null || enc.isEmpty) return {};
+      final aesKey = await _getKey();
+      final keyBytes = await aesKey.extractBytes();
+      final obj = await compute(_decLoadObj, {
+        'encoded': enc,
+        'keyBytes': keyBytes,
+      });
+      return obj ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> removeRawObj(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('$_objPrefix$key');
+    } catch (_) {}
+  }
+
   /// Ambil pesan cache (null jika tidak ada).
   Future<List<MessageModel>> loadMessages(String chatKey) async {
     // Fast path: sudah pernah dibuka sesi ini — langsung pakai mem-cache
@@ -286,11 +390,16 @@ class MessageCache {
     }
   }
 
-  /// Hapus SEMUA cache versi lama & baru (dipanggil saat app start & logout).
+  /// Hapus SEMUA cache versi lama & baru (dipakai saat logout / reset).
   Future<void> clearAllLegacy() async {
     _memCache.clear();
     final prefs = await SharedPreferences.getInstance();
-    for (final prefix in ['chat_cache_v1_', 'chat_cache_v2_']) {
+    for (final prefix in [
+      'chat_cache_v1_',
+      'chat_cache_v2_',
+      'chats_list_v1_',
+      'obj_v1_',
+    ]) {
       final keys = prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
       for (final k in keys) {
         await prefs.remove(k);

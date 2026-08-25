@@ -2,6 +2,51 @@
 
 Catatan biar tidak bolak-balik build karena perubahan tidak muncul di device.
 
+## Upload ke Google Play (WAJIB baca)
+
+**Alur lengkap dari kode → Play:**
+
+1. **Bump versi** di `pubspec.yaml` jadi `X.Y.Z+N`:
+   - `N` = versionCode (monoton naik, TIDAK boleh dipakai ulang)
+   - `X.Y.Z` = versionName
+   - Aturan: cek **versi terakhir di Play Console** → naikkan `N+1` & `Z+1` (minimal patch).
+     Kalau ragu → naikkan 2 (lebih aman daripada bentrok di Play).
+
+   Cek versi aktif & riwayat upload:
+   ```bash
+   grep "^version:" pubspec.yaml
+   git log --all --format='%h %s' -- pubspec.yaml | grep -i upload | head -5
+   ```
+
+2. **`flutter clean`** — WAJIB setelah ubah `pubspec.yaml` supaya
+   `android/local.properties` (flutter.versionCode) ter-refresh.
+
+3. **Build AAB flavor play** (obfuscated):
+   ```bash
+   cd /Users/zunixe/Documents/ChatYuk
+   flutter clean
+   KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+     flutter build appbundle --release --flavor play \
+     --dart-define=APP_FLAVOR=play \
+     --obfuscate --split-debug-info=build/app/symbols
+   ```
+   Output: `build/app/outputs/bundle/playRelease/app-play-release.aab`
+
+4. **Upload via fastlane**:
+   ```bash
+   fastlane play track:alpha      # track "Pengujian tertutup - Alpha"
+   fastlane play track:production # production
+   ```
+   Syarat: `fastlane/google-play.json` (service account, JANGAN commit), Play Android
+   Developer API enabled. Keystore dibaca dari `android/key.properties`.
+
+5. **Commit** pubspec bump setelah berhasil upload.
+
+**PENTING — buat build distro APKPure/Android biasa:**
+- Jangan ubah versi lagi untuk install ke HP / distribusi APK biasa.
+- Build APK flavor `apkpure` dengan VERSI YANG SAMA (`--dart-define=APP_FLAVOR=apkpure`),
+  versi di APKPure harus SAMA dengan versi terakhir Google Play.
+
 ## ALUR WAJIB SEKARANG: push ke folder Download SAJA (tanpa adb install)
 
 User install manual dari File Manager di masing-masing HP. JANGAN buang waktu

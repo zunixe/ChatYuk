@@ -82,6 +82,31 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
     }).toList();
   }
 
+  List<Map<String, dynamic>> _sortedFiltered(
+    List<Map<String, dynamic>> chats,
+    Map<String, ActiveCallInfo> activeByChat,
+  ) {
+    final filtered = _filtered(chats);
+    if (filtered.isEmpty || activeByChat.isEmpty) return filtered;
+    final pinned = <Map<String, dynamic>>[];
+    final rest = <Map<String, dynamic>>[];
+    for (final c in filtered) {
+      final chatId = '${c['chat_id'] ?? ''}';
+      if (activeByChat.containsKey(chatId)) {
+        pinned.add(c);
+      } else {
+        rest.add(c);
+      }
+    }
+    if (pinned.isEmpty) return filtered;
+    pinned.sort((a, b) {
+      final ca = activeByChat['${a['chat_id']}']!;
+      final cb = activeByChat['${b['chat_id']}']!;
+      return cb.createdAt.compareTo(ca.createdAt);
+    });
+    return [...pinned, ...rest];
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
@@ -159,7 +184,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
                     ],
                   ),
                 )
-              : _filtered(admin.chats).isEmpty
+              : _sortedFiltered(admin.chats, admin.activeCallsByChat).isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -183,10 +208,10 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     itemCount:
-                        _filtered(admin.chats).length +
+                        _sortedFiltered(admin.chats, admin.activeCallsByChat).length +
                         (admin.chatsHasMore ? 1 : 0),
                     itemBuilder: (_, i) {
-                      final filtered = _filtered(admin.chats);
+                      final filtered = _sortedFiltered(admin.chats, admin.activeCallsByChat);
                       if (i >= filtered.length) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 16),

@@ -17,25 +17,22 @@ import '../config/strings_admin.dart';
 
 List<Widget> adminSettingsHeader(BuildContext context) {
   if (!AdminGate.enabled) return const [];
-  // Saat sesi dummy, panel admin tidak boleh terlihat/terbuka
-  // (semua RPC admin akan Unauthorized).
-  final isDummy = context.read<AuthProvider>().dummySessionActive;
-  if (isDummy) return const [];
+  // Hanya admin sungguhan (zunixe) yang melihat UI admin. Login anon/user
+  // biasa di build admin = tampilan user normal.
+  final auth = context.read<AuthProvider>();
+  final isDummy = auth.dummySessionActive;
+  if (isDummy || !auth.isRealAdmin) return const [];
   return const [_AdminPanelTile(), _AdminDivider()];
 }
 
 List<Widget> adminSettingsTail(BuildContext context) {
+  // Semua toggle admin (screenshot, watermark, invisible, call-all,
+  // registrasi wajib) dipindah ke tab "Pengaturan Global" di admin panel.
   if (!AdminGate.enabled) return const [];
-  final isDummy = context.read<AuthProvider>().dummySessionActive;
-  if (isDummy) return const [];
-  return const [
-    _ScreenshotToggle(),
-    _AdminDivider(),
-    _WatermarkToggle(),
-    _AdminDivider(),
-    _InvisibleToggle(),
-    _AdminDivider(),
-  ];
+  final auth = context.read<AuthProvider>();
+  final isDummy = auth.dummySessionActive;
+  if (isDummy || !auth.isRealAdmin) return const [];
+  return const [];
 }
 
 class _AdminDivider extends StatelessWidget {
@@ -94,173 +91,6 @@ class _AdminPanelTile extends StatelessWidget {
   }
 }
 
-class _ScreenshotToggle extends StatelessWidget {
-  const _ScreenshotToggle();
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppTheme.online.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.screenshot_monitor,
-              color: AppTheme.online,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.labelScreenshotAllow,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.descScreenshotAdmin,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.screenshotEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setScreenshotEnabled(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WatermarkToggle extends StatelessWidget {
-  const _WatermarkToggle();
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.fingerprint,
-              color: AppTheme.primary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.labelWatermarkAdmin,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.descWatermarkAdmin,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.watermarkEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setWatermarkEnabled(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InvisibleToggle extends StatelessWidget {
-  const _InvisibleToggle();
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.purple.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.visibility_off_outlined,
-              color: Colors.purple,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.labelInvisibleAdmin,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.descInvisibleAdmin,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.invisibleEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setInvisibleEnabled(v),
-            activeThumbColor: Colors.purple,
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 /// Banner sesi dummy — tampil di atas body Profil saat admin sedang
 /// memakai akun dummy. Tombolnya menjalankan [backToAdminFlow].

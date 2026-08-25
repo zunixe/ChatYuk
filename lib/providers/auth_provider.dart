@@ -10,6 +10,7 @@ import '../models/user_model.dart';
 import '../providers/locale_provider.dart';
 import '../core/admin_gate.dart';
 import '../services/auth_service.dart';
+import '../services/device_info_service.dart';
 import '../services/location_service.dart';
 import '../services/message_cache.dart';
 import '../services/points_service.dart';
@@ -56,7 +57,9 @@ class AuthProvider extends ChangeNotifier {
   bool _watermarkEnabled = false;
   bool _invisibleEnabled = false;
   bool _requireRegistration = false;
-  StreamSubscription<Map<String, dynamic>>? _appSettingsSub;
+  bool _callAllEnabled = false;
+  StreamSubscription<Map<String, dynamic>?>? _appSettingsSub;
+  Timer? _settingsPollTimer;
 
   UserModel? get profile => _profile;
   bool get loading => _loading;
@@ -65,9 +68,16 @@ class AuthProvider extends ChangeNotifier {
   bool get watermarkEnabled => _watermarkEnabled;
   bool get invisibleEnabled => _invisibleEnabled;
   bool get requireRegistration => _requireRegistration;
+  bool get callAllEnabled => _callAllEnabled;
   bool get isSignedIn => _auth.isSignedIn;
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
+
+  /// User sesi aktif adalah admin sungguhan (zunixe)? Dipakai untuk
+  /// menampilkan/menyembunyikan seluruh UI admin di build admin — login
+  /// anon/user biasa di ChatYuk Admin tetap melihat tampilan USER biasa.
+  bool get isRealAdmin =>
+      AdminGate.isRealAdmin(_auth.currentUser?.email);
   String? get userEmail => _auth.userEmail;
   bool get hasPassword => _auth.hasPassword;
   bool get notificationsEnabled => _notificationsEnabled;
@@ -125,6 +135,19 @@ class AuthProvider extends ChangeNotifier {
   void _listenAuthState() {
     _authStateSub = _auth.authStateChanges.listen((state) async {
       if (_disposed) return;
+      // Safety-net: email baru saja terkonfirmasi (link OTP / deep link)
+      // → sinkronkan is_registered + email ke profiles. Tanpa ini akun yang
+      // mengonfirmasi belakangan tetap tercatat anon di admin panel.
+      if ((state.event == AuthChangeEvent.signedIn ||
+              state.event == AuthChangeEvent.userUpdated) &&
+          (_auth.currentUser?.emailConfirmedAt != null)) {
+        final p = _profile;
+        if (p == null || !p.isRegistered) {
+          await _auth.markRegistered();
+          _profile = await _auth.getProfile();
+          if (!_disposed) notifyListeners();
+        }
+      }
       if (state.event != AuthChangeEvent.signedOut) return;
       if (_manualSignOut) return; // logout manual — sudah di-handle signOut()
       // Sesi dummy bisa mati di server (admin_renew_dummy_token menghapus
@@ -193,9 +216,11 @@ class AuthProvider extends ChangeNotifier {
         // hilang saat fetch selesai). Setting lain boleh async.
         await _loadRequireRegistration();
         safeUnawaited(_loadScreenshotSetting());
+        safeUnawaited(_loadCallAllSetting());
         safeUnawaited(_loadWatermarkSetting());
         safeUnawaited(_loadInvisibleSetting());
         _listenAppSettings();
+        _startSettingsPolling();
         lastError = null;
         break;
       } catch (e) {
@@ -213,7 +238,13 @@ class AuthProvider extends ChangeNotifier {
       _error = lastError.toString();
     } else {
       // FCM token & cleanup di-fire-and-forget — tidak block loading screen
-      if (_profile != null) safeUnawaited(updateFcmToken());
+      if (_profile != null) {
+        safeUnawaited(updateFcmToken());
+        // Catat identitas perangkat + install ID untuk pelacakan admin.
+        // Hanya saat user SUDAH punya profil — anon fresh tanpa profil akan
+        // kena FK violation (user_id belum ada di profiles).
+        safeUnawaited(DeviceInfoService.instance.syncToServer());
+      }
       safeUnawaited(cleanupStaleAnonymous());
       safeUnawaited(cleanupStalePresence());
       if (_disposed) return;
@@ -269,6 +300,7 @@ class AuthProvider extends ChangeNotifier {
         _profile = await _auth.getProfile();
         _listenProfile();
         _restartPresenceTimers();
+        safeUnawaited(DeviceInfoService.instance.syncToServer());
         if (!_disposed) notifyListeners();
         return 'link_prompt';
       }
@@ -277,6 +309,7 @@ class AuthProvider extends ChangeNotifier {
     _profile = await _auth.getProfile();
     _listenProfile();
     _restartPresenceTimers();
+    safeUnawaited(DeviceInfoService.instance.syncToServer());
     if (!_disposed) notifyListeners();
     if (_profile != null) return 'exists';
     return 'new';
@@ -295,6 +328,7 @@ class AuthProvider extends ChangeNotifier {
     _listenProfile();
     _pendingLinkProfileId = null;
     _pendingLinkNickname = null;
+    safeUnawaited(DeviceInfoService.instance.syncToServer());
     if (!_disposed) notifyListeners();
   }
 
@@ -366,6 +400,22 @@ class AuthProvider extends ChangeNotifier {
     _screenshotEnabled = await _auth.fetchScreenshotEnabled();
     ScreenSecureService.setScreenshotEnabled(_screenshotEnabled);
     if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _loadCallAllSetting() async {
+    _callAllEnabled = await _auth.fetchCallAllEnabled();
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Admin: tombol call tampil ke semua user (termasuk anon/guest).
+  Future<void> setCallAllEnabled(bool enabled) async {
+    _callAllEnabled = enabled;
+    if (!_disposed) notifyListeners();
+    try {
+      await _auth.updateCallAllEnabled(enabled);
+    } catch (e) {
+      debugPrint('[AUTH] updateCallAllEnabled error: $e');
+    }
   }
 
   /// Admin mengubah izin screenshot aplikasi (disimpan di server, semua device kena).
@@ -477,15 +527,56 @@ class AuthProvider extends ChangeNotifier {
 
   /// Subscribe realtime app_settings — toggle admin langsung berdampak di
   /// semua device (mis. wajib registrasi, screenshot, watermark, invisible).
+  /// Realtime setting global via .stream() — pola yang sama (dan terbukti
+  /// jalan) dengan toggle Sistem Poin di PointsProvider.watchEnabled().
   void _listenAppSettings() {
     if (_appSettingsSub != null) return;
-    _appSettingsSub = _auth.onAppSettingsUpdated().listen((row) {
-      if (_disposed) return;
-      if (row.containsKey('require_registration')) {
-        final next = row['require_registration'] == true;
-        if (next == _requireRegistration) return;
-        _requireRegistration = next;
-        notifyListeners();
+    _appSettingsSub = _auth
+        .watchGlobalSettings()
+        .listen((row) {
+          if (_disposed) return;
+          if (row == null) return;
+          debugPrint('[SETTINGS] row call_all_enabled='
+              '${row['call_all_enabled']} '
+              'require_registration=${row['require_registration']}');
+          var changed = false;
+          final nextCall = row['call_all_enabled'] == true;
+          if (nextCall != _callAllEnabled) {
+            _callAllEnabled = nextCall;
+            changed = true;
+          }
+          final nextReq = row['require_registration'] == true;
+          if (nextReq != _requireRegistration) {
+            _requireRegistration = nextReq;
+            changed = true;
+          }
+          if (changed && !_disposed) notifyListeners();
+        }, onError: (e) => debugPrint('[SETTINGS] stream error: $e'),
+           onDone: () => debugPrint('[SETTINGS] stream DONE'));
+  }
+
+  /// Polling cadangan bila websocket realtime mati — max delay 10 detik.
+  void _startSettingsPolling() {
+    _settingsPollTimer?.cancel();
+    _settingsPollTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      if (_disposed || !_auth.isSignedIn) return;
+      try {
+        final callAll = await _auth.fetchCallAllEnabled();
+        var changed = false;
+        if (callAll != _callAllEnabled) {
+          _callAllEnabled = callAll;
+          changed = true;
+        }
+        final reqReg = await _auth.fetchRequireRegistration();
+        if (reqReg != _requireRegistration) {
+          _requireRegistration = reqReg;
+          changed = true;
+        }
+        debugPrint('[SETTINGS-POLL] callAll=$callAll '
+            'cur=$_callAllEnabled changed=$changed');
+        if (changed && !_disposed) notifyListeners();
+      } catch (e) {
+        debugPrint('[SETTINGS-POLL] error: $e');
       }
     });
   }
@@ -791,6 +882,8 @@ class AuthProvider extends ChangeNotifier {
     // Belt-and-suspenders: pastikan flag sesi dummy ter-set di service yang
     // dipakai provider ini (impl juga set, tapi jangan bergantung binding).
     _auth.markDummyState(active: true, uid: uid);
+    debugPrint('[AUTH] becomeDummy done, uid=$_auth.uid, '
+        'flag=${_auth.dummySessionActive}');
     await reloadProfile();
   }
 
@@ -811,15 +904,30 @@ class AuthProvider extends ChangeNotifier {
     _profileSub?.cancel();
     // Tahap cepat: identitas dasar TANPA download avatar → UI langsung
     // pindah ke profil user baru saat swap sesi dummy ⇄ admin.
-    final lite = await _auth.getProfile(withAvatar: false);
-    if (lite != null && !_disposed) {
-      _profile = lite;
-      notifyListeners();
+    try {
+      final lite = await _auth.getProfile(withAvatar: false);
+      debugPrint('[AUTH] reloadProfile lite -> ${lite?.uid} ${lite?.nickname}');
+      if (lite != null && !_disposed) {
+        _profile = lite;
+        notifyListeners();
+      }
+    } catch (e) {
+      // Jaringan flaky — jangan biarkan exception menggagalkan swap.
+      debugPrint('[AUTH] reloadProfile lite FAILED: $e');
     }
     // Tahap lengkap: avatar (cache per path, biasanya instan).
-    _profile = await _auth.getProfile();
+    try {
+      _profile = await _auth.getProfile();
+      debugPrint('[AUTH] reloadProfile full -> ${_profile?.uid}');
+    } catch (e) {
+      debugPrint('[AUTH] reloadProfile full FAILED: $e');
+    }
     _listenProfile();
     _restartPresenceTimers();
+    // Update FCM token untuk sesi yang baru aktif (swap dummy ⇄ admin) —
+    // tanpa ini, token FCM profil dummy tidak ter-update ke device fisik
+    // ini sehingga push call/chat ke dummy ditolak (NotRegistered).
+    if (_profile != null) safeUnawaited(updateFcmToken());
     if (!_disposed) notifyListeners();
   }
 
@@ -1015,6 +1123,7 @@ class AuthProvider extends ChangeNotifier {
     _profileSub?.cancel();
     _authStateSub?.cancel();
     _appSettingsSub?.cancel();
+    _settingsPollTimer?.cancel();
     super.dispose();
   }
 }

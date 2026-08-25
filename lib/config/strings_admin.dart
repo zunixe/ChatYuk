@@ -26,6 +26,112 @@ extension SAdminX on S {
 
   String get adminContactTab => isId ? 'Kontak' : 'Contact';
 
+  String get adminDeviceTab => isId ? 'Perangkat' : 'Devices';
+  String get adminDeviceTitle => isId ? 'Perangkat' : 'Devices';
+  String get adminDeviceSearch => isId ? 'Cari user/device...' : 'Search user/device...';
+  String get adminDeviceNoData =>
+      isId ? 'Belum ada device terdeteksi' : 'No devices detected yet';
+  String get adminDeviceNoResult => isId ? 'Tidak ada yang cocok' : 'No match found';
+  String get adminDeviceActive => isId ? 'aktif' : 'active';
+  String get adminDeviceInactive => isId ? 'lama' : 'inactive';
+  String get adminDeviceModel => isId ? 'Device' : 'Device';
+  String get adminDeviceOs => isId ? 'OS' : 'OS';
+  String get adminDeviceLastSeen => isId ? 'Terakhir aktif' : 'Last seen';
+  String get adminDeviceInstallId => isId ? 'Install ID' : 'Install ID';
+  String get adminDeviceIp => isId ? 'IP' : 'IP';
+  String get adminDeviceDetail => isId ? 'Detail User' : 'User Detail';
+  String get adminDeviceProfile => isId ? 'Profil' : 'Profile';
+  String get adminDeviceUserid => isId ? 'User ID' : 'User ID';
+  String get adminDeviceEmail => isId ? 'Email' : 'Email';
+  String get adminDeviceRegistered => isId ? 'Terdaftar' : 'Registered';
+  String get adminDeviceAnon => isId ? 'Anonim' : 'Anonymous';
+  String get adminDeviceGender => isId ? 'Kelamin' : 'Gender';
+  String get adminDeviceCity => isId ? 'Kota' : 'City';
+  String get adminDeviceAge => isId ? 'Umur' : 'Age';
+  String get adminDevicePoints => isId ? 'Poin' : 'Points';
+  String get adminDeviceStatus => isId ? 'Status' : 'Status';
+  String get adminDeviceLastLogin => isId ? 'Login terakhir' : 'Last login';
+  String get adminDeviceCreated => isId ? 'Dibuat' : 'Created';
+  String get adminDeviceDevices => isId ? 'Perangkat' : 'Devices';
+  String get adminDeviceChats => isId ? 'Chat dengan' : 'Chats with';
+  String get adminDeviceLocation => isId ? 'Riwayat Lokasi' : 'Location History';
+  String get adminDeviceNoDevices =>
+      isId ? 'Belum ada perangkat tercatat' : 'No devices recorded';
+  String get adminDeviceNoChats =>
+      isId ? 'Belum ada chat' : 'No chats yet';
+  String get adminDeviceCopyId => isId ? 'Salin' : 'Copy';
+  String get adminDeviceCopied => isId ? 'Disalin' : 'Copied';
+  String get adminDeviceUsersUsed =>
+      isId ? 'User yang pernah login' : 'Users who logged in';
+  String get adminDeviceNoUsers =>
+      isId ? 'Belum ada user tercatat' : 'No users recorded';
+  String get adminDeviceOpenUser =>
+      isId ? 'Lihat detail user' : 'View user detail';
+  String get adminDeviceCount =>
+      isId ? 'user' : 'user';
+  String get adminDeviceByUser => isId ? 'Per User' : 'By User';
+  String get adminDeviceByDevice => isId ? 'Per Device' : 'By Device';
+
+  String get adminStorageTitle => isId
+      ? 'Penggunaan Data Supabase'
+      : 'Supabase Data Usage';
+  String get adminStorageDb => isId ? 'Database' : 'Database';
+  String get adminStorageImages => isId
+      ? 'Gambar (chat & publik)'
+      : 'Images (chat & public)';
+  String get adminStorageFree => isId ? 'Tersedia' : 'Free';
+  String get adminStorageTotal => isId ? 'Total Terpakai' : 'Total Used';
+  String get adminStorageFiles => isId ? 'File gambar' : 'Image files';
+  String get adminStorageGrowth => isId
+      ? 'Pertumbuhan Data'
+      : 'Data Growth';
+  String get adminGrowthDay => isId ? 'Hari ini' : 'Today';
+  String get adminGrowthWeek => isId ? '7 hari' : '7 days';
+  String get adminGrowthMonth => isId ? '30 hari' : '30 days';
+  String get adminGrowthMessages => isId ? 'Pesan' : 'Messages';
+  String get adminGrowthSignals => isId ? 'Sinyal call' : 'Call signals';
+  String get adminGrowthImages => isId ? 'Gambar' : 'Images';
+  String get adminGrowthRegistrations =>
+      isId ? 'Registrasi' : 'Registrations';
+  String get adminRegListTitle =>
+      isId ? 'User Terdaftar (Email)' : 'Registered Users (Email)';
+  String get adminCfTitle =>
+      isId ? 'Cloudflare Realtime (TURN)' : 'Cloudflare Realtime (TURN)';
+  String get adminCfNotConfigured => isId
+      ? 'Belum dikonfigurasi — set CF_ACCOUNT_ID & CF_ANALYTICS_TOKEN di secrets Supabase untuk melihat kuota.'
+      : 'Not configured — set CF_ACCOUNT_ID & CF_ANALYTICS_TOKEN in Supabase secrets to see quota.';
+  String get adminCfQuota => isId ? 'Kuota 1 TB/bulan' : '1 TB/month quota';
+  String get adminCfMonth => isId ? 'Bulan ini' : 'This month';
+  String get adminQuotaLabel => isId ? 'Kuota' : 'Quota';
+
+  String get adminDeletedTab => isId ? 'Terhapus' : 'Deleted';
+  String get adminDeletedTitle => isId ? 'User Terhapus' : 'Deleted Users';
+  String get adminDeletedSearch =>
+      isId ? 'Cari user terhapus...' : 'Search deleted users...';
+  String get adminDeletedNoData =>
+      isId ? 'Belum ada user terhapus' : 'No deleted users yet';
+  String get adminDeletedNoResult =>
+      isId ? 'Tidak ada yang cocok' : 'No match found';
+  String get adminDeletedReason => isId ? 'Alasan' : 'Reason';
+  String get adminDeletedAt => isId ? 'Dihapus' : 'Deleted';
+  String get adminDeletedStale =>
+      isId ? 'Stale (anon >7 hari)' : 'Stale (anon >7 days)';
+  String get adminDeletedClaim =>
+      isId ? 'Nickname diambil' : 'Nickname claimed';
+  String get adminDeletedAdmin =>
+      isId ? 'Dihapus admin' : 'Deleted by admin';
+  String get adminDeletedDummy =>
+      isId ? 'Dummy dihapus' : 'Dummy deleted';
+  String get adminDeletedClaimedBy =>
+      isId ? 'Diambil oleh' : 'Claimed by';
+  String get adminDeletedNewNick =>
+      isId ? 'Nickname baru' : 'New nickname';
+  String get adminDeletedDeviceHistory =>
+      isId ? 'Riwayat Device' : 'Device History';
+  String get adminDeletedNoDevice =>
+      isId ? 'Tidak ada device tercatat' : 'No devices recorded';
+  String get adminDeletedUid => isId ? 'UID Asli' : 'Original UID';
+
   String get adminContactEmpty =>
       isId ? 'Belum ada pesan kontak' : 'No contact messages yet';
 
@@ -38,6 +144,10 @@ extension SAdminX on S {
   String get descScreenshotAdmin => isId
       ? 'Admin — kontrol screenshot untuk semua pengguna'
       : 'Admin — control screenshots for all users';
+
+  String get descScreenshotAdminBuild => isId
+      ? 'Pengaturan ini hanya berlaku untuk ChatYuk user. ChatYuk Admin selalu bisa screenshot.'
+      : 'This setting applies only to ChatYuk user. ChatYuk Admin can always take screenshots.';
 
   String get labelWatermarkAdmin =>
       isId ? 'Aktifkan watermark forensik' : 'Enable forensic watermark';
@@ -102,6 +212,15 @@ extension SAdminX on S {
       ? 'Realtime — efek langsung ke semua device'
       : 'Realtime — immediate effect on all devices';
 
+  String get adminCallAllTitle => isId
+      ? 'Tombol Call untuk Semua User'
+      : 'Call Button for All Users';
+  String get adminCallAllOn => isId ? 'Semua user' : 'All users';
+  String get adminCallAllOff => isId ? 'Terdaftar saja' : 'Registered only';
+  String get adminCallAllDesc => isId
+      ? 'Saat aktif, ikon panggilan (audio/video) tampil untuk semua user termasuk yang belum daftar.'
+      : 'When enabled, the call (audio/video) icon appears for all users including unregistered ones.';
+
   String get adminRegisteredOnly =>
       isId ? 'Hanya user registered' : 'Registered users only';
 
@@ -109,6 +228,9 @@ extension SAdminX on S {
       isId ? 'user terjebak (0 poin)' : 'users stuck (0 points)';
 
   String get adminOverview => isId ? 'Ringkasan' : 'Overview';
+
+  String get adminGlobalSettingTab =>
+      isId ? 'Pengaturan Global' : 'Global Setting';
 
   String get adminRegTitle => isId ? 'Registrasi Email' : 'Email Registrations';
 

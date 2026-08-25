@@ -125,3 +125,14 @@ Map<String, dynamic> snakeToCamel(Map<String, dynamic> map) {
       })();
   return map.map((k, v) => MapEntry(keyMap[k] ?? k, v));
 }
+
+/// Format bytes ke bentuk mudah dibaca ("512 KB", "22.1 MB", "1.2 GB").
+String formatBytes(num bytes) {
+  if (bytes < 1024) return '$bytes B';
+  final kb = bytes / 1024;
+  if (kb < 1024) return '${kb.toStringAsFixed(kb < 10 ? 1 : 0)} KB';
+  final mb = kb / 1024;
+  if (mb < 1024) return '${mb.toStringAsFixed(mb < 10 ? 1 : 0)} MB';
+  final gb = mb / 1024;
+  return '${gb.toStringAsFixed(2)} GB';
+}

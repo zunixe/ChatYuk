@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/active_call_model.dart';
 import '../services/admin_service.dart';
@@ -8,6 +9,73 @@ import '../services/storage_photo_service.dart';
 
 class AdminProvider extends ChangeNotifier {
   final AdminService _service = AdminService(Supabase.instance.client);
+
+  // ── Notifikasi admin (device baru / call video aktif) ──
+  final StreamController<String> _notifCtrl =
+      StreamController<String>.broadcast();
+  final Set<String> _seenDeviceIds = {};
+  final Set<String> _seenCallIds = {};
+  bool _notifArmed = false;
+  bool _seenDevicesLoaded = false;
+  static const String _kSeenDevicesKey = 'admin_seen_device_ids';
+
+  /// Stream notifikasi admin — dipakai layar panel untuk menampilkan
+  /// snackbar + notifikasi sistem (localNotifications).
+  Stream<String> get notifications => _notifCtrl.stream;
+
+  void _emit(String msg) {
+    if (_disposed) return;
+    try {
+      if (!_notifCtrl.isClosed) _notifCtrl.add(msg);
+    } catch (_) {}
+  }
+
+  /// Arm notifikasi: muat dulu daftar device yang SUDAH pernah dinotifikasi
+  /// (tersimpan di SharedPreferences, persist antar restart), baru aktif.
+  Future<void> armNotifications() async {
+    // 1) Muat device yang sudah pernah dinotifikasi (persist antar restart).
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getStringList(_kSeenDevicesKey) ?? const [];
+      _seenDeviceIds.addAll(saved);
+    } catch (_) {}
+
+    // 2) SEED diam-diam: semua device yang sudah ada SEKARANG dimasukkan ke
+    // daftar seen TANPA notifikasi. Hanya device yang muncul SETELAH titik
+    // ini yang akan dinotifikasi.
+    try {
+      final res = await _service.listDevices(limit: 1000, offset: 0);
+      final items = (res['items'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>();
+      for (final d in items) {
+        final id = '${d['install_id'] ?? ''}';
+        if (id.isNotEmpty) _seenDeviceIds.add(id);
+      }
+      // Simpan gabungan supaya restart berikutnya punya baseline yang sama.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_kSeenDevicesKey, _seenDeviceIds.toList());
+    } catch (e) {
+      debugPrint('[ADMIN] arm seed devices error: $e');
+    }
+
+    _seenDevicesLoaded = true;
+    _notifArmed = true;
+  }
+
+  Future<void> _persistSeenDevice(String installId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_kSeenDevicesKey) ?? <String>[];
+      if (!list.contains(installId)) {
+        list.add(installId);
+        // Batasi ukuran list (simpan 500 terbaru).
+        while (list.length > 500) {
+          list.removeAt(0);
+        }
+        await prefs.setStringList(_kSeenDevicesKey, list);
+      }
+    } catch (_) {}
+  }
   Map<String, dynamic>? _stats;
   bool _loading = false;
   String? _error;
@@ -153,6 +221,213 @@ class AdminProvider extends ChangeNotifier {
   int get chatsTotal => _chatsTotal;
   String? get chatsError => _chatsError;
 
+  // ── Device tracking (tab Perangkat) ──
+  static const int _devicePageSize = 100;
+  List<Map<String, dynamic>> _devices = [];
+  bool _devicesLoading = false;
+  bool _devicesHasMore = true;
+  int _devicesTotal = 0;
+  bool _devicesFetchingMore = false;
+  String? _devicesError;
+
+  List<Map<String, dynamic>> get devices => _devices;
+  bool get devicesLoading => _devicesLoading;
+  bool get devicesHasMore => _devicesHasMore;
+  int get devicesTotal => _devicesTotal;
+  String? get devicesError => _devicesError;
+
+Future<void> fetchDevices() async {
+    _devicesLoading = true;
+    _devicesError = null;
+    if (!_disposed) notifyListeners();
+    try {
+      final res = await _service.listDevices(
+        limit: _devicePageSize,
+        offset: 0,
+      );
+      _devices = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      _devicesTotal = (res['total'] as num?)?.toInt() ?? 0;
+      _devicesHasMore = _devices.length < _devicesTotal;
+      await _detectNewDevices(_devices);
+    } catch (e) {
+      _devicesError = e.toString();
+      debugPrint('[ADMIN] fetchDevices error: $e');
+    }
+    _devicesLoading = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Notifikasi device baru — daftar install_id yang sudah dinotifikasi
+  /// PERSIST di SharedPreferences, jadi tidak dobel antar restart app.
+  Future<void> _detectNewDevices(List<Map<String, dynamic>> devices) async {
+    if (!_seenDevicesLoaded || _disposed) return; // tunggu armNotifications
+    for (final d in devices) {
+      final installId = '${d['install_id'] ?? ''}';
+      if (installId.isEmpty) continue;
+      if (_seenDeviceIds.contains(installId)) continue;
+      _seenDeviceIds.add(installId);
+      await _persistSeenDevice(installId);
+      final nick = '${d['nickname'] ?? '?'}';
+      final brand = '${d['brand'] ?? ''}';
+      final model = '${d['model'] ?? ''}';
+      final device = [brand, model].where((e) => e.isNotEmpty).join(' ');
+      _emit('Device baru: $nick · ${device.isEmpty ? 'unknown' : device}');
+    }
+  }
+
+  /// Refresh periodic tanpa spinner & tanpa menimpa list saat error.
+  Future<void> refreshDevicesSilent() async {
+    try {
+      final res = await _service.listDevices(
+        limit: _devicePageSize,
+        offset: 0,
+      );
+      _devices = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      _devicesTotal = (res['total'] as num?)?.toInt() ?? 0;
+      _devicesHasMore = _devices.length < _devicesTotal;
+      _devicesError = null;
+    } catch (e) {
+      debugPrint('[ADMIN] refreshDevicesSilent error: $e');
+      if (_devices.isEmpty) _devicesError = e.toString();
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> fetchMoreDevices() async {
+    if (_devicesFetchingMore || !_devicesHasMore || _devicesLoading) return;
+    _devicesFetchingMore = true;
+    try {
+      final res = await _service.listDevices(
+        limit: _devicePageSize,
+        offset: _devices.length,
+      );
+      final more = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      if (more.isNotEmpty) _devices.addAll(more);
+      _devicesHasMore = _devices.length < _devicesTotal;
+    } catch (e) {
+      debugPrint('[ADMIN] fetchMoreDevices error: $e');
+    }
+    _devicesFetchingMore = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Detail lengkap satu user (profil + device + chat + lokasi).
+  Future<Map<String, dynamic>> getUserDetail(String uid) async {
+    return _service.getUserDetail(uid);
+  }
+
+  // ── Arsip user terhapus (tab Terhapus) ──
+  static const int _deletedPageSize = 100;
+  List<Map<String, dynamic>> _deleted = [];
+  bool _deletedLoading = false;
+  bool _deletedHasMore = true;
+  int _deletedTotal = 0;
+  bool _deletedFetchingMore = false;
+  String? _deletedError;
+
+  List<Map<String, dynamic>> get deleted => _deleted;
+  bool get deletedLoading => _deletedLoading;
+  bool get deletedHasMore => _deletedHasMore;
+  int get deletedTotal => _deletedTotal;
+  String? get deletedError => _deletedError;
+
+  Future<void> fetchDeleted() async {
+    _deletedLoading = true;
+    _deletedError = null;
+    if (!_disposed) notifyListeners();
+    try {
+      final res = await _service.listDeleted(
+        limit: _deletedPageSize,
+        offset: 0,
+      );
+      _deleted = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      _deletedTotal = (res['total'] as num?)?.toInt() ?? 0;
+      _deletedHasMore = _deleted.length < _deletedTotal;
+    } catch (e) {
+      _deletedError = e.toString();
+      debugPrint('[ADMIN] fetchDeleted error: $e');
+    }
+    _deletedLoading = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> fetchMoreDeleted() async {
+    if (_deletedFetchingMore || !_deletedHasMore || _deletedLoading) return;
+    _deletedFetchingMore = true;
+    try {
+      final res = await _service.listDeleted(
+        limit: _deletedPageSize,
+        offset: _deleted.length,
+      );
+      final more = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      if (more.isNotEmpty) _deleted.addAll(more);
+      _deletedHasMore = _deleted.length < _deletedTotal;
+    } catch (e) {
+      debugPrint('[ADMIN] fetchMoreDeleted error: $e');
+    }
+    _deletedFetchingMore = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Riwayat device user yang sudah dihapus.
+  Future<List<Map<String, dynamic>>> getDeletedDeviceHistory(String nick) async {
+    return _service.getDeletedDeviceHistory(nick);
+  }
+
+  // ── Statistik penggunaan data Supabase ──
+  Map<String, dynamic>? _storageStats;
+  bool _storageStatsLoading = false;
+
+  Map<String, dynamic>? get storageStats => _storageStats;
+  bool get storageStatsLoading => _storageStatsLoading;
+
+  Future<void> fetchStorageStats() async {
+    _storageStatsLoading = true;
+    if (!_disposed) notifyListeners();
+    try {
+      _storageStats = await _service.getStorageStats();
+    } catch (e) {
+      debugPrint('[ADMIN] fetchStorageStats error: $e');
+    }
+    _storageStatsLoading = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  // ── Daftar registrasi email ──
+  List<Map<String, dynamic>> _registrations = [];
+  bool _registrationsLoading = false;
+
+  List<Map<String, dynamic>> get registrations => _registrations;
+  bool get registrationsLoading => _registrationsLoading;
+
+  Future<void> fetchRegistrations() async {
+    _registrationsLoading = true;
+    if (!_disposed) notifyListeners();
+    try {
+      final res = await _service.listRegistrations(limit: 200, offset: 0);
+      _registrations =
+          List<Map<String, dynamic>>.from(res['items'] ?? const []);
+    } catch (e) {
+      debugPrint('[ADMIN] fetchRegistrations error: $e');
+    }
+    _registrationsLoading = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  // ── Cloudflare Realtime TURN usage ──
+  Map<String, dynamic>? _cfUsage;
+
+  Map<String, dynamic>? get cfUsage => _cfUsage;
+
+  Future<void> fetchCfUsage() async {
+    try {
+      _cfUsage = await _service.getCfUsage();
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      debugPrint('[ADMIN] fetchCfUsage error: $e');
+    }
+  }
+
   Future<void> fetchChats() async {
     _chatsLoading = true;
     _chatsError = null;
@@ -237,11 +512,24 @@ class AdminProvider extends ChangeNotifier {
         await _service.sweepStaleCalls();
       } catch (_) {}
       _activeCalls = await _service.getActiveCalls();
+      _detectNewCalls(_activeCalls);
     } catch (e) {
       debugPrint('[ADMIN] fetchActiveCalls error: $e');
     }
     _activeCallsLoading = false;
     if (!_disposed) notifyListeners();
+  }
+
+  /// Notifikasi video call baru di monitor chat.
+  void _detectNewCalls(List<ActiveCallInfo> calls) {
+    for (final c in calls) {
+      if (_seenCallIds.contains(c.id)) continue;
+      _seenCallIds.add(c.id);
+      if (!_notifArmed) continue;
+      if (c.status == 'ringing' || c.status == 'answered') {
+        _emit('Video call: ${c.callerName} ↔ ${c.calleeName}');
+      }
+    }
   }
 
   /// Realtime: dengarkan tabel calls — INSERT/UPDATE apapun langsung
@@ -460,6 +748,9 @@ class AdminProvider extends ChangeNotifier {
       Supabase.instance.client.removeChannel(_callChannel!);
     } catch (_) {}
     _callChannel = null;
+    try {
+      _notifCtrl.close();
+    } catch (_) {}
     super.dispose();
   }
 }

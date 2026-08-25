@@ -51,6 +51,7 @@ class RoomModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'name': name,
       'description': description,
       'icon': icon,
@@ -58,6 +59,11 @@ class RoomModel {
       'category': category,
       'order': order,
       'onlineCount': onlineCount,
+      'is_private': isPrivate,
+      'owner_id': ownerId,
+      'owner_name': ownerName,
+      'has_password': hasPassword,
+      'expires_at': expiresAt?.toIso8601String(),
     };
   }
 
