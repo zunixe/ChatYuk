@@ -22,6 +22,8 @@ class _TimelineScreenState extends State<TimelineScreen>
   late final TabController _tab = TabController(length: 3, vsync: this);
   final ScrollController _scroll = ScrollController();
   int _current = 0;
+  // Posisi scroll per tab — dipulihkan saat balik ke tab tsb.
+  final Map<int, double> _scrollOffsets = {};
 
   @override
   void initState() {
@@ -43,8 +45,20 @@ class _TimelineScreenState extends State<TimelineScreen>
   void _onTabChanged() {
     if (_tab.indexIsChanging) return;
     if (_tab.index != _current) {
+      // Simpan posisi scroll scope lama supaya balik ke tab ini tetap
+      // di posisi yang sama (klik terasa instan, tidak lompat ke atas).
+      if (_scroll.hasClients) _scrollOffsets[_current] = _scroll.offset;
       _current = _tab.index;
       _load(refresh: true);
+      // Pulihkan posisi scroll scope baru setelah frame ter-render.
+      final target = _scrollOffsets[_current];
+      if (target != null && target > 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_scroll.hasClients) return;
+          final max = _scroll.position.maxScrollExtent;
+          _scroll.jumpTo(target.clamp(0.0, max));
+        });
+      }
     }
   }
 
