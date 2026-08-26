@@ -61,6 +61,11 @@ class MessageStore {
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_chat_ts ON $_table(chat_key, ts DESC)',
       );
+      await db.execute(
+        'CREATE TABLE IF NOT EXISTS kv('
+        'key TEXT PRIMARY KEY, '
+        'json TEXT NOT NULL)',
+      );
       _db = db;
       completer.complete(db);
       return db;
@@ -147,8 +152,66 @@ class MessageStore {
     if (db == null || !db.isOpen) return;
     try {
       await db.delete(_table);
+      await db.delete('kv');
     } catch (e) {
       debugPrint('[STORE] clearAll error: $e');
+    }
+  }
+
+  // ── KV generik: timeline, list room, list chat, dsb ───────────────────────
+
+  /// Simpan objek JSON di bawah [key]. [json] harus hasil jsonEncode.
+  Future<void> saveKv(String key, String json) async {
+    final db = _db;
+    if (db == null || !db.isOpen) return;
+    try {
+      await db.insert(
+        'kv',
+        {'key': key, 'json': json},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('[STORE] kv save $key error: $e');
+    }
+  }
+
+  Future<String?> loadKv(String key) async {
+    final db = _db;
+    if (db == null || !db.isOpen) return null;
+    try {
+      final rows = await db.query(
+        'kv',
+        columns: ['json'],
+        where: 'key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return rows.first['json'] as String?;
+    } catch (e) {
+      debugPrint('[STORE] kv load $key error: $e');
+      return null;
+    }
+  }
+
+  Future<void> removeKv(String key) async {
+    final db = _db;
+    if (db == null || !db.isOpen) return;
+    try {
+      await db.delete('kv', where: 'key = ?', whereArgs: [key]);
+    } catch (e) {
+      debugPrint('[STORE] kv remove $key error: $e');
+    }
+  }
+
+  /// Hapus SEMUA baris kv tanpa menyentuh pesan.
+  Future<void> clearKv() async {
+    final db = _db;
+    if (db == null || !db.isOpen) return;
+    try {
+      await db.delete('kv');
+    } catch (e) {
+      debugPrint('[STORE] clearKv error: $e');
     }
   }
 }

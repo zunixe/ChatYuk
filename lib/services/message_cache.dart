@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
@@ -7,74 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message_model.dart';
 import 'message_store.dart';
 
-// Top-level function untuk compute() — encrypt + write di background isolate
-Future<void> _encSave(Map<String, dynamic> args) async {
-  final prefsKey = args['prefsKey'] as String;
-  final plaintext = args['plaintext'] as String;
-  final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
-  final key = SecretKey(List<int>.from(keyBytes));
-  final aes = AesGcm.with256bits();
-  final iv = aes.newNonce();
-  final secretBox = await aes.encrypt(
-    utf8.encode(plaintext),
-    secretKey: key,
-    nonce: iv,
-  );
-  final payload = {
-    'n': base64Encode(secretBox.nonce),
-    'c': base64Encode(secretBox.cipherText),
-    'm': base64Encode(secretBox.mac.bytes),
-  };
-  final enc = base64Encode(utf8.encode(jsonEncode(payload)));
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString(prefsKey, enc);
-}
 
-// Top-level function untuk compute() — decrypt + parse OBJECT di background
-Future<Map<String, dynamic>?> _decLoadObj(Map<String, dynamic> args) async {
-  try {
-    final encoded = args['encoded'] as String;
-    final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
-    final key = SecretKey(List<int>.from(keyBytes));
-    final aes = AesGcm.with256bits();
-    final payload =
-        jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
-    final box = SecretBox(
-      base64Decode(payload['c'] as String),
-      nonce: base64Decode(payload['n'] as String),
-      mac: Mac(base64Decode(payload['m'] as String)),
-    );
-    final clear = await aes.decrypt(box, secretKey: key);
-    return jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
-  } catch (_) {
-    return null;
-  }
-}
-
-// Top-level function untuk compute() — decrypt + parse di background isolate
-// supaya buka chat tidak freeze saat mendekripsi cache besar.
-Future<List<dynamic>?> _decLoad(Map<String, dynamic> args) async {
-  try {
-    final encoded = args['encoded'] as String;
-    final keyBytes = (args['keyBytes'] as List<dynamic>).cast<int>();
-    final key = SecretKey(List<int>.from(keyBytes));
-    final aes = AesGcm.with256bits();
-    final payload =
-        jsonDecode(utf8.decode(base64Decode(encoded))) as Map<String, dynamic>;
-    final box = SecretBox(
-      base64Decode(payload['c'] as String),
-      nonce: base64Decode(payload['n'] as String),
-      mac: Mac(base64Decode(payload['m'] as String)),
-    );
-    final clear = await aes.decrypt(box, secretKey: key);
-    final list = jsonDecode(utf8.decode(clear)) as List<dynamic>;
-    return list;
-  } catch (_) {
-    return null;
-  }
-}
-
-// Top-level function untuk compute() — decrypt string tunggal (foto) di background
+// Top-level function untuk compute() â€” decrypt string tunggal (foto) di background
 Future<String?> _decStr(Map<String, dynamic> args) async {
   try {
     final encoded = args['encoded'] as String;
@@ -95,7 +29,7 @@ Future<String?> _decStr(Map<String, dynamic> args) async {
   }
 }
 
-// Top-level function untuk compute() — decrypt BANYAK foto sekaligus dalam
+// Top-level function untuk compute() â€” decrypt BANYAK foto sekaligus dalam
 // SATU isolate. Baca file + decrypt di background; hasil Map<messageId, b64>.
 // Jauh lebih cepat daripada decrypt satu-satu (tiap call spawn isolate baru).
 Future<Map<String, String>?> _decBatch(Map<String, dynamic> args) async {
@@ -142,7 +76,7 @@ class MessageCache {
   static final _aes = AesGcm.with256bits();
 
   // In-memory cache: sekali decrypt, buka ulang chat tidak perlu decrypt lagi.
-  // Dibatasi 30 chat — LRU sederhana, buang yang paling lama saat penuh.
+  // Dibatasi 30 chat â€” LRU sederhana, buang yang paling lama saat penuh.
   final Map<String, List<MessageModel>> _memCache = {};
   static const _memCacheMax = 30;
 
@@ -211,7 +145,7 @@ class MessageCache {
     return _decrypt(encoded, key);
   }
 
-  /// Dekripsi di background isolate — untuk PhotoCache supaya buka chat
+  /// Dekripsi di background isolate â€” untuk PhotoCache supaya buka chat
   /// tidak freeze saat decrypt banyak foto sekaligus.
   Future<String?> decryptStringAsync(String encoded) async {
     try {
@@ -224,7 +158,7 @@ class MessageCache {
   }
 
   /// Dekripsi BANYAK foto dalam SATU isolate (baca file + decrypt).
-  /// paths = Map<messageId, pathFileEnkripsi> → hasil Map<messageId, b64>.
+  /// paths = Map<messageId, pathFileEnkripsi> â†’ hasil Map<messageId, b64>.
   Future<Map<String, String>?> decryptMany(Map<String, String> paths) async {
     try {
       if (paths.isEmpty) return {};
@@ -276,43 +210,40 @@ class MessageCache {
   Future<void> prewarmDb() async {
     try {
       await _ensureDb();
+      // Purge sisa cache format prefs lama (pesan v2, list chat, objek
+      // timeline/rooms) — semuanya kini tinggal di SQLite.
       final prefs = await SharedPreferences.getInstance();
-      final keys = prefs
+      final legacy = prefs
           .getKeys()
-          .where((k) => k.startsWith(_keyPrefix))
+          .where((k) =>
+              k.startsWith(_keyPrefix) ||
+              k.startsWith('chats_list_v1_') ||
+              k.startsWith('obj_v1_'))
           .toList();
-      for (final k in keys) await prefs.remove(k);
+      for (final k in legacy) {
+        await prefs.remove(k);
+      }
     } catch (_) {}
   }
 
-  // ── List private chat (persist antar restart app) ────────────────────────
-  static const _listPrefix = 'chats_list_v1_';
+  // â”€â”€ List private chat / timeline / rooms (persist antar restart app) â”€â”€â”€â”€â”€
+  // Semua blob generik kini di tabel `kv` SQLite terenkripsi â€” bukan lagi
+  // prefs+AES. API tidak berubah supaya call site (timeline, room, chat
+  // list) tidak perlu disentuh.
 
   Future<void> saveRawList(String key, List<Map<String, dynamic>> rows) async {
     try {
       if (rows.isEmpty) return;
-      final aesKey = await _getKey();
-      final keyBytes = await aesKey.extractBytes();
-      await compute(_encSave, {
-        'prefsKey': '$_listPrefix$key',
-        'plaintext': jsonEncode(rows),
-        'keyBytes': keyBytes,
-      });
+      await _ensureDb();
+      await MessageStore.instance.saveKv(key, jsonEncode(rows));
     } catch (_) {}
   }
 
   Future<List<Map<String, dynamic>>> loadRawList(String key) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final enc = prefs.getString('$_listPrefix$key');
-      if (enc == null || enc.isEmpty) return [];
-      final aesKey = await _getKey();
-      final keyBytes = await aesKey.extractBytes();
-      final list = await compute(_decLoad, {
-        'encoded': enc,
-        'keyBytes': keyBytes,
-      });
-      if (list == null) return [];
+      final json = await _loadKvSafe(key);
+      if (json == null || json.isEmpty) return [];
+      final list = jsonDecode(json) as List<dynamic>;
       return list
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
@@ -323,39 +254,27 @@ class MessageCache {
 
   Future<void> removeRawList(String key) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('$_listPrefix$key');
+      await _ensureDb();
+      await MessageStore.instance.removeKv(key);
     } catch (_) {}
   }
 
-  // ── Objek generic (timeline, rooms) ──────────────────────────────────────
-  static const _objPrefix = 'obj_v1_';
+  // â”€â”€ Objek generic (timeline, rooms) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<void> saveRawObj(String key, Map<String, dynamic> obj) async {
     try {
       if (obj.isEmpty) return;
-      final aesKey = await _getKey();
-      final keyBytes = await aesKey.extractBytes();
-      await compute(_encSave, {
-        'prefsKey': '$_objPrefix$key',
-        'plaintext': jsonEncode(obj),
-        'keyBytes': keyBytes,
-      });
+      await _ensureDb();
+      await MessageStore.instance.saveKv(key, jsonEncode(obj));
     } catch (_) {}
   }
 
   Future<Map<String, dynamic>> loadRawObj(String key) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final enc = prefs.getString('$_objPrefix$key');
-      if (enc == null || enc.isEmpty) return {};
-      final aesKey = await _getKey();
-      final keyBytes = await aesKey.extractBytes();
-      final obj = await compute(_decLoadObj, {
-        'encoded': enc,
-        'keyBytes': keyBytes,
-      });
-      return obj ?? {};
+      final json = await _loadKvSafe(key);
+      if (json == null || json.isEmpty) return {};
+      final obj = jsonDecode(json);
+      return obj is Map<String, dynamic> ? obj : {};
     } catch (_) {
       return {};
     }
@@ -363,15 +282,20 @@ class MessageCache {
 
   Future<void> removeRawObj(String key) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('$_objPrefix$key');
+      await _ensureDb();
+      await MessageStore.instance.removeKv(key);
     } catch (_) {}
+  }
+
+  Future<String?> _loadKvSafe(String key) async {
+    await _ensureDb();
+    return MessageStore.instance.loadKv(key);
   }
 
   /// Ambil pesan cache (null jika tidak ada).
   /// Fast path: mem-cache. Slow path: SQLite terenkripsi (satu query).
   Future<List<MessageModel>> loadMessages(String chatKey) async {
-    // Fast path: sudah pernah dibuka sesi ini — langsung pakai mem-cache
+    // Fast path: sudah pernah dibuka sesi ini â€” langsung pakai mem-cache
     // tanpa perlu query DB sama sekali.
     final mem = _memCache[chatKey];
     if (mem != null) {
@@ -428,7 +352,7 @@ class MessageCache {
 
   Future<void> clearAll() => clearAllLegacy();
 
-  /// Hapus HANYA cache format lama v1 — cache v2 aktif tetap utuh.
+  /// Hapus HANYA cache format lama v1 â€” cache v2 aktif tetap utuh.
   /// Dipanggil saat app startup agar pesan cached tetap tersedia.
   Future<void> clearLegacyV1Only() async {
     final prefs = await SharedPreferences.getInstance();
