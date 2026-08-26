@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +21,13 @@ MessageModel _msg(String id, DateTime ts, {String text = 'halo'}) =>
     );
 
 void main() {
+  // Native assets kadang tidak ter-link saat flutter test di Windows →
+  // preload dll secara manual; lookup simbol @Native berikutnya menemukan
+  // modul yang sudah termuat di proses.
+  final localDll = File('build/native_assets/windows/sqlite3.dll');
+  if (Platform.isWindows && localDll.existsSync()) {
+    DynamicLibrary.open(localDll.absolute.path);
+  }
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
@@ -96,5 +104,23 @@ void main() {
     await MessageStore.instance.clearAll();
     final loaded = await MessageStore.instance.loadMessages('chat-5');
     expect(loaded, isEmpty);
+  });
+
+  test('kv: roundtrip objek + replace + remove', () async {
+    await MessageStore.instance.saveKv('timeline_all', '{"posts":[1,2]}');
+    expect(await MessageStore.instance.loadKv('timeline_all'),
+        '{"posts":[1,2]}');
+    await MessageStore.instance
+        .saveKv('timeline_all', '{"posts":[3],"cursor":"x"}');
+    expect(await MessageStore.instance.loadKv('timeline_all'),
+        '{"posts":[3],"cursor":"x"}');
+    await MessageStore.instance.removeKv('timeline_all');
+    expect(await MessageStore.instance.loadKv('timeline_all'), isNull);
+  });
+
+  test('clearAll juga mengosongkan kv (logout)', () async {
+    await MessageStore.instance.saveKv('rooms_ID', '{"rooms":[]}');
+    await MessageStore.instance.clearAll();
+    expect(await MessageStore.instance.loadKv('rooms_ID'), isNull);
   });
 }
