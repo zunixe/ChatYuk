@@ -87,12 +87,14 @@ class AdminProvider extends ChangeNotifier {
   String? get error => _error;
   bool get pointsEnabled => _pointsEnabled;
 
-  Future<void> fetchStats() async {
+  Future<void> fetchStats({bool force = false}) async {
     _loading = true;
     _error = null;
     if (!_disposed) notifyListeners();
     try {
-      _stats = await _service.getStats();
+      _stats = force
+          ? await _service.getStatsForce()
+          : await _service.getStats();
       _pointsEnabled = _stats?['points_enabled'] == true;
     } catch (e) {
       _error = e.toString();
@@ -103,9 +105,12 @@ class AdminProvider extends ChangeNotifier {
   }
 
   /// Refresh statistik tanpa memicu state "loading" (untuk timer/polling).
-  Future<void> refreshStats() async {
+  /// Server meng-cache hasil 5 menit — polling ini jadi O(1) di DB.
+  Future<void> refreshStats({bool force = false}) async {
     try {
-      _stats = await _service.getStats();
+      _stats = force
+          ? await _service.getStatsForce()
+          : await _service.getStats();
       _pointsEnabled = _stats?['points_enabled'] == true;
     } catch (e) {
       debugPrint('[ADMIN] refreshStats error: $e');
@@ -140,15 +145,28 @@ class AdminProvider extends ChangeNotifier {
   // ── Bar chart registrasi email per hari ──
   Map<int, int> _regDaily = {};
   bool _regLoading = false;
+  final Map<String, Map<int, int>> _regDailyCache = {};
 
   Map<int, int> get regDaily => _regDaily;
   bool get regLoading => _regLoading;
 
   Future<void> fetchRegistrationsDaily(int year, int month) async {
+    final cacheKey = '${year}_$month';
+    // Bulan lampau tidak berubah lagi → cache permanen; bulan berjalan
+    // di-refetch tiap kali dibuka.
+    final isCurrentMonth =
+        year == DateTime.now().year && month == DateTime.now().month;
+    if (!isCurrentMonth && _regDailyCache.containsKey(cacheKey)) {
+      if (_regDaily == _regDailyCache[cacheKey]) return;
+      _regDaily = _regDailyCache[cacheKey]!;
+      if (!_disposed) notifyListeners();
+      return;
+    }
     _regLoading = true;
     if (!_disposed) notifyListeners();
     try {
       _regDaily = await _service.fetchRegistrationsDaily(year, month);
+      _regDailyCache[cacheKey] = _regDaily;
     } catch (e) {
       debugPrint('[ADMIN] fetchRegistrationsDaily error: $e');
       _regDaily = {};
@@ -377,15 +395,25 @@ Future<void> fetchDevices() async {
   // ── Statistik penggunaan data Supabase ──
   Map<String, dynamic>? _storageStats;
   bool _storageStatsLoading = false;
+  DateTime? _storageStatsAt;
+  static const _storageTtl = Duration(minutes: 10);
 
   Map<String, dynamic>? get storageStats => _storageStats;
   bool get storageStatsLoading => _storageStatsLoading;
 
-  Future<void> fetchStorageStats() async {
+  /// TTL 10 menit — kartu Overview remount tidak menembak RPC berulang.
+  Future<void> fetchStorageStats({bool force = false}) async {
+    if (!force &&
+        _storageStats != null &&
+        _storageStatsAt != null &&
+        DateTime.now().difference(_storageStatsAt!) < _storageTtl) {
+      return;
+    }
     _storageStatsLoading = true;
     if (!_disposed) notifyListeners();
     try {
       _storageStats = await _service.getStorageStats();
+      _storageStatsAt = DateTime.now();
     } catch (e) {
       debugPrint('[ADMIN] fetchStorageStats error: $e');
     }
@@ -492,6 +520,7 @@ Future<void> fetchDevices() async {
   bool _activeCallsLoading = false;
   RealtimeChannel? _callChannel;
   Timer? _callRealtimeDebounce;
+  int _sweepCounter = 0;
 
   List<ActiveCallInfo> get activeCalls => _activeCalls;
   bool get activeCallsLoading => _activeCallsLoading;
@@ -506,11 +535,13 @@ Future<void> fetchDevices() async {
     if (_activeCallsLoading) return;
     _activeCallsLoading = true;
     try {
-      // Bersihkan zombie dulu (app dipaksa tutup saat call → row menggantung),
-      // lalu ambil daftar aktif. Hasil sweep juga memicu realtime UPDATE.
-      try {
-        await _service.sweepStaleCalls();
-      } catch (_) {}
+      // Sweep zombie hanya tiap panggilan ke-12 (fallback ~12 menit pada
+      // polling 60 dtk) — realtime UPDATE sudah memicu refresh instan.
+      if (_sweepCounter++ % 12 == 0) {
+        try {
+          await _service.sweepStaleCalls();
+        } catch (_) {}
+      }
       _activeCalls = await _service.getActiveCalls();
       _detectNewCalls(_activeCalls);
     } catch (e) {
