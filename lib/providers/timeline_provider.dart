@@ -35,6 +35,10 @@ class TimelineProvider extends ChangeNotifier {
 
   // Cache per scope — emit instant saat tab switch, server menyusul.
   final Map<String, _ScopeCache> _scopeCache = {};
+  // Kapan terakhir scope ini sukses fetch dari server — tab yang masih
+  // fresh (<30s) TIDAK di-fetch ulang saat diswitch (klik terasa instan,
+  // pola sama dengan list chat).
+  final Map<String, DateTime> _lastLoadedAt = {};
   // Cache komentar per postId — buka comment instant, server menyusul.
   final Map<String, List<Map<String, dynamic>>> _commentCache = {};
 
@@ -354,11 +358,33 @@ class TimelineProvider extends ChangeNotifier {
     // Kalau sedang loading scope LAIN, tetap emit cache scope baru dulu
     // supaya tab switch terasa instant, lalu lanjut fetch setelah selesai.
     if (_loading && _scope == scope) return;
+    final cached = _scopeCache[scope];
+    final fresh = cached != null &&
+        cached.posts.isNotEmpty &&
+        _lastLoadedAt[scope] != null &&
+        DateTime.now().difference(_lastLoadedAt[scope]!) <
+            const Duration(seconds: 30);
     _scope = scope;
     if (refresh) {
       _cursor = null;
       _cursorBoosted = false;
       _hasMore = true;
+
+      // Tab yang datanya masih fresh: langsung pakai cache & SELESAI —
+      // tanpa network, tanpa flag loading. Ini yang bikin klik tab terasa
+      // secepat pindah menu chat.
+      if (fresh) {
+        _posts
+          ..clear()
+          ..addAll(cached.posts);
+        _cursor = cached.cursor;
+        _cursorBoosted = cached.cursorBoosted;
+        _hasMore = cached.hasMore;
+        _invalidateView();
+        notifyListeners();
+        return;
+      }
+
       // Cache daftar followee — dipakai filter realtime untuk scope
       // 'following' (payload realtime tidak membawa is_following).
       if (scope == 'following') _refreshFollowedIds();
@@ -371,7 +397,6 @@ class TimelineProvider extends ChangeNotifier {
       // Emit cache scope baru DULU — instant tanpa network.
       // Konten tab sebelumnya diganti atomik dengan cache tab baru.
       // Server menyusul dan update feed dengan data fresh.
-      final cached = _scopeCache[scope];
       if (cached != null && cached.posts.isNotEmpty) {
         _posts
           ..clear()
@@ -385,11 +410,12 @@ class TimelineProvider extends ChangeNotifier {
         // Cache memori kosong (cold start) — coba disk.
         _loadDiskScope(scope);
       }
-      // Kalau tidak ada cache: biarkan _posts apa adanya (konten scope lama
-      // tetap tampil selama fetch) supaya tidak pernah blink ke empty state.
     }
-    _loading = true;
-    notifyListeners();
+    if (cached == null || cached.posts.isEmpty) {
+      // Spinner HANYA saat tidak ada apa pun untuk ditampilkan.
+      _loading = true;
+      notifyListeners();
+    }
     try {
       final list = await _service.listPosts(
         scope,
@@ -433,6 +459,7 @@ class TimelineProvider extends ChangeNotifier {
       }
       // Simpan hasil fetch terbaru ke cache scope ini.
       _syncScopeCache();
+      _lastLoadedAt[scope] = DateTime.now();
       _scheduleDiskSave();
     } catch (e) {
       debugPrint('[TimelineProvider] load error: $e');
