@@ -32,7 +32,8 @@ class AdminPanelScreen extends StatefulWidget {
   State<AdminPanelScreen> createState() => _AdminPanelScreenState();
 }
 
-class _AdminPanelScreenState extends State<AdminPanelScreen> {
+class _AdminPanelScreenState extends State<AdminPanelScreen>
+    with WidgetsBindingObserver {
   final _bonusCtrl = TextEditingController(text: '100');
   final _logoutCtrl = TextEditingController();
   Timer? _statsTimer;
@@ -85,6 +86,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final admin = context.read<AdminProvider>();
     Future.microtask(() => admin.fetchStats());
     _loadPointSettings();
@@ -96,15 +98,44 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
     _notifSub = admin.notifications.listen((msg) => _showAdminNotification(msg));
     // Polling ringan → angka statistik selalu segar tanpa loading flash.
+    // Server meng-cache admin_stats 5 menit, jadi tiap poll = O(1) di DB.
     _statsTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _pollStats(),
     );
   }
 
-  void _startNotifyPolling() {
+  /// App di-background → stop semua polling (hemat baterai & beban DB);
+  /// resume → refresh sekarang lalu jalan lagi.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _statsTimer?.cancel();
+      _statsTimer = null;
+      _notifyTimer?.cancel();
+      _notifyTimer = null;
+    } else if (state == AppLifecycleState.resumed) {
+      if (mounted && _statsTimer == null) {
+        unawaited(_pollStats());
+        _statsTimer = Timer.periodic(
+          const Duration(seconds: 30),
+          (_) => _pollStats(),
+        );
+        if (_notifyTimer == null) _startNotifyPolling(immediate: true);
+      }
+    }
+  }
+
+  void _startNotifyPolling({bool immediate = false}) {
     if (!mounted) return;
-    _notifyTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    if (immediate) {
+      final a = context.read<AdminProvider>();
+      a.fetchDevices();
+      a.fetchActiveCalls();
+    }
+    // 60 dtk cukup — realtime call sudah instan; devices hanya sumber
+    // notifikasi "device baru" (RPC ter-index, murah).
+    _notifyTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!mounted) return;
       final a = context.read<AdminProvider>();
       a.fetchDevices();
@@ -181,6 +212,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _statsTimer?.cancel();
     _notifyTimer?.cancel();
     _notifSub?.cancel();
@@ -277,7 +309,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 ? _errorView(admin, s)
                 : RefreshIndicator(
                     onRefresh: () async {
-                      await admin.fetchStats();
+                      // force = server hitung ulang sekarang (lewati cache 5 mnt).
+                      await admin.fetchStats(force: true);
                       if (mounted)
                         setState(() => _lastUpdated = DateTime.now());
                     },
@@ -314,7 +347,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 ? _errorView(admin, s)
                 : RefreshIndicator(
                     onRefresh: () async {
-                      await admin.fetchStats();
+                      await admin.fetchStats(); // cache server 5 mnt — cukup
                       if (mounted)
                         setState(() => _lastUpdated = DateTime.now());
                     },

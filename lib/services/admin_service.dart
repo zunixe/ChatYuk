@@ -12,6 +12,12 @@ class AdminService {
     return res as Map<String, dynamic>;
   }
 
+  /// Paksa server menghitung ulang statistik (pull-to-refresh).
+  Future<Map<String, dynamic>> getStatsForce() async {
+    final res = await _sb.rpc('admin_stats_force');
+    return res as Map<String, dynamic>;
+  }
+
   /// Detail data per kategori untuk card Overview (list user/room).
   Future<Map<String, dynamic>> getStatsDetail() async {
     final res = await _sb.rpc('admin_stats_detail');
