@@ -26,7 +26,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab> {
   final _scrollCtrl = ScrollController();
   String _query = '';
   Timer? _refreshTimer;
-  bool _byDevice = false;
+  bool _byDevice = true;
 
   @override
   void initState() {
@@ -159,25 +159,26 @@ class _AdminDevicesTabState extends State<AdminDevicesTab> {
               Expanded(
                 child: Text(s.adminDeviceTitle, style: AppText.titleEmphasis),
               ),
-              // Toggle tampilan: per user (default) / per device.
-              Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgInput,
-                  borderRadius: BorderRadius.circular(10),
+              // Toggle tampilan: per device / per user (default).
+              // Urutan chip: Per Device kiri, Per User kanan (terpilih saat buka).
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgInput,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _seg(s.adminDeviceByDevice, _byDevice, () {
+                        setState(() => _byDevice = true);
+                      }),
+                      _seg(s.adminDeviceByUser, !_byDevice, () {
+                        setState(() => _byDevice = false);
+                      }),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _seg(s.adminDeviceByUser, !_byDevice, () {
-                      setState(() => _byDevice = false);
-                    }),
-                    _seg(s.adminDeviceByDevice, _byDevice, () {
-                      setState(() => _byDevice = true);
-                    }),
-                  ],
-                ),
-              ),
               IconButton(
                 icon: Icon(Icons.refresh_rounded, color: AppTheme.primary),
                 onPressed: () => admin.fetchDevices(),
