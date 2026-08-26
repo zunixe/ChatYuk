@@ -213,7 +213,12 @@ class _MissionsScreenState extends State<MissionsScreen>
       onRefresh: _load,
       color: AppTheme.primary,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+        padding: EdgeInsets.fromLTRB(
+          12,
+          4,
+          12,
+          MediaQuery.of(context).padding.bottom + 24,
+        ),
         itemCount: items.length,
         itemBuilder: (_, i) => _MissionCard(
           data: Map<String, dynamic>.from(items[i] as Map),

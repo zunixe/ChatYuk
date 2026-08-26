@@ -431,9 +431,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(_showUsers ? Icons.chat : Icons.people),
-            onPressed: () => setState(() => _showUsers = !_showUsers),
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: _HeaderToggle(
+              showUsers: _showUsers,
+              onTap: () => setState(() => _showUsers = !_showUsers),
+            ),
           ),
         ],
       ),
@@ -652,7 +655,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               ),
             ),
             ListTile(
-              leading: Icon(Icons.chat_bubble, color: AppTheme.primary),
+              leading: _SheetIcon(
+                icon: Icons.chat_rounded,
+                color: AppTheme.primary,
+              ),
               title: Text(
                 s.titlePrivateChat,
                 style: TextStyle(color: AppTheme.textPrimary),
@@ -711,7 +717,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               },
             ),
             ListTile(
-              leading: const Icon(Icons.block, color: AppTheme.danger),
+              leading: const _SheetIcon(
+                icon: Icons.block_rounded,
+                color: AppTheme.danger,
+              ),
               title: Text(
                 s.btnBlock,
                 style: const TextStyle(color: AppTheme.danger),
@@ -730,7 +739,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               },
             ),
             ListTile(
-              leading: const Icon(Icons.flag, color: Colors.orange),
+              leading: const _SheetIcon(
+                icon: Icons.flag_rounded,
+                color: Colors.orange,
+              ),
               title: Text(
                 s.btnReport,
                 style: const TextStyle(color: Colors.orange),
@@ -1036,7 +1048,7 @@ class _MessageBubble extends StatelessWidget {
                         SizedBox(width: 3),
                         Icon(
                           Icons.verified,
-                          size: 13,
+                          size: 14,
                           color: Color(0xFF4A90E2),
                         ),
                       ],
@@ -1189,7 +1201,7 @@ class _ChatInputState extends State<_ChatInput> {
                   child: IconButton(
                     onPressed: () =>
                         EmojiPickerSheet.show(context, widget.controller),
-                    icon: Icon(Icons.emoji_emotions_outlined, size: 22),
+                    icon: Icon(Icons.emoji_emotions_rounded, size: 24),
                     color: AppTheme.textSecondary,
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
@@ -1234,10 +1246,7 @@ class _ChatInputState extends State<_ChatInput> {
                           ),
                         ),
                         _RoomInputIconBtn(
-                          icon: widget.showAttachRow
-                              ? Icons.close
-                              : Icons.add_circle_outline,
-                          color: AppTheme.primary,
+                          open: widget.showAttachRow,
                           onTap: widget.onToggleAttach,
                           tooltip: s.menuSendPhoto,
                         ),
@@ -1261,16 +1270,37 @@ class _ChatInputState extends State<_ChatInput> {
                       ? const SizedBox(width: 0, key: ValueKey('empty'))
                       : SizedBox(
                           key: const ValueKey('send'),
-                          width: 48,
-                          height: 48,
-                          child: IconButton(
-                            onPressed: widget.onSend,
-                            icon: const Icon(Icons.send_rounded, size: 22),
-                            color: Colors.white,
-                            padding: EdgeInsets.zero,
-                            style: IconButton.styleFrom(
-                              backgroundColor: AppTheme.primary,
-                              shape: const CircleBorder(),
+                          width: 44,
+                          height: 44,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  AppTheme.primaryDark,
+                                  AppTheme.primary,
+                                  AppTheme.accent,
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primary.withValues(alpha: 0.35),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: IconButton(
+                              onPressed: widget.onSend,
+                              icon: const Icon(Icons.send_rounded, size: 20),
+                              color: Colors.white,
+                              padding: EdgeInsets.zero,
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shape: const CircleBorder(),
+                              ),
                             ),
                           ),
                         ),
@@ -1286,14 +1316,14 @@ class _ChatInputState extends State<_ChatInput> {
                       child: Row(
                         children: [
                           _RoomAttachChip(
-                            icon: Icons.image_outlined,
+                            icon: Icons.image_rounded,
                             color: AppTheme.primary,
                             label: s.menuSendPhoto,
                             onTap: widget.onSendPhoto,
                           ),
                           const SizedBox(width: 12),
                           _RoomAttachChip(
-                            icon: Icons.timer_outlined,
+                            icon: Icons.timer_rounded,
                             color: Colors.orange,
                             label: s.menuViewOnce,
                             onTap: widget.onSendViewOnce,
@@ -1311,13 +1341,11 @@ class _ChatInputState extends State<_ChatInput> {
 }
 
 class _RoomInputIconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color;
+  final bool open;
   final VoidCallback onTap;
   final String tooltip;
   const _RoomInputIconBtn({
-    required this.icon,
-    required this.color,
+    required this.open,
     required this.onTap,
     required this.tooltip,
   });
@@ -1328,13 +1356,103 @@ class _RoomInputIconBtn extends StatelessWidget {
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
+        borderRadius: BorderRadius.circular(15),
+        child: Container(
           width: 30,
-          height: 48,
-          child: Icon(icon, color: color, size: 22),
+          height: 30,
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
+          ),
+          child: AnimatedRotation(
+            turns: open ? 0.125 : 0,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutBack,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: ScaleTransition(scale: anim, child: child),
+              ),
+              child: Icon(
+                open ? Icons.close_rounded : Icons.add_rounded,
+                key: ValueKey(open),
+                color: AppTheme.primary,
+                size: 20,
+              ),
+            ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Toggle header room: pill squircle dengan icon beranimasi
+/// anggota ⇄ chat — lebih jelas afordansinya daripada icon polos.
+class _HeaderToggle extends StatelessWidget {
+  final bool showUsers;
+  final VoidCallback onTap;
+  const _HeaderToggle({required this.showUsers, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    return Tooltip(
+      message: showUsers ? s.roomShowChat : s.roomShowMembers,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: showUsers
+                ? AppTheme.primary
+                : AppTheme.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: ScaleTransition(scale: anim, child: child),
+            ),
+            child: Icon(
+              showUsers ? Icons.forum_rounded : Icons.groups_rounded,
+              key: ValueKey(showUsers),
+              size: 20,
+              color: showUsers ? Colors.white : AppTheme.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Icon dalam lingkaran tinted untuk item bottom sheet — konsisten
+/// gaya modern, warna membedakan aksi.
+class _SheetIcon extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  const _SheetIcon({required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Icon(icon, color: color, size: 20),
     );
   }
 }

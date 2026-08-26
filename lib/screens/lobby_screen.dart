@@ -125,10 +125,10 @@ class _LobbyScreenState extends State<LobbyScreen>
                     height: 36,
                     decoration: BoxDecoration(
                       color: AppTheme.primary.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      Icons.public,
+                      Icons.public_rounded,
                       color: AppTheme.primary,
                       size: 20,
                     ),
@@ -373,7 +373,12 @@ class _GlobalRoomsTab extends StatelessWidget {
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.of(context).padding.bottom + 24,
+      ),
       itemCount: rooms.length,
       itemBuilder: (_, i) => _RoomCard(room: rooms[i]),
     );
@@ -452,7 +457,7 @@ class _PrivateRoomsTab extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.add, color: Colors.white, size: 18),
+                    const Icon(Icons.add_rounded, color: Colors.white, size: 18),
                     const SizedBox(width: 6),
                     Text(
                       s.btnCreateRoom,
@@ -816,7 +821,10 @@ class _PrivateRoomCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.more_time, color: AppTheme.primary),
+              leading: _SheetIcon(
+                icon: Icons.more_time_rounded,
+                color: AppTheme.primary,
+              ),
               title: Text(
                 s.btnExtendRoom,
                 style: TextStyle(color: AppTheme.textPrimary),
@@ -824,7 +832,10 @@ class _PrivateRoomCard extends StatelessWidget {
               onTap: () => Navigator.pop(ctx, 'extend'),
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppTheme.danger),
+              leading: const _SheetIcon(
+                icon: Icons.delete_outline_rounded,
+                color: AppTheme.danger,
+              ),
               title: Text(
                 s.btnDeleteRoom,
                 style: const TextStyle(color: AppTheme.danger),
@@ -957,7 +968,7 @@ class _PrivateRoomCard extends StatelessWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     color: AppTheme.accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
                     child: Text(
@@ -983,8 +994,8 @@ class _PrivateRoomCard extends StatelessWidget {
                           if (room.hasPassword) ...[
                             SizedBox(width: 4),
                             Icon(
-                              Icons.lock,
-                              size: 13,
+                              Icons.lock_rounded,
+                              size: 14,
                               color: AppTheme.textSecondary,
                             ),
                           ],
@@ -1072,7 +1083,7 @@ class _PrivateRoomCard extends StatelessWidget {
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
-        child: const Icon(Icons.delete_outline, color: Colors.white, size: 28),
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 24),
       ),
       child: card,
     );
@@ -1116,7 +1127,7 @@ class _RoomCard extends StatelessWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
                     child: Text(
@@ -1183,6 +1194,27 @@ class _RoomCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Icon dalam squircle tinted untuk item menu � gaya konsisten
+/// dengan bottom sheet lain.
+class _SheetIcon extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  const _SheetIcon({required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Icon(icon, color: color, size: 20),
     );
   }
 }

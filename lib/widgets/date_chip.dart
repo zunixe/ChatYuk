@@ -31,20 +31,24 @@ class DateChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Overlay chip 20% di kedua mode (gelap: putih 20%, terang: hitam 20%).
+    final isDark = AppTheme.isDark;
     return Center(
       child: Container(
         margin: EdgeInsets.symmetric(vertical: 6),
         padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.06),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.20)
+              : Colors.black.withValues(alpha: 0.20),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           label,
           style: AppText.label.copyWith(
-            color: AppTheme.textSecondary,
+            color: isDark ? AppTheme.textSecondary : const Color(0xFF424242),
             letterSpacing: 0,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),

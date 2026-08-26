@@ -206,7 +206,12 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
                   onRefresh: () => admin.fetchChats(),
                   child: ListView.builder(
                     controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    padding: EdgeInsets.fromLTRB(
+                      12,
+                      0,
+                      12,
+                      MediaQuery.of(context).padding.bottom + 12,
+                    ),
                     itemCount:
                         _sortedFiltered(admin.chats, admin.activeCallsByChat).length +
                         (admin.chatsHasMore ? 1 : 0),

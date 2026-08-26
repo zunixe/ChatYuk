@@ -73,7 +73,12 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: EdgeInsets.all(12),
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  12,
+                  12,
+                  MediaQuery.of(context).padding.bottom + 24,
+                ),
                 children: [
                   if (_inbox.isNotEmpty) ...[
                     Text(

@@ -207,7 +207,12 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 final hasMore = paged.length < filtered.length;
                 return ListView.builder(
                   controller: _scrollCtrl,
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    16,
+                    16,
+                    MediaQuery.of(context).padding.bottom + 16,
+                  ),
                   itemCount: paged.length + (hasMore ? 1 : 0),
                   itemBuilder: (_, i) {
                     if (i >= paged.length) {
