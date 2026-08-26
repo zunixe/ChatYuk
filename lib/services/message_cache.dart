@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message_model.dart';
+import 'message_store.dart';
 
 // Top-level function untuk compute() — encrypt + write di background isolate
 Future<void> _encSave(Map<String, dynamic> args) async {
@@ -239,22 +240,49 @@ class MessageCache {
   /// Kirim list kosong untuk menghapus cache chat tersebut.
   /// imageData di-strip (foto disimpan terpisah di PhotoCache) supaya
   /// cache pesan tetap kecil dan cepat dibaca.
+  ///
+  /// Layer disk = SQLite terenkripsi (MessageStore), bukan lagi blob prefs.
   Future<void> saveMessages(String chatKey, List<MessageModel> messages) async {
     _memCacheUpdate(chatKey, messages);
-    final prefs = await SharedPreferences.getInstance();
-    if (messages.isEmpty) {
-      await prefs.remove('$_keyPrefix$chatKey');
-      return;
+    try {
+      await _ensureDb();
+      if (messages.isEmpty) {
+        await MessageStore.instance.clearChat(chatKey);
+      } else {
+        await MessageStore.instance.saveMessages(
+          chatKey,
+          messages.map((m) {
+            final map = m.toMap();
+            map['imageData'] = '';
+            return MessageModel.fromMap(m.id, map);
+          }).toList(),
+        );
+      }
+    } catch (e) {
+      debugPrint('[MessageCache] saveMessages $chatKey ignored: $e');
     }
+  }
+
+  /// Buka DB SQLite dengan passphrase dari kunci AES secure storage.
+  Future<void> _ensureDb() async {
+    if (MessageStore.instance.isOpen) return;
     final key = await _getKey();
-    final data = messages.map((m) => {...m.toMap(), 'imageData': ''}).toList();
-    final plain = jsonEncode(data);
-    final keyBytes = await key.extractBytes();
-    await compute(_encSave, {
-      'prefsKey': '$_keyPrefix$chatKey',
-      'plaintext': plain,
-      'keyBytes': keyBytes,
-    });
+    await MessageStore.instance.open(base64Encode(await key.extractBytes()));
+  }
+
+  /// Warm-up saat bootstrap: buka DB + baca kunci lebih awal supaya buka
+  /// chat pertama tidak menanggung latensi Keystore, dan sekalian purge
+  /// sisa cache prefs format lama v2.
+  Future<void> prewarmDb() async {
+    try {
+      await _ensureDb();
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs
+          .getKeys()
+          .where((k) => k.startsWith(_keyPrefix))
+          .toList();
+      for (final k in keys) await prefs.remove(k);
+    } catch (_) {}
   }
 
   // ── List private chat (persist antar restart app) ────────────────────────
@@ -341,38 +369,26 @@ class MessageCache {
   }
 
   /// Ambil pesan cache (null jika tidak ada).
+  /// Fast path: mem-cache. Slow path: SQLite terenkripsi (satu query).
   Future<List<MessageModel>> loadMessages(String chatKey) async {
     // Fast path: sudah pernah dibuka sesi ini — langsung pakai mem-cache
-    // tanpa perlu decrypt sama sekali.
+    // tanpa perlu query DB sama sekali.
     final mem = _memCache[chatKey];
     if (mem != null) {
       _memCacheUpdate(chatKey, mem); // refresh urutan LRU
       return mem;
     }
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final enc = prefs.getString('$_keyPrefix$chatKey');
-      if (enc == null || enc.isEmpty) return [];
-      final key = await _getKey();
-      final keyBytes = await key.extractBytes();
-      // Decrypt + parse di isolate — jangan block UI saat cache besar.
-      final list = await compute(_decLoad, {
-        'encoded': enc,
-        'keyBytes': keyBytes,
-      });
-      if (list == null) return [];
-      final msgs = list
-          .map(
-            (e) => MessageModel.fromMap(
-              'cached',
-              Map<String, dynamic>.from(e as Map),
-            ),
-          )
-          .toList();
+      final sw = Stopwatch()..start();
+      await _ensureDb();
+      final msgs = await MessageStore.instance.loadMessages(chatKey);
+      debugPrint(
+        '[CACHE-TIME] $chatKey sqlite=${sw.elapsedMilliseconds}ms n=${msgs.length}',
+      );
       _memCacheUpdate(chatKey, msgs);
       return msgs;
     } catch (e) {
-      // Cache corrupt / key mismatch — abaikan, tampilkan dari server.
+      debugPrint('[MessageCache] loadMessages $chatKey error: $e');
       return [];
     }
   }
@@ -390,9 +406,12 @@ class MessageCache {
     }
   }
 
-  /// Hapus SEMUA cache versi lama & baru (dipakai saat logout / reset).
+  /// Hapus SEMUA cache (dipakai saat logout / reset).
   Future<void> clearAllLegacy() async {
     _memCache.clear();
+    try {
+      await MessageStore.instance.clearAll();
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     for (final prefix in [
       'chat_cache_v1_',
