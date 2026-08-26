@@ -56,6 +56,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       type == 'friend_request' ||
       type == 'subscribe' ||
       type == 'call';
+  final isMessage = type == 'message' ||
+      (type == null && data.containsKey('chatId'));
   final title = isDataOnly
       ? data['otherName'] ?? data['fromName'] ?? 'User'
       : message.notification?.title ??
@@ -70,7 +72,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
             : type == 'friend_request'
             ? 'sent you a friend request'
             : 'subscribed to you')
-      : message.notification?.body ?? 'You have a new message';
+      : message.notification?.body ?? (isMessage ? 'New message' : 'You have a new message');
 
   final androidInit = const lpn.AndroidInitializationSettings(
     '@mipmap/ic_launcher',
@@ -78,6 +80,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final settings = lpn.InitializationSettings(android: androidInit);
   final plugin = lpn.FlutterLocalNotificationsPlugin();
   await plugin.initialize(settings: settings);
+  await _ensureAndroidChannels(plugin);
 
   // Panggilan masuk → notifikasi gaya telepon: suara alarm (loop channel),
   // full-screen intent, tampil di lockscreen. Channel 'chatyuk_calls' dibuat
@@ -115,6 +118,45 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     notificationDetails: lpn.NotificationDetails(android: androidDetails),
     payload: jsonEncode(data),
   );
+}
+
+/// Buat channel notifikasi Android wajib (Android 8+ butuh channel terlebih
+/// dahulu — tanpa ini notifikasi lokal & FCM tidak muncul). Dipanggil dari
+/// background handler DAN `_initNotifications`.
+Future<void> _ensureAndroidChannels(
+  lpn.FlutterLocalNotificationsPlugin plugin,
+) async {
+  const chat = lpn.AndroidNotificationChannel(
+    'chatyuk_chat',
+    'Chat Notifications',
+    description: 'New message notifications from chat',
+    importance: lpn.Importance.high,
+  );
+  const calls = lpn.AndroidNotificationChannel(
+    'chatyuk_calls',
+    'Incoming Calls',
+    description: 'Incoming call alerts with ringtone',
+    importance: lpn.Importance.max,
+    playSound: true,
+  );
+  const active = lpn.AndroidNotificationChannel(
+    'call_active',
+    'ChatYuk Calls',
+    description: 'Ongoing call notification',
+    importance: lpn.Importance.low,
+  );
+  await plugin
+      .resolvePlatformSpecificImplementation<
+          lpn.AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(chat);
+  await plugin
+      .resolvePlatformSpecificImplementation<
+          lpn.AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(calls);
+  await plugin
+      .resolvePlatformSpecificImplementation<
+          lpn.AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(active);
 }
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
@@ -291,6 +333,21 @@ Future<void> _initNotifications() async {
       } catch (_) {}
     },
   );
+  // Android 8+: wajib buat channel sebelum show notif. Android 13+: wajib
+  // dapat izin runtime POST_NOTIFICATIONS — tanpa keduanya notifikasi tidak
+  // pernah muncul meski FCM terkirim.
+  await _ensureAndroidChannels(localNotifications);
+  if (kIsWeb == false) {
+    try {
+      final androidImpl = localNotifications
+          .resolvePlatformSpecificImplementation<
+              lpn.AndroidFlutterLocalNotificationsPlugin>();
+      final granted = await androidImpl?.requestNotificationsPermission();
+      debugPrint('[NOTIF] POST_NOTIFICATIONS granted=$granted');
+    } catch (e) {
+      debugPrint('[NOTIF] requestNotificationsPermission error: $e');
+    }
+  }
 
   if (!_firebaseReady) {
     debugPrint('[FCM] dilewati, Firebase belum init');
