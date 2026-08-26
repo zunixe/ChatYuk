@@ -458,6 +458,20 @@ class S {
 
   // ── Errors / Generic ──
   String get btnCancel => isId ? 'Batal' : 'Cancel';
+  String get privateRoomsStopBroadcast => isId ? 'Hentikan broadcast' : 'Stop broadcast';
+
+  String get roomActionHandRaise => isId ? 'Angkat tangan' : 'Raise hand';
+
+  String get roomHandRaised => isId ? 'Tangan diangkat — tunggu admin mengizinkan' : 'Hand raised — waiting for admin approval';
+
+  String get privateRoomsLiveConnecting => isId ? 'Menyambungkan...' : 'Connecting...';
+
+  String get privateRoomsMembersTitle => isId ? 'Anggota' : 'Members';
+
+  String get privateRoomsPendingQueue => isId ? 'Menunggu Persetujuan' : 'Pending Approvals';
+
+  String get privateRoomsTitle => isId ? 'Room Privat' : 'Private Rooms';
+
   String get btnClose => isId ? 'Tutup' : 'Close';
   String get msgStartConversation =>
       isId ? 'Mulai percakapan!' : 'Start the conversation!';
