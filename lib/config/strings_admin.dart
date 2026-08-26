@@ -132,6 +132,73 @@ extension SAdminX on S {
       isId ? 'Tidak ada device tercatat' : 'No devices recorded';
   String get adminDeletedUid => isId ? 'UID Asli' : 'Original UID';
 
+  String get privateRoomsScanQr => isId ? 'Scan QR' : 'Scan QR';
+  String get privateRoomsEmpty => isId
+      ? 'Belum ada room privat. Buat baru atau scan QR undangan.'
+      : 'No private rooms yet. Create one or scan an invite QR.';
+  String get privateRoomsYouAreOwner =>
+      isId ? 'kamu pemiliknya' : 'you are the owner';
+  String get privateRoomsLive => isId ? 'LIVE' : 'LIVE';
+  String get privateRoomsMaxNote => isId
+      ? 'Maks 20 member · join via QR wajib disetujui admin'
+      : 'Max 20 members · QR joins require admin approval';
+  String get privateRoomsQrHint => isId
+      ? 'Bagikan QR ini. Yang scan akan masuk antrean dan harus di-approve.'
+      : 'Share this QR. Scanners join a queue and need your approval.';
+  String get privateRoomsCopyLink => isId ? 'Salin Link QR' : 'Copy QR Link';
+  String get privateRoomsRotateQr =>
+      isId ? 'Ganti Kode QR (QR lama mati)' : 'Rotate QR (old QR dies)';
+  String get privateRoomsRotated =>
+      isId ? 'QR baru dibuat, QR lama mati' : 'New QR created, old QR revoked';
+  String get privateRoomsEnterRoom => isId ? 'Masuk Room' : 'Enter Room';
+  String get createRoomNameLabel =>
+      isId ? 'Nama Room (3-30 karakter)' : 'Room Name (3-30 chars)';
+  String get privateRoomsJoinPendingTitle =>
+      isId ? 'Menunggu Persetujuan' : 'Awaiting Approval';
+  String get privateRoomsJoinPendingBody => isId
+      ? 'Request join terkirim. Tunggu admin menyetujui — kamu akan bisa masuk setelah itu.'
+      : 'Join request sent. Wait for admin approval before entering.';
+  String get privateRoomsJoinedTitle =>
+      isId ? 'Berhasil Masuk' : 'Joined Successfully';
+  String get privateRoomsJoinedBody =>
+      isId ? 'Kamu resmi jadi member room ini.' : 'You are now a member of this room.';
+  String get roomHandRaised => isId
+      ? 'Tangan diangkat — tunggu admin mengizinkan'
+      : 'Hand raised — waiting for admin approval';
+  String get privateRoomsLiveConnecting => isId
+      ? 'Menyambungkan...'
+      : 'Connecting...';
+  String get roomShowChat => isId ? 'Chat' : 'Chat';
+  String get roomShowMembers => isId ? 'Anggota' : 'Members';
+
+  String get privateRoomsScanHint => isId
+      ? 'Arahkan kamera ke QR undangan room'
+      : 'Point the camera at a room invite QR';
+  String get privateRoomsShowQr =>
+      isId ? 'Kode QR Undangan' : 'Invite QR';
+  String get privateRoomsMembersTitle =>
+      isId ? 'Anggota' : 'Members';
+  String get privateRoomsPendingQueue =>
+      isId ? 'Menunggu Persetujuan' : 'Pending Approvals';
+  String get roomRoleOwner => isId ? 'Pemilik' : 'Owner';
+  String get roomRoleAdmin => isId ? 'Admin' : 'Admin';
+  String get roomRoleMember => isId ? 'Member' : 'Member';
+  String get roomActionPromote => isId
+      ? 'Jadikan admin'
+      : 'Promote to admin';
+  String get roomActionDemote => isId
+      ? 'Turunkan jadi member'
+      : 'Demote to member';
+  String get roomActionKick => isId ? 'Keluarkan' : 'Remove';
+  String get roomActionBroadcast =>
+      isId ? 'Izinkan Broadcast' : 'Allow Broadcast';
+  String get roomKickConfirmTitle => isId
+      ? 'Keluarkan dari room?'
+      : 'Remove from room?';
+  String get roomKickConfirmBody => isId
+      ? 'User bisa request masuk lagi, tapi harus di-approve.'
+      : 'They can request again but must be approved.';
+
   String get adminContactEmpty =>
       isId ? 'Belum ada pesan kontak' : 'No contact messages yet';
 

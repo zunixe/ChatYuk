@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import 'room_chat_screen.dart';
+import 'private_rooms_screen.dart';
 import '../providers/theme_provider.dart';
 
 class LobbyScreen extends StatefulWidget {
@@ -96,6 +97,21 @@ class _LobbyScreenState extends State<LobbyScreen>
                 ],
               ),
               iconTheme: IconThemeData(color: Colors.white),
+              // Fitur private room v2 (QR + admin) — admin build saja.
+              actions: [
+                if (AdminGate.panelBuilder != null)
+                  IconButton(
+                    tooltip: s.privateRoomsTitle,
+                    icon: const Icon(Icons.meeting_room_outlined),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PrivateRoomsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+              ],
             ),
       body: Column(
         children: [

@@ -38,6 +38,7 @@ class DateChip extends StatelessWidget {
         margin: EdgeInsets.symmetric(vertical: 6),
         padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
+          // Overlay chip 20% di kedua mode (gelap: putih 20%, terang: hitam 20%).
           color: isDark
               ? Colors.white.withValues(alpha: 0.20)
               : Colors.black.withValues(alpha: 0.20),
@@ -46,7 +47,7 @@ class DateChip extends StatelessWidget {
         child: Text(
           label,
           style: AppText.label.copyWith(
-            color: isDark ? AppTheme.textSecondary : const Color(0xFF424242),
+            color: Colors.white,
             letterSpacing: 0,
             fontWeight: FontWeight.w600,
           ),

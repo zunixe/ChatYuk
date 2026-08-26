@@ -178,4 +178,21 @@ class RoomService {
         });
     });
   }
+
+  /// Ambil satu room by id (untuk private room flow).
+  Future<Map<String, dynamic>?> fetchRoomById(String roomId) async {
+    try {
+      final row = await _sb
+          .from('rooms')
+          .select(
+              'id,name,description,icon,country,category,is_private,owner_id,owner_name,has_password,expires_at,created_at,live_uid,live_started_at,max_members')
+          .eq('id', roomId)
+          .maybeSingle();
+      return row;
+    } catch (e) {
+      debugPrint('[room] fetchRoomById error: $e');
+      return null;
+    }
+  }
+
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:intl/intl.dart';
@@ -15,9 +16,13 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/storage_photo_service.dart';
+import '../services/room_service.dart';
 import '../services/forensic_watermark.dart';
 import '../utils.dart';
 import '../main.dart';
+import '../services/private_room_service.dart';
+import '../services/room_broadcast_service.dart';
+import 'room_members_sheet.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
@@ -85,6 +90,21 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<UserModel>> _usersStream;
 
+  // ── Private room v2 ──
+  String? _myRole;
+  String? _liveUid;
+  int _pendingCount = 0;
+  RoomBroadcastSession? _broadcastSession;
+  bool get isPrivateRoom => widget.room.isPrivate == true;
+  bool get canModerate =>
+      isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
+  bool get iAmBroadcasting =>
+      _broadcastSession != null &&
+      _broadcastSession!.isBroadcaster &&
+      _liveUid == _auth.uid;
+  bool get watchingLive =>
+      _broadcastSession != null && !iAmBroadcasting;
+
   @override
   void initState() {
     super.initState();
@@ -96,9 +116,149 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
     _pointsProv = context.read<PointsProvider>();
+    if (isPrivateRoom) {
+      unawaited(_initPrivate());
+    }
     _joinRoom();
     _startPresenceHeartbeat();
     _scrollCtrl.addListener(_onRoomScroll);
+  }
+
+  // ── Private room v2 ──
+
+  Future<void> _initPrivate() async {
+    try {
+      _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
+      if (canModerate) {
+        try {
+          final req = await PrivateRoomService.instance
+              .listJoinRequests(widget.room.id);
+          _pendingCount = req.length;
+        } catch (_) {}
+      }
+      await _refreshLiveUid();
+      // Subscribe perubahan live_uid via stream rooms (postgres_changes
+      // sudah global; cukup poll ringan tiap 5 detik).
+      Timer.periodic(const Duration(seconds: 5), (_) => _refreshLiveUid());
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _refreshLiveUid() async {
+    final row = await RoomService().fetchRoomById(widget.room.id);
+    final live = row?['live_uid']?.toString();
+    if (!mounted) return;
+    if (live == _liveUid) return;
+    setState(() {
+      _liveUid = (live != null && live.isNotEmpty) ? live : null;
+    });
+    _syncBroadcastSession();
+  }
+
+  void _syncBroadcastSession() {
+    final iAmLive = _liveUid != null && _liveUid == _auth.uid;
+    final someoneElse = _liveUid != null &&
+        _liveUid != _auth.uid;
+
+    if (iAmLive) {
+      if (_broadcastSession == null ||
+          _broadcastSession!.isBroadcaster != true) {
+        unawaited(_startBroadcastSession());
+      }
+    } else if (someoneElse) {
+      if (_broadcastSession == null || _broadcastSession!.isBroadcaster) {
+        unawaited(_startViewerSession());
+      }
+    } else {
+      // Tidak ada live → bersihkan.
+      unawaited(_broadcastSession?.stop());
+      _broadcastSession = null;
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _startBroadcastSession() async {
+    unawaited(_broadcastSession?.stop());
+    _broadcastSession = null;
+    final session = RoomBroadcastSession(
+      roomId: widget.room.id,
+      isBroadcaster: true,
+      onEnded: () {
+        if (mounted) {
+          setState(() {
+            _broadcastSession = null;
+            _liveUid = null;
+          });
+        }
+      },
+    );
+    _broadcastSession = session;
+    await session.start();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _startViewerSession() async {
+    unawaited(_broadcastSession?.stop());
+    _broadcastSession = null;
+    final session = RoomBroadcastSession(
+      roomId: widget.room.id,
+      isBroadcaster: false,
+      onEnded: () {
+        if (mounted) {
+          setState(() => _broadcastSession = null);
+        }
+      },
+    );
+    _broadcastSession = session;
+    await session.start();
+    await session.requestStream();
+    if (mounted) setState(() {});
+  }
+
+
+  /// Hand raise — kirim signal ke admin.
+  Future<void> _raiseHand() async {
+    await PrivateRoomService.instance.sendSignal(
+      widget.room.id,
+      type: 'hand_raise',
+      payload: {'nickname': _auth.profile?.nickname ?? ''},
+    );
+    if (!mounted) return;
+    final s = context.read<LocaleProvider>().s;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(s.roomHandRaised),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _openMembersSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppTheme.bgScreen,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => RoomMembersSheet(
+        roomId: widget.room.id,
+        myRole: _myRole ?? 'member',
+        onChanged: () async {
+          if (canModerate) {
+            try {
+              final req = await PrivateRoomService.instance
+                  .listJoinRequests(widget.room.id);
+              _pendingCount = req.length;
+            } catch (_) {}
+          }
+          await _refreshLiveUid();
+          if (mounted) setState(() {});
+        },
+      ),
+    );
   }
 
   /// Heartbeat presence: refresh joined_at tiap 60 detik selama room terbuka.
@@ -431,17 +591,55 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           ],
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: _HeaderToggle(
-              showUsers: _showUsers,
-              onTap: () => setState(() => _showUsers = !_showUsers),
+          if (isPrivateRoom) ...[
+            // Hand-raise utk non-broadcaster; Stop broadcast utk broadcaster.
+            if (_liveUid == null && !canModerate)
+              IconButton(
+                tooltip: s.roomActionHandRaise,
+                icon: const Icon(Icons.pan_tool_rounded),
+                onPressed: _raiseHand,
+              ),
+            if (iAmBroadcasting)
+              IconButton(
+                tooltip: s.privateRoomsStopBroadcast,
+                icon: Icon(Icons.cancel_rounded, color: AppTheme.danger),
+                onPressed: () async {
+                  await PrivateRoomService.instance.stopBroadcast(widget.room.id);
+                  await _broadcastSession?.stop();
+                  if (mounted) setState(() { _broadcastSession = null; });
+                },
+              ),
+            IconButton(
+              tooltip: s.privateRoomsMembersTitle,
+              icon: Badge(
+                isLabelVisible:
+                    canModerate && _pendingCount > 0,
+                label: Text('$_pendingCount'),
+                child: const Icon(Icons.group_outlined),
+              ),
+              onPressed: _openMembersSheet,
             ),
-          ),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: _HeaderToggle(
+                showUsers: _showUsers,
+                onTap: () => setState(() => _showUsers = !_showUsers),
+              ),
+            ),
+          ],
         ],
       ),
       body: Column(
         children: [
+          if (isPrivateRoom &&
+              _liveUid != null &&
+              _broadcastSession != null) ...[
+            _BroadcastStage(
+              session: _broadcastSession!,
+              isBroadcaster: iAmBroadcasting,
+            ),
+          ],
           if (_showUsers)
             Container(
               height: 120,
@@ -1491,6 +1689,102 @@ class _RoomAttachChip extends StatelessWidget {
             label,
             style: AppText.caption.copyWith(color: AppTheme.textSecondary),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Stage broadcast setengah layar: video broadcaster + kontrol ringkas.
+class _BroadcastStage extends StatelessWidget {
+  const _BroadcastStage({required this.session, required this.isBroadcaster});
+
+  final RoomBroadcastSession session;
+  final bool isBroadcaster;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    return Container(
+      height: 220,
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (isBroadcaster && session.localRendererReady)
+            RTCVideoView(session.localRenderer,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                mirror: true)
+          else if (!isBroadcaster &&
+              session.remoteReady &&
+              session.remoteRenderer.srcObject != null)
+            RTCVideoView(session.remoteRenderer,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
+          else
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(strokeWidth: 2),
+                  const SizedBox(height: 8),
+                  Text(s.privateRoomsLiveConnecting,
+                      style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+          Positioned(
+            top: 8,
+            left: 10,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text('LIVE · ${session.viewerCount}',
+                  style: AppText.micro.copyWith(color: Colors.white)),
+            ),
+          ),
+          if (isBroadcaster)
+            Positioned(
+              bottom: 8,
+              right: 10,
+              child: Row(children: [
+                IconButton.filledTonal(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => session.toggleCamera(),
+                  icon: Icon(Icons.videocam_rounded,
+                      size: 18,
+                      color: session.cameraOn ? null : AppTheme.danger),
+                ),
+                const SizedBox(width: 6),
+                IconButton.filledTonal(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => session.switchCamera(),
+                  icon: const Icon(Icons.cameraswitch_rounded, size: 18),
+                ),
+                const SizedBox(width: 6),
+                IconButton.filledTonal(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () async {
+                    await PrivateRoomService.instance
+                        .stopBroadcast(session.roomId);
+                    await session.stop();
+                  },
+                  icon: const Icon(Icons.stop_circle_rounded,
+                      size: 20, color: AppTheme.danger),
+                ),
+              ]),
+            ),
+          if (!isBroadcaster)
+            Positioned(
+              bottom: 8,
+              right: 10,
+              child: Text('${session.viewerCount} peers',
+                  style: AppText.micro.copyWith(color: Colors.white54)),
+            ),
         ],
       ),
     );
