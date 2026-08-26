@@ -504,6 +504,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   await AdminGate.postInit?.call();
   await MessageCache.instance
       .clearLegacyV1Only(); // bersihkan hanya cache format lama v1
+  // Buka DB pesan (SQLite terenkripsi) + purge sisa cache prefs lama —
+  // fire-and-forget supaya buka chat pertama tidak menanggung latensi ini.
+  unawaited(MessageCache.instance.prewarmDb());
   PhotoCache.instance.cleanOldPhotos(); // fire-and-forget, hapus foto >7 hari
   if (_firebaseReady) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);

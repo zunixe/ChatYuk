@@ -394,8 +394,7 @@ class ChatService {
         final cacheF = _current.isEmpty
             ? MessageCache.instance.loadMessages(cacheKey)
             : Future<List<MessageModel>>.value(const <MessageModel>[]);
-        final cached = await cacheF;
-        if (cached.isNotEmpty && !controller.isClosed) {
+        final cached = await cacheF;        if (cached.isNotEmpty && !controller.isClosed) {
           _current = cached;
           controller.add(_current);
           loadPhotosAsync(cached);
@@ -411,7 +410,11 @@ class ChatService {
             controller.add(_current);
           }
         }
+        final swServer = Stopwatch()..start();
         final server = await fetchServer(limit: 100);
+        debugPrint(
+          '[CACHE-TIME] $cacheKey server=${swServer.elapsedMilliseconds}ms n=${server.length}',
+        );
         if (controller.isClosed) return;
         if (_hiddenCutoff != null) {
           server.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
