@@ -355,3 +355,21 @@ Catatan:
 - **Screenshot toggle**: `app_settings.screenshot_enabled` (admin `zunixe@gmail.com`) → `ScreenSecureService`
 - **Deep link**: `chatyuk://login-callback` → `lib/main.dart` `_handleDeepLink()`
 - **Google Sign-In**: native `google_sign_in` + Supabase `signInWithIdToken`. JANGAN pakai OAuth client dari project `chatyuk.admin` (banned).
+  - **WAJIB: build selalu ditandatangani `android/keystore/chatyuk-release-v2.jks`**
+    (alias `chatyuk`, pass di atas). Error `"10, null, null"` saat login Google =
+    **DEVELOPER_ERROR** → SHA-1 signing tidak terdaftar di Firebase project
+    `chatyuk-7c9e4` untuk paket `com.chatyuk.chatyuk`.
+  - **SHA-1 keystore aktif (v2):**
+    `8C:CC:42:E3:FE:93:37:21:6C:E4:25:0E:2B:FC:CB:22:94:1E:50:A2`
+    Cek kapan pun:
+    ```bash
+    keytool -list -v -keystore android/keystore/chatyuk-release-v2.jks \
+      -alias chatyuk -storepass chatyuk2024secure | grep SHA1
+    ```
+  - SHA ini harus ada di Firebase Console → Project settings → Your apps →
+    Android `com.chatyuk.chatyuk` → **SHA certificate hashes** (bersama Web
+    client `599111437536-hg56...` sebagai serverClientId). Kalau keystore baru,
+    daftarkan SHA barunya sebelum upload/rilis.
+  - Kalau SHA & client sudah benar tapi device tetap `"10, null, null"`:
+    cache Google Play Services di HP basi → hapus data Google Play Services
+    (Setelan → Aplikasi → Google Play Services → Hapus data) lalu reboot HP.
