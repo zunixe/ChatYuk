@@ -49,10 +49,15 @@ class ChatMessageStream {
   final Stream<List<MessageModel>> stream;
   final Future<void> Function() loadOlder;
   final Future<void> Function(String messageId) fetchImage;
+
+  /// Fetch ulang pesan terbaru dari server — jaring pengaman kalau event
+  /// Realtime miss (channel drop) supaya bubble pending tidak nyangkut.
+  final Future<void> Function() reload;
   const ChatMessageStream({
     required this.stream,
     required this.loadOlder,
     required this.fetchImage,
+    required this.reload,
   });
 }
 
@@ -701,6 +706,7 @@ class ChatService {
       stream: controller.stream,
       loadOlder: loadOlder,
       fetchImage: fetchImage,
+      reload: reload,
     );
   }
 

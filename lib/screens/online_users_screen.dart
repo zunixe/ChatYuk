@@ -481,7 +481,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                           )
                         : ListView.builder(
                             controller: _scrollCtrl,
-                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                            padding: EdgeInsets.fromLTRB(
+                              10,
+                              8,
+                              10,
+                              MediaQuery.of(context).padding.bottom + 12,
+                            ),
                             itemCount: paged.length + (hasMore ? 1 : 0),
                             itemBuilder: (_, i) {
                               if (i >= paged.length) {

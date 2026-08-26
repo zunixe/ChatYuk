@@ -69,7 +69,9 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView.separated(
-                padding: const EdgeInsets.only(bottom: 40),
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).padding.bottom + 40,
+                ),
                 itemCount: _items.length,
                 separatorBuilder: (_, i) =>
                     const Divider(height: 1, indent: 64),

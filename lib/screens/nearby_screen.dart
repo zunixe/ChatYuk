@@ -309,7 +309,12 @@ class _NearbyScreenState extends State<NearbyScreen> {
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+        padding: EdgeInsets.fromLTRB(
+          10,
+          8,
+          10,
+          MediaQuery.of(context).padding.bottom + 12,
+        ),
         itemCount: _users.length,
         itemBuilder: (_, i) =>
             _NearbyCard(data: _users[i], onTap: () => _startChat(_users[i])),

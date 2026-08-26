@@ -2126,7 +2126,12 @@ class _RegistrationsSheetState extends State<_RegistrationsSheet> {
                     )
                   : ListView.builder(
                       controller: scrollCtrl,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        0,
+                        16,
+                        MediaQuery.of(context).padding.bottom + 24,
+                      ),
                       itemCount: list.length,
                       itemBuilder: (_, i) {
                         final r = list[i];

@@ -76,7 +76,12 @@ class _SocialListScreenState extends State<SocialListScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView.builder(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  12,
+                  12,
+                  MediaQuery.of(context).padding.bottom + 24,
+                ),
                 itemCount: _items.length,
                 itemBuilder: (_, i) => _SocialTile(entry: _items[i]),
               ),

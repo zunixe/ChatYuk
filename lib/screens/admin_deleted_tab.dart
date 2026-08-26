@@ -180,7 +180,12 @@ class _AdminDeletedTabState extends State<AdminDeletedTab> {
                   onRefresh: () => admin.fetchDeleted(),
                   child: ListView.builder(
                     controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    padding: EdgeInsets.fromLTRB(
+                      12,
+                      0,
+                      12,
+                      MediaQuery.of(context).padding.bottom + 12,
+                    ),
                     itemCount:
                         _filtered(admin.deleted).length +
                         (admin.deletedHasMore ? 1 : 0),

@@ -102,6 +102,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   late Stream<List<PrivateChatInfo>> _chatInfoStream;
   Future<void> Function() _loadOlder = () async {};
   Future<void> Function(String messageId) _msgsHandleFetchImage = (_) async {};
+  Future<void> Function() _msgsHandleReload = () async {};
   bool _loadingOlder = false;
 
   DateTime? _otherLastRead;
@@ -167,6 +168,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _msgsStream = msgsHandle.stream;
     _loadOlder = msgsHandle.loadOlder;
     _msgsHandleFetchImage = msgsHandle.fetchImage;
+    _msgsHandleReload = msgsHandle.reload;
     // Scroll ke atas → load pesan lama (pagination)
     _scrollCtrl.addListener(_onScrollToLoadOlder);
     _chatInfoStream = chat.getMyPrivateChats(auth.uid ?? '');
@@ -290,6 +292,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   @override
   void dispose() {
     _hideActionBar();
+    _pendingConfirmTimer?.cancel();
     CallProvider.instance.removeListener(_onCallChanged);
     // Keluar chat TIDAK memutus panggilan — call lanjut berjalan dan notifikasi
     // ongoing "sedang call" tetap tampil. Tap notifikasi → kembali ke chat ini.
@@ -423,6 +426,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   bool _isSending = false;
+  Timer? _pendingConfirmTimer;
   MessageModel? _editingMessage;
   MessageModel? _replyingTo;
   StreamSubscription<void>? _typingSub;
@@ -504,10 +508,28 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       return;
     }
 
+    // Optimistic SEBELUM deduct: bubble langsung muncul instan tanpa
+    // menunggu round-trip RPC potong poin (yang bisa 1-2 detik di
+    // jaringan lambat). Gagal deduct → bubble dihapus lagi.
+    final pending = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
+      text: text,
+      type: 'text',
+      imageData: '',
+      timestamp: DateTime.now(),
+    );
+    setState(() => _pending.add(pending));
+    _scrollToBottom();
+
     // Deduct poin sebelum kirim
     final pp = context.read<PointsProvider>();
     final remaining = await pp.deductBeforeSend('text');
     if (remaining < 0) {
+      setState(() => _pending.remove(pending));
       _isSending = false;
       if (!mounted) return;
       final ss = context.read<LocaleProvider>().s;
@@ -521,18 +543,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       return;
     }
 
-    final pending = MessageModel(
-      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
-      senderId: uid,
-      senderName: profile.nickname,
-      senderGender: profile.gender,
-      isRegistered: profile.isRegistered,
-      text: text,
-      type: 'text',
-      imageData: '',
-      timestamp: DateTime.now(),
-    );
-    setState(() => _pending.add(pending));
     try {
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
@@ -546,6 +556,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       );
       if (_replyingTo != null) setState(() => _replyingTo = null);
       _maybeNewChatBonus();
+      _schedulePendingConfirmFallback();
     } catch (e) {
       // Kirim gagal → kembalikan koin yang sudah terpotong.
       debugPrint('[send] gagal chat=${widget.chatId}: $e');
@@ -568,6 +579,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _isSending = false;
     }
     _scrollToBottom();
+  }
+
+  /// Jaring pengaman konfirmasi pending: kalau 3 detik setelah insert sukses
+  /// bubble masih belum terkonfirmasi (event Realtime miss / channel drop),
+  /// fetch ulang pesan dari server supaya tidak nyangkut sampai polling 30s.
+  void _schedulePendingConfirmFallback() {
+    _pendingConfirmTimer?.cancel();
+    _pendingConfirmTimer = Timer(const Duration(seconds: 3), () async {
+      if (!mounted || _pending.isEmpty) return;
+      try {
+        await _msgsHandleReload();
+      } catch (_) {}
+    });
   }
 
   /// Mulai edit pesan teks sendiri — teks dimasukkan ke composer bawah,
@@ -742,6 +766,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       }
       return;
     }
+    // Optimistic: tampilkan foto langsung tanpa nunggu upload server.
+    final pendingPhoto = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
+      text: '',
+      type: 'image',
+      imageData: base64,
+      timestamp: DateTime.now(),
+    );
+    setState(() => _pending.add(pendingPhoto));
+    _scrollToBottom();
     try {
       // Upload foto ke Storage — DB hanya simpan path (hemat ruang).
       final path = await StoragePhotoService.instance.upload(
@@ -759,6 +797,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         imageData: stored,
       );
       _maybeNewChatBonus();
+      _schedulePendingConfirmFallback();
       if (ppPhoto.enabled) {
         ppPhoto.oneTimeBonus('first_photo', 10).then((earned) {
           if (earned && mounted) {
@@ -777,6 +816,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       // Upload/kirim gagal → kembalikan koin yang sudah terpotong.
       safeUnawaited(ppPhoto.refundChatPoint('image'));
       if (mounted) {
+        setState(() => _pending.remove(pendingPhoto));
         final s = context.read<LocaleProvider>().s;
         ScaffoldMessenger.of(
           context,
@@ -858,6 +898,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         imageData: stored,
       );
       _maybeNewChatBonus();
+      _schedulePendingConfirmFallback();
       _scrollToBottom();
     } catch (e) {
       // Upload/kirim gagal → kembalikan koin yang sudah terpotong.

@@ -53,6 +53,8 @@ class S {
   String get noPrivateRoomsHint =>
       isId ? 'Buat room-mu sendiri di bawah' : 'Create your own room below';
   String get btnCreateRoom => isId ? 'Buat Room' : 'Create Room';
+  String get roomShowMembers => isId ? 'Lihat anggota' : 'View members';
+  String get roomShowChat => isId ? 'Kembali ke chat' : 'Back to chat';
   String get createRoomTitle =>
       isId ? 'Buat Room Private' : 'Create Private Room';
   String get roomNameLabel => isId ? 'Nama room' : 'Room name';

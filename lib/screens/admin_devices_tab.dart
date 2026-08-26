@@ -267,7 +267,12 @@ class _AdminDevicesTabState extends State<AdminDevicesTab> {
                   onRefresh: () => admin.fetchDevices(),
                   child: ListView.builder(
                     controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    padding: EdgeInsets.fromLTRB(
+                      12,
+                      0,
+                      12,
+                      MediaQuery.of(context).padding.bottom + 12,
+                    ),
                     itemCount:
                         _filtered(admin.devices).length +
                         (admin.devicesHasMore ? 1 : 0),
@@ -387,7 +392,12 @@ class _AdminDevicesTabState extends State<AdminDevicesTab> {
       onRefresh: () => admin.fetchDevices(),
       child: ListView.builder(
         controller: _scrollCtrl,
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        padding: EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          MediaQuery.of(context).padding.bottom + 12,
+        ),
         itemCount: groups.length,
         itemBuilder: (_, i) {
           final g = groups[i];
