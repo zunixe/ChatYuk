@@ -249,8 +249,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     }
   }
 
-  Future<void> _showUnreadBubble(BuildContext context, UserModel user, int unreadCount, Offset globalPos) async {
-    final myUid = context.read<AuthProvider>().uid;
+  Future<void> _showUnreadBubble(BuildContext cardCtx, UserModel user, int unreadCount, Offset globalPos) async {
+    final myUid = cardCtx.read<AuthProvider>().uid;
     if (myUid == null) return;
     final ids = [myUid, user.uid]..sort();
     final chatId = '${ids[0]}_${ids[1]}';
@@ -272,20 +272,33 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             'createdAt': r['created_at'],
           })).toList();
     } catch (_) {}
-    if (!context.mounted || msgs.isEmpty) return;
+    if (!cardCtx.mounted || msgs.isEmpty) return;
     HapticFeedback.mediumImpact();
-    final overlay = Overlay.of(context);
+    // Hitung posisi card agar bubble nempel tepat di atas/bawah card
+    final box = cardCtx.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final cardTopLeft = box.localToGlobal(Offset.zero);
+    final cardSize = box.size;
+    final cardCenterX = cardTopLeft.dx + cardSize.width / 2;
+    final overlay = Overlay.of(cardCtx);
     late OverlayEntry entry;
     entry = OverlayEntry(
       builder: (ctx) {
         final size = MediaQuery.of(ctx).size;
         final bubbleWidth = 280.0;
         final bubbleHeight = (msgs.length * 48.0 + 40).clamp(72, 280).toDouble();
-        double left = globalPos.dx - bubbleWidth / 2;
+        double left = cardCenterX - bubbleWidth / 2;
         left = left.clamp(12, size.width - bubbleWidth - 12);
-        double top = globalPos.dy - bubbleHeight - 24;
-        if (top < 40) top = globalPos.dy + 24;
-        final isAbove = globalPos.dy - bubbleHeight - 24 >= 40;
+        // Nempel tepat: 0 gap + ekor 8px
+        final spaceAbove = cardTopLeft.dy;
+        final spaceBelow = size.height - (cardTopLeft.dy + cardSize.height);
+        final isAbove = spaceAbove > spaceBelow && spaceAbove >= bubbleHeight + 16;
+        double top;
+        if (isAbove) {
+          top = cardTopLeft.dy - bubbleHeight - 8;
+        } else {
+          top = cardTopLeft.dy + cardSize.height + 8;
+        }
         return Stack(
           children: [
             Positioned.fill(
@@ -309,7 +322,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     Container(
                       width: bubbleWidth,
                       constraints: const BoxConstraints(maxWidth: 280),
-                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: AppTheme.bgInput,
                         borderRadius: BorderRadius.circular(16),
@@ -617,13 +630,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                   ),
                                 );
                               }
-                              return _UserCard(
-                                user: paged[i],
-                                onTap: () => _startChat(context, paged[i]),
-                                onLongPressStart: unreadMap[paged[i].uid] != null && unreadMap[paged[i].uid]! > 0
-                                    ? (d) => _showUnreadBubble(context, paged[i], unreadMap[paged[i].uid]!, d.globalPosition)
-                                    : null,
-                                unreadCount: unreadMap[paged[i].uid] ?? 0,
+                              return Builder(
+                                builder: (cardCtx) => _UserCard(
+                                  user: paged[i],
+                                  onTap: () => _startChat(context, paged[i]),
+                                  onLongPressStart: unreadMap[paged[i].uid] != null && unreadMap[paged[i].uid]! > 0
+                                      ? (d) => _showUnreadBubble(cardCtx, paged[i], unreadMap[paged[i].uid]!, d.globalPosition)
+                                      : null,
+                                  unreadCount: unreadMap[paged[i].uid] ?? 0,
+                                ),
                               );
                             },
                           ),
@@ -862,6 +877,7 @@ class _UserCard extends StatelessWidget {
             child: Row(
               children: [
                 Stack(
+                  clipBehavior: Clip.none,
                   children: [
                     Container(
                       width: 40,
