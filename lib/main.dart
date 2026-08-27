@@ -59,8 +59,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final settings = lpn.InitializationSettings(android: androidInit);
     final plugin = lpn.FlutterLocalNotificationsPlugin();
     await plugin.initialize(settings: settings);
-    final key = data['callId'] ?? data['chatId'] ?? '';
+    final key = data['chatId'] ?? data['callId'] ?? '';
     await plugin.cancel(id: notifIdForKey(key));
+    // juga batalkan varian callId jika beda
+    final alt = data['callId'] as String?;
+    if (alt != null && alt.isNotEmpty && alt != key) {
+      await plugin.cancel(id: notifIdForKey(alt));
+    }
     return;
   }
   final isDataOnly =
@@ -174,10 +179,27 @@ Future<void> _ensureAndroidChannels(
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
-  // call_canceled → batalkan notifikasi call yang masih tampil.
+  // call_canceled → batalkan notifikasi call yang masih tampil + tutup
+  // IncomingCallScreen yang mungkin masih terbuka.
   if (data['type'] == 'call_canceled') {
-    final key = data['callId'] ?? data['chatId'] ?? '';
+    final key = data['chatId'] ?? data['callId'] ?? '';
     await localNotifications.cancel(id: notifIdForKey(key));
+    final alt = data['callId'] as String?;
+    if (alt != null && alt.isNotEmpty && alt != key) {
+      await localNotifications.cancel(id: notifIdForKey(alt));
+    }
+    // tutup layar panggilan masuk yang masih nongol (jika ada)
+    final callId = (data['callId'] ?? data['chatId']) as String?;
+    if (callId != null && callId.isNotEmpty) {
+      if (CallProvider.instance.activeCallId == callId) {
+        CallProvider.instance.unregisterCall(callId);
+      }
+      final nav = navigatorKey.currentState;
+      if (nav != null && nav.canPop()) {
+        // IncomingCallScreen adalah fullscreenDialog di atas stack — cukup pop sekali
+        nav.pop();
+      }
+    }
     return;
   }
   // Panggilan masuk saat app TERBUKA ditangani Supabase Realtime
@@ -284,8 +306,26 @@ void _openFromData(Map<String, dynamic> data) {
     final callId = data['callId'] ?? '';
     if (callId.isNotEmpty && CallProvider.instance.activeCallId != callId) {
       unawaited(
-        _waitForSession().then((ready) {
+        _waitForSession().then((ready) async {
           if (!ready || navigatorKey.currentState == null) return;
+          // guard: klik notif basi setelah caller sudah end → jangan buka
+          // IncomingCallScreen yang langsung jadi "calling" stuck.
+          try {
+            final row = await Supabase.instance.client
+                .from('calls')
+                .select('status')
+                .eq('id', callId)
+                .maybeSingle();
+            final st = row?['status'] as String?;
+            if (st != null && st != 'ringing') {
+              // batalkan notif basi
+              final k = (data['chatId'] ?? callId) as String;
+              await localNotifications.cancel(id: notifIdForKey(k));
+              await localNotifications.cancel(id: notifIdForKey(callId));
+              return;
+            }
+          } catch (_) {}
+          if (navigatorKey.currentState == null) return;
           navigatorKey.currentState!.push(
             MaterialPageRoute(
               fullscreenDialog: true,
@@ -299,6 +339,19 @@ void _openFromData(Map<String, dynamic> data) {
           );
         }),
       );
+    }
+    return;
+  }
+  if (data['type'] == 'call_canceled') {
+    // tap pada notif call_canceled atau stale call→call_canceled push — cukup
+    // batalkan notif, jangan reset navigation stack
+    final key = (data['chatId'] ?? data['callId'] ?? '') as String;
+    if (key.isNotEmpty) {
+      localNotifications.cancel(id: notifIdForKey(key));
+      final alt = data['callId'] as String?;
+      if (alt != null && alt.isNotEmpty && alt != key) {
+        localNotifications.cancel(id: notifIdForKey(alt));
+      }
     }
     return;
   }
