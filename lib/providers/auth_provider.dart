@@ -15,6 +15,7 @@ import '../services/location_service.dart';
 import '../services/message_cache.dart';
 import '../services/points_service.dart';
 import '../services/screen_secure_service.dart';
+import '../services/notification_prefs_service.dart';
 
 // Shortcut untuk fire-and-forget.
 // Tidak membungkam error: log biar kegagalan tetap terlihat di debug.
@@ -371,13 +372,18 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Toggle notifikasi ON/OFF.
-  /// OFF → kosongkan fcm_token di DB agar push tidak terkirim.
+  /// OFF → kosongkan fcm_token di DB agar push tidak terkirim + matikan semua toggle per-jenis.
   /// ON  → set ulang fcm_token.
   Future<void> setNotificationsEnabled(bool enabled) async {
     _notificationsEnabled = enabled;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_notifPrefKey, enabled);
+      if (!enabled) {
+        for (final t in NotificationPrefsService.types) {
+          await prefs.setBool('notif_type_$t', false);
+        }
+      }
     } catch (_) {}
     if (enabled) {
       await updateFcmToken();

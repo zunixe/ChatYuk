@@ -34,6 +34,7 @@ class NotificationPrefsService {
 
   static Future<bool> shouldShowForFcmType(String? fcmType) async {
     final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('notif_enabled') ?? true)) return false;
     bool get(String t) => prefs.getBool(_key(t)) ?? true;
     switch (fcmType) {
       case 'call':
