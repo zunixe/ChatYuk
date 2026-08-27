@@ -80,38 +80,6 @@ class CallService {
     }
   }
 
-  /// Kirim pesan riwayat call ke private chat.
-  Future<void> sendCallMessage({
-    required String myUid,
-    required String otherUid,
-    required String myName,
-    required String myGender,
-    required String callType,
-    required String status,
-    required int durationSeconds,
-  }) async {
-    final ids = [myUid, otherUid]..sort();
-    final chatId = '${ids[0]}_${ids[1]}';
-    final durText = durationSeconds > 0
-        ? ' (${durationSeconds ~/ 60}:${(durationSeconds % 60).toString().padLeft(2, '0')})'
-        : '';
-    final text = '${callType == 'video' ? '📹' : '📞'} $status$durText';
-    try {
-      await _sb.from('private_messages').insert({
-        'chat_id': chatId,
-        'sender_id': myUid,
-        'sender_name': myName,
-        'sender_gender': myGender,
-        'text': text,
-        'type': 'call',
-        'image_data': '',
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      });
-    } catch (e) {
-      debugPrint('[CallService] sendCallMessage error: $e');
-    }
-  }
-
   /// Stream panggilan masuk (insert calls dengan callee_id = aku).
   Stream<Map<String, dynamic>> onIncomingCall() {
     final controller = StreamController<Map<String, dynamic>>.broadcast();
@@ -1014,33 +982,10 @@ class CallSession extends ChangeNotifier {
     _syncTimer?.cancel();
     _phase = CallPhase.ended;
     notifyListeners();
-    // Kirim pesan riwayat call ke private chat (hanya caller yang kirim,
-    // supaya tidak duplikat di kedua sisi).
-    if (isCaller) {
-      final myUid = _service.uid;
-      if (myUid != null) {
-        final dur = _connectedAt != null
-            ? DateTime.now().difference(_connectedAt!).inSeconds
-            : 0;
-        final statusText = switch (reason) {
-          CallEndReason.ended => 'Call ended',
-          CallEndReason.declined => 'Call declined',
-          CallEndReason.missed => 'Missed call',
-          CallEndReason.canceled => 'Call canceled',
-          CallEndReason.busy => 'Busy',
-          CallEndReason.error => 'Call failed',
-        };
-        _service.sendCallMessage(
-          myUid: myUid,
-          otherUid: remoteUid,
-          myName: myName,
-          myGender: myGender,
-          callType: callType,
-          status: statusText,
-          durationSeconds: dur,
-        );
-      }
-    }
+    // Pesan riwayat call di private chat kini dibuat SATU sumber saja di
+    // server (trigger call_history_insert saat status calls berubah) —
+    // supaya tidak ada pesan ganda (client + server) yang memicu
+    // notifikasi missed_call ganda.
   }
 
   /// Bersihkan semua resource WebRTC. Panggil dari dispose screen.
