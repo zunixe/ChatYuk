@@ -63,12 +63,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final plugin = lpn.FlutterLocalNotificationsPlugin();
     await plugin.initialize(settings: settings);
     await _ensureAndroidChannels(plugin);
-    final key = data['chatId'] ?? data['callId'] ?? '';
+    // callId adalah ID kanonik. chatId hanya dipakai sebagai fallback untuk
+    // payload lama agar ringing dan call_ended selalu memakai notif ID sama.
+    final key = data['callId'] ?? data['chatId'] ?? '';
     if (key.isEmpty) return;
     // Hapus ringing lama (ongoing) sebelum update → hindari dobel
     // (ongoing:true → autoCancel:true kadang tidak replace di MIUI).
     await plugin.cancel(id: notifIdForKey(key));
-    final alt = data['callId'] as String?;
+    final alt = data['chatId'] as String?;
     if (alt != null && alt.isNotEmpty && alt != key) {
       await plugin.cancel(id: notifIdForKey(alt));
     }
@@ -114,9 +116,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final settings = lpn.InitializationSettings(android: androidInit);
     final plugin = lpn.FlutterLocalNotificationsPlugin();
     await plugin.initialize(settings: settings);
-    final key = data['chatId'] ?? data['callId'] ?? '';
+    final key = data['callId'] ?? data['chatId'] ?? '';
     await plugin.cancel(id: notifIdForKey(key));
-    final alt = data['callId'] as String?;
+    final alt = data['chatId'] as String?;
     if (alt != null && alt.isNotEmpty && alt != key) {
       await plugin.cancel(id: notifIdForKey(alt));
     }
@@ -183,7 +185,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
   await plugin.show(
     id: notifIdForKey(
-      data['chatId'] ?? data['roomId'] ?? data['callId'] ?? 'bg',
+    data['callId'] ?? data['chatId'] ?? data['roomId'] ?? 'bg',
     ),
     title: title,
     body: body,
@@ -238,11 +240,11 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   // notify_call_ended yang kini kirim type call_ended untuk semua status
   // terminal, bukan call_canceled).
   if (data['type'] == 'call_ended') {
-    final key = data['chatId'] ?? data['callId'] ?? '';
+    final key = data['callId'] ?? data['chatId'] ?? '';
     if (key.isEmpty) return;
     // Hapus ringing lama sebelum update (MIUI: ongoing→non-ongoing tidak replace)
     await localNotifications.cancel(id: notifIdForKey(key));
-    final alt = data['callId'] as String?;
+    final alt = data['chatId'] as String?;
     if (alt != null && alt.isNotEmpty && alt != key) {
       await localNotifications.cancel(id: notifIdForKey(alt));
     }
@@ -300,9 +302,9 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   // call_canceled → batalkan notifikasi call yang masih tampil + tutup
   // IncomingCallScreen yang mungkin masih terbuka.
   if (data['type'] == 'call_canceled') {
-    final key = data['chatId'] ?? data['callId'] ?? '';
+    final key = data['callId'] ?? data['chatId'] ?? '';
     await localNotifications.cancel(id: notifIdForKey(key));
-    final alt = data['callId'] as String?;
+    final alt = data['chatId'] as String?;
     if (alt != null && alt.isNotEmpty && alt != key) {
       await localNotifications.cancel(id: notifIdForKey(alt));
     }
@@ -353,7 +355,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
 
   await localNotifications.show(
     id: notifIdForKey(
-      data['chatId'] ?? data['roomId'] ?? data['callId'] ?? 'local',
+      data['callId'] ?? data['chatId'] ?? data['roomId'] ?? 'local',
     ),
     title: title,
     body: body,
