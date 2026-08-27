@@ -8,6 +8,7 @@ import '../config/supabase_config.dart';
 import '../core/admin_gate.dart';
 import '../services/storage_photo_service.dart';
 import '../services/avatar_service.dart';
+import '../services/device_info_service.dart';
 import '../utils.dart';
 
 /// Dilempar saat email tidak terdaftar di Auth (cek via RPC sebelum kirim reset).
@@ -737,7 +738,15 @@ class AuthService {
   Future<void> updateFcmToken(String? token) async {
     final id = uid;
     if (id == null) return;
-    await _sb.from('profiles').update({'fcm_token': token ?? ''}).eq('id', id);
+    final t = token ?? '';
+    try {
+      await _sb.from('profiles').update({'fcm_token': t}).eq('id', id);
+    } catch (_) {}
+    try {
+      final installId = await DeviceInfoService.instance.installId();
+      await _sb.rpc('update_device_fcm_token',
+          params: {'p_install_id': installId, 'p_token': t});
+    } catch (_) {}
   }
 
   Future<void> goOffline() async {
