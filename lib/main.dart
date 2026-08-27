@@ -199,6 +199,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> _ensureAndroidChannels(
   lpn.FlutterLocalNotificationsPlugin plugin,
 ) async {
+  final androidImpl = plugin.resolvePlatformSpecificImplementation<lpn.AndroidFlutterLocalNotificationsPlugin>();
+  // Hapus channel lama (high) supaya bisa recreate jadi max — Android tidak update importance channel yang sudah ada.
+  try { await androidImpl?.deleteNotificationChannel(channelId: 'chatyuk_chat'); } catch (_) {}
   const chat = lpn.AndroidNotificationChannel(
     'chatyuk_chat',
     'Chat Notifications',
