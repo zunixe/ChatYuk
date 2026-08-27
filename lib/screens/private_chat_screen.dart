@@ -1899,13 +1899,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Container(
+                            SizedBox(
                               width: 44,
                               height: 44,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primary,
-                                shape: BoxShape.circle,
-                              ),
                               child: IconButton(
                                 onPressed: () =>
                                     EmojiPickerSheet.show(context, _msgCtrl),
@@ -1913,7 +1909,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                   Icons.emoji_emotions_outlined,
                                   size: 22,
                                 ),
-                                color: Colors.white,
+                                color: AppTheme.primary,
                                 padding: EdgeInsets.zero,
                                 visualDensity: VisualDensity.compact,
                               ),
