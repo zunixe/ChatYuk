@@ -270,6 +270,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
   }
 
   Future<void> _create() async {
+    if (_creating) return;
     final name = _nameCtrl.text.trim();
     if (name.length < 3 || mounted == false) return;
     setState(() => _creating = true);

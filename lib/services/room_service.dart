@@ -153,6 +153,11 @@ class RoomService {
     await _sb.rpc('delete_private_room', params: {'p_room_id': roomId});
   }
 
+  Future<Map<String, dynamic>> resetRoomPassword(String roomId, String? newPassword) async {
+    final res = await _sb.rpc('reset_room_password', params: {'p_room_id': roomId, 'p_new_password': newPassword});
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
   /// Stream realtime perubahan tabel rooms (khusus private room) untuk
   /// negara tertentu. Dipakai supaya penghapusan/pembuatan room langsung
   /// tersinkron di semua device tanpa reload manual. Mengembalikan daftar

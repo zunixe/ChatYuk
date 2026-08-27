@@ -78,6 +78,13 @@ class S {
   String get enterPassword => isId ? 'Masukkan password' : 'Enter password';
   String get errWrongPassword => isId ? 'Password salah' : 'Wrong password';
   String get btnJoin => isId ? 'Masuk' : 'Join';
+  String get resetPasswordTitle =>
+      isId ? 'Atur Ulang Password Room' : 'Reset Room Password';
+  String get resetPasswordHint =>
+      isId ? 'Password baru 4-30 karakter (kosongkan untuk hapus)' : 'New password 4-30 chars (empty to remove)';
+  String get msgPasswordReset => isId ? 'Password diperbarui' : 'Password updated';
+  String get btnResetPassword => isId ? 'Reset Password' : 'Reset Password';
+  String get btnRemovePassword => isId ? 'Hapus Password' : 'Remove Password';
   String get roomByOwner => isId ? 'oleh' : 'by';
   String get btnExtendRoom =>
       isId ? 'Perpanjang 7 hari (50 koin)' : 'Extend 7 days (50 coins)';

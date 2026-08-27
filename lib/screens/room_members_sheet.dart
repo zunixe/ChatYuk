@@ -31,6 +31,8 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
   List<Map<String, dynamic>> _members = [];
   List<Map<String, dynamic>> _pending = [];
   bool _loading = true;
+  final _pwCtrl = TextEditingController();
+  bool _pwSaving = false;
 
   late final S s;
   bool get canModerate =>
@@ -62,10 +64,30 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
     }
   }
 
+  @override
+  void dispose() {
+    _pwCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _act(Future<void> Function() fn) async {
     await fn();
     await _load();
     widget.onChanged();
+  }
+
+  Future<void> _resetPw(bool remove) async {
+    setState(() => _pwSaving = true);
+    try {
+      await RoomService().resetRoomPassword(widget.roomId, remove ? null : _pwCtrl.text.trim());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgPasswordReset)));
+      _pwCtrl.clear();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _pwSaving = false);
+    }
   }
 
   void _confirm(String title, String body, Future<void> Function() fn) {
@@ -223,6 +245,18 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                           ],
                         ),
                       ),
+                    const Divider(height: 24),
+                  ],
+                  if (widget.myRole == 'owner') ...[
+                    Text(s.resetPasswordTitle, style: AppText.label.copyWith(color: AppTheme.primary)),
+                    const SizedBox(height: 6),
+                    TextField(controller: _pwCtrl, obscureText: true, decoration: InputDecoration(hintText: s.resetPasswordHint, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Expanded(child: FilledButton(onPressed: _pwSaving ? null : () => _resetPw(false), child: Text(s.btnResetPassword))),
+                      const SizedBox(width: 8),
+                      TextButton(onPressed: _pwSaving ? null : () => _resetPw(true), child: Text(s.btnRemovePassword)),
+                    ]),
                     const Divider(height: 24),
                   ],
                   // Member list.
