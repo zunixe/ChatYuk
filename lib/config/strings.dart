@@ -397,6 +397,8 @@ class S {
       isId ? 'berlangganan ke kamu' : 'subscribed to you';
   String get notifCallingBody =>
       isId ? 'menelpon kamu...' : 'is calling you...';
+  String get notifTimelineBody =>
+      isId ? 'membuat postingan baru' : 'created a new post';
   String get labelNotifications => isId ? 'Notifikasi' : 'Notifications';
   String get notifEnabledDesc => isId
       ? 'Terima notifikasi pesan baru'
