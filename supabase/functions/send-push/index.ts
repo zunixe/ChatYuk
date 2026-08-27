@@ -110,12 +110,6 @@ Deno.serve(async (req) => {
         data: data || {},
         android: {
           priority: 'high',
-          ...(isCall ? {
-            notification: {
-              channel_id: 'chatyuk_calls',
-              sound: 'ringtone',
-            },
-          } : {}),
         },
       },
     };
