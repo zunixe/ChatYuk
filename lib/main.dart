@@ -17,6 +17,7 @@ import 'models/room_model.dart';
 import 'providers/auth_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/locale_provider.dart';
+import 'providers/nav_provider.dart';
 import 'screens/incoming_call_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
@@ -272,6 +273,17 @@ void _openFromData(Map<String, dynamic> data) {
   final nav = navigatorKey.currentState;
   if (nav == null || data.isEmpty) return;
   final s = localeProvider.s;
+  // Timeline post baru dari yang diikuti
+  if (data['type'] == 'timeline_post') {
+    nav.popUntil((r) => r.isFirst);
+    final ctx = navigatorKey.currentContext;
+    if (ctx != null) {
+      try {
+        ctx.read<NavProvider>().goTo(2);
+      } catch (_) {}
+    }
+    return;
+  }
   // Panggilan aktif (tap notifikasi ongoing) → kembali ke chat yang sedang call.
   if (data['type'] == 'active_call') {
     final chatId = data['chatId'] ?? '';
