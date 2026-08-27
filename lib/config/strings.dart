@@ -473,6 +473,10 @@ class S {
   String get privateRoomsPendingQueue => isId ? 'Menunggu Persetujuan' : 'Pending Approvals';
 
   String get privateRoomsTitle => isId ? 'Room Privat' : 'Private Rooms';
+  String get roomBroadcastFull =>
+      isId ? 'Sudah 4 broadcaster (maksimal)' : 'Broadcast full (4/4)';
+  String get roomBroadcastCapHint =>
+      isId ? 'Tunggu giliran atau angkat tangan' : 'Wait your turn or raise hand';
 
   String get btnClose => isId ? 'Tutup' : 'Close';
   String get msgStartConversation =>

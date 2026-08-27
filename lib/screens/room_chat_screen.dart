@@ -95,6 +95,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   String? _liveUid;
   int _pendingCount = 0;
   RoomBroadcastSession? _broadcastSession;
+  Timer? _livePoll;
   bool get isPrivateRoom => widget.room.isPrivate == true;
   bool get canModerate =>
       isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
@@ -137,9 +138,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         } catch (_) {}
       }
       await _refreshLiveUid();
-      // Subscribe perubahan live_uid via stream rooms (postgres_changes
-      // sudah global; cukup poll ringan tiap 5 detik).
-      Timer.periodic(const Duration(seconds: 5), (_) => _refreshLiveUid());
+      _livePoll?.cancel();
+      _livePoll = Timer.periodic(const Duration(seconds: 5), (_) => _refreshLiveUid());
     } catch (_) {}
     if (!mounted) return;
     setState(() {});
@@ -179,6 +179,18 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   Future<void> _startBroadcastSession() async {
+    // cap 4
+    try {
+      final cnt = await PrivateRoomService.instance.broadcastCount(widget.room.id);
+      if (cnt >= 4) {
+        if (!mounted) return;
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.roomBroadcastFull), backgroundColor: AppTheme.danger),
+        );
+        return;
+      }
+    } catch (_) {}
     unawaited(_broadcastSession?.stop());
     _broadcastSession = null;
     final session = RoomBroadcastSession(
@@ -194,7 +206,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       },
     );
     _broadcastSession = session;
-    await session.start();
+    try {
+      await session.start();
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().contains('Broadcast full') ? context.read<LocaleProvider>().s.roomBroadcastFull : '$e';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      _broadcastSession = null;
+    }
     if (mounted) setState(() {});
   }
 
@@ -323,6 +342,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
+    _livePoll?.cancel();
+    unawaited(_broadcastSession?.stop());
     if (activeChatId.value == widget.room.id) {
       activeChatId.value = null;
     }
@@ -1706,22 +1727,28 @@ class _BroadcastStage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
+    final tiles = <Widget>[];
+    if (isBroadcaster && session.localRendererReady) {
+      tiles.add(RTCVideoView(session.localRenderer,
+          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover, mirror: true));
+    }
+    for (final r in session.remoteRenderers.values) {
+      if (r.srcObject != null) {
+        tiles.add(RTCVideoView(r, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover));
+      }
+    }
+    // fallback single remoteRenderer lama
+    if (tiles.isEmpty && !isBroadcaster && session.remoteRenderer.srcObject != null) {
+      tiles.add(RTCVideoView(session.remoteRenderer,
+          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover));
+    }
     return Container(
       height: 220,
       color: Colors.black,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (isBroadcaster && session.localRendererReady)
-            RTCVideoView(session.localRenderer,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                mirror: true)
-          else if (!isBroadcaster &&
-              session.remoteReady &&
-              session.remoteRenderer.srcObject != null)
-            RTCVideoView(session.remoteRenderer,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
-          else
+          if (tiles.isEmpty)
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1732,6 +1759,14 @@ class _BroadcastStage extends StatelessWidget {
                       style: const TextStyle(color: Colors.white70)),
                 ],
               ),
+            )
+          else if (tiles.length == 1)
+            tiles.first
+          else
+            GridView.count(
+              crossAxisCount: 2,
+              childAspectRatio: 1.6,
+              children: tiles,
             ),
           Positioned(
             top: 8,

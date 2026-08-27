@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
@@ -88,9 +89,9 @@ class PrivateRoomService {
   }
 
   String _randomToken() {
-    final rand = DateTime.now().microsecondsSinceEpoch;
-    return rand.toRadixString(36).padLeft(10, '0') +
-        uid.toString().substring(0, 4);
+    final r = Random.secure();
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    return List.generate(22, (_) => chars[r.nextInt(chars.length)]).join();
   }
 
   // ── Broadcast grant/stop ──
@@ -104,6 +105,57 @@ class PrivateRoomService {
 
   Future<void> stopBroadcast(String roomId) async {
     await _sb.rpc('stop_broadcast', params: {'p_room_id': roomId});
+  }
+
+  Future<int> broadcastCount(String roomId) async {
+    try {
+      final rows = await _sb
+          .from('room_broadcasters')
+          .select('user_id')
+          .eq('room_id', roomId);
+      return (rows as List).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> startBroadcast(String roomId) async {
+    await _sb.rpc('start_broadcast', params: {'p_room_id': roomId});
+  }
+
+  Future<void> stopBroadcastV2(String roomId) async {
+    try {
+      await _sb.rpc('stop_broadcast_v2', params: {'p_room_id': roomId});
+    } catch (_) {
+      // fallback ke RPC lama
+      await stopBroadcast(roomId);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> listBroadcasters(String roomId) async {
+    try {
+      final rows = await _sb
+          .from('room_broadcasters')
+          .select('user_id,started_at')
+          .eq('room_id', roomId)
+          .order('started_at');
+      return (rows as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> listMyRooms() async {
+    try {
+      final res = await _sb.rpc('list_my_private_rooms', params: {'p_uid': uid});
+      if (res is List) return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      if (res is Map && res['data'] is List) {
+        return (res['data'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return const [];
+    } catch (_) {
+      return const [];
+    }
   }
 
   // ── Signaling (room_signals) ──

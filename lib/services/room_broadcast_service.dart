@@ -7,14 +7,13 @@ import '../config/call_config.dart';
 import 'private_room_service.dart';
 import '../config/supabase_config.dart';
 
-/// Broadcast video satu-ke-banyak di private room (mesh WebRTC).
+/// Broadcast video satu-ke-banyak di private room (mesh WebRTC, cap 4).
 ///
-/// - Broadcaster = member yang diberi izin oleh admin.
+/// - Broadcaster = member yang diberi izin oleh admin (max 4 simultan).
 /// - Tiap penonton = 1 peer connection (offer dari broadcaster).
-/// - Signaling via tabel room_signals (b_offer/b_answer/b_cand/b_bye).
+/// - Signaling via tabel room_signals (b_offer/b_answer/b_cand/b_bye/b_join).
 /// - Adaptive bitrate: kualitas turun mengikuti jumlah penonton.
-/// - Heartbeat last_seen di rooms.live_started_at; jika broadcaster
-///   hilang >45 detik, penonton berhenti otomatis (fallback app crash).
+/// - Heartbeat via room_broadcasters; watchdog hentikan jika broadcaster hilang.
 class RoomBroadcastSession extends ChangeNotifier {
   RoomBroadcastSession({
     required this.roomId,
@@ -37,12 +36,13 @@ class RoomBroadcastSession extends ChangeNotifier {
 
   final RTCVideoRenderer localRenderer = RTCVideoRenderer();
   bool localRendererReady = false;
-  // Penonton: video dari broadcaster.
   final RTCVideoRenderer remoteRenderer = RTCVideoRenderer();
+  final Map<String, RTCVideoRenderer> remoteRenderers = {};
   bool remoteReady = false;
   bool hasRemoteVideo = false;
 
   StreamSubscription? _signalSub;
+  RealtimeChannel? _broadcasterSub;
   Timer? _hbTimer;
   Timer? _watchdog;
   int _lastSignalId = 0;
@@ -51,81 +51,93 @@ class RoomBroadcastSession extends ChangeNotifier {
 
   bool get cameraOn => _cameraOn;
   int get viewerCount => _peers.length;
+  static const int kMaxBroadcasters = 4;
 
-  /// Bitrate target (kbps) sesuai jumlah penonton — ladder adaptif.
   static int _targetKbps(int viewers) {
-    if (viewers <= 6) return 1200; // ~720p
-    if (viewers <= 12) return 700; // ~480p
-    return 400; // ~360p
+    if (viewers <= 2) return 1200;
+    if (viewers <= 4) return 700;
+    return 400;
   }
 
   Future<void> start() async {
     if (_closed) return;
     await localRenderer.initialize();
-
     await remoteRenderer.initialize();
-    if (!isBroadcaster) {
-      _signalSub = _prv.onSignal(roomId).listen(_onSignal);
-      unawaited(_prv.requestJoin(roomId)); // no-op kalau sudah member
-      await Future.delayed(const Duration(milliseconds: 600));
-      await requestStream();
-      notifyListeners();
-      return;
-    }
+
+    _signalSub = _prv.onSignal(roomId).listen(_onSignal);
+    unawaited(_seedMissedSignals());
+
     if (isBroadcaster) {
+      // Cap 4: cek jumlah broadcaster aktif sebelum ambil kamera
+      final cnt = await _prv.broadcastCount(roomId);
+      if (cnt >= kMaxBroadcasters) {
+        debugPrint('[BROADCAST] cap 4 reached, abort start');
+        await stop();
+        throw Exception('Broadcast full (4/4)');
+      }
       try {
         _localStream = await navigator.mediaDevices.getUserMedia({
-          'audio': false, // broadcast = video saja (mic tetap lewat chat/voice)
+          'audio': false,
           'video': {'facingMode': 'user', 'width': 1280, 'height': 720},
         });
         localRenderer.srcObject = _localStream;
         localRendererReady = true;
+        await _prv.startBroadcast(roomId);
       } catch (e) {
-        debugPrint('[BROADCAST] getUserMedia failed: $e');
+        debugPrint('[BROADCAST] getUserMedia/startBroadcast failed: $e');
         await stop();
-        return;
+        rethrow;
       }
-      // Broadcaster: tunggu penonton masuk → buat offer per penonton.
-      _signalSub = _prv.onSignal(roomId).listen(_onSignal);
-      unawaited(_seedMissedSignals());
-      // Heartbeat: tandai masih hidup.
+      // Heartbeat tampilkan masih hidup
       _hbTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
         if (_closed) return;
         try {
-          final liveUid = await _currentLiveUid();
-          if (liveUid != _sb.auth.currentUser?.id) return stop();
           await _sb.rpc('touch_broadcast', params: {'p_room_id': roomId});
         } catch (_) {}
       });
+      // Subscribe perubahan broadcaster untuk bitrate adaptif
+      _broadcasterSub = _sb
+          .channel('room-broadcasters-$roomId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'room_broadcasters',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'room_id',
+              value: roomId,
+            ),
+            callback: (_) => _renegotiateBitrateAll(),
+          )
+          .subscribe();
+      // All-together: broadcaster juga butuh lihat broadcaster lain
+      await Future.delayed(const Duration(milliseconds: 400));
+      await requestStream();
     } else {
-      // Penonton: watchdog — kalau live_uid hilang / broadcaster mati, stop.
+      // Penonton: minta stream
+      unawaited(_prv.requestJoin(roomId));
+      await Future.delayed(const Duration(milliseconds: 600));
+      await requestStream();
+      // Watchdog: jika tidak ada broadcaster, stop
       _watchdog = Timer.periodic(const Duration(seconds: 10), (_) async {
         if (_closed) return;
         try {
-          final liveUid = await _currentLiveUid();
-          if (liveUid == null || liveUid.isEmpty) stop();
+          final cnt = await _prv.broadcastCount(roomId);
+          if (cnt == 0) stop();
         } catch (_) {}
       });
     }
     notifyListeners();
   }
 
+  // ignore: unused_element
   Future<String?> _currentLiveUid() async {
     try {
-      final row = await _sbRoom();
+      final row = await _sb.from('rooms').select('live_uid').eq('id', roomId).maybeSingle();
       return row?['live_uid']?.toString();
     } catch (_) {
       return null;
     }
-  }
-
-  Future<Map<String, dynamic>?> _sbRoom() async {
-    try {
-      final res = await PrivateRoomService.instance
-          .listMembers(roomId); // keep-alive jalur supabase
-      debugPrint('[BROADCAST] members=${res.length}');
-    } catch (_) {}
-    return null;
   }
 
   void _onSignal(Map<String, dynamic> sig) {
@@ -136,7 +148,6 @@ class RoomBroadcastSession extends ChangeNotifier {
 
     switch (type) {
       case 'b_join':
-        // Penonton minta stream → broadcaster buat offer.
         if (isBroadcaster && !_peers.containsKey(from)) {
           unawaited(_makeOfferTo(from));
         }
@@ -153,12 +164,15 @@ class RoomBroadcastSession extends ChangeNotifier {
       case 'b_bye':
         _dropPeer(from);
         break;
+      case 'hand_raise':
+        // diteruskan ke UI via notifyListeners, RoomMembersSheet bisa listen
+        notifyListeners();
+        break;
     }
   }
 
-  /// Penonton: kirim b_join untuk meminta offer.
   Future<void> requestStream() async {
-    if (_closed || isBroadcaster) return;
+    if (_closed) return;
     await _prv.sendSignal(
       roomId,
       type: 'b_join',
@@ -256,7 +270,12 @@ class RoomBroadcastSession extends ChangeNotifier {
     try {
       pc?.close();
     } catch (_) {}
+    final rr = remoteRenderers.remove(uid);
+    try {
+      rr?.dispose();
+    } catch (_) {}
     _pendingCands.remove(uid);
+    hasRemoteVideo = remoteRenderers.isNotEmpty;
     notifyListeners();
   }
 
@@ -280,7 +299,6 @@ class RoomBroadcastSession extends ChangeNotifier {
     }
   }
 
-  /// Re-negotiate bitrate ke semua peer (dipanggil saat jumlah penonton berubah).
   void _renegotiateBitrateAll() {
     for (final pc in _peers.values) {
       _applyBitrate(pc);
@@ -307,8 +325,6 @@ class RoomBroadcastSession extends ChangeNotifier {
     }
   }
 
-  // ── Sisi PENONTON ──
-
   Future<void> _viewerHandleOffer(
     String broadcasterUid,
     Map<String, dynamic> payload,
@@ -326,13 +342,20 @@ class RoomBroadcastSession extends ChangeNotifier {
       pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _peers[broadcasterUid] = pc;
 
-      pc.onTrack = (event) {
+      pc.onTrack = (event) async {
         final stream =
             event.streams.isNotEmpty ? event.streams.first : null;
         if (stream != null && !_closed) {
           remoteRenderer.srcObject = stream;
-          hasRemoteVideo =
-              stream.getVideoTracks().isNotEmpty;
+          var r = remoteRenderers[broadcasterUid];
+          if (r == null) {
+            r = RTCVideoRenderer();
+            await r.initialize();
+            remoteRenderers[broadcasterUid] = r;
+          }
+          r.srcObject = stream;
+          hasRemoteVideo = remoteRenderers.values.any((rr) => rr.srcObject != null);
+          remoteReady = true;
           notifyListeners();
         }
       };
@@ -360,19 +383,14 @@ class RoomBroadcastSession extends ChangeNotifier {
     _hbTimer?.cancel();
     _watchdog?.cancel();
     await _signalSub?.cancel();
-    await remoteRenderer.initialize();
-    if (!isBroadcaster) {
-      _signalSub = _prv.onSignal(roomId).listen(_onSignal);
-      unawaited(_prv.requestJoin(roomId)); // no-op kalau sudah member
-      await Future.delayed(const Duration(milliseconds: 600));
-      await requestStream();
-      notifyListeners();
-      return;
+    if (_broadcasterSub != null) {
+      _sb.removeChannel(_broadcasterSub!);
+      _broadcasterSub = null;
     }
     if (isBroadcaster) {
       await _prv.sendSignal(roomId, type: 'b_bye');
       try {
-        await _prv.stopBroadcast(roomId);
+        await _prv.stopBroadcastV2(roomId);
       } catch (_) {}
     }
     for (final pc in _peers.values) {
@@ -381,14 +399,22 @@ class RoomBroadcastSession extends ChangeNotifier {
       } catch (_) {}
     }
     _peers.clear();
+    for (final r in remoteRenderers.values) {
+      try {
+        await r.dispose();
+      } catch (_) {}
+    }
+    remoteRenderers.clear();
     try {
       await localRenderer.dispose();
+    } catch (_) {}
+    try {
+      await remoteRenderer.dispose();
     } catch (_) {}
     onEnded?.call();
     notifyListeners();
   }
 
-  // Seed signal yang terlewat saat broadcaster offline (id cursor).
   Future<void> _seedMissedSignals() async {
     final rows = await _prv.fetchSignalsSince(roomId, _lastSignalId);
     for (final r in rows) {
