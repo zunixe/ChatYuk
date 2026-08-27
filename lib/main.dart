@@ -121,7 +121,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       type == 'follow' ||
       type == 'friend_request' ||
       type == 'subscribe' ||
-      type == 'call';
+      type == 'call' ||
+      type == 'message';
   final isMessage = type == 'message' ||
       (type == null && data.containsKey('chatId'));
   final title = isDataOnly
@@ -131,6 +132,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final body = isDataOnly
       ? (type == 'call'
             ? 'is calling you'
+            : type == 'message'
+            ? (data['body'] as String?) ?? 'New message'
             : type == 'online'
             ? 'is online'
             : type == 'follow'
@@ -324,7 +327,8 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       type == 'follow' ||
       type == 'friend_request' ||
       type == 'subscribe' ||
-      type == 'call';
+      type == 'call' ||
+      type == 'message';
   final isOnline = type == 'online';
   final title = isDataOnly
       ? data['otherName'] ?? data['fromName'] ?? s.unknownUser
@@ -333,6 +337,8 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   final body = isDataOnly
       ? (type == 'call'
             ? s.notifCallingBody
+            : type == 'message'
+            ? (data['body'] as String?) ?? s.notifNewMessageBody
             : isOnline
             ? s.notifOnlineBody
             : type == 'follow'
