@@ -202,6 +202,16 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     ),
                   );
                 }
+                // Urutkan: online teratas, lalu idle, lalu offline — di dalam grup urut by lastMessageAt terbaru
+                filtered.sort((a, b) {
+                  final aUid = a.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
+                  final bUid = b.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
+                  int rank(String s) => s == 'online' ? 0 : s == 'idle' ? 1 : 2;
+                  final ra = rank(statusMap[aUid] ?? 'offline');
+                  final rb = rank(statusMap[bUid] ?? 'offline');
+                  if (ra != rb) return ra.compareTo(rb);
+                  return b.lastMessageAt.compareTo(a.lastMessageAt);
+                });
                 // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus
                 final paged = filtered.take(_page * _pageSize).toList();
                 final hasMore = paged.length < filtered.length;
