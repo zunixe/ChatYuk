@@ -52,9 +52,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final data = message.data;
   final type = data['type'];
   // call_ended → panggilan selesai/dibatalkan. UPDATE notif call yang sama
-  // (id = chatId) jadi "Call ended", bukan tambah notif baru. Juga hapus
-  // duplikat id alternatif (callId vs chatId) biar tidak tersisa 2 notif
-  // saat DB fan-out mengirim ke device dengan id berbeda.
+  // (id = callId) jadi "Call ended". Langsung show dengan id sama (update
+  // in-place) tanpa cancel dulu — cancel+show di MIUI justru menyisakan
+  // notif kosong (ghost) + notif baru = 2 notif.
   if (type == 'call_ended') {
     final androidInit = const lpn.AndroidInitializationSettings(
       '@mipmap/ic_launcher',
@@ -63,17 +63,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final plugin = lpn.FlutterLocalNotificationsPlugin();
     await plugin.initialize(settings: settings);
     await _ensureAndroidChannels(plugin);
-    // callId adalah ID kanonik. chatId hanya dipakai sebagai fallback untuk
-    // payload lama agar ringing dan call_ended selalu memakai notif ID sama.
     final key = data['callId'] ?? data['chatId'] ?? '';
     if (key.isEmpty) return;
-    // Hapus ringing lama (ongoing) sebelum update → hindari dobel
-    // (ongoing:true → autoCancel:true kadang tidak replace di MIUI).
-    await plugin.cancel(id: notifIdForKey(key));
-    final alt = data['chatId'] as String?;
-    if (alt != null && alt.isNotEmpty && alt != key) {
-      await plugin.cancel(id: notifIdForKey(alt));
-    }
+    debugPrint('[NOTIF_BG] call_ended key=$key data=$data');
     String _pick(Map d, List<String> keys, String fallback) {
       for (final k in keys) {
         final v = d[k];
@@ -242,12 +234,9 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   if (data['type'] == 'call_ended') {
     final key = data['callId'] ?? data['chatId'] ?? '';
     if (key.isEmpty) return;
-    // Hapus ringing lama sebelum update (MIUI: ongoing→non-ongoing tidak replace)
-    await localNotifications.cancel(id: notifIdForKey(key));
-    final alt = data['chatId'] as String?;
-    if (alt != null && alt.isNotEmpty && alt != key) {
-      await localNotifications.cancel(id: notifIdForKey(alt));
-    }
+    debugPrint('[NOTIF] call_ended key=$key title=${data['otherName']} body=${data['body']}');
+    // Langsung update notif yang sama (id = callId) tanpa cancel dulu — cancel+show
+    // di MIUI menyisakan ghost kosong.
     // Tutup IncomingCallScreen yang mungkin masih nongol (app foreground)
     final callId = (data['callId'] ?? data['chatId']) as String?;
     if (callId != null && callId.isNotEmpty) {
