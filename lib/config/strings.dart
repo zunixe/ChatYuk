@@ -406,6 +406,38 @@ class S {
       isId ? 'menelpon kamu...' : 'is calling you...';
   String get notifTimelineBody =>
       isId ? 'membuat postingan baru' : 'created a new post';
+  String get notifMissedCallBody =>
+      isId ? 'panggilan tak terjawab' : 'missed call';
+  // ── Notifikasi Detail (per-jenis toggle) ──
+  String get notifDetailTitle =>
+      isId ? 'Pengaturan Notifikasi' : 'Notification Settings';
+  String get notifDetailHint => isId
+      ? 'Pilih notifikasi yang ingin kamu terima'
+      : 'Choose which notifications to receive';
+  String get notifTypeCall => isId ? 'Panggilan' : 'Calls';
+  String get notifTypeCallDesc =>
+      isId ? 'Panggilan suara & video' : 'Voice & video calls';
+  String get notifTypeChat => isId ? 'Chat' : 'Chats';
+  String get notifTypeChatDesc =>
+      isId ? 'Pesan private baru' : 'New private messages';
+  String get notifTypeOnline => isId ? 'Pesan Online' : 'Online Alerts';
+  String get notifTypeOnlineDesc =>
+      isId ? 'Teman chat sedang online' : 'Chat contact is online';
+  String get notifTypeTimeline => isId ? 'Timeline' : 'Timeline';
+  String get notifTypeTimelineDesc =>
+      isId ? 'Postingan baru di timeline' : 'New timeline posts';
+  String get notifTypeFollower => isId ? 'Pengikut' : 'Followers';
+  String get notifTypeFollowerDesc =>
+      isId ? 'Seseorang mengikuti kamu' : 'Someone followed you';
+  String get notifTypeFollowing => isId ? 'Mengikuti' : 'Following';
+  String get notifTypeFollowingDesc =>
+      isId ? 'Langganan & update mengikuti' : 'Subscriptions & following updates';
+  String get notifTypeFriend => isId ? 'Teman' : 'Friends';
+  String get notifTypeFriendDesc =>
+      isId ? 'Permintaan & update teman' : 'Friend requests & updates';
+  String get chatOnlineBadge => isId ? 'Online' : 'Online';
+  String get chatOnlineSubtitle =>
+      isId ? '● Online sekarang' : '● Online now';
   String get labelNotifications => isId ? 'Notifikasi' : 'Notifications';
   String get notifEnabledDesc => isId
       ? 'Terima notifikasi pesan baru'

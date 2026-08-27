@@ -27,6 +27,7 @@ import 'utils.dart';
 import 'services/message_cache.dart';
 import 'services/photo_cache.dart';
 import 'services/chat_background.dart';
+import 'services/notification_prefs_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final LocaleProvider localeProvider = LocaleProvider();
@@ -51,6 +52,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
   final data = message.data;
   final type = data['type'];
+  if (!await NotificationPrefsService.shouldShowForFcmType(type as String?)) return;
   // call_ended → panggilan selesai/dibatalkan. UPDATE notif call yang sama
   // (id = callId) jadi "Call ended". Langsung show dengan id sama (update
   // in-place) tanpa cancel dulu — cancel+show di MIUI justru menyisakan
@@ -230,6 +232,7 @@ Future<void> _ensureAndroidChannels(
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
+  if (!await NotificationPrefsService.shouldShowForFcmType(data['type'] as String?)) return;
   // call_ended → update notif call yang sama jadi "Call ended" + tutup
   // IncomingCallScreen & foreground service jika masih tampil (sinkron DB
   // notify_call_ended yang kini kirim type call_ended untuk semua status
