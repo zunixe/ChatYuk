@@ -50,6 +50,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
   final data = message.data;
   final type = data['type'];
+  // call_canceled → panggilan dibatalkan/diputus sebelum dijawab. Batalkan
+  // notifikasi call yang masih tampil (gaya panggilan berakhir).
+  if (type == 'call_canceled') {
+    final androidInit = const lpn.AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+    final settings = lpn.InitializationSettings(android: androidInit);
+    final plugin = lpn.FlutterLocalNotificationsPlugin();
+    await plugin.initialize(settings: settings);
+    final key = data['callId'] ?? data['chatId'] ?? '';
+    await plugin.cancel(id: notifIdForKey(key));
+    return;
+  }
   final isDataOnly =
       type == 'online' ||
       type == 'follow' ||
@@ -161,6 +174,12 @@ Future<void> _ensureAndroidChannels(
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
+  // call_canceled → batalkan notifikasi call yang masih tampil.
+  if (data['type'] == 'call_canceled') {
+    final key = data['callId'] ?? data['chatId'] ?? '';
+    await localNotifications.cancel(id: notifIdForKey(key));
+    return;
+  }
   // Panggilan masuk saat app TERBUKA ditangani Supabase Realtime
   // (IncomingCallScreen dengan ringtone sendiri) — jangan tampilkan notif.
   if (data['type'] == 'call') return;
