@@ -49,7 +49,20 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     _loadCaller();
     _startRingtone();
     _statusSub = _service.onCallStatus(widget.callId).listen((status) {
-      if (status == 'canceled' || status == 'ended') _close();
+      if (status == 'canceled' ||
+          status == 'ended' ||
+          status == 'declined' ||
+          status == 'busy' ||
+          status == 'missed') _close();
+    });
+    // cek status awal — jika caller sudah membatalkan sebelum realtime
+    // subscribe (race), langsung tutup agar tidak stuck di "calling".
+    _service.getCall(widget.callId).then((row) {
+      final st = row?['status'] as String?;
+      if (!mounted) return;
+      if (st != null && st != 'ringing' && st != 'answered') {
+        _close();
+      }
     });
   }
 
