@@ -13,6 +13,8 @@ import '../services/auth_service.dart';
 import '../services/device_info_service.dart';
 import '../services/location_service.dart';
 import '../services/message_cache.dart';
+import '../services/realtime_hub.dart';
+import '../services/push_topic_service.dart';
 import '../services/points_service.dart';
 import '../services/screen_secure_service.dart';
 import '../services/notification_prefs_service.dart';
@@ -81,6 +83,12 @@ class AuthProvider extends ChangeNotifier {
       AdminGate.isRealAdmin(_auth.currentUser?.email);
   String? get userEmail => _auth.userEmail;
   bool get hasPassword => _auth.hasPassword;
+  Future<bool> fetchHasPassword() => _auth.fetchHasPassword();
+  bool get hasPasswordSync => _auth.hasPassword;
+  Future<void> refreshHasPassword() async {
+    await _auth.fetchHasPassword();
+    if (!_disposed) notifyListeners();
+  }
   bool get notificationsEnabled => _notificationsEnabled;
 
   AuthProvider() {
@@ -240,6 +248,7 @@ class AuthProvider extends ChangeNotifier {
     } else {
       // FCM token & cleanup di-fire-and-forget — tidak block loading screen
       if (_profile != null) {
+        safeUnawaited(refreshHasPassword());
         safeUnawaited(updateFcmToken());
         // Catat identitas perangkat + install ID untuk pelacakan admin.
         // Hanya saat user SUDAH punya profil — anon fresh tanpa profil akan
@@ -252,6 +261,9 @@ class AuthProvider extends ChangeNotifier {
       _startHeartbeat();
       _startLocationPing();
       safeUnawaited(_initLocation());
+      if (_profile != null && !_invisibleEnabled && !_isIdle && uid != null) {
+        safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile!.nickname));
+      }
       // Daily login bonus poin
       safeUnawaited(_claimDailyPoints());
     }
@@ -499,11 +511,13 @@ class AuthProvider extends ChangeNotifier {
         _isIdle = false;
         await _auth.goInvisible();
         _profile = _profile?.copyWith(status: 'invisible');
+        safeUnawaited(RealtimeHub.instance.untrackOnline());
       } else {
         await _auth.goOnline();
         _profile = _profile?.copyWith(status: 'online');
         resetIdleTimer();
         safeUnawaited(_updateLocationOnOnline());
+        if (uid != null) safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''));
       }
     } catch (e) {
       debugPrint('[AUTH] updateInvisibleEnabled error: $e');
@@ -978,26 +992,29 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> goOnline() async {
     if (_disposed) return;
-    if (dummySessionActive) return; // status dummy dikontrol admin panel
-    if (_invisibleEnabled) return; // invisible → jangan pernah online
+    if (dummySessionActive) return;
+    if (_invisibleEnabled) return;
     await _auth.goOnline();
     _profile = _profile?.copyWith(status: 'online');
     if (!_disposed) notifyListeners();
     resetIdleTimer();
     safeUnawaited(_updateLocationOnOnline());
+    if (uid != null) {
+      safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''));
+    }
   }
 
   /// Set status idle — dipakai saat app di-background/tutup (bukan logout).
-  /// User tetap tampil di menu online sebagai idle, tidak hilang.
   Future<void> goIdle() async {
     if (_disposed) return;
-    if (dummySessionActive) return; // status dummy dikontrol admin panel
-    if (_invisibleEnabled) return; // invisible → tetap offline
+    if (dummySessionActive) return;
+    if (_invisibleEnabled) return;
     _idleTimer?.cancel();
     _isIdle = true;
     await _auth.goIdle();
     _profile = _profile?.copyWith(status: 'idle');
     if (!_disposed) notifyListeners();
+    safeUnawaited(RealtimeHub.instance.untrackOnline());
   }
 
   Future<void> goOffline() async {
@@ -1006,16 +1023,18 @@ class AuthProvider extends ChangeNotifier {
     await _auth.goOffline();
     _profile = _profile?.copyWith(status: 'offline');
     if (!_disposed) notifyListeners();
+    safeUnawaited(RealtimeHub.instance.untrackOnline());
   }
 
-  /// Heartbeat berkala: update last_seen di server tiap 120 detik.
-  /// Kalau app di-kill/force-stop, heartbeat berhenti dan last_seen
-  /// jadi basi sehingga admin bisa menandai user offline.
+  /// Heartbeat berkala: update last_seen di server tiap 120 detik + Presence.
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
       if (_disposed) return;
       safeUnawaited(_auth.updateLastSeen());
+      if (uid != null && !_invisibleEnabled && !_isIdle) {
+        safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''));
+      }
     });
   }
 

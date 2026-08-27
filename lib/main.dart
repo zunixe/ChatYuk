@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -237,6 +240,18 @@ Future<void> _ensureAndroidChannels(
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
+  final currentUid = Supabase.instance.client.auth.currentUser?.id;
+  // Jangan tampilkan notifikasi untuk diri sendiri (online, message, call, timeline, room)
+  if (currentUid != null && currentUid.isNotEmpty) {
+    final senderUid = (data['uid'] ?? data['otherUid'] ?? data['callerUid'] ?? data['authorId'] ?? data['sender_id'] ?? data['senderId'] ?? '') as String;
+    if (senderUid.isNotEmpty && senderUid == currentUid) return;
+    // Online khusus: data['uid'] adalah yang online
+    if (data['type'] == 'online' && (data['uid'] as String?) == currentUid) return;
+    // Timeline: authorId
+    if ((data['type'] == 'timeline' || data['type'] == 'timeline_post') && (data['authorId'] as String?) == currentUid) return;
+    // Room: cek jika data mengandung ownerId/sender
+    if (data['type'] == 'room' && (data['ownerId'] as String?) == currentUid) return;
+  }
   final shouldShow = await NotificationPrefsService.shouldShowForFcmType(data['type'] as String?);
   debugPrint('[NOTIF_FG] type=${data['type']} shouldShow=$shouldShow data=$data');
   if (!shouldShow) return;
@@ -283,6 +298,19 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
     }
     final title = _pick(data, ['otherName', 'callerName'], localeProvider.s.unknownUser);
     final body = _notifBody(message, data) ?? 'Call ended';
+    String? bigPicPath;
+    final avatarUrl2 = data['avatarUrl'] as String?;
+    if (avatarUrl2 != null && avatarUrl2.startsWith('http')) {
+      try {
+        final resp = await http.get(Uri.parse(avatarUrl2)).timeout(const Duration(seconds: 4));
+        if (resp.statusCode == 200) {
+          final dir = await getTemporaryDirectory();
+          final file = File('${dir.path}/notif_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg');
+          await file.writeAsBytes(resp.bodyBytes);
+          bigPicPath = file.path;
+        }
+      } catch (_) {}
+    }
     await localNotifications.show(
       id: notifIdForKey(key),
       title: title,
@@ -295,7 +323,10 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
           importance: lpn.Importance.max,
           priority: lpn.Priority.max,
           autoCancel: true,
+          styleInformation: bigPicPath != null ? lpn.BigPictureStyleInformation(lpn.FilePathAndroidBitmap(bigPicPath), hideExpandedLargeIcon: true) : null,
+          largeIcon: bigPicPath != null ? lpn.FilePathAndroidBitmap(bigPicPath) : null,
         ),
+        iOS: bigPicPath != null ? lpn.DarwinNotificationDetails(attachments: [lpn.DarwinNotificationAttachment(bigPicPath)]) : null,
       ),
       payload: jsonEncode(data),
     );
@@ -346,7 +377,9 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
             (type == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
   final body = isDataOnly
       ? (type == 'call'
-            ? s.notifCallingBody
+            ? (data['callType'] == 'video'
+                ? s.notifCallingVideoBody
+                : s.notifCallingVoiceBody)
             : type == 'message'
             ? (data['body'] as String?) ?? s.notifNewMessageBody
             : isOnline
@@ -358,6 +391,20 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
             : s.notifSubscribeBody)
       : message.notification?.body ?? s.notifNewMessageBody;
 
+  // Avatar BigPicture jika ada avatarUrl http
+  String? bigPicPath;
+  final avatarUrl = data['avatarUrl'] as String?;
+  if (avatarUrl != null && avatarUrl.startsWith('http')) {
+    try {
+      final resp = await http.get(Uri.parse(avatarUrl)).timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/notif_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await file.writeAsBytes(resp.bodyBytes);
+        bigPicPath = file.path;
+      }
+    } catch (_) {}
+  }
   await localNotifications.show(
     id: notifIdForKey(
       data['callId'] ?? data['chatId'] ?? data['roomId'] ?? 'local',
@@ -371,7 +418,14 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
         channelDescription: s.notifChannelDesc,
         importance: lpn.Importance.max,
         priority: lpn.Priority.max,
+        styleInformation: bigPicPath != null
+            ? lpn.BigPictureStyleInformation(lpn.FilePathAndroidBitmap(bigPicPath), hideExpandedLargeIcon: true)
+            : null,
+        largeIcon: bigPicPath != null ? lpn.FilePathAndroidBitmap(bigPicPath) : null,
       ),
+      iOS: bigPicPath != null
+          ? lpn.DarwinNotificationDetails(attachments: [lpn.DarwinNotificationAttachment(bigPicPath)])
+          : null,
     ),
     payload: jsonEncode(data),
   );

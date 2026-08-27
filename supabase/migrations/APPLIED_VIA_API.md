@@ -40,6 +40,36 @@
 - **Code sync:** `lib/main.dart` `call_ended` handler (background `48` + foreground `213`) sekarang: (a) cancel duplikat `callId` alt sebelum `show`, (b) foreground juga `unregisterCall` + `nav.pop()` + `clearSession()` untuk dismiss `IncomingCallScreen` & `call_active` foreground service yang tertinggal (penyebab notif ke-3). Tanpa ini, DB sudah 1 push tapi code masih ninggalin `IncomingCallScreen` + `call_active` = 3 ikon.
 - **Verifikasi sinkron:** `call_push` fan-out ✅, `notify_call_ended` data-only + `data.body` ✅, `send-push` `call_ended` data-only ✅, `main.dart` handle `call_ended` dismiss ✅, `flutter analyze` 0 error 0 warning (156 infos ok).
 
+## 2026-08-28 — 20260828010000_call_message_avatar.sql
+
+- **Status:** ✅ SUDAH TERAPPLIED di remote DB `fohcucyyejdryryoxitm` pada 2026-08-28 via **Supabase Management API** `POST /v1/projects/.../database/query` (token `sbp_...` dari Keychain, bukan `supabase db push` yang timeout 300s).
+- **Cara apply:** `curl -X POST https://api.supabase.com/v1/projects/fohcucyyejdryryoxitm/database/query -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" --data-binary @/tmp/mig1.json` + `insert into supabase_migrations.schema_migrations (version) values ('20260828010000')` (sudah). Verifikasi: `select pg_get_functiondef(oid) from pg_proc where proname='call_push'` mengandung `avatarUrl`.
+
+## 2026-08-28 — 20260828020000_unified_fanout_debounce.sql
+
+- **Status:** ✅ SUDAH TERAPPLIED di remote DB `fohcucyyejdryryoxitm` pada 2026-08-28 via **Management API** (sama). Verifikasi: `select version from supabase_migrations.schema_migrations order by version desc limit 5` → `20260828020000, 20260828010000` teratas.
+
+## 2026-08-28 — Edge Functions (fanout + send-push avatar)
+
+- **send-push** `supabase/functions/send-push/index.ts`: support `topic` (selain `token`), resolve `avatarUrl` path `avatars/` → public URL `https://.../storage/v1/object/public/chat-photos/...`, set `notification.image` + `android.notification.image` + `apns fcm_options.image`, `data` stringified. Verifikasi: `grep -c avatarUrl supabase/functions/send-push/index.ts` >0.
+- **fanout** `supabase/functions/fanout/index.ts` (BARU): HTTP `POST {type,id}` → query `profiles/posts/rooms` via `SUPABASE_SERVICE_ROLE_KEY` → `admin.messaging().send({topic:'online-$id'|'timeline-all'|'room-$id', notification:{title,body,image}, data:{...}})` + `broadcast` via Realtime (Presence). Deploy: `supabase functions deploy fanout --no-verify-jwt` + `send-push` redeploy.
+
+## 2026-08-28 — Flutter (unified realtime)
+
+- **RealtimeHub** `lib/services/realtime_hub.dart` + **PushTopicService** `lib/services/push_topic_service.dart` (baru) — hub Presence `online-global`, Broadcast `timeline-all`, Presence `room-$id`.
+- **AuthProvider** `lib/providers/auth_provider.dart`: heartbeat `trackOnline` Presence tiap 120s, `untrack` saat idle/offline/invisible.
+- **ChatService** `lib/services/chat_service.dart:getOnlineUsers()` ganti `SELECT LIMIT 500 + polling 30d` → `PresenceState` + `SELECT ... WHERE id IN (presence uids)` + avatar batch.
+- **TimelineProvider** `lib/providers/timeline_provider.dart` + **RoomProvider** `lib/providers/room_provider.dart` listen `RealtimeHub.timelineBroadcast` / `roomPresence`.
+- **main.dart** `lib/main.dart`: `import dart:io, http, path_provider`, `_showLocalNotification` download `avatarUrl` → `BigPictureStyleInformation` + `largeIcon` (call_ended + generic).
+
+## 2026-08-28 — 20260828030000_fix_call_notif_single.sql
+
+- **Status:** ✅ SUDAH TERAPPLIED di remote DB `fohcucyyejdryryoxitm` pada 2026-08-28 via Management API (token Keychain). `supabase functions deploy send-push` juga redeploy (tambah `call_canceled` ke `dataOnlyTypes`).
+- **Isi:** Hapus trigger lama `calls_notify_canceled_trigger` / `notify_call_canceled`, tambahkan kolom `calls.notif_sent_at` + idempoten `before update` di `notify_call_ended()` (hanya kirim sekali per call dari `ringing/answered → terminal`), `send-push` jadikan `call_canceled` data-only juga. Verifikasi: `select trigger_name from information_schema.triggers where event_object_table='calls'` harus hanya `calls_notify_ended_trigger` + `notify_call_ringing_trigger`, dan `select proname from pg_proc where proname='notify_call_ended'` mengandung `notif_sent_at`.
+
+
+> AI sesi berikutnya: JANGAN `supabase db push` untuk 20260828010000/20260828020000 — gunakan Playwright SQL Editor `https://supabase.com/dashboard/project/fohcucyyejdryryoxitm/sql` → paste isi file → Run → lalu `insert into supabase_migrations.schema_migrations (version) values ('20260828010000'),('20260828020000')` manual. Functions deploy via `supabase functions deploy fanout --no-verify-jwt` (butuh `SUPABASE_ACCESS_TOKEN` + Docker, atau via Dashboard Functions).
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:

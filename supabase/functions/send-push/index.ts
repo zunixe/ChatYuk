@@ -71,9 +71,13 @@ Deno.serve(async (req) => {
       return new Response('Method not allowed', { status: 405 });
     }
     const body = await req.json();
-    const { token, title, body: msgBody, data } = body;
-    if (!token) {
-      return new Response(JSON.stringify({ error: 'no token' }), { status: 400 });
+    const { token, topic, title, body: msgBody, data } = body;
+    if (!token && !topic) {
+      return new Response(JSON.stringify({ error: 'no token/topic' }), { status: 400 });
+    }
+    // Resolve avatar path -> public URL untuk BigPicture (Android) / image (iOS)
+    if (data?.avatarUrl && data.avatarUrl.startsWith('avatars/')) {
+      data.avatarUrl = `https://fohcucyyejdryryoxitm.supabase.co/storage/v1/object/public/chat-photos/${data.avatarUrl}`;
     }
 
     // Data-only untuk tipe yang teksnya dirender client (bilingual):
@@ -84,7 +88,7 @@ Deno.serve(async (req) => {
     // Jika call_ended dikirim sebagai notification block, FCM auto-tampilkan
     // 1 notif sistem (id random) + Flutter tampilkan 1 lagi (id chatId) =
     // dobel (penyebab 3 notifikasi). Jadi HARUS data-only.
-    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call', 'call_ended', 'message'];
+    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call', 'call_ended', 'call_canceled', 'message'];
     const isDataOnly = dataOnlyTypes.includes(body.data?.type);
 
     // Untuk call, susun teks dari data (nama caller + tipe).
@@ -96,21 +100,27 @@ Deno.serve(async (req) => {
       ? (body.data?.callType === 'video' ? 'Panggilan video' : 'Panggilan suara')
       : (msgBody || 'Ada pesan baru');
 
+    // Avatar untuk FCM image (BigPicture) — hanya jika ada URL http
+    const avatarImage = data?.avatarUrl && data.avatarUrl.startsWith('http') ? data.avatarUrl : undefined;
     const message = {
       message: {
-        token,
+        ...(token ? { token } : {}),
+        ...(topic ? { topic } : {}),
         ...(isDataOnly
           ? {}
           : {
               notification: {
                 title: notifTitle,
                 body: notifBody,
+                ...(avatarImage ? { image: avatarImage } : {}),
               },
             }),
-        data: data || {},
+        data: data ? Object.fromEntries(Object.entries(data).map(([k,v])=>[k, String(v)])) : {},
         android: {
           priority: 'high',
+          ...(avatarImage && !isDataOnly ? { notification: { image: avatarImage } } : {}),
         },
+        apns: avatarImage ? { payload: { aps: { 'mutable-content': 1 } }, fcm_options: { image: avatarImage } } : undefined,
       },
     };
 

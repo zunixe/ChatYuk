@@ -5,6 +5,7 @@ import '../models/room_model.dart';
 import '../services/room_service.dart';
 import '../services/chat_service.dart';
 import '../services/message_cache.dart';
+import '../services/realtime_hub.dart';
 
 class RoomProvider extends ChangeNotifier {
   final RoomService _service = RoomService();
@@ -27,6 +28,20 @@ class RoomProvider extends ChangeNotifier {
   String? get error => _error;
 
   RoomProvider() {
+    // Unified fan-out: Presence room juga update counts per-room
+    RealtimeHub.instance.roomPresence.listen((msg) {
+      final roomId = msg['roomId'] as String?;
+      final state = msg['state'] as Map?;
+      if (roomId == null || state == null) return;
+      int total = 0;
+      for (final v in state.values) {
+        if (v is List) total += v.length;
+      }
+      if (_counts[roomId] == total) return;
+      _counts = {..._counts, roomId: total};
+      _applyCounts();
+      notifyListeners();
+    });
     _countsSub = _chat.getRoomOnlineCounts().listen(
       (counts) {
         // Event presence (heartbeat 60s tiap user) tidak mengubah count —

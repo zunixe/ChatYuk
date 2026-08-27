@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/timeline_service.dart';
 import '../services/message_cache.dart';
+import '../services/realtime_hub.dart';
 
 /// Cache per-scope: posts + pagination state untuk tab Semua/Mengikuti/Postinganku.
 class _ScopeCache {
@@ -132,6 +133,11 @@ class TimelineProvider extends ChangeNotifier {
   void _listenRealtime() {
     _rtSub?.cancel();
     _rtSub = _service.watchNewPosts().listen(_onNewPost);
+    // Unified fan-out: juga dengar Broadcast timeline-all (Presence) untuk 1→N ringan
+    RealtimeHub.instance.timelineBroadcast.listen((msg) {
+      final payload = msg['payload'] as Map<String, dynamic>?;
+      if (payload != null) _onNewPost({'event': msg['event'] ?? 'insert', 'row': payload});
+    });
   }
 
   void _onNewPost(Map<String, dynamic> msg) {

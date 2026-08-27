@@ -20,10 +20,13 @@ import '../providers/social_provider.dart';
 import '../services/chat_service.dart';
 import '../services/location_service.dart';
 import '../utils/bounded_cache.dart';
+import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
 import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/services.dart';
 
 final _avatarCache = BoundedCache<String, Uint8List>(80);
 
@@ -246,6 +249,121 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     }
   }
 
+  Future<void> _showUnreadBubble(BuildContext context, UserModel user, int unreadCount, Offset globalPos) async {
+    final myUid = context.read<AuthProvider>().uid;
+    if (myUid == null) return;
+    final ids = [myUid, user.uid]..sort();
+    final chatId = '${ids[0]}_${ids[1]}';
+    List<MessageModel> msgs = [];
+    try {
+      final rows = await Supabase.instance.client
+          .from('private_messages')
+          .select('id, sender_id, sender_name, text, type, image_data, created_at')
+          .eq('chat_id', chatId)
+          .eq('sender_id', user.uid)
+          .order('created_at', ascending: false)
+          .limit(unreadCount > 8 ? 8 : unreadCount);
+      msgs = rows.map((r) => MessageModel.fromMap('${r['id']}', {
+            'senderId': r['sender_id'],
+            'senderName': r['sender_name'],
+            'text': r['text'] ?? '',
+            'type': r['type'] ?? 'text',
+            'imageData': r['image_data'] ?? '',
+            'createdAt': r['created_at'],
+          })).toList();
+    } catch (_) {}
+    if (!context.mounted || msgs.isEmpty) return;
+    HapticFeedback.mediumImpact();
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (ctx) {
+        final size = MediaQuery.of(ctx).size;
+        final bubbleWidth = 280.0;
+        final bubbleHeight = (msgs.length * 48.0 + 40).clamp(72, 280).toDouble();
+        double left = globalPos.dx - bubbleWidth / 2;
+        left = left.clamp(12, size.width - bubbleWidth - 12);
+        double top = globalPos.dy - bubbleHeight - 24;
+        if (top < 40) top = globalPos.dy + 24;
+        final isAbove = globalPos.dy - bubbleHeight - 24 >= 40;
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () => entry.remove(),
+                child: Container(color: Colors.black.withValues(alpha: 0.15)),
+              ),
+            ),
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                color: Colors.transparent,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!isAbove) ...[
+                      CustomPaint(size: const Size(14, 8), painter: _BubbleTailPainter(color: AppTheme.bgInput, isTop: true)),
+                    ],
+                    Container(
+                      width: bubbleWidth,
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgInput,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 16, offset: const Offset(0, 6))],
+                        border: Border.all(color: AppTheme.divider.withValues(alpha: 0.8)),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Text(user.nickname, style: AppText.bodyStrong.copyWith(fontSize: 13)),
+                            const SizedBox(width: 6),
+                            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)), child: Text('$unreadCount baru', style: AppText.micro.copyWith(color: AppTheme.danger, fontWeight: FontWeight.w800))),
+                            const Spacer(),
+                            GestureDetector(onTap: () => entry.remove(), child: Icon(Icons.close, size: 16, color: AppTheme.textSecondary)),
+                          ]),
+                          Divider(height: 1, color: AppTheme.divider.withValues(alpha: 0.5)),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (final m in msgs) ...[
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+                                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    Expanded(child: Text(m.text.isNotEmpty ? m.text : (m.type == 'image' ? '[Foto]' : m.type), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodySmall.copyWith(height: 1.2))),
+                                    const SizedBox(width: 8),
+                                    Text(DateFormat('HH:mm').format(m.timestamp.toLocal()), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                                  ]),
+                                ),
+                                if (m != msgs.last) Divider(height: 1, color: AppTheme.divider.withValues(alpha: 0.3)),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isAbove) ...[
+                      CustomPaint(size: const Size(14, 8), painter: _BubbleTailPainter(color: AppTheme.bgInput, isTop: false)),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 4), () {
+      if (entry.mounted) entry.remove();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
@@ -419,11 +537,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   ),
                   Expanded(
                     child: !provider.hasLoaded
-                        ? Center(
-                            child: CircularProgressIndicator(
-                              color: AppTheme.primary,
-                              strokeWidth: 2,
-                            ),
+                        ? ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+                            itemCount: 6,
+                            itemBuilder: (_, __) => const _SkeletonCard(),
                           )
                         : users.isEmpty
                         ? Center(
@@ -503,6 +620,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               return _UserCard(
                                 user: paged[i],
                                 onTap: () => _startChat(context, paged[i]),
+                                onLongPressStart: unreadMap[paged[i].uid] != null && unreadMap[paged[i].uid]! > 0
+                                    ? (d) => _showUnreadBubble(context, paged[i], unreadMap[paged[i].uid]!, d.globalPosition)
+                                    : null,
                                 unreadCount: unreadMap[paged[i].uid] ?? 0,
                               );
                             },
@@ -569,6 +689,54 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   }
 }
 
+class _SkeletonCard extends StatelessWidget {
+  const _SkeletonCard();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: AppTheme.bgCard, borderRadius: BorderRadius.circular(14)),
+      child: Row(children: [
+        Container(width: 40, height: 40, decoration: BoxDecoration(color: AppTheme.divider, shape: BoxShape.circle)),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(height: 14, width: 120, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(6))),
+          const SizedBox(height: 6),
+          Container(height: 11, width: 180, decoration: BoxDecoration(color: AppTheme.divider.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(6))),
+        ])),
+      ]),
+    );
+  }
+}
+
+class _BubbleTailPainter extends CustomPainter {
+  final Color color;
+  final bool isTop;
+  _BubbleTailPainter({required this.color, required this.isTop});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..style = PaintingStyle.fill;
+    final path = Path();
+    if (isTop) {
+      path.moveTo(size.width / 2 - 7, size.height);
+      path.lineTo(size.width / 2 + 7, size.height);
+      path.lineTo(size.width / 2, 0);
+    } else {
+      path.moveTo(size.width / 2 - 7, 0);
+      path.lineTo(size.width / 2 + 7, 0);
+      path.lineTo(size.width / 2, size.height);
+    }
+    path.close();
+    canvas.drawShadow(path, Colors.black.withValues(alpha: 0.1), 2, false);
+    canvas.drawPath(path, paint);
+    final border = Paint()..color = AppTheme.divider.withValues(alpha: 0.6)..style = PaintingStyle.stroke..strokeWidth = 1;
+    canvas.drawPath(path, border);
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class _FilterDropdown extends StatelessWidget {
   final String value;
   final String label;
@@ -625,10 +793,12 @@ class _FilterDropdown extends StatelessWidget {
 class _UserCard extends StatelessWidget {
   final UserModel user;
   final VoidCallback onTap;
+  final void Function(LongPressStartDetails)? onLongPressStart;
   final int unreadCount;
   const _UserCard({
     required this.user,
     required this.onTap,
+    this.onLongPressStart,
     this.unreadCount = 0,
   });
 
@@ -646,6 +816,7 @@ class _UserCard extends StatelessWidget {
     if (diff.inDays < 7) return '${diff.inDays}d';
     return DateFormat('d MMM').format(lastSeen.toLocal());
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -666,24 +837,26 @@ class _UserCard extends StatelessWidget {
         ? s.statusOffline
         : s.statusOnline;
 
-    return Container(
-      margin: EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    return GestureDetector(
+      onLongPressStart: onLongPressStart,
+      child: Container(
+        margin: EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.bgCard,
           borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
@@ -889,6 +1062,6 @@ class _UserCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }

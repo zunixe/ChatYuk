@@ -478,13 +478,52 @@ class AuthService {
     await _sb.auth.signOut();
   }
 
-  /// Akun punya password? Akun Google (sign-in via Google) tidak punya
-  /// password — user harus "set password" dulu sebelum bisa ganti.
-  bool get hasPassword => currentUser?.appMetadata['provider'] != 'google';
+  bool _cachedHasPassword = false;
+  bool _hasPasswordFetched = false;
+
+  /// Akun punya password? Cek via RPC `has_password` yang melihat
+  /// `auth.users.encrypted_password` (paling akurat untuk Google+password).
+  /// Fallback ke `appMetadata` bila RPC gagal.
+  bool get hasPassword {
+    if (_hasPasswordFetched) return _cachedHasPassword;
+    final user = currentUser;
+    if (user == null) return false;
+    final providers = user.appMetadata['providers'];
+    if (providers is List) return providers.contains('email');
+    final identities = user.identities;
+    if (identities != null) {
+      for (final id in identities) {
+        final p = (id as dynamic).provider as String?;
+        if (p == 'email') return true;
+        final map = (id as dynamic).toJson is Function
+            ? (id as dynamic).toJson() as Map
+            : null;
+        if (map != null && map['provider'] == 'email') return true;
+      }
+    }
+    return user.appMetadata['provider'] != 'google';
+  }
+
+  Future<bool> fetchHasPassword() async {
+    try {
+      final res = await _sb.rpc('has_password');
+      if (res is bool) {
+        _cachedHasPassword = res;
+        _hasPasswordFetched = true;
+        return res;
+      }
+    } catch (_) {}
+    final fallback = hasPassword;
+    _cachedHasPassword = fallback;
+    _hasPasswordFetched = true;
+    return fallback;
+  }
 
   /// Set password baru (untuk akun Google yang belum punya password).
   Future<void> setPassword(String newPassword) async {
     await _sb.auth.updateUser(UserAttributes(password: newPassword));
+    _cachedHasPassword = true;
+    _hasPasswordFetched = true;
   }
 
   /// Ganti password: verifikasi password lama dulu, lalu update.

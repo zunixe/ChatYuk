@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
+import '../services/message_cache.dart';
 
 bool _usersEqual(List<UserModel> a, List<UserModel> b) {
   if (a.length != b.length) return false;
@@ -26,6 +27,16 @@ class OnlineUsersProvider extends ChangeNotifier {
   bool get hasLoaded => _loaded;
 
   OnlineUsersProvider() {
+    // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network
+    MessageCache.instance.loadRawList('online_users').then((cached) {
+      if (cached.isNotEmpty && _users.isEmpty) {
+        try {
+          _users = cached.map((e) => UserModel.fromMap('${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e))).toList();
+          _loaded = true;
+          notifyListeners();
+        } catch (_) {}
+      }
+    });
     _sub = _service.getOnlineUsers().listen(
       (users) {
         _loaded = true;
@@ -36,6 +47,11 @@ class OnlineUsersProvider extends ChangeNotifier {
         _users = deduped;
         _error = null;
         notifyListeners();
+        // Simpan ke disk untuk cold start berikutnya (tanpa avatar base64 biar kecil)
+        if (deduped.isNotEmpty) {
+          final rows = deduped.map((u) => {'uid': u.uid, ...u.toMap(), 'avatar': ''}).toList();
+          MessageCache.instance.saveRawList('online_users', rows);
+        }
       },
       onError: (e) {
         debugPrint('[OnlineUsersProvider] stream error: $e');

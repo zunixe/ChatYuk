@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../config/supabase_config.dart';
+import 'realtime_hub.dart';
 import '../config/gifts.dart';
 import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
@@ -1362,152 +1363,120 @@ class ChatService {
   Stream<List<UserModel>> getOnlineUsers() {
     final controller = StreamController<List<UserModel>>.broadcast();
     List<UserModel> cached = [];
+    Timer? debounce;
 
-    Future<void> fetchOnline() async {
+    Future<void> syncFromPresence() async {
       try {
-        // Admin invisible: ambil uid admin yang sedang invisible, exclude
-        // dari daftar online — tidak bergantung pada status (tahan race
-        // toggle OFF→ON yang bisa menimpa status ke online sesaat).
+        final state = RealtimeHub.instance.onlinePresenceState;
+        // Coba RPC ringan dulu (1 RTT, server-side, tanpa IN 500)
+        List<dynamic> rpcRows = [];
+        bool usedRpc = false;
+        try {
+          final data = await _sb.rpc('get_online_users', params: {'p_limit': 100}).timeout(const Duration(seconds: 4));
+          if (data is List && data.isNotEmpty) {
+            rpcRows = data;
+            usedRpc = true;
+          }
+        } catch (_) {}
+        List<dynamic> rows;
+        if (usedRpc) {
+          rows = rpcRows;
+        } else {
+          // Fallback hybrid lama jika RPC belum deploy / gagal
+          final presenceUids = state.values.expand((list) => list).map((m) => '${m['uid'] ?? ''}').where((id) => id.isNotEmpty).toList();
+          Set<String> dbUids = {};
+          try {
+            final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 30)).toIso8601String();
+            final dbRows = await _sb.from('profiles').select('id').neq('status', 'offline').neq('status', 'invisible').gte('last_seen', cutoff).limit(500).timeout(const Duration(seconds: 4));
+            for (final r in dbRows) {
+              final id = '${r['id'] ?? ''}';
+              if (id.isNotEmpty) dbUids.add(id);
+            }
+          } catch (_) {}
+          final uids = {...presenceUids, ...dbUids}.toList();
+          if (uids.isEmpty) {
+            cached = [];
+            if (!controller.isClosed) controller.add(List.unmodifiable(cached));
+            return;
+          }
+          String? invisibleUid2;
+          try {
+            final setting = await _sb.from('app_settings').select('invisible_enabled,invisible_admin_uid').eq('id', 'global').maybeSingle().timeout(const Duration(seconds: 3));
+            if (setting?['invisible_enabled'] == true) invisibleUid2 = setting?['invisible_admin_uid'] as String?;
+          } catch (_) {}
+          final filtered2 = invisibleUid2 == null ? uids : uids.where((id) => id != invisibleUid2).toList();
+          if (filtered2.isEmpty) {
+            cached = [];
+            if (!controller.isClosed) controller.add(List.unmodifiable(cached));
+            return;
+          }
+          const cols2 = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
+          rows = await _sb.from('profiles').select(cols2).inFilter('id', filtered2).limit(1000).timeout(const Duration(seconds: 6));
+        }
+        // Invisible filter untuk path RPC juga
         String? invisibleUid;
         try {
-          final setting = await _sb
-              .from('app_settings')
-              .select('invisible_enabled,invisible_admin_uid')
-              .eq('id', 'global')
-              .maybeSingle()
-              .timeout(const Duration(seconds: 6));
-          if (setting?['invisible_enabled'] == true) {
-            invisibleUid = setting?['invisible_admin_uid'] as String?;
-          }
-        } on TimeoutException {
-          // DNS/network lagi lambat — langsung selesai, jangan tunggu
-          // query kedua; addError via catch luar supaya spinner cepat berhenti.
-          rethrow;
+          final setting = await _sb.from('app_settings').select('invisible_enabled,invisible_admin_uid').eq('id', 'global').maybeSingle().timeout(const Duration(seconds: 2));
+          if (setting?['invisible_enabled'] == true) invisibleUid = setting?['invisible_admin_uid'] as String?;
         } catch (_) {}
-        // Exclude kolom sensitif: fcm_token, ip_address
-        const cols =
-            'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
-        // Hanya user yang masih aktif: last_seen dalam 30 menit terakhir.
-        // User yang uninstall app / akunnya hilang last_seen-nya tidak pernah
-        // di-update lagi sehingga otomatis hilang dari daftar online.
-        final cutoff = DateTime.now()
-            .toUtc()
-            .subtract(const Duration(minutes: 30))
-            .toIso8601String();
-        final rows = await _sb
-            .from('profiles')
-            .select(cols)
-            .neq('status', 'offline')
-            .neq('status', 'invisible')
-            .gte('last_seen', cutoff)
-            .order('last_seen', ascending: false)
-            .limit(500)
-            .timeout(const Duration(seconds: 6));
-        cached = <UserModel>[];
-        final seenUids = <String>{};
+        if (invisibleUid != null) {
+          rows = rows.where((r) => '${(r as Map)['id']}' != invisibleUid).toList();
+        }
+        final seen = <String>{};
         final pending = <UserModel>[];
         for (final row in rows) {
           try {
-            var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
-            if (u.uid == invisibleUid) continue;
-            // Dedupe by uid — cegah duplikat dari race/query apa pun.
-            if (!seenUids.add(u.uid)) continue;
+            final u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
+            if (!seen.add(u.uid)) continue;
             pending.add(u);
           } catch (e) {
-            // Row bermasalah dilewati — jangan sampai satu row rusak
-            // menggagalkan seluruh daftar online.
             debugPrint('[getOnlineUsers] skip bad row: $e');
           }
         }
-        // Download avatar paralel (batch 6) — hindari N round-trip berurutan
-        // yang membuat daftar online lambat saat first load.
-        const avatarBatch = 6;
+        // Progressive: emit dulu tanpa avatar (instant), avatar nyusul background
+        cached = List.of(pending);
+        if (!controller.isClosed) controller.add(List.unmodifiable(cached));
+        // Background download avatar batch 20
+        const avatarBatch = 20;
+        bool avatarUpdated = false;
         for (var i = 0; i < pending.length; i += avatarBatch) {
           final chunk = pending.skip(i).take(avatarBatch).toList();
-          final results = await Future.wait(
-            chunk.map((u) async {
-              if (u.avatar.isNotEmpty &&
-                  StoragePhotoService.instance.isAvatarPath(u.avatar)) {
-                return u.copyWith(avatar: await _avatarB64(u.avatar));
-              }
-              return u;
-            }),
-          );
-          cached.addAll(results);
+          final results = await Future.wait(chunk.map((u) async {
+            if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+              final b64 = await _avatarB64(u.avatar);
+              if (b64.isNotEmpty) return u.copyWith(avatar: b64);
+            }
+            return u;
+          }));
+          for (var j = 0; j < chunk.length; j++) {
+            final idx = cached.indexWhere((c) => c.uid == chunk[j].uid);
+            if (idx >= 0 && results[j].avatar != cached[idx].avatar) {
+              cached[idx] = results[j];
+              avatarUpdated = true;
+            }
+          }
         }
-        if (!controller.isClosed) controller.add(List.unmodifiable(cached));
+        if (avatarUpdated && !controller.isClosed) controller.add(List.unmodifiable(cached));
       } catch (e) {
-        debugPrint('[getOnlineUsers] fetch error: $e');
-        // Forward error ke stream supaya hasLoaded=true (provider menangkap
-        // onError) — spinner tidak akan pernah muter selamanya saat REST gagal.
+        debugPrint('[getOnlineUsers] presence fetch error: $e');
         if (!controller.isClosed) controller.addError(e);
       }
     }
 
-    // Realtime: update status user yang sudah ada di cache secara instan,
-    // supaya status di list chat sinkron dengan status di private chat.
-    final channel = _sb.channel('online-users-status');
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.update,
-      schema: 'public',
-      table: 'profiles',
-      callback: (payload) {
-        final newStatus = payload.newRecord['status'] as String?;
-        final id = payload.newRecord['id'] as String?;
-        final lastSeenStr = payload.newRecord['last_seen'] as String?;
-        if (id == null || newStatus == null || controller.isClosed) return;
-        DateTime? lastSeen;
-        try {
-          lastSeen = DateTime.tryParse(lastSeenStr ?? '');
-        } catch (e) {
-          debugPrint('[ChatService] clearViewOnceImage ignored: $e');
-        }
-        final idx = cached.indexWhere((u) => u.uid == id);
-        if (idx >= 0) {
-          // Status offline/invisible → hapus dari daftar online (langsung,
-          // tanpa menunggu poll). Status lain → update status di cache.
-          if (newStatus == 'offline' || newStatus == 'invisible') {
-            cached = List.of(cached)..removeAt(idx);
-          } else {
-            cached[idx] = cached[idx].copyWith(
-              status: newStatus,
-              lastSeen: lastSeen,
-            );
-          }
-          controller.add(List.unmodifiable(cached));
-          // User sudah ada di cache — jangan refetch 500 row + avatar untuk
-          // tiap heartbeat; cukup update dari payload.
-          return;
-        }
-        // User baru (belum ada di cache) → refetch supaya user baru muncul.
-        fetchOnline();
-      },
-    );
-    channel.subscribe();
-
-    // Toggle invisible admin mengubah app_settings (invisible_enabled) —
-    // subscribe realtime app_settings supaya device lain langsung tahu
-    // tanpa menunggu poll 30 detik.
-    final settingChannel = _sb.channel('online-users-settings');
-    settingChannel.onPostgresChanges(
-      event: PostgresChangeEvent.update,
-      schema: 'public',
-      table: 'app_settings',
-      callback: (_) => fetchOnline(),
-    );
-    settingChannel.subscribe();
-
-    // Poll setiap 30 detik — cukup responsif untuk status online/idle/offline
-    final timer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => fetchOnline(),
-    );
-    fetchOnline();
-
+    final sub = RealtimeHub.instance.onlinePresence.listen((_) {
+      debounce?.cancel();
+      debounce = Timer(const Duration(milliseconds: 300), syncFromPresence);
+    });
+    // initial sync
+    syncFromPresence();
+    // also periodic fallback if presence empty (cold start before track)
+    final fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (cached.isEmpty) syncFromPresence();
+    });
     controller.onCancel = () {
-      timer.cancel();
-      _sb.removeChannel(channel);
-      _sb.removeChannel(settingChannel);
+      debounce?.cancel();
+      fallbackTimer.cancel();
+      sub.cancel();
     };
     return controller.stream;
   }

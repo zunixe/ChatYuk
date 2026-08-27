@@ -554,9 +554,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         repliedToText: _replyingTo?.text,
         repliedToSenderName: _replyingTo?.senderName,
       );
-      if (mounted) setState(() => _pending.remove(pending));
       if (_replyingTo != null) setState(() => _replyingTo = null);
       _maybeNewChatBonus();
+      _schedulePendingConfirmFallback();
     } catch (e) {
       // Kirim gagal → kembalikan koin yang sudah terpotong.
       debugPrint('[send] gagal chat=${widget.chatId}: $e');
