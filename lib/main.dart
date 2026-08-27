@@ -52,7 +52,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
   final data = message.data;
   final type = data['type'];
-  if (!await NotificationPrefsService.shouldShowForFcmType(type as String?)) return;
+  final shouldShow = await NotificationPrefsService.shouldShowForFcmType(type as String?);
+  debugPrint('[NOTIF_BG] type=$type shouldShow=$shouldShow data=$data');
+  if (!shouldShow) return;
   // call_ended → panggilan selesai/dibatalkan. UPDATE notif call yang sama
   // (id = callId) jadi "Call ended". Langsung show dengan id sama (update
   // in-place) tanpa cancel dulu — cancel+show di MIUI justru menyisakan
@@ -176,8 +178,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           _channelId,
           'Chat Notifications',
           channelDescription: 'New message notifications from chat',
-          importance: lpn.Importance.high,
-          priority: lpn.Priority.high,
+          importance: lpn.Importance.max,
+          priority: lpn.Priority.max,
         );
 
   await plugin.show(
@@ -201,7 +203,7 @@ Future<void> _ensureAndroidChannels(
     'chatyuk_chat',
     'Chat Notifications',
     description: 'New message notifications from chat',
-    importance: lpn.Importance.high,
+    importance: lpn.Importance.max,
   );
   const calls = lpn.AndroidNotificationChannel(
     'chatyuk_calls',
@@ -232,7 +234,9 @@ Future<void> _ensureAndroidChannels(
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
-  if (!await NotificationPrefsService.shouldShowForFcmType(data['type'] as String?)) return;
+  final shouldShow = await NotificationPrefsService.shouldShowForFcmType(data['type'] as String?);
+  debugPrint('[NOTIF_FG] type=${data['type']} shouldShow=$shouldShow data=$data');
+  if (!shouldShow) return;
   // call_ended → update notif call yang sama jadi "Call ended" + tutup
   // IncomingCallScreen & foreground service jika masih tampil (sinkron DB
   // notify_call_ended yang kini kirim type call_ended untuk semua status
@@ -362,8 +366,8 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
         _channelId,
         s.notifChannelName,
         channelDescription: s.notifChannelDesc,
-        importance: lpn.Importance.high,
-        priority: lpn.Priority.high,
+        importance: lpn.Importance.max,
+        priority: lpn.Priority.max,
       ),
     ),
     payload: jsonEncode(data),
