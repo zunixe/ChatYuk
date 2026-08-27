@@ -20,6 +20,7 @@ import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
+import 'notification_settings_screen.dart';
 import '../core/admin_gate.dart';
 import 'contact_screen.dart';
 import 'donate_screen.dart';
@@ -1590,29 +1591,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             SizedBox(width: 12),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.labelNotifications,
-                                    style: AppText.bodyStrong.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    s.notifEnabledDesc,
-                                    style: AppText.bodySmall.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
+                              child: InkWell(
+                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen())),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [Text(s.labelNotifications, style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500)), SizedBox(width: 4), Icon(Icons.chevron_right, size: 16, color: AppTheme.textSecondary)]),
+                                    Text(s.notifEnabledDesc, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                                  ],
+                                ),
                               ),
                             ),
                             Switch(
                               value: auth.notificationsEnabled,
-                              onChanged: (v) => context
-                                  .read<AuthProvider>()
-                                  .setNotificationsEnabled(v),
+                              onChanged: (v) => context.read<AuthProvider>().setNotificationsEnabled(v),
                               activeThumbColor: AppTheme.primary,
                             ),
                           ],

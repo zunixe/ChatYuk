@@ -492,14 +492,15 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                           ],
                                         ),
                                         SizedBox(height: 2),
-                                        Text(
-                                          _chatSubtitle(chat, auth.uid!, s),
-                                          style: AppText.bodySmall.copyWith(
-                                            color: AppTheme.textSecondary,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                        Builder(builder: (_) {
+                                          final otherStatus = statusMap[otherUid] ?? 'offline';
+                                          final isOnline = otherStatus == 'online';
+                                          return Text(
+                                            isOnline ? s.chatOnlineSubtitle : _chatSubtitle(chat, auth.uid!, s),
+                                            style: AppText.bodySmall.copyWith(color: isOnline ? const Color(0xFF4CAF50) : AppTheme.textSecondary, fontWeight: isOnline ? FontWeight.w600 : FontWeight.w400),
+                                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                                          );
+                                        }),
                                         SizedBox(height: 2),
                                         Text(
                                           '${chat.messageCount} ${s.chatMsgCount}',
