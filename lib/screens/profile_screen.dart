@@ -1943,17 +1943,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ],
           ),
+          actionsAlignment: MainAxisAlignment.spaceBetween,
           actions: [
-            TextButton(
-              onPressed: loading ? null : () => Navigator.pop(ctx, false),
-              child: Text(
-                s.btnCancel,
-                style: TextStyle(color: AppTheme.textSecondary),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                side: BorderSide(color: AppTheme.divider),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                minimumSize: Size(100, 36),
               ),
+              onPressed: loading ? null : () => Navigator.pop(ctx, false),
+              child: Text(s.btnCancel, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                minimumSize: Size(100, 36),
               ),
               onPressed: loading
                   ? null
@@ -1999,7 +2006,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     )
                   : Text(
-                      s.btnSavePassword,
+                      s.btnSave,
                       style: const TextStyle(color: Colors.white),
                     ),
             ),
