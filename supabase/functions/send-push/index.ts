@@ -80,8 +80,9 @@ Deno.serve(async (req) => {
     // online, follow, friend_request, subscribe.
     // 'call' juga data-only → ditangani background handler Flutter yang
     // menampilkan notifikasi full-screen + suara ringtone (gaya panggilan telp).
-    // 'call_canceled' juga data-only → hanya membatalkan notif ringing, jangan tampilkan notif baru.
-    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call', 'call_canceled'];
+    // 'call_ended' pakai notification block biasa (title/body dari DB) —
+    // isinya "update" notif call yang sama via id yang sama (chatId).
+    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call'];
     const isDataOnly = dataOnlyTypes.includes(body.data?.type);
 
     // Untuk call, susun teks dari data (nama caller + tipe).
