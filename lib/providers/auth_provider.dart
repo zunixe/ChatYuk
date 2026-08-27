@@ -301,6 +301,7 @@ class AuthProvider extends ChangeNotifier {
         _listenProfile();
         _restartPresenceTimers();
         safeUnawaited(DeviceInfoService.instance.syncToServer());
+        safeUnawaited(updateFcmToken());
         if (!_disposed) notifyListeners();
         return 'link_prompt';
       }
@@ -310,6 +311,7 @@ class AuthProvider extends ChangeNotifier {
     _listenProfile();
     _restartPresenceTimers();
     safeUnawaited(DeviceInfoService.instance.syncToServer());
+    safeUnawaited(updateFcmToken());
     if (!_disposed) notifyListeners();
     if (_profile != null) return 'exists';
     return 'new';
@@ -329,6 +331,7 @@ class AuthProvider extends ChangeNotifier {
     _pendingLinkProfileId = null;
     _pendingLinkNickname = null;
     safeUnawaited(DeviceInfoService.instance.syncToServer());
+    safeUnawaited(updateFcmToken());
     if (!_disposed) notifyListeners();
   }
 
@@ -674,6 +677,7 @@ class AuthProvider extends ChangeNotifier {
     _profile = _profile?.copyWith(isRegistered: true);
     // Kasih bonus +100 poin untuk register email
     _claimRegisterBonus();
+    safeUnawaited(updateFcmToken());
     if (!_disposed) notifyListeners();
   }
 
