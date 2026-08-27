@@ -151,10 +151,12 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     );
     if (auth.uid == null) return const SizedBox();
 
-    // Map uid → status dari daftar online users
+    // Map uid → status & nama live dari daftar online users
     final statusMap = <String, String>{};
+    final liveNameMap = <String, String>{};
     for (final u in onlineUsers) {
       statusMap[u.uid] = u.status;
+      liveNameMap[u.uid] = u.nickname;
     }
 
     return Scaffold(
@@ -254,7 +256,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                           (p) => p != auth.uid,
                           orElse: () => '',
                         );
-                        final otherName = c.participantNames[otherUid] ?? '';
+                        final otherName = liveNameMap[otherUid] ?? c.participantNames[otherUid] ?? '';
                         return otherName.toLowerCase().contains(_query);
                       }).toList();
                 // Update last filtered for outer bar
@@ -327,7 +329,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                       (p) => p != auth.uid,
                       orElse: () => '',
                     );
-                    final otherName = chat.participantNames[otherUid] ?? 'Anon';
+                    final otherName = liveNameMap[otherUid] ?? chat.participantNames[otherUid] ?? 'Anon';
                     final unread = chat.unreadCounts[auth.uid] ?? 0;
                     final isBlocked = blocked.contains(otherUid);
 
