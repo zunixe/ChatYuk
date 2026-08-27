@@ -51,8 +51,41 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
   final data = message.data;
   final type = data['type'];
-  // call_canceled → panggilan dibatalkan/diputus sebelum dijawab. Batalkan
-  // notifikasi call yang masih tampil (gaya panggilan berakhir).
+  // call_ended → panggilan selesai/dibatalkan. UPDATE notif call yang sama
+  // (id = chatId) jadi "Call ended", bukan tambah notif baru.
+  if (type == 'call_ended') {
+    final androidInit = const lpn.AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+    final settings = lpn.InitializationSettings(android: androidInit);
+    final plugin = lpn.FlutterLocalNotificationsPlugin();
+    await plugin.initialize(settings: settings);
+    await _ensureAndroidChannels(plugin);
+    final key = data['chatId'] ?? data['callId'] ?? '';
+    if (key.isEmpty) return;
+    final title = data['otherName'] ?? data['callerName'] ?? 'User';
+    final body = message.notification?.body ??
+        data['body'] ??
+        'Call ended';
+    await plugin.show(
+      id: notifIdForKey(key),
+      title: title,
+      body: body,
+      notificationDetails: lpn.NotificationDetails(
+        android: lpn.AndroidNotificationDetails(
+          'chatyuk_calls',
+          'Incoming Calls',
+          channelDescription: 'Incoming call alerts with ringtone',
+          importance: lpn.Importance.max,
+          priority: lpn.Priority.max,
+          autoCancel: true,
+        ),
+      ),
+      payload: jsonEncode(data),
+    );
+    return;
+  }
+  // call_canceled → lama; pertahankan sebagai fallback: batalkan notif.
   if (type == 'call_canceled') {
     final androidInit = const lpn.AndroidInitializationSettings(
       '@mipmap/ic_launcher',
@@ -62,7 +95,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await plugin.initialize(settings: settings);
     final key = data['chatId'] ?? data['callId'] ?? '';
     await plugin.cancel(id: notifIdForKey(key));
-    // juga batalkan varian callId jika beda
     final alt = data['callId'] as String?;
     if (alt != null && alt.isNotEmpty && alt != key) {
       await plugin.cancel(id: notifIdForKey(alt));
@@ -180,6 +212,30 @@ Future<void> _ensureAndroidChannels(
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
+  // call_ended → update notif call yang sama jadi "Call ended".
+  if (data['type'] == 'call_ended') {
+    final key = data['chatId'] ?? data['callId'] ?? '';
+    if (key.isEmpty) return;
+    final title = data['otherName'] ?? data['callerName'] ?? localeProvider.s.unknownUser;
+    final body = message.notification?.body ?? data['body'] ?? 'Call ended';
+    await localNotifications.show(
+      id: notifIdForKey(key),
+      title: title,
+      body: body,
+      notificationDetails: lpn.NotificationDetails(
+        android: lpn.AndroidNotificationDetails(
+          'chatyuk_calls',
+          'Incoming Calls',
+          channelDescription: 'Incoming call alerts with ringtone',
+          importance: lpn.Importance.max,
+          priority: lpn.Priority.max,
+          autoCancel: true,
+        ),
+      ),
+      payload: jsonEncode(data),
+    );
+    return;
+  }
   // call_canceled → batalkan notifikasi call yang masih tampil + tutup
   // IncomingCallScreen yang mungkin masih terbuka.
   if (data['type'] == 'call_canceled') {
