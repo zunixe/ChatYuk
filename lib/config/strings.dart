@@ -308,6 +308,20 @@ class S {
   String get deleteChatConfirm => isId
       ? 'Hapus percakapan ini? Pesan tidak bisa dipulihkan.'
       : 'Delete this conversation? Messages cannot be recovered.';
+  String get btnSelectAll => isId ? 'Pilih Semua' : 'Select All';
+  String get btnDeselectAll => isId ? 'Batal Pilih' : 'Deselect All';
+  String get btnDeleteAll => isId ? 'Hapus Semua' : 'Delete All';
+  String get btnDeleteSelected => isId ? 'Hapus Terpilih' : 'Delete Selected';
+  String get deleteAllConfirm => isId
+      ? 'Hapus SEMUA percakapan? Tidak bisa dipulihkan.'
+      : 'Delete ALL conversations? Cannot be recovered.';
+  String deleteSelectedConfirm(int n) => isId
+      ? 'Hapus $n percakapan terpilih?'
+      : 'Delete $n selected conversations?';
+  String get deleteAllSuccess => isId ? 'Semua chat dihapus' : 'All chats deleted';
+  String deleteSelectedSuccess(int n) =>
+      isId ? '$n chat dihapus' : '$n chats deleted';
+  String selectedCount(int n) => isId ? '$n terpilih' : '$n selected';
 
   // ── Profile ──
   String get titleProfile => isId ? 'Profil' : 'Profile';
@@ -404,6 +418,10 @@ class S {
       isId ? 'berlangganan ke kamu' : 'subscribed to you';
   String get notifCallingBody =>
       isId ? 'menelpon kamu...' : 'is calling you...';
+  String get notifCallingVideoBody =>
+      isId ? '📹 panggilan video...' : '📹 video calling...';
+  String get notifCallingVoiceBody =>
+      isId ? '📞 panggilan suara...' : '📞 voice calling...';
   String get notifTimelineBody =>
       isId ? 'membuat postingan baru' : 'created a new post';
   String get notifMissedCallBody =>

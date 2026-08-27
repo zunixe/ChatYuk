@@ -1624,10 +1624,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
-                            onTap: () => _showPasswordDialog(
-                              context,
-                              isSet: !auth.hasPassword,
-                            ),
+                            onTap: () async {
+                              final hasPw = await context.read<AuthProvider>().fetchHasPassword();
+                              if (context.mounted) _showPasswordDialog(context, isSet: !hasPw);
+                            },
                             child: Row(
                               children: [
                                 Container(
@@ -1649,20 +1649,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 SizedBox(width: 12),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        auth.hasPassword
-                                            ? s.btnChangePassword
-                                            : s.btnSetPassword,
+                                  child: FutureBuilder<bool>(
+                                    future: auth.fetchHasPassword(),
+                                    builder: (ctx, snap) {
+                                      final hasPw = snap.data ?? auth.hasPassword;
+                                      return Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            hasPw
+                                                ? s.btnChangePassword
+                                                : s.btnSetPassword,
                                         style: AppText.bodyStrong.copyWith(
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                       Text(
-                                        auth.hasPassword
+                                        hasPw
                                             ? s.descChangePassword
                                             : s.descSetPassword,
                                         style: AppText.bodySmall.copyWith(
@@ -1670,9 +1673,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                       ),
                                     ],
-                                  ),
-                                ),
-                                Icon(
+                                  );
+                                },
+                              ),
+                            ),
+                            Icon(
                                   Icons.chevron_right,
                                   color: AppTheme.textSecondary,
                                 ),

@@ -35,6 +35,57 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   int _lastTotal = 0;
   String _query = '';
   final TextEditingController _searchCtrl = TextEditingController();
+  final Set<String> _selected = {};
+  bool get _selectionMode => _selected.isNotEmpty;
+  List<PrivateChatInfo> _lastFiltered = [];
+
+  void _toggleSelect(String chatId) {
+    setState(() {
+      if (_selected.contains(chatId)) _selected.remove(chatId);
+      else _selected.add(chatId);
+    });
+  }
+
+  void _selectAll(List<PrivateChatInfo> chats) {
+    setState(() => _selected.addAll(chats.map((c) => c.chatId)));
+  }
+
+  void _clearSelection() => setState(() => _selected.clear());
+
+  Future<void> _deleteSelected(String uid) async {
+    final ids = _selected.toList();
+    _clearSelection();
+    for (final id in ids) {
+      await _deleteChat(uid, id);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.read<LocaleProvider>().s.deleteSelectedSuccess(ids.length))),
+      );
+    }
+  }
+
+  Future<void> _deleteAll(String uid, List<PrivateChatInfo> chats) async {
+    final s = context.read<LocaleProvider>().s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(s.btnDeleteAll, style: TextStyle(color: AppTheme.textPrimary)),
+        content: Text(s.deleteAllConfirm, style: TextStyle(color: AppTheme.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.btnDeleteAll, style: const TextStyle(color: AppTheme.danger))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    _clearSelection();
+    for (final c in chats) {
+      await _deleteChat(uid, c.chatId);
+    }
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.deleteAllSuccess)));
+  }
 
   @override
   void initState() {
@@ -108,7 +159,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
-      appBar: widget.embedded ? null : AppBar(title: Text(s.titlePrivateChat)),
+      appBar: widget.embedded ? null : AppBar(title: Text(_selectionMode ? s.selectedCount(_selected.length) : s.titlePrivateChat)),
       body: Column(
         children: [
           Padding(
@@ -150,6 +201,39 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
               ),
             ),
           ),
+          AnimatedContainer(
+            duration: Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            margin: EdgeInsets.fromLTRB(16, 2, 16, 4),
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _selectionMode ? AppTheme.primary.withValues(alpha: AppTheme.isDark ? 0.18 : 0.08) : AppTheme.bgCard,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _selectionMode ? AppTheme.primary.withValues(alpha: 0.25) : AppTheme.divider, width: 1),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: AppTheme.isDark ? 0.2 : 0.06), blurRadius: 8, offset: Offset(0, 2))],
+            ),
+            child: Row(
+                children: [
+                  if (_selectionMode) ...[
+                    TextButton.icon(icon: Icon(_selected.length == _lastFiltered.length ? Icons.deselect : Icons.select_all, size: 18), label: Text(_selected.length == _lastFiltered.length ? s.btnDeselectAll : s.btnSelectAll, style: AppText.caption), onPressed: () {
+                      if (_selected.length == _lastFiltered.length) _clearSelection(); else _selectAll(_lastFiltered);
+                    }),
+                    SizedBox(width: 8),
+                    TextButton.icon(icon: Icon(Icons.delete_outline, size: 18, color: AppTheme.danger), label: Text(s.btnDeleteSelected, style: AppText.caption.copyWith(color: AppTheme.danger)), onPressed: _selected.isEmpty ? null : () async {
+                      final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(backgroundColor: AppTheme.bgCard, title: Text(s.btnDeleteSelected, style: TextStyle(color: AppTheme.textPrimary)), content: Text(s.deleteSelectedConfirm(_selected.length), style: TextStyle(color: AppTheme.textSecondary)), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)), TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.btnDeleteSelected, style: const TextStyle(color: AppTheme.danger)))]));
+                      if (ok == true) _deleteSelected(auth.uid!);
+                    }),
+                    Spacer(),
+                    TextButton(onPressed: _clearSelection, child: Text(s.btnCancel, style: AppText.caption)),
+                  ] else ...[
+                    if (_lastFiltered.isNotEmpty)
+                      TextButton.icon(icon: Icon(Icons.delete_sweep, size: 18, color: AppTheme.danger), label: Text(s.btnDeleteAll, style: AppText.caption.copyWith(color: AppTheme.danger)), onPressed: () => _deleteAll(auth.uid!, _lastFiltered)),
+                    Spacer(),
+                    TextButton.icon(icon: Icon(Icons.checklist, size: 18), label: Text(s.btnSelectAll, style: AppText.caption), onPressed: () => _selectAll(_lastFiltered)),
+                  ],
+                ],
+              ),
+            ),
           Expanded(
             child: StreamBuilder<List<PrivateChatInfo>>(
               stream: _stream,
@@ -173,6 +257,18 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         final otherName = c.participantNames[otherUid] ?? '';
                         return otherName.toLowerCase().contains(_query);
                       }).toList();
+                // Update last filtered for outer bar
+                _lastFiltered = filtered;
+                // Urutkan: online teratas
+                filtered.sort((a, b) {
+                  final aUid = a.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
+                  final bUid = b.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
+                  int rank(String v) => v == 'online' ? 0 : v == 'idle' ? 1 : 2;
+                  final ra = rank(statusMap[aUid] ?? 'offline');
+                  final rb = rank(statusMap[bUid] ?? 'offline');
+                  if (ra != rb) return ra.compareTo(rb);
+                  return b.lastMessageAt.compareTo(a.lastMessageAt);
+                });
                 // Reset page jika data berubah total
                 if (chats.length != _lastTotal) {
                   _lastTotal = chats.length;
@@ -202,16 +298,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     ),
                   );
                 }
-                // Urutkan: online teratas, lalu idle, lalu offline — di dalam grup urut by lastMessageAt terbaru
-                filtered.sort((a, b) {
-                  final aUid = a.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-                  final bUid = b.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-                  int rank(String s) => s == 'online' ? 0 : s == 'idle' ? 1 : 2;
-                  final ra = rank(statusMap[aUid] ?? 'offline');
-                  final rb = rank(statusMap[bUid] ?? 'offline');
-                  if (ra != rb) return ra.compareTo(rb);
-                  return b.lastMessageAt.compareTo(a.lastMessageAt);
-                });
                 // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus
                 final paged = filtered.take(_page * _pageSize).toList();
                 final hasMore = paged.length < filtered.length;
@@ -219,7 +305,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                   controller: _scrollCtrl,
                   padding: EdgeInsets.fromLTRB(
                     16,
-                    16,
+                    4,
                     16,
                     MediaQuery.of(context).padding.bottom + 16,
                   ),
@@ -245,7 +331,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     final unread = chat.unreadCounts[auth.uid] ?? 0;
                     final isBlocked = blocked.contains(otherUid);
 
-                    return Dismissible(
+                    final isSelected = _selected.contains(chat.chatId);
+                    return GestureDetector(
+                      onLongPress: () => _toggleSelect(chat.chatId),
+                      child: Dismissible(
                       key: ValueKey(chat.chatId),
                       direction: DismissDirection.endToStart,
                       background: Container(
@@ -324,17 +413,22 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                           );
                         }
                       },
-                      child: Container(
+                      child: AnimatedContainer(
+                        duration: Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
                         margin: EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
-                          color: isBlocked
-                              ? AppTheme.bgCard.withValues(alpha: 0.5)
-                              : AppTheme.bgCard,
+                          color: isSelected
+                              ? AppTheme.primary.withValues(alpha: AppTheme.isDark ? 0.15 : 0.06)
+                              : isBlocked
+                                  ? AppTheme.bgCard.withValues(alpha: 0.5)
+                                  : AppTheme.bgCard,
                           borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: isSelected ? AppTheme.primary.withValues(alpha: 0.4) : Colors.transparent, width: 1.5),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 8,
+                              color: Colors.black.withValues(alpha: isSelected ? 0.08 : 0.05),
+                              blurRadius: isSelected ? 12 : 8,
                               offset: Offset(0, 2),
                             ),
                           ],
@@ -343,7 +437,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                           color: Colors.transparent,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () => Navigator.push(
+                            onTap: _selectionMode ? () => _toggleSelect(chat.chatId) : () => Navigator.push(
                               context,
                               PageRouteBuilder(
                                 transitionDuration: const Duration(
@@ -391,6 +485,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                               ),
                               child: Row(
                                 children: [
+                                  if (_selectionMode) ...[
+                                    Checkbox(value: isSelected, onChanged: (_) => _toggleSelect(chat.chatId), activeColor: AppTheme.primary),
+                                    SizedBox(width: 4),
+                                  ],
                                   ProfileAvatar(
                                     uid: otherUid,
                                     name: otherName,
@@ -606,6 +704,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                             ),
                           ),
                         ),
+                      ),
                       ),
                     );
                   },
