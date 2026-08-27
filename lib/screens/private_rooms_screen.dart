@@ -47,16 +47,25 @@ class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
     try {
       final uid = _prv.uid;
       if (uid == null) return;
+      // Batch: 1 RPC ganti N+1 fetchRoomById
+      try {
+        final res = await _prv.listMyRooms();
+        if (!mounted) return;
+        setState(() {
+          _myRooms = res;
+          _loading = false;
+        });
+        return;
+      } catch (_) {
+        // fallback ke jalur lama
+      }
       final rows = await RoomService().fetchMyMemberships(uid);
-      // Ambil detail tiap private room yang jadi member.
       final all = <Map<String, dynamic>>[];
       for (final rid in rows) {
         if (!rid.startsWith('pr_')) continue;
         try {
           final row = await RoomService().fetchRoomById(rid);
-          if (row != null) {
-            all.add(Map<String, dynamic>.from(row));
-          }
+          if (row != null) all.add(Map<String, dynamic>.from(row));
         } catch (_) {}
       }
       if (!mounted) return;
