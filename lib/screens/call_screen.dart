@@ -346,108 +346,128 @@ class _CallScreenState extends State<CallScreen> {
                 },
               ),
 
-            // Info atas
+            // Info atas — pakai SafeArea biar tidak ketutup notch/status bar
             Positioned(
-              top: 40,
+              top: 0,
               left: 0,
               right: 0,
-              child: Column(
-                children: [
-                  Text(
-                    widget.remoteName,
-                    style: AppText.headline.copyWith(color: Colors.white),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Column(
+                    children: [
+                      Text(
+                        widget.remoteName,
+                        style: AppText.headline.copyWith(color: Colors.white),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _phaseText(s),
+                        style: AppText.body.copyWith(color: Colors.white70),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _phaseText(s),
-                    style: AppText.body.copyWith(color: Colors.white70),
-                  ),
-                ],
+                ),
               ),
             ),
 
-            // Kontrol bawah
+            // Kontrol bawah — SafeArea + padding agar tidak ketutup gesture bar Xiaomi
             if (inCall)
               Positioned(
-                bottom: 48,
+                bottom: 0,
                 left: 0,
                 right: 0,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _ControlButton(
-                      icon: _session.micOn ? Icons.mic : Icons.mic_off,
-                      color: _session.micOn ? null : Colors.redAccent,
-                      tooltip: _session.micOn ? s.btnMute : s.btnUnmute,
-                      onTap: _session.toggleMic,
-                    ),
-                    if (isVideo) ...[
-                      const SizedBox(width: 16),
-                      _ControlButton(
-                        icon: _session.cameraOn
-                            ? Icons.videocam
-                            : Icons.videocam_off,
-                        color: _session.cameraOn ? null : Colors.redAccent,
-                        tooltip: s.btnSwitchCamera,
-                        onTap: _session.toggleCamera,
-                      ),
-                      const SizedBox(width: 16),
-                      _ControlButton(
-                        icon: Icons.cameraswitch,
-                        tooltip: s.btnSwitchCamera,
-                        onTap: _session.switchCamera,
-                      ),
-                      const SizedBox(width: 16),
-                      _ControlButton(
-                        icon: _session.speakerOn
-                            ? Icons.volume_up
-                            : Icons.volume_off,
-                        color: _session.speakerOn ? null : Colors.redAccent,
-                        tooltip: s.btnSpeaker,
-                        onTap: _session.toggleSpeaker,
-                      ),
-                      if (_minimizable) ...[
-                        const SizedBox(width: 16),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         _ControlButton(
-                          icon: Icons.picture_in_picture_alt,
-                          tooltip: s.callMinimize,
-                          onTap: _minimize,
+                          icon: _session.micOn ? Icons.mic : Icons.mic_off,
+                          color: _session.micOn ? null : Colors.redAccent,
+                          tooltip: _session.micOn ? s.btnMute : s.btnUnmute,
+                          onTap: _session.toggleMic,
+                        ),
+                        if (isVideo) ...[
+                          const SizedBox(width: 12),
+                          _ControlButton(
+                            icon: _session.cameraOn
+                                ? Icons.videocam
+                                : Icons.videocam_off,
+                            color: _session.cameraOn ? null : Colors.redAccent,
+                            tooltip: s.btnSwitchCamera,
+                            onTap: _session.toggleCamera,
+                          ),
+                          const SizedBox(width: 12),
+                          _ControlButton(
+                            icon: Icons.cameraswitch,
+                            tooltip: s.btnSwitchCamera,
+                            onTap: _session.switchCamera,
+                          ),
+                          const SizedBox(width: 12),
+                          _ControlButton(
+                            icon: _session.speakerOn
+                                ? Icons.volume_up
+                                : Icons.volume_off,
+                            color: _session.speakerOn ? null : Colors.redAccent,
+                            tooltip: s.btnSpeaker,
+                            onTap: _session.toggleSpeaker,
+                          ),
+                          if (_minimizable) ...[
+                            const SizedBox(width: 12),
+                            _ControlButton(
+                              icon: Icons.picture_in_picture_alt,
+                              tooltip: s.callMinimize,
+                              onTap: _minimize,
+                            ),
+                          ],
+                        ],
+                        const SizedBox(width: 12),
+                        _ControlButton(
+                          icon: Icons.call_end,
+                          color: Colors.redAccent,
+                          tooltip: s.btnEndCall,
+                          onTap: _session.end,
                         ),
                       ],
-                    ],
-                    const SizedBox(width: 16),
-                    _ControlButton(
-                      icon: Icons.call_end,
-                      color: Colors.redAccent,
-                      tooltip: s.btnEndCall,
-                      onTap: _session.end,
                     ),
-                  ],
+                  ),
                 ),
               )
             else if (_session.phase == CallPhase.ringing ||
                 _session.phase == CallPhase.connecting)
               Positioned(
-                bottom: 48,
+                bottom: 0,
                 left: 0,
                 right: 0,
-                child: Center(
-                  child: _ControlButton(
-                    icon: Icons.call_end,
-                    color: Colors.redAccent,
-                    tooltip: s.btnEndCall,
-                    onTap: _session.end,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 24, top: 12),
+                    child: Center(
+                      child: _ControlButton(
+                        icon: Icons.call_end,
+                        color: Colors.redAccent,
+                        tooltip: s.btnEndCall,
+                        onTap: _session.end,
+                      ),
+                    ),
                   ),
                 ),
               ),
 
-            // Timer saat in-call (di atas kontrol)
+            // Timer saat in-call (di atas kontrol) — ikut SafeArea bottom
             if (inCall)
               Positioned(
-                bottom: 130,
+                bottom: 0,
                 left: 0,
                 right: 0,
-                child: _ElapsedTimer(onTick: _tick),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 88),
+                    child: _ElapsedTimer(onTick: _tick),
+                  ),
+                ),
               ),
           ],
         ),
