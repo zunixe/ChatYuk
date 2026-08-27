@@ -52,7 +52,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final data = message.data;
   final type = data['type'];
   // call_ended → panggilan selesai/dibatalkan. UPDATE notif call yang sama
-  // (id = chatId) jadi "Call ended", bukan tambah notif baru.
+  // (id = chatId) jadi "Call ended", bukan tambah notif baru. Juga hapus
+  // duplikat id alternatif (callId vs chatId) biar tidak tersisa 2 notif
+  // saat DB fan-out mengirim ke device dengan id berbeda.
   if (type == 'call_ended') {
     final androidInit = const lpn.AndroidInitializationSettings(
       '@mipmap/ic_launcher',
@@ -63,10 +65,29 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await _ensureAndroidChannels(plugin);
     final key = data['chatId'] ?? data['callId'] ?? '';
     if (key.isEmpty) return;
-    final title = data['otherName'] ?? data['callerName'] ?? 'User';
-    final body = message.notification?.body ??
-        data['body'] ??
-        'Call ended';
+    // Hapus ringing lama (ongoing) sebelum update → hindari dobel
+    // (ongoing:true → autoCancel:true kadang tidak replace di MIUI).
+    await plugin.cancel(id: notifIdForKey(key));
+    final alt = data['callId'] as String?;
+    if (alt != null && alt.isNotEmpty && alt != key) {
+      await plugin.cancel(id: notifIdForKey(alt));
+    }
+    String _pick(Map d, List<String> keys, String fallback) {
+      for (final k in keys) {
+        final v = d[k];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+      return fallback;
+    }
+    String? _notifBody(RemoteMessage m, Map d) {
+      final nb = m.notification?.body;
+      if (nb != null && nb.trim().isNotEmpty) return nb.trim();
+      final db = d['body'];
+      if (db is String && db.trim().isNotEmpty) return db.trim();
+      return null;
+    }
+    final title = _pick(data, ['otherName', 'callerName'], 'User');
+    final body = _notifBody(message, data) ?? 'Call ended';
     await plugin.show(
       id: notifIdForKey(key),
       title: title,
@@ -212,12 +233,52 @@ Future<void> _ensureAndroidChannels(
 
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
-  // call_ended → update notif call yang sama jadi "Call ended".
+  // call_ended → update notif call yang sama jadi "Call ended" + tutup
+  // IncomingCallScreen & foreground service jika masih tampil (sinkron DB
+  // notify_call_ended yang kini kirim type call_ended untuk semua status
+  // terminal, bukan call_canceled).
   if (data['type'] == 'call_ended') {
     final key = data['chatId'] ?? data['callId'] ?? '';
     if (key.isEmpty) return;
-    final title = data['otherName'] ?? data['callerName'] ?? localeProvider.s.unknownUser;
-    final body = message.notification?.body ?? data['body'] ?? 'Call ended';
+    // Hapus ringing lama sebelum update (MIUI: ongoing→non-ongoing tidak replace)
+    await localNotifications.cancel(id: notifIdForKey(key));
+    final alt = data['callId'] as String?;
+    if (alt != null && alt.isNotEmpty && alt != key) {
+      await localNotifications.cancel(id: notifIdForKey(alt));
+    }
+    // Tutup IncomingCallScreen yang mungkin masih nongol (app foreground)
+    final callId = (data['callId'] ?? data['chatId']) as String?;
+    if (callId != null && callId.isNotEmpty) {
+      if (CallProvider.instance.activeCallId == callId) {
+        CallProvider.instance.unregisterCall(callId);
+      }
+      final nav = navigatorKey.currentState;
+      if (nav != null && nav.canPop()) {
+        try { nav.pop(); } catch (_) {}
+      }
+      try {
+        final dynamic prov = CallProvider.instance;
+        if (prov.activeSession != null) {
+          await prov.clearSession();
+        }
+      } catch (_) {}
+    }
+    String _pick(Map d, List<String> keys, String fallback) {
+      for (final k in keys) {
+        final v = d[k];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+      return fallback;
+    }
+    String? _notifBody(RemoteMessage m, Map d) {
+      final nb = m.notification?.body;
+      if (nb is String && nb.trim().isNotEmpty) return nb.trim();
+      final db = d['body'];
+      if (db is String && db.trim().isNotEmpty) return db.trim();
+      return null;
+    }
+    final title = _pick(data, ['otherName', 'callerName'], localeProvider.s.unknownUser);
+    final body = _notifBody(message, data) ?? 'Call ended';
     await localNotifications.show(
       id: notifIdForKey(key),
       title: title,

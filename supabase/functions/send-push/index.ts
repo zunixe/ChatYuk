@@ -78,11 +78,13 @@ Deno.serve(async (req) => {
 
     // Data-only untuk tipe yang teksnya dirender client (bilingual):
     // online, follow, friend_request, subscribe.
-    // 'call' juga data-only → ditangani background handler Flutter yang
-    // menampilkan notifikasi full-screen + suara ringtone (gaya panggilan telp).
-    // 'call_ended' pakai notification block biasa (title/body dari DB) —
-    // isinya "update" notif call yang sama via id yang sama (chatId).
-    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call'];
+    // 'call' & 'call_ended' data-only → ditangani Flutter (localNotifications)
+    // dengan id yang sama (notifIdForKey(chatId)) sehingga call_ended
+    // MENG-UPDATE notif ringing yang sama, bukan nambah notifikasi baru.
+    // Jika call_ended dikirim sebagai notification block, FCM auto-tampilkan
+    // 1 notif sistem (id random) + Flutter tampilkan 1 lagi (id chatId) =
+    // dobel (penyebab 3 notifikasi). Jadi HARUS data-only.
+    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call', 'call_ended'];
     const isDataOnly = dataOnlyTypes.includes(body.data?.type);
 
     // Untuk call, susun teks dari data (nama caller + tipe).
