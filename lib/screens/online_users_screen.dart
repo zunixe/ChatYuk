@@ -13,7 +13,6 @@ import '../config/regions.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
-import '../core/admin_gate.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
@@ -390,22 +389,21 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         backgroundColor: AppTheme.headerGradient.colors.first,
         // Admin Panel di KIRI ATAS — hanya untuk zunixe (bukan sesi dummy).
         // Build user: panelBuilder null → tidak pernah tampil.
-        leading: (AdminGate.panelBuilder != null &&
-                auth.isRealAdmin &&
-                !auth.dummySessionActive)
-            ? IconButton(
-                tooltip: 'Admin Panel',
-                icon: const Icon(Icons.admin_panel_settings_outlined),
-                onPressed: () {
-                  final builder = AdminGate.panelBuilder;
-                  if (builder == null) return;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: builder),
-                  );
-                },
-              )
-            : null,
+        leading: IconButton(
+          tooltip: s.searchHint,
+          icon: Icon(_isSearching ? Icons.close : Icons.search_rounded),
+          color: Colors.white,
+          onPressed: () {
+            setState(() {
+              _isSearching = !_isSearching;
+              if (!_isSearching) {
+                _searchCtrl.clear();
+                _search = '';
+                _page = 1;
+              }
+            });
+          },
+        ),
         flexibleSpace: Container(
           decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
@@ -472,21 +470,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: Row(
                       children: [
-                        IconButton(
-                          icon: Icon(_isSearching ? Icons.close : Icons.search),
-                          color: AppTheme.primary,
-                          tooltip: s.searchHint,
-                          onPressed: () {
-                            setState(() {
-                              _isSearching = !_isSearching;
-                              if (!_isSearching) {
-                                _searchCtrl.clear();
-                                _search = '';
-                                _page = 1;
-                              }
-                            });
-                          },
-                        ),
                         Expanded(
                           child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 250),
