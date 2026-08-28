@@ -42,6 +42,7 @@ class S {
 
   // ── Lobby / Rooms ──
   String get titleRooms => isId ? 'Pilih Room' : 'Choose a Room';
+  String get searchRoom => isId ? 'Cari Room' : 'Search Room';
   String get roomOnlineCount => isId ? 'online' : 'online';
   String get noRooms => isId ? 'Belum ada room tersedia' : 'No rooms available';
 
@@ -1183,6 +1184,7 @@ class S {
   String get badgeBoosted => isId ? 'Boost' : 'Boost';
   String get badgeFriend => isId ? 'Teman' : 'Friend';
   String get badgeSubscriber => isId ? 'Subscriber' : 'Subscriber';
+  String get noResults => isId ? 'Tidak ada hasil ditemukan' : 'No results found';
 }
 
 const _privacyId = <LegalSection>[
