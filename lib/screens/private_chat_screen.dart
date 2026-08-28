@@ -720,6 +720,23 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
+    await _sendImageBytes(bytes);
+  }
+
+  /// Buka kamera langsung → foto → langsung kirim ke chat (masuk pesan).
+  Future<void> _takePhoto() async {
+    final picked = await _imagePicker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.rear,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    await _sendImageBytes(bytes);
+  }
+
+  /// Proses + kirim foto (dipakai gallery & kamera) — resize di isolate,
+  /// upload storage, insert pesan image.
+  Future<void> _sendImageBytes(Uint8List bytes) async {
     // Tolak file > 10MB sebelum proses
     if (bytes.length > 10 * 1024 * 1024) {
       if (mounted) {
@@ -2045,6 +2062,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                       ),
                                       const SizedBox(width: 8),
                                       _AttachChip(
+                                        icon: Icons.photo_camera_outlined,
+                                        color: Colors.teal,
+                                        label: s.menuTakePhoto,
+                                        onTap: () {
+                                          setState(
+                                            () => _showAttachRow = false,
+                                          );
+                                          _takePhoto();
+                                        },
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _AttachChip(
                                         icon: Icons.timer_outlined,
                                         color: Colors.orange,
                                         label: s.menuViewOnce,
@@ -2280,10 +2309,17 @@ class _AttachChip extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
+                color: color,
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.35),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
-              child: Center(child: Icon(icon, color: color, size: 24)),
+              child: Center(child: Icon(icon, color: Colors.white, size: 24)),
             ),
             SizedBox(height: 4),
             Text(

@@ -46,6 +46,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   String _negara = 'all';
   String _gender = 'all';
   String _search = '';
+  bool _isSearching = false;
   int _page = 1;
   static const int _pageSize = 20;
   static const _prefKeyNegara = 'filter_negara';
@@ -408,22 +409,24 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         flexibleSpace: Container(
           decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
-        title: Consumer<OnlineUsersProvider>(
-          builder: (_, prov, __) => Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                s.titleOnline,
-                style: AppText.title.copyWith(color: Colors.white),
+        title: _isSearching
+            ? null
+            : Consumer<OnlineUsersProvider>(
+                builder: (_, prov, __) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      s.titleOnline,
+                      style: AppText.title.copyWith(color: Colors.white),
+                    ),
+                    Text(
+                      '${prov.users.length} ${s.onlineActiveUsers}',
+                      style: AppText.bodySmall.copyWith(color: Colors.white70),
+                    ),
+                  ],
+                ),
               ),
-              Text(
-                '${prov.users.length} ${s.onlineActiveUsers}',
-                style: AppText.bodySmall.copyWith(color: Colors.white70),
-              ),
-            ],
-          ),
-        ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           // "Orang Sekitar" (nearby) hanya untuk akun terdaftar — kombinasi
@@ -467,45 +470,70 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: TextField(
-                      controller: _searchCtrl,
-                      onChanged: (v) => setState(() {
-                        _search = v;
-                        _page = 1;
-                      }),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        hintText: s.searchHint,
-                        prefixIcon: Icon(
-                          Icons.search,
-                          color: AppTheme.textSecondary,
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(_isSearching ? Icons.close : Icons.search),
+                          color: AppTheme.primary,
+                          tooltip: s.searchHint,
+                          onPressed: () {
+                            setState(() {
+                              _isSearching = !_isSearching;
+                              if (!_isSearching) {
+                                _searchCtrl.clear();
+                                _search = '';
+                                _page = 1;
+                              }
+                            });
+                          },
                         ),
-                        suffixIcon: _search.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(
-                                  Icons.clear,
-                                  size: 18,
-                                  color: AppTheme.textSecondary,
-                                ),
-                                onPressed: () {
-                                  _searchCtrl.clear();
-                                  setState(() {
-                                    _search = '';
-                                    _page = 1;
-                                  });
-                                },
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: AppTheme.bgCard,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10,
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            transitionBuilder: (child, anim) => SizeTransition(
+                              sizeFactor: anim,
+                              axis: Axis.horizontal,
+                              child: SlideTransition(
+                                position: Tween<Offset>(begin: const Offset(-0.2, 0), end: Offset.zero)
+                                    .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+                                child: child,
+                              ),
+                            ),
+                            child: _isSearching
+                                ? TextField(
+                                    key: const ValueKey('search'),
+                                    controller: _searchCtrl,
+                                    autofocus: true,
+                                    onChanged: (v) => setState(() {
+                                      _search = v;
+                                      _page = 1;
+                                    }),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      hintText: s.searchHint,
+                                      prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+                                      suffixIcon: _search.isNotEmpty
+                                          ? IconButton(
+                                              icon: Icon(Icons.clear, size: 18, color: AppTheme.textSecondary),
+                                              onPressed: () {
+                                                _searchCtrl.clear();
+                                                setState(() {
+                                                  _search = '';
+                                                  _page = 1;
+                                                });
+                                              },
+                                            )
+                                          : null,
+                                      filled: true,
+                                      fillColor: AppTheme.bgCard,
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                   Padding(

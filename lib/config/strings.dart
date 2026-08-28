@@ -100,6 +100,7 @@ class S {
 
   // ── Send Coins ──
   String get menuSendPhoto => isId ? 'Kirim Foto' : 'Send Photo';
+  String get menuTakePhoto => isId ? 'Ambil Foto' : 'Take Photo';
   String get menuViewOnce => isId ? 'Foto Sekali Lihat' : 'View-once Photo';
   String get menuSendCoin => isId ? 'Kirim Koin' : 'Send Coins';
   String get sendCoinTitle => isId ? 'Kirim Koin' : 'Send Coins';
