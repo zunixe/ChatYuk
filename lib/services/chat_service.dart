@@ -1368,11 +1368,35 @@ class ChatService {
     Future<void> syncFromPresence() async {
       try {
         final state = RealtimeHub.instance.onlinePresenceState;
+        // Fast path: jika presence sudah ada, langsung pakai tanpa tunggu RPC (hemat 1 RTT)
+        final presenceUidsFast = state.values.expand((list) => list).map((m) => '${m['uid'] ?? ''}').where((id) => id.isNotEmpty).toList();
+        if (presenceUidsFast.isNotEmpty) {
+          try {
+            const colsFast = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
+            final fastRows = await _sb.from('profiles').select(colsFast).inFilter('id', presenceUidsFast.take(50).toList()).limit(50).timeout(const Duration(seconds: 2));
+            if (fastRows.isNotEmpty && !controller.isClosed) {
+              // Emit cepat dari presence
+              final seenFast = <String>{};
+              final pendingFast = <UserModel>[];
+              for (final row in fastRows) {
+                try {
+                  final u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
+                  if (!seenFast.add(u.uid)) continue;
+                  pendingFast.add(u);
+                } catch (_) {}
+              }
+              if (pendingFast.isNotEmpty) {
+                cached = List.unmodifiable(pendingFast);
+                controller.add(cached);
+              }
+            }
+          } catch (_) {}
+        }
         // Coba RPC ringan dulu (1 RTT, server-side, tanpa IN 500)
         List<dynamic> rpcRows = [];
         bool usedRpc = false;
         try {
-          final data = await _sb.rpc('get_online_users', params: {'p_limit': 100}).timeout(const Duration(seconds: 4));
+          final data = await _sb.rpc('get_online_users', params: {'p_limit': 100}).timeout(const Duration(seconds: 2));
           if (data is List && data.isNotEmpty) {
             rpcRows = data;
             usedRpc = true;
@@ -1387,7 +1411,7 @@ class ChatService {
           Set<String> dbUids = {};
           try {
             final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 30)).toIso8601String();
-            final dbRows = await _sb.from('profiles').select('id').neq('status', 'offline').neq('status', 'invisible').gte('last_seen', cutoff).limit(100).timeout(const Duration(seconds: 4));
+            final dbRows = await _sb.from('profiles').select('id').neq('status', 'offline').neq('status', 'invisible').gte('last_seen', cutoff).limit(100).timeout(const Duration(seconds: 2));
             for (final r in dbRows) {
               final id = '${r['id'] ?? ''}';
               if (id.isNotEmpty) dbUids.add(id);
@@ -1401,7 +1425,7 @@ class ChatService {
           }
           String? invisibleUid2;
           try {
-            final setting = await _sb.from('app_settings').select('invisible_enabled,invisible_admin_uid').eq('id', 'global').maybeSingle().timeout(const Duration(seconds: 3));
+            final setting = await _sb.from('app_settings').select('invisible_enabled,invisible_admin_uid').eq('id', 'global').maybeSingle().timeout(const Duration(seconds: 1));
             if (setting?['invisible_enabled'] == true) invisibleUid2 = setting?['invisible_admin_uid'] as String?;
           } catch (_) {}
           final filtered2 = invisibleUid2 == null ? uids : uids.where((id) => id != invisibleUid2).toList();
