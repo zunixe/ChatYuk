@@ -2134,6 +2134,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                       onTap: _toggleAttachRow,
                                       tooltip: s.menuSendPhoto,
                                     ),
+                                    const SizedBox(width: 4),
+                                    _InputIconBtn(
+                                      icon: Icons.photo_camera_outlined,
+                                      color: AppTheme.primary,
+                                      onTap: () {
+                                        setState(() => _showAttachRow = false);
+                                        _takePhoto();
+                                      },
+                                      tooltip: s.menuTakePhoto,
+                                    ),
                                     const SizedBox(width: 10),
                                   ],
                                 ),
@@ -2203,18 +2213,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                             () => _showAttachRow = false,
                                           );
                                           _sendPhoto();
-                                        },
-                                      ),
-                                      const SizedBox(width: 8),
-                                      _AttachChip(
-                                        icon: Icons.photo_camera_outlined,
-                                        color: Colors.teal,
-                                        label: s.menuTakePhoto,
-                                        onTap: () {
-                                          setState(
-                                            () => _showAttachRow = false,
-                                          );
-                                          _takePhoto();
                                         },
                                       ),
                                       const SizedBox(width: 8),

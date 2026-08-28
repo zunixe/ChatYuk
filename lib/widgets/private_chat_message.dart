@@ -282,59 +282,74 @@ class MessageBubble extends StatelessWidget {
                           ),
                         ),
                       if (msg.type == 'image' && msg.imageData.isNotEmpty)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              MessageImage(
-                                imageData: msg.imageData,
-                                chatKey: chatKey,
-                                messageId: msg.id,
-                              ),
-                              Positioned(
-                                right: 6,
-                                bottom: 6,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 2,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  MessageImage(
+                                    imageData: msg.imageData,
+                                    chatKey: chatKey,
+                                    messageId: msg.id,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.55),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        timeStr,
-                                        style: AppText.micro.copyWith(
-                                          color: Colors.white,
-                                        ),
+                                  Positioned(
+                                    right: 6,
+                                    bottom: 6,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 2,
                                       ),
-                                      if (isMe) ...[
-                                        const SizedBox(width: 3),
-                                        Icon(
-                                          isPending
-                                              ? Icons.done
-                                              : (isRead
-                                                    ? Icons.done_all
-                                                    : Icons.done),
-                                          size: 12,
-                                          color: isPending
-                                              ? Colors.white70
-                                              : (isRead
-                                                    ? const Color(0xFF7EC8FF)
-                                                    : Colors.white70),
-                                        ),
-                                      ],
-                                    ],
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.55),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            timeStr,
+                                            style: AppText.micro.copyWith(
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          if (isMe) ...[
+                                            const SizedBox(width: 3),
+                                            Icon(
+                                              isPending
+                                                  ? Icons.done
+                                                  : (isRead
+                                                        ? Icons.done_all
+                                                        : Icons.done),
+                                              size: 12,
+                                              color: isPending
+                                                  ? Colors.white70
+                                                  : (isRead
+                                                        ? const Color(0xFF7EC8FF)
+                                                        : Colors.white70),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (msg.text.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  msg.text,
+                                  style: AppText.body.copyWith(
+                                    color: AppTheme.textPrimary,
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                          ],
                         )
                       else if (msg.type == 'image' &&
                           msg.imageData.isEmpty &&
