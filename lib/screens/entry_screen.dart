@@ -211,30 +211,9 @@ class _EntryScreenState extends State<EntryScreen> {
       return;
     }
 
-    // Cek duplicate sebelum submit
-    final available = await context.read<AuthProvider>().isNicknameAvailable(
-      nick,
-    );
-    if (!available) {
-      // Nick milik akun anon yang sudah lama tak aktif (dummy di-uninstall)
-      // → coba ambil alih. Kalau gagal, baru anggap dipakai.
-      var claimed = false;
-      try {
-        claimed = await context.read<AuthProvider>().claimNickname(nick);
-      } catch (e) {
-        debugPrint('[ENTRY] claimNickname error: $e');
-      }
-      if (!claimed) {
-        setState(() => _nicknameError = s.errNicknameTaken);
-        _nicknameFocus.requestFocus();
-        return;
-      }
-    }
-
     _entered = true;
     setState(() => _loading = true);
     debugPrint('[ENTRY] _enter start nick=$nick');
-    // Retry ringan: jaringan (DNS) kadang gagal sesaat saat ganti user.
     Object? lastError;
     for (var attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -249,9 +228,21 @@ class _EntryScreenState extends State<EntryScreen> {
         lastError = null;
         break;
       } catch (e) {
+        final msg = e.toString().toLowerCase();
+        // Nickname taken → coba ambil alih (akun stale >7 hari) tanpa delay
+        if (msg.contains('duplicate') || msg.contains('taken') || msg.contains('nickname')) {
+          try {
+            final claimed = await context.read<AuthProvider>().claimNickname(nick);
+            if (claimed) {
+              await context.read<AuthProvider>().registerProfile(
+                nickname: nick, gender: _gender, age: _age, country: _negara, city: _kota, ipAddress: _ipAddress);
+              lastError = null; break;
+            }
+          } catch (_) {}
+        }
         lastError = e;
         debugPrint('[ENTRY] registerProfile attempt $attempt ERROR: $e');
-        if (attempt < 3) await Future.delayed(const Duration(seconds: 2));
+        if (attempt < 3) await Future.delayed(Duration(milliseconds: attempt == 1 ? 500 : 800));
       }
     }
     if (lastError != null) {
