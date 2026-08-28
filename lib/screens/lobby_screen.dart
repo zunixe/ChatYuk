@@ -59,6 +59,26 @@ class _LobbyScreenState extends State<LobbyScreen>
     await prefs.setString(_prefKey, country);
   }
 
+  void _showSearchRoomSheet(BuildContext context) {
+    final roomProvider = context.read<RoomProvider>();
+    final allRooms = roomProvider.rooms;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _SearchRoomSheet(
+        rooms: allRooms,
+        onRoomTap: (room) {
+          Navigator.of(ctx).pop();
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
@@ -97,6 +117,11 @@ class _LobbyScreenState extends State<LobbyScreen>
                 ],
               ),
               iconTheme: IconThemeData(color: Colors.white),
+              leading: IconButton(
+                tooltip: s.searchRoom,
+                icon: const Icon(Icons.search_rounded),
+                onPressed: () => _showSearchRoomSheet(context),
+              ),
               // Fitur private room v2 (QR + admin) — admin build saja.
               actions: [
                 if (AdminGate.panelBuilder != null)
@@ -1231,6 +1256,139 @@ class _SheetIcon extends StatelessWidget {
         borderRadius: BorderRadius.circular(13),
       ),
       child: Icon(icon, color: color, size: 20),
+    );
+  }
+}
+
+class _SearchRoomSheet extends StatefulWidget {
+  final List<RoomModel> rooms;
+  final void Function(RoomModel room) onRoomTap;
+  const _SearchRoomSheet({required this.rooms, required this.onRoomTap});
+
+  @override
+  State<_SearchRoomSheet> createState() => _SearchRoomSheetState();
+}
+
+class _SearchRoomSheetState extends State<_SearchRoomSheet> {
+  final _ctrl = TextEditingController();
+  final _focus = FocusNode();
+  List<RoomModel> _filtered = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.rooms;
+    _focus.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String q) {
+    final query = q.toLowerCase().trim();
+    setState(() {
+      _filtered = query.isEmpty
+          ? widget.rooms
+          : widget.rooms
+              .where((r) => r.name.toLowerCase().contains(query))
+              .toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      builder: (ctx, scrollCtrl) => Container(
+        decoration: BoxDecoration(
+          color: AppTheme.bgScreen,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.textSecondary.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _ctrl,
+                focusNode: _focus,
+                onChanged: _onChanged,
+                style: AppText.body,
+                decoration: InputDecoration(
+                  hintText: context.read<LocaleProvider>().s.searchRoom,
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  prefixIconConstraints:
+                      const BoxConstraints(minWidth: 36, minHeight: 0),
+                  filled: true,
+                  fillColor: AppTheme.bgCard,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        context.read<LocaleProvider>().s.noResults,
+                        style: AppText.body
+                            .copyWith(color: AppTheme.textSecondary),
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollCtrl,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      itemCount: _filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 2),
+                      itemBuilder: (_, i) {
+                        final room = _filtered[i];
+                        return ListTile(
+                          dense: true,
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.forum_rounded,
+                                color: AppTheme.primary, size: 20),
+                          ),
+                          title: Text(room.name,
+                              style: AppText.bodyStrong,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          trailing: Icon(Icons.chevron_right_rounded,
+                              color: AppTheme.textSecondary, size: 20),
+                          onTap: () => widget.onRoomTap(room),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
