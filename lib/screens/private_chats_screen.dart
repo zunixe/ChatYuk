@@ -19,7 +19,8 @@ import '../providers/theme_provider.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
   final bool embedded;
-  const PrivateChatsScreen({super.key, this.embedded = false});
+  final String? externalQuery;
+  const PrivateChatsScreen({super.key, this.embedded = false, this.externalQuery});
 
   @override
   State<PrivateChatsScreen> createState() => _PrivateChatsScreenState();
@@ -152,6 +153,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     );
     if (auth.uid == null) return const SizedBox();
 
+    final effectiveQuery = widget.externalQuery ?? _query;
+
     // Map uid → status & nama live dari daftar online users
     final statusMap = <String, String>{};
     final liveNameMap = <String, String>{};
@@ -164,7 +167,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     // agar sibling AnimatedContainer (tombol Hapus Semua) selalu melihat
     // data terbaru. StreamBuilder cuma simpan raw data ke _lastChats.
     if (_lastChats.isNotEmpty) {
-      final filtered = _query.isEmpty
+      final filtered = effectiveQuery.isEmpty
           ? _lastChats
           : _lastChats.where((c) {
               final otherUid = c.participants.firstWhere(
@@ -173,7 +176,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
               );
               final otherName =
                   liveNameMap[otherUid] ?? c.participantNames[otherUid] ?? '';
-              return otherName.toLowerCase().contains(_query);
+              return otherName.toLowerCase().contains(effectiveQuery);
             }).toList();
       // Urutkan: online teratas
       filtered.sort((a, b) {
@@ -195,45 +198,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       appBar: widget.embedded ? null : AppBar(title: Text(_selectionMode ? s.selectedCount(_selected.length) : s.titlePrivateChat)),
       body: Column(
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
-              decoration: InputDecoration(
-                hintText: s.searchHint,
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: AppTheme.textSecondary,
-                  size: 20,
-                ),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: Icon(
-                          Icons.clear,
-                          color: AppTheme.textSecondary,
-                          size: 18,
-                        ),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          setState(() => _query = '');
-                        },
-                      ),
-                filled: true,
-                fillColor: AppTheme.bgCard,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
           AnimatedContainer(
             duration: Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
@@ -280,13 +244,19 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 }
                 final chats = (snap.data ?? []).toList();
                 // Simpan raw data ke field agar level build() bisa komputasi.
-                if (_lastChats != chats) {
+                if (_lastChats.length != chats.length ||
+                    (chats.isNotEmpty && _lastChats != chats)) {
                   _lastChats = chats;
                   // Reset page jika data berubah total
                   if (chats.length != _lastTotal) {
                     _lastTotal = chats.length;
                     _page = 1;
                   }
+                  // Trigger rebuild parent agar _lastFiltered (di level build())
+                  // dihitung ulang — termasuk tombol "Hapus Semua".
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() {});
+                  });
                 }
                 // _lastFiltered sudah dihitung di level build() —
                 // gunakan di sini untuk rendering list.
@@ -299,14 +269,14 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         Text('💬', style: TextStyle(fontSize: AppGlyph.xl)),
                         SizedBox(height: 12),
                         Text(
-                          _query.isEmpty ? s.noPrivateChats : s.searchNoResult,
+                          effectiveQuery.isEmpty ? s.noPrivateChats : s.searchNoResult,
                           style: AppText.bodyStrong.copyWith(
                             color: AppTheme.textSecondary,
                           ),
                         ),
                         SizedBox(height: 4),
                         Text(
-                          _query.isEmpty ? s.noPrivateChatsHint : '',
+                          effectiveQuery.isEmpty ? s.noPrivateChatsHint : '',
                           style: AppText.bodySmall.copyWith(
                             color: AppTheme.textSecondary,
                           ),
