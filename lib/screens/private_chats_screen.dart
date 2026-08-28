@@ -201,7 +201,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
           AnimatedContainer(
             duration: Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            margin: EdgeInsets.fromLTRB(16, 2, 16, 4),
+            margin: EdgeInsets.fromLTRB(16, 10, 16, 10),
             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: _selectionMode ? AppTheme.primary.withValues(alpha: AppTheme.isDark ? 0.18 : 0.08) : AppTheme.bgCard,
