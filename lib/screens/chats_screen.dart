@@ -21,6 +21,20 @@ class _ChatsScreenState extends State<ChatsScreen>
   String _query = '';
 
   @override
+  void initState() {
+    super.initState();
+    _tab.addListener(() {
+      if (_tab.index != 0 && _isSearching) {
+        setState(() {
+          _isSearching = false;
+          _searchCtrl.clear();
+          _query = '';
+        });
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _tab.dispose();
     _searchCtrl.dispose();
@@ -40,20 +54,22 @@ class _ChatsScreenState extends State<ChatsScreen>
         flexibleSpace: Container(
           decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
-        leading: IconButton(
-          tooltip: s.searchHint,
-          icon: Icon(showSearch ? Icons.close : Icons.search_rounded),
-          color: Colors.white,
-          onPressed: () {
-            setState(() {
-              _isSearching = !_isSearching;
-              if (!_isSearching) {
-                _searchCtrl.clear();
-                _query = '';
-              }
-            });
-          },
-        ),
+        leading: isPesanTab
+            ? IconButton(
+                tooltip: s.searchHint,
+                icon: Icon(showSearch ? Icons.close : Icons.search_rounded),
+                color: Colors.white,
+                onPressed: () {
+                  setState(() {
+                    _isSearching = !_isSearching;
+                    if (!_isSearching) {
+                      _searchCtrl.clear();
+                      _query = '';
+                    }
+                  });
+                },
+              )
+            : null,
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           transitionBuilder: (child, anim) => FadeTransition(
