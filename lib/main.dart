@@ -574,111 +574,62 @@ void _openFromMessage(RemoteMessage? message) {
   _openFromData(message.data);
 }
 
-Future<void> _initNotifications() async {
+Future<void> _initNotificationsFast() async {
   await localeProvider.init();
-
-  final androidInit = const lpn.AndroidInitializationSettings(
-    '@mipmap/ic_launcher',
-  );
+  final androidInit = const lpn.AndroidInitializationSettings('@mipmap/ic_launcher');
   final iosInit = const lpn.DarwinInitializationSettings();
-  final settings = lpn.InitializationSettings(
-    android: androidInit,
-    iOS: iosInit,
-  );
+  final settings = lpn.InitializationSettings(android: androidInit, iOS: iosInit);
   await localNotifications.initialize(
     settings: settings,
     onDidReceiveNotificationResponse: (response) {
       final payload = response.payload;
       if (payload == null || payload.isEmpty) return;
-      try {
-        _openFromData(jsonDecode(payload) as Map<String, dynamic>);
-      } catch (_) {}
+      try { _openFromData(jsonDecode(payload) as Map<String, dynamic>); } catch (_) {}
     },
   );
-  // Android 8+: wajib buat channel sebelum show notif. Android 13+: wajib
-  // dapat izin runtime POST_NOTIFICATIONS — tanpa keduanya notifikasi tidak
-  // pernah muncul meski FCM terkirim.
   await _ensureAndroidChannels(localNotifications);
   if (kIsWeb == false) {
     try {
-      final androidImpl = localNotifications
-          .resolvePlatformSpecificImplementation<
-              lpn.AndroidFlutterLocalNotificationsPlugin>();
+      final androidImpl = localNotifications.resolvePlatformSpecificImplementation<lpn.AndroidFlutterLocalNotificationsPlugin>();
       final granted = await androidImpl?.requestNotificationsPermission();
       debugPrint('[NOTIF] POST_NOTIFICATIONS granted=$granted');
-    } catch (e) {
-      debugPrint('[NOTIF] requestNotificationsPermission error: $e');
-    }
+    } catch (e) { debugPrint('[NOTIF] requestNotificationsPermission error: $e'); }
   }
-
-  if (!_firebaseReady) {
-    debugPrint('[FCM] dilewati, Firebase belum init');
-    _initDeepLinks();
-    return;
-  }
-
+  if (!_firebaseReady) { debugPrint('[FCM] dilewati, Firebase belum init'); _initDeepLinks(); return; }
   final messaging = FirebaseMessaging.instance;
-
   final settingsNow = await messaging.getNotificationSettings();
   if (settingsNow.authorizationStatus != AuthorizationStatus.authorized) {
-    final perm = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-    if (perm.authorizationStatus != AuthorizationStatus.authorized) {
-      debugPrint('FCM permission denied');
-    }
+    final perm = await messaging.requestPermission(alert: true, badge: true, sound: true);
+    if (perm.authorizationStatus != AuthorizationStatus.authorized) debugPrint('FCM permission denied');
   }
+  FirebaseMessaging.onMessage.listen(_showLocalNotification);
+  FirebaseMessaging.onMessageOpenedApp.listen(_openFromMessage);
+  final initial = await messaging.getInitialMessage();
+  if (initial != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openFromMessage(initial));
+  _initDeepLinks();
+}
 
+Future<void> _initFcmTokenLazy() async {
+  if (!_firebaseReady) return;
+  final messaging = FirebaseMessaging.instance;
   String? token;
-  try {
-    token = await messaging.getToken().timeout(const Duration(seconds: 5));
-  } catch (e) {
-    debugPrint('FCM getToken failed: $e');
-  }
+  try { token = await messaging.getToken().timeout(const Duration(seconds: 5)); } catch (e) { debugPrint('FCM getToken failed: $e'); }
   if (token != null) {
     debugPrint('FCM token: ${token.substring(0, 20)}...');
     final auth = AuthService();
-    if (auth.isSignedIn) {
-      unawaited(auth.updateFcmToken(token));
-    } else {
-      unawaited(
-        _waitForSession().then((ready) {
-          if (ready) unawaited(AuthService().updateFcmToken(token!));
-        }),
-      );
-    }
+    if (auth.isSignedIn) unawaited(auth.updateFcmToken(token));
+    else unawaited(_waitForSession().then((ready) { if (ready) unawaited(AuthService().updateFcmToken(token!)); }));
   }
-
-  // Token bisa dirotasi FCM kapan saja (umumnya setelah reinstall app).
-  // Simpan otomatis ke profiles supaya push call/chat tidak ditolak
-  // FCM dengan error NotRegistered (token mati di DB).
   FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
     final auth = AuthService();
-    if (auth.isSignedIn) {
-      unawaited(auth.updateFcmToken(newToken));
-    } else {
-      unawaited(
-        _waitForSession().then((ready) {
-          if (ready) unawaited(AuthService().updateFcmToken(newToken));
-        }),
-      );
-    }
+    if (auth.isSignedIn) unawaited(auth.updateFcmToken(newToken));
+    else unawaited(_waitForSession().then((ready) { if (ready) unawaited(AuthService().updateFcmToken(newToken)); }));
   });
+}
 
-  FirebaseMessaging.onMessage.listen(_showLocalNotification);
-  FirebaseMessaging.onMessageOpenedApp.listen(_openFromMessage);
-
-  final initial = await messaging.getInitialMessage();
-  if (initial != null) {
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _openFromMessage(initial),
-    );
-  }
-
-  // Deep link handler (chatyuk://)
-  _initDeepLinks();
+Future<void> _initNotifications() async {
+  await _initNotificationsFast();
+  await _initFcmTokenLazy();
 }
 
 // Handle deep links: chatyuk://login-callback?token=...&type=recovery
@@ -803,34 +754,34 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     debugPrint('[PLATFORM-ERROR] $error\n$stack');
     return true;
   };
-  try {
-    await Firebase.initializeApp(
-      options: firebaseOptions ?? DefaultFirebaseOptions.currentPlatform,
-    );
-    _firebaseReady = true;
-  } on UnsupportedError catch (e) {
-    debugPrint('[FIREBASE] iOS belum dikonfigurasi, lewati: $e');
-  } on FirebaseException catch (e) {
-    if (e.code == 'duplicate-app') {
-      _firebaseReady = true;
-    } else {
-      debugPrint('[FIREBASE] init gagal: $e');
-    }
-  } catch (e) {
-    debugPrint('[FIREBASE] init error: $e');
-  }
-  await SupabaseConfig.init();
-  await AdminGate.postInit?.call();
-  await MessageCache.instance
-      .clearLegacyV1Only(); // bersihkan hanya cache format lama v1
-  // Buka DB pesan (SQLite terenkripsi) + purge sisa cache prefs lama —
-  // fire-and-forget supaya buka chat pertama tidak menanggung latensi ini.
+  // Paralel: Supabase + Firebase (independen) — hemat 300-800ms
+  await Future.wait([
+    SupabaseConfig.init(),
+    Future(() async {
+      try {
+        await Firebase.initializeApp(options: firebaseOptions ?? DefaultFirebaseOptions.currentPlatform);
+        _firebaseReady = true;
+      } on UnsupportedError catch (e) {
+        debugPrint('[FIREBASE] iOS belum dikonfigurasi, lewati: $e');
+      } on FirebaseException catch (e) {
+        if (e.code == 'duplicate-app') _firebaseReady = true; else debugPrint('[FIREBASE] init gagal: $e');
+      } catch (e) {
+        debugPrint('[FIREBASE] init error: $e');
+      }
+    }),
+  ]);
+  // Fire-and-forget yang tidak block TTI
+  unawaited(AdminGate.postInit?.call());
+  unawaited(MessageCache.instance.clearLegacyV1Only());
   unawaited(MessageCache.instance.prewarmDb());
-  PhotoCache.instance.cleanOldPhotos(); // fire-and-forget, hapus foto >7 hari
+  unawaited(PhotoCache.instance.cleanOldPhotos());
   if (_firebaseReady) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
-  await _initNotifications();
+  // Channel + permission cepat (tanpa getToken 5s) — getToken lazy setelah runApp
+  await _initNotificationsFast();
   await warmChatBackground();
   runApp(const ChatYukApp());
+  // Token FCM lambat (5s) — lazy setelah UI tampil, tidak block TTI
+  unawaited(_initFcmTokenLazy());
 }

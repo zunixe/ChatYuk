@@ -202,28 +202,31 @@ class AuthProvider extends ChangeNotifier {
     // Auto-retry dengan backoff: jaringan (DNS/connectivity) sering gagal
     // sesaat, apalagi pas baru connect WiFi atau ganti user. Jangan langsung
     // tampilkan layar error — coba ulang dulu beberapa kali.
-    const maxAttempts = 2;
-    const delays = [2, 3]; // detik antar percobaan
+    // Optimasi jutaan user: jika session sudah ada (restore), jangan signInAnonymously lagi
+    final hasSession = _auth.currentUser != null;
+    final maxAttempts = hasSession ? 1 : 2;
+    const delays = [2, 3];
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        debugPrint('[AUTH] _init attempt $attempt/$maxAttempts');
-        await _auth.signInAnonymously();
+        debugPrint('[AUTH] _init attempt $attempt/$maxAttempts hasSession=$hasSession');
+        if (!hasSession) await _auth.signInAnonymously();
         debugPrint('[AUTH] signInAnonymously OK');
-        _profile = await _auth.getProfile();
-        debugPrint('[AUTH] getProfile -> ${_profile?.uid}');
-        // Restart saat sesi dummy aktif → pulihkan state dummy + token
-        // admin. Hook hanya terisi di build admin (lib/main_admin.dart).
+        // Lite dulu (tanpa avatar) → langsung notify, UI tidak nunggu foto
+        _profile = await _auth.getProfile(withAvatar: false);
+        debugPrint('[AUTH] getProfile lite -> ${_profile?.uid}');
+        if (_profile != null && !_disposed) notifyListeners();
+        // Full avatar fire-and-forget
+        if (_profile != null) {
+          _auth.getProfile().then((full) {
+            if (full != null && !_disposed) { _profile = full; notifyListeners(); }
+          });
+        }
         await AdminGate.restoreDummySession?.call();
-        // Realtime: profil sendiri (poin, status, email terdaftar, dll) —
-        // badge poin di profil & private chat langsung update.
         _listenProfile();
-        // Setting admin (screenshot/watermark/invisible) di-fire-and-forget:
-        // tidak wajib tunggu sebelum masuk app — loading cuma butuh login + profil.
-        // Wajib registrasi HARUS di-await sebelum loading selesai — kalau
-        // fire-and-forget, halaman pertama blink (form guest muncul dulu lalu
-        // hilang saat fetch selesai). Setting lain boleh async.
-        await _loadRequireRegistration();
+        try {
+          await _loadRequireRegistration().timeout(const Duration(seconds: 2), onTimeout: () => debugPrint('[AUTH] requireReg timeout fallback false'));
+        } catch (e) { debugPrint('[AUTH] requireReg error: $e'); }
         safeUnawaited(_loadScreenshotSetting());
         safeUnawaited(_loadCallAllSetting());
         safeUnawaited(_loadWatermarkSetting());
@@ -259,8 +262,12 @@ class AuthProvider extends ChangeNotifier {
       safeUnawaited(cleanupStalePresence());
       if (_disposed) return;
       _startHeartbeat();
-      _startLocationPing();
-      safeUnawaited(_initLocation());
+      // Lokasi lazy 2 detik setelah UI tampil — hemat 2-5 detik TTI, tidak block cold start untuk jutaan user
+      Future.delayed(const Duration(seconds: 2), () {
+        if (_disposed) return;
+        _startLocationPing();
+        safeUnawaited(_initLocation());
+      });
       if (_profile != null && !_invisibleEnabled && !_isIdle && uid != null) {
         safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile!.nickname));
       }
@@ -578,10 +585,10 @@ class AuthProvider extends ChangeNotifier {
            onDone: () => debugPrint('[SETTINGS] stream DONE'));
   }
 
-  /// Polling cadangan bila websocket realtime mati — max delay 10 detik.
+  /// Polling cadangan bila websocket realtime mati — max delay 30 detik (hemat untuk jutaan user, realtime tetap utama).
   void _startSettingsPolling() {
     _settingsPollTimer?.cancel();
-    _settingsPollTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+    _settingsPollTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       if (_disposed || !_auth.isSignedIn) return;
       try {
         final callAll = await _auth.fetchCallAllEnabled();
