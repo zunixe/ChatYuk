@@ -433,6 +433,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   Timer? _typingClearTimer;
   DateTime _lastTypingSent = DateTime(2000);
   bool _showTyping = false;
+  String? _pendingPhotoBase64;
 
   void _subscribeTyping() {
     _typingSub?.cancel();
@@ -473,7 +474,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
-    if (text.isEmpty || _isSending) return;
+    final hasPhoto = _pendingPhotoBase64 != null;
+    if (text.isEmpty && !hasPhoto) return;
+    if (_isSending) return;
 
     // Mode edit: kirim langsung mengubah pesan lama (bukan pesan baru).
     if (_editingMessage != null) {
@@ -483,6 +486,94 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       setState(() => _editingMessage = null);
       if (text != original) {
         await ChatService().editPrivateMessage(id, text);
+      }
+      return;
+    }
+
+    // Jika ada foto preview → kirim foto (+ opsional teks caption)
+    if (hasPhoto) {
+      final photoB64 = _pendingPhotoBase64!;
+      _msgCtrl.clear();
+      setState(() => _pendingPhotoBase64 = null);
+      _isSending = true;
+
+      final auth = context.read<AuthProvider>();
+      final chat = context.read<ChatProvider>();
+      final uid = auth.uid;
+      final profile = auth.profile;
+      if (uid == null || profile == null) {
+        _isSending = false;
+        return;
+      }
+      final ppPhoto = context.read<PointsProvider>();
+      final rPhoto = await ppPhoto.deductBeforeSend('image');
+      if (rPhoto < 0) {
+        _isSending = false;
+        if (!mounted) return;
+        if (rPhoto == -1) {
+          ppPhoto.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
+          );
+        }
+        return;
+      }
+
+      final pendingPhoto = MessageModel(
+        id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        isRegistered: profile.isRegistered,
+        text: text,
+        type: 'image',
+        imageData: photoB64,
+        timestamp: DateTime.now(),
+      );
+      setState(() => _pending.add(pendingPhoto));
+      _scrollToBottom();
+      try {
+        final path = await StoragePhotoService.instance.upload(
+          chatId: widget.chatId,
+          base64: photoB64,
+        );
+        final stored = path ?? photoB64;
+        await chat.sendPrivateMessage(
+          chatId: widget.chatId,
+          senderId: uid,
+          senderName: profile.nickname,
+          senderGender: profile.gender,
+          text: text,
+          type: 'image',
+          imageData: stored,
+        );
+        _maybeNewChatBonus();
+        _schedulePendingConfirmFallback();
+        if (ppPhoto.enabled) {
+          ppPhoto.oneTimeBonus('first_photo', 10).then((earned) {
+            if (earned && mounted) {
+              ppPhoto.showPointsToast(
+                context,
+                context.read<LocaleProvider>().s.pointsGain(
+                  10,
+                  context.read<LocaleProvider>().s.reasonFirstPhoto,
+                ),
+              );
+            }
+          });
+        }
+        _scrollToBottom();
+      } catch (e) {
+        safeUnawaited(ppPhoto.refundChatPoint('image'));
+        if (mounted) {
+          setState(() => _pending.remove(pendingPhoto));
+          final s = context.read<LocaleProvider>().s;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+        }
+      } finally {
+        await Future.delayed(const Duration(milliseconds: 300));
+        _isSending = false;
       }
       return;
     }
@@ -723,7 +814,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     await _sendImageBytes(bytes);
   }
 
-  /// Buka kamera langsung → foto → langsung kirim ke chat (masuk pesan).
+  /// Buka kamera → tampilkan preview di composer (bukan langsung kirim).
   Future<void> _takePhoto() async {
     final picked = await _imagePicker.pickImage(
       source: ImageSource.camera,
@@ -731,7 +822,24 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
-    await _sendImageBytes(bytes);
+    if (bytes.length > 10 * 1024 * 1024) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.msgFileTooLarge)),
+        );
+      }
+      return;
+    }
+    final processed = await compute(_processImage, bytes);
+    if (processed == null) return;
+    if (mounted) {
+      setState(() {
+        _pendingPhotoBase64 = processed;
+        _inputFocus.requestFocus();
+      });
+      _scrollToBottom();
+    }
   }
 
   /// Proses + kirim foto (dipakai gallery & kamera) — resize di isolate,
@@ -1913,6 +2021,43 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                               ],
                             ),
                           ),
+                        if (_pendingPhotoBase64 != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.memory(
+                                    base64.decode(_pendingPhotoBase64!),
+                                    height: 160,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        setState(() => _pendingPhotoBase64 = null),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
@@ -2011,7 +2156,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                         child: child,
                                       ),
                                     ),
-                                child: value.text.trim().isEmpty
+                                child: value.text.trim().isEmpty && _pendingPhotoBase64 == null
                                     ? const SizedBox(
                                         width: 0,
                                         key: ValueKey('empty'),
