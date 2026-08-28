@@ -1088,7 +1088,7 @@ class ChatService {
         .select()
         .contains('participants', [myUid])
         .order('last_message_at', ascending: false)
-        .limit(500);
+        .limit(50);
     Set<String> hiddenSet = {};
     try {
       hiddenSet = await getHiddenChats(myUid);
@@ -1387,7 +1387,7 @@ class ChatService {
           Set<String> dbUids = {};
           try {
             final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 30)).toIso8601String();
-            final dbRows = await _sb.from('profiles').select('id').neq('status', 'offline').neq('status', 'invisible').gte('last_seen', cutoff).limit(500).timeout(const Duration(seconds: 4));
+            final dbRows = await _sb.from('profiles').select('id').neq('status', 'offline').neq('status', 'invisible').gte('last_seen', cutoff).limit(100).timeout(const Duration(seconds: 4));
             for (final r in dbRows) {
               final id = '${r['id'] ?? ''}';
               if (id.isNotEmpty) dbUids.add(id);
