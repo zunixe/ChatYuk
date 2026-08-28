@@ -23,19 +23,28 @@ class _ChatsScreenState extends State<ChatsScreen>
   @override
   void initState() {
     super.initState();
-    _tab.addListener(() {
-      if (_tab.index != 0 && _isSearching) {
-        setState(() {
-          _isSearching = false;
-          _searchCtrl.clear();
-          _query = '';
-        });
-      }
-    });
+    _tab.addListener(_onTabChanged);
+    _tab.animation!.addListener(_onTabAnimated);
+  }
+
+  void _onTabChanged() {
+    if (_tab.index != 0 && _isSearching) {
+      setState(() {
+        _isSearching = false;
+        _searchCtrl.clear();
+        _query = '';
+      });
+    }
+  }
+
+  void _onTabAnimated() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _tab.animation!.removeListener(_onTabAnimated);
+    _tab.removeListener(_onTabChanged);
     _tab.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -44,7 +53,8 @@ class _ChatsScreenState extends State<ChatsScreen>
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final isPesanTab = _tab.index == 0;
+    final tabProgress = _tab.animation!.value;
+    final isPesanTab = tabProgress < 0.5;
     final showSearch = _isSearching && isPesanTab;
 
     return Scaffold(
