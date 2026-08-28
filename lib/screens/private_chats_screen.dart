@@ -38,6 +38,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   final Set<String> _selected = {};
   bool get _selectionMode => _selected.isNotEmpty;
   List<PrivateChatInfo> _lastFiltered = [];
+  List<PrivateChatInfo> _lastChats = [];
 
   void _toggleSelect(String chatId) {
     setState(() {
@@ -159,6 +160,36 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       liveNameMap[u.uid] = u.nickname;
     }
 
+    // ── Komputasi _lastFiltered di LEVEL BUILD (bukan di StreamBuilder) ──
+    // agar sibling AnimatedContainer (tombol Hapus Semua) selalu melihat
+    // data terbaru. StreamBuilder cuma simpan raw data ke _lastChats.
+    if (_lastChats.isNotEmpty) {
+      final filtered = _query.isEmpty
+          ? _lastChats
+          : _lastChats.where((c) {
+              final otherUid = c.participants.firstWhere(
+                (p) => p != auth.uid,
+                orElse: () => '',
+              );
+              final otherName =
+                  liveNameMap[otherUid] ?? c.participantNames[otherUid] ?? '';
+              return otherName.toLowerCase().contains(_query);
+            }).toList();
+      // Urutkan: online teratas
+      filtered.sort((a, b) {
+        final aUid =
+            a.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
+        final bUid =
+            b.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
+        int rank(String v) => v == 'online' ? 0 : v == 'idle' ? 1 : 2;
+        final ra = rank(statusMap[aUid] ?? 'offline');
+        final rb = rank(statusMap[bUid] ?? 'offline');
+        if (ra != rb) return ra.compareTo(rb);
+        return b.lastMessageAt.compareTo(a.lastMessageAt);
+      });
+      _lastFiltered = filtered;
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: widget.embedded ? null : AppBar(title: Text(_selectionMode ? s.selectedCount(_selected.length) : s.titlePrivateChat)),
@@ -248,34 +279,18 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                   );
                 }
                 final chats = (snap.data ?? []).toList();
-                // Filter pencarian berdasarkan nama lawan chat
-                final filtered = _query.isEmpty
-                    ? chats
-                    : chats.where((c) {
-                        final otherUid = c.participants.firstWhere(
-                          (p) => p != auth.uid,
-                          orElse: () => '',
-                        );
-                        final otherName = liveNameMap[otherUid] ?? c.participantNames[otherUid] ?? '';
-                        return otherName.toLowerCase().contains(_query);
-                      }).toList();
-                // Update last filtered for outer bar
-                _lastFiltered = filtered;
-                // Urutkan: online teratas
-                filtered.sort((a, b) {
-                  final aUid = a.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-                  final bUid = b.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-                  int rank(String v) => v == 'online' ? 0 : v == 'idle' ? 1 : 2;
-                  final ra = rank(statusMap[aUid] ?? 'offline');
-                  final rb = rank(statusMap[bUid] ?? 'offline');
-                  if (ra != rb) return ra.compareTo(rb);
-                  return b.lastMessageAt.compareTo(a.lastMessageAt);
-                });
-                // Reset page jika data berubah total
-                if (chats.length != _lastTotal) {
-                  _lastTotal = chats.length;
-                  _page = 1;
+                // Simpan raw data ke field agar level build() bisa komputasi.
+                if (_lastChats != chats) {
+                  _lastChats = chats;
+                  // Reset page jika data berubah total
+                  if (chats.length != _lastTotal) {
+                    _lastTotal = chats.length;
+                    _page = 1;
+                  }
                 }
+                // _lastFiltered sudah dihitung di level build() —
+                // gunakan di sini untuk rendering list.
+                final filtered = _lastFiltered;
                 if (filtered.isEmpty) {
                   return Center(
                     child: Column(
