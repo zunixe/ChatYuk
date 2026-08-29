@@ -24,6 +24,9 @@ class _TimelineScreenState extends State<TimelineScreen>
   int _current = 0;
   // Posisi scroll per tab — dipulihkan saat balik ke tab tsb.
   final Map<int, double> _scrollOffsets = {};
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _search = '';
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -39,6 +42,7 @@ class _TimelineScreenState extends State<TimelineScreen>
     _tab.dispose();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -85,12 +89,20 @@ class _TimelineScreenState extends State<TimelineScreen>
     final s = context.watch<LocaleProvider>().s;
     // Rebuild granular: hanya rebuild saat daftar post / hasMore benar-benar
     // berubah (bukan tiap notifyListeners — mis. pricing, loading).
-    final posts = context.select<TimelineProvider, List<Map<String, dynamic>>>(
+    final postsRaw = context.select<TimelineProvider, List<Map<String, dynamic>>>(
       (t) => t.posts,
     );
     final hasMore = context.select<TimelineProvider, bool>((t) => t.hasMore);
     final loading = context.select<TimelineProvider, bool>((t) => t.loading);
     final scope = _scope;
+    final posts = _search.isEmpty
+        ? postsRaw
+        : postsRaw.where((p) {
+            final q = _search.toLowerCase();
+            final text = (p['text'] as String? ?? '').toLowerCase();
+            final name = (p['authorName'] as String? ?? '').toLowerCase();
+            return text.contains(q) || name.contains(q);
+          }).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -123,12 +135,51 @@ class _TimelineScreenState extends State<TimelineScreen>
           ],
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: () => _load(refresh: true),
-        // Empty state HANYA saat fetch selesai & benar-benar kosong. Saat
-        // loading pertama kali (atau tab switch) tampilkan spinner — jangan
-        // blink ke "Belum ada postingan" kalau sebenarnya ada data.
-        child: posts.isEmpty && !loading
+      body: Column(
+        children: [
+          // Search bar — sama posisi & style dengan halaman Pengguna Online
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      hintText: s.searchHint,
+                      hintStyle: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                      prefixIcon: Icon(Icons.search, size: 20, color: AppTheme.textSecondary),
+                      suffixIcon: _search.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(Icons.close, size: 18, color: AppTheme.textSecondary),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _search = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: AppTheme.bgCard,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.divider)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.divider)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.primary, width: 1.5)),
+                    ),
+                    onChanged: (v) => setState(() => _search = v),
+                    onTap: () => setState(() => _isSearching = true),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => _load(refresh: true),
+              // Empty state HANYA saat fetch selesai & benar-benar kosong. Saat
+              // loading pertama kali (atau tab switch) tampilkan spinner — jangan
+              // blink ke "Belum ada postingan" kalau sebenarnya ada data.
+              child: posts.isEmpty && !loading
             ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
@@ -211,6 +262,9 @@ class _TimelineScreenState extends State<TimelineScreen>
                   );
                 },
               ),
+            ),
+          ),
+        ],
       ),
     );
   }
