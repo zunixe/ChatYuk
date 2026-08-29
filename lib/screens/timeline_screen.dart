@@ -111,16 +111,73 @@ class _TimelineScreenState extends State<TimelineScreen>
         flexibleSpace: Container(
           decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('ChatYuk', style: AppText.title.copyWith(color: Colors.white)),
-            Text(
-              s.titleTimeline,
-              style: AppText.bodySmall.copyWith(color: Colors.white70),
+        leading: IconButton(
+          tooltip: s.searchHint,
+          icon: Icon(_isSearching ? Icons.close : Icons.search_rounded),
+          color: Colors.white,
+          onPressed: () {
+            setState(() {
+              _isSearching = !_isSearching;
+              if (!_isSearching) {
+                _searchCtrl.clear();
+                _search = '';
+              }
+            });
+          },
+        ),
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: SizeTransition(
+              sizeFactor: anim,
+              axis: Axis.horizontal,
+              axisAlignment: -1,
+              child: child,
             ),
-          ],
+          ),
+          child: _isSearching
+              ? SizedBox(
+                  key: const ValueKey('search'),
+                  height: 40,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    autofocus: true,
+                    onChanged: (v) => setState(() => _search = v),
+                    style: AppText.body.copyWith(color: Colors.white),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: s.searchHint,
+                      hintStyle: AppText.body.copyWith(color: Colors.white54),
+                      prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 20),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 0),
+                      suffixIcon: _search.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18, color: Colors.white70),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _search = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.15),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white, width: 1)),
+                    ),
+                  ),
+                )
+              : Column(
+                  key: const ValueKey('title'),
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('ChatYuk', style: AppText.title.copyWith(color: Colors.white)),
+                    Text(s.titleTimeline, style: AppText.bodySmall.copyWith(color: Colors.white70)),
+                  ],
+                ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         bottom: TabBar(
@@ -135,46 +192,7 @@ class _TimelineScreenState extends State<TimelineScreen>
           ],
         ),
       ),
-      body: Column(
-        children: [
-          // Search bar — sama posisi & style dengan halaman Pengguna Online
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    style: AppText.body,
-                    decoration: InputDecoration(
-                      hintText: s.searchHint,
-                      hintStyle: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-                      prefixIcon: Icon(Icons.search, size: 20, color: AppTheme.textSecondary),
-                      suffixIcon: _search.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(Icons.close, size: 18, color: AppTheme.textSecondary),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() => _search = '');
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: AppTheme.bgCard,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.divider)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.divider)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.primary, width: 1.5)),
-                    ),
-                    onChanged: (v) => setState(() => _search = v),
-                    onTap: () => setState(() => _isSearching = true),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: RefreshIndicator(
+      body: RefreshIndicator(
               onRefresh: () => _load(refresh: true),
               // Empty state HANYA saat fetch selesai & benar-benar kosong. Saat
               // loading pertama kali (atau tab switch) tampilkan spinner — jangan
@@ -262,9 +280,6 @@ class _TimelineScreenState extends State<TimelineScreen>
                   );
                 },
               ),
-            ),
-          ),
-        ],
       ),
     );
   }
