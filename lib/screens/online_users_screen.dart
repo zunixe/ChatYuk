@@ -16,6 +16,7 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
+import '../providers/timeline_provider.dart';
 import '../services/chat_service.dart';
 import '../services/location_service.dart';
 import '../utils/bounded_cache.dart';
@@ -269,11 +270,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       final pp = context.read<AuthProvider>();
       await pp.updateAvatar(processed);
       if (mounted) {
-        // Langsung patch list online supaya foto baru terlihat tanpa tunggu stream 30s
+        // Langsung patch list online & timeline supaya foto baru terlihat
+        // tanpa pindah halaman / tunggu stream 30s
         try {
           final uid = pp.profile?.uid ?? '';
           if (uid.isNotEmpty) {
             context.read<OnlineUsersProvider>().updateAvatarForUid(uid, processed);
+            context.read<TimelineProvider>().refreshAvatarForUid(uid, processed);
           }
         } catch (_) {}
         setState(() => _uploadingAvatar = false);

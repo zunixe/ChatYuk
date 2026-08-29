@@ -476,6 +476,37 @@ class TimelineProvider extends ChangeNotifier {
     }
   }
 
+  /// Update avatar di semua post milik uid — dipanggil setelah ganti foto
+  /// supaya timeline langsung pakai foto baru tanpa pindah halaman.
+  void refreshAvatarForUid(String uid, String newBase64) {
+    if (uid.isEmpty) return;
+    bool changed = false;
+    for (var i = 0; i < _posts.length; i++) {
+      if ('${_posts[i]['authorId']}' == uid) {
+        _posts[i] = {..._posts[i], 'authorAvatar': newBase64};
+        changed = true;
+      }
+    }
+    for (final entry in _scopeCache.entries) {
+      final list = entry.value.posts;
+      for (var i = 0; i < list.length; i++) {
+        if ('${list[i]['authorId']}' == uid) {
+          list[i] = {...list[i], 'authorAvatar': newBase64};
+        }
+      }
+    }
+    // disk cache juga (next cold start pakai foto baru)
+    _scheduleDiskSave();
+    if (changed) {
+      _invalidateView();
+      notifyListeners();
+    } else {
+      // tidak ada post di cache tapi tetap notify biar _AuthorAvatar
+      // rebuild dan ambil base64 baru dari AvatarB64Service cache
+      notifyListeners();
+    }
+  }
+
   /// Mutasi lokal setelah aksi sukses (tanpa refetch penuh).
   void updatePost(String id, Map<String, dynamic> patch) {
     final i = _posts.indexWhere((p) => p['id'] == id);
