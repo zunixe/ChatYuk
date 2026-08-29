@@ -28,7 +28,7 @@ class RoomProvider extends ChangeNotifier {
   String? get error => _error;
 
   RoomProvider() {
-    // Unified fan-out: Presence room juga update counts per-room
+    // Unified fan-out: Presence room juga update counts per-room (RealtimeHub per-room presence)
     RealtimeHub.instance.roomPresence.listen((msg) {
       final roomId = msg['roomId'] as String?;
       final state = msg['state'] as Map?;
@@ -42,10 +42,16 @@ class RoomProvider extends ChangeNotifier {
       _applyCounts();
       notifyListeners();
     });
-    _countsSub = _chat.getRoomOnlineCounts().listen(
+    _subscribeCounts();
+    _subscribePrivateRooms();
+    _loadDisk();
+    reload();
+  }
+
+  void _subscribeCounts() {
+    _countsSub?.cancel();
+    _countsSub = _chat.getRoomOnlineCounts(country: _country).listen(
       (counts) {
-        // Event presence (heartbeat 60s tiap user) tidak mengubah count —
-        // lewati notify supaya lobby tidak rebuild tiap detik.
         if (_countsEquals(counts, _counts)) return;
         _counts = counts;
         _applyCounts();
@@ -55,9 +61,6 @@ class RoomProvider extends ChangeNotifier {
         debugPrint('[RoomProvider] counts stream error: $e');
       },
     );
-    _subscribePrivateRooms();
-    _loadDisk();
-    reload();
   }
 
   // ── Persist list room ke disk (encrypted) — cold start tampil instan ────
@@ -128,6 +131,7 @@ class RoomProvider extends ChangeNotifier {
   Future<void> setCountry(String country) async {
     if (country == _country) return;
     _country = country;
+    _subscribeCounts();
     _subscribePrivateRooms(); // langganan ulang untuk negara baru
     notifyListeners();
     // Tampilkan cache disk negara itu dulu kalau memori kosong.
