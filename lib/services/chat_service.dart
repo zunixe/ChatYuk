@@ -1400,8 +1400,29 @@ class ChatService {
                 } catch (_) {}
               }
               if (pendingFast.isNotEmpty) {
-                cached = List.unmodifiable(pendingFast);
-                controller.add(cached);
+                cached = List.of(pendingFast);
+                if (!controller.isClosed) controller.add(List.unmodifiable(cached));
+                // Background download avatar batch (sama seperti slow path)
+                const avatarBatch = 20;
+                bool avatarUpdated = false;
+                for (var i = 0; i < pendingFast.length; i += avatarBatch) {
+                  final chunk = pendingFast.skip(i).take(avatarBatch).toList();
+                  final results = await Future.wait(chunk.map((u) async {
+                    if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+                      final b64 = await _avatarB64(u.avatar);
+                      if (b64.isNotEmpty) return u.copyWith(avatar: b64);
+                    }
+                    return u;
+                  }));
+                  for (var j = 0; j < chunk.length; j++) {
+                    final idx = cached.indexWhere((c) => c.uid == chunk[j].uid);
+                    if (idx >= 0 && results[j].avatar != cached[idx].avatar) {
+                      cached[idx] = results[j];
+                      avatarUpdated = true;
+                    }
+                  }
+                }
+                if (avatarUpdated && !controller.isClosed) controller.add(List.unmodifiable(cached));
               }
             }
           } catch (_) {}
