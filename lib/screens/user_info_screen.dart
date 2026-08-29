@@ -79,6 +79,16 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   Future<void> _toggleFollow() async {
     final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final targetRegistered = _profile?.isRegistered ?? false;
+    if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgRegisterToFollow)));
+      return;
+    }
+    if (!targetRegistered) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgTargetNotRegistered)));
+      return;
+    }
     final social = context.read<SocialProvider>();
     setState(() => _busySocial = true);
     final ok = _following
