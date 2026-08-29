@@ -16,6 +16,7 @@ import '../services/timeline_service.dart';
 import '../utils.dart';
 import 'post_photo_viewer.dart';
 import 'profile_avatar.dart';
+import '../screens/other_profile_screen.dart';
 
 /// Kartu postingan timeline: header + foto + caption + like/comment/share.
 class PostCard extends StatefulWidget {
@@ -409,7 +410,7 @@ class _PostCardState extends State<PostCard> {
             padding: EdgeInsets.fromLTRB(12, 12, 12, 8),
             child: Row(
               children: [
-                _AuthorAvatar(post: _p, name: name, size: 38),
+                GestureDetector(onTap: _openProfile, child: _AuthorAvatar(post: _p, name: name, size: 38)),
                 SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -418,10 +419,13 @@ class _PostCardState extends State<PostCard> {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(
-                              name,
-                              style: AppText.bodyStrong,
-                              overflow: TextOverflow.ellipsis,
+                            child: GestureDetector(
+                              onTap: _openProfile,
+                              child: Text(
+                                name,
+                                style: AppText.bodyStrong,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
                           if (isFriend) ...[
@@ -788,6 +792,19 @@ class _PostCardState extends State<PostCard> {
         ).showSnackBar(SnackBar(content: Text(s.errDeletePost)));
       }
     }
+  }
+
+  void _openProfile() {
+    final uid = _p['authorId'] as String? ?? '';
+    if (uid.isEmpty) return;
+    final me = context.read<AuthProvider>().uid;
+    if (uid == me) return;
+    final avatar = _p['authorAvatar'] as String? ?? '';
+    final name = _p['authorName'] as String? ?? 'Anon';
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => OtherProfileScreen(uid: uid, name: name, avatar: avatar)),
+    );
   }
 
   String _timeAgo(DateTime t) => _timeAgoShort(t);
