@@ -83,8 +83,10 @@
 ## 2026-08-29 — 20260829040000_timeline_country.sql
 
 - **Status:** SUDAH TERAPPLIED via Management API pada 2026-08-29.
-- **Isi:** `list_posts` overload dengan 5 param (tambah `p_country text default null`), filter `posts.country = p_country` jika not null. 4-param wrapper tetap ada via overload revoke/grant.
-- **Verifikasi:** `select pronargs, proargtypes from pg_proc where proname='list_posts';` → harus ada 2 baris (4 args + 5 args).
+- **Isi:** `list_posts` overload dengan 5 param (tambah `p_country text default null`), **filter country dihapus** (timeline global — semua negara lihat semua post). 
+- **IMPORTANT:** 4-param wrapper **DILEPAS** (`DROP FUNCTION`) — sebelumnya cause ambiguity error `function list_posts(unknown, integer, unknown, boolean) is not unique` karena PostgreSQL tak bisa memilih antara 4-param dan 5-param overload ketika app kirim 4 param via Supabase RPC (JSON → unknown type). Dengan hanya 5-param (semua ada default), 4-param call langsung resolve ke 5-param.
+- **Fix tambahan:** `list_posts` scope `mine` → `p_scope='mine' and p.author_id=me` (bukan fallback ke follows). File on-disk sync dengan DB.
+- **Verifikasi:** `select pronargs from pg_proc where proname='list_posts';` → **1 baris** (5 args saja). `select public.list_posts('all',30,null,false)` → return 4 posts.
 
 ## Pola untuk AI berikutnya
 

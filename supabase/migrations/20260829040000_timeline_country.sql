@@ -85,13 +85,9 @@ begin
 
   return jsonb_build_object('posts', coalesce(rows, '[]'::jsonb));
 end; $$;
--- keep old 4-param signature for backward compat
-create or replace function public.list_posts(
-  p_scope text, p_limit int, p_cursor timestamptz, p_cursor_boosted boolean
-) returns jsonb language sql security definer set search_path=public as $$
-  select public.list_posts(p_scope, p_limit, p_cursor, p_cursor_boosted, null::text);
-$$;
-revoke execute on function public.list_posts(text,int,timestamptz,boolean) from public, anon;
-grant execute on function public.list_posts(text,int,timestamptz,boolean) to authenticated;
+-- DILEPAS 4-param wrapper — cause ambiguity error (function not unique)
+-- ketika app kirim 4 param via Supabase RPC (JSON → unknown type).
+-- 5-param function di atas punya semua DEFAULT, jadi 4-param call
+-- langsung resolve ke sini. Cukup 1 overload.
 revoke execute on function public.list_posts(text,int,timestamptz,boolean,text) from public, anon;
 grant execute on function public.list_posts(text,int,timestamptz,boolean,text) to authenticated;
