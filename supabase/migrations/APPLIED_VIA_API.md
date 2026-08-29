@@ -94,6 +94,12 @@
 - **Isi:** Tambah `UPDATE` policy untuk bucket `chat-photos` (`chat_photos_authenticated_update`). Sebelumnya hanya ada INSERT/DELETE/SELECT policies — tidak ada UPDATE. Saat `uploadAvatar` pakai `FileOptions(upsert: true)` dan avatar sudah ada sebelumnya, storage coba UPDATE row yang existing → gagal `new row violates row-level security policy` (403). Dengan policy ini, authenticated users bisa update avatar mereka sendiri.
 - **Verifikasi:** `select count(*) from pg_policies where schemaname='storage' AND tablename='objects';` → 6 policies (termasuk `chat_photos_authenticated_update` untuk UPDATE).
 
+## 2026-08-29 — 20260829060000_relax_profiles_policy.sql
+
+- **Status:** SUDAH TERAPPLAY via Management API pada 2026-08-29.
+- **Isi:** `profiles_update_own` policy `WITH CHECK` dibuka — sebelumnya mengharuskan `nickname >= 3 chars`, `status in (online,idle,offline)`, `points` unchanged. Ini BLOCK semua UPDATE termasuk `updateAvatar` (line 768), `markRegistered` (line 375), `goOnline` (line ~842). Sekarang cukup `USING (auth.uid() = id) WITH CHECK (auth.uid() = id)` — security tetap (user cuma bisa update row sendiri), tapi tidak blokir update kolom lain.
+- **Verifikasi:** `select with_check from pg_policies where schemaname='public' and tablename='profiles' and policyname='profiles_update_own';` → `(auth.uid() = id)` saja.
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
