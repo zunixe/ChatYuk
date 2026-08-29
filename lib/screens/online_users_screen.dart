@@ -294,6 +294,59 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     }
   }
 
+  void _showAvatarZoom(String b64, Color bgColor, String initial) {
+    Uint8List? bytes;
+    if (b64.isNotEmpty) {
+      try {
+        bytes = base64Decode(b64);
+      } catch (_) {}
+    }
+    if (bytes == null && initial.isEmpty) return;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: bytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(bytes, fit: BoxFit.contain),
+                      )
+                    : CircleAvatar(
+                        radius: 90,
+                        backgroundColor: bgColor,
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 48,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _scrollCtrl.removeListener(_onScroll);
@@ -691,11 +744,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                     child: Center(
-                      child: GestureDetector(
-                        onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
-                        child: Stack(
-                          children: [
-                            Container(
+                      child: Stack(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              final b64 = auth.profile?.avatar ?? '';
+                              final init = (auth.profile?.nickname ?? '?')[0].toUpperCase();
+                              _showAvatarZoom(b64, AppTheme.primary, init);
+                            },
+                            child: Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(color: Colors.white, width: 3),
@@ -725,9 +782,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                     : null,
                               ),
                             ),
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
+                          ),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: GestureDetector(
+                              onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
                               child: Container(
                                 width: 30,
                                 height: 30,
@@ -756,8 +816,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                       ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
