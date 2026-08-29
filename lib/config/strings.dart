@@ -281,6 +281,11 @@ class S {
       isId ? 'Gagal membaca gambar' : 'Failed to read image';
   String get errSendPhoto =>
       isId ? 'Gagal kirim foto: ' : 'Failed to send photo: ';
+  String get errVoicePermission => isId ? 'Izin mikrofon ditolak' : 'Microphone permission denied';
+  String get errVoiceTooShort => isId ? 'Rekaman terlalu pendek' : 'Recording too short';
+  String get msgVoice => isId ? '[Voice]' : '[Voice]';
+  String get hintHoldToRecord => isId ? 'Tahan untuk rekam' : 'Hold to record';
+  String get hintSlideToCancel => isId ? 'Geser untuk batal' : 'Slide to cancel';
   String get msgPhoto => isId ? '[Foto]' : '[Photo]';
   String get msgViewOnce => isId ? '[Foto Sekali Lihat]' : '[View Once Photo]';
   String get viewOnceTap =>

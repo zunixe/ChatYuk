@@ -413,7 +413,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           chatId: 'room_${widget.room.id}',
           base64: photoB64,
         );
-        final stored = path ?? photoB64;
+        if (path == null || path.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)));
+          }
+          _isSending = false;
+          return;
+        }
         await chat.sendRoomMessage(
           roomId: widget.room.id,
           senderId: uid,
@@ -421,7 +427,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           senderGender: profile.gender,
           text: text,
           type: 'image',
-          imageData: stored,
+          imageData: path,
         );
         _scrollToBottom();
       } catch (e) {
@@ -579,7 +585,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         chatId: 'room_${widget.room.id}',
         base64: base64,
       );
-      final stored = path ?? base64;
+      if (path == null || path.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)));
+        }
+        _isSending = false;
+        return;
+      }
       await chat.sendRoomMessage(
         roomId: widget.room.id,
         senderId: uid,
@@ -587,7 +599,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         senderGender: profile.gender,
         text: '',
         type: 'image',
-        imageData: stored,
+        imageData: path,
       );
       _scrollToBottom();
     } catch (e) {
@@ -647,7 +659,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         chatId: 'room_${widget.room.id}',
         base64: base64,
       );
-      final stored = path ?? base64;
+      if (path == null || path.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)));
+        }
+        _isSending = false;
+        return;
+      }
       await chat.sendRoomMessage(
         roomId: widget.room.id,
         senderId: uid,
@@ -655,7 +673,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         senderGender: profile.gender,
         text: '',
         type: 'view_once',
-        imageData: stored,
+        imageData: path,
       );
       _scrollToBottom();
     } catch (e) {

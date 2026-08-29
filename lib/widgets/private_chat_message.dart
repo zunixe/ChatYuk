@@ -13,6 +13,7 @@ import '../providers/locale_provider.dart';
 import '../services/photo_cache.dart';
 import '../services/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
+import 'voice_bubble.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
@@ -288,7 +289,9 @@ class MessageBubble extends StatelessWidget {
                             ],
                           ),
                         ),
-                      if (msg.type == 'image' && msg.imageData.isNotEmpty)
+                      if (msg.type == 'voice' && msg.imageData.isNotEmpty)
+                        VoiceBubble(path: msg.imageData, durationMs: msg.durationMs ?? 0, isMe: isMe)
+                      else if (msg.type == 'image' && msg.imageData.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
