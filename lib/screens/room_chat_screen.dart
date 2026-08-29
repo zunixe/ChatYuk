@@ -1465,16 +1465,38 @@ class _ChatInput extends StatefulWidget {
 }
 
 class _ChatInputState extends State<_ChatInput> {
+  Uint8List? _decodedPhoto;
+
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onChanged);
+    _decodePhoto();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatInput old) {
+    super.didUpdateWidget(old);
+    if (old.pendingPhotoBase64 != widget.pendingPhotoBase64) _decodePhoto();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onChanged);
     super.dispose();
+  }
+
+  void _decodePhoto() {
+    final b64 = widget.pendingPhotoBase64;
+    if (b64 == null) {
+      _decodedPhoto = null;
+    } else {
+      try {
+        _decodedPhoto = base64Decode(b64);
+      } catch (_) {
+        _decodedPhoto = null;
+      }
+    }
   }
 
   void _onChanged() {
@@ -1485,7 +1507,7 @@ class _ChatInputState extends State<_ChatInput> {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     return Container(
-      padding: EdgeInsets.fromLTRB(8, 6, 8, 6),
+      padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
       decoration: BoxDecoration(
         color: AppTheme.bgScreen,
         boxShadow: [
@@ -1500,51 +1522,53 @@ class _ChatInputState extends State<_ChatInput> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (widget.pendingPhotoBase64 != null)
+            if (_decodedPhoto != null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.memory(
-                        base64Decode(widget.pendingPhotoBase64!),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    children: [
+                      Image.memory(
+                        _decodedPhoto!,
                         width: double.infinity,
-                        fit: BoxFit.contain,
+                        height: 150,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
                       ),
-                    ),
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: GestureDetector(
-                        onTap: widget.onCancelPhoto,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.black54,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            size: 16,
-                            color: Colors.white,
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: GestureDetector(
+                          onTap: widget.onCancelPhoto,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 SizedBox(
-                  width: 44,
-                  height: 44,
+                  width: 40,
+                  height: 40,
                   child: IconButton(
                     onPressed: () =>
                         EmojiPickerSheet.show(context, widget.controller),
-                    icon: Icon(Icons.emoji_emotions_rounded, size: 24),
+                    icon: Icon(Icons.emoji_emotions_rounded, size: 22),
                     color: AppTheme.textSecondary,
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
@@ -1577,7 +1601,7 @@ class _ChatInputState extends State<_ChatInput> {
                               enabledBorder: InputBorder.none,
                               focusedBorder: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(
-                                vertical: 12,
+                                vertical: 10,
                               ),
                             ),
                             textInputAction: TextInputAction.newline,
@@ -1593,14 +1617,14 @@ class _ChatInputState extends State<_ChatInput> {
                           onTap: widget.onToggleAttach,
                           tooltip: s.menuSendPhoto,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 2),
                         _RoomInputIconBtn(
                           open: false,
                           onTap: widget.onTakePhoto,
                           tooltip: s.menuTakePhoto,
                           icon: Icons.photo_camera_outlined,
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                       ],
                     ),
                   ),
@@ -1616,7 +1640,7 @@ class _ChatInputState extends State<_ChatInput> {
                     axisAlignment: -1,
                     child: FadeTransition(opacity: anim, child: child),
                   ),
-                  child: widget.controller.text.trim().isEmpty && widget.pendingPhotoBase64 == null
+                  child: widget.controller.text.trim().isEmpty && _decodedPhoto == null
                       ? const SizedBox(width: 0, key: ValueKey('empty'))
                       : SizedBox(
                           key: const ValueKey('send'),

@@ -1927,7 +1927,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     ),
                   ),
                 Container(
-                  padding: EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
                   decoration: BoxDecoration(
                     color: Colors.transparent,
                     boxShadow: [
@@ -2023,46 +2023,47 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           ),
                         if (_pendingPhotoBase64 != null)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-                            child: Stack(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.memory(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Stack(
+                                children: [
+                                  Image.memory(
                                     base64.decode(_pendingPhotoBase64!),
                                     width: double.infinity,
-                                    fit: BoxFit.contain,
+                                    height: 150,
+                                    fit: BoxFit.cover,
                                   ),
-                                ),
-                                Positioned(
-                                  top: 6,
-                                  right: 6,
-                                  child: GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _pendingPhotoBase64 = null),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black54,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.close,
-                                        size: 16,
-                                        color: Colors.white,
+                                  Positioned(
+                                    top: 6,
+                                    right: 6,
+                                    child: GestureDetector(
+                                      onTap: () =>
+                                          setState(() => _pendingPhotoBase64 = null),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black54,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.close,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Container(
-                              width: 44,
-                              height: 44,
+                              width: 40,
+                              height: 40,
                               decoration: BoxDecoration(
                                 color: AppTheme.isDark ? Colors.transparent : AppTheme.primary,
                                 shape: BoxShape.circle,
@@ -2072,7 +2073,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                     EmojiPickerSheet.show(context, _msgCtrl),
                                 icon: Icon(
                                   Icons.emoji_emotions_outlined,
-                                  size: 22,
+                                  size: 20,
                                 ),
                                 color: AppTheme.isDark ? AppTheme.primary : Colors.white,
                                 padding: EdgeInsets.zero,
@@ -2111,7 +2112,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                           focusedBorder: InputBorder.none,
                                           contentPadding:
                                               const EdgeInsets.symmetric(
-                                                vertical: 12,
+                                                vertical: 10,
                                               ),
                                         ),
                                         textInputAction:
@@ -2143,7 +2144,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                       },
                                       tooltip: s.menuTakePhoto,
                                     ),
-                                    const SizedBox(width: 10),
+                                    const SizedBox(width: 8),
                                   ],
                                 ),
                               ),
