@@ -77,6 +77,29 @@ class ChatService {
     _avatarCache.remove('avatars/$uid.jpg');
   }
 
+  static void setAvatarCacheForUid(String uid, String base64) {
+    if (base64.isEmpty) {
+      _avatarCache.remove('avatars/$uid.jpg');
+      return;
+    }
+    if (_avatarCache.length >= _avatarCacheMax) {
+      _avatarCache.remove(_avatarCache.keys.first);
+    }
+    _avatarCache['avatars/$uid.jpg'] = base64;
+  }
+
+  static void setAvatarCacheForPath(String path, String base64) {
+    if (path.isEmpty) return;
+    if (base64.isEmpty) {
+      _avatarCache.remove(path);
+      return;
+    }
+    if (_avatarCache.length >= _avatarCacheMax) {
+      _avatarCache.remove(_avatarCache.keys.first);
+    }
+    _avatarCache[path] = base64;
+  }
+
   Future<String> _avatarB64(String path) async {
     final cached = _avatarCache[path];
     if (cached != null) return cached;
@@ -1402,8 +1425,14 @@ class ChatService {
               final pendingFast = <UserModel>[];
               for (final row in fastRows) {
                 try {
-                  final u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
+                  var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
                   if (!seenFast.add(u.uid)) continue;
+                  if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+                    final cachedB64 = _avatarCache[u.avatar];
+                    if (cachedB64 != null && cachedB64.isNotEmpty) {
+                      u = u.copyWith(avatar: cachedB64);
+                    }
+                  }
                   pendingFast.add(u);
                 } catch (_) {}
               }
@@ -1493,8 +1522,14 @@ class ChatService {
         final pending = <UserModel>[];
         for (final row in rows) {
           try {
-            final u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
+            var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
             if (!seen.add(u.uid)) continue;
+            if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+              final cachedB64 = _avatarCache[u.avatar];
+              if (cachedB64 != null && cachedB64.isNotEmpty) {
+                u = u.copyWith(avatar: cachedB64);
+              }
+            }
             pending.add(u);
           } catch (e) {
             debugPrint('[getOnlineUsers] skip bad row: $e');
