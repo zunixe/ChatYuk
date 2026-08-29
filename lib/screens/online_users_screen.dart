@@ -682,60 +682,71 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                     child: Center(
                       child: GestureDetector(
-                        onTap: _pickAndUploadAvatar,
-                        child: SizedBox(
-                          width: 96,
-                          height: 96,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Container(
-                                width: 96,
-                                height: 96,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppTheme.primary.withValues(alpha: 0.3),
-                                    width: 2.5,
+                        onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+                        child: Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 12,
+                                    offset: Offset(0, 4),
                                   ),
-                                ),
-                                child: ClipOval(
-                                  child: (auth.profile?.avatar ?? '').isNotEmpty
-                                      ? _AsyncAvatar(
-                                          avatarB64: auth.profile!.avatar,
-                                          initial: (auth.profile?.nickname ?? '?')[0].toUpperCase(),
-                                          color: AppTheme.primary,
-                                        )
-                                      : Container(
-                                          color: AppTheme.primary.withValues(alpha: 0.12),
-                                          child: Icon(
-                                            Icons.person,
-                                            size: 44,
-                                            color: AppTheme.primary.withValues(alpha: 0.5),
-                                          ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 46,
+                                backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
+                                backgroundImage: (auth.profile?.avatar ?? '').isNotEmpty
+                                    ? MemoryImage(base64Decode(auth.profile!.avatar))
+                                    : null,
+                                child: (auth.profile?.avatar ?? '').isEmpty
+                                    ? Text(
+                                        (auth.profile?.nickname ?? '?')[0].toUpperCase(),
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: AppGlyph.avatarInitial(92),
+                                          fontWeight: FontWeight.w800,
                                         ),
-                                ),
+                                      )
+                                    : null,
                               ),
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: Container(
-                                  width: 30,
-                                  height: 30,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: AppTheme.primary,
-                                    border: Border.all(color: Colors.white, width: 2),
-                                  ),
-                                  child: const Icon(
-                                    Icons.add,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 4,
+                                    ),
+                                  ],
                                 ),
+                                child: _uploadingAvatar
+                                    ? Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppTheme.primary,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.camera_alt,
+                                        color: AppTheme.primary,
+                                        size: 16,
+                                      ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
