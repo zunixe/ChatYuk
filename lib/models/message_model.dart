@@ -15,6 +15,7 @@ class MessageModel {
   final String? repliedToId;
   final String? repliedToText;
   final String? repliedToSenderName;
+  final int? durationMs;
 
   MessageModel({
     required this.id,
@@ -31,6 +32,7 @@ class MessageModel {
     this.repliedToId,
     this.repliedToText,
     this.repliedToSenderName,
+    this.durationMs,
   });
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
@@ -46,11 +48,12 @@ class MessageModel {
       type: map['type'] ?? 'text',
       edited: map['edited'] == true,
       isDeleted: map['isDeleted'] == true,
-      imageData: map['imageData'] ?? '',
+      imageData: map['imageData'] ?? map['voice_path'] ?? map['voicePath'] ?? map['image_path'] ?? '',
       timestamp: parseDate(map['timestamp'] ?? map['createdAt']),
       repliedToId: map['repliedToId'] is String ? map['repliedToId'] : null,
       repliedToText: map['repliedToText'],
       repliedToSenderName: map['repliedToSenderName'],
+      durationMs: (map['durationMs'] ?? map['duration_ms'] ?? map['duration']) is num ? (map['durationMs'] ?? map['duration_ms'] ?? map['duration'] as num).toInt() : null,
     );
   }
 
@@ -68,6 +71,7 @@ class MessageModel {
       'repliedToId': repliedToId,
       'repliedToText': repliedToText,
       'repliedToSenderName': repliedToSenderName,
+      'durationMs': durationMs,
     };
   }
 
@@ -80,6 +84,7 @@ class MessageModel {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    int? durationMs,
   }) {
     return MessageModel(
       id: id,
@@ -96,6 +101,7 @@ class MessageModel {
       repliedToId: repliedToId ?? this.repliedToId,
       repliedToText: repliedToText ?? this.repliedToText,
       repliedToSenderName: repliedToSenderName ?? this.repliedToSenderName,
+      durationMs: durationMs ?? this.durationMs,
     );
   }
 }

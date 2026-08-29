@@ -127,15 +127,17 @@ class ChatService {
     required String text,
     String type = 'text',
     String imageData = '',
+    int? durationMs,
   }) async {
     // Validasi tipe pesan
-    if (!['text', 'image', 'view_once'].contains(type)) {
+    if (!['text', 'image', 'view_once', 'voice'].contains(type)) {
       throw Exception('Invalid message type');
     }
-    // Validasi image data jika ada — boleh base64 (lama) ATAU path storage (baru)
+    // Validasi image/voice data jika ada — boleh base64 (lama) ATAU path storage (baru)
     if (imageData.isNotEmpty &&
         !isValidImageBase64(imageData) &&
-        !StoragePhotoService.instance.isPath(imageData)) {
+        !StoragePhotoService.instance.isPath(imageData) &&
+        !StoragePhotoService.instance.isVoicePath(imageData)) {
       throw Exception('Invalid image data');
     }
     if (type == 'text' && (text.isEmpty || text.length > 2000)) return;
@@ -146,7 +148,10 @@ class ChatService {
       'sender_gender': senderGender,
       'text': text,
       'type': type,
-      'image_data': imageData,
+      'image_data': type == 'voice' ? '' : imageData,
+      if (type == 'voice') 'voice_path': imageData,
+      if (type == 'voice' && durationMs != null) 'duration_ms': durationMs,
+      if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
     });
   }
 
@@ -255,9 +260,9 @@ class ChatService {
     // Kolom tanpa image_data — foto diambil terpisah (PhotoCache / download
     // lazy) supaya buka chat tetap cepat walau ada ratusan foto.
     const privateCols =
-        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted';
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms';
     const roomCols =
-        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at';
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,image_path,voice_path,duration_ms';
     const replyCols = 'replied_to_id,replied_to_text,replied_to_sender_name';
     final cols = isPrivate ? '$privateCols,$replyCols' : roomCols;
 
@@ -798,19 +803,21 @@ class ChatService {
     required String text,
     String type = 'text',
     String imageData = '',
+    int? durationMs,
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
   }) async {
     // Validasi tipe pesan
-    if (!['text', 'image', 'view_once', 'call'].contains(type)) {
+    if (!['text', 'image', 'view_once', 'call', 'voice'].contains(type)) {
       throw Exception('Invalid message type');
     }
-    // Validasi image data jika ada — boleh base64 (lama) ATAU path storage (baru)
+    // Validasi image/voice data jika ada — boleh base64 (lama) ATAU path storage (baru)
     if (type != 'call' &&
         imageData.isNotEmpty &&
         !isValidImageBase64(imageData) &&
-        !StoragePhotoService.instance.isPath(imageData)) {
+        !StoragePhotoService.instance.isPath(imageData) &&
+        !StoragePhotoService.instance.isVoicePath(imageData)) {
       throw Exception('Invalid image data');
     }
     // Batasi panjang teks pesan
@@ -834,7 +841,10 @@ class ChatService {
       'sender_gender': senderGender,
       'text': text,
       'type': type,
-      'image_data': imageData,
+      'image_data': type == 'voice' ? '' : imageData,
+      if (type == 'voice') 'voice_path': imageData,
+      if (type == 'voice' && durationMs != null) 'duration_ms': durationMs,
+      if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
       if (repliedToId != null) 'replied_to_id': repliedToId,
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null)

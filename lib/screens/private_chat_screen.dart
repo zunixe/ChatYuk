@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
 import '../config/theme.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
@@ -23,6 +27,8 @@ import '../services/storage_photo_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
+import '../widgets/voice_bubble.dart';
+import '../widgets/voice_record_overlay.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/chat_call_overlay.dart';
 import '../main.dart';
@@ -538,7 +544,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           chatId: widget.chatId,
           base64: photoB64,
         );
-        final stored = path ?? photoB64;
+        if (path == null || path.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
+            );
+            setState(() => _pending.removeWhere((m) => m.id == pendingPhoto.id));
+          }
+          return;
+        }
         await chat.sendPrivateMessage(
           chatId: widget.chatId,
           senderId: uid,
@@ -546,7 +560,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           senderGender: profile.gender,
           text: text,
           type: 'image',
-          imageData: stored,
+          imageData: path,
         );
         _maybeNewChatBonus();
         _schedulePendingConfirmFallback();
@@ -683,6 +697,74 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         await _msgsHandleReload();
       } catch (_) {}
     });
+  }
+
+  // ── Voice message 60s (WA style) ──
+  final _record = AudioRecorder();
+  bool _isRecordingVoice = false;
+  Timer? _voiceTimer;
+  int _voiceSeconds = 0;
+  OverlayEntry? _voiceOverlay;
+
+  Future<void> _startVoiceRecord() async {
+    final hasPerm = await Permission.microphone.request();
+    if (!hasPerm.isGranted) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errVoicePermission)));
+      return;
+    }
+    try {
+      if (await _record.hasPermission()) {
+        final dir = await getTemporaryDirectory();
+        final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
+        await _record.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000), path: path);
+        setState(() { _isRecordingVoice = true; _voiceSeconds = 0; });
+        _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+          if (_voiceSeconds >= 59) { _stopVoiceRecord(send: true); return; }
+          setState(() => _voiceSeconds++);
+        });
+        _showVoiceOverlay();
+      }
+    } catch (_) {}
+  }
+
+  void _showVoiceOverlay() {
+    _voiceOverlay?.remove();
+    _voiceOverlay = OverlayEntry(builder: (_) => Positioned(bottom: 90, left: 16, right: 16, child: Material(color: Colors.transparent, child: VoiceRecordOverlay(onCancel: _cancelVoiceRecord, onSend: () => _stopVoiceRecord(send: true)))));
+    Overlay.of(context).insert(_voiceOverlay!);
+  }
+
+  Future<void> _stopVoiceRecord({required bool send}) async {
+    _voiceTimer?.cancel();
+    _voiceOverlay?.remove(); _voiceOverlay = null;
+    if (!_isRecordingVoice) return;
+    final path = await _record.stop();
+    setState(() => _isRecordingVoice = false);
+    if (!send || path == null) return;
+    final f = File(path);
+    if (!await f.exists()) return;
+    final bytes = await f.readAsBytes();
+    if (bytes.length < 2000) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errVoiceTooShort)));
+      return;
+    }
+    final chatId = widget.chatId;
+    final storagePath = await StoragePhotoService.instance.uploadVoice(chatId: chatId, bytes: bytes);
+    if (storagePath == null || storagePath.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)));
+      return;
+    }
+    final auth = context.read<AuthProvider>();
+    final uid = auth.uid; final profile = auth.profile;
+    if (uid == null || profile == null) return;
+    await context.read<ChatProvider>().sendPrivateMessage(chatId: chatId, senderId: uid, senderName: profile.nickname, senderGender: profile.gender, text: '', type: 'voice', imageData: storagePath);
+    try { await f.delete(); } catch (_) {}
+  }
+
+  void _cancelVoiceRecord() {
+    _voiceTimer?.cancel();
+    _voiceOverlay?.remove(); _voiceOverlay = null;
+    _record.cancel();
+    setState(() => _isRecordingVoice = false);
   }
 
   /// Mulai edit pesan teks sendiri — teks dimasukkan ke composer bawah,
@@ -911,7 +993,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         chatId: widget.chatId,
         base64: base64,
       );
-      final stored = path ?? base64;
+      if (path == null || path.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
+          );
+          setState(() => _pending.removeWhere((m) => m.id == pendingPhoto.id));
+        }
+        return;
+      }
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
         senderId: uid,
@@ -919,7 +1009,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         senderGender: profile.gender,
         text: '',
         type: 'image',
-        imageData: stored,
+        imageData: path,
       );
       _maybeNewChatBonus();
       _schedulePendingConfirmFallback();
@@ -1012,7 +1102,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         chatId: widget.chatId,
         base64: base64,
       );
-      final stored = path ?? base64;
+      if (path == null || path.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
+          );
+          setState(() => _pending.removeWhere((m) => m.id == pending.id));
+        }
+        return;
+      }
       await chat.sendPrivateMessage(
         chatId: widget.chatId,
         senderId: uid,
@@ -1020,7 +1118,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         senderGender: profile.gender,
         text: '',
         type: 'view_once',
-        imageData: stored,
+        imageData: path,
       );
       _maybeNewChatBonus();
       _schedulePendingConfirmFallback();
@@ -2149,47 +2247,50 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 2),
+                            const SizedBox(width: 8),
                             ValueListenableBuilder<TextEditingValue>(
                               valueListenable: _msgCtrl,
-                              builder: (context, value, _) => AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 180),
-                                switchInCurve: Curves.easeOut,
-                                switchOutCurve: Curves.easeIn,
-                                transitionBuilder: (child, anim) =>
-                                    SizeTransition(
-                                      sizeFactor: anim,
-                                      axis: Axis.horizontal,
-                                      axisAlignment: -1,
-                                      child: FadeTransition(
-                                        opacity: anim,
-                                        child: child,
-                                      ),
-                                    ),
-                                child: value.text.trim().isEmpty && _pendingPhotoBase64 == null
-                                    ? const SizedBox(
-                                        width: 0,
-                                        key: ValueKey('empty'),
-                                      )
-                                    : SizedBox(
-                                        key: const ValueKey('send'),
-                                        width: 48,
-                                        height: 48,
-                                        child: IconButton(
-                                          onPressed: _send,
-                                          icon: const Icon(
-                                            Icons.send_rounded,
-                                            size: 22,
+                              builder: (context, value, _) {
+                                final hasText = value.text.trim().isNotEmpty || _pendingPhotoBase64 != null;
+                                return AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 180),
+                                  switchInCurve: Curves.easeOut,
+                                  switchOutCurve: Curves.easeIn,
+                                  transitionBuilder: (child, anim) => SizeTransition(
+                                    sizeFactor: anim,
+                                    axis: Axis.horizontal,
+                                    axisAlignment: -1,
+                                    child: FadeTransition(opacity: anim, child: child),
+                                  ),
+                                  child: hasText
+                                      ? SizedBox(
+                                          key: const ValueKey('send'),
+                                          width: 48,
+                                          height: 48,
+                                          child: IconButton(
+                                            onPressed: _send,
+                                            icon: const Icon(Icons.send_rounded, size: 22),
+                                            color: Colors.white,
+                                            padding: EdgeInsets.zero,
+                                            style: IconButton.styleFrom(backgroundColor: AppTheme.primary, shape: const CircleBorder()),
                                           ),
-                                          color: Colors.white,
-                                          padding: EdgeInsets.zero,
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: AppTheme.primary,
-                                            shape: const CircleBorder(),
+                                        )
+                                      : SizedBox(
+                                          key: const ValueKey('mic'),
+                                          width: 48,
+                                          height: 48,
+                                          child: GestureDetector(
+                                            onLongPressStart: (_) => _startVoiceRecord(),
+                                            onLongPressEnd: (_) => _stopVoiceRecord(send: true),
+                                            onLongPressCancel: () => _cancelVoiceRecord(),
+                                            child: Container(
+                                              decoration: BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
+                                              child: const Icon(Icons.mic_rounded, color: Colors.white, size: 22),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                              ),
+                                );
+                              },
                             ),
                           ],
                         ),

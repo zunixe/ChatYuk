@@ -18,7 +18,11 @@ class StoragePhotoService {
   SupabaseClient get _sb => SupabaseConfig.client;
 
   bool isPath(String value) =>
-      value.startsWith('chat/') && value.contains('.jpg');
+      (value.startsWith('chat/') ||
+          value.startsWith('posts/') ||
+          value.startsWith('timeline/') ||
+          value.startsWith('voice/')) &&
+      (value.contains('.jpg') || value.contains('.m4a') || value.contains('.mp3'));
 
   /// Path untuk foto baru di chat. Tidak bergantung messageId (yang baru
   /// diketahui setelah insert) — cukup chatId + timestamp unik.
@@ -35,6 +39,10 @@ class StoragePhotoService {
   /// Path foto post timeline.
   String postImagePath(String uid) =>
       'posts/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
+
+  /// Path voice message.
+  String voicePath(String chatId) =>
+      'voice/$chatId/${DateTime.now().microsecondsSinceEpoch}.m4a';
 
   /// Upload foto post timeline → Storage. Return path atau null.
   Future<String?> uploadPostImage({
@@ -67,6 +75,27 @@ class StoragePhotoService {
       return null;
     }
   }
+
+  /// Upload voice m4a bytes → Storage. Return path atau null.
+  Future<String?> uploadVoice({
+    required String chatId,
+    required Uint8List bytes,
+  }) async {
+    try {
+      final path = voicePath(chatId);
+      await _sb.storage.from(_bucket).uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(contentType: 'audio/m4a'),
+          );
+      return path;
+    } catch (e) {
+      debugPrint('[StoragePhoto] uploadVoice error: $e');
+      return null;
+    }
+  }
+
+  bool isVoicePath(String v) => v.startsWith('voice/') && v.contains('.m4a');
 
   /// Download path → base64. Null jika gagal / tidak ditemukan.
   Future<String?> download(String path) async {
