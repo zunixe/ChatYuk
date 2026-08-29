@@ -875,8 +875,8 @@ class AuthProvider extends ChangeNotifier {
     await _auth.updateAvatar(base64);
     final uid = _profile?.uid ?? _auth.uid ?? '';
     if (uid.isNotEmpty) {
-      AvatarB64Service.instance.clearForUid(uid);
-      ChatService.clearAvatarCacheForUid(uid);
+      AvatarB64Service.instance.setForUid(uid, base64);
+      ChatService.setAvatarCacheForUid(uid, base64);
     }
     _profile = _profile?.copyWith(avatar: base64);
     if (!_disposed) notifyListeners();

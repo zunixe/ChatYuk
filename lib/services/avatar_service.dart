@@ -58,6 +58,21 @@ class AvatarB64Service {
     _inflight.remove(path);
   }
 
+  void setForUid(String uid, String base64) {
+    if (uid.isEmpty) return;
+    if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
+    _cache[uid] = base64;
+    final path = 'avatars/$uid.jpg';
+    if (_pathCache.length >= _maxCache) _pathCache.remove(_pathCache.keys.first);
+    _pathCache[path] = base64;
+  }
+
+  void setForPath(String path, String base64) {
+    if (path.isEmpty) return;
+    if (_pathCache.length >= _maxCache) _pathCache.remove(_pathCache.keys.first);
+    _pathCache[path] = base64;
+  }
+
   /// Ambil avatar langsung dari path storage (tanpa query profil) —
   /// dipakai timeline yang sudah membawa authorAvatar di payload.
   Future<String> getByPath(String path) async {
