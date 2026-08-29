@@ -12,7 +12,7 @@ declare
   rows jsonb;
 begin
   if me is null then raise exception 'Not authenticated'; end if;
-  if p_scope not in ('all','following') then p_scope := 'all'; end if;
+  if p_scope not in ('all','following','mine') then p_scope := 'all'; end if;
   p_limit := least(coalesce(p_limit, 30), 50);
   if p_country is not null and btrim(p_country) = '' then p_country := null; end if;
 
@@ -41,8 +41,11 @@ begin
                or (b.blocker_id = p.author_id and b.blocked_id = me))
       and (
         p_scope = 'all'
-        or p.author_id = me
-        or exists (select 1 from public.follows f where f.followee_id = p.author_id and f.follower_id = me)
+        or (p_scope = 'mine' and p.author_id = me)
+        or (p_scope = 'following' and (
+              p.author_id = me
+              or exists (select 1 from public.follows f where f.followee_id = p.author_id and f.follower_id = me)
+           ))
       )
     order by p.is_boosted desc, p.created_at desc
     limit p_limit

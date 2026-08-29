@@ -313,22 +313,49 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
           onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
           child: IndexedStack(index: tab, children: _pages!),
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            final auth = context.read<AuthProvider>();
-            // Anon (belum isi email) — samakan dengan timeline: arahkan
-            // ke profil, jangan buka composer.
-            if (!(auth.profile?.isRegistered ?? false)) {
-              showAnonPromptDialog(context);
-              return;
-            }
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PostComposerScreen()),
-            );
-          },
-          backgroundColor: AppTheme.primary,
-          elevation: 3,
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        floatingActionButton: SizedBox(
+          width: 52,
+          height: 52,
+          child: FloatingActionButton(
+            onPressed: () {
+              final auth = context.read<AuthProvider>();
+              // Anon (belum isi email) — samakan dengan timeline: arahkan
+              // ke profil, jangan buka composer.
+              if (!(auth.profile?.isRegistered ?? false)) {
+                showAnonPromptDialog(context);
+                return;
+              }
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PostComposerScreen()),
+              );
+            },
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppTheme.primaryDark,
+                    AppTheme.primary,
+                    AppTheme.accent,
+                  ],
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primary.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
+            ),
+          ),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         bottomNavigationBar: _BottomNav(currentIndex: tab, onTap: _onNavTap),
@@ -357,7 +384,9 @@ class _BottomNav extends StatelessWidget {
         return BottomAppBar(
           color: AppTheme.bgCard,
           shape: const CircularNotchedRectangle(),
-          notchMargin: 8,
+          notchMargin: 6,
+          padding: EdgeInsets.zero,
+          height: 56,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -380,17 +409,18 @@ class _BottomNav extends StatelessWidget {
       onTap: () => onTap(index),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _BadgedIcon(icon: icon, count: badge, color: color),
-            const SizedBox(height: 2),
+            const SizedBox(height: 1),
             Text(
               label,
               style: AppText.caption.copyWith(
                 color: color,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 10,
               ),
             ),
           ],
