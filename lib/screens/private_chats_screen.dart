@@ -315,6 +315,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                       orElse: () => '',
                     );
                     final otherName = liveNameMap[otherUid] ?? chat.participantNames[otherUid] ?? 'Anon';
+                    final otherGender = chat.participantGenders[otherUid] ?? '';
                     final unread = chat.unreadCounts[auth.uid] ?? 0;
                     final isBlocked = blocked.contains(otherUid);
 
@@ -476,11 +477,18 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                     Checkbox(value: isSelected, onChanged: (_) => _toggleSelect(chat.chatId), activeColor: AppTheme.primary),
                                     SizedBox(width: 4),
                                   ],
-                                  ProfileAvatar(
+                                   ProfileAvatar(
                                     uid: otherUid,
                                     name: otherName,
                                     size: 44,
-                                    borderRadius: 12,
+                                    borderRadius: 0,
+                                    borderColor: isBlocked
+                                        ? null
+                                        : (otherGender == 'male'
+                                            ? AppTheme.male
+                                            : otherGender == 'female'
+                                                ? AppTheme.female
+                                                : AppTheme.accent),
                                     bgColor: isBlocked
                                         ? AppTheme.textSecondary.withValues(
                                             alpha: 0.15,
@@ -506,8 +514,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                             ),
                                           )
                                         : Container(
-                                            width: 12,
-                                            height: 12,
+                                            width: 11,
+                                            height: 11,
                                             decoration: BoxDecoration(
                                               color:
                                                   (statusMap[otherUid] ??
@@ -522,7 +530,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                               shape: BoxShape.circle,
                                               border: Border.all(
                                                 color: Colors.white,
-                                                width: 2,
+                                                width: 1.5,
                                               ),
                                             ),
                                           ),

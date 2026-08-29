@@ -21,6 +21,8 @@ class ProfileAvatar extends StatefulWidget {
   final double borderRadius;
   final Color bgColor;
   final Color? textColor;
+  final Color? borderColor;
+  final double borderWidth;
   final Widget? badge;
 
   const ProfileAvatar({
@@ -31,6 +33,8 @@ class ProfileAvatar extends StatefulWidget {
     this.borderRadius = 0,
     this.bgColor = AppTheme.accent,
     this.textColor,
+    this.borderColor,
+    this.borderWidth = 1.5,
     this.badge,
   });
 
@@ -64,24 +68,29 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
 
   @override
   Widget build(BuildContext context) {
+    final isCircle = widget.borderRadius == 0;
     final shape = BorderRadius.circular(widget.borderRadius);
     Widget child;
     if (_bytes != null) {
-      child = ClipRRect(
-        borderRadius: shape,
-        child: Image.memory(
-          _bytes!,
-          width: widget.size,
-          height: widget.size,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-        ),
+      final img = Image.memory(
+        _bytes!,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
       );
+      child = isCircle
+          ? ClipOval(child: img)
+          : ClipRRect(borderRadius: shape, child: img);
     } else {
       child = Container(
         width: widget.size,
         height: widget.size,
-        decoration: BoxDecoration(color: widget.bgColor, borderRadius: shape),
+        decoration: BoxDecoration(
+          color: widget.bgColor,
+          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+          borderRadius: isCircle ? null : shape,
+        ),
         child: Center(
           child: Text(
             widget.name.isNotEmpty ? widget.name[0].toUpperCase() : '?',
@@ -94,12 +103,26 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
         ),
       );
     }
+    if (widget.borderColor != null) {
+      child = Container(
+        width: widget.size + widget.borderWidth * 2,
+        height: widget.size + widget.borderWidth * 2,
+        padding: EdgeInsets.all(widget.borderWidth),
+        decoration: BoxDecoration(
+          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+          borderRadius: isCircle ? null : shape,
+          border: Border.all(color: widget.borderColor!, width: widget.borderWidth),
+        ),
+        child: child,
+      );
+    }
     if (widget.badge == null) return child;
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         child,
         if (widget.badge != null)
-          Positioned(right: -2, bottom: -2, child: widget.badge!),
+          Positioned(right: 0, bottom: 0, child: widget.badge!),
       ],
     );
   }
