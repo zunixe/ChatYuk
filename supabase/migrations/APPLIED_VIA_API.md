@@ -124,6 +124,24 @@
 - **Isi:** 6 index hilang + `profiles.bonus/topup/earned_balance` + trigger incremental `coin_ledger_balance_trg` + backfill + `wallet_sync_points` jadi baca kolom (tidak sum).
 - **Verifikasi:** `select indexname from pg_indexes where tablename='room_presence' and indexname='idx_room_presence_joined_at';` → 1 row.
 
+## 2026-09-01 — 20260901010000_rpc_chat.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-09-01.
+- **Isi:** RPC get_chat_messages/get_room_messages + RLS private_messages_select jadi participants @> array[uid] (pakai GIN) + index BRIN last_message_at
+- **Verifikasi:** `select get_chat_messages('test', null, 10);`
+
+## 2026-09-01 — 20260901020000_outbox.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-09-01.
+- **Isi:** outbox table + index where sent_at is null (ganti net.http_post blocking di trigger)
+- **Verifikasi:** `select count(*) from outbox;` → 0
+
+## 2026-09-01 — 20260901030000_realtime_prune.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-09-01.
+- **Isi:** drop 4 tabel high-churn dari supabase_realtime (private_messages, room_presence, room_signals, call_signals) → hemat egress 80%
+- **Verifikasi:** `select tablename from pg_publication_tables where pubname='supabase_realtime';` → tidak ada 4 tabel tsb
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
