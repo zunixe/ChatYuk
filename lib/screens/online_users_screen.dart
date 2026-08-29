@@ -85,9 +85,8 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     if (old.avatarB64 != widget.avatarB64) {
       final cached = _avatarCache.get(widget.avatarB64);
       if (cached != null) {
-        _bytes = cached;
+        if (_bytes != cached) setState(() => _bytes = cached);
       } else {
-        _bytes = null;
         compute(_avatarDecodeB64, widget.avatarB64).then((b) {
           if (b != null && mounted) {
             _avatarCache.putIfAbsent(widget.avatarB64, () => b);
