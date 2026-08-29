@@ -142,6 +142,12 @@
 - **Isi:** drop 4 tabel high-churn dari supabase_realtime (private_messages, room_presence, room_signals, call_signals) → hemat egress 80%
 - **Verifikasi:** `select tablename from pg_publication_tables where pubname='supabase_realtime';` → tidak ada 4 tabel tsb
 
+## 2026-09-01 — 20260901040000_revert_realtime_prune.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-09-01.
+- **Isi:** Revert drop realtime — kembalikan private_messages, room_presence, room_signals, call_signals ke supabase_realtime (client belum migrasi ke broadcast, drop bikin delay 30s)
+- **Verifikasi:** `select tablename from pg_publication_tables where pubname='supabase_realtime';` → 20 rows termasuk 4 tabel tsb
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
