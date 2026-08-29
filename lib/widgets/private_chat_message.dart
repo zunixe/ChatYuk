@@ -290,19 +290,65 @@ class MessageBubble extends StatelessWidget {
                         ),
                       if (msg.type == 'image' && msg.imageData.isNotEmpty)
                         Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(10),
-                              child: MessageImage(
-                                imageData: msg.imageData,
-                                chatKey: chatKey,
-                                messageId: msg.id,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  MessageImage(
+                                    imageData: msg.imageData,
+                                    chatKey: chatKey,
+                                    messageId: msg.id,
+                                  ),
+                                  Positioned(
+                                    right: 6,
+                                    bottom: 6,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.55),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            timeStr,
+                                            style: AppText.micro.copyWith(
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          if (isMe) ...[
+                                            const SizedBox(width: 3),
+                                            Icon(
+                                              isPending
+                                                  ? Icons.done
+                                                  : (isRead
+                                                        ? Icons.done_all
+                                                        : Icons.done),
+                                              size: 12,
+                                              color: isPending
+                                                  ? Colors.white70
+                                                  : (isRead
+                                                        ? const Color(0xFF7EC8FF)
+                                                        : Colors.white70),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             if (msg.text.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(top: 6),
+                                padding: const EdgeInsets.only(top: 4),
                                 child: Text(
                                   msg.text,
                                   style: AppText.body.copyWith(
@@ -310,36 +356,6 @@ class MessageBubble extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    timeStr,
-                                    style: AppText.micro.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                  if (isMe) ...[
-                                    const SizedBox(width: 3),
-                                    Icon(
-                                      isPending
-                                          ? Icons.done
-                                          : (isRead
-                                                ? Icons.done_all
-                                                : Icons.done),
-                                      size: 12,
-                                      color: isPending
-                                          ? AppTheme.textSecondary
-                                          : (isRead
-                                                ? AppTheme.primary
-                                                : AppTheme.textSecondary),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
                           ],
                         )
                       else if (msg.type == 'image' &&
