@@ -9,7 +9,8 @@ bool _usersEqual(List<UserModel> a, List<UserModel> b) {
   for (int i = 0; i < a.length; i++) {
     if (a[i].uid != b[i].uid ||
         a[i].status != b[i].status ||
-        a[i].lastSeen != b[i].lastSeen)
+        a[i].lastSeen != b[i].lastSeen ||
+        a[i].avatar != b[i].avatar)
       return false;
   }
   return true;
