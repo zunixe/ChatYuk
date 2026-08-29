@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -25,6 +26,7 @@ import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 
 final _avatarCache = BoundedCache<String, Uint8List>(80);
 
@@ -38,6 +40,13 @@ Uint8List? _avatarDecodeB64(String b64) {
   } catch (_) {
     return null;
   }
+}
+
+String? _processAvatarImage(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final resized = img.copyResize(decoded, width: 400);
+  return base64Encode(img.encodeJpg(resized, quality: 80));
 }
 
 class _AsyncAvatar extends StatefulWidget {
@@ -194,6 +203,64 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   Future<void> _saveFilter() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKeyNegara, _negara);
+  }
+
+  Future<void> _pickAndUploadAvatar() async {
+    final s = context.read<LocaleProvider>().s;
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(s.avatarGallery),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(s.menuTakePhoto),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, maxWidth: 1200, imageQuality: 85);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+
+    final processed = await compute(_processAvatarImage, bytes);
+    if (processed == null || !mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.errPhotoLoad)),
+      );
+      return;
+    }
+
+    try {
+      await context.read<AuthProvider>().updateAvatar(processed);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.msgProfileSaved)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${s.errPhotoSave}$e')),
+        );
+      }
+    }
   }
 
   @override
@@ -589,6 +656,70 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
               return Column(
                 children: [
+                  // ── Foto profil sendiri ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: _pickAndUploadAvatar,
+                        child: SizedBox(
+                          width: 96,
+                          height: 96,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: 96,
+                                height: 96,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppTheme.primary.withValues(alpha: 0.3),
+                                    width: 2.5,
+                                  ),
+                                ),
+                                child: ClipOval(
+                                  child: (auth.profile?.avatar ?? '').isNotEmpty
+                                      ? _AsyncAvatar(
+                                          avatarB64: auth.profile!.avatar,
+                                          initial: (auth.profile?.nickname ?? '?')[0].toUpperCase(),
+                                          color: AppTheme.primary,
+                                        )
+                                      : Container(
+                                          color: AppTheme.primary.withValues(alpha: 0.12),
+                                          child: Icon(
+                                            Icons.person,
+                                            size: 44,
+                                            color: AppTheme.primary.withValues(alpha: 0.5),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppTheme.primary,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                  ),
+                                  child: const Icon(
+                                    Icons.add,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     child: Row(
