@@ -70,6 +70,22 @@
 
 > AI sesi berikutnya: JANGAN `supabase db push` untuk 20260828010000/20260828020000 — gunakan Playwright SQL Editor `https://supabase.com/dashboard/project/fohcucyyejdryryoxitm/sql` → paste isi file → Run → lalu `insert into supabase_migrations.schema_migrations (version) values ('20260828010000'),('20260828020000')` manual. Functions deploy via `supabase functions deploy fanout --no-verify-jwt` (butuh `SUPABASE_ACCESS_TOKEN` + Docker, atau via Dashboard Functions).
 
+## 2026-08-29 — 20260829030000_perf_phase1_country.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-08-29.
+- **Isi:** GIN index `idx_private_chats_participants_gin` on `private_chats.participants`, partial index `idx_profiles_country_last_seen`, `posts.country` column + trigger `posts_fill_country()`, per-country RPCs (`get_online_users(p_country,p_limit)`, `count_room_presence_by_country(p_country)`, `cleanup_room_presence(p_minutes)`), backfill posts country.
+- **Verifikasi:**
+  ```sql
+  select version from supabase_migrations.schema_migrations order by version desc limit 3;
+  -- 20260829040000, 20260829030000, 20260828040000
+  ```
+
+## 2026-08-29 — 20260829040000_timeline_country.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-08-29.
+- **Isi:** `list_posts` overload dengan 5 param (tambah `p_country text default null`), filter `posts.country = p_country` jika not null. 4-param wrapper tetap ada via overload revoke/grant.
+- **Verifikasi:** `select pronargs, proargtypes from pg_proc where proname='list_posts';` → harus ada 2 baris (4 args + 5 args).
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:

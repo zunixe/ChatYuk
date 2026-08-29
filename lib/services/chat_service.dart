@@ -1368,12 +1368,26 @@ class ChatService {
     Future<void> syncFromPresence() async {
       try {
         final state = RealtimeHub.instance.onlinePresenceState;
-        // Fast path: jika presence sudah ada, langsung pakai tanpa tunggu RPC (hemat 1 RTT)
-        final presenceUidsFast = state.values.expand((list) => list).map((m) => '${m['uid'] ?? ''}').where((id) => id.isNotEmpty).toList();
+        // Fast path per-country shard: ambil max 50 uid tanpa expand full O(N) (jangan values.expand untuk 1M)
+        List<String> firstNPresenceUids(int n) {
+          final out = <String>[];
+          for (final list in state.values) {
+            for (final m in list as List) {
+              final uid = '${(m as Map)['uid'] ?? ''}';
+              if (uid.isEmpty) continue;
+              out.add(uid);
+              if (out.length >= n) return out;
+            }
+            if (out.length >= n) break;
+          }
+          return out;
+        }
+
+        final presenceUidsFast = firstNPresenceUids(50);
         if (presenceUidsFast.isNotEmpty) {
           try {
             const colsFast = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
-            final fastRows = await _sb.from('profiles').select(colsFast).inFilter('id', presenceUidsFast.take(50).toList()).limit(50).timeout(const Duration(seconds: 2));
+            final fastRows = await _sb.from('profiles').select(colsFast).inFilter('id', presenceUidsFast).limit(50).timeout(const Duration(seconds: 2));
             if (fastRows.isNotEmpty && !controller.isClosed) {
               // Emit cepat dari presence
               final seenFast = <String>{};
@@ -1406,8 +1420,8 @@ class ChatService {
         if (usedRpc) {
           rows = rpcRows;
         } else {
-          // Fallback hybrid lama jika RPC belum deploy / gagal
-          final presenceUids = state.values.expand((list) => list).map((m) => '${m['uid'] ?? ''}').where((id) => id.isNotEmpty).toList();
+          // Fallback hybrid lama jika RPC belum deploy / gagal — tetap batasi O(50)
+          final presenceUids = firstNPresenceUids(50);
           Set<String> dbUids = {};
           try {
             final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 30)).toIso8601String();
@@ -1623,26 +1637,38 @@ class ChatService {
     }
   }
 
-  Stream<Map<String, int>> getRoomOnlineCounts() {
-    return _sb
-        .from('room_presence')
-        .stream(primaryKey: ['room_id', 'user_id'])
-        .map((rows) {
-          final counts = <String, int>{};
-          // Sama seperti daftar user room: presence basi (> 5 menit) tidak
-          // dihitung supaya count online di lobby tidak ghost.
-          final cutoff = DateTime.now().toUtc().subtract(
-            const Duration(minutes: 5),
-          );
-          for (final row in rows) {
-            final joined = DateTime.tryParse('${row['joined_at']}');
-            if (joined == null || !joined.toUtc().isAfter(cutoff)) continue;
-            final roomId = '${row['room_id']}';
-            counts[roomId] = (counts[roomId] ?? 0) + 1;
-          }
-          return counts;
-        });
+  Stream<Map<String, int>> getRoomOnlineCounts({String? country}) {
+    final controller = StreamController<Map<String, int>>.broadcast();
+    Timer? timer;
+    bool closed = false;
+    Future<void> fetch() async {
+      if (closed || controller.isClosed) return;
+      try {
+        final c = (country == null || country.trim().isEmpty) ? null : country.trim();
+        final res = await _sb.rpc('count_room_presence_by_country', params: {'p_country': c});
+        final map = <String, int>{};
+        if (res is Map) {
+          res.forEach((k, v) => map['$k'] = (v as num).toInt());
+        }
+        if (!controller.isClosed) controller.add(map);
+      } catch (e) {
+        debugPrint('[getRoomOnlineCounts] rpc error country=$country: $e');
+      }
+    }
+
+    fetch();
+    timer = Timer.periodic(const Duration(seconds: 15), (_) => fetch());
+    // Cleanup stale presence di background (idempotent)
+    _sb.rpc('cleanup_room_presence', params: {'p_minutes': 10}).catchError((_) {});
+    controller.onCancel = () {
+      closed = true;
+      timer?.cancel();
+    };
+    return controller.stream;
   }
+
+  @Deprecated('Use getRoomOnlineCounts(country: ...) per-country shard')
+  Stream<Map<String, int>> getRoomOnlineCountsLegacy() => getRoomOnlineCounts();
 
   // ── Block / Report ──
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -31,6 +30,78 @@ final _avatarCache = BoundedCache<String, Uint8List>(80);
 
 void clearAllAvatarCaches() {
   _avatarCache.clear();
+}
+
+Uint8List? _avatarDecodeB64(String b64) {
+  try {
+    return base64Decode(b64);
+  } catch (_) {
+    return null;
+  }
+}
+
+class _AsyncAvatar extends StatefulWidget {
+  final String avatarB64;
+  final String initial;
+  final Color color;
+  const _AsyncAvatar({required this.avatarB64, required this.initial, required this.color});
+
+  @override
+  State<_AsyncAvatar> createState() => _AsyncAvatarState();
+}
+
+class _AsyncAvatarState extends State<_AsyncAvatar> {
+  Uint8List? _bytes;
+  @override
+  void initState() {
+    super.initState();
+    final cached = _avatarCache.get(widget.avatarB64);
+    if (cached != null) {
+      _bytes = cached;
+    } else {
+      compute(_avatarDecodeB64, widget.avatarB64).then((b) {
+        if (b != null && mounted) {
+          _avatarCache.putIfAbsent(widget.avatarB64, () => b);
+          setState(() => _bytes = b);
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AsyncAvatar old) {
+    super.didUpdateWidget(old);
+    if (old.avatarB64 != widget.avatarB64) {
+      final cached = _avatarCache.get(widget.avatarB64);
+      if (cached != null) {
+        _bytes = cached;
+      } else {
+        _bytes = null;
+        compute(_avatarDecodeB64, widget.avatarB64).then((b) {
+          if (b != null && mounted) {
+            _avatarCache.putIfAbsent(widget.avatarB64, () => b);
+            setState(() => _bytes = b);
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final b = _bytes;
+    if (b == null) {
+      return Center(
+        child: Text(widget.initial,
+            style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
+      );
+    }
+    return Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => Center(
+              child: Text(widget.initial,
+                  style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
+            ));
+  }
 }
 
 class OnlineUsersScreen extends StatefulWidget {
@@ -896,21 +967,10 @@ class _UserCard extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: color.withValues(alpha: 0.15),
                         border: Border.all(color: color, width: 1.5),
-                        image: user.avatar.isNotEmpty
-                            ? DecorationImage(
-                                image: MemoryImage(
-                                  _avatarCache.putIfAbsent(
-                                    user.avatar,
-                                    () => base64Decode(user.avatar),
-                                  ),
-                                ),
-                                fit: BoxFit.cover,
-                              )
-                            : null,
                       ),
-                      child: user.avatar.isNotEmpty
-                          ? null
-                          : Center(
+                      clipBehavior: Clip.antiAlias,
+                      child: user.avatar.isEmpty
+                          ? Center(
                               child: Text(
                                 user.initial,
                                 style: TextStyle(
@@ -919,7 +979,8 @@ class _UserCard extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                            ),
+                            )
+                          : _AsyncAvatar(avatarB64: user.avatar, initial: user.initial, color: color),
                     ),
                     Positioned(
                       right: 0,

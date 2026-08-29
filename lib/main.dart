@@ -627,11 +627,6 @@ Future<void> _initFcmTokenLazy() async {
   });
 }
 
-Future<void> _initNotifications() async {
-  await _initNotificationsFast();
-  await _initFcmTokenLazy();
-}
-
 // Handle deep links: chatyuk://login-callback?token=...&type=recovery
 void _initDeepLinks() {
   final appLinks = AppLinks();
