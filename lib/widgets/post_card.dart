@@ -16,7 +16,7 @@ import '../services/timeline_service.dart';
 import '../utils.dart';
 import 'post_photo_viewer.dart';
 import 'profile_avatar.dart';
-import '../screens/other_profile_screen.dart';
+import '../screens/user_info_screen.dart';
 
 /// Kartu postingan timeline: header + foto + caption + like/comment/share.
 class PostCard extends StatefulWidget {
@@ -797,13 +797,10 @@ class _PostCardState extends State<PostCard> {
   void _openProfile() {
     final uid = _p['authorId'] as String? ?? '';
     if (uid.isEmpty) return;
-    final me = context.read<AuthProvider>().uid;
-    if (uid == me) return;
-    final avatar = _p['authorAvatar'] as String? ?? '';
     final name = _p['authorName'] as String? ?? 'Anon';
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => OtherProfileScreen(uid: uid, name: name, avatar: avatar)),
+      MaterialPageRoute(builder: (_) => UserInfoScreen(userId: uid, fallbackName: name)),
     );
   }
 
