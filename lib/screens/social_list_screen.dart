@@ -5,6 +5,7 @@ import '../providers/locale_provider.dart';
 import '../services/social_service.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/theme_provider.dart';
+import 'user_info_screen.dart';
 
 /// Daftar sosial (followers / following / friends / subscribers).
 /// `kind` menentukan tipe; `userId` menentukan user yang diambil (diri sendiri
@@ -112,34 +113,47 @@ class _SocialTile extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            ProfileAvatar(uid: uid, name: name, size: 40, borderRadius: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      name,
-                      style: AppText.bodyStrong,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: uid.isEmpty
+              ? null
+              : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => UserInfoScreen(userId: uid, fallbackName: name)),
                   ),
-                  if (registered) ...[
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.verified,
-                      size: 14,
-                      color: Color(0xFF4A90E2),
-                    ),
-                  ],
-                ],
-              ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                ProfileAvatar(uid: uid, name: name, size: 40, borderRadius: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          style: AppText.bodyStrong,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (registered) ...[
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.verified,
+                          size: 14,
+                          color: Color(0xFF4A90E2),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 18, color: AppTheme.textSecondary),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
