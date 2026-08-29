@@ -45,8 +45,9 @@ Uint8List? _avatarDecodeB64(String b64) {
 String? _processAvatarImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = img.copyResize(decoded, width: 300);
-  return base64Encode(img.encodeJpg(resized, quality: 70));
+  final resized = img.copyResize(decoded, width: 300, height: 300);
+  final jpg = img.encodeJpg(resized, quality: 70);
+  return base64Encode(jpg);
 }
 
 class _AsyncAvatar extends StatefulWidget {
@@ -205,6 +206,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     await prefs.setString(_prefKeyNegara, _negara);
   }
 
+  bool _uploadingAvatar = false;
+
   Future<void> _pickAndUploadAvatar() async {
     final s = context.read<LocaleProvider>().s;
     final source = await showModalBottomSheet<ImageSource>(
@@ -231,33 +234,51 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         ),
       ),
     );
-    if (source == null) return;
+    if (source == null || !mounted) return;
 
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source, maxWidth: 1200, imageQuality: 85);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    if (!mounted) return;
-
-    final processed = await compute(_processAvatarImage, bytes);
-    if (processed == null || !mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.errPhotoLoad)),
-      );
-      return;
-    }
-
+    setState(() => _uploadingAvatar = true);
     try {
-      await context.read<AuthProvider>().updateAvatar(processed);
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 600,
+        maxHeight: 600,
+        imageQuality: 80,
+      );
+      if (picked == null || !mounted) {
+        setState(() => _uploadingAvatar = false);
+        return;
+      }
+      final bytes = await picked.readAsBytes();
+      if (!mounted) {
+        setState(() => _uploadingAvatar = false);
+        return;
+      }
+
+      final processed = await compute(_processAvatarImage, bytes);
+      if (processed == null || !mounted) {
+        setState(() => _uploadingAvatar = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gagal proses foto')),
+          );
+        }
+        return;
+      }
+
+      final pp = context.read<AuthProvider>();
+      await pp.updateAvatar(processed);
       if (mounted) {
+        setState(() => _uploadingAvatar = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s.msgProfileSaved)),
         );
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _uploadingAvatar = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal: $e')),
+          SnackBar(content: Text('Gagal upload: $e')),
         );
       }
     }
