@@ -45,8 +45,8 @@ Uint8List? _avatarDecodeB64(String b64) {
 String? _processAvatarImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = img.copyResize(decoded, width: 400);
-  return base64Encode(img.encodeJpg(resized, quality: 80));
+  final resized = img.copyResize(decoded, width: 300);
+  return base64Encode(img.encodeJpg(resized, quality: 70));
 }
 
 class _AsyncAvatar extends StatefulWidget {
@@ -257,7 +257,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${s.errPhotoSave}$e')),
+          SnackBar(content: Text('Gagal: $e')),
         );
       }
     }
