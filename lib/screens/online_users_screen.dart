@@ -269,6 +269,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       final pp = context.read<AuthProvider>();
       await pp.updateAvatar(processed);
       if (mounted) {
+        // Langsung patch list online supaya foto baru terlihat tanpa tunggu stream 30s
+        try {
+          final uid = pp.profile?.uid ?? '';
+          if (uid.isNotEmpty) {
+            context.read<OnlineUsersProvider>().updateAvatarForUid(uid, processed);
+          }
+        } catch (_) {}
         setState(() => _uploadingAvatar = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s.msgProfileSaved)),

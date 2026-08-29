@@ -63,6 +63,22 @@ class OnlineUsersProvider extends ChangeNotifier {
     );
   }
 
+  void updateAvatarForUid(String uid, String base64) {
+    final idx = _users.indexWhere((u) => u.uid == uid);
+    if (idx >= 0 && _users[idx].avatar != base64) {
+      _users[idx] = _users[idx].copyWith(avatar: base64);
+      notifyListeners();
+    }
+  }
+
+  void removeAvatarForUid(String uid) {
+    final idx = _users.indexWhere((u) => u.uid == uid);
+    if (idx >= 0 && _users[idx].avatar.isNotEmpty) {
+      _users[idx] = _users[idx].copyWith(avatar: '');
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
     _sub?.cancel();

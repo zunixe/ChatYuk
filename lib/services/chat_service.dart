@@ -66,8 +66,16 @@ class ChatService {
   final SupabaseClient _sb = SupabaseConfig.client;
 
   // Cache avatar (path → base64) — hindari download ulang tiap fetch online.
-  final Map<String, String> _avatarCache = {};
+  static final Map<String, String> _avatarCache = {};
   static const _avatarCacheMax = 100;
+
+  static void clearAvatarCacheForPath(String path) {
+    _avatarCache.remove(path);
+  }
+
+  static void clearAvatarCacheForUid(String uid) {
+    _avatarCache.remove('avatars/$uid.jpg');
+  }
 
   Future<String> _avatarB64(String path) async {
     final cached = _avatarCache[path];

@@ -43,13 +43,19 @@ class AvatarB64Service {
 
   /// Clear cache untuk uid tertentu (dipanggil saat avatar di-update)
   /// agar fetch berikutnya dapat avatar yang baru.
+  /// Path `avatars/$uid.jpg` selalu sama → harus clear _pathCache juga
+  /// kalau tidak getByPath return base64 lama.
   void clearForUid(String uid) {
     _cache.remove(uid);
+    _pathCache.remove('avatars/$uid.jpg');
+    _inflight.remove(uid);
+    _inflight.remove('avatars/$uid.jpg');
   }
 
   /// Clear cache untuk path tertentu (avatar path berubah / dihapus)
   void clearForPath(String path) {
     _pathCache.remove(path);
+    _inflight.remove(path);
   }
 
   /// Ambil avatar langsung dari path storage (tanpa query profil) —

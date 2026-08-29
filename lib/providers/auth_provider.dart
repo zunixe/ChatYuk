@@ -11,6 +11,7 @@ import '../providers/locale_provider.dart';
 import '../core/admin_gate.dart';
 import '../services/avatar_service.dart';
 import '../services/auth_service.dart';
+import '../services/chat_service.dart';
 import '../services/device_info_service.dart';
 import '../services/location_service.dart';
 import '../services/message_cache.dart';
@@ -872,16 +873,22 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> updateAvatar(String base64) async {
     await _auth.updateAvatar(base64);
-    final uid = _profile?.uid ?? '';
-    if (uid.isNotEmpty) AvatarB64Service.instance.clearForUid(uid);
+    final uid = _profile?.uid ?? _auth.uid ?? '';
+    if (uid.isNotEmpty) {
+      AvatarB64Service.instance.clearForUid(uid);
+      ChatService.clearAvatarCacheForUid(uid);
+    }
     _profile = _profile?.copyWith(avatar: base64);
     if (!_disposed) notifyListeners();
   }
 
   Future<void> removeAvatar() async {
     await _auth.removeAvatar();
-    final uid = _profile?.uid ?? '';
-    if (uid.isNotEmpty) AvatarB64Service.instance.clearForUid(uid);
+    final uid = _profile?.uid ?? _auth.uid ?? '';
+    if (uid.isNotEmpty) {
+      AvatarB64Service.instance.clearForUid(uid);
+      ChatService.clearAvatarCacheForUid(uid);
+    }
     _profile = _profile?.copyWith(avatar: '');
     if (!_disposed) notifyListeners();
   }
