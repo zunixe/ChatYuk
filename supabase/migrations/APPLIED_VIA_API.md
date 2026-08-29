@@ -112,6 +112,12 @@
 - **Isi:** `follows_insert_own` + `friend_requests_insert_own` policy diperketat — hanya `is_registered=true` yang bisa follow / friend request. Anon tidak bisa follow & tidak bisa difollow.
 - **Verifikasi:** `select policyname from pg_policies where tablename='follows';` → follows_insert_own dengan check is_registered.
 
+## 2026-08-29 — 20260829090000_purge_inactive_90d.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-08-29.
+- **Isi:** `purge_inactive_accounts()` hapus akun tidak aktif 90 hari (last_seen < now-90d, batasi 100/run) + hapus relasi (follows, friend_requests, blocks, private_chats, messages, presence) + cron harian 03:30 `purge_inactive_90d`.
+- **Verifikasi:** `select cron.jobname from cron.job where jobname='purge_inactive_90d';` → 1 row.
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
