@@ -86,6 +86,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   int _roomSendCount = 0;
   PointsProvider? _pointsProv;
   Timer? _presenceTimer;
+  String? _pendingPhotoBase64;
 
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<UserModel>> _usersStream;
@@ -377,18 +378,68 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
-    if (text.isEmpty || _isSending) return;
-    _msgCtrl.clear();
-    _isSending = true;
+    final hasPhoto = _pendingPhotoBase64 != null;
+    if (text.isEmpty && !hasPhoto) return;
+    if (_isSending) return;
 
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
     final uid = auth.uid;
     final profile = auth.profile;
-    if (uid == null || profile == null) {
-      _isSending = false;
+    if (uid == null || profile == null) return;
+
+    if (hasPhoto) {
+      final photoB64 = _pendingPhotoBase64!;
+      _msgCtrl.clear();
+      setState(() => _pendingPhotoBase64 = null);
+      _isSending = true;
+
+      final pp = context.read<PointsProvider>();
+      final rPhoto = await pp.deductBeforeSend('image');
+      if (rPhoto < 0) {
+        _isSending = false;
+        if (!mounted) return;
+        if (rPhoto == -1) {
+          pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
+          );
+        }
+        return;
+      }
+      try {
+        final path = await StoragePhotoService.instance.upload(
+          chatId: 'room_${widget.room.id}',
+          base64: photoB64,
+        );
+        final stored = path ?? photoB64;
+        await chat.sendRoomMessage(
+          roomId: widget.room.id,
+          senderId: uid,
+          senderName: profile.nickname,
+          senderGender: profile.gender,
+          text: text,
+          type: 'image',
+          imageData: stored,
+        );
+        _scrollToBottom();
+      } catch (e) {
+        safeUnawaited(pp.refundChatPoint('image'));
+        if (mounted) {
+          final s = context.read<LocaleProvider>().s;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.errSendPhoto)),
+          );
+        }
+      } finally {
+        _isSending = false;
+      }
       return;
     }
+
+    _msgCtrl.clear();
+    _isSending = true;
 
     final pp = context.read<PointsProvider>();
     final remaining = await pp.deductBeforeSend('text');
@@ -469,58 +520,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       return;
     }
-    final base64 = await compute(_roomProcessImage, bytes);
-    if (base64 == null) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.errPhotoRead)),
-        );
-      }
-      return;
-    }
-    if (!mounted) return;
-    final auth = context.read<AuthProvider>();
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    final pp = context.read<PointsProvider>();
-    final r = await pp.deductBeforeSend('image');
-    if (r < 0) {
-      if (!mounted) return;
-      if (r == -1) {
-        pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
-        );
-      }
-      return;
-    }
-    try {
-      final path = await StoragePhotoService.instance.upload(
-        chatId: 'room_${widget.room.id}',
-        base64: base64,
-      );
-      final stored = path ?? base64;
-      await context.read<ChatProvider>().sendRoomMessage(
-        roomId: widget.room.id,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: '',
-        type: 'image',
-        imageData: stored,
-      );
-      _scrollToBottom();
-    } catch (e) {
-      safeUnawaited(pp.refundChatPoint('image'));
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.errSendPhoto)),
-        );
-      }
+    final processed = await compute(_roomProcessImage, bytes);
+    if (processed == null) return;
+    if (mounted) {
+      setState(() => _pendingPhotoBase64 = processed);
     }
   }
 
@@ -859,6 +862,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               setState(() => _showAttachRow = false);
               _sendViewOncePhoto();
             },
+            pendingPhotoBase64: _pendingPhotoBase64,
+            onCancelPhoto: _pendingPhotoBase64 != null
+                ? () => setState(() => _pendingPhotoBase64 = null)
+                : null,
           ),
         ],
       ),
@@ -1439,6 +1446,8 @@ class _ChatInput extends StatefulWidget {
   final VoidCallback onTakePhoto;
   final VoidCallback onSendPhoto;
   final VoidCallback onSendViewOnce;
+  final String? pendingPhotoBase64;
+  final VoidCallback? onCancelPhoto;
   const _ChatInput({
     required this.controller,
     required this.onSend,
@@ -1447,6 +1456,8 @@ class _ChatInput extends StatefulWidget {
     required this.onTakePhoto,
     required this.onSendPhoto,
     required this.onSendViewOnce,
+    this.pendingPhotoBase64,
+    this.onCancelPhoto,
   });
 
   @override
@@ -1489,6 +1500,41 @@ class _ChatInputState extends State<_ChatInput> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.pendingPhotoBase64 != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        base64Decode(widget.pendingPhotoBase64!),
+                        width: double.infinity,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: GestureDetector(
+                        onTap: widget.onCancelPhoto,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -1570,7 +1616,7 @@ class _ChatInputState extends State<_ChatInput> {
                     axisAlignment: -1,
                     child: FadeTransition(opacity: anim, child: child),
                   ),
-                  child: widget.controller.text.trim().isEmpty
+                  child: widget.controller.text.trim().isEmpty && widget.pendingPhotoBase64 == null
                       ? const SizedBox(width: 0, key: ValueKey('empty'))
                       : SizedBox(
                           key: const ValueKey('send'),
