@@ -14,9 +14,11 @@ import '../models/user_photo.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/online_users_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/timeline_provider.dart';
 import '../services/auth_service.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
@@ -311,6 +313,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _uploading = true);
     try {
       await context.read<AuthProvider>().updateAvatar(base64);
+      if (mounted) {
+        final uid = context.read<AuthProvider>().profile?.uid ?? '';
+        if (uid.isNotEmpty) {
+          try {
+            context.read<OnlineUsersProvider>().updateAvatarForUid(uid, base64);
+          } catch (_) {}
+          try {
+            context.read<TimelineProvider>().refreshAvatarForUid(uid, base64);
+          } catch (_) {}
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -375,9 +388,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   await context.read<AuthProvider>().removeAvatar();
+                  if (mounted) {
+                    final uid = context.read<AuthProvider>().profile?.uid ?? '';
+                    if (uid.isNotEmpty) {
+                      try {
+                        context
+                            .read<OnlineUsersProvider>()
+                            .removeAvatarForUid(uid);
+                      } catch (_) {}
+                      try {
+                        context
+                            .read<TimelineProvider>()
+                            .refreshAvatarForUid(uid, '');
+                      } catch (_) {}
+                    }
+                  }
                 },
               ),
             const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAvatarZoom(Uint8List? bytes, Color bgColor, String initial) {
+    if (bytes == null && initial.isEmpty) return;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: bytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(
+                          bytes,
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    : CircleAvatar(
+                        radius: 90,
+                        backgroundColor: bgColor,
+                        child: Text(
+                          initial,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 48,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
           ],
         ),
       ),
@@ -725,34 +803,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       // Avatar
                       Stack(
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 3),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black26,
-                                  blurRadius: 12,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
+                          GestureDetector(
+                            onTap: () => _showAvatarZoom(
+                              avatarBytes,
+                              avatarColor,
+                              profile?.initial ?? '?',
                             ),
-                            child: CircleAvatar(
-                              radius: 46,
-                              backgroundColor: avatarColor,
-                              backgroundImage: avatarBytes != null
-                                  ? MemoryImage(avatarBytes)
-                                  : null,
-                              child: (profile?.avatar ?? '').isEmpty
-                                  ? Text(
-                                      profile?.initial ?? '?',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: AppGlyph.avatarInitial(92),
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    )
-                                  : null,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 12,
+                                    offset: Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 46,
+                                backgroundColor: avatarColor,
+                                backgroundImage: avatarBytes != null
+                                    ? MemoryImage(avatarBytes)
+                                    : null,
+                                child: (profile?.avatar ?? '').isEmpty
+                                    ? Text(
+                                        profile?.initial ?? '?',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: AppGlyph.avatarInitial(92),
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      )
+                                    : null,
+                              ),
                             ),
                           ),
                           Positioned(
