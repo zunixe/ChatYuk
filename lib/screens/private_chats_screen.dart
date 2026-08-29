@@ -206,8 +206,18 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                   liveNameMap[otherUid] ?? c.participantNames[otherUid] ?? '';
               return otherName.toLowerCase().contains(effectiveQuery);
             }).toList();
-      // Urutkan: online teratas
+      // Urutkan: pinned paling atas, baru online, baru lastMessageAt
       filtered.sort((a, b) {
+        final aPinned = a.isPinnedFor(auth.uid ?? '');
+        final bPinned = b.isPinnedFor(auth.uid ?? '');
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+        if (aPinned && bPinned) {
+          final aT = a.pinnedAtFor(auth.uid ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bT = b.pinnedAtFor(auth.uid ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final c = bT.compareTo(aT);
+          if (c != 0) return c;
+        }
         final aUid =
             a.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
         final bUid =
