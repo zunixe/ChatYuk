@@ -1,5 +1,5 @@
--- Timeline per-country shard — list_posts filter by country (tetap Supabase)
--- patch list_posts v4: tambah p_country param, filter posts.country = p_country jika not null
+-- Timeline global — semua negara bisa lihat semua post (tidak filter by country)
+-- list_posts tetap punya p_country param untuk compat, tapi TIDAK difilter
 create or replace function public.list_posts(
   p_scope text default 'all',
   p_limit int default 30,
@@ -14,7 +14,6 @@ begin
   if me is null then raise exception 'Not authenticated'; end if;
   if p_scope not in ('all','following','mine') then p_scope := 'all'; end if;
   p_limit := least(coalesce(p_limit, 30), 50);
-  if p_country is not null and btrim(p_country) = '' then p_country := null; end if;
 
   with visible as (
     select p.*
@@ -23,7 +22,6 @@ begin
       (p_cursor is null
         or p.is_boosted < p_cursor_boosted
         or (p.is_boosted = p_cursor_boosted and p.created_at < p_cursor))
-      and (p_country is null or p.country = p_country)
       and (
         p.visibility = 'public'
         or (p.visibility = 'followers' and (
