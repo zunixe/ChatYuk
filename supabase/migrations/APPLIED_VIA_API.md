@@ -106,6 +106,12 @@
 - **Isi:** `private_chats.pinned_by text[]` + `pinned_at jsonb` + GIN index + RPC `pin_private_chat(p_chat_id text, p_pin boolean)` (per-user, check participants). Sort pinned dulu by pinnedAt DESC, baru lastMessageAt DESC. Optimistic update di ChatService.
 - **Verifikasi:** `select column_name from information_schema.columns where table_name='private_chats' and column_name like 'pinned%';` → 2 rows. `select pin_private_chat('test', true);` → ok.
 
+## 2026-08-29 — 20260829080000_follow_registered_only.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-08-29.
+- **Isi:** `follows_insert_own` + `friend_requests_insert_own` policy diperketat — hanya `is_registered=true` yang bisa follow / friend request. Anon tidak bisa follow & tidak bisa difollow.
+- **Verifikasi:** `select policyname from pg_policies where tablename='follows';` → follows_insert_own dengan check is_registered.
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
