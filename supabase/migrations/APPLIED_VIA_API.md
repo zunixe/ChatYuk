@@ -88,6 +88,12 @@
 - **Fix tambahan:** `list_posts` scope `mine` → `p_scope='mine' and p.author_id=me` (bukan fallback ke follows). File on-disk sync dengan DB.
 - **Verifikasi:** `select pronargs from pg_proc where proname='list_posts';` → **1 baris** (5 args saja). `select public.list_posts('all',30,null,false)` → return 4 posts.
 
+## 2026-08-29 — 20260829050000_storage_update_policy.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-08-29.
+- **Isi:** Tambah `UPDATE` policy untuk bucket `chat-photos` (`chat_photos_authenticated_update`). Sebelumnya hanya ada INSERT/DELETE/SELECT policies — tidak ada UPDATE. Saat `uploadAvatar` pakai `FileOptions(upsert: true)` dan avatar sudah ada sebelumnya, storage coba UPDATE row yang existing → gagal `new row violates row-level security policy` (403). Dengan policy ini, authenticated users bisa update avatar mereka sendiri.
+- **Verifikasi:** `select count(*) from pg_policies where schemaname='storage' AND tablename='objects';` → 6 policies (termasuk `chat_photos_authenticated_update` untuk UPDATE).
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
