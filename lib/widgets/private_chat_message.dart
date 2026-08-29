@@ -47,8 +47,15 @@ Uint8List? b64ToBytes(String b64) {
   }
 }
 
-// Cache decode agar scroll-back tidak resize (glitch). Key = hash imageData.
+// Cache decode agar scroll-back tidak resize (glitch). Key = hash imageData, bounded 80 (LRU) cegah OOM di 1M.
 final decodedImageCache = <int, DecodedImage>{};
+const _decodedCacheMax = 80;
+void _putDecodedCache(int key, DecodedImage img) {
+  if (decodedImageCache.length >= _decodedCacheMax) {
+    decodedImageCache.remove(decodedImageCache.keys.first);
+  }
+  decodedImageCache[key] = img;
+}
 
 // Teks + waktu: 1 baris → inline [teks  waktu]; 2+ baris → waktu di baris
 // baru rata kanan/kiri, sejajar dengan waktu pesan 1 baris di atasnya.
@@ -287,56 +294,10 @@ class MessageBubble extends StatelessWidget {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(10),
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  MessageImage(
-                                    imageData: msg.imageData,
-                                    chatKey: chatKey,
-                                    messageId: msg.id,
-                                  ),
-                                  Positioned(
-                                    right: 6,
-                                    bottom: 6,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withValues(alpha: 0.55),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            timeStr,
-                                            style: AppText.micro.copyWith(
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          if (isMe) ...[
-                                            const SizedBox(width: 3),
-                                            Icon(
-                                              isPending
-                                                  ? Icons.done
-                                                  : (isRead
-                                                        ? Icons.done_all
-                                                        : Icons.done),
-                                              size: 12,
-                                              color: isPending
-                                                  ? Colors.white70
-                                                  : (isRead
-                                                        ? const Color(0xFF7EC8FF)
-                                                        : Colors.white70),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              child: MessageImage(
+                                imageData: msg.imageData,
+                                chatKey: chatKey,
+                                messageId: msg.id,
                               ),
                             ),
                             if (msg.text.isNotEmpty)
@@ -349,6 +310,36 @@ class MessageBubble extends StatelessWidget {
                                   ),
                                 ),
                               ),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    timeStr,
+                                    style: AppText.micro.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                  if (isMe) ...[
+                                    const SizedBox(width: 3),
+                                    Icon(
+                                      isPending
+                                          ? Icons.done
+                                          : (isRead
+                                                ? Icons.done_all
+                                                : Icons.done),
+                                      size: 12,
+                                      color: isPending
+                                          ? AppTheme.textSecondary
+                                          : (isRead
+                                                ? AppTheme.primary
+                                                : AppTheme.textSecondary),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
                           ],
                         )
                       else if (msg.type == 'image' &&
@@ -665,7 +656,7 @@ class _MessageImageState extends State<MessageImage> {
       // Decode gagal — jangan cache null (dipaksa `!` dulu bikin crash).
       return;
     }
-    decodedImageCache[key] = decoded;
+    _putDecodedCache(key, decoded);
     if (!mounted) return;
     setState(() => _decoded = decoded);
   }

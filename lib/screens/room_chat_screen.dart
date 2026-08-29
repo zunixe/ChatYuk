@@ -389,6 +389,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       _isSending = false;
       return;
     }
+
     final pp = context.read<PointsProvider>();
     final remaining = await pp.deductBeforeSend('text');
     if (remaining < 0) {
@@ -450,6 +451,77 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   void _toggleAttachRow() {
     if (!_showAttachRow) FocusScope.of(context).unfocus();
     setState(() => _showAttachRow = !_showAttachRow);
+  }
+
+  Future<void> _takePhoto() async {
+    final picked = await _imagePicker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.rear,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > 10 * 1024 * 1024) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.msgFileTooLarge)),
+        );
+      }
+      return;
+    }
+    final base64 = await compute(_roomProcessImage, bytes);
+    if (base64 == null) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.errPhotoRead)),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
+    final pp = context.read<PointsProvider>();
+    final r = await pp.deductBeforeSend('image');
+    if (r < 0) {
+      if (!mounted) return;
+      if (r == -1) {
+        pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
+        );
+      }
+      return;
+    }
+    try {
+      final path = await StoragePhotoService.instance.upload(
+        chatId: 'room_${widget.room.id}',
+        base64: base64,
+      );
+      final stored = path ?? base64;
+      await context.read<ChatProvider>().sendRoomMessage(
+        roomId: widget.room.id,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: '',
+        type: 'image',
+        imageData: stored,
+      );
+      _scrollToBottom();
+    } catch (e) {
+      safeUnawaited(pp.refundChatPoint('image'));
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.errSendPhoto)),
+        );
+      }
+    }
   }
 
   Future<void> _sendPhoto() async {
@@ -775,6 +847,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             onSend: _send,
             showAttachRow: _showAttachRow,
             onToggleAttach: _toggleAttachRow,
+            onTakePhoto: () {
+              setState(() => _showAttachRow = false);
+              _takePhoto();
+            },
             onSendPhoto: () {
               setState(() => _showAttachRow = false);
               _sendPhoto();
@@ -1360,6 +1436,7 @@ class _ChatInput extends StatefulWidget {
   final VoidCallback onSend;
   final bool showAttachRow;
   final VoidCallback onToggleAttach;
+  final VoidCallback onTakePhoto;
   final VoidCallback onSendPhoto;
   final VoidCallback onSendViewOnce;
   const _ChatInput({
@@ -1367,6 +1444,7 @@ class _ChatInput extends StatefulWidget {
     required this.onSend,
     required this.showAttachRow,
     required this.onToggleAttach,
+    required this.onTakePhoto,
     required this.onSendPhoto,
     required this.onSendViewOnce,
   });
@@ -1469,6 +1547,13 @@ class _ChatInputState extends State<_ChatInput> {
                           onTap: widget.onToggleAttach,
                           tooltip: s.menuSendPhoto,
                         ),
+                        const SizedBox(width: 4),
+                        _RoomInputIconBtn(
+                          open: false,
+                          onTap: widget.onTakePhoto,
+                          tooltip: s.menuTakePhoto,
+                          icon: Icons.photo_camera_outlined,
+                        ),
                         const SizedBox(width: 10),
                       ],
                     ),
@@ -1563,10 +1648,12 @@ class _RoomInputIconBtn extends StatelessWidget {
   final bool open;
   final VoidCallback onTap;
   final String tooltip;
+  final IconData? icon;
   const _RoomInputIconBtn({
     required this.open,
     required this.onTap,
     required this.tooltip,
+    this.icon,
   });
 
   @override
@@ -1595,8 +1682,8 @@ class _RoomInputIconBtn extends StatelessWidget {
                 child: ScaleTransition(scale: anim, child: child),
               ),
               child: Icon(
-                open ? Icons.close_rounded : Icons.add_rounded,
-                key: ValueKey(open),
+                icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
+                key: ValueKey(icon ?? open),
                 color: AppTheme.primary,
                 size: 20,
               ),
