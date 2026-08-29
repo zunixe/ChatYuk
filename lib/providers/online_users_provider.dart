@@ -22,6 +22,7 @@ class OnlineUsersProvider extends ChangeNotifier {
   StreamSubscription? _sub;
   String? _error;
   bool _loaded = false;
+  Timer? _debounce;
 
   List<UserModel> get users => _users;
   String? get error => _error;
@@ -45,6 +46,26 @@ class OnlineUsersProvider extends ChangeNotifier {
         final seen = <String>{};
         final deduped = users.where((u) => seen.add(u.uid)).toList();
         if (_usersEqual(_users, deduped)) return;
+        // Debounce avatar-only churn di cold start (fast 50→ slow 100→ avatar batch 20)
+        // biar list tidak rebuild 3-4x beruntun yang terlihat kedip.
+        final isAvatarOnlyChange = _users.length == deduped.length &&
+            _users.isNotEmpty &&
+            _users.every((old) {
+              final idx = deduped.indexWhere((n) => n.uid == old.uid);
+              if (idx < 0) return false;
+              final n = deduped[idx];
+              return old.status == n.status && old.lastSeen == n.lastSeen;
+            });
+        if (isAvatarOnlyChange) {
+          _debounce?.cancel();
+          _debounce = Timer(const Duration(milliseconds: 180), () {
+            _users = deduped;
+            _error = null;
+            notifyListeners();
+          });
+          return;
+        }
+        _debounce?.cancel();
         _users = deduped;
         _error = null;
         notifyListeners();
@@ -81,6 +102,7 @@ class OnlineUsersProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _sub?.cancel();
     super.dispose();
   }
