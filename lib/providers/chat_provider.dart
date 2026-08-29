@@ -185,6 +185,10 @@ class ChatProvider extends ChangeNotifier {
     await _service.hideChat(myUid, chatId);
   }
 
+  Future<void> pinChat(String chatId, bool pin) async {
+    await _service.pinPrivateChat(chatId, pin);
+  }
+
   Future<Set<String>> getHiddenChats(String myUid) {
     return _service.getHiddenChats(myUid);
   }

@@ -269,6 +269,10 @@ class S {
   String get timeJustNow => isId ? 'Baru' : 'Now';
   String get labelToday => isId ? 'Hari ini' : 'Today';
   String get labelYesterday => isId ? 'Kemarin' : 'Yesterday';
+  String get btnPin => isId ? 'Sematkan' : 'Pin';
+  String get btnUnpin => isId ? 'Lepas Sematan' : 'Unpin';
+  String get msgPinned => isId ? 'Chat disematkan di atas' : 'Chat pinned to top';
+  String get msgUnpinned => isId ? 'Sematan dilepas' : 'Chat unpinned';
 
   // ── Chat Screen (private & room) ──
   String get hintTypeMessage => isId ? 'Ketik pesan...' : 'Type a message...';

@@ -100,6 +100,12 @@
 - **Isi:** `profiles_update_own` policy `WITH CHECK` dibuka — sebelumnya mengharuskan `nickname >= 3 chars`, `status in (online,idle,offline)`, `points` unchanged. Ini BLOCK semua UPDATE termasuk `updateAvatar` (line 768), `markRegistered` (line 375), `goOnline` (line ~842). Sekarang cukup `USING (auth.uid() = id) WITH CHECK (auth.uid() = id)` — security tetap (user cuma bisa update row sendiri), tapi tidak blokir update kolom lain.
 - **Verifikasi:** `select with_check from pg_policies where schemaname='public' and tablename='profiles' and policyname='profiles_update_own';` → `(auth.uid() = id)` saja.
 
+## 2026-08-29 — 20260829070000_pin_chats.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-08-29.
+- **Isi:** `private_chats.pinned_by text[]` + `pinned_at jsonb` + GIN index + RPC `pin_private_chat(p_chat_id text, p_pin boolean)` (per-user, check participants). Sort pinned dulu by pinnedAt DESC, baru lastMessageAt DESC. Optimistic update di ChatService.
+- **Verifikasi:** `select column_name from information_schema.columns where table_name='private_chats' and column_name like 'pinned%';` → 2 rows. `select pin_private_chat('test', true);` → ok.
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
