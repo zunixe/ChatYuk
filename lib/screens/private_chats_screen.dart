@@ -48,6 +48,34 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     });
   }
 
+  Future<void> _showPinOptions(BuildContext ctx, PrivateChatInfo chat, bool isPinned) async {
+    final s = ctx.read<LocaleProvider>().s;
+    final action = await showModalBottomSheet<String>(
+      context: ctx,
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: Icon(isPinned ? Icons.push_pin_outlined : Icons.push_pin, color: AppTheme.primary), title: Text(isPinned ? s.btnUnpin : s.btnPin), onTap: () => Navigator.pop(ctx, isPinned ? 'unpin' : 'pin')),
+          ListTile(leading: const Icon(Icons.delete_outline, color: AppTheme.danger), title: Text(s.btnDeleteChat, style: const TextStyle(color: AppTheme.danger)), onTap: () => Navigator.pop(ctx, 'delete')),
+        ]),
+      ),
+    );
+    if (!mounted || action == null) return;
+    final uid = ctx.read<AuthProvider>().uid;
+    if (uid == null) return;
+    if (action == 'pin' || action == 'unpin') {
+      final pin = action == 'pin';
+      try {
+        await ctx.read<ChatProvider>().pinChat(chat.chatId, pin);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(pin ? s.msgPinned : s.msgUnpinned)));
+        ctx.read<ChatProvider>().refreshMyPrivateChats(uid);
+      } catch (_) {}
+    } else if (action == 'delete') {
+      await _deleteChat(uid, chat.chatId);
+    }
+  }
+
   void _selectAll(List<PrivateChatInfo> chats) {
     setState(() => _selected.addAll(chats.map((c) => c.chatId)));
   }
@@ -320,12 +348,37 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     final isBlocked = blocked.contains(otherUid);
 
                     final isSelected = _selected.contains(chat.chatId);
+                    final isPinned = chat.isPinnedFor(auth.uid ?? '');
                     return GestureDetector(
-                      onLongPress: () => _toggleSelect(chat.chatId),
+                      onLongPress: () => _showPinOptions(context, chat, isPinned),
                       child: Dismissible(
                       key: ValueKey(chat.chatId),
-                      direction: DismissDirection.endToStart,
+                      direction: DismissDirection.horizontal,
                       background: Container(
+                        alignment: Alignment.centerLeft,
+                        padding: EdgeInsets.only(left: 20),
+                        margin: EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              isPinned ? Icons.push_pin_outlined : Icons.push_pin,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              isPinned ? s.btnUnpin : s.btnPin,
+                              style: AppText.caption.copyWith(color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                      secondaryBackground: Container(
                         alignment: Alignment.centerRight,
                         padding: EdgeInsets.only(right: 20),
                         margin: EdgeInsets.only(bottom: 8),
@@ -336,57 +389,31 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.delete_outline,
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                            Icon(Icons.delete_outline, color: Colors.white, size: 24),
                             SizedBox(height: 4),
-                            Text(
-                              s.btnDelete,
-                              style: AppText.caption.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
+                            Text(s.btnDelete, style: AppText.caption.copyWith(color: Colors.white)),
                           ],
                         ),
                       ),
-                      confirmDismiss: (_) async {
+                      confirmDismiss: (direction) async {
+                        if (direction == DismissDirection.startToEnd) {
+                          final ok = await context.read<ChatProvider>().pinChat(chat.chatId, !isPinned).then((_) => true).catchError((_) => false);
+                          if (ok && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isPinned ? s.msgUnpinned : s.msgPinned)));
+                            // trigger reload to re-sort
+                            if (auth.uid != null) context.read<ChatProvider>().refreshMyPrivateChats(auth.uid!);
+                          }
+                          return false;
+                        }
                         return await showDialog<bool>(
                               context: context,
                               builder: (ctx) => AlertDialog(
                                 backgroundColor: AppTheme.bgCard,
-                                title: Text(
-                                  s.btnDeleteChat,
-                                  style: TextStyle(color: AppTheme.textPrimary),
-                                ),
-                                content: Text(
-                                  s.deleteChatConfirm,
-                                  style: TextStyle(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
+                                title: Text(s.btnDeleteChat, style: TextStyle(color: AppTheme.textPrimary)),
+                                content: Text(s.deleteChatConfirm, style: TextStyle(color: AppTheme.textSecondary)),
                                 actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx).pop(false),
-                                    child: Text(
-                                      context
-                                          .read<LocaleProvider>()
-                                          .s
-                                          .btnCancel,
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx).pop(true),
-                                    child: Text(
-                                      s.btnDeleteChat,
-                                      style: const TextStyle(
-                                        color: AppTheme.danger,
-                                      ),
-                                    ),
-                                  ),
+                                  TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(context.read<LocaleProvider>().s.btnCancel)),
+                                  TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(s.btnDeleteChat, style: const TextStyle(color: AppTheme.danger))),
                                 ],
                               ),
                             ) ??
@@ -396,9 +423,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         final messenger = ScaffoldMessenger.of(context);
                         await _deleteChat(auth.uid!, chat.chatId);
                         if (mounted) {
-                          messenger.showSnackBar(
-                            SnackBar(content: Text(s.deleteChatSuccess)),
-                          );
+                          messenger.showSnackBar(SnackBar(content: Text(s.deleteChatSuccess)));
                         }
                       },
                       child: AnimatedContainer(
@@ -560,6 +585,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                           ),
                                                     ),
                                                   ),
+                                                  if (isPinned) ...[
+                                                    SizedBox(width: 3),
+                                                    Icon(Icons.push_pin, size: 14, color: AppTheme.primary),
+                                                  ],
                                                   if (chat.participantRegistered[otherUid] ==
                                                       true) ...[
                                                     SizedBox(width: 3),

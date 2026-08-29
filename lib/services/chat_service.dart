@@ -1019,8 +1019,8 @@ class ChatService {
     } else {
       list = [chat, ...last];
     }
-    // Jaga urutan DESC by lastMessageAt — item baru/berubah bisa pindah posisi.
-    list.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+    // Jaga urutan: pinned dulu (by pinnedAt), baru lastMessageAt
+    list.sort((a, b) => _comparePinned(a, b, myUid));
     _privateChatsLast[myUid] = list;
     _lastChatReloadAt[myUid] = DateTime.now();
     _scheduleChatListSave(myUid);
@@ -1127,11 +1127,13 @@ class ChatService {
       debugPrint('[ChatService] clearViewOnceImage ignored: $e');
     }
     _privateChatsHidden[myUid] = hiddenSet;
-    return rows
+    final list = rows
         .where((row) => !hiddenSet.contains(row['chat_id']))
         .map(_rowToPrivateChat)
         .where((c) => c.messageCount > 0)
         .toList();
+    list.sort((a, b) => _comparePinned(a, b, myUid));
+    return list;
   }
 
   PrivateChatInfo _rowToPrivateChat(Map<String, dynamic> row) {
@@ -1161,7 +1163,55 @@ class ChatService {
       lastReadAt: (d['lastReadAt'] as Map<dynamic, dynamic>? ?? {}).map(
         (k, v) => MapEntry(k.toString(), parseDate(v)),
       ),
+      pinnedBy: List<String>.from(d['pinnedBy'] ?? const []),
+      pinnedAt: (d['pinnedAt'] as Map<dynamic, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(k.toString(), parseDate(v)),
+      ),
     );
+  }
+
+  Future<void> pinPrivateChat(String chatId, bool pin) async {
+    // Optimistic update biar UI langsung pindah ke atas tanpa tunggu network
+    final myUid = _sb.auth.currentUser?.id;
+    if (myUid != null) {
+      final last = _privateChatsLast[myUid];
+      if (last != null) {
+        final idx = last.indexWhere((c) => c.chatId == chatId);
+        if (idx >= 0) {
+          final old = last[idx];
+          final newPinnedBy = pin
+              ? (old.pinnedBy.contains(myUid) ? old.pinnedBy : [...old.pinnedBy, myUid])
+              : old.pinnedBy.where((id) => id != myUid).toList();
+          final newPinnedAt = Map<String, DateTime>.from(old.pinnedAt);
+          if (pin) {
+            newPinnedAt[myUid] = DateTime.now();
+          } else {
+            newPinnedAt.remove(myUid);
+          }
+          final updated = old.copyWith(pinnedBy: newPinnedBy, pinnedAt: newPinnedAt);
+          final list = List<PrivateChatInfo>.from(last)..[idx] = updated;
+          list.sort((a, b) => _comparePinned(a, b, myUid));
+          _privateChatsLast[myUid] = list;
+          _privateChatsStreams[myUid]?.add(List.unmodifiable(list));
+          _scheduleChatListSave(myUid);
+        }
+      }
+    }
+    await _sb.rpc('pin_private_chat', params: {'p_chat_id': chatId, 'p_pin': pin});
+  }
+
+  static int _comparePinned(PrivateChatInfo a, PrivateChatInfo b, String myUid) {
+    final aPinned = a.isPinnedFor(myUid);
+    final bPinned = b.isPinnedFor(myUid);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+    if (aPinned && bPinned) {
+      final aTime = a.pinnedAtFor(myUid) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b.pinnedAtFor(myUid) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final c = bTime.compareTo(aTime);
+      if (c != 0) return c;
+    }
+    return b.lastMessageAt.compareTo(a.lastMessageAt);
   }
 
   /// Snapshot terakhir list private chat — dipakai initialData StreamBuilder
@@ -1219,7 +1269,7 @@ class ChatService {
       if (cachedRows.isEmpty) return;
       final cached =
           cachedRows.map(PrivateChatInfo.fromMap).toList()
-            ..sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+            ..sort((a, b) => _comparePinned(a, b, myUid));
       if (_privateChatsLast[myUid] != null &&
           _privateChatsLast[myUid]!.isNotEmpty) {
         return; // sudah ada data lebih baru — jangan timpa
@@ -1795,6 +1845,8 @@ class PrivateChatInfo {
   final int messageCount;
   final Map<String, int> unreadCounts;
   final Map<String, DateTime> lastReadAt;
+  final List<String> pinnedBy;
+  final Map<String, DateTime> pinnedAt;
 
   PrivateChatInfo({
     required this.chatId,
@@ -1809,7 +1861,12 @@ class PrivateChatInfo {
     this.messageCount = 0,
     this.unreadCounts = const {},
     this.lastReadAt = const {},
+    this.pinnedBy = const [],
+    this.pinnedAt = const {},
   });
+
+  bool isPinnedFor(String uid) => pinnedBy.contains(uid);
+  DateTime? pinnedAtFor(String uid) => pinnedAt[uid];
 
   Map<String, dynamic> toMap() => {
     'chatId': chatId,
@@ -1824,6 +1881,8 @@ class PrivateChatInfo {
     'messageCount': messageCount,
     'unreadCounts': unreadCounts,
     'lastReadAt': lastReadAt.map((k, v) => MapEntry(k, v.toIso8601String())),
+    'pinnedBy': pinnedBy,
+    'pinnedAt': pinnedAt.map((k, v) => MapEntry(k, v.toIso8601String())),
   };
 
   static Map<String, String> _strMap(dynamic v) =>
@@ -1854,6 +1913,10 @@ class PrivateChatInfo {
         (k, v) =>
             MapEntry('$k', DateTime.tryParse('$v') ?? DateTime(2000)),
       ),
+      pinnedBy: List<String>.from(d['pinnedBy'] ?? const []),
+      pinnedAt: ((d['pinnedAt'] as Map?) ?? {}).map(
+        (k, v) => MapEntry('$k', DateTime.tryParse('$v') ?? DateTime(2000)),
+      ),
     );
   }
 
@@ -1870,6 +1933,8 @@ class PrivateChatInfo {
     int? messageCount,
     Map<String, int>? unreadCounts,
     Map<String, DateTime>? lastReadAt,
+    List<String>? pinnedBy,
+    Map<String, DateTime>? pinnedAt,
   }) {
     return PrivateChatInfo(
       chatId: chatId ?? this.chatId,
@@ -1885,6 +1950,8 @@ class PrivateChatInfo {
       messageCount: messageCount ?? this.messageCount,
       unreadCounts: unreadCounts ?? this.unreadCounts,
       lastReadAt: lastReadAt ?? this.lastReadAt,
+      pinnedBy: pinnedBy ?? this.pinnedBy,
+      pinnedAt: pinnedAt ?? this.pinnedAt,
     );
   }
 }
