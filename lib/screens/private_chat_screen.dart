@@ -2030,9 +2030,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                   borderRadius: BorderRadius.circular(12),
                                   child: Image.memory(
                                     base64.decode(_pendingPhotoBase64!),
-                                    height: 160,
                                     width: double.infinity,
-                                    fit: BoxFit.cover,
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
                                 Positioned(
