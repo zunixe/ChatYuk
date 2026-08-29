@@ -1170,9 +1170,9 @@ class ChatService {
     );
   }
 
-  Future<void> pinPrivateChat(String chatId, bool pin) async {
+  Future<void> pinPrivateChat(String chatId, bool pin, {String? myUidParam}) async {
     // Optimistic update biar UI langsung pindah ke atas tanpa tunggu network
-    final myUid = _sb.auth.currentUser?.id;
+    final myUid = myUidParam ?? _sb.auth.currentUser?.id;
     if (myUid != null) {
       final last = _privateChatsLast[myUid];
       if (last != null) {
