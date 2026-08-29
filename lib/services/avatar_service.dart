@@ -41,6 +41,17 @@ class AvatarB64Service {
     }
   }
 
+  /// Clear cache untuk uid tertentu (dipanggil saat avatar di-update)
+  /// agar fetch berikutnya dapat avatar yang baru.
+  void clearForUid(String uid) {
+    _cache.remove(uid);
+  }
+
+  /// Clear cache untuk path tertentu (avatar path berubah / dihapus)
+  void clearForPath(String path) {
+    _pathCache.remove(path);
+  }
+
   /// Ambil avatar langsung dari path storage (tanpa query profil) —
   /// dipakai timeline yang sudah membawa authorAvatar di payload.
   Future<String> getByPath(String path) async {
