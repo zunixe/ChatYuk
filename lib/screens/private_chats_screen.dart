@@ -67,9 +67,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     if (action == 'pin' || action == 'unpin') {
       final pin = action == 'pin';
       try {
-        await ctx.read<ChatProvider>().pinChat(chat.chatId, pin);
+        await ctx.read<ChatProvider>().pinChat(chat.chatId, pin, myUid: uid);
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(pin ? s.msgPinned : s.msgUnpinned)));
-        ctx.read<ChatProvider>().refreshMyPrivateChats(uid);
+        // optimistic sudah di atas, tidak perlu refresh manual (biar tidak kedip)
       } catch (_) {}
     } else if (action == 'delete') {
       await _deleteChat(uid, chat.chatId);
@@ -407,11 +407,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                       ),
                       confirmDismiss: (direction) async {
                         if (direction == DismissDirection.startToEnd) {
-                          final ok = await context.read<ChatProvider>().pinChat(chat.chatId, !isPinned).then((_) => true).catchError((_) => false);
+                          final myUid = auth.uid;
+                          final ok = await context.read<ChatProvider>().pinChat(chat.chatId, !isPinned, myUid: myUid).then((_) => true).catchError((_) => false);
                           if (ok && mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isPinned ? s.msgUnpinned : s.msgPinned)));
-                            // trigger reload to re-sort
-                            if (auth.uid != null) context.read<ChatProvider>().refreshMyPrivateChats(auth.uid!);
                           }
                           return false;
                         }
