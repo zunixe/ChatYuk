@@ -118,6 +118,12 @@
 - **Isi:** `purge_inactive_accounts()` hapus akun tidak aktif 90 hari (last_seen < now-90d, batasi 100/run) + hapus relasi (follows, friend_requests, blocks, private_chats, messages, presence) + cron harian 03:30 `purge_inactive_90d`.
 - **Verifikasi:** `select cron.jobname from cron.job where jobname='purge_inactive_90d';` → 1 row.
 
+## 2026-09-01 — 20260901000000_p0_indexes_incremental.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-09-01.
+- **Isi:** 6 index hilang + `profiles.bonus/topup/earned_balance` + trigger incremental `coin_ledger_balance_trg` + backfill + `wallet_sync_points` jadi baca kolom (tidak sum).
+- **Verifikasi:** `select indexname from pg_indexes where tablename='room_presence' and indexname='idx_room_presence_joined_at';` → 1 row.
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
