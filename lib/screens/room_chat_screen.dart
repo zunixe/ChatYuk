@@ -877,20 +877,24 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         ),
         actions: [
           if (isPrivateRoom) ...[
-            // Hand-raise utk non-broadcaster; Stop broadcast utk broadcaster; Start untuk yang di-grant
+            // Hand-raise utk member biasa; Start broadcast utk yang live_uid == saya (di-grant)
             if (_liveUid == null && !canModerate && !isGrantedBroadcast)
               IconButton(
                 tooltip: s.roomActionHandRaise,
                 icon: const Icon(Icons.pan_tool_rounded),
                 onPressed: _raiseHand,
               ),
-            if (_liveUid == null && isGrantedBroadcast && !iAmBroadcasting)
+            if ((_liveUid == _auth.uid && !iAmBroadcasting) || (_liveUid == null && isGrantedBroadcast && !iAmBroadcasting))
               IconButton(
                 tooltip: s.privateRoomsStartBroadcast,
                 icon: Icon(Icons.videocam_rounded, color: AppTheme.primary),
                 onPressed: () async {
-                  await PrivateRoomService.instance.startBroadcast(widget.room.id);
-                  await _refreshLiveUid();
+                  // Jika live_uid sudah saya, langsung start session; jika belum, request grant lalu start
+                  if (_liveUid != _auth.uid) {
+                    await PrivateRoomService.instance.startBroadcast(widget.room.id);
+                    await _refreshLiveUid();
+                  }
+                  await _startBroadcastSession();
                 },
               ),
             if (iAmBroadcasting)
