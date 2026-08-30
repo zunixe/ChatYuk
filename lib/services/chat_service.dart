@@ -636,6 +636,33 @@ class ChatService {
         reload();
       },
     );
+    channel.onBroadcast(event: 'new_message', callback: (payload, [ref]) async {
+      lastRealtime = DateTime.now();
+      if (controller.isClosed) return;
+      try {
+        final data = payload as Map<String, dynamic>;
+        if (data['chat_id']?.toString() != filterVal && data['room_id']?.toString() != filterVal) return;
+        var msg = MessageModel.fromMap(data['id']?.toString() ?? 'bc-${DateTime.now().microsecondsSinceEpoch}', snakeToCamel(data));
+        if (_current.any((m) => m.id == msg.id)) return;
+        if (msg.imageData.isNotEmpty) {
+          try {
+            var d = msg.imageData;
+            if (StoragePhotoService.instance.isPath(d) || StoragePhotoService.instance.isVoicePath(d)) {
+              d = await StoragePhotoService.instance.download(d) ?? '';
+            }
+            if (d.isNotEmpty) {
+              final thumb = await PhotoCache.instance.save(cacheKey, msg.id, d);
+              if (!controller.isClosed && thumb != null && thumb.isNotEmpty) msg = msg.copyWith(imageData: thumb);
+            }
+          } catch (_) {}
+        }
+        // Sisipkan kronologis
+        var idx = _current.indexWhere((m) => m.timestamp.isAfter(msg.timestamp));
+        if (idx < 0) { _current.add(msg); } else { _current.insert(idx, msg); }
+        controller.add(List.unmodifiable(_current));
+        scheduleCacheSave();
+      } catch (_) {}
+    });
     channel.subscribe();
     reload();
 
@@ -850,6 +877,22 @@ class ChatService {
       if (repliedToSenderName != null)
         'replied_to_sender_name': repliedToSenderName,
     });
+    // Broadcast untuk skala (tanpa postgres realtime) — fire-and-forget
+    try {
+      final ch = _sb.channel('private_$chatId');
+      ch.subscribe();
+      await ch.sendBroadcastMessage(event: 'new_message', payload: {
+        'chat_id': chatId,
+        'sender_id': senderId,
+        'sender_name': senderName,
+        'sender_gender': senderGender,
+        'text': text,
+        'type': type,
+        'image_data': type == 'voice' ? '' : imageData,
+        'voice_path': type == 'voice' ? imageData : '',
+        'duration_ms': durationMs ?? 0,
+      });
+    } catch (_) {}
   }
 
   /// Kirim koin ke lawan bicara. Server yang memvalidasi & memotong koin.
