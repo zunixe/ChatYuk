@@ -65,6 +65,7 @@ class _MicRecordButtonState extends State<MicRecordButton> with SingleTickerProv
           onLongPressStart: widget.isRecording ? null : (_) => widget.onLongPressStart(),
           onLongPressCancel: widget.onLongPressCancel,
           child: Container(
+            alignment: Alignment.center,
             decoration: BoxDecoration(
               color: widget.isRecording ? Colors.red : AppTheme.primary,
               shape: BoxShape.circle,
