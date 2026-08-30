@@ -107,6 +107,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   int _pendingCount = 0;
   RoomBroadcastSession? _broadcastSession;
   Timer? _livePoll;
+  bool _isGrantedBroadcast = false;
   bool get isPrivateRoom => widget.room.isPrivate == true;
   bool get canModerate =>
       isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
@@ -114,6 +115,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       _broadcastSession != null &&
       _broadcastSession!.isBroadcaster &&
       _liveUid == _auth.uid;
+  bool get isGrantedBroadcast => _isGrantedBroadcast;
   bool get watchingLive =>
       _broadcastSession != null && !iAmBroadcasting;
 
@@ -148,12 +150,27 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           _pendingCount = req.length;
         } catch (_) {}
       }
+      try {
+        final b = await PrivateRoomService.instance.listBroadcasters(widget.room.id);
+        _isGrantedBroadcast = b.any((e) => '${e['user_id']}' == _auth.uid);
+      } catch (_) {}
       await _refreshLiveUid();
       _livePoll?.cancel();
-      _livePoll = Timer.periodic(const Duration(seconds: 5), (_) => _refreshLiveUid());
+      _livePoll = Timer.periodic(const Duration(seconds: 5), (_) {
+        _refreshLiveUid();
+        _refreshGrant();
+      });
     } catch (_) {}
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _refreshGrant() async {
+    try {
+      final b = await PrivateRoomService.instance.listBroadcasters(widget.room.id);
+      final g = b.any((e) => '${e['user_id']}' == _auth.uid);
+      if (mounted && g != _isGrantedBroadcast) setState(() => _isGrantedBroadcast = g);
+    } catch (_) {}
   }
 
   Future<void> _refreshLiveUid() async {
@@ -860,12 +877,21 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         ),
         actions: [
           if (isPrivateRoom) ...[
-            // Hand-raise utk non-broadcaster; Stop broadcast utk broadcaster.
-            if (_liveUid == null && !canModerate)
+            // Hand-raise utk non-broadcaster; Stop broadcast utk broadcaster; Start untuk yang di-grant
+            if (_liveUid == null && !canModerate && !isGrantedBroadcast)
               IconButton(
                 tooltip: s.roomActionHandRaise,
                 icon: const Icon(Icons.pan_tool_rounded),
                 onPressed: _raiseHand,
+              ),
+            if (_liveUid == null && isGrantedBroadcast && !iAmBroadcasting)
+              IconButton(
+                tooltip: s.privateRoomsStartBroadcast,
+                icon: Icon(Icons.videocam_rounded, color: AppTheme.primary),
+                onPressed: () async {
+                  await PrivateRoomService.instance.startBroadcast(widget.room.id);
+                  await _refreshLiveUid();
+                },
               ),
             if (iAmBroadcasting)
               IconButton(
@@ -900,6 +926,19 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       ),
       body: Column(
         children: [
+          if (isPrivateRoom && _myRole == null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              color: Colors.orange.withValues(alpha: 0.12),
+              child: Row(
+                children: [
+                  const Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(s.privateRoomNeedApproval, style: AppText.bodySmall.copyWith(color: Colors.orange.shade800))),
+                ],
+              ),
+            ),
           if (isPrivateRoom &&
               _liveUid != null &&
               _broadcastSession != null) ...[
