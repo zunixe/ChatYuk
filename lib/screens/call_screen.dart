@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
@@ -71,6 +72,7 @@ class _CallScreenState extends State<CallScreen> {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable();
     CallProvider.instance.registerCall(widget.callId);
     final profile = context.read<AuthProvider>().profile;
     final s = context.read<LocaleProvider>().s;
@@ -111,6 +113,7 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     _session.removeListener(_onSession);
     _autoClose?.cancel();
     if (_ownsSession) {

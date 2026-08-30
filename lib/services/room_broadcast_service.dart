@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/call_config.dart';
 import 'private_room_service.dart';
 import '../config/supabase_config.dart';
@@ -45,9 +46,13 @@ class RoomBroadcastSession extends ChangeNotifier {
   RealtimeChannel? _broadcasterSub;
   Timer? _hbTimer;
   Timer? _watchdog;
+  Timer? _syncTimer;
   int _lastSignalId = 0;
   bool _closed = false;
   bool _cameraOn = true;
+  final Set<String> _offerInFlight = {};
+  final Map<String, DateTime> _lastOfferAt = {};
+  final Map<String, String> _pcIds = {};
 
   bool get cameraOn => _cameraOn;
   int get viewerCount => _peers.length;
@@ -61,11 +66,17 @@ class RoomBroadcastSession extends ChangeNotifier {
 
   Future<void> start() async {
     if (_closed) return;
+    WakelockPlus.enable();
     await localRenderer.initialize();
     await remoteRenderer.initialize();
 
     _signalSub = _prv.onSignal(roomId).listen(_onSignal);
-    unawaited(_seedMissedSignals());
+    await _fastForwardSignals();
+    // Polling cadangan tiap 2 detik (pola call 1:1) — realtime insert
+    // bisa terlewat, tanpa polling handshake bisa mati diam-diam.
+    _syncTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_syncMissedSignals());
+    });
 
     if (isBroadcaster) {
       // Cap 4: cek jumlah broadcaster aktif sebelum ambil kamera
@@ -142,18 +153,44 @@ class RoomBroadcastSession extends ChangeNotifier {
 
   void _onSignal(Map<String, dynamic> sig) {
     if (_closed) return;
+    // Signal basi (replay dari DB / late realtime) diabaikan — mencegah
+    // offer/answer lama merusak negosiasi WebRTC (video hitam).
+    final ca = DateTime.tryParse('${sig['created_at'] ?? ''}');
+    if (ca != null &&
+        DateTime.now().toUtc().difference(ca.toUtc()) >
+            const Duration(seconds: 30)) {
+      return;
+    }
     final type = '${sig['type'] ?? ''}';
     final from = '${sig['from_uid'] ?? ''}';
     final payload = (sig['payload'] as Map?)?.cast<String, dynamic>() ?? {};
 
     switch (type) {
       case 'b_join':
-        if (isBroadcaster && !_peers.containsKey(from)) {
-          unawaited(_makeOfferTo(from));
+        // Viewer re-join (keluar-masuk room) → pc lama pasti mati; tutup
+        // dan buat offer baru. Guard in-flight cukup untuk cegah dobel.
+        if (isBroadcaster && !_offerInFlight.contains(from)) {
+          _offerInFlight.add(from);
+          unawaited(
+              _makeOfferTo(from).whenComplete(() => _offerInFlight.remove(from)));
         }
         break;
       case 'b_offer':
-        unawaited(_viewerHandleOffer(from, payload));
+        // Guard SINKRON pakai timestamp: burst offer (replay + realtime)
+        // harusnya hanya yang TERBARU diproses. Guard async di dalam
+        // _viewerHandleOffer kalah race (semua offer masuk sebelum satu pun
+        // selesai setRemoteDescription → 20 answer → pc broadcaster rusak).
+        {
+          final ca = DateTime.tryParse('${sig['created_at'] ?? ''}') ??
+              DateTime.now().toUtc();
+          final last = _lastOfferAt[from];
+          if (last != null && !ca.isAfter(last)) {
+            debugPrint('[BROADCAST] duplicate/stale offer ignored for $from');
+            return;
+          }
+          _lastOfferAt[from] = ca;
+          unawaited(_viewerHandleOffer(from, payload));
+        }
         break;
       case 'b_answer':
         unawaited(_handleAnswer(from, payload));
@@ -192,9 +229,9 @@ class RoomBroadcastSession extends ChangeNotifier {
       _pendingCands.remove(viewerUid);
       final pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _peers[viewerUid] = pc;
-      _applyBitrate(pc);
 
       await pc.addTrack(_localStream!.getVideoTracks().first, _localStream!);
+      _applyBitrate(pc);
       _renegotiateBitrateAll();
 
       pc.onIceCandidate = (c) {
@@ -213,8 +250,13 @@ class RoomBroadcastSession extends ChangeNotifier {
 
       final offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      // pcId mengikat answer ke pc yang membuat offer ini — answer dari
+      // offer lama (race) tidak pernah diterapkan ke pc baru.
+      final pcId = 'pc_${DateTime.now().microsecondsSinceEpoch}';
+      _pcIds[viewerUid] = pcId;
       await _prv.sendSignal(roomId, type: 'b_offer', toUid: viewerUid, payload: {
         'sdp': offer.toMap(),
+        'pcId': pcId,
       });
       notifyListeners();
     } catch (e) {
@@ -225,11 +267,30 @@ class RoomBroadcastSession extends ChangeNotifier {
   Future<void> _handleAnswer(String from, Map<String, dynamic> payload) async {
     final sdp = payload['sdp'] as Map<String, dynamic>?;
     final pc = _peers[from];
+    debugPrint('[BROADCAST] b_answer from=$from hasPc=${pc != null} pcId=${payload['pcId']} expected=${_pcIds[from]}');
     if (!isBroadcaster || sdp == null || pc == null) return;
+    // Binding: answer harus milik offer/pc TERAKHIR untuk viewer ini.
+    // Answer dari pc lama (race 2 offer) ditolak — mencegah SDP mismatch.
+    final pcId = '${payload['pcId'] ?? ''}';
+    if (pcId.isNotEmpty && pcId != (_pcIds[from] ?? '')) {
+      debugPrint('[BROADCAST] b_answer from stale pc ignored for $from');
+      return;
+    }
+    // Guard state: answer hanya valid saat punya offer pending (have-local-offer).
+    // Tanpa ini, answer basi/dobel → "wrong state: stable" dan peer hang.
+    final local = await pc.getLocalDescription();
+    debugPrint('[BROADCAST] b_answer local=${local?.type}');
+    if (local == null || local.type != 'offer') return;
+    final remote = await pc.getRemoteDescription();
+    if (remote != null) {
+      debugPrint('[BROADCAST] b_answer duplicate ignored for $from');
+      return;
+    }
     try {
       await pc.setRemoteDescription(
         RTCSessionDescription(sdp['sdp'], sdp['type']),
       );
+      debugPrint('[BROADCAST] b_answer applied for $from');
       for (final c in List<Map<String, dynamic>>.from(_pendingCands[from] ?? const [])) {
         try {
           await pc.addCandidate(RTCIceCandidate(
@@ -332,6 +393,17 @@ class RoomBroadcastSession extends ChangeNotifier {
     final sdp = payload['sdp'] as Map<String, dynamic>?;
     if (sdp == null) return;
     try {
+      // Pola call 1:1 (call_service.dart): offer duplikat / sudah dijawab
+      // diabaikan — memproses ulang membuat pc baru & answer tertukar
+      // (video hitam, stuck Connecting).
+      final existingPc = _peers[broadcasterUid];
+      if (existingPc != null) {
+        final existing = await existingPc.getRemoteDescription();
+        if (existing != null) {
+          debugPrint('[BROADCAST] duplicate offer ignored for $broadcasterUid');
+          return;
+        }
+      }
       var pc = _peers[broadcasterUid];
       if (pc != null) {
         try {
@@ -367,11 +439,24 @@ class RoomBroadcastSession extends ChangeNotifier {
       await pc.setRemoteDescription(
         RTCSessionDescription(sdp['sdp'], sdp['type']),
       );
+      // Flush candidate broadcaster yang antri sebelum offer diproses
+      // (broadcaster _handleAnswer punya ini; viewer terlewat → ICE gagal).
+      for (final c in List<Map<String, dynamic>>.from(
+          _pendingCands[broadcasterUid] ?? const [])) {
+        try {
+          await pc.addCandidate(RTCIceCandidate(
+            c['candidate'] ?? '',
+            c['sdpMid'],
+            (c['sdpMLineIndex'] as num?)?.toInt(),
+          ));
+        } catch (_) {}
+      }
+      _pendingCands.remove(broadcasterUid);
       final answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await _prv.sendSignal(roomId, type: 'b_answer', toUid: broadcasterUid,
-          payload: {'sdp': answer.toMap()});
-      debugPrint('[BROADCAST] viewer answered $broadcasterUid');
+          payload: {'sdp': answer.toMap(), 'pcId': payload['pcId'] ?? ''});
+      debugPrint('[BROADCAST] viewer answered $broadcasterUid pcId=${payload['pcId']}');
     } catch (e) {
       debugPrint('[BROADCAST] viewer offer failed: $e');
     }
@@ -380,8 +465,10 @@ class RoomBroadcastSession extends ChangeNotifier {
   Future<void> stop() async {
     if (_closed) return;
     _closed = true;
+    WakelockPlus.disable();
     _hbTimer?.cancel();
     _watchdog?.cancel();
+    _syncTimer?.cancel();
     await _signalSub?.cancel();
     if (_broadcasterSub != null) {
       _sb.removeChannel(_broadcasterSub!);
@@ -392,6 +479,10 @@ class RoomBroadcastSession extends ChangeNotifier {
       try {
         await _prv.stopBroadcastV2(roomId);
       } catch (_) {}
+    } else {
+      // Viewer juga beri tahu broadcaster agar pc basi di-drop — tanpa ini
+      // re-join (keluar-masuk room) diabaikan selamanya → video blank.
+      await _prv.sendSignal(roomId, type: 'b_bye');
     }
     for (final pc in _peers.values) {
       try {
@@ -415,12 +506,33 @@ class RoomBroadcastSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _seedMissedSignals() async {
-    final rows = await _prv.fetchSignalsSince(roomId, _lastSignalId);
-    for (final r in rows) {
-      _lastSignalId = max(_lastSignalId, ((r['id'] ?? 0) as num).toInt());
-      _onSignal(r);
-    }
+  Future<void> _syncMissedSignals() async {
+    if (_closed) return;
+    try {
+      final rows = await _prv.fetchSignalsSince(roomId, _lastSignalId);
+      for (final r in rows) {
+        _lastSignalId = max(_lastSignalId, ((r['id'] ?? 0) as num).toInt());
+        _onSignal(r);
+      }
+    } catch (_) {}
+  }
+
+  /// Cursor maju ke id signal TERBESAR saat session dimulai — offer/answer
+  /// lama dari session sebelumnya tidak boleh di-replay (penyebab video
+  /// blank saat keluar-masuk room). Signal baru (id > cursor) saja yang
+  /// diproses polling.
+  Future<void> _fastForwardSignals() async {
+    try {
+      final row = await _sb
+          .from('room_signals')
+          .select('id')
+          .eq('room_id', roomId)
+          .order('id', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      _lastSignalId = ((row?['id'] ?? 0) as num).toInt();
+      debugPrint('[BROADCAST] signal cursor fast-forward to $_lastSignalId');
+    } catch (_) {}
   }
 
   @override

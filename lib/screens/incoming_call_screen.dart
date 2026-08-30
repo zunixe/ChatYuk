@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
@@ -45,6 +46,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable();
     CallProvider.instance.registerCall(widget.callId);
     _loadCaller();
     _startRingtone();
@@ -95,6 +97,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     // Jangan unregister bila call diterima — session sudah diambil alih
     // CallProvider (aktif), dan unregister di sini akan mematikan penanda busy.
     if (!_accepted) CallProvider.instance.unregisterCall(widget.callId);
