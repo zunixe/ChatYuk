@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -81,11 +82,29 @@ class AuthService {
 
     if (idToken == null) throw Exception('Google idToken null');
 
-    final response = await _sb.auth.signInWithIdToken(
-      provider: OAuthProvider.google,
-      idToken: idToken,
-      accessToken: accessToken,
-    );
+    debugPrint('[GOOGLE] idToken len=${idToken.length} accessToken len=${accessToken?.length ?? 0} webClientId=$webClientId');
+    try {
+      final parts = idToken.split('.');
+      if (parts.length == 3) {
+        final payload = String.fromCharCodes(base64Url.decode(base64Url.normalize(parts[1])));
+        debugPrint('[GOOGLE] idToken payload aud check: ${payload.substring(0, payload.length > 500 ? 500 : payload.length)}');
+      }
+    } catch (_) {}
+    AuthResponse response;
+    try {
+      response = await _sb.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+    } catch (e, st) {
+      debugPrint('[GOOGLE] signInWithIdToken FAILED: $e');
+      debugPrint('[GOOGLE] stack: $st');
+      if (e is AuthApiException) {
+        debugPrint('[GOOGLE] AuthApiException statusCode=${e.statusCode} code=${e.code} message=${e.message}');
+      }
+      rethrow;
+    }
 
     // Simpan email ke profile jika belum ada
     final id = _sb.auth.currentUser?.id;

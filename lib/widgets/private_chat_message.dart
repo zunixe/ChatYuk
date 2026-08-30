@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
@@ -15,6 +17,7 @@ import '../services/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
 import 'voice_bubble.dart';
 import 'link_preview.dart';
+import 'linkify_text.dart';
 import '../services/link_preview_service.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
@@ -79,6 +82,30 @@ class MessageTextWithTime extends StatelessWidget {
     this.trailing,
   });
 
+  List<TextSpan> _linkifySpans(String t, TextStyle base) {
+    final spans = <TextSpan>[];
+    int last = 0;
+    for (final m in RegExp(r'https?:\/\/[^\s]+').allMatches(t)) {
+      if (m.start > last) spans.add(TextSpan(text: t.substring(last, m.start), style: base));
+      final url = m.group(0)!;
+      spans.add(TextSpan(
+        text: url,
+        style: base.copyWith(color: AppTheme.primary, decoration: TextDecoration.underline),
+        recognizer: TapGestureRecognizer()..onTap = () async {
+          final uri = Uri.tryParse(url);
+          if (uri != null) {
+            // ignore: avoid_dynamic_calls
+            try { await launchUrl(uri, mode: LaunchMode.externalApplication); } catch (_) {}
+          }
+        },
+      ));
+      last = m.end;
+    }
+    if (last < t.length) spans.add(TextSpan(text: t.substring(last), style: base));
+    if (spans.isEmpty) spans.add(TextSpan(text: t, style: base));
+    return spans;
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -102,7 +129,7 @@ class MessageTextWithTime extends StatelessWidget {
             text: TextSpan(
               style: textStyle,
               children: [
-                TextSpan(text: text),
+                ..._linkifySpans(text, textStyle),
                 const TextSpan(text: '  '),
                 WidgetSpan(
                   alignment: PlaceholderAlignment.belowBaseline,
@@ -128,7 +155,7 @@ class MessageTextWithTime extends StatelessWidget {
               : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(text, style: textStyle),
+            RichText(text: TextSpan(style: textStyle, children: _linkifySpans(text, textStyle))),
             const SizedBox(height: 3),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -363,11 +390,9 @@ class MessageBubble extends StatelessWidget {
                             if (msg.text.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
-                                child: Text(
+                                child: LinkifyText(
                                   msg.text,
-                                  style: AppText.body.copyWith(
-                                    color: AppTheme.textPrimary,
-                                  ),
+                                  style: AppText.body.copyWith(color: AppTheme.textPrimary),
                                 ),
                               ),
                           ],

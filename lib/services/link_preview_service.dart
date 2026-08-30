@@ -27,7 +27,7 @@ class LinkPreviewService {
     if (_cache.containsKey(url)) return _cache[url];
     try {
       final res = await http.get(Uri.parse(url), headers: {'User-Agent': 'Mozilla/5.0'}).timeout(const Duration(seconds: 5));
-      if (res.statusCode != 200) return null;
+      if (res.statusCode != 200) throw Exception('status ${res.statusCode}');
       final html = res.body;
       String getMeta(String prop) {
         final r1 = RegExp('<meta[^>]+property=["\']$prop["\'][^>]+content=["\']([^"\']+)["\']', caseSensitive: false);
@@ -44,16 +44,20 @@ class LinkPreviewService {
       String title = getMeta('og:title');
       if (title.isEmpty) {
         final t = RegExp(r'<title[^>]*>([^<]+)</title>', caseSensitive: false).firstMatch(html);
-        title = t?.group(1)?.trim() ?? url;
+        title = t?.group(1)?.trim() ?? '';
       }
+      if (title.isEmpty) title = Uri.tryParse(url)?.host ?? url;
       final desc = getMeta('og:description').isNotEmpty ? getMeta('og:description') : getName('description');
       final img = getMeta('og:image');
       final site = getMeta('og:site_name');
-      final data = LinkPreviewData(url: url, title: title, description: desc, image: img, siteName: site);
+      final data = LinkPreviewData(url: url, title: title, description: desc, image: img, siteName: site.isNotEmpty ? site : Uri.tryParse(url)?.host ?? '');
       _cache[url] = data;
       return data;
     } catch (_) {
-      return null;
+      final host = Uri.tryParse(url)?.host ?? url;
+      final fallback = LinkPreviewData(url: url, title: host, siteName: host);
+      _cache[url] = fallback;
+      return fallback;
     }
   }
 }
