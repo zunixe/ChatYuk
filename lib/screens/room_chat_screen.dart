@@ -143,8 +143,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   // ── Private room v2 ──
 
   Future<void> _initPrivate() async {
+    debugPrint('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
     try {
       _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
+      debugPrint('[BDBG] myRole=$_myRole isPrivate=${widget.room.isPrivate}');
       if (canModerate) {
         try {
           final req = await PrivateRoomService.instance
@@ -154,16 +156,22 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       await _refreshLiveUid();
       try {
-        final b = await PrivateRoomService.instance.listBroadcasters(widget.room.id);
-        _isGrantedBroadcast = b.any((e) => '${e['user_id']}' == _auth.uid) || _liveUid == _auth.uid;
-      } catch (_) {}
+        final granted = await PrivateRoomService.instance.myBroadcastGranted(widget.room.id);
+        _isGrantedBroadcast = granted || _liveUid == _auth.uid;
+        debugPrint('[BDBG] init granted=$_isGrantedBroadcast live=$_liveUid');
+      } catch (e) {
+        debugPrint('[BDBG] init myBroadcastGranted error: $e');
+      }
       _listenRoomLive();
       _livePoll?.cancel();
       _livePoll = Timer.periodic(const Duration(seconds: 5), (_) {
         _refreshLiveUid();
         _refreshGrant();
+        _ensureViewerSession();
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[BDBG] initPrivate ERROR: $e');
+    }
     if (!mounted) return;
     setState(() {});
   }
@@ -183,11 +191,15 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: widget.room.id),
         callback: (payload) {
           final live = payload.newRecord['live_uid']?.toString();
+          debugPrint('[BDBG] realtime rooms update live=$live current=$_liveUid');
           if (live != _liveUid) {
-            setState(() => _liveUid = (live != null && live.isNotEmpty) ? live : null);
-            _refreshGrant();
-            _syncBroadcastSession();
+            _liveUid = (live != null && live.isNotEmpty) ? live : null;
+            setState(() {});
           }
+          // Selalu sync — kalau live_uid sama dengan sebelumnya (broadcast
+          // restart), viewer tetap harus mulai sesi.
+          _refreshGrant();
+          _syncBroadcastSession();
         },
       );
       ch.subscribe();
@@ -197,15 +209,34 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   Future<void> _refreshGrant() async {
     try {
-      final b = await PrivateRoomService.instance.listBroadcasters(widget.room.id);
-      final g = b.any((e) => '${e['user_id']}' == _auth.uid) || _liveUid == _auth.uid;
+      final granted = await PrivateRoomService.instance.myBroadcastGranted(widget.room.id);
+      final g = granted || _liveUid == _auth.uid;
+      debugPrint('[BDBG] refreshGrant granted=$granted live=$_liveUid uid=${_auth.uid} g=$g');
       if (mounted && g != _isGrantedBroadcast) setState(() => _isGrantedBroadcast = g);
+    } catch (e) {
+      debugPrint('[BDBG] refreshGrant error: $e');
+    }
+  }
+
+  /// Pastikan viewer session jalan kalau ada orang lain yang broadcast.
+  /// Menutup celah: live_uid tidak berubah (broadcast restart) atau event
+  /// realtime terlewat → tanpa ini viewer harus keluar-masuk room dulu.
+  Future<void> _ensureViewerSession() async {
+    if (!isPrivateRoom || !mounted) return;
+    if (_liveUid == null || _liveUid == _auth.uid) return;
+    if (_broadcastSession != null && !_broadcastSession!.isBroadcaster) return;
+    try {
+      final cnt = await PrivateRoomService.instance.broadcastCount(widget.room.id);
+      if (!mounted) return;
+      if (cnt == 0) return;
+      unawaited(_startViewerSession());
     } catch (_) {}
   }
 
   Future<void> _refreshLiveUid() async {
     final row = await RoomService().fetchRoomById(widget.room.id);
     final live = row?['live_uid']?.toString();
+    debugPrint('[BDBG] refreshLiveUid fetched=$live current=$_liveUid');
     if (!mounted) return;
     if (live == _liveUid) return;
     setState(() {
@@ -2086,8 +2117,8 @@ class _ChatInputState extends State<_ChatInput> {
                         )
                       : SizedBox(
                           key: const ValueKey('send'),
-                          width: 44,
-                          height: 44,
+                          width: 40,
+                          height: 40,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,

@@ -2306,11 +2306,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                   child: hasText
                                       ? SizedBox(
                                           key: const ValueKey('send'),
-                                          width: 48,
-                                          height: 48,
+                                          width: 40,
+                                          height: 40,
                                           child: IconButton(
                                             onPressed: _send,
-                                            icon: const Icon(Icons.send_rounded, size: 22),
+                                            icon: const Icon(Icons.send_rounded, size: 20),
                                             color: Colors.white,
                                             padding: EdgeInsets.zero,
                                             style: IconButton.styleFrom(backgroundColor: AppTheme.primary, shape: const CircleBorder()),
