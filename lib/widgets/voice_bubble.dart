@@ -83,12 +83,9 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     final progress = _dur.inMilliseconds == 0 ? 0.0 : _pos.inMilliseconds / _dur.inMilliseconds;
     final displayDur = _playing ? _dur - _pos : Duration(milliseconds: widget.durationMs);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: widget.isMe ? AppTheme.primary.withValues(alpha: 0.15) : AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.divider, width: 0.5),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      // Transparan — biar menyatu dengan bubble chat, hanya tombol bulat yang terlihat
+      color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
@@ -101,6 +98,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
                 child: Container(
                   width: 32,
                   height: 32,
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
                   child: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 20),
                 ),
