@@ -529,6 +529,7 @@ class S {
   // ── Errors / Generic ──
   String get btnCancel => isId ? 'Batal' : 'Cancel';
   String get privateRoomsStopBroadcast => isId ? 'Hentikan broadcast' : 'Stop broadcast';
+  String get privateRoomsStartBroadcast => isId ? 'Mulai broadcast' : 'Start broadcast';
 
   String get roomActionHandRaise => isId ? 'Angkat tangan' : 'Raise hand';
 
@@ -541,6 +542,7 @@ class S {
   String get privateRoomsPendingQueue => isId ? 'Menunggu Persetujuan' : 'Pending Approvals';
 
   String get privateRoomsTitle => isId ? 'Room Privat' : 'Private Rooms';
+  String get privateRoomNeedApproval => isId ? 'Menunggu persetujuan admin untuk mengirim pesan' : 'Waiting for admin approval to send messages';
   String get roomBroadcastFull =>
       isId ? 'Sudah 4 broadcaster (maksimal)' : 'Broadcast full (4/4)';
   String get roomBroadcastCapHint =>
