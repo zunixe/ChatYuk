@@ -2304,16 +2304,28 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                     child: FadeTransition(opacity: anim, child: child),
                                   ),
                                   child: hasText
-                                      ? SizedBox(
+                                      ? GestureDetector(
                                           key: const ValueKey('send'),
-                                          width: 40,
-                                          height: 40,
-                                          child: IconButton(
-                                            onPressed: _send,
-                                            icon: const Icon(Icons.send_rounded, size: 20),
-                                            color: Colors.white,
-                                            padding: EdgeInsets.zero,
-                                            style: IconButton.styleFrom(backgroundColor: AppTheme.primary, shape: const CircleBorder()),
+                                          onTap: _send,
+                                          child: Container(
+                                            width: 40,
+                                            height: 40,
+                                            alignment: Alignment.center,
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.primary,
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: AppTheme.primary.withValues(alpha: 0.4),
+                                                  blurRadius: 10,
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Icon(
+                                              Icons.send_rounded,
+                                              size: 20,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         )
                                       : MicRecordButton(

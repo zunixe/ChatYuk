@@ -141,6 +141,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   // ── Private room v2 ──
+  bool _roleChecked = false;
 
   Future<void> _initPrivate() async {
     debugPrint('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
@@ -172,6 +173,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     } catch (e) {
       debugPrint('[BDBG] initPrivate ERROR: $e');
     }
+    _roleChecked = true;
     if (!mounted) return;
     setState(() {});
   }
@@ -1005,7 +1007,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       ),
       body: Column(
         children: [
-          if (isPrivateRoom && _myRole == null)
+          // Banner hanya setelah role selesai dicek — mencegah blink
+          // "menunggu persetujuan" di awal load untuk member biasa.
+          if (isPrivateRoom && _roleChecked && _myRole == null)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2115,39 +2119,27 @@ class _ChatInputState extends State<_ChatInput> {
                           onLongPressCancel: _cancelVoiceRecord,
                           size: 40,
                         )
-                      : SizedBox(
+                      : GestureDetector(
                           key: const ValueKey('send'),
-                          width: 40,
-                          height: 40,
-                          child: DecoratedBox(
+                          onTap: widget.onSend,
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            alignment: Alignment.center,
                             decoration: BoxDecoration(
+                              color: AppTheme.primary,
                               shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  AppTheme.primaryDark,
-                                  AppTheme.primary,
-                                  AppTheme.accent,
-                                ],
-                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.primary.withValues(alpha: 0.35),
+                                  color: AppTheme.primary.withValues(alpha: 0.4),
                                   blurRadius: 10,
-                                  offset: const Offset(0, 3),
                                 ),
                               ],
                             ),
-                            child: IconButton(
-                              onPressed: widget.onSend,
-                              icon: const Icon(Icons.send_rounded, size: 20),
+                            child: const Icon(
+                              Icons.send_rounded,
+                              size: 20,
                               color: Colors.white,
-                              padding: EdgeInsets.zero,
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                shape: const CircleBorder(),
-                              ),
                             ),
                           ),
                         ),
