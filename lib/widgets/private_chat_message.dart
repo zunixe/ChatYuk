@@ -290,7 +290,14 @@ class MessageBubble extends StatelessWidget {
                           ),
                         ),
                       if (msg.type == 'voice' && msg.imageData.isNotEmpty)
-                        VoiceBubble(path: msg.imageData, durationMs: msg.durationMs ?? 0, isMe: isMe)
+                        VoiceBubble(
+                          path: msg.imageData,
+                          durationMs: msg.durationMs ?? 0,
+                          isMe: isMe,
+                          timeStr: timeStr,
+                          isPending: isPending,
+                          isRead: isRead,
+                        )
                       else if (msg.type == 'image' && msg.imageData.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
