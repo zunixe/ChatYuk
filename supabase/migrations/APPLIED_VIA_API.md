@@ -148,6 +148,12 @@
 - **Isi:** Revert drop realtime — kembalikan private_messages, room_presence, room_signals, call_signals ke supabase_realtime (client belum migrasi ke broadcast, drop bikin delay 30s)
 - **Verifikasi:** `select tablename from pg_publication_tables where pubname='supabase_realtime';` → 20 rows termasuk 4 tabel tsb
 
+## 2026-09-01 — 20260901050000_fix_age_check.sql
+
+- **Status:** SUDAH TERAPPLY via Management API pada 2026-09-01.
+- **Isi:** `profiles_age_18_check` dilonggarkan — allow `age=0` untuk user baru Google (sebelumnya hanya `is null` atau `>=18`, insert age 0 gagal 23514 → Google Sign-In 400)
+- **Verifikasi:** `insert into profiles (id, age) values (gen_random_uuid(), 0)` → sukses
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
