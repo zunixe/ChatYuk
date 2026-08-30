@@ -33,6 +33,8 @@ import '../widgets/private_chat_message.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/voice_record_overlay.dart';
 import '../widgets/mic_record_button.dart';
+import '../widgets/link_preview.dart';
+import '../services/link_preview_service.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
@@ -1436,6 +1438,7 @@ class _MessageBubble extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _replyQuote(context),
+        if (LinkPreviewService.instance.extractUrl(msg.text) != null) LinkPreview(text: msg.text),
         MessageTextWithTime(
           text: msg.text,
           timeStr: timeStr,
@@ -1452,6 +1455,18 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    if (msg.isDeleted) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            Text(s.messageDeleted, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary, fontStyle: FontStyle.italic)),
+          ],
+        ),
+      );
+    }
     final timeStr = DateFormat.Hm().format(msg.timestamp.toLocal());
 
     // Pesan sendiri: biru muda (sama private), rata kanan, tanpa avatar
@@ -1804,7 +1819,7 @@ class _ChatInputState extends State<_ChatInput> {
                 ),
               ),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 SizedBox(
                   width: 40,
