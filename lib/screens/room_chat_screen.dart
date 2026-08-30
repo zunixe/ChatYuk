@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
@@ -152,9 +153,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       try {
         final b = await PrivateRoomService.instance.listBroadcasters(widget.room.id);
-        _isGrantedBroadcast = b.any((e) => '${e['user_id']}' == _auth.uid);
+        _isGrantedBroadcast = b.any((e) => '${e['user_id']}' == _auth.uid) || _liveUid == _auth.uid;
       } catch (_) {}
       await _refreshLiveUid();
+      _listenRoomLive();
       _livePoll?.cancel();
       _livePoll = Timer.periodic(const Duration(seconds: 5), (_) {
         _refreshLiveUid();
@@ -165,10 +167,37 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     setState(() {});
   }
 
+  RealtimeChannel? _roomLiveChannel;
+
+  void _listenRoomLive() {
+    try {
+      _roomLiveChannel?.unsubscribe();
+    } catch (_) {}
+    try {
+      final ch = Supabase.instance.client.channel('room-live-${widget.room.id}');
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'rooms',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: widget.room.id),
+        callback: (payload) {
+          final live = payload.newRecord['live_uid']?.toString();
+          if (live != _liveUid) {
+            setState(() => _liveUid = (live != null && live.isNotEmpty) ? live : null);
+            _refreshGrant();
+            _syncBroadcastSession();
+          }
+        },
+      );
+      ch.subscribe();
+      _roomLiveChannel = ch;
+    } catch (_) {}
+  }
+
   Future<void> _refreshGrant() async {
     try {
       final b = await PrivateRoomService.instance.listBroadcasters(widget.room.id);
-      final g = b.any((e) => '${e['user_id']}' == _auth.uid);
+      final g = b.any((e) => '${e['user_id']}' == _auth.uid) || _liveUid == _auth.uid;
       if (mounted && g != _isGrantedBroadcast) setState(() => _isGrantedBroadcast = g);
     } catch (_) {}
   }
@@ -371,6 +400,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
     _livePoll?.cancel();
+    try { _roomLiveChannel?.unsubscribe(); } catch (_) {}
     unawaited(_broadcastSession?.stop());
     if (activeChatId.value == widget.room.id) {
       activeChatId.value = null;
