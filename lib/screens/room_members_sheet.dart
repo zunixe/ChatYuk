@@ -283,19 +283,43 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      subtitle: Text(
-                        switch (m['role']) {
-                          'owner' => s.roomRoleOwner,
-                          'admin' => s.roomRoleAdmin,
-                          _ => s.roomRoleMember,
-                        },
-                        style: AppText.micro.copyWith(
-                          color: (m['role'] == 'owner' ||
-                                  m['role'] == 'admin')
-                              ? AppTheme.primary
-                              : AppTheme.textSecondary,
-                          fontWeight: FontWeight.w700,
-                        ),
+                       subtitle: Row(
+                        children: [
+                          Text(
+                            switch (m['role']) {
+                              'owner' => s.roomRoleOwner,
+                              'admin' => s.roomRoleAdmin,
+                              _ => s.roomRoleMember,
+                            },
+                            style: AppText.micro.copyWith(
+                              color: (m['role'] == 'owner' ||
+                                      m['role'] == 'admin')
+                                  ? AppTheme.primary
+                                  : AppTheme.textSecondary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          FutureBuilder<List<Map<String, dynamic>>>(
+                            future: PrivateRoomService.instance.listBroadcasters(widget.roomId),
+                            builder: (_, snap) {
+                              final isBroadcaster = (snap.data ?? []).any((e) => '${e['user_id']}' == '${m['user_id']}');
+                              if (!isBroadcaster) return const SizedBox.shrink();
+                              return Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.live_tv_rounded, size: 10, color: Colors.red),
+                                    SizedBox(width: 4),
+                                    Text(s.privateRoomsLiveNow, style: AppText.micro.copyWith(color: Colors.red, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                       trailing: _memberActions(m),
                     ),

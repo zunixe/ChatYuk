@@ -530,6 +530,7 @@ class S {
   String get btnCancel => isId ? 'Batal' : 'Cancel';
   String get privateRoomsStopBroadcast => isId ? 'Hentikan broadcast' : 'Stop broadcast';
   String get privateRoomsStartBroadcast => isId ? 'Mulai broadcast' : 'Start broadcast';
+  String get privateRoomsLiveNow => isId ? 'LIVE' : 'LIVE';
 
   String get roomActionHandRaise => isId ? 'Angkat tangan' : 'Raise hand';
 

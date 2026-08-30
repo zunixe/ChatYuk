@@ -821,6 +821,27 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     ),
                   ),
                   const SizedBox(height: 4),
+                  // Nama user sendiri + verified badge (seperti profile screen)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        auth.profile?.nickname ?? '-',
+                        style: AppText.headline.copyWith(
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      if (auth.profile?.isRegistered == true) ...[
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.verified,
+                          size: 18,
+                          color: Color(0xFF4A90E2),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     child: Row(

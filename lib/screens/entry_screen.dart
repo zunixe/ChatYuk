@@ -165,8 +165,9 @@ class _EntryScreenState extends State<EntryScreen> {
         // tidak perlu navigasi tambahan (EntryScreen adalah home).
       }
       // 'exists' — profile sudah ada, _AuthGate handle navigasi otomatis
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[GOOGLE] signInWithGoogle error: $e');
+      debugPrint('[GOOGLE] stack: $st');
       if (mounted) {
         ScaffoldMessenger.of(
           context,

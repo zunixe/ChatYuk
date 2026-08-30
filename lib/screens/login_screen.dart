@@ -299,8 +299,9 @@ class _LoginScreenState extends State<LoginScreen> {
         // supaya halaman utama (dari _AuthGate) terlihat.
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[GOOGLE] login signInWithGoogle error: $e');
+      debugPrint('[GOOGLE] stack: $st');
       _snack('${s.errGoogleSignIn}$e');
     }
     if (mounted) setState(() => _googleLoading = false);
