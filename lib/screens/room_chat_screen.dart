@@ -5,8 +5,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
 import '../config/theme.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
@@ -26,6 +30,8 @@ import 'room_members_sheet.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
+import '../widgets/voice_bubble.dart';
+import '../widgets/voice_record_overlay.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
@@ -375,6 +381,50 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   bool _isSending = false;
+
+  Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
+    final auth = context.read<AuthProvider>();
+    final chat = context.read<ChatProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
+    try {
+      final f = File(filePath);
+      if (!await f.exists()) return;
+      final bytes = await f.readAsBytes();
+      final storagePath = await StoragePhotoService.instance.uploadVoice(
+        chatId: 'room_${widget.room.id}',
+        bytes: bytes,
+      );
+      if (storagePath == null || storagePath.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${context.read<LocaleProvider>().s.errSendFailed}upload')),
+          );
+        }
+        return;
+      }
+      await chat.sendRoomMessage(
+        roomId: widget.room.id,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: '',
+        type: 'voice',
+        imageData: storagePath,
+        durationMs: durationMs,
+      );
+      try { await f.delete(); } catch (_) {}
+      _scrollToBottom();
+    } catch (e) {
+      debugPrint('[RoomVoice] send error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${context.read<LocaleProvider>().s.errSendFailed}$e')),
+        );
+      }
+    }
+  }
 
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
@@ -880,6 +930,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               setState(() => _showAttachRow = false);
               _sendViewOncePhoto();
             },
+            onSendVoice: _sendVoiceMessage,
             pendingPhotoBase64: _pendingPhotoBase64,
             onCancelPhoto: _pendingPhotoBase64 != null
                 ? () => setState(() => _pendingPhotoBase64 = null)
@@ -1209,6 +1260,9 @@ class _MessageBubble extends StatelessWidget {
     required bool alignRight,
   }) {
     final chatKey = 'room_$roomId';
+    if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
+      return VoiceBubble(path: msg.imageData, durationMs: msg.durationMs ?? 0, isMe: isMe);
+    }
     if (msg.type == 'image' && msg.imageData.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -1466,6 +1520,7 @@ class _ChatInput extends StatefulWidget {
   final VoidCallback onSendViewOnce;
   final String? pendingPhotoBase64;
   final VoidCallback? onCancelPhoto;
+  final void Function(String filePath, int durationMs)? onSendVoice;
   const _ChatInput({
     required this.controller,
     required this.onSend,
@@ -1476,6 +1531,7 @@ class _ChatInput extends StatefulWidget {
     required this.onSendViewOnce,
     this.pendingPhotoBase64,
     this.onCancelPhoto,
+    this.onSendVoice,
   });
 
   @override
@@ -1484,6 +1540,56 @@ class _ChatInput extends StatefulWidget {
 
 class _ChatInputState extends State<_ChatInput> {
   Uint8List? _decodedPhoto;
+  final _record = AudioRecorder();
+  bool _isRecordingVoice = false;
+  Timer? _voiceTimer;
+  int _voiceSeconds = 0;
+  OverlayEntry? _voiceOverlay;
+
+  Future<void> _startVoiceRecord() async {
+    final hasPerm = await Permission.microphone.request();
+    if (!hasPerm.isGranted) return;
+    try {
+      if (!await _record.hasPermission()) return;
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
+      await _record.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000), path: path);
+      setState(() { _isRecordingVoice = true; _voiceSeconds = 0; });
+      _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (_voiceSeconds >= 59) { _stopVoiceRecord(); return; }
+        setState(() => _voiceSeconds++);
+      });
+      _showVoiceOverlay();
+    } catch (_) {}
+  }
+
+  void _showVoiceOverlay() {
+    _voiceOverlay?.remove();
+    _voiceOverlay = OverlayEntry(builder: (_) => Positioned(bottom: 90, left: 16, right: 16, child: Material(color: Colors.transparent, child: VoiceRecordOverlay(onCancel: _cancelVoiceRecord, onSend: _stopVoiceRecord))));
+    Overlay.of(context).insert(_voiceOverlay!);
+  }
+
+  Future<void> _stopVoiceRecord() async {
+    _voiceTimer?.cancel();
+    _voiceOverlay?.remove(); _voiceOverlay = null;
+    if (!_isRecordingVoice) return;
+    final path = await _record.stop();
+    setState(() => _isRecordingVoice = false);
+    if (path == null) return;
+    final f = File(path);
+    if (!await f.exists()) return;
+    final bytes = await f.readAsBytes();
+    if (bytes.length < 2000) return;
+    final ms = _voiceSeconds * 1000;
+    widget.onSendVoice?.call(path, ms);
+  }
+
+  void _cancelVoiceRecord() {
+    _voiceTimer?.cancel();
+    _voiceOverlay?.remove(); _voiceOverlay = null;
+    _record.cancel();
+    setState(() => _isRecordingVoice = false);
+  }
 
   @override
   void initState() {
@@ -1501,6 +1607,10 @@ class _ChatInputState extends State<_ChatInput> {
   @override
   void dispose() {
     widget.controller.removeListener(_onChanged);
+    _voiceTimer?.cancel();
+    _voiceOverlay?.remove();
+    _voiceOverlay = null;
+    _record.dispose();
     super.dispose();
   }
 
@@ -1647,7 +1757,7 @@ class _ChatInputState extends State<_ChatInput> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 2),
+                const SizedBox(width: 8),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
                   switchInCurve: Curves.easeOut,
@@ -1659,7 +1769,28 @@ class _ChatInputState extends State<_ChatInput> {
                     child: FadeTransition(opacity: anim, child: child),
                   ),
                   child: widget.controller.text.trim().isEmpty && _decodedPhoto == null
-                      ? const SizedBox(width: 0, key: ValueKey('empty'))
+                      ? SizedBox(
+                          key: const ValueKey('mic'),
+                          width: 48,
+                          height: 48,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              if (_isRecordingVoice) {
+                                _stopVoiceRecord();
+                              } else {
+                                _startVoiceRecord();
+                              }
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: _isRecordingVoice ? Colors.red : AppTheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(_isRecordingVoice ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 22),
+                            ),
+                          ),
+                        )
                       : SizedBox(
                           key: const ValueKey('send'),
                           width: 44,

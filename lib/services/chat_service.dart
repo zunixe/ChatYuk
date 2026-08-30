@@ -113,6 +113,28 @@ class ChatService {
     return b64;
   }
 
+  /// Foto masih perlu diisi: imageData kosong ATAU masih path storage
+  /// (belum ter-download ke base64 lokal).
+  static bool _needsPhotoFill(MessageModel m) {
+    if (m.imageData.isEmpty) return true;
+    return StoragePhotoService.instance.isPath(m.imageData) ||
+        StoragePhotoService.instance.isVoicePath(m.imageData);
+  }
+
+  /// Unduh audio voice message ke cache lokal (base64 via PhotoCache) —
+  /// dipakai VoiceBubble untuk play offline tanpa fetch ulang.
+  Future<void> _downloadVoiceToCache(String cacheKey, MessageModel msg) async {
+    try {
+      if (msg.imageData.isEmpty) return;
+      if (!StoragePhotoService.instance.isVoicePath(msg.imageData)) return;
+      final existing = await PhotoCache.instance.load(cacheKey, msg.id);
+      if (existing != null && existing.isNotEmpty) return;
+      await PhotoCache.instance.save(cacheKey, msg.id, msg.imageData);
+    } catch (e) {
+      debugPrint('[ChatService] voice cache ${msg.id}: $e');
+    }
+  }
+
   // ── Room Chat ──
 
   ChatMessageStream getRoomMessages(String roomId) {
@@ -288,11 +310,13 @@ class ChatService {
           final ids = batch.map((m) => m.id).toList();
           final rows = await _sb
               .from(table)
-              .select('id,image_data')
+              .select('id,image_data,image_path')
               .inFilter('id', ids);
           final byId = {
             for (final r in rows)
-              '${r['id']}': (r['image_data'] as String? ?? ''),
+              '${r['id']}': (r['image_data'] as String? ?? '').isNotEmpty
+                  ? (r['image_data'] as String? ?? '')
+                  : (r['image_path'] as String? ?? ''),
           };
           // Download path storage dibatasi paralelnya (4) supaya tidak
           // membuka banyak koneksi sekaligus.
@@ -322,7 +346,7 @@ class ChatService {
               );
               if (controller.isClosed) return;
               final idx = _current.indexWhere((x) => x.id == m.id);
-              if (idx >= 0 && _current[idx].imageData.isEmpty) {
+              if (idx >= 0 && _needsPhotoFill(_current[idx])) {
                 _current[idx] = _current[idx].copyWith(
                   imageData: thumb ?? data,
                 );
@@ -371,7 +395,7 @@ class ChatService {
               continue;
             }
             final idx = _current.indexWhere((x) => x.id == m.id);
-            if (idx >= 0 && _current[idx].imageData.isEmpty) {
+            if (idx >= 0 && _needsPhotoFill(_current[idx])) {
               _current[idx] = _current[idx].copyWith(imageData: data);
               controller.add(List.unmodifiable(_current));
               scheduleCacheSave();
@@ -531,7 +555,8 @@ class ChatService {
           // pakai thumb (decode cepat, ala WhatsApp). Kalau thumb gagal dibuat,
           // fallback ke imageData penuh supaya gambar tetap muncul (tidak spinner
           // selamanya). Full-res tersimpan di PhotoCache untuk fullscreen.
-          if (msg.imageData.isNotEmpty) {
+          // VOICE: jangan proses sebagai image — path m4a langsung dipakai VoiceBubble.
+          if (msg.imageData.isNotEmpty && msg.type != 'voice') {
             try {
               var data = msg.imageData;
               // PATH storage → download dari bucket sebelum dibuat thumbnail.
@@ -555,6 +580,9 @@ class ChatService {
               msg.type == 'view_once' ||
               msg.type == 'view_once_expired') {
             queuePhotoDownload(msg);
+          } else if (msg.type == 'voice') {
+            // Voice: unduh audio ke cache lokal via PhotoCache (tanpa thumbnail)
+            unawaited(_downloadVoiceToCache(cacheKey, msg));
           }
           // Sisipkan di posisi kronologis yang benar (ascending by timestamp),
           // bukan selalu di akhir — pesan realtime bisa tiba tidak urut
@@ -726,10 +754,12 @@ class ChatService {
         if (data == null) {
           final row = await _sb
               .from(table)
-              .select('image_data')
+              .select('image_data,image_path')
               .eq('id', m.id)
               .maybeSingle();
-          var full = row?['image_data'] as String? ?? '';
+          var full = (row?['image_data'] as String? ?? '').isNotEmpty
+              ? (row?['image_data'] as String? ?? '')
+              : (row?['image_path'] as String? ?? '');
           // PATH storage → download dari bucket sebelum disimpan ke cache.
           if (full.isNotEmpty && StoragePhotoService.instance.isPath(full)) {
             full = await StoragePhotoService.instance.download(full) ?? '';
