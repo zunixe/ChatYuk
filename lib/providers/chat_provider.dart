@@ -25,6 +25,7 @@ class ChatProvider extends ChangeNotifier {
     required String text,
     String type = 'text',
     String imageData = '',
+    int? durationMs,
   }) async {
     await _service.sendRoomMessage(
       roomId: roomId,
@@ -34,6 +35,7 @@ class ChatProvider extends ChangeNotifier {
       text: text,
       type: type,
       imageData: imageData,
+      durationMs: durationMs,
     );
   }
 
@@ -110,6 +112,7 @@ class ChatProvider extends ChangeNotifier {
     required String text,
     String type = 'text',
     String imageData = '',
+    int? durationMs,
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
@@ -122,6 +125,7 @@ class ChatProvider extends ChangeNotifier {
       text: text,
       type: type,
       imageData: imageData,
+      durationMs: durationMs,
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,

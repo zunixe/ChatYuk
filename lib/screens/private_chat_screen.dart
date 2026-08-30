@@ -743,6 +743,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final f = File(path);
     if (!await f.exists()) return;
     final bytes = await f.readAsBytes();
+    final recordedMs = _voiceSeconds * 1000;
     if (bytes.length < 2000) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errVoiceTooShort)));
       return;
@@ -750,14 +751,37 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final chatId = widget.chatId;
     final storagePath = await StoragePhotoService.instance.uploadVoice(chatId: chatId, bytes: bytes);
     if (storagePath == null || storagePath.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${context.read<LocaleProvider>().s.errSendFailed}upload')));
       return;
     }
     final auth = context.read<AuthProvider>();
     final uid = auth.uid; final profile = auth.profile;
     if (uid == null || profile == null) return;
-    await context.read<ChatProvider>().sendPrivateMessage(chatId: chatId, senderId: uid, senderName: profile.nickname, senderGender: profile.gender, text: '', type: 'voice', imageData: storagePath);
-    try { await f.delete(); } catch (_) {}
+    // Optimistic: tampilkan bubble voice langsung
+    final optimistic = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
+      text: '',
+      type: 'voice',
+      imageData: storagePath,
+      timestamp: DateTime.now(),
+      durationMs: recordedMs,
+    );
+    setState(() => _pending.add(optimistic));
+    _scrollToBottom();
+    try {
+      await context.read<ChatProvider>().sendPrivateMessage(chatId: chatId, senderId: uid, senderName: profile.nickname, senderGender: profile.gender, text: '', type: 'voice', imageData: storagePath, durationMs: recordedMs);
+      try { await f.delete(); } catch (_) {}
+    } catch (e) {
+      debugPrint('[Voice] send error: $e');
+      if (mounted) {
+        setState(() => _pending.remove(optimistic));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${context.read<LocaleProvider>().s.errSendFailed}$e')));
+      }
+    }
   }
 
   void _cancelVoiceRecord() {
@@ -2279,13 +2303,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                           key: const ValueKey('mic'),
                                           width: 48,
                                           height: 48,
-                                          child: GestureDetector(
-                                            onLongPressStart: (_) => _startVoiceRecord(),
-                                            onLongPressEnd: (_) => _stopVoiceRecord(send: true),
-                                            onLongPressCancel: () => _cancelVoiceRecord(),
+                                          child: InkWell(
+                                            onTap: () {
+                                              if (_isRecordingVoice) {
+                                                _stopVoiceRecord(send: true);
+                                              } else {
+                                                _startVoiceRecord();
+                                              }
+                                            },
+                                            customBorder: const CircleBorder(),
                                             child: Container(
-                                              decoration: BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
-                                              child: const Icon(Icons.mic_rounded, color: Colors.white, size: 22),
+                                              decoration: BoxDecoration(
+                                                color: _isRecordingVoice ? Colors.red : AppTheme.primary,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(_isRecordingVoice ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 22),
                                             ),
                                           ),
                                         ),

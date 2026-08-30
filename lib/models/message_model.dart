@@ -48,13 +48,22 @@ class MessageModel {
       type: map['type'] ?? 'text',
       edited: map['edited'] == true,
       isDeleted: map['isDeleted'] == true,
-      imageData: map['imageData'] ?? map['voice_path'] ?? map['voicePath'] ?? map['image_path'] ?? '',
+      // imageData: base64 lama ATAU path storage (voicePath/imagePath).
+      // Pakai isNotEmpty (bukan ??) karena '' bukan null — path harus tetap terpakai.
+      imageData: _firstNonEmpty([map['imageData'], map['voicePath'], map['voice_path'], map['imagePath'], map['image_path']]),
       timestamp: parseDate(map['timestamp'] ?? map['createdAt']),
       repliedToId: map['repliedToId'] is String ? map['repliedToId'] : null,
       repliedToText: map['repliedToText'],
       repliedToSenderName: map['repliedToSenderName'],
       durationMs: (map['durationMs'] ?? map['duration_ms'] ?? map['duration']) is num ? (map['durationMs'] ?? map['duration_ms'] ?? map['duration'] as num).toInt() : null,
     );
+  }
+
+  static String _firstNonEmpty(List<dynamic> vals) {
+    for (final v in vals) {
+      if (v is String && v.isNotEmpty) return v;
+    }
+    return '';
   }
 
   Map<String, dynamic> toMap() {
