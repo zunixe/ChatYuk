@@ -35,6 +35,7 @@ import '../widgets/voice_bubble.dart';
 import '../widgets/voice_record_overlay.dart';
 import '../widgets/mic_record_button.dart';
 import '../widgets/composer_link_preview.dart';
+import '../widgets/linkify_text.dart';
 import '../widgets/link_preview.dart';
 import '../services/link_preview_service.dart';
 import 'private_chat_screen.dart';
@@ -151,11 +152,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           _pendingCount = req.length;
         } catch (_) {}
       }
+      await _refreshLiveUid();
       try {
         final b = await PrivateRoomService.instance.listBroadcasters(widget.room.id);
         _isGrantedBroadcast = b.any((e) => '${e['user_id']}' == _auth.uid) || _liveUid == _auth.uid;
       } catch (_) {}
-      await _refreshLiveUid();
       _listenRoomLive();
       _livePoll?.cancel();
       _livePoll = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -219,10 +220,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         _liveUid != _auth.uid;
 
     if (iAmLive) {
-      if (_broadcastSession == null ||
-          _broadcastSession!.isBroadcaster != true) {
-        unawaited(_startBroadcastSession());
-      }
+      // Jangan auto-start — biarkan user klik manual dari chip/broadcast button.
     } else if (someoneElse) {
       if (_broadcastSession == null || _broadcastSession!.isBroadcaster) {
         unawaited(_startViewerSession());
@@ -915,17 +913,33 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 onPressed: _raiseHand,
               ),
             if ((_liveUid == _auth.uid && !iAmBroadcasting) || (_liveUid == null && isGrantedBroadcast && !iAmBroadcasting))
-              IconButton(
-                tooltip: s.privateRoomsStartBroadcast,
-                icon: Icon(Icons.videocam_rounded, color: AppTheme.primary),
-                onPressed: () async {
-                  // Jika live_uid sudah saya, langsung start session; jika belum, request grant lalu start
+              GestureDetector(
+                onTap: () async {
                   if (_liveUid != _auth.uid) {
                     await PrivateRoomService.instance.startBroadcast(widget.room.id);
                     await _refreshLiveUid();
                   }
                   await _startBroadcastSession();
                 },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 16),
+                      const SizedBox(width: 4),
+                      Text(
+                        s.privateRoomsStartBroadcast,
+                        style: AppText.label.copyWith(color: AppTheme.primary),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             if (iAmBroadcasting)
               IconButton(
@@ -973,6 +987,29 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 ],
               ),
             ),
+          if (isPrivateRoom && isGrantedBroadcast && !iAmBroadcasting)
+            GestureDetector(
+              onTap: () async {
+                if (_liveUid != _auth.uid) {
+                  await PrivateRoomService.instance.startBroadcast(widget.room.id);
+                  await _refreshLiveUid();
+                }
+                await _startBroadcastSession();
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                color: AppTheme.primary.withValues(alpha: 0.12),
+                child: Row(
+                  children: [
+                    Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(s.privateRoomsStartBroadcast, style: AppText.bodySmall.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600))),
+                    Icon(Icons.chevron_right_rounded, color: AppTheme.primary, size: 18),
+                  ],
+                ),
+              ),
+            ),
           if (isPrivateRoom &&
               _liveUid != null &&
               _broadcastSession != null) ...[
@@ -981,9 +1018,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               isBroadcaster: iAmBroadcasting,
             ),
           ],
-          if (_showUsers)
+          // User list horizontal — private room selalu tampil, global room via toggle
+          if (isPrivateRoom || _showUsers)
             Container(
-              height: 120,
+              height: 90,
               color: AppTheme.bgCard,
               child: StreamBuilder<List<UserModel>>(
                 stream: _usersStream,
@@ -1001,7 +1039,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   }
                   return ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     itemCount: users.length,
                     itemBuilder: (_, i) => _UserChip(
                       user: users[i],
@@ -1532,6 +1570,14 @@ class _MessageBubble extends StatelessWidget {
               ],
             ),
           ),
+          if (msg.text.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: LinkifyText(
+                msg.text,
+                style: AppText.body.copyWith(color: _textColor),
+              ),
+            ),
         ],
       );
     }
