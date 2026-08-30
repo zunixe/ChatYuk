@@ -214,23 +214,20 @@ class _TimelineScreenState extends State<TimelineScreen>
                           : scope == 'following'
                           ? s.emptyFollowingHint
                           : s.emptyMineHint,
-                      // Postinganku: "Ketuk +" bisa diklik — sama seperti menu "+": anon
-                      // dapat popup lengkapi email, registered langsung composer.
-                      actionLabel: scope == 'mine' ? s.emptyTimelineCta : null,
-                      onAction: scope == 'mine'
-                          ? () {
-                              final auth = context.read<AuthProvider>();
-                              if (!(auth.profile?.isRegistered ?? false)) {
-                                showAnonPromptDialog(context);
-                                return;
-                              }
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const PostComposerScreen(),
-                                ),
-                              );
-                            }
-                          : null,
+                      // Semua tab: "Ketuk +" bisa diklik — seragam, anon popup, registered ke composer
+                      actionLabel: s.emptyTimelineCta,
+                      onAction: () {
+                        final auth = context.read<AuthProvider>();
+                        if (!(auth.profile?.isRegistered ?? false)) {
+                          showAnonPromptDialog(context);
+                          return;
+                        }
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const PostComposerScreen(),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],

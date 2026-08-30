@@ -150,6 +150,9 @@ class ChatService {
     String type = 'text',
     String imageData = '',
     int? durationMs,
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
   }) async {
     // Validasi tipe pesan
     if (!['text', 'image', 'view_once', 'voice'].contains(type)) {
@@ -174,7 +177,19 @@ class ChatService {
       if (type == 'voice') 'voice_path': imageData,
       if (type == 'voice' && durationMs != null) 'duration_ms': durationMs,
       if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
+      if (repliedToId != null) 'replied_to_id': repliedToId,
+      if (repliedToText != null) 'replied_to_text': repliedToText,
+      if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
     });
+  }
+
+  Future<bool> deleteRoomMessage(String messageId) async {
+    try {
+      await _sb.from('messages').update({'is_deleted': true}).eq('id', messageId);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── Private Chat ──
@@ -284,7 +299,7 @@ class ChatService {
     const privateCols =
         'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms';
     const roomCols =
-        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,image_path,voice_path,duration_ms';
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,replied_to_id,replied_to_text,replied_to_sender_name';
     const replyCols = 'replied_to_id,replied_to_text,replied_to_sender_name';
     final cols = isPrivate ? '$privateCols,$replyCols' : roomCols;
 

@@ -427,6 +427,41 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     }
   }
 
+  MessageModel? _replyingTo;
+
+  void _replyMessage(MessageModel msg) {
+    setState(() => _replyingTo = msg);
+  }
+
+  void _cancelReply() => setState(() => _replyingTo = null);
+
+  Future<void> _deleteMessage(MessageModel msg) async {
+    final ok = await context.read<ChatProvider>().deleteRoomMessage(msg.id);
+    if (ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pesan dihapus')));
+    }
+  }
+
+  void _onMessageLongPress(MessageModel msg) {
+    if (msg.isDeleted) return;
+    final s = context.read<LocaleProvider>().s;
+    final isMe = msg.senderId == context.read<AuthProvider>().uid;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(leading: Icon(Icons.reply, color: AppTheme.primary), title: Text(s.menuReply), onTap: () { Navigator.pop(context); _replyMessage(msg); }),
+            if (isMe) ListTile(leading: Icon(Icons.delete_outline, color: AppTheme.danger), title: Text(s.btnDelete, style: TextStyle(color: AppTheme.danger)), onTap: () { Navigator.pop(context); _deleteMessage(msg); }),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
     final hasPhoto = _pendingPhotoBase64 != null;
@@ -439,10 +474,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final profile = auth.profile;
     if (uid == null || profile == null) return;
 
+    final replying = _replyingTo;
     if (hasPhoto) {
       final photoB64 = _pendingPhotoBase64!;
       _msgCtrl.clear();
-      setState(() => _pendingPhotoBase64 = null);
+      setState(() {
+        _pendingPhotoBase64 = null;
+        _replyingTo = null;
+      });
       _isSending = true;
 
       final pp = context.read<PointsProvider>();
@@ -479,6 +518,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           text: text,
           type: 'image',
           imageData: path,
+          repliedToId: replying?.id,
+          repliedToText: replying?.text,
+          repliedToSenderName: replying?.senderName,
         );
         _scrollToBottom();
       } catch (e) {
@@ -495,7 +537,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       return;
     }
 
+    final reply = _replyingTo;
     _msgCtrl.clear();
+    setState(() => _replyingTo = null);
     _isSending = true;
 
     final pp = context.read<PointsProvider>();
@@ -520,6 +564,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         senderName: profile.nickname,
         senderGender: profile.gender,
         text: text,
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
       );
       if (pp.enabled) {
         pp.showPointsToast(
@@ -897,16 +944,20 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     if (item.dateLabel != null)
                       return DateChip(label: item.dateLabel!);
                     final m = item.msg!;
-                    return _MessageBubble(
-                      key: ValueKey(m.id),
-                      msg: m,
-                      isMe: m.senderId == auth.uid,
-                      color: Color(
-                        userColorPalette[colorHashForUid(m.senderId) %
-                            userColorPalette.length],
+                    final isMe = m.senderId == auth.uid;
+                    return GestureDetector(
+                      onLongPress: () => _onMessageLongPress(m),
+                      child: _MessageBubble(
+                        key: ValueKey(m.id),
+                        msg: m,
+                        isMe: isMe,
+                        color: Color(
+                          userColorPalette[colorHashForUid(m.senderId) %
+                              userColorPalette.length],
+                        ),
+                        roomId: widget.room.id,
+                        onTapUser: () => _onTapUser(m, auth),
                       ),
-                      roomId: widget.room.id,
-                      onTapUser: () => _onTapUser(m, auth),
                     );
                   },
                 );
@@ -914,6 +965,27 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             ),
           ),
 
+          if (_replyingTo != null)
+            Container(
+              color: AppTheme.bgCard,
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+              child: Row(
+                children: [
+                  Container(width: 3, height: 36, decoration: BoxDecoration(color: AppTheme.primary, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_replyingTo!.senderName, style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
+                        Text(_replyingTo!.text.isNotEmpty ? _replyingTo!.text : '[Foto]', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.bodySmall),
+                      ],
+                    ),
+                  ),
+                  IconButton(icon: const Icon(Icons.close, size: 18), onPressed: _cancelReply, color: AppTheme.textSecondary),
+                ],
+              ),
+            ),
           _ChatInput(
             controller: _msgCtrl,
             onSend: _send,
@@ -1255,6 +1327,26 @@ class _MessageBubble extends StatelessWidget {
       msg.type == 'view_once_expired';
 
   // Konten bubble: foto / view-once / teks — dipakai untuk pesan sendiri & orang lain.
+  Widget _replyQuote(BuildContext context) {
+    if (msg.repliedToText == null || msg.repliedToText!.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isMe ? Colors.white.withValues(alpha: 0.15) : AppTheme.bgScreen.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(left: BorderSide(color: AppTheme.primary, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(msg.repliedToSenderName ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.primary)),
+          Text(msg.repliedToText!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.bodySmall),
+        ],
+      ),
+    );
+  }
+
   Widget _content(
     BuildContext context,
     String timeStr, {
@@ -1262,41 +1354,53 @@ class _MessageBubble extends StatelessWidget {
   }) {
     final chatKey = 'room_$roomId';
     if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
-      return VoiceBubble(
-        path: msg.imageData,
-        durationMs: msg.durationMs ?? 0,
-        isMe: isMe,
-        timeStr: timeStr,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _replyQuote(context),
+          VoiceBubble(
+            path: msg.imageData,
+            durationMs: msg.durationMs ?? 0,
+            isMe: isMe,
+            timeStr: timeStr,
+          ),
+        ],
       );
     }
     if (msg.type == 'image' && msg.imageData.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            MessageImage(
-              imageData: msg.imageData,
-              chatKey: chatKey,
-              messageId: msg.id,
-            ),
-            Positioned(
-              right: 6,
-              bottom: 6,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(8),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _replyQuote(context),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                MessageImage(
+                  imageData: msg.imageData,
+                  chatKey: chatKey,
+                  messageId: msg.id,
                 ),
-                child: Text(
-                  timeStr,
-                  style: AppText.micro.copyWith(color: Colors.white),
+                Positioned(
+                  right: 6,
+                  bottom: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      timeStr,
+                      style: AppText.micro.copyWith(color: Colors.white),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
     if (msg.type == 'view_once' || msg.type == 'view_once_expired') {
@@ -1328,15 +1432,21 @@ class _MessageBubble extends StatelessWidget {
         ],
       );
     }
-    return MessageTextWithTime(
-      text: msg.text,
-      timeStr: timeStr,
-      textStyle: AppText.body.copyWith(color: _textColor),
-      timeStyle: AppText.micro.copyWith(
-        color: _textColor.withValues(alpha: 0.45),
-        fontWeight: FontWeight.w400,
-      ),
-      alignRight: alignRight,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _replyQuote(context),
+        MessageTextWithTime(
+          text: msg.text,
+          timeStr: timeStr,
+          textStyle: AppText.body.copyWith(color: _textColor),
+          timeStyle: AppText.micro.copyWith(
+            color: _textColor.withValues(alpha: 0.45),
+            fontWeight: FontWeight.w400,
+          ),
+          alignRight: alignRight,
+        ),
+      ],
     );
   }
 

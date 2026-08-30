@@ -26,6 +26,9 @@ class ChatProvider extends ChangeNotifier {
     String type = 'text',
     String imageData = '',
     int? durationMs,
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
   }) async {
     await _service.sendRoomMessage(
       roomId: roomId,
@@ -36,7 +39,14 @@ class ChatProvider extends ChangeNotifier {
       type: type,
       imageData: imageData,
       durationMs: durationMs,
+      repliedToId: repliedToId,
+      repliedToText: repliedToText,
+      repliedToSenderName: repliedToSenderName,
     );
+  }
+
+  Future<bool> deleteRoomMessage(String messageId) async {
+    return _service.deleteRoomMessage(messageId);
   }
 
   // Private chat
