@@ -30,6 +30,7 @@ import '../widgets/date_chip.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/voice_record_overlay.dart';
 import '../widgets/mic_record_button.dart';
+import '../widgets/composer_link_preview.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/chat_call_overlay.dart';
 import '../main.dart';
@@ -2195,6 +2196,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                               ),
                             ),
                           ),
+                        ComposerLinkPreview(controller: _msgCtrl),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [

@@ -33,6 +33,7 @@ import '../widgets/private_chat_message.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/voice_record_overlay.dart';
 import '../widgets/mic_record_button.dart';
+import '../widgets/composer_link_preview.dart';
 import '../widgets/link_preview.dart';
 import '../services/link_preview_service.dart';
 import 'private_chat_screen.dart';
@@ -431,6 +432,17 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   MessageModel? _replyingTo;
 
+  // LayerLink per pesan — anchor action bar (Balas / Hapus) tepat di atas bubble.
+  final Map<String, LayerLink> _msgLinks = {};
+  OverlayEntry? _actionBar;
+
+  LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
+
+  void _hideActionBar() {
+    _actionBar?.remove();
+    _actionBar = null;
+  }
+
   void _replyMessage(MessageModel msg) {
     setState(() => _replyingTo = msg);
   }
@@ -444,24 +456,66 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     }
   }
 
-  void _onMessageLongPress(MessageModel msg) {
+  void _onMessageLongPress(
+    LongPressStartDetails details,
+    MessageModel msg,
+    LayerLink link,
+  ) {
     if (msg.isDeleted) return;
+    _hideActionBar();
     final s = context.read<LocaleProvider>().s;
     final isMe = msg.senderId == context.read<AuthProvider>().uid;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.bgCard,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(leading: Icon(Icons.reply, color: AppTheme.primary), title: Text(s.menuReply), onTap: () { Navigator.pop(context); _replyMessage(msg); }),
-            if (isMe) ListTile(leading: Icon(Icons.delete_outline, color: AppTheme.danger), title: Text(s.btnDelete, style: TextStyle(color: AppTheme.danger)), onTap: () { Navigator.pop(context); _deleteMessage(msg); }),
-          ],
-        ),
+
+    Widget iconBtn(IconData icon, String tooltip, VoidCallback onTap, {bool danger = false}) {
+      return IconButton(
+        icon: Icon(icon, size: 20, color: danger ? AppTheme.danger : AppTheme.textPrimary),
+        tooltip: tooltip,
+        splashRadius: 20,
+        onPressed: () {
+          _hideActionBar();
+          onTap();
+        },
+      );
+    }
+
+    _actionBar = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _hideActionBar,
+              behavior: HitTestBehavior.translucent,
+              child: const SizedBox.expand(),
+            ),
+          ),
+          CompositedTransformFollower(
+            link: link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.topCenter,
+            followerAnchor: Alignment.bottomCenter,
+            offset: const Offset(0, -8),
+            child: Material(
+              color: AppTheme.bgCard,
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              shadowColor: Colors.black.withValues(alpha: 0.25),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    iconBtn(Icons.reply, s.menuReply, () => _replyMessage(msg)),
+                    if (isMe)
+                      iconBtn(Icons.delete_outline, s.btnDelete, () => _deleteMessage(msg), danger: true),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
+    Overlay.of(context).insert(_actionBar!);
   }
 
   Future<void> _send() async {
@@ -947,18 +1001,21 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                       return DateChip(label: item.dateLabel!);
                     final m = item.msg!;
                     final isMe = m.senderId == auth.uid;
-                    return GestureDetector(
-                      onLongPress: () => _onMessageLongPress(m),
-                      child: _MessageBubble(
-                        key: ValueKey(m.id),
-                        msg: m,
-                        isMe: isMe,
-                        color: Color(
-                          userColorPalette[colorHashForUid(m.senderId) %
-                              userColorPalette.length],
+                    return CompositedTransformTarget(
+                      link: _linkFor(m.id),
+                      child: GestureDetector(
+                        onLongPressStart: (d) => _onMessageLongPress(d, m, _linkFor(m.id)),
+                        child: _MessageBubble(
+                          key: ValueKey(m.id),
+                          msg: m,
+                          isMe: isMe,
+                          color: Color(
+                            userColorPalette[colorHashForUid(m.senderId) %
+                                userColorPalette.length],
+                          ),
+                          roomId: widget.room.id,
+                          onTapUser: () => _onTapUser(m, auth),
                         ),
-                        roomId: widget.room.id,
-                        onTapUser: () => _onTapUser(m, auth),
                       ),
                     );
                   },
@@ -1818,6 +1875,7 @@ class _ChatInputState extends State<_ChatInput> {
                   ),
                 ),
               ),
+            ComposerLinkPreview(controller: widget.controller),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
