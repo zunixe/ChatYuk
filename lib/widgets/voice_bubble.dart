@@ -8,7 +8,10 @@ class VoiceBubble extends StatefulWidget {
   final String path; // storage path voice/...
   final int durationMs;
   final bool isMe;
-  const VoiceBubble({super.key, required this.path, required this.durationMs, this.isMe = false});
+  final String timeStr;
+  final bool isPending;
+  final bool isRead;
+  const VoiceBubble({super.key, required this.path, required this.durationMs, this.isMe = false, this.timeStr = '', this.isPending = false, this.isRead = false});
 
   @override
   State<VoiceBubble> createState() => _VoiceBubbleState();
@@ -86,33 +89,56 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.divider, width: 0.5),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
-            onTap: _toggle,
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
-              child: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 20),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SliderTheme(
-                  data: SliderThemeData(trackHeight: 3, thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6), overlayShape: RoundSliderThumbShape(enabledThumbRadius: 10)),
-                  child: Slider(value: progress.clamp(0, 1), min: 0, max: 1, onChanged: (v) async {
-                    final seek = Duration(milliseconds: (_dur.inMilliseconds * v).toInt());
-                    await _player.seek(seek);
-                  }, activeColor: AppTheme.primary, inactiveColor: AppTheme.divider),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: _toggle,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
+                  child: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 20),
                 ),
-                Text(_fmt(displayDur), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 130,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SliderTheme(
+                      data: SliderThemeData(trackHeight: 3, thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6), overlayShape: RoundSliderThumbShape(enabledThumbRadius: 10)),
+                      child: Slider(value: progress.clamp(0, 1), min: 0, max: 1, onChanged: (v) async {
+                        final seek = Duration(milliseconds: (_dur.inMilliseconds * v).toInt());
+                        await _player.seek(seek);
+                      }, activeColor: AppTheme.primary, inactiveColor: AppTheme.divider),
+                    ),
+                    Text(_fmt(displayDur), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.timeStr.isNotEmpty)
+                Text(widget.timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary.withValues(alpha: 0.7))),
+              if (widget.isMe && widget.timeStr.isNotEmpty) ...[
+                const SizedBox(width: 3),
+                Icon(
+                  widget.isPending ? Icons.done : (widget.isRead ? Icons.done_all : Icons.done),
+                  size: 12,
+                  color: widget.isPending ? Colors.white38 : (widget.isRead ? const Color(0xFF7EC8FF) : Colors.white38),
+                ),
               ],
-            ),
+            ],
           ),
         ],
       ),

@@ -29,6 +29,7 @@ import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/voice_record_overlay.dart';
+import '../widgets/mic_record_button.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/chat_call_overlay.dart';
 import '../main.dart';
@@ -149,6 +150,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   // Hanya foto dengan timestamp setelah screen dibuka yang diproses, supaya
   // history lama tidak ikut menghapus pending.
   final Set<String> _confirmedPhotoIds = {};
+  final Set<String> _confirmedVoiceIds = {};
   late final DateTime _openedAt;
 
   @override
@@ -243,6 +245,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             setState(() {
               _pending.removeAt(idx);
             });
+          }
+        }
+      }
+      // Voice: FIFO sama seperti foto — tiap voice terkonfirmasi menghapus
+      // satu pending voice tertua supaya tidak dobel & urutan tetap benar.
+      for (final m in msgs) {
+        if (mySenderIds.contains(m.senderId) &&
+            m.type == 'voice' &&
+            m.timestamp.isAfter(_openedAt) &&
+            _confirmedVoiceIds.add(m.id)) {
+          final idx = _pending.indexWhere((p) => p.type == 'voice');
+          if (idx != -1) {
+            setState(() => _pending.removeAt(idx));
           }
         }
       }
@@ -2299,27 +2314,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                             style: IconButton.styleFrom(backgroundColor: AppTheme.primary, shape: const CircleBorder()),
                                           ),
                                         )
-                                      : SizedBox(
-                                          key: const ValueKey('mic'),
-                                          width: 48,
-                                          height: 48,
-                                          child: InkWell(
-                                            onTap: () {
-                                              if (_isRecordingVoice) {
-                                                _stopVoiceRecord(send: true);
-                                              } else {
-                                                _startVoiceRecord();
-                                              }
-                                            },
-                                            customBorder: const CircleBorder(),
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: _isRecordingVoice ? Colors.red : AppTheme.primary,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(_isRecordingVoice ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 22),
-                                            ),
-                                          ),
+                                      : MicRecordButton(
+                                          isRecording: _isRecordingVoice,
+                                          onTap: () => _stopVoiceRecord(send: true),
+                                          onLongPressStart: _startVoiceRecord,
+                                          onLongPressCancel: _cancelVoiceRecord,
+                                          size: 40,
                                         ),
                                 );
                               },

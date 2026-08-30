@@ -32,6 +32,7 @@ import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/voice_record_overlay.dart';
+import '../widgets/mic_record_button.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
@@ -1261,7 +1262,12 @@ class _MessageBubble extends StatelessWidget {
   }) {
     final chatKey = 'room_$roomId';
     if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
-      return VoiceBubble(path: msg.imageData, durationMs: msg.durationMs ?? 0, isMe: isMe);
+      return VoiceBubble(
+        path: msg.imageData,
+        durationMs: msg.durationMs ?? 0,
+        isMe: isMe,
+        timeStr: timeStr,
+      );
     }
     if (msg.type == 'image' && msg.imageData.isNotEmpty) {
       return ClipRRect(
@@ -1769,27 +1775,12 @@ class _ChatInputState extends State<_ChatInput> {
                     child: FadeTransition(opacity: anim, child: child),
                   ),
                   child: widget.controller.text.trim().isEmpty && _decodedPhoto == null
-                      ? SizedBox(
-                          key: const ValueKey('mic'),
-                          width: 48,
-                          height: 48,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () {
-                              if (_isRecordingVoice) {
-                                _stopVoiceRecord();
-                              } else {
-                                _startVoiceRecord();
-                              }
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: _isRecordingVoice ? Colors.red : AppTheme.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(_isRecordingVoice ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 22),
-                            ),
-                          ),
+                      ? MicRecordButton(
+                          isRecording: _isRecordingVoice,
+                          onTap: _stopVoiceRecord,
+                          onLongPressStart: _startVoiceRecord,
+                          onLongPressCancel: _cancelVoiceRecord,
+                          size: 40,
                         )
                       : SizedBox(
                           key: const ValueKey('send'),
