@@ -7,6 +7,7 @@ class NotificationPrefsService {
     'call',
     'chat',
     'online',
+    'broadcast',
     'timeline',
     'follower',
     'following',
@@ -46,6 +47,8 @@ class NotificationPrefsService {
         return get('chat');
       case 'online':
         return get('online');
+      case 'broadcast':
+        return get('broadcast');
       case 'timeline_post':
       case 'room':
         return get('timeline');
