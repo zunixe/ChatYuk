@@ -27,6 +27,7 @@ import 'screens/chats_screen.dart';
 import 'screens/post_composer_screen.dart';
 import 'widgets/anon_prompt_dialog.dart';
 import 'widgets/call_banner.dart';
+import 'widgets/skeleton_card.dart';
 
 class ChatYukApp extends StatelessWidget {
   const ChatYukApp({super.key});
@@ -163,18 +164,7 @@ class _AuthGateState extends State<_AuthGate> {
     _maybeScheduleAutoRetry(auth);
 
     if (auth.loading) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: AppTheme.primary),
-              SizedBox(height: 16),
-              Text(s.loading, style: TextStyle(color: AppTheme.textSecondary)),
-            ],
-          ),
-        ),
-      );
+      return const _AuthSkeletonScreen();
     }
 
     if (auth.error != null) {
@@ -463,6 +453,69 @@ class _BadgedIcon extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Skeleton loading saat auth check — meniru layout OnlineUsersScreen
+/// (avatar bulat + nama + filter row + list kartu) supaya transisi ke
+/// layar utama terasa mulus, tanpa flash putih/spinner.
+class _AuthSkeletonScreen extends StatelessWidget {
+  const _AuthSkeletonScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget box(double w, double h, {double r = 6, Color? color}) => Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: color ?? AppTheme.divider.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(r),
+      ),
+    );
+
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 14),
+            Center(
+              child: Container(
+                width: 92,
+                height: 92,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(child: box(140, 16)),
+            const SizedBox(height: 6),
+            Center(child: box(90, 11)),
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  Expanded(child: box(0, 52, r: 12)),
+                  const SizedBox(width: 12),
+                  Expanded(child: box(0, 52, r: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+                itemCount: 8,
+                itemBuilder: (_, __) => const SkeletonCard(),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

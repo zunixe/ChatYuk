@@ -19,6 +19,7 @@ import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../services/chat_service.dart';
 import '../services/location_service.dart';
+import '../widgets/skeleton_card.dart';
 import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
@@ -887,7 +888,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         ? ListView.builder(
                             padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
                             itemCount: 6,
-                            itemBuilder: (_, __) => const _SkeletonCard(),
+                            itemBuilder: (_, __) => const SkeletonCard(),
                           )
                         : users.isEmpty
                         ? Center(
@@ -1034,27 +1035,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SkeletonCard extends StatelessWidget {
-  const _SkeletonCard();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(color: AppTheme.bgCard, borderRadius: BorderRadius.circular(14)),
-      child: Row(children: [
-        Container(width: 40, height: 40, decoration: BoxDecoration(color: AppTheme.divider, shape: BoxShape.circle)),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(height: 14, width: 120, decoration: BoxDecoration(color: AppTheme.divider, borderRadius: BorderRadius.circular(6))),
-          const SizedBox(height: 6),
-          Container(height: 11, width: 180, decoration: BoxDecoration(color: AppTheme.divider.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(6))),
-        ])),
-      ]),
     );
   }
 }
