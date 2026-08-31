@@ -5,7 +5,12 @@ import '../config/theme.dart';
 class VoiceRecordOverlay extends StatefulWidget {
   final VoidCallback onCancel;
   final VoidCallback onSend;
-  const VoiceRecordOverlay({super.key, required this.onCancel, required this.onSend});
+  final String slideToCancelText;
+  const VoiceRecordOverlay(
+      {super.key,
+      required this.onCancel,
+      required this.onSend,
+      required this.slideToCancelText});
 
   @override
   State<VoiceRecordOverlay> createState() => VoiceRecordOverlayState();
@@ -49,7 +54,31 @@ class VoiceRecordOverlayState extends State<VoiceRecordOverlay> with SingleTicke
           const SizedBox(width: 10),
           Text(_fmt, style: AppText.bodyStrong.copyWith(color: Colors.red)),
           const SizedBox(width: 12),
-          Expanded(child: Row(children: List.generate(20, (i) => Expanded(child: Container(margin: EdgeInsets.symmetric(horizontal: 1), height: 6 + (i % 4) * 4.0, decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(2))))))),
+          Expanded(
+            flex: 3,
+            child: Row(
+                children: List.generate(
+                    20,
+                    (i) => Expanded(
+                        child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 1),
+                            height: 6 + (i % 4) * 4.0,
+                            decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(2)))))),
+          ),
+          const SizedBox(width: 12),
+          // Teks arahan geser kiri utk batal — area merah rekam
+          Expanded(
+            flex: 2,
+            child: Text(
+              widget.slideToCancelText,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.caption.copyWith(color: Colors.red),
+            ),
+          ),
           const SizedBox(width: 12),
           GestureDetector(onTap: widget.onCancel, child: Icon(Icons.close, color: AppTheme.textSecondary)),
           const SizedBox(width: 8),

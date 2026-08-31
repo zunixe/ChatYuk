@@ -700,13 +700,16 @@ class _MessageImageState extends State<MessageImage> {
 
   Future<void> _decode(int key) async {
     var data = widget.imageData;
+    debugPrint('[PHOTO-DBG] MessageImage ${widget.messageId} inLen=${data.length} isPath=${StoragePhotoService.instance.isPath(data)}');
     // PATH storage (belum base64) → download dulu. decodeImageB64 melempar
     // null untuk input non-base64, jadi jangan memanggilnya dengan path.
     if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
       data = await StoragePhotoService.instance.download(data) ?? '';
+      debugPrint('[PHOTO-DBG] MessageImage ${widget.messageId} downloaded len=${data.length}');
     }
     if (data.isEmpty) return;
     final decoded = await compute(decodeImageB64, data);
+    debugPrint('[PHOTO-DBG] MessageImage ${widget.messageId} decoded=${decoded != null && decoded.width > 0}');
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       // Decode gagal — jangan cache null (dipaksa `!` dulu bikin crash).
       return;

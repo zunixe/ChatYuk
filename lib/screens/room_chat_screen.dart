@@ -2040,7 +2040,6 @@ class _ChatInputState extends State<_ChatInput> {
   Uint8List? _decodedPhoto;
   final _record = AudioRecorder();
   bool _isRecordingVoice = false;
-  bool _isDraggingRecord = false;
   Timer? _voiceTimer;
   int _voiceSeconds = 0;
   OverlayEntry? _voiceOverlay;
@@ -2063,7 +2062,7 @@ class _ChatInputState extends State<_ChatInput> {
 
   void _showVoiceOverlay() {
     _voiceOverlay?.remove();
-    _voiceOverlay = OverlayEntry(builder: (_) => Positioned(bottom: 90, left: 16, right: 16, child: Material(color: Colors.transparent, child: VoiceRecordOverlay(onCancel: _cancelVoiceRecord, onSend: _stopVoiceRecord))));
+    _voiceOverlay = OverlayEntry(builder: (_) => Positioned(bottom: 90, left: 16, right: 16, child: Material(color: Colors.transparent, child: VoiceRecordOverlay(onCancel: _cancelVoiceRecord, onSend: _stopVoiceRecord, slideToCancelText: context.read<LocaleProvider>().s.hintSlideToCancel))));
     Overlay.of(context).insert(_voiceOverlay!);
   }
 
@@ -2189,43 +2188,12 @@ class _ChatInputState extends State<_ChatInput> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                if (_isRecordingVoice) ...[
-                  Expanded(
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 16),
-                          Icon(Icons.mic_rounded, color: Colors.red, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            _voiceSeconds < 60
-                                ? '${_voiceSeconds.toString().padLeft(2, '0')}s'
-                                : '${(_voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(_voiceSeconds % 60).toString().padLeft(2, '0')}',
-                            style: AppText.bodyStrong.copyWith(color: Colors.red),
-                          ),
-                          const Spacer(),
-                          Text(
-                            s.hintSlideToCancel,
-                            style: AppText.caption.copyWith(color: Colors.red.withValues(alpha: 0.6)),
-                          ),
-                          const SizedBox(width: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ] else ...[
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: IconButton(
-                      onPressed: () =>
-                        EmojiPickerSheet.show(context, widget.controller),
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: IconButton(
+                    onPressed: () =>
+                      EmojiPickerSheet.show(context, widget.controller),
                     icon: Icon(Icons.emoji_emotions_rounded, size: 22),
                     color: AppTheme.textSecondary,
                     padding: EdgeInsets.zero,
@@ -2233,120 +2201,150 @@ class _ChatInputState extends State<_ChatInput> {
                   ),
                 ),
                 SizedBox(width: 2),
-                  Expanded(
-                    child: Container(
-                      constraints: BoxConstraints(maxHeight: 132),
-                      decoration: BoxDecoration(
-                        color: AppTheme.bgCard,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: AppTheme.bgCard, width: 1),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          SizedBox(width: 16),
-                          Expanded(
-                            child: TextField(
-                              controller: widget.controller,
-                              style: AppText.body,
-                              decoration: InputDecoration(
-                                hintText: s.hintTypeMessage,
-                                hintStyle: AppText.body.copyWith(
-                                  color: AppTheme.textSecondary,
+                Expanded(
+                  child: Container(
+                    constraints: BoxConstraints(maxHeight: 132),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgCard,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: AppTheme.bgCard, width: 1),
+                    ),
+                    // Isi card di-swap: ketik pesan ↔ rekam voice.
+                    // Ukuran & posisi card 100% identik karena
+                    // container-nya yang sama. Tinggi 48 = tinggi
+                    // konten ketik (icon +/📷 48px).
+                    child: _isRecordingVoice
+                        ? SizedBox(
+                            height: 48,
+                            child: Row(
+                              children: [
+                                const SizedBox(width: 16),
+                                Icon(Icons.mic_rounded, color: Colors.red, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _voiceSeconds < 60
+                                      ? '${_voiceSeconds.toString().padLeft(2, '0')}s'
+                                      : '${(_voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(_voiceSeconds % 60).toString().padLeft(2, '0')}',
+                                  style: AppText.bodyStrong.copyWith(color: Colors.red),
                                 ),
-                                filled: false,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 10,
+                                const Spacer(),
+                                Icon(Icons.arrow_back_rounded, size: 14, color: AppTheme.textSecondary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  s.hintSlideToCancel,
+                                  style: AppText.body.copyWith(color: AppTheme.textSecondary),
                                 ),
-                              ),
-                              textInputAction: TextInputAction.newline,
-                              onSubmitted: (_) => widget.onSend(),
-                              minLines: 1,
-                              maxLines: null,
-                              keyboardType: TextInputType.multiline,
-                              textCapitalization: TextCapitalization.sentences,
+                                const SizedBox(width: 16),
+                              ],
                             ),
-                          ),
-                          _RoomInputIconBtn(
-                            open: widget.showAttachRow,
-                            onTap: widget.onToggleAttach,
-                            tooltip: s.menuSendPhoto,
-                          ),
-                          const SizedBox(width: 2),
-                          _RoomInputIconBtn(
-                            open: false,
-                            onTap: widget.onTakePhoto,
-                            tooltip: s.menuTakePhoto,
-                            icon: Icons.photo_camera_outlined,
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                if (!_isRecordingVoice)
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    switchInCurve: Curves.easeOut,
-                    switchOutCurve: Curves.easeIn,
-                    transitionBuilder: (child, anim) => SizeTransition(
-                      sizeFactor: anim,
-                      axis: Axis.horizontal,
-                      axisAlignment: -1,
-                      child: FadeTransition(opacity: anim, child: child),
-                    ),
-                    child: widget.controller.text.trim().isEmpty && _decodedPhoto == null
-                        ? MicRecordButton(
-                            isRecording: _isRecordingVoice,
-                            onTap: _stopVoiceRecord,
-                            onLongPressStart: _startVoiceRecord,
-                            onLongPressCancel: _cancelVoiceRecord,
-                            onDragStart: () => setState(() => _isDraggingRecord = true),
-                            onDragEnd: () => setState(() => _isDraggingRecord = false),
-                            elapsedSeconds: _voiceSeconds,
-                            size: 40,
                           )
-                        : GestureDetector(
-                            key: const ValueKey('send'),
-                            onTap: widget.onSend,
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primary,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppTheme.primary.withValues(alpha: 0.4),
-                                    blurRadius: 10,
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              SizedBox(width: 16),
+                              Expanded(
+                                child: TextField(
+                                  controller: widget.controller,
+                                  style: AppText.body,
+                                  decoration: InputDecoration(
+                                    hintText: s.hintTypeMessage,
+                                    hintStyle: AppText.body.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    filled: false,
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 10,
+                                    ),
                                   ),
-                                ],
+                                  textInputAction: TextInputAction.newline,
+                                  onSubmitted: (_) => widget.onSend(),
+                                  minLines: 1,
+                                  maxLines: null,
+                                  keyboardType: TextInputType.multiline,
+                                  textCapitalization: TextCapitalization.sentences,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.send_rounded,
-                                size: 20,
-                                color: Colors.white,
+                              _RoomInputIconBtn(
+                                open: widget.showAttachRow,
+                                onTap: widget.onToggleAttach,
+                                tooltip: s.menuSendPhoto,
                               ),
-                            ),
+                              const SizedBox(width: 2),
+                              _RoomInputIconBtn(
+                                open: false,
+                                onTap: widget.onTakePhoto,
+                                tooltip: s.menuTakePhoto,
+                                icon: Icons.photo_camera_outlined,
+                              ),
+                              const SizedBox(width: 8),
+                            ],
                           ),
-                  )
-                else
-                  MicRecordButton(
-                    isRecording: _isRecordingVoice,
-                    onTap: _stopVoiceRecord,
-                    onLongPressStart: _startVoiceRecord,
-                    onLongPressCancel: _cancelVoiceRecord,
-                    onDragStart: () => setState(() => _isDraggingRecord = true),
-                    onDragEnd: () => setState(() => _isDraggingRecord = false),
-                    elapsedSeconds: _voiceSeconds,
-                    size: 40,
                   ),
+                ),
+                const SizedBox(width: 8),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: <Widget>[
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  ),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: child,
+                  ),
+                  // SATU instance MicRecordButton sepanjang gesture: swap
+                  // cabang saat recording meng-unmount tombol yang di-hold
+                  // → gesture putus → rekaman menggantung (hang).
+                  child: _isRecordingVoice
+                      ? MicRecordButton(
+                          isRecording: true,
+                          onTap: _stopVoiceRecord,
+                          onLongPressStart: _startVoiceRecord,
+                          onLongPressCancel: _cancelVoiceRecord,
+                          size: 40,
+                        )
+                      : (widget.controller.text.trim().isEmpty && _decodedPhoto == null
+                      ? MicRecordButton(
+                          isRecording: false,
+                          onTap: _stopVoiceRecord,
+                          onLongPressStart: _startVoiceRecord,
+                          onLongPressCancel: _cancelVoiceRecord,
+                          size: 40,
+                        )
+                          : GestureDetector(
+                              key: const ValueKey('send'),
+                              onTap: widget.onSend,
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppTheme.primary.withValues(alpha: 0.4),
+                                      blurRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.send_rounded,
+                                  size: 20,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )),
+                ),
               ],
             ),
             AnimatedSize(

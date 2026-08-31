@@ -738,14 +738,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           if (_voiceSeconds >= 59) { _stopVoiceRecord(send: true); return; }
           setState(() => _voiceSeconds++);
         });
-        _showVoiceOverlay();
       }
     } catch (_) {}
   }
 
   void _showVoiceOverlay() {
     _voiceOverlay?.remove();
-    _voiceOverlay = OverlayEntry(builder: (_) => Positioned(bottom: 90, left: 16, right: 16, child: Material(color: Colors.transparent, child: VoiceRecordOverlay(onCancel: _cancelVoiceRecord, onSend: () => _stopVoiceRecord(send: true)))));
+    final s = context.read<LocaleProvider>().s;
+    _voiceOverlay = OverlayEntry(builder: (_) => Positioned(bottom: 90, left: 16, right: 16, child: Material(color: Colors.transparent, child: VoiceRecordOverlay(onCancel: _cancelVoiceRecord, onSend: () => _stopVoiceRecord(send: true), slideToCancelText: s.hintSlideToCancel))));
     Overlay.of(context).insert(_voiceOverlay!);
   }
 
@@ -2231,61 +2231,90 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                     width: 1,
                                   ),
                                 ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    SizedBox(width: 16),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _msgCtrl,
-                                        focusNode: _inputFocus,
-                                        style: AppText.body,
-                                        decoration: InputDecoration(
-                                          hintText: s.hintTypeMessage,
-                                          hintStyle: AppText.body.copyWith(
-                                            color: AppTheme.textSecondary,
-                                          ),
-                                          filled: false,
-                                          border: InputBorder.none,
-                                          enabledBorder: InputBorder.none,
-                                          focusedBorder: InputBorder.none,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                vertical: 10,
-                                              ),
+                                // Isi card di-swap: ketik pesan ↔ rekam voice.
+                                // Ukuran & posisi card 100% identik karena
+                                // container-nya yang sama. Tinggi 48 = tinggi
+                                // konten ketik (icon +/📷 48px).
+                                child: _isRecordingVoice
+                                    ? SizedBox(
+                                        height: 48,
+                                        child: Row(
+                                          children: [
+                                            SizedBox(width: 16),
+                                            Icon(Icons.mic_rounded, color: Colors.red, size: 18),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              _voiceSeconds < 60
+                                                  ? '${_voiceSeconds.toString().padLeft(2, '0')}s'
+                                                  : '${(_voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(_voiceSeconds % 60).toString().padLeft(2, '0')}',
+                                              style: AppText.bodyStrong.copyWith(color: Colors.red),
+                                            ),
+                                            Spacer(),
+                                            Icon(Icons.arrow_back_rounded, size: 14, color: AppTheme.textSecondary),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              s.hintSlideToCancel,
+                                              style: AppText.body.copyWith(color: AppTheme.textSecondary),
+                                            ),
+                                            SizedBox(width: 16),
+                                          ],
                                         ),
-                                        textInputAction:
-                                            TextInputAction.newline,
-                                        onSubmitted: (_) => _send(),
-                                        onChanged: (_) => _sendTypingSignal(),
-                                        minLines: 1,
-                                        maxLines: 4,
-                                        keyboardType: TextInputType.multiline,
-                                        textCapitalization:
-                                            TextCapitalization.sentences,
+                                      )
+                                    : Row(
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          SizedBox(width: 16),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _msgCtrl,
+                                              focusNode: _inputFocus,
+                                              style: AppText.body,
+                                              decoration: InputDecoration(
+                                                hintText: s.hintTypeMessage,
+                                                hintStyle: AppText.body.copyWith(
+                                                  color: AppTheme.textSecondary,
+                                                ),
+                                                filled: false,
+                                                border: InputBorder.none,
+                                                enabledBorder: InputBorder.none,
+                                                focusedBorder: InputBorder.none,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 10,
+                                                    ),
+                                              ),
+                                              textInputAction:
+                                                  TextInputAction.newline,
+                                              onSubmitted: (_) => _send(),
+                                              onChanged: (_) => _sendTypingSignal(),
+                                              minLines: 1,
+                                              maxLines: 4,
+                                              keyboardType: TextInputType.multiline,
+                                              textCapitalization:
+                                                  TextCapitalization.sentences,
+                                            ),
+                                          ),
+                                          _InputIconBtn(
+                                            icon: _showAttachRow
+                                                ? Icons.close
+                                                : Icons.add_circle_outline,
+                                            color: AppTheme.primary,
+                                            onTap: _toggleAttachRow,
+                                            tooltip: s.menuSendPhoto,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          _InputIconBtn(
+                                            icon: Icons.photo_camera_outlined,
+                                            color: AppTheme.primary,
+                                            onTap: () {
+                                              setState(() => _showAttachRow = false);
+                                              _takePhoto();
+                                            },
+                                            tooltip: s.menuTakePhoto,
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
                                       ),
-                                    ),
-                                    _InputIconBtn(
-                                      icon: _showAttachRow
-                                          ? Icons.close
-                                          : Icons.add_circle_outline,
-                                      color: AppTheme.primary,
-                                      onTap: _toggleAttachRow,
-                                      tooltip: s.menuSendPhoto,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    _InputIconBtn(
-                                      icon: Icons.photo_camera_outlined,
-                                      color: AppTheme.primary,
-                                      onTap: () {
-                                        setState(() => _showAttachRow = false);
-                                        _takePhoto();
-                                      },
-                                      tooltip: s.menuTakePhoto,
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -2293,48 +2322,65 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                               valueListenable: _msgCtrl,
                               builder: (context, value, _) {
                                 final hasText = value.text.trim().isNotEmpty || _pendingPhotoBase64 != null;
+                                // SATU instance MicRecordButton sepanjang gesture
+                                // — swap cabang saat recording meng-unmount tombol
+                                // yang di-hold → gesture putus → rekaman hang.
                                 return AnimatedSwitcher(
                                   duration: const Duration(milliseconds: 180),
                                   switchInCurve: Curves.easeOut,
                                   switchOutCurve: Curves.easeIn,
-                                  transitionBuilder: (child, anim) => SizeTransition(
-                                    sizeFactor: anim,
-                                    axis: Axis.horizontal,
-                                    axisAlignment: -1,
-                                    child: FadeTransition(opacity: anim, child: child),
+                                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                                    clipBehavior: Clip.none,
+                                    alignment: Alignment.center,
+                                    children: <Widget>[
+                                      ...previousChildren,
+                                      if (currentChild != null) currentChild,
+                                    ],
                                   ),
-                                  child: hasText
-                                      ? GestureDetector(
-                                          key: const ValueKey('send'),
-                                          onTap: _send,
-                                          child: Container(
-                                            width: 40,
-                                            height: 40,
-                                            alignment: Alignment.center,
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.primary,
-                                              shape: BoxShape.circle,
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: AppTheme.primary.withValues(alpha: 0.4),
-                                                  blurRadius: 10,
-                                                ),
-                                              ],
-                                            ),
-                                            child: const Icon(
-                                              Icons.send_rounded,
-                                              size: 20,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        )
-                                      : MicRecordButton(
-                                          isRecording: _isRecordingVoice,
+                                  transitionBuilder: (child, anim) => FadeTransition(
+                                    opacity: anim,
+                                    child: child,
+                                  ),
+                                  child: _isRecordingVoice
+                                      ? MicRecordButton(
+                                          isRecording: true,
                                           onTap: () => _stopVoiceRecord(send: true),
                                           onLongPressStart: _startVoiceRecord,
                                           onLongPressCancel: _cancelVoiceRecord,
                                           size: 40,
-                                        ),
+                                        )
+                                      : (hasText
+                                          ? GestureDetector(
+                                              key: const ValueKey('send'),
+                                              onTap: _send,
+                                              child: Container(
+                                                width: 40,
+                                                height: 40,
+                                                alignment: Alignment.center,
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.primary,
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: AppTheme.primary.withValues(alpha: 0.4),
+                                                      blurRadius: 10,
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: const Icon(
+                                                  Icons.send_rounded,
+                                                  size: 20,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            )
+                                          : MicRecordButton(
+                                              isRecording: false,
+                                              onTap: () => _stopVoiceRecord(send: true),
+                                              onLongPressStart: _startVoiceRecord,
+                                              onLongPressCancel: _cancelVoiceRecord,
+                                              size: 40,
+                                            )),
                                 );
                               },
                             ),

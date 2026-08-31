@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 
-/// Tombol mic rekam voice: membesar saat long-press (WhatsApp style).
-/// Long press → scale 1.0 → 1.5 + merah + icon stop.
-/// Saat merekam: pulse kecil. Lepas → shrink balik ke 1.0.
+/// Tombol mic WA-style: sentuh → LANGSUNG membesar (tanpa jeda long-press);
+/// lepas tanpa geser → kirim; geser kiri sampai ambang → batal.
 class MicRecordButton extends StatefulWidget {
   final bool isRecording;
   final VoidCallback onTap;
@@ -25,21 +24,28 @@ class MicRecordButton extends StatefulWidget {
 
 class _MicRecordButtonState extends State<MicRecordButton>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _growCtrl;
-  late final AnimationController _pulseCtrl;
+  late final AnimationController _animCtrl;
+  late final CurvedAnimation _grow;
+  double _dragOffset = 0;
+  bool _fingerDown = false;
+  Offset? _pointerOrigin;
+
+  // Geser cukup jauh ke kiri → batal; lepas tanpa geser → kirim.
+  static const double _cancelThreshold = -120;
+  static const double _maxDrag = -200;
 
   @override
   void initState() {
     super.initState();
-    _growCtrl = AnimationController(
+    _animCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 250),
-      lowerBound: 0,
-      upperBound: 1,
+      duration: const Duration(milliseconds: 150),
+      value: widget.isRecording ? 1.0 : 0.0,
     );
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
+    _grow = CurvedAnimation(
+      parent: _animCtrl,
+      curve: Curves.easeOutBack,
+      reverseCurve: Curves.easeOutBack,
     );
   }
 
@@ -47,67 +53,123 @@ class _MicRecordButtonState extends State<MicRecordButton>
   void didUpdateWidget(covariant MicRecordButton old) {
     super.didUpdateWidget(old);
     if (widget.isRecording && !old.isRecording) {
-      _growCtrl.forward();
-      _pulseCtrl.repeat(reverse: true);
+      if (_fingerDown) _animCtrl.forward();
     } else if (!widget.isRecording && old.isRecording) {
-      _growCtrl.reverse();
-      _pulseCtrl.stop();
-      _pulseCtrl.value = 0;
+      _animCtrl.reverse();
     }
   }
 
   @override
   void dispose() {
-    _growCtrl.dispose();
-    _pulseCtrl.dispose();
+    _animCtrl.dispose();
     super.dispose();
+  }
+
+  bool get _isCancelZone => _dragOffset <= _cancelThreshold;
+
+  // Listener pointer mentah — tidak pakai LongPress (delay ~500ms).
+  void _onPointerDown(PointerDownEvent event) {
+    _pointerOrigin = event.position;
+    _fingerDown = true;
+    _animCtrl.forward();
+    if (!widget.isRecording) {
+      widget.onLongPressStart();
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    final origin = _pointerOrigin;
+    if (origin == null) return;
+    setState(() {
+      _dragOffset = (event.position.dx - origin.dx).clamp(_maxDrag, 0.0);
+    });
+  }
+
+  void _onPointerUp(PointerUpEvent _) {
+    final origin = _pointerOrigin;
+    if (origin == null) return;
+    _pointerOrigin = null;
+    _fingerDown = false;
+    // WhatsApp-style: lepas tanpa geser = kirim; geser ke kiri = batal.
+    // Kalau recording belum mulai (race sentuh-lepas cepat), anggap batal.
+    final shouldCancel = _isCancelZone || !widget.isRecording;
+    _animCtrl.reverse();
+    setState(() => _dragOffset = 0);
+    if (shouldCancel) {
+      widget.onLongPressCancel();
+    } else {
+      widget.onTap();
+    }
+  }
+
+  void _onPointerCancel(PointerCancelEvent _) {
+    if (_pointerOrigin == null) return;
+    _pointerOrigin = null;
+    _fingerDown = false;
+    _animCtrl.reverse();
+    setState(() => _dragOffset = 0);
+    widget.onLongPressCancel();
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.isRecording ? Colors.red : AppTheme.primary;
+    final isRecording = widget.isRecording;
 
-    return SizedBox(
-      width: widget.size * 1.6,
-      height: widget.size * 1.6,
+    return Listener(
+      onPointerDown: _onPointerDown,
+      onPointerMove: _onPointerMove,
+      onPointerUp: _onPointerUp,
+      onPointerCancel: _onPointerCancel,
       child: AnimatedBuilder(
-        animation: Listenable.merge([_growCtrl, _pulseCtrl]),
-        builder: (context, child) {
-          final grow = 1.0 + _growCtrl.value * 0.5;
-          final pulse = widget.isRecording
-              ? 1.0 + _pulseCtrl.value * 0.08
-              : 1.0;
-          return Transform.scale(
-            scale: grow * pulse,
-            child: child,
+        animation: _animCtrl,
+        builder: (context, _) {
+          final progress = _grow.value;
+          // Slot layout tetap (widget.size); visual circle melebihi batas
+          // via OverflowBox — benar-benar bulat & bebas clip.
+          final diameter = widget.size + progress * widget.size * 0.8;
+          final color = _isCancelZone
+              ? Colors.red
+              : isRecording
+                  ? Colors.red
+                  : AppTheme.primary;
+          return SizedBox(
+            width: widget.size,
+            height: widget.size,
+            child: OverflowBox(
+              maxWidth: double.infinity,
+              maxHeight: double.infinity,
+              alignment: Alignment.center,
+              child: Transform.translate(
+                offset: Offset(_dragOffset, 0),
+                child: Container(
+                  width: diameter,
+                  height: diameter,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.4),
+                        blurRadius: 10 + progress * 10,
+                        spreadRadius: progress * 4,
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    _isCancelZone
+                        ? Icons.close_rounded
+                        : isRecording
+                            ? Icons.stop_rounded
+                            : Icons.mic_rounded,
+                    color: Colors.white,
+                    size: diameter * 0.5,
+                  ),
+                ),
+              ),
+            ),
           );
         },
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.isRecording ? widget.onTap : null,
-          onLongPressStart:
-              widget.isRecording ? null : (_) => widget.onLongPressStart(),
-          onLongPressCancel: widget.onLongPressCancel,
-          child: Container(
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.4),
-                  blurRadius: 10,
-                  spreadRadius: widget.isRecording ? 2 : 0,
-                ),
-              ],
-            ),
-            child: Icon(
-              widget.isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-              color: Colors.white,
-              size: widget.size * 0.5,
-            ),
-          ),
-        ),
       ),
     );
   }
