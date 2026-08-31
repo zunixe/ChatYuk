@@ -33,6 +33,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
   bool _loading = true;
   final _pwCtrl = TextEditingController();
   bool _pwSaving = false;
+  String? _liveUid;
 
   late final S s;
   bool get canModerate =>
@@ -53,10 +54,12 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
               .listJoinRequests(widget.roomId)
               .then((rows) => rows) // RPC guard admin di server
           : <Map<String, dynamic>>[];
+      final room = await RoomService().fetchRoomById(widget.roomId);
       if (!mounted) return;
       setState(() {
         _members = members;
         _pending = pending;
+        _liveUid = room?['live_uid']?.toString();
         _loading = false;
       });
     } catch (_) {
@@ -71,9 +74,16 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
   }
 
   Future<void> _act(Future<void> Function() fn) async {
-    await fn();
-    await _load();
-    widget.onChanged();
+    try {
+      await fn();
+      await _load();
+      widget.onChanged();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: AppTheme.danger),
+      );
+    }
   }
 
   Future<void> _resetPw(bool remove) async {
@@ -299,26 +309,40 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          FutureBuilder<List<Map<String, dynamic>>>(
-                            future: PrivateRoomService.instance.listBroadcasters(widget.roomId),
-                            builder: (_, snap) {
-                              final isBroadcaster = (snap.data ?? []).any((e) => '${e['user_id']}' == '${m['user_id']}');
-                              if (!isBroadcaster) return const SizedBox.shrink();
-                              return Container(
-                                margin: const EdgeInsets.only(left: 6),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.live_tv_rounded, size: 10, color: Colors.red),
-                                    SizedBox(width: 4),
-                                    Text(s.privateRoomsLiveNow, style: AppText.micro.copyWith(color: Colors.red, fontWeight: FontWeight.w700)),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
+                          if ('${m['user_id']}' == _liveUid || '${m['broadcast_granted']}' == 'true')
+                            Container(
+                              margin: const EdgeInsets.only(left: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: ('${m['user_id']}' == _liveUid
+                                          ? Colors.red
+                                          : AppTheme.primary)
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6)),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    '${m['user_id']}' == _liveUid
+                                        ? Icons.live_tv_rounded
+                                        : Icons.videocam_rounded,
+                                    size: 10,
+                                    color: '${m['user_id']}' == _liveUid ? Colors.red : AppTheme.primary,
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '${m['user_id']}' == _liveUid
+                                        ? s.privateRoomsLiveNow
+                                        : s.roomActionBroadcast,
+                                    style: AppText.micro.copyWith(
+                                        color: '${m['user_id']}' == _liveUid
+                                            ? Colors.red
+                                            : AppTheme.primary,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                       trailing: _memberActions(m),
@@ -355,7 +379,10 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
     }
     items.add(PopupMenuItem(
       value: 'broadcast',
-      child: Text(s.roomActionBroadcast),
+      child: Text(
+          (uid == _liveUid || '${m['broadcast_granted']}' == 'true')
+              ? s.roomActionRevokeBroadcast
+              : s.roomActionBroadcast),
     ));
 
     return PopupMenuButton<String>(
@@ -373,8 +400,14 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
             );
             break;
           case 'broadcast':
-            _act(() =>
-                PrivateRoomService.instance.grantBroadcast(widget.roomId, uid));
+            final isCurrentlyGranted = uid == _liveUid || '${m['broadcast_granted']}' == 'true';
+            _act(() async {
+              if (isCurrentlyGranted) {
+                await PrivateRoomService.instance.revokeBroadcast(widget.roomId, uid);
+              } else {
+                await PrivateRoomService.instance.grantBroadcast(widget.roomId, uid);
+              }
+            });
             break;
         }
       },

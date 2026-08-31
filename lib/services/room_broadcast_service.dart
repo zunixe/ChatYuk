@@ -47,12 +47,17 @@ class RoomBroadcastSession extends ChangeNotifier {
   Timer? _hbTimer;
   Timer? _watchdog;
   Timer? _syncTimer;
+  Timer? _rejoinTimer;
+  Timer? _reOfferTimer;
   int _lastSignalId = 0;
   bool _closed = false;
   bool _cameraOn = true;
-  final Set<String> _offerInFlight = {};
+  final Set<int> _seenSignalIds = {};
   final Map<String, DateTime> _lastOfferAt = {};
   final Map<String, String> _pcIds = {};
+  final Map<String, DateTime> _offerSentAt = {};
+  String _viewerAcceptedPcId = '';
+  int _bitrateRecalcTick = 0;
 
   bool get cameraOn => _cameraOn;
   int get viewerCount => _peers.length;
@@ -74,7 +79,7 @@ class RoomBroadcastSession extends ChangeNotifier {
     await _fastForwardSignals();
     // Polling cadangan tiap 2 detik (pola call 1:1) — realtime insert
     // bisa terlewat, tanpa polling handshake bisa mati diam-diam.
-    _syncTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _syncTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       unawaited(_syncMissedSignals());
     });
 
@@ -106,7 +111,34 @@ class RoomBroadcastSession extends ChangeNotifier {
           await _sb.rpc('touch_broadcast', params: {'p_room_id': roomId});
         } catch (_) {}
       });
-      // Subscribe perubahan broadcaster untuk bitrate adaptif
+      // Recovery watchdog: dua kasus deadlock dijahit di sini —
+      // (a) pc benar-benar gagal (Failed/Disconnected/Closed-stale)
+      // (b) pc stuck have-local-offer > 8 detik (offer terkirim tapi answer
+      //     tak pernah datang / ditolak) — tanpa ini deadlock menunggu
+      //     cycle rejoin viewer yang lambat.
+      _reOfferTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        if (_closed || !isBroadcaster) return;
+        for (final entry in _peers.entries.toList()) {
+          final pc = entry.value;
+          final st = pc.connectionState;
+          final dead = st == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+              st == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+              st == RTCPeerConnectionState.RTCPeerConnectionStateClosed;
+          if (st != null && dead) {
+            debugPrint('[BROADCAST] re-offer to ${entry.key} state=$st');
+            unawaited(_makeOfferTo(entry.key));
+            continue;
+          }
+          final sentAt = _offerSentAt[entry.key];
+          if (sentAt != null &&
+              DateTime.now().difference(sentAt) > const Duration(seconds: 8)) {
+            debugPrint('[BROADCAST] re-offer to ${entry.key} (no answer >8s)');
+            unawaited(_makeOfferTo(entry.key));
+          }
+        }
+      });
+      // Subscribe perubahan broadcaster — hanya untuk menghitung ulang
+      // bitrate saat JUMLAH peer berubah (bukan tiap heartbeat row).
       _broadcasterSub = _sb
           .channel('room-broadcasters-$roomId')
           .onPostgresChanges(
@@ -118,7 +150,16 @@ class RoomBroadcastSession extends ChangeNotifier {
               column: 'room_id',
               value: roomId,
             ),
-            callback: (_) => _renegotiateBitrateAll(),
+            callback: (_) {
+              // Debounce — heartbeat touch tiap 15s juga memicu event ini.
+              _bitrateRecalcTick++;
+              final tick = _bitrateRecalcTick;
+              Future.delayed(const Duration(seconds: 2), () {
+                if (!_closed && tick == _bitrateRecalcTick) {
+                  _renegotiateBitrateAll();
+                }
+              });
+            },
           )
           .subscribe();
       // All-together: broadcaster juga butuh lihat broadcaster lain
@@ -127,7 +168,7 @@ class RoomBroadcastSession extends ChangeNotifier {
     } else {
       // Penonton: minta stream
       unawaited(_prv.requestJoin(roomId));
-      await Future.delayed(const Duration(milliseconds: 600));
+      await Future.delayed(const Duration(milliseconds: 200));
       await requestStream();
       // Watchdog: jika tidak ada broadcaster, stop
       _watchdog = Timer.periodic(const Duration(seconds: 10), (_) async {
@@ -135,6 +176,19 @@ class RoomBroadcastSession extends ChangeNotifier {
         try {
           final cnt = await _prv.broadcastCount(roomId);
           if (cnt == 0) stop();
+        } catch (_) {}
+      });
+      // Rejoin watchdog: berkala cek — kalau broadcaster aktif tapi video
+      // belum masuk/koneksi mati, restart session (b_join baru → offer
+      // baru). Sebelumnya sekali-jalan: video beku tidak pernah pulih.
+      _rejoinTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+        if (_closed || remoteReady) return;
+        try {
+          final cnt = await _prv.broadcastCount(roomId);
+          if (cnt > 0) {
+            debugPrint('[BROADCAST] viewer rejoin (no video)');
+            await stop();
+          }
         } catch (_) {}
       });
     }
@@ -153,6 +207,13 @@ class RoomBroadcastSession extends ChangeNotifier {
 
   void _onSignal(Map<String, dynamic> sig) {
     if (_closed) return;
+    // Dedupe by signal id — realtime & polling bisa menyampaikan row yang
+    // sama dua kali. Tanpa ini b_join/offer/answer dobel merusak handshake.
+    final sid = (sig['id'] ?? 0) as num;
+    final sidInt = sid.toInt();
+    if (sidInt > 0) {
+      if (!_seenSignalIds.add(sidInt)) return;
+    }
     // Signal basi (replay dari DB / late realtime) diabaikan — mencegah
     // offer/answer lama merusak negosiasi WebRTC (video hitam).
     final ca = DateTime.tryParse('${sig['created_at'] ?? ''}');
@@ -167,12 +228,11 @@ class RoomBroadcastSession extends ChangeNotifier {
 
     switch (type) {
       case 'b_join':
-        // Viewer re-join (keluar-masuk room) → pc lama pasti mati; tutup
-        // dan buat offer baru. Guard in-flight cukup untuk cegah dobel.
-        if (isBroadcaster && !_offerInFlight.contains(from)) {
-          _offerInFlight.add(from);
-          unawaited(
-              _makeOfferTo(from).whenComplete(() => _offerInFlight.remove(from)));
+        // Dedupe by signal id ada di _onSignal (atas) — b_join dobel
+        // realtime+polling = row sama = id sama. Re-enter cepat (row baru)
+        // langsung diproses, tidak perlu kooldown waktu.
+        if (isBroadcaster) {
+          unawaited(_makeOfferTo(from));
         }
         break;
       case 'b_offer':
@@ -217,6 +277,30 @@ class RoomBroadcastSession extends ChangeNotifier {
     );
   }
 
+  /// Tunggu ICE gathering complete supaya semua kandidat TERKANDUNG di
+  /// dalam SDP (non-trickle). Mencegah kelas bug "answer applied tapi ICE
+  /// tidak pernah jalan" karena trickle candidate hilang di transit.
+  /// Timeout 2 detik — kalau blom selesai, kirim apa adanya (trickle tetap
+  /// jalan sebagai fallback).
+  Future<void> _waitIceGathering(RTCPeerConnection pc) async {
+    if (pc.iceGatheringState ==
+        RTCIceGatheringState.RTCIceGatheringStateComplete) {
+      return;
+    }
+    final completer = Completer<void>();
+    pc.onIceGatheringState = (state) {
+      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete &&
+          !completer.isCompleted) {
+        completer.complete();
+      }
+    };
+    try {
+      await completer.future.timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // timeout — kirim SDP apa adanya, trickle tetap fallback
+    }
+  }
+
   Future<void> _makeOfferTo(String viewerUid) async {
     try {
       if (_localStream == null) return;
@@ -226,13 +310,14 @@ class RoomBroadcastSession extends ChangeNotifier {
           await old.close();
         } catch (_) {}
       }
+      _peers.remove(viewerUid);
+      _pcIds.remove(viewerUid);
       _pendingCands.remove(viewerUid);
       final pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _peers[viewerUid] = pc;
 
       await pc.addTrack(_localStream!.getVideoTracks().first, _localStream!);
       _applyBitrate(pc);
-      _renegotiateBitrateAll();
 
       pc.onIceCandidate = (c) {
         _prv.sendSignal(roomId, type: 'b_cand', toUid: viewerUid, payload: {
@@ -241,6 +326,10 @@ class RoomBroadcastSession extends ChangeNotifier {
       };
       pc.onConnectionState = (st) {
         debugPrint('[BROADCAST] peer $viewerUid state=$st');
+        // Hanya proses event dari pc yang MASIH AKTIF di _peers — event
+        // Closed dari pc lama yang baru diganti tidak boleh menghapus
+        // pc baru (race re-offer yang dulu bikin video blank abadi).
+        if (!identical(_peers[viewerUid], pc)) return;
         if (st == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
             st == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
           _dropPeer(viewerUid);
@@ -250,12 +339,16 @@ class RoomBroadcastSession extends ChangeNotifier {
 
       final offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      // pcId mengikat answer ke pc yang membuat offer ini — answer dari
-      // offer lama (race) tidak pernah diterapkan ke pc baru.
+      // Non-trickle: tunggu kandidat terkumpul di SDP sebelum dikirim —
+      // kandidat yang hilang di transit = ICE tidak pernah jalan (bug
+      // re-enter: answer applied tapi pc Closed tanpa Connecting).
+      await _waitIceGathering(pc);
+      final desc = await pc.getLocalDescription();
       final pcId = 'pc_${DateTime.now().microsecondsSinceEpoch}';
       _pcIds[viewerUid] = pcId;
+      _offerSentAt[viewerUid] = DateTime.now();
       await _prv.sendSignal(roomId, type: 'b_offer', toUid: viewerUid, payload: {
-        'sdp': offer.toMap(),
+        'sdp': (desc ?? offer).toMap(),
         'pcId': pcId,
       });
       notifyListeners();
@@ -291,6 +384,7 @@ class RoomBroadcastSession extends ChangeNotifier {
         RTCSessionDescription(sdp['sdp'], sdp['type']),
       );
       debugPrint('[BROADCAST] b_answer applied for $from');
+      _offerSentAt.remove(from);
       for (final c in List<Map<String, dynamic>>.from(_pendingCands[from] ?? const [])) {
         try {
           await pc.addCandidate(RTCIceCandidate(
@@ -317,6 +411,19 @@ class RoomBroadcastSession extends ChangeNotifier {
       _pendingCands.putIfAbsent(from, () => []).add(c);
       return;
     }
+    // Buffer sampai remote description terpasang — addCandidate saat masih
+    // have-local-offer gagal diam-diam dan candidate hilang permanen
+    // (root cause stuck "menyambungkan" tanpa error di log).
+    try {
+      final remote = await pc.getRemoteDescription();
+      if (remote == null) {
+        _pendingCands.putIfAbsent(from, () => []).add(c);
+        return;
+      }
+    } catch (_) {
+      _pendingCands.putIfAbsent(from, () => []).add(c);
+      return;
+    }
     try {
       await pc.addCandidate(RTCIceCandidate(
         c['candidate'] ?? '',
@@ -336,6 +443,8 @@ class RoomBroadcastSession extends ChangeNotifier {
       rr?.dispose();
     } catch (_) {}
     _pendingCands.remove(uid);
+    _pcIds.remove(uid);
+    _offerSentAt.remove(uid);
     hasRemoteVideo = remoteRenderers.isNotEmpty;
     notifyListeners();
   }
@@ -344,20 +453,24 @@ class RoomBroadcastSession extends ChangeNotifier {
     final kbps = _targetKbps(_peers.length);
     try {
       final senders = await pc.getSenders();
-      final videoSender = senders.firstWhere((s) => s.track?.kind == 'video');
-      final params = RTCRtpParameters(
-        encodings: [
-          RTCRtpEncoding(
-            active: true,
-            maxBitrate: kbps * 1000,
-            minBitrate: (kbps * 0.5).round() * 1000,
-          ),
-        ],
-      );
-      await videoSender.setParameters(params);
-    } catch (e) {
-      debugPrint('[BROADCAST] set bitrate failed: $e');
-    }
+      // Loop manual — firstWhere melempar "Bad state: No element" saat
+      // sender belum ter-populate async (spam log + bitrate tak terpasang).
+      for (final s in senders) {
+        if (s.track?.kind == 'video') {
+          final params = RTCRtpParameters(
+            encodings: [
+              RTCRtpEncoding(
+                active: true,
+                maxBitrate: kbps * 1000,
+                minBitrate: (kbps * 0.5).round() * 1000,
+              ),
+            ],
+          );
+          await s.setParameters(params);
+          break;
+        }
+      }
+    } catch (_) {}
   }
 
   void _renegotiateBitrateAll() {
@@ -392,18 +505,16 @@ class RoomBroadcastSession extends ChangeNotifier {
   ) async {
     final sdp = payload['sdp'] as Map<String, dynamic>?;
     if (sdp == null) return;
+    // Dedupe pakai pcId: offer dengan pcId BARU = re-offer sah, harus
+    // diproses (ganti pc lama). pcId LAMA/sama = replay, ditolak.
+    // (Guard getRemoteDescription lama salah menolak re-offer valid →
+    // broadcaster tak pernah dapat answer → video blank abadi.)
+    final offerPcId = '${payload['pcId'] ?? ''}';
+    if (offerPcId.isNotEmpty && offerPcId == _viewerAcceptedPcId) {
+      debugPrint('[BROADCAST] duplicate offer (same pcId) ignored');
+      return;
+    }
     try {
-      // Pola call 1:1 (call_service.dart): offer duplikat / sudah dijawab
-      // diabaikan — memproses ulang membuat pc baru & answer tertukar
-      // (video hitam, stuck Connecting).
-      final existingPc = _peers[broadcasterUid];
-      if (existingPc != null) {
-        final existing = await existingPc.getRemoteDescription();
-        if (existing != null) {
-          debugPrint('[BROADCAST] duplicate offer ignored for $broadcasterUid');
-          return;
-        }
-      }
       var pc = _peers[broadcasterUid];
       if (pc != null) {
         try {
@@ -413,6 +524,21 @@ class RoomBroadcastSession extends ChangeNotifier {
       }
       pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _peers[broadcasterUid] = pc;
+      _viewerAcceptedPcId = offerPcId;
+      // Negosiasi baru → video lama tidak boleh dianggap "siap" lagi.
+      remoteReady = false;
+
+      pc.onConnectionState = (st) {
+        debugPrint('[BROADCAST] viewer pc state=$st');
+        // Koneksi mati → video beku. Reset remoteReady supaya rejoin
+        // watchdog bisa restart session (tanpa ini viewer menonton
+        // layar beku selamanya).
+        if (st == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+            st == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+          remoteReady = false;
+          notifyListeners();
+        }
+      };
 
       pc.onTrack = (event) async {
         final stream =
@@ -454,8 +580,12 @@ class RoomBroadcastSession extends ChangeNotifier {
       _pendingCands.remove(broadcasterUid);
       final answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      // Non-trickle: kandidat viewer ikut dalam SDP answer — broadcaster
+      // tidak menunggu trickle yang bisa hilang.
+      await _waitIceGathering(pc);
+      final desc = await pc.getLocalDescription();
       await _prv.sendSignal(roomId, type: 'b_answer', toUid: broadcasterUid,
-          payload: {'sdp': answer.toMap(), 'pcId': payload['pcId'] ?? ''});
+          payload: {'sdp': (desc ?? answer).toMap(), 'pcId': payload['pcId'] ?? ''});
       debugPrint('[BROADCAST] viewer answered $broadcasterUid pcId=${payload['pcId']}');
     } catch (e) {
       debugPrint('[BROADCAST] viewer offer failed: $e');
@@ -469,6 +599,8 @@ class RoomBroadcastSession extends ChangeNotifier {
     _hbTimer?.cancel();
     _watchdog?.cancel();
     _syncTimer?.cancel();
+    _rejoinTimer?.cancel();
+    _reOfferTimer?.cancel();
     await _signalSub?.cancel();
     if (_broadcasterSub != null) {
       _sb.removeChannel(_broadcasterSub!);

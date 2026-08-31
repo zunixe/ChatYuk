@@ -41,6 +41,23 @@ class CallNotification {
     );
   }
 
+  /// Foreground service untuk BROADCAST: viewer/broadcaster yang keluar app
+  /// (minimize) tetap mempertahankan koneksi WebRTC — video tidak putus,
+  /// dan saat balik ke app stream tetap hidup.
+  static Future<void> startLive({required String text}) async {
+    await _ensureInit();
+    await FlutterForegroundTask.startService(
+      notificationTitle: 'ChatYuk',
+      notificationText: text,
+    );
+  }
+
+  static Future<void> stopLive() async {
+    try {
+      await FlutterForegroundTask.stopService();
+    } catch (_) {}
+  }
+
   static Future<void> cancel() async {
     try {
       await FlutterForegroundTask.stopService();
