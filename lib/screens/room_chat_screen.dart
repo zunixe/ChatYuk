@@ -41,6 +41,7 @@ import '../services/link_preview_service.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
+import '../services/call_notification.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 String? _roomProcessImage(Uint8List bytes) {
@@ -142,6 +143,29 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   // ── Private room v2 ──
   bool _roleChecked = false;
+  bool _broadcastStarting = false;
+  bool _stageMinimized = false;
+  Offset? _pipPos;
+  Size _pipSize = const Size(140, 190);
+  bool _pipResizing = false;
+  Size _pipResizeStartSize = Size.zero;
+  Offset _pipResizeStartLocal = Offset.zero;
+
+  /// Satu pintu mulai broadcast — cegah double-tap (toggle ke stop) dan
+  /// beri feedback loading di tombol/banner.
+  Future<void> _onStartBroadcastTap() async {
+    if (_broadcastStarting || iAmBroadcasting) return;
+    setState(() => _broadcastStarting = true);
+    try {
+      if (_liveUid != _auth.uid) {
+        await PrivateRoomService.instance.startBroadcast(widget.room.id);
+        await _refreshLiveUid();
+      }
+      await _startBroadcastSession();
+    } finally {
+      if (mounted) setState(() => _broadcastStarting = false);
+    }
+  }
 
   Future<void> _initPrivate() async {
     debugPrint('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
@@ -285,6 +309,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       roomId: widget.room.id,
       isBroadcaster: true,
       onEnded: () {
+        CallNotification.stopLive();
         if (mounted) {
           setState(() {
             _broadcastSession = null;
@@ -296,6 +321,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _broadcastSession = session;
     try {
       await session.start();
+      // Foreground service: broadcast tetap hidup saat app di-background
+      CallNotification.startLive(
+          text: context.read<LocaleProvider>().s.broadcastLiveNotif);
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().contains('Broadcast full') ? context.read<LocaleProvider>().s.roomBroadcastFull : '$e';
@@ -312,6 +340,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       roomId: widget.room.id,
       isBroadcaster: false,
       onEnded: () {
+        CallNotification.stopLive();
         if (mounted) {
           setState(() => _broadcastSession = null);
         }
@@ -319,6 +348,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     );
     _broadcastSession = session;
     await session.start();
+    // Foreground service: menonton broadcast tetap hidup di background
+    CallNotification.startLive(
+        text: context.read<LocaleProvider>().s.broadcastWatchingNotif);
     await session.requestStream();
     if (mounted) setState(() {});
   }
@@ -945,30 +977,35 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 icon: const Icon(Icons.pan_tool_rounded),
                 onPressed: _raiseHand,
               ),
-            if ((_liveUid == _auth.uid && !iAmBroadcasting) || (_liveUid == null && isGrantedBroadcast && !iAmBroadcasting))
+            if (((_liveUid == _auth.uid && !iAmBroadcasting) || (_liveUid == null && isGrantedBroadcast && !iAmBroadcasting)) || _broadcastStarting)
               GestureDetector(
-                onTap: () async {
-                  if (_liveUid != _auth.uid) {
-                    await PrivateRoomService.instance.startBroadcast(widget.room.id);
-                    await _refreshLiveUid();
-                  }
-                  await _startBroadcastSession();
-                },
+                onTap: _broadcastStarting ? null : _onStartBroadcastTap,
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    color: AppTheme.primary.withValues(alpha: _broadcastStarting ? 0.25 : 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 16),
+                      if (_broadcastStarting)
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 16),
                       const SizedBox(width: 4),
                       Text(
-                        s.privateRoomsStartBroadcast,
-                        style: AppText.label.copyWith(color: AppTheme.primary),
+                        _broadcastStarting
+                            ? (s.roomBroadcastConnecting)
+                            : s.privateRoomsStartBroadcast,
+                        style: AppText.label.copyWith(
+                          color: AppTheme.primary.withValues(alpha: _broadcastStarting ? 0.6 : 1),
+                        ),
                       ),
                     ],
                   ),
@@ -1005,7 +1042,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           ],
         ],
       ),
-      body: Column(
+      body: Builder(builder: (context) {
+        final showStageInline = isPrivateRoom &&
+            !_stageMinimized &&
+            _liveUid != null &&
+            _broadcastSession != null;
+        final showPip = isPrivateRoom &&
+            _stageMinimized &&
+            _liveUid != null &&
+            _broadcastSession != null;
+        final column = Column(
         children: [
           // Banner hanya setelah role selesai dicek — mencegah blink
           // "menunggu persetujuan" di awal load untuk member biasa.
@@ -1022,35 +1068,42 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 ],
               ),
             ),
-          if (isPrivateRoom && isGrantedBroadcast && !iAmBroadcasting)
+          if (isPrivateRoom && isGrantedBroadcast && (!iAmBroadcasting || _broadcastStarting))
             GestureDetector(
-              onTap: () async {
-                if (_liveUid != _auth.uid) {
-                  await PrivateRoomService.instance.startBroadcast(widget.room.id);
-                  await _refreshLiveUid();
-                }
-                await _startBroadcastSession();
-              },
+              onTap: _broadcastStarting ? null : _onStartBroadcastTap,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 color: AppTheme.primary.withValues(alpha: 0.12),
                 child: Row(
                   children: [
-                    Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 18),
+                    if (_broadcastStarting)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 18),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(s.privateRoomsStartBroadcast, style: AppText.bodySmall.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600))),
+                    Expanded(
+                      child: Text(
+                        _broadcastStarting
+                            ? s.roomBroadcastConnecting
+                            : s.privateRoomsStartBroadcast,
+                        style: AppText.bodySmall.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
                     Icon(Icons.chevron_right_rounded, color: AppTheme.primary, size: 18),
                   ],
                 ),
               ),
             ),
-          if (isPrivateRoom &&
-              _liveUid != null &&
-              _broadcastSession != null) ...[
+          if (showStageInline) ...[
             _BroadcastStage(
               session: _broadcastSession!,
               isBroadcaster: iAmBroadcasting,
+              onMinimize: () => setState(() => _stageMinimized = true),
             ),
           ],
           // User list horizontal — private room selalu tampil, global room via toggle
@@ -1191,6 +1244,27 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 ],
               ),
             ),
+          // Pending approval: composer diganti bar info — jangan biarkan user
+          // mencoba kirim lalu gagal diam-diam.
+          if (isPrivateRoom && _roleChecked && _myRole == null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              color: AppTheme.bgCard,
+              child: Row(
+                children: [
+                  Icon(Icons.lock_outline_rounded, size: 18, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      s.privateRoomNeedApproval,
+                      style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
           _ChatInput(
             controller: _msgCtrl,
             onSend: _send,
@@ -1215,7 +1289,89 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 : null,
           ),
         ],
-      ),
+      );
+        if (!showPip) return column;
+        return Stack(children: [
+          column,
+          Builder(builder: (context) {
+            final mq = MediaQuery.of(context);
+            final minW = 100.0, maxW = mq.size.width * 0.8;
+            final minH = 130.0, maxH = mq.size.height * 0.6;
+            _pipSize = Size(
+              _pipSize.width.clamp(minW, maxW),
+              _pipSize.height.clamp(minH, maxH),
+            );
+            final w = _pipSize.width;
+            final h = _pipSize.height;
+            _pipPos ??= Offset(mq.size.width - w - 12, 24);
+            final pos = Offset(
+              _pipPos!.dx.clamp(8.0, mq.size.width - w - 8),
+              _pipPos!.dy.clamp(8.0, mq.size.height - h - 8),
+            );
+            final handle = 28.0;
+            return Positioned(
+              left: pos.dx,
+              top: pos.dy,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onDoubleTap: () => setState(() => _stageMinimized = false),
+                onPanStart: (d) {
+                  _pipResizing =
+                      d.localPosition.dx > w - handle && d.localPosition.dy > h - handle;
+                  _pipResizeStartSize = _pipSize;
+                  _pipResizeStartLocal = d.localPosition;
+                },
+                onPanUpdate: (d) {
+                  setState(() {
+                    if (_pipResizing) {
+                      _pipSize = Size(
+                        (_pipResizeStartSize.width + d.localPosition.dx - _pipResizeStartLocal.dx)
+                            .clamp(minW, maxW),
+                        (_pipResizeStartSize.height + d.localPosition.dy - _pipResizeStartLocal.dy)
+                            .clamp(minH, maxH),
+                      );
+                    } else {
+                      _pipPos = Offset(
+                        (_pipPos!.dx + d.delta.dx).clamp(8.0, mq.size.width - w - 8),
+                        (_pipPos!.dy + d.delta.dy).clamp(8.0, mq.size.height - h - 8),
+                      );
+                    }
+                  });
+                },
+                child: Container(
+                  width: w,
+                  height: h,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white24),
+                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _BroadcastStage(
+                          session: _broadcastSession!,
+                          isBroadcaster: iAmBroadcasting,
+                          compact: true,
+                        ),
+                        // Handle resize pojok kanan bawah
+                        Positioned(
+                          right: 4,
+                          bottom: 4,
+                          child: Icon(Icons.zoom_out_map_rounded, size: 14, color: Colors.white38),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ]);
+      }),
     );
   }
 
@@ -1884,6 +2040,7 @@ class _ChatInputState extends State<_ChatInput> {
   Uint8List? _decodedPhoto;
   final _record = AudioRecorder();
   bool _isRecordingVoice = false;
+  bool _isDraggingRecord = false;
   Timer? _voiceTimer;
   int _voiceSeconds = 0;
   OverlayEntry? _voiceOverlay;
@@ -1901,7 +2058,6 @@ class _ChatInputState extends State<_ChatInput> {
         if (_voiceSeconds >= 59) { _stopVoiceRecord(); return; }
         setState(() => _voiceSeconds++);
       });
-      _showVoiceOverlay();
     } catch (_) {}
   }
 
@@ -2033,11 +2189,42 @@ class _ChatInputState extends State<_ChatInput> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: IconButton(
-                    onPressed: () =>
+                if (_isRecordingVoice) ...[
+                  Expanded(
+                    child: Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 16),
+                          Icon(Icons.mic_rounded, color: Colors.red, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            _voiceSeconds < 60
+                                ? '${_voiceSeconds.toString().padLeft(2, '0')}s'
+                                : '${(_voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(_voiceSeconds % 60).toString().padLeft(2, '0')}',
+                            style: AppText.bodyStrong.copyWith(color: Colors.red),
+                          ),
+                          const Spacer(),
+                          Text(
+                            s.hintSlideToCancel,
+                            style: AppText.caption.copyWith(color: Colors.red.withValues(alpha: 0.6)),
+                          ),
+                          const SizedBox(width: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ] else ...[
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: IconButton(
+                      onPressed: () =>
                         EmojiPickerSheet.show(context, widget.controller),
                     icon: Icon(Icons.emoji_emotions_rounded, size: 22),
                     color: AppTheme.textSecondary,
@@ -2046,104 +2233,120 @@ class _ChatInputState extends State<_ChatInput> {
                   ),
                 ),
                 SizedBox(width: 2),
-                Expanded(
-                  child: Container(
-                    constraints: BoxConstraints(maxHeight: 132),
-                    decoration: BoxDecoration(
-                      color: AppTheme.bgCard,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppTheme.bgCard, width: 1),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        SizedBox(width: 16),
-                        Expanded(
-                          child: TextField(
-                            controller: widget.controller,
-                            style: AppText.body,
-                            decoration: InputDecoration(
-                              hintText: s.hintTypeMessage,
-                              hintStyle: AppText.body.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                              filled: false,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                              ),
-                            ),
-                            textInputAction: TextInputAction.newline,
-                            onSubmitted: (_) => widget.onSend(),
-                            minLines: 1,
-                            maxLines: null,
-                            keyboardType: TextInputType.multiline,
-                            textCapitalization: TextCapitalization.sentences,
-                          ),
-                        ),
-                        _RoomInputIconBtn(
-                          open: widget.showAttachRow,
-                          onTap: widget.onToggleAttach,
-                          tooltip: s.menuSendPhoto,
-                        ),
-                        const SizedBox(width: 2),
-                        _RoomInputIconBtn(
-                          open: false,
-                          onTap: widget.onTakePhoto,
-                          tooltip: s.menuTakePhoto,
-                          icon: Icons.photo_camera_outlined,
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  switchInCurve: Curves.easeOut,
-                  switchOutCurve: Curves.easeIn,
-                  transitionBuilder: (child, anim) => SizeTransition(
-                    sizeFactor: anim,
-                    axis: Axis.horizontal,
-                    axisAlignment: -1,
-                    child: FadeTransition(opacity: anim, child: child),
-                  ),
-                  child: widget.controller.text.trim().isEmpty && _decodedPhoto == null
-                      ? MicRecordButton(
-                          isRecording: _isRecordingVoice,
-                          onTap: _stopVoiceRecord,
-                          onLongPressStart: _startVoiceRecord,
-                          onLongPressCancel: _cancelVoiceRecord,
-                          size: 40,
-                        )
-                      : GestureDetector(
-                          key: const ValueKey('send'),
-                          onTap: widget.onSend,
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppTheme.primary.withValues(alpha: 0.4),
-                                  blurRadius: 10,
+                  Expanded(
+                    child: Container(
+                      constraints: BoxConstraints(maxHeight: 132),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgCard,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: AppTheme.bgCard, width: 1),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: TextField(
+                              controller: widget.controller,
+                              style: AppText.body,
+                              decoration: InputDecoration(
+                                hintText: s.hintTypeMessage,
+                                hintStyle: AppText.body.copyWith(
+                                  color: AppTheme.textSecondary,
                                 ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.send_rounded,
-                              size: 20,
-                              color: Colors.white,
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                              textInputAction: TextInputAction.newline,
+                              onSubmitted: (_) => widget.onSend(),
+                              minLines: 1,
+                              maxLines: null,
+                              keyboardType: TextInputType.multiline,
+                              textCapitalization: TextCapitalization.sentences,
                             ),
                           ),
-                        ),
-                ),
+                          _RoomInputIconBtn(
+                            open: widget.showAttachRow,
+                            onTap: widget.onToggleAttach,
+                            tooltip: s.menuSendPhoto,
+                          ),
+                          const SizedBox(width: 2),
+                          _RoomInputIconBtn(
+                            open: false,
+                            onTap: widget.onTakePhoto,
+                            tooltip: s.menuTakePhoto,
+                            icon: Icons.photo_camera_outlined,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (!_isRecordingVoice)
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, anim) => SizeTransition(
+                      sizeFactor: anim,
+                      axis: Axis.horizontal,
+                      axisAlignment: -1,
+                      child: FadeTransition(opacity: anim, child: child),
+                    ),
+                    child: widget.controller.text.trim().isEmpty && _decodedPhoto == null
+                        ? MicRecordButton(
+                            isRecording: _isRecordingVoice,
+                            onTap: _stopVoiceRecord,
+                            onLongPressStart: _startVoiceRecord,
+                            onLongPressCancel: _cancelVoiceRecord,
+                            onDragStart: () => setState(() => _isDraggingRecord = true),
+                            onDragEnd: () => setState(() => _isDraggingRecord = false),
+                            elapsedSeconds: _voiceSeconds,
+                            size: 40,
+                          )
+                        : GestureDetector(
+                            key: const ValueKey('send'),
+                            onTap: widget.onSend,
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.primary.withValues(alpha: 0.4),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.send_rounded,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                  )
+                else
+                  MicRecordButton(
+                    isRecording: _isRecordingVoice,
+                    onTap: _stopVoiceRecord,
+                    onLongPressStart: _startVoiceRecord,
+                    onLongPressCancel: _cancelVoiceRecord,
+                    onDragStart: () => setState(() => _isDraggingRecord = true),
+                    onDragEnd: () => setState(() => _isDraggingRecord = false),
+                    elapsedSeconds: _voiceSeconds,
+                    size: 40,
+                  ),
               ],
             ),
             AnimatedSize(
@@ -2341,10 +2544,13 @@ class _RoomAttachChip extends StatelessWidget {
 
 /// Stage broadcast setengah layar: video broadcaster + kontrol ringkas.
 class _BroadcastStage extends StatelessWidget {
-  const _BroadcastStage({required this.session, required this.isBroadcaster});
+  const _BroadcastStage(
+      {required this.session, required this.isBroadcaster, this.onMinimize, this.compact = false});
 
   final RoomBroadcastSession session;
   final bool isBroadcaster;
+  final VoidCallback? onMinimize;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -2365,7 +2571,7 @@ class _BroadcastStage extends StatelessWidget {
           objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover));
     }
     return Container(
-      height: 220,
+      height: compact ? double.infinity : 220,
       color: Colors.black,
       child: Stack(
         fit: StackFit.expand,
@@ -2404,6 +2610,37 @@ class _BroadcastStage extends StatelessWidget {
                   style: AppText.micro.copyWith(color: Colors.white)),
             ),
           ),
+          // Drag ke bawah di AREA MANA PUN video utk minimize (hanya stage
+          // inline, bukan PiP). Double-tap juga minimize.
+          if (onMinimize != null)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragUpdate: (d) {
+                  if (d.primaryDelta != null && d.primaryDelta! > 8) {
+                    onMinimize!();
+                  }
+                },
+                onDoubleTap: onMinimize,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          if (onMinimize != null)
+            Positioned(
+              top: 6,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white54,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
           if (isBroadcaster)
             Positioned(
               bottom: 8,

@@ -69,6 +69,12 @@ class AuthService {
     final webClientId = googleWebClientIdOverride ?? googleWebClientIdDefault;
 
     final googleSignIn = GoogleSignIn(serverClientId: webClientId);
+    // Paksa account picker muncul tiap kali — jangan pakai akun cached.
+    // Tanpa ini, setelah gagal login / logout, signIn() diam-diam pakai
+    // akun Google sebelumnya tanpa pilihan.
+    try {
+      await googleSignIn.signOut();
+    } catch (_) {}
     // google_sign_in: user batal → signIn() mengembalikan null (tidak
     // melempar). Null dikembalikan ke atas supaya UI diam-diam kembali
     // tanpa snackbar error.

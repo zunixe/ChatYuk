@@ -151,6 +151,14 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
 
 ## Build & Signing
 
+- **SATU-SATUNYA PROSEDUR BUILD TERVERIFIKASI — build dari tool/AI lain
+  yang tidak mengikuti ini MEMBUAT LOGIN GOOGLE GAGAL (`12500,null/null`):**
+  build "asal" (debug-signing atau tanpa env keystore) menghasilkan SHA-1
+  yang tidak dikenal Firebase. Selalu ikuti langkah persis di bawah —
+  clean manual Android-only, env `KEYSTORE_PASS`+`KEY_PASS`, flag
+  `--flavor` + `--dart-define` lengkap. Setelah build, verify SHA-1 APK
+  (lihat bagian Google Sign-In) sebelum dipush ke HP.
+
 - **FLAVOR-GATE ADMIN (WAJIB dipahami sebelum build):**
   - Kode admin TERPISAH dari build rilis. Entry rilis = default `lib/main.dart`
     (TIDAK mengandung kode admin — dijamin tree-shaking via `lib/core/admin_gate.dart`).
@@ -373,3 +381,33 @@ Catatan:
   - Kalau SHA & client sudah benar tapi device tetap `"10, null, null"`:
     cache Google Play Services di HP basi → hapus data Google Play Services
     (Setelan → Aplikasi → Google Play Services → Hapus data) lalu reboot HP.
+  - **Error 400 saat `signInWithIdToken` (GoTrue v2.195.0+)** — GoTrue kini
+    memvalidasi KEDUANYA: `aud` DAN `azp` idToken Google terhadap whitelist.
+    Token dari Android punya `aud` = Web client dan `azp` = Android client,
+    jadi keduanya WAJIB di-whitelist Supabase:
+    - `external_google_client_id` (via Management API) = **kedua client
+      comma-separated**: Web `599111437536-hg56bq0nc2m6kig6hg41lmrbtfel5n2c`
+      + Android `599111437536-r1rb2m8pfko85lh1nu8ufdesiinv4cso`.
+    - Diagnostic: pesan `Unacceptable audience in id_token` = `aud` tidak
+      terdaftar; token valid tapi 400 "Internal Server Error" = azp/aud
+      mismatch. Baca payload token dari logcat `[GOOGLE] idToken payload`.
+    - **PENTING**: Management API PATCH `external_google_additional_client_ids`
+      BUGGY (selalu gagal / malah menimpa `client_id`) — gunakan
+      comma-separated di `external_google_client_id`.
+    - Config dianggap "belum lengkap" kalau salah satu client hilang → semua
+      device gagal login 400 secara berulang.
+  - **Error `12500,null,null` saat login Google** = APK TIDAK ditandatangani
+    keystore v2 (mis. build debug, atau build dibuat oleh tool/AI lain tanpa
+    env `KEYSTORE_PASS`+`KEY_PASS` dan flag flavor yang benar). Firebase hanya
+    mengenal SHA-1 keystore v2 → build "asal" langsung gagal sign-in. Solusi:
+    build SELALU pakai prosedur "Build & Push ke HP" di bawah (release +
+    `--flavor apkpure` + keystore v2), JANGAN pernah pakai `flutter build apk`
+    tanpa flavor/keystore. Kalau build dari tool lain, verify SHA-1 APK:
+    ```bash
+    keytool -printcert -jarfile app-apkpure-release.apk | grep SHA1
+    # harus: 8C:CC:42:E3:FE:93:37:21:6C:E4:25:0E:2B:FC:CB:22:94:1E:50:A2
+    ```
+  - **Account picker**: `auth_service.dart` memanggil `googleSignIn.signOut()`
+    sebelum `signIn()` — JANGAN dihapus; tanpa itu picker tidak muncul dan
+    login diam-diam pakai akun Google terakhir (keinginan user: selalu pilih
+    akun tiap klik "Lanjutkan dengan Google").

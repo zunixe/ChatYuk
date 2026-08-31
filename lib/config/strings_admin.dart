@@ -192,6 +192,8 @@ extension SAdminX on S {
   String get roomActionKick => isId ? 'Keluarkan' : 'Remove';
   String get roomActionBroadcast =>
       isId ? 'Izinkan Broadcast' : 'Allow Broadcast';
+  String get roomActionRevokeBroadcast =>
+      isId ? 'Batalkan Broadcast' : 'Revoke Broadcast';
   String get roomKickConfirmTitle => isId
       ? 'Keluarkan dari room?'
       : 'Remove from room?';

@@ -351,6 +351,7 @@ class ChatService {
             for (var j = 0; j < chunk.length; j++) {
               final m = chunk[j];
               final data = results[j];
+              debugPrint('[PHOTO-DBG] drain ${m.id} srcLen=${(byId[m.id] ?? '').length} dlLen=${data.length}');
               if (data.isEmpty) continue;
               // save() menyimpan full-res + membuat thumbnail (dikembalikan).
               // Bubble pakai thumbnail supaya decode cepat; full-res di PhotoCache.
@@ -441,9 +442,15 @@ class ChatService {
             .limit(limit);
       }
       final rows = await query;
-      return rows
+      final list = rows
           .map((row) => MessageModel.fromMap('${row['id']}', snakeToCamel(row)))
           .toList();
+      for (final m in list) {
+        if (m.type == 'image' || m.type == 'view_once' || m.type == 'voice') {
+          debugPrint('[PHOTO-DBG] fetchServer ${m.id} type=${m.type} imgLen=${m.imageData.length} head=${m.imageData.isEmpty ? '' : m.imageData.substring(0, m.imageData.length > 30 ? 30 : m.imageData.length)}');
+        }
+      }
+      return list;
     }
 
     // Ambil cutoff delete user ini (UTC → local). null = tidak pernah delete.
@@ -619,6 +626,9 @@ class ChatService {
           debugPrint(
             '[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal',
           );
+          if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'voice') {
+            debugPrint('[PHOTO-DBG] rt-insert ${msg.id} type=${msg.type} imgLen=${msg.imageData.length} head=${msg.imageData.isEmpty ? '' : msg.imageData.substring(0, msg.imageData.length > 30 ? 30 : msg.imageData.length)}');
+          }
           controller.add(_current);
           scheduleCacheSave();
         } catch (_) {
@@ -1765,6 +1775,14 @@ class ChatService {
                   lastSeen: parseDate(d['joinedAt']),
                 );
               })
+              // Dedupe by uid — update event dari supabase stream bisa
+              // menduplikasi row (bug stream multi-column PK) sehingga
+              // "Kamu" muncul 2x setelah keluar-masuk room.
+              .fold<Map<String, UserModel>>({}, (acc, u) {
+                acc[u.uid] = u;
+                return acc;
+              })
+              .values
               .toList();
         });
   }

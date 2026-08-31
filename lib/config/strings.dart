@@ -427,6 +427,8 @@ class S {
       isId ? 'mengirim permintaan teman' : 'sent you a friend request';
   String get notifSubscribeBody =>
       isId ? 'berlangganan ke kamu' : 'subscribed to you';
+  String notifBroadcastBody(String roomName) =>
+      isId ? 'sedang live di $roomName' : 'is live in $roomName';
   String get notifCallingBody =>
       isId ? 'menelpon kamu...' : 'is calling you...';
   String get notifCallingVideoBody =>
@@ -452,6 +454,9 @@ class S {
   String get notifTypeOnline => isId ? 'Pesan Online' : 'Online Alerts';
   String get notifTypeOnlineDesc =>
       isId ? 'Teman chat sedang online' : 'Chat contact is online';
+  String get notifTypeBroadcast => isId ? 'Live Broadcast' : 'Live Broadcast';
+  String get notifTypeBroadcastDesc =>
+      isId ? 'Ada yang mulai broadcast di room' : 'Someone starts broadcasting in a room';
   String get notifTypeTimeline => isId ? 'Timeline' : 'Timeline';
   String get notifTypeTimelineDesc =>
       isId ? 'Postingan baru di timeline' : 'New timeline posts';
@@ -529,6 +534,11 @@ class S {
   // ── Errors / Generic ──
   String get btnCancel => isId ? 'Batal' : 'Cancel';
   String get privateRoomsStopBroadcast => isId ? 'Hentikan broadcast' : 'Stop broadcast';
+  String get roomBroadcastConnecting => isId ? 'Menyiapkan…' : 'Starting…';
+  String get broadcastLiveNotif =>
+      isId ? 'Broadcast aktif — ketuk untuk kembali' : 'Broadcast live — tap to return';
+  String get broadcastWatchingNotif =>
+      isId ? 'Menonton broadcast — ketuk untuk kembali' : 'Watching broadcast — tap to return';
   String get privateRoomsStartBroadcast => isId ? 'Mulai broadcast' : 'Start broadcast';
   String get privateRoomsLiveNow => isId ? 'LIVE' : 'LIVE';
 

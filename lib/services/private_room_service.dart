@@ -103,6 +103,30 @@ class PrivateRoomService {
     });
   }
 
+  Future<void> revokeBroadcast(String roomId, String targetUid) async {
+    await _sb.rpc('revoke_broadcast', params: {
+      'p_room_id': roomId,
+      'p_uid': targetUid,
+    });
+  }
+
+  /// Grant broadcast persisten untuk diri sendiri (dari room_members).
+  Future<bool> myBroadcastGranted(String roomId) async {
+    try {
+      final myUid = uid;
+      if (myUid == null) return false;
+      final row = await _sb
+          .from('room_members')
+          .select('broadcast_granted')
+          .eq('room_id', roomId)
+          .eq('user_id', myUid)
+          .maybeSingle();
+      return row?['broadcast_granted'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> stopBroadcast(String roomId) async {
     await _sb.rpc('stop_broadcast', params: {'p_room_id': roomId});
   }
@@ -207,6 +231,8 @@ class PrivateRoomService {
   }
 
   /// Ambil signal yang terlewat saat offline/refresh (cursor id).
+  /// Hanya signal SEGAR (<= 30 detik) — signal basi jangan di-replay,
+  /// biar tidak badai offer/answer lama yang merusak state WebRTC.
   Future<List<Map<String, dynamic>>> fetchSignalsSince(
     String roomId,
     int sinceId,
@@ -217,6 +243,8 @@ class PrivateRoomService {
           .select()
           .eq('room_id', roomId)
           .gt('id', sinceId)
+          .gte('created_at',
+              DateTime.now().toUtc().subtract(const Duration(seconds: 30)).toIso8601String())
           .order('id')
           .limit(200);
       return rows
