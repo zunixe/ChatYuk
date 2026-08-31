@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     // Jika call_ended dikirim sebagai notification block, FCM auto-tampilkan
     // 1 notif sistem (id random) + Flutter tampilkan 1 lagi (id chatId) =
     // dobel (penyebab 3 notifikasi). Jadi HARUS data-only.
-    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call', 'call_ended', 'call_canceled', 'message'];
+    const dataOnlyTypes = ['online', 'follow', 'friend_request', 'subscribe', 'call', 'call_ended', 'call_canceled', 'message', 'broadcast'];
     const isDataOnly = dataOnlyTypes.includes(body.data?.type);
 
     // Untuk call, susun teks dari data (nama caller + tipe).

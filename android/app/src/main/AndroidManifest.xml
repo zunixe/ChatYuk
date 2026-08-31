@@ -13,8 +13,8 @@
     <!-- Foreground service: call tetap jalan walau app di-swipe (gaya WhatsApp) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
-    <!-- Notifikasi panggilan masuk tampil full-screen di atas lockscreen -->
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <!-- USE_FULL_SCREEN_INTENT DIHAPUS: ditolak Google Play (kebijakan hanya
+         untuk app alarm/telepon). Notifikasi call tetap heads-up + lockscreen. -->
     <!-- Rekam panggilan (folder publik ChatYuk Admin/Record) -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>

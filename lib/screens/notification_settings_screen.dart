@@ -46,6 +46,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       _Item(s.notifTypeCall, s.notifTypeCallDesc, Icons.call_outlined, 'call'),
       _Item(s.notifTypeChat, s.notifTypeChatDesc, Icons.chat_bubble_outline, 'chat'),
       _Item(s.notifTypeOnline, s.notifTypeOnlineDesc, Icons.circle_outlined, 'online'),
+      _Item(s.notifTypeBroadcast, s.notifTypeBroadcastDesc, Icons.podcasts_outlined, 'broadcast'),
       _Item(s.notifTypeTimeline, s.notifTypeTimelineDesc, Icons.view_list_outlined, 'timeline'),
       _Item(s.notifTypeFollower, s.notifTypeFollowerDesc, Icons.person_add_outlined, 'follower'),
       _Item(s.notifTypeFollowing, s.notifTypeFollowingDesc, Icons.favorite_border, 'following'),
