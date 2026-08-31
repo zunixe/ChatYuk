@@ -56,6 +56,7 @@ class RoomBroadcastSession extends ChangeNotifier {
   final Map<String, DateTime> _lastOfferAt = {};
   final Map<String, String> _pcIds = {};
   final Map<String, DateTime> _offerSentAt = {};
+  final Set<String> _offerBusy = {};
   String _viewerAcceptedPcId = '';
   int _bitrateRecalcTick = 0;
 
@@ -178,16 +179,18 @@ class RoomBroadcastSession extends ChangeNotifier {
           if (cnt == 0) stop();
         } catch (_) {}
       });
-      // Rejoin watchdog: berkala cek — kalau broadcaster aktif tapi video
-      // belum masuk/koneksi mati, restart session (b_join baru → offer
-      // baru). Sebelumnya sekali-jalan: video beku tidak pernah pulih.
-      _rejoinTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      // Rejoin TANPA teardown: selama video belum masuk / koneksi mati,
+      // kirim b_join baru tiap 5 detik → broadcaster re-offer (guard busy
+      // mencegah spam) → viewer terima offer terbaru (pcId) → handshake
+      // ulang → onTrack → video hidup. Session tidak dibongkar — tidak ada
+      // fase blank di antara restart, screen stay di stage "menyambungkan".
+      _rejoinTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
         if (_closed || remoteReady) return;
         try {
           final cnt = await _prv.broadcastCount(roomId);
           if (cnt > 0) {
-            debugPrint('[BROADCAST] viewer rejoin (no video)');
-            await stop();
+            debugPrint('[BROADCAST] viewer re-ping (no video yet)');
+            await requestStream();
           }
         } catch (_) {}
       });
@@ -228,9 +231,8 @@ class RoomBroadcastSession extends ChangeNotifier {
 
     switch (type) {
       case 'b_join':
-        // Dedupe by signal id ada di _onSignal (atas) — b_join dobel
-        // realtime+polling = row sama = id sama. Re-enter cepat (row baru)
-        // langsung diproses, tidak perlu kooldown waktu.
+        // Guard busy ada di dalam _makeOfferTo — b_join dobel realtime+polling
+        // maupun tumpang tindih watchdog tetap satu offer per viewer.
         if (isBroadcaster) {
           unawaited(_makeOfferTo(from));
         }
@@ -302,6 +304,11 @@ class RoomBroadcastSession extends ChangeNotifier {
   }
 
   Future<void> _makeOfferTo(String viewerUid) async {
+    // Guard tunggal di SEMUA jalur (b_join, recovery, deadlock): satu offer
+    // berjalan per viewer. Tanpa ini b_join dobel → 2 pc paralel → answer
+    // jatuh ke pc salah → kadang Connected kadang blank (race klasik).
+    if (_offerBusy.contains(viewerUid)) return;
+    _offerBusy.add(viewerUid);
     try {
       if (_localStream == null) return;
       final old = _peers[viewerUid];
@@ -354,6 +361,8 @@ class RoomBroadcastSession extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[BROADCAST] offer to $viewerUid failed: $e');
+    } finally {
+      _offerBusy.remove(viewerUid);
     }
   }
 
@@ -530,11 +539,14 @@ class RoomBroadcastSession extends ChangeNotifier {
 
       pc.onConnectionState = (st) {
         debugPrint('[BROADCAST] viewer pc state=$st');
-        // Koneksi mati → video beku. Reset remoteReady supaya rejoin
-        // watchdog bisa restart session (tanpa ini viewer menonton
-        // layar beku selamanya).
+        // Guard identitas: event dari pc lama (yang diganti re-offer) tidak
+        // boleh me-reset status pc baru.
+        if (!identical(_peers[broadcasterUid], pc)) return;
+        // Koneksi mati → video beku. Reset remoteReady supaya rejoin ping
+        // jalan lagi (tanpa ini viewer menonton layar beku selamanya).
         if (st == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-            st == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+            st == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+            st == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
           remoteReady = false;
           notifyListeners();
         }
