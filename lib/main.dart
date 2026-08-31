@@ -25,6 +25,7 @@ import 'screens/incoming_call_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/supabase_config.dart';
+import 'config/theme.dart';
 import 'services/auth_service.dart';
 import 'utils.dart';
 import 'services/message_cache.dart';
@@ -128,6 +129,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       type == 'follow' ||
       type == 'friend_request' ||
       type == 'subscribe' ||
+      type == 'broadcast' ||
       type == 'call' ||
       type == 'message';
   final isMessage = type == 'message' ||
@@ -141,6 +143,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
             ? 'is calling you'
             : type == 'message'
             ? (data['body'] as String?) ?? 'New message'
+            : type == 'broadcast'
+            ? 'is live in ${data['roomName'] ?? 'Room'}'
             : type == 'online'
             ? 'is online'
             : type == 'follow'
@@ -159,8 +163,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await _ensureAndroidChannels(plugin);
 
   // Panggilan masuk → notifikasi gaya telepon: suara alarm (loop channel),
-  // full-screen intent, tampil di lockscreen. Channel 'chatyuk_calls' dibuat
-  // sekali oleh sistem dengan suara raw/ringtone.mp3.
+  // heads-up di lockscreen. fullScreenIntent dihapus — USE_FULL_SCREEN_INTENT
+  // ditolak Google Play (kebijakan hanya untuk app alarm/telepon).
   final isCall = type == 'call';
   final androidDetails = isCall
       ? lpn.AndroidNotificationDetails(
@@ -171,7 +175,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           priority: lpn.Priority.max,
           sound: const lpn.RawResourceAndroidNotificationSound('ringtone'),
           audioAttributesUsage: lpn.AudioAttributesUsage.alarm,
-          fullScreenIntent: true,
           ongoing: true,
           autoCancel: false,
           category: lpn.AndroidNotificationCategory.call,
@@ -368,6 +371,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       type == 'follow' ||
       type == 'friend_request' ||
       type == 'subscribe' ||
+      type == 'broadcast' ||
       type == 'call' ||
       type == 'message';
   final isOnline = type == 'online';
@@ -382,6 +386,8 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
                 : s.notifCallingVoiceBody)
             : type == 'message'
             ? (data['body'] as String?) ?? s.notifNewMessageBody
+            : type == 'broadcast'
+            ? s.notifBroadcastBody((data['roomName'] as String?) ?? 'Room')
             : isOnline
             ? s.notifOnlineBody
             : type == 'follow'
@@ -547,7 +553,7 @@ void _openFromData(Map<String, dynamic> data) {
   }
   nav.pushAndRemoveUntil(
     MaterialPageRoute(
-      builder: (_) => data['type'] == 'room'
+      builder: (_) => data['type'] == 'room' || data['type'] == 'broadcast'
           ? RoomChatScreen(
               room: RoomModel(
                 id: data['roomId'] ?? '',
@@ -776,6 +782,7 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Channel + permission cepat (tanpa getToken 5s) — getToken lazy setelah runApp
   await _initNotificationsFast();
   await warmChatBackground();
+  await AppTheme.init();
   runApp(const ChatYukApp());
   // Token FCM lambat (5s) — lazy setelah UI tampil, tidak block TTI
   unawaited(_initFcmTokenLazy());

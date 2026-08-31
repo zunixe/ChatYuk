@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Skala tipografi resmi ChatYuk — 8 ukuran, 11 token.
 /// Aturan lengkap ada di AGENTS.md bagian "Tipografi".
@@ -112,6 +113,14 @@ class AppTheme {
 
   /// Mode aktif — di-set oleh ThemeProvider sebelum notifyListeners.
   static bool isDark = false;
+
+  /// Inisialisasi sinkron theme dari SharedPreferences.
+  /// HARUS dipanggil SEBELUM runApp() supaya frame pertama langsung pakai
+  /// tema yang benar (menghilangkan flash putih saat cold start).
+  static Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    isDark = prefs.getBool('app_theme_dark') ?? true;
+  }
 
   // ── Brand (konstan di kedua mode) ──
   static const Color primary = Color(0xFF2196F3);

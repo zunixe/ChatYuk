@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Warna splash & background window saat startup — HARUS sama dengan
+     scaffoldBackgroundColor tema gelap app (lib/config/theme.dart _bgScreenDark)
+     supaya transisi splash -> frame pertama Flutter tidak blink. -->
+<resources>
+    <color name="launch_bg">#121212</color>
+</resources>
