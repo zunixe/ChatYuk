@@ -2043,6 +2043,32 @@ class _ChatInputState extends State<_ChatInput> {
   Timer? _voiceTimer;
   int _voiceSeconds = 0;
   OverlayEntry? _voiceOverlay;
+  bool _isVoiceLocked = false;
+  bool _isVoicePaused = false;
+
+  void _lockVoiceRecord() {
+    if (mounted) setState(() => _isVoiceLocked = true);
+  }
+
+  void _startVoiceTimer() {
+    _voiceTimer?.cancel();
+    _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_voiceSeconds >= 59) { _stopVoiceRecord(); return; }
+      setState(() => _voiceSeconds++);
+    });
+  }
+
+  Future<void> _pauseVoiceRecord() async {
+    try { await _record.pause(); } catch (_) {}
+    _voiceTimer?.cancel();
+    if (mounted) setState(() => _isVoicePaused = true);
+  }
+
+  Future<void> _resumeVoiceRecord() async {
+    try { await _record.resume(); } catch (_) {}
+    if (mounted) setState(() => _isVoicePaused = false);
+    _startVoiceTimer();
+  }
 
   Future<void> _startVoiceRecord() async {
     final hasPerm = await Permission.microphone.request();
@@ -2052,11 +2078,13 @@ class _ChatInputState extends State<_ChatInput> {
       final dir = await getTemporaryDirectory();
       final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
       await _record.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000), path: path);
-      setState(() { _isRecordingVoice = true; _voiceSeconds = 0; });
-      _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-        if (_voiceSeconds >= 59) { _stopVoiceRecord(); return; }
-        setState(() => _voiceSeconds++);
+      setState(() {
+        _isRecordingVoice = true;
+        _voiceSeconds = 0;
+        _isVoiceLocked = false;
+        _isVoicePaused = false;
       });
+      _startVoiceTimer();
     } catch (_) {}
   }
 
@@ -2070,6 +2098,8 @@ class _ChatInputState extends State<_ChatInput> {
     _voiceTimer?.cancel();
     _voiceOverlay?.remove(); _voiceOverlay = null;
     if (!_isRecordingVoice) return;
+    _isVoiceLocked = false;
+    _isVoicePaused = false;
     final path = await _record.stop();
     setState(() => _isRecordingVoice = false);
     if (path == null) return;
@@ -2085,7 +2115,11 @@ class _ChatInputState extends State<_ChatInput> {
     _voiceTimer?.cancel();
     _voiceOverlay?.remove(); _voiceOverlay = null;
     _record.cancel();
-    setState(() => _isRecordingVoice = false);
+    setState(() {
+      _isRecordingVoice = false;
+      _isVoiceLocked = false;
+      _isVoicePaused = false;
+    });
   }
 
   @override
@@ -2228,11 +2262,25 @@ class _ChatInputState extends State<_ChatInput> {
                                   style: AppText.bodyStrong.copyWith(color: Colors.red),
                                 ),
                                 const Spacer(),
-                                Icon(Icons.arrow_back_rounded, size: 14, color: AppTheme.textSecondary),
-                                const SizedBox(width: 4),
-                                Text(
-                                  s.hintSlideToCancel,
-                                  style: AppText.body.copyWith(color: AppTheme.textSecondary),
+                                GestureDetector(
+                                  onTap: () => _isVoicePaused
+                                      ? _resumeVoiceRecord()
+                                      : _pauseVoiceRecord(),
+                                  child: Container(
+                                    width: 30,
+                                    height: 30,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withValues(alpha: 0.12),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      _isVoicePaused
+                                          ? Icons.play_arrow_rounded
+                                          : Icons.pause_rounded,
+                                      color: Colors.red,
+                                      size: 18,
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(width: 16),
                               ],
@@ -2307,17 +2355,21 @@ class _ChatInputState extends State<_ChatInput> {
                   child: _isRecordingVoice
                       ? MicRecordButton(
                           isRecording: true,
+                          isLocked: _isVoiceLocked,
                           onTap: _stopVoiceRecord,
                           onLongPressStart: _startVoiceRecord,
                           onLongPressCancel: _cancelVoiceRecord,
+                          onLock: _lockVoiceRecord,
                           size: 40,
                         )
                       : (widget.controller.text.trim().isEmpty && _decodedPhoto == null
                       ? MicRecordButton(
                           isRecording: false,
+                          isLocked: _isVoiceLocked,
                           onTap: _stopVoiceRecord,
                           onLongPressStart: _startVoiceRecord,
                           onLongPressCancel: _cancelVoiceRecord,
+                          onLock: _lockVoiceRecord,
                           size: 40,
                         )
                           : GestureDetector(
