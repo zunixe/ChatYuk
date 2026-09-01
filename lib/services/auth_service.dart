@@ -348,6 +348,30 @@ class AuthService {
     }, onConflict: 'id');
   }
 
+  /// Ambil toggle notifikasi pengingat harian (re-engagement) — admin global.
+  Future<bool> fetchReengageEnabled() async {
+    try {
+      final res = await _sb
+          .from('app_settings')
+          .select('reengage_enabled')
+          .eq('id', 'global')
+          .maybeSingle();
+      return res?['reengage_enabled'] != false;
+    } catch (e) {
+      debugPrint('[AUTH] fetchReengageEnabled error: $e');
+      return true;
+    }
+  }
+
+  /// Update toggle pengingat harian. RLS membatasi hanya admin.
+  Future<void> updateReengageEnabled(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'reengage_enabled': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
+  }
+
   /// Stream perubahan setting app_settings (realtime) — dipakai AuthProvider
   /// supaya toggle admin langsung berdampak di semua device tanpa polling.
   Stream<Map<String, dynamic>> onAppSettingsUpdated() {

@@ -162,6 +162,15 @@
 - **Deploy ulang `send-push`:** 2026-09-01 via `supabase functions deploy send-push --no-verify-jwt` — `dataOnlyTypes` kini berisi `['online','follow','friend_request','subscribe','call','call_ended','call_canceled','message','broadcast']`. Tanpa ini push broadcast terbungkus notif block "Pesan baru" (dobel).
 - **Teks client** (`lib/config/strings.dart` `notifBroadcastBody`): ID "Sedang broadcast di {room}", EN "is broadcasting in {room}". Tap notif → `_openFromData` buka RoomChatScreen langsung.
 
+## 2026-09-01 — 20260901080000_reengage_notif.sql
+
+- **Status:** ✅ SUDAH TERAPPLIED via Management API pada 2026-09-01.
+- **Isi:** Notifikasi pengingat harian (re-engagement): user offline 1–8 hari (stop setelah 7 hari notif), 1x/hari (dedupe `profiles.last_reengage_at` < 20 jam), token dari `user_devices` (is_active + fcm_token), push **notification block** via send-push (tampil walau app dimatikan). Toggle admin global: `app_settings.reengage_enabled` (default true). Cron `reengage-daily` `0 12 * * *` (12:00 UTC = 19:00 WIB).
+- **Teks rotasi 3 varian** (by offline_days mod 3): 👀 obrolan seru / 🔥 room rame / 💬 teman aktif — ID+EN, tanpa framing dating.
+- **`admin_get_point_settings` diganti return `to_jsonb(app_settings)` penuh** (sebelumnya daftar kolom manual) — client admin panel menerima semua kolom; `admin_update_point_settings` tambah `reengage_enabled`.
+- **Verifikasi:** dry run `select send_reengage_notifications(5)` → 5 terkirim; cron job id 7; kolom ada di 2 tabel.
+- **Catatan client:** tap notif reengage → buka app default (data type `reengage` diterima `_showLocalNotification`/`_openFromData` — tidak match tipe lain, aman). Edge function `send-push` TIDAK perlu deploy ulang (notification block dikirim karena `type:'reengage'` tidak ada di dataOnlyTypes).
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:

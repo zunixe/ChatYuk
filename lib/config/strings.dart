@@ -381,6 +381,9 @@ class S {
       isId ? 'Gagal simpan foto: ' : 'Failed to save photo: ';
   String get errPhotoLoad =>
       isId ? 'Gagal membaca gambar' : 'Failed to read image';
+  String get errPhotoPermission => isId
+      ? 'Izin kamera/galeri belum diizinkan — aktifkan di Pengaturan HP'
+      : 'Camera/gallery permission denied — enable it in device Settings';
   String get msgPhotoExpired =>
       isId ? '⏰ Foto sudah expired' : '⏰ Photo expired';
   String get msgPhotoTapToLoad =>
@@ -803,6 +806,13 @@ class S {
   String get descRequireRegistration => isId
       ? 'Admin — sembunyikan "Mulai Chat Sekarang", hanya Login Google & Daftar Email'
       : 'Admin — hide "Start Chatting Now", only Google Login & Email Sign Up';
+
+  // ── Notifikasi pengingat harian (admin) ──
+  String get labelReengageNotif =>
+      isId ? 'Pengingat Harian' : 'Daily Reminder';
+  String get descReengageNotif => isId
+      ? 'Push pengingat tiap 19:00 ke user offline 1-8 hari (stop setelah 7 hari)'
+      : 'Push daily reminder at 19:00 to users offline 1-8 days (stops after 7 days)';
 
   // ── Points ──
   String get pointsTitle => isId ? 'Poin ChatYuk' : 'ChatYuk Points';
