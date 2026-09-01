@@ -249,6 +249,8 @@ class S {
   String get statusOffline => isId ? 'Offline' : 'Offline';
   String get statusInvisible => isId ? 'Invisible' : 'Invisible';
   String get typingStatus => isId ? 'Sedang mengetik' : 'Typing';
+  String get recordingStatus =>
+      isId ? 'Merekam suara...' : 'Recording voice...';
   String get genderMale => isId ? '👨 Laki-laki' : '👨 Male';
   String get genderFemale => isId ? '👩 Perempuan' : '👩 Female';
   String get genderMalePlain => isId ? 'Laki-laki' : 'Male';
@@ -428,7 +430,7 @@ class S {
   String get notifSubscribeBody =>
       isId ? 'berlangganan ke kamu' : 'subscribed to you';
   String notifBroadcastBody(String roomName) =>
-      isId ? 'sedang live di $roomName' : 'is live in $roomName';
+      isId ? 'Sedang broadcast di $roomName' : 'is broadcasting in $roomName';
   String get notifCallingBody =>
       isId ? 'menelpon kamu...' : 'is calling you...';
   String get notifCallingVideoBody =>

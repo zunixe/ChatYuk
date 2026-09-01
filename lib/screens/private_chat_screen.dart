@@ -451,10 +451,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   Timer? _pendingConfirmTimer;
   MessageModel? _editingMessage;
   MessageModel? _replyingTo;
-  StreamSubscription<void>? _typingSub;
+  StreamSubscription<String>? _typingSub;
   Timer? _typingClearTimer;
   DateTime _lastTypingSent = DateTime(2000);
   bool _showTyping = false;
+  bool _showRecording = false;
   String? _pendingPhotoBase64;
 
   void _subscribeTyping() {
@@ -462,15 +463,24 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _typingSub = context
         .read<ChatProvider>()
         .getTypingStream(widget.chatId)
-        .listen((_) {
+        .listen((kind) {
           if (!mounted) return;
           setState(() {
-            _showTyping = true;
+            if (kind == 'recording') {
+              _showRecording = true;
+              _showTyping = false;
+            } else {
+              _showTyping = true;
+              _showRecording = false;
+            }
           });
           _typingClearTimer?.cancel();
           _typingClearTimer = Timer(const Duration(seconds: 3), () {
             if (!mounted) return;
-            setState(() => _showTyping = false);
+            setState(() {
+              _showTyping = false;
+              _showRecording = false;
+            });
           });
         });
   }
@@ -480,6 +490,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (now.difference(_lastTypingSent).inMilliseconds < 2500) return;
     _lastTypingSent = now;
     context.read<ChatProvider>().sendTyping(widget.chatId);
+  }
+
+  void _sendRecordingSignal() {
+    context.read<ChatProvider>().sendTyping(widget.chatId, kind: 'recording');
   }
 
   bool _newChatBonusClaimed = false;
@@ -721,6 +735,33 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   Timer? _voiceTimer;
   int _voiceSeconds = 0;
   OverlayEntry? _voiceOverlay;
+  bool _isVoiceLocked = false;
+  bool _isVoicePaused = false;
+
+  void _lockVoiceRecord() {
+    if (mounted) setState(() => _isVoiceLocked = true);
+  }
+
+  void _startVoiceTimer() {
+    _voiceTimer?.cancel();
+    _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_voiceSeconds >= 59) { _stopVoiceRecord(send: true); return; }
+      _sendRecordingSignal();
+      setState(() => _voiceSeconds++);
+    });
+  }
+
+  Future<void> _pauseVoiceRecord() async {
+    try { await _record.pause(); } catch (_) {}
+    _voiceTimer?.cancel();
+    if (mounted) setState(() => _isVoicePaused = true);
+  }
+
+  Future<void> _resumeVoiceRecord() async {
+    try { await _record.resume(); } catch (_) {}
+    if (mounted) setState(() => _isVoicePaused = false);
+    _startVoiceTimer();
+  }
 
   Future<void> _startVoiceRecord() async {
     final hasPerm = await Permission.microphone.request();
@@ -733,11 +774,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         final dir = await getTemporaryDirectory();
         final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
         await _record.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000), path: path);
-        setState(() { _isRecordingVoice = true; _voiceSeconds = 0; });
-        _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-          if (_voiceSeconds >= 59) { _stopVoiceRecord(send: true); return; }
-          setState(() => _voiceSeconds++);
+        setState(() {
+          _isRecordingVoice = true;
+          _voiceSeconds = 0;
+          _isVoiceLocked = false;
+          _isVoicePaused = false;
         });
+        _sendRecordingSignal();
+        _startVoiceTimer();
       }
     } catch (_) {}
   }
@@ -753,6 +797,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _voiceTimer?.cancel();
     _voiceOverlay?.remove(); _voiceOverlay = null;
     if (!_isRecordingVoice) return;
+    _isVoiceLocked = false;
+    _isVoicePaused = false;
     final path = await _record.stop();
     setState(() => _isRecordingVoice = false);
     if (!send || path == null) return;
@@ -804,7 +850,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _voiceTimer?.cancel();
     _voiceOverlay?.remove(); _voiceOverlay = null;
     _record.cancel();
-    setState(() => _isRecordingVoice = false);
+    setState(() {
+      _isRecordingVoice = false;
+      _isVoiceLocked = false;
+      _isVoicePaused = false;
+    });
   }
 
   /// Mulai edit pesan teks sendiri — teks dimasukkan ke composer bawah,
@@ -2056,12 +2106,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     ],
                   ),
                 ),
-                if (_showTyping)
+                if (_showTyping || _showRecording)
                   Padding(
                     padding: EdgeInsets.fromLTRB(14, 6, 0, 10),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: _TypingBubble(),
+                      child: _TypingBubble(isRecording: _showRecording),
                     ),
                   ),
                 Container(
@@ -2250,11 +2300,25 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                               style: AppText.bodyStrong.copyWith(color: Colors.red),
                                             ),
                                             Spacer(),
-                                            Icon(Icons.arrow_back_rounded, size: 14, color: AppTheme.textSecondary),
-                                            SizedBox(width: 4),
-                                            Text(
-                                              s.hintSlideToCancel,
-                                              style: AppText.body.copyWith(color: AppTheme.textSecondary),
+                                            GestureDetector(
+                                              onTap: () => _isVoicePaused
+                                                  ? _resumeVoiceRecord()
+                                                  : _pauseVoiceRecord(),
+                                              child: Container(
+                                                width: 30,
+                                                height: 30,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.withValues(alpha: 0.12),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Icon(
+                                                  _isVoicePaused
+                                                      ? Icons.play_arrow_rounded
+                                                      : Icons.pause_rounded,
+                                                  color: Colors.red,
+                                                  size: 18,
+                                                ),
+                                              ),
                                             ),
                                             SizedBox(width: 16),
                                           ],
@@ -2344,9 +2408,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                   child: _isRecordingVoice
                                       ? MicRecordButton(
                                           isRecording: true,
+                                          isLocked: _isVoiceLocked,
                                           onTap: () => _stopVoiceRecord(send: true),
                                           onLongPressStart: _startVoiceRecord,
                                           onLongPressCancel: _cancelVoiceRecord,
+                                          onLock: _lockVoiceRecord,
                                           size: 40,
                                         )
                                       : (hasText
@@ -2376,9 +2442,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                             )
                                           : MicRecordButton(
                                               isRecording: false,
+                                              isLocked: _isVoiceLocked,
                                               onTap: () => _stopVoiceRecord(send: true),
                                               onLongPressStart: _startVoiceRecord,
                                               onLongPressCancel: _cancelVoiceRecord,
+                                              onLock: _lockVoiceRecord,
                                               size: 40,
                                             )),
                                 );
@@ -2672,7 +2740,8 @@ class _AttachChip extends StatelessWidget {
 }
 
 class _TypingBubble extends StatefulWidget {
-  const _TypingBubble();
+  final bool isRecording;
+  const _TypingBubble({this.isRecording = false});
 
   @override
   State<_TypingBubble> createState() => _TypingBubbleState();
@@ -2693,6 +2762,26 @@ class _TypingBubbleState extends State<_TypingBubble>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isRecording) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.bgInput,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.mic_rounded, color: Colors.red, size: 16),
+            SizedBox(width: 6),
+            Text(
+              context.read<LocaleProvider>().s.recordingStatus,
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(

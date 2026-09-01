@@ -1164,16 +1164,19 @@ class ChatService {
     });
   }
 
-  /// Stream event typing lawan bicara di satu chat.
-  Stream<void> getTypingStream(String chatId) {
-    final controller = StreamController<void>.broadcast();
+  /// Stream event typing/recording lawan bicara di satu chat.
+  /// Emit kind: 'typing' | 'recording' (dari payload event).
+  Stream<String> getTypingStream(String chatId) {
+    final controller = StreamController<String>.broadcast();
     final channel = _typingChannel(chatId);
     channel.onBroadcast(
       event: 'typing',
       callback: (payload) {
         final senderId = payload['sender_id'] as String?;
         if (senderId == null || senderId == _sb.auth.currentUser?.id) return;
-        if (!controller.isClosed) controller.add(null);
+        if (!controller.isClosed) {
+          controller.add((payload['kind'] as String?) ?? 'typing');
+        }
       },
     );
     controller.onCancel = () {
@@ -1183,8 +1186,8 @@ class ChatService {
     return controller.stream;
   }
 
-  /// Kirim sinyal typing (throttle dilakukan di screen).
-  void sendTyping(String chatId) {
+  /// Kirim sinyal typing/recording (throttle dilakukan di screen).
+  void sendTyping(String chatId, {String kind = 'typing'}) {
     final uid = _sb.auth.currentUser?.id;
     if (uid == null) return;
     _typingChannel(chatId)
@@ -1192,6 +1195,7 @@ class ChatService {
           event: 'typing',
           payload: {
             'sender_id': uid,
+            'kind': kind,
             'ts': DateTime.now().millisecondsSinceEpoch,
           },
         )

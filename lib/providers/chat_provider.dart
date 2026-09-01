@@ -109,10 +109,11 @@ class ChatProvider extends ChangeNotifier {
   Stream<String> getUserStatus(String uid, {String? initialStatus}) =>
       _service.getUserStatus(uid, initialStatus: initialStatus);
 
-  Stream<void> getTypingStream(String chatId) =>
+  Stream<String> getTypingStream(String chatId) =>
       _service.getTypingStream(chatId);
 
-  void sendTyping(String chatId) => _service.sendTyping(chatId);
+  void sendTyping(String chatId, {String kind = 'typing'}) =>
+      _service.sendTyping(chatId, kind: kind);
 
   Future<void> sendPrivateMessage({
     required String chatId,
