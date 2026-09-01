@@ -54,3 +54,20 @@ class SkeletonCard extends StatelessWidget {
     );
   }
 }
+
+/// ListView berisi beberapa SkeletonCard — placeholder list saat loading.
+/// Taxan dipakai semua screen (online users, chat list, timeline, rooms).
+class SkeletonList extends StatelessWidget {
+  final int count;
+  final EdgeInsets padding;
+  const SkeletonList({super.key, this.count = 6, this.padding = const EdgeInsets.fromLTRB(10, 8, 10, 12)});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: padding,
+      itemCount: count,
+      itemBuilder: (_, __) => const SkeletonCard(),
+    );
+  }
+}

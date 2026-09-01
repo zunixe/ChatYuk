@@ -20,12 +20,16 @@ class RoomProvider extends ChangeNotifier {
   StreamSubscription? _privateSub;
   String? _error;
   Timer? _diskSaveTimer;
+  // True setelah data pertama selesai dimuat (disk atau server) — dipakai
+  // UI untuk menampilkan skeleton, bukan empty state "kosong", saat startup.
+  bool _hasLoaded = false;
 
   List<RoomModel> get rooms => _rooms;
   List<RoomModel> get privateRooms => _privateRooms;
   Set<String> get memberRoomIds => _memberRoomIds;
   String get country => _country;
   String? get error => _error;
+  bool get hasLoaded => _hasLoaded;
 
   RoomProvider() {
     // Unified fan-out: Presence room juga update counts per-room (RealtimeHub per-room presence)
@@ -84,9 +88,11 @@ class RoomProvider extends ChangeNotifier {
       _memberRoomIds = ((memObj['ids'] as List?) ?? const [])
           .map((e) => '$e')
           .toSet();
+      _hasLoaded = true;
       notifyListeners();
     } catch (e) {
       debugPrint('[RoomProvider] disk load error: $e');
+      _hasLoaded = true;
     }
   }
 
@@ -118,6 +124,7 @@ class RoomProvider extends ChangeNotifier {
           (rooms) {
             _privateRooms = rooms;
             _applyCounts();
+            _hasLoaded = true;
             notifyListeners();
             _scheduleDiskSave();
           },
@@ -149,6 +156,7 @@ class RoomProvider extends ChangeNotifier {
       }
       _rooms = rooms;
       _applyCounts();
+      _hasLoaded = true;
       if (!_seeded && rooms.isEmpty) {
         _seeded = true;
         seedRooms();
@@ -160,6 +168,7 @@ class RoomProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[RoomProvider] fetch rooms error: $e');
       _error = e.toString();
+      _hasLoaded = true;
       notifyListeners();
     }
   }
@@ -176,10 +185,12 @@ class RoomProvider extends ChangeNotifier {
       _privateRooms = priv;
       _memberRoomIds = members;
       _applyCounts();
+      _hasLoaded = true;
       notifyListeners();
       _scheduleDiskSave();
     } catch (e) {
       debugPrint('[RoomProvider] fetch private rooms error: $e');
+      _hasLoaded = true;
     }
   }
 

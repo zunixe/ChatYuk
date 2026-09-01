@@ -224,6 +224,11 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   List<Widget>? _pages;
   bool? _pagesDark; // tema saat _pages terakhir dibuat
 
+  // Tab yang pernah dikunjungi — halaman hanya dibangun saat pertama kali
+  // dikunjungi (lazy IndexedStack). Tanpa ini, 4 halaman dibangun sekaligus
+  // di frame pertama setelah skeleton → blink abu terang 1-2 frame.
+  final Set<int> _visitedTabs = {0};
+
   @override
   void initState() {
     super.initState();
@@ -291,6 +296,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       ];
       _pagesDark = dark;
     }
+    if (!_visitedTabs.contains(tab)) _visitedTabs.add(tab);
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: _roomProvider),
@@ -301,7 +307,15 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
           behavior: HitTestBehavior.translucent,
           onTap: () => context.read<AuthProvider>().notifyActivity(),
           onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
-          child: IndexedStack(index: tab, children: _pages!),
+          child: IndexedStack(
+            index: tab,
+            children: [
+              for (var i = 0; i < _pages!.length; i++)
+                _visitedTabs.contains(i)
+                    ? _pages![i]
+                    : const SizedBox.shrink(),
+            ],
+          ),
         ),
         floatingActionButton: SizedBox(
           width: 52,

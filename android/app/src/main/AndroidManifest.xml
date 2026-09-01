@@ -63,6 +63,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Matikan Impeller (Vulkan) — di Xiaomi Adreno frame pertama sesekali
+             ke-present setengah jadi: appbar tergambar, body jadi abu polos
+             (#b6b6b6) 1-2 frame. Fallback ke Skia (OpenGL) menghilangkannya. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <!-- Default channel FCM untuk notifikasi data (message/call) yang
              terkirim sebagai notification block — biar selalu muncul di tray. -->
         <meta-data
