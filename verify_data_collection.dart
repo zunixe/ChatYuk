@@ -1,7 +1,7 @@
 // Verifikasi pengumpulan data untuk Play Console Data Safety
-import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'lib/providers/auth_provider.dart';
+import 'lib/services/avatar_service.dart';
 
 void main() async {
   print('=== Verifikasi Pengumpulan Data ChatYuk ===');
@@ -19,9 +19,9 @@ void main() async {
   // 2. Cek AvatarService (foto profil pengguna)
   String? avatarB64;
   try {
-    final avatarService = AvatarB64Service();
+    final avatarService = AvatarB64Service.instance;
     avatarB64 = await avatarService.get('current_user_id');
-    print('✓ avatarB64 tersedia: ${avatarB64?.length} karakter');
+    print('✓ avatarB64 tersedia: ${avatarB64.length} karakter');
   } catch (e) {
     print('✗ avatarB64 tidak tersedia: $e');
   }
@@ -29,7 +29,7 @@ void main() async {
   // 3. Cek AuthProvider (data pengguna)
   try {
     final auth = AuthProvider();
-    final user = auth.user;
+    final user = auth.profile;
     print('✓ user data tersedia: ${user?.uid}');
   } catch (e) {
     print('✗ user data tidak tersedia: $e');

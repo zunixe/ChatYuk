@@ -693,7 +693,7 @@ class ChatService {
       lastRealtime = DateTime.now();
       if (controller.isClosed) return;
       try {
-        final data = payload as Map<String, dynamic>;
+        final data = payload;
         if (data['chat_id']?.toString() != filterVal && data['room_id']?.toString() != filterVal) return;
         var msg = MessageModel.fromMap(data['id']?.toString() ?? 'bc-${DateTime.now().microsecondsSinceEpoch}', snakeToCamel(data));
         if (_current.any((m) => m.id == msg.id)) return;

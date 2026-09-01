@@ -32,7 +32,6 @@ import '../widgets/date_chip.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/voice_bubble.dart';
-import '../widgets/voice_record_overlay.dart';
 import '../widgets/mic_record_button.dart';
 import '../widgets/composer_link_preview.dart';
 import '../widgets/linkify_text.dart';
@@ -2086,12 +2085,6 @@ class _ChatInputState extends State<_ChatInput> {
       });
       _startVoiceTimer();
     } catch (_) {}
-  }
-
-  void _showVoiceOverlay() {
-    _voiceOverlay?.remove();
-    _voiceOverlay = OverlayEntry(builder: (_) => Positioned(bottom: 90, left: 16, right: 16, child: Material(color: Colors.transparent, child: VoiceRecordOverlay(onCancel: _cancelVoiceRecord, onSend: _stopVoiceRecord, slideToCancelText: context.read<LocaleProvider>().s.hintSlideToCancel))));
-    Overlay.of(context).insert(_voiceOverlay!);
   }
 
   Future<void> _stopVoiceRecord() async {
