@@ -5,12 +5,11 @@ class SupabaseConfig {
   static const String publishableKey =
       'sb_publishable_aFQQbXscy1mqVq5jHX7p2w_wzs2GAKg';
 
-  // Base URL edge function referral redirect (tracking share).
-  static const String referralBase =
-      'https://fohcucyyejdryryoxitm.functions.supabase.co/r';
-
-  /// Link share personal — menyisipkan uid pengirim untuk tracking klik.
-  static String shareLink(String uid) => '$referralBase?u=$uid';
+  /// Link share aplikasi — langsung ke Google Play.
+  /// (Dulu: edge function /r dengan uid untuk tracking klik; tracking
+  /// dimatikan sesuai permintaan — semua share kini ke listing Play Store.)
+  static const String shareLink =
+      'https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
 
   static Future<void> init() async {
     await Supabase.initialize(

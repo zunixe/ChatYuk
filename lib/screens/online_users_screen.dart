@@ -362,7 +362,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final s = context.read<LocaleProvider>().s;
     final uid = auth.uid;
     if (uid == null) return;
-    final link = SupabaseConfig.shareLink(uid);
+    final link = SupabaseConfig.shareLink;
     await Share.share(s.shareInviteMsg(link));
   }
 
