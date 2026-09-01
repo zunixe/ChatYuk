@@ -35,10 +35,28 @@ import 'subscriptions_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
 String? _processAvatar(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
+  var decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = img.copyResize(decoded, width: 300, height: 300);
-  final jpg = img.encodeJpg(resized, quality: 70);
+  // Terapkan orientasi EXIF — foto kamera bisa tersimpan rotate 90/180°.
+  decoded = img.bakeOrientation(decoded);
+  // Center-crop sisi terkecil → rasio 1:1 tanpa distorsi (tidak gepeng).
+  final w = decoded.width;
+  final h = decoded.height;
+  final side = w < h ? w : h;
+  final cropped = img.copyCrop(
+    decoded,
+    x: (w - side) ~/ 2,
+    y: (h - side) ~/ 2,
+    width: side,
+    height: side,
+  );
+  final resized = img.copyResize(
+    cropped,
+    width: 300,
+    height: 300,
+    interpolation: img.Interpolation.cubic,
+  );
+  final jpg = img.encodeJpg(resized, quality: 88);
   return base64Encode(jpg);
 }
 
@@ -47,10 +65,12 @@ String? _processAvatar(Uint8List bytes) {
 // user lain sebagai teaser (tidak bisa "dijernihkan"), tapi tetap bikin
 // penasaran. Foto asli hanya dikirim server saat sudah unlock.
 Map<String, String>? _processPhotoWithPreview(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
+  var decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
+  // Orientasi EXIF — foto kamera jangan sampai miring.
+  decoded = img.bakeOrientation(decoded);
   final resized = img.copyResize(decoded, width: 600);
-  final full = base64Encode(img.encodeJpg(resized, quality: 75));
+  final full = base64Encode(img.encodeJpg(resized, quality: 82));
   // Preview: kecil + blur berat, kualitas rendah.
   var preview = img.copyResize(decoded, width: 120);
   preview = img.gaussianBlur(preview, radius: 8);
@@ -209,11 +229,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _addGalleryPhoto(ImageSource source) async {
     final s = context.read<LocaleProvider>().s;
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: source,
-      maxWidth: 1200,
-      imageQuality: 85,
-    );
+    final XFile? picked;
+    try {
+      picked = await picker.pickImage(
+        source: source,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
+    } catch (e) {
+      debugPrint('[PROFILE] pickImage error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.errPhotoPermission)),
+        );
+      }
+      return;
+    }
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
     if (!mounted) return;
@@ -289,12 +320,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _pickAndUpload(ImageSource source) async {
     final s = context.read<LocaleProvider>().s;
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: source,
-      maxWidth: 600,
-      maxHeight: 600,
-      imageQuality: 80,
-    );
+    final XFile? picked;
+    try {
+      picked = await picker.pickImage(
+        source: source,
+        maxWidth: 600,
+        maxHeight: 600,
+        imageQuality: 80,
+      );
+    } catch (e) {
+      // Cancel sebelum izin kamera/galeri → PlatformException, jangan error.
+      debugPrint('[PROFILE] pickImage error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.errPhotoPermission)),
+        );
+      }
+      return;
+    }
     if (picked == null) return;
 
     final bytes = await picked.readAsBytes();

@@ -26,18 +26,20 @@ class AdminGlobalSettingTab extends StatelessWidget {
         16,
         MediaQuery.of(context).padding.bottom + 24,
       ),
-      children: const [
-        _InfoCard(),
-        SizedBox(height: 12),
-        _ScreenshotToggle(),
-        SizedBox(height: 10),
-        _WatermarkToggle(),
-        SizedBox(height: 10),
-        _InvisibleToggle(),
-        SizedBox(height: 10),
-        _CallAllToggle(),
-        SizedBox(height: 10),
-        _RequireRegistrationToggle(),
+      children: [
+        const _InfoCard(),
+        const SizedBox(height: 12),
+        const _ScreenshotToggle(),
+        const SizedBox(height: 10),
+        const _WatermarkToggle(),
+        const SizedBox(height: 10),
+        const _InvisibleToggle(),
+        const SizedBox(height: 10),
+        const _CallAllToggle(),
+        const SizedBox(height: 10),
+        const _RequireRegistrationToggle(),
+        const SizedBox(height: 10),
+        _ReengageToggle(),
       ],
     );
   }
@@ -357,6 +359,63 @@ class _RequireRegistrationToggle extends StatelessWidget {
             value: auth.requireRegistration,
             onChanged: (v) =>
                 context.read<AuthProvider>().setRequireRegistration(v),
+            activeThumbColor: AppTheme.primary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Toggle notifikasi pengingat harian (re-engagement): push ke user yang
+/// offline 1-8 hari, tiap 19:00 WIB, berhenti setelah 7 hari. Server-side
+/// (pg_cron + FCM); toggle ini hanya menulis app_settings.reengage_enabled.
+class _ReengageToggle extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final auth = context.watch<AuthProvider>();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.deepOrange.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.notifications_active_outlined,
+                color: Colors.deepOrange, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.labelReengageNotif,
+                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  s.descReengageNotif,
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: auth.reengageEnabled,
+            onChanged: (v) =>
+                context.read<AuthProvider>().setReengageEnabled(v),
             activeThumbColor: AppTheme.primary,
           ),
         ],

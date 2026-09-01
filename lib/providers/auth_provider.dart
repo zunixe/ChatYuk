@@ -60,6 +60,7 @@ class AuthProvider extends ChangeNotifier {
   bool _screenshotEnabled = true;
   bool _watermarkEnabled = false;
   bool _invisibleEnabled = false;
+  bool _reengageEnabled = true;
   bool _requireRegistration = false;
   bool _callAllEnabled = false;
   StreamSubscription<Map<String, dynamic>?>? _appSettingsSub;
@@ -71,6 +72,7 @@ class AuthProvider extends ChangeNotifier {
   bool get screenshotEnabled => _screenshotEnabled;
   bool get watermarkEnabled => _watermarkEnabled;
   bool get invisibleEnabled => _invisibleEnabled;
+  bool get reengageEnabled => _reengageEnabled;
   bool get requireRegistration => _requireRegistration;
   bool get callAllEnabled => _callAllEnabled;
   bool get isSignedIn => _auth.isSignedIn;
@@ -232,6 +234,7 @@ class AuthProvider extends ChangeNotifier {
         safeUnawaited(_loadCallAllSetting());
         safeUnawaited(_loadWatermarkSetting());
         safeUnawaited(_loadInvisibleSetting());
+        safeUnawaited(loadReengageSetting());
         _listenAppSettings();
         _startSettingsPolling();
         lastError = null;
@@ -434,6 +437,23 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _loadCallAllSetting() async {
     _callAllEnabled = await _auth.fetchCallAllEnabled();
     if (!_disposed) notifyListeners();
+  }
+
+  /// Ambil toggle pengingat harian (re-engagement) — dipakai admin panel.
+  Future<void> loadReengageSetting() async {
+    _reengageEnabled = await _auth.fetchReengageEnabled();
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Admin: toggle notifikasi pengingat harian (19:00 WIB, user offline).
+  Future<void> setReengageEnabled(bool enabled) async {
+    _reengageEnabled = enabled;
+    if (!_disposed) notifyListeners();
+    try {
+      await _auth.updateReengageEnabled(enabled);
+    } catch (e) {
+      debugPrint('[AUTH] updateReengageEnabled error: $e');
+    }
   }
 
   /// Admin: tombol call tampil ke semua user (termasuk anon/guest).
