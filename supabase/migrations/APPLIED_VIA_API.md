@@ -154,6 +154,14 @@
 - **Isi:** `profiles_age_18_check` dilonggarkan — allow `age=0` untuk user baru Google (sebelumnya hanya `is null` atau `>=18`, insert age 0 gagal 23514 → Google Sign-In 400)
 - **Verifikasi:** `insert into profiles (id, age) values (gen_random_uuid(), 0)` → sukses
 
+## 2026-09-01 — 20260830120000_broadcast_notif.sql
+
+- **Status:** ✅ SUDAH TERAPPLIED via Management API pada 2026-09-01 (token Keychain "Supabase CLI" → `go-keyring-base64:` prefix, decode base64 = `sbp_...`).
+- **Isi:** Trigger `notify_broadcast_started` di `room_broadcasters` AFTER INSERT (start broadcast video) → push data-only `type:'broadcast'` ke semua member room (kecuali broadcaster).
+- **Verifikasi:** `select tgname, tgenabled from pg_trigger where tgrelid='public.room_broadcasters'::regclass and not tgisinternal` → `notify_broadcast_started_trigger | O`.
+- **Deploy ulang `send-push`:** 2026-09-01 via `supabase functions deploy send-push --no-verify-jwt` — `dataOnlyTypes` kini berisi `['online','follow','friend_request','subscribe','call','call_ended','call_canceled','message','broadcast']`. Tanpa ini push broadcast terbungkus notif block "Pesan baru" (dobel).
+- **Teks client** (`lib/config/strings.dart` `notifBroadcastBody`): ID "Sedang broadcast di {room}", EN "is broadcasting in {room}". Tap notif → `_openFromData` buka RoomChatScreen langsung.
+
 ## Pola untuk AI berikutnya
 
 Jika `supabase db push` timeout lagi:
