@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ (API 31): sistem menampilkan splash otomatis dari tema.
+         Tanpa ini background splash default PUTIH — kelihatan sekilas saat
+         cold start lambat. Samakan dengan scaffoldBackgroundColor dark mode
+         (#121212, lib/config/theme.dart _bgScreenDark). -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@color/launch_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/launch_bg</item>
+    </style>
+</resources>

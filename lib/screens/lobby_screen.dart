@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import 'room_chat_screen.dart';
+import '../widgets/skeleton_card.dart';
 import 'private_rooms_screen.dart';
 import '../providers/theme_provider.dart';
 
@@ -192,7 +193,7 @@ class _LobbyScreenState extends State<LobbyScreen>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _GlobalRoomsTab(rooms: roomProvider.rooms),
+                _GlobalRoomsTab(rooms: roomProvider.rooms, loaded: roomProvider.hasLoaded),
                 _PrivateRoomsTab(),
               ],
             ),
@@ -368,11 +369,17 @@ class _ModeOption extends StatelessWidget {
 
 class _GlobalRoomsTab extends StatelessWidget {
   final List<RoomModel> rooms;
-  const _GlobalRoomsTab({required this.rooms});
+  final bool loaded;
+  const _GlobalRoomsTab({required this.rooms, this.loaded = true});
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
+    if (rooms.isEmpty && !loaded) {
+      // Data belum selesai dimuat — jangan tampilkan empty state "no rooms"
+      // yang menyesatkan, tampilkan skeleton saja.
+      return const SkeletonList(count: 6);
+    }
     if (rooms.isEmpty) {
       return Center(
         child: Column(
@@ -407,6 +414,13 @@ class _PrivateRoomsTab extends StatelessWidget {
     final s = context.watch<LocaleProvider>().s;
     final roomProvider = context.watch<RoomProvider>();
     final rooms = roomProvider.privateRooms;
+    if (rooms.isEmpty && !roomProvider.hasLoaded) {
+      // Data belum selesai dimuat — skeleton, bukan empty state.
+      return const SkeletonList(
+        count: 6,
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 88),
+      );
+    }
     return Stack(
       children: [
         if (rooms.isEmpty)

@@ -6,6 +6,7 @@ import '../providers/locale_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../widgets/anon_prompt_dialog.dart';
+import '../widgets/skeleton_card.dart';
 import 'post_composer_screen.dart';
 import '../providers/theme_provider.dart';
 
@@ -232,24 +233,20 @@ class _TimelineScreenState extends State<TimelineScreen>
                   ),
                 ],
               )
+            : posts.isEmpty && loading
+            ? // Skeleton saat load pertama — konsisten dengan tab lain.
+              const SkeletonList(
+                count: 5,
+                padding: EdgeInsets.only(top: 4, bottom: 88),
+              )
             : ListView.builder(
                 controller: _scroll,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(top: 4, bottom: 88),
-                itemCount: posts.isEmpty
-                    ? 1
-                    : posts.length +
-                          (loading && hasMore ? 1 : 0) +
-                          (!hasMore ? 1 : 0),
+                itemCount: posts.length +
+                      (loading && hasMore ? 1 : 0) +
+                      (!hasMore ? 1 : 0),
                 itemBuilder: (_, i) {
-                  if (posts.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    );
-                  }
                   if (i >= posts.length && loading && hasMore) {
                     return const Padding(
                       padding: EdgeInsets.all(16),

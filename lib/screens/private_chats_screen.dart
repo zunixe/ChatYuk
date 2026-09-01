@@ -10,6 +10,7 @@ import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
+import '../widgets/skeleton_card.dart';
 import '../services/social_service.dart';
 import '../utils.dart';
 import '../widgets/profile_avatar.dart';
@@ -276,9 +277,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
               builder: (_, snap) {
                 if (snap.connectionState == ConnectionState.waiting &&
                     snap.data == null) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: AppTheme.primary),
-                  );
+                  // Skeleton list saat stream belum memberi data pertama —
+                  // konsisten dengan skeleton tab lain.
+                  return const SkeletonList(count: 6);
                 }
                 final chats = (snap.data ?? []).toList();
                 // Simpan raw data ke field agar level build() bisa komputasi.
