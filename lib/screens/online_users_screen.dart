@@ -19,7 +19,6 @@ import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../services/chat_service.dart';
 import '../services/location_service.dart';
-import '../widgets/skeleton_card.dart';
 import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
@@ -885,10 +884,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   ),
                   Expanded(
                     child: !provider.hasLoaded
-                        ? ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
-                            itemCount: 6,
-                            itemBuilder: (_, __) => const SkeletonCard(),
+                        ? const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                color: AppTheme.primary,
+                              ),
+                            ),
                           )
                         : users.isEmpty
                         ? Center(

@@ -807,6 +807,14 @@ class AuthService {
       throw Exception('Image too large (max 384KB)');
     }
     // Upload ke Storage — DB hanya simpan path (hemat ruang).
+    // Path baru diberi timestamp (cache-buster) — hapus file avatar lama
+    // supaya Storage tidak menumpuk file versi lama.
+    final oldAvatar = (await _sb
+            .from('profiles')
+            .select('avatar')
+            .eq('id', id)
+            .maybeSingle())?['avatar'] as String? ??
+        '';
     final path = base64.isEmpty
         ? ''
         : await StoragePhotoService.instance.uploadAvatar(
@@ -814,6 +822,13 @@ class AuthService {
                 base64: base64,
               ) ??
               '';
+    if (oldAvatar.isNotEmpty &&
+        StoragePhotoService.instance.isAvatarPath(oldAvatar) &&
+        oldAvatar != path) {
+      try {
+        await _sb.storage.from('chat-photos').remove([oldAvatar]);
+      } catch (_) {}
+    }
     await _sb.from('profiles').update({'avatar': path}).eq('id', id);
   }
 

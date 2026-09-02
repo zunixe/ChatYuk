@@ -20,6 +20,17 @@ class RoomProvider extends ChangeNotifier {
   StreamSubscription? _privateSub;
   String? _error;
   Timer? _diskSaveTimer;
+  // Warm-up disk cache — auth gate menunggu future ini (maks terbatas)
+  // sebelum mengganti skeleton, supaya tab pertama tidak blink abu.
+  final Completer<void> _warm = Completer<void>();
+  bool _warmDone = false;
+  Future<void> get warmFuture => _warm.future;
+
+  void _markWarm() {
+    if (_warmDone) return;
+    _warmDone = true;
+    if (!_warm.isCompleted) _warm.complete();
+  }
   // True setelah data pertama selesai dimuat (disk atau server) — dipakai
   // UI untuk menampilkan skeleton, bukan empty state "kosong", saat startup.
   bool _hasLoaded = false;
@@ -93,6 +104,8 @@ class RoomProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[RoomProvider] disk load error: $e');
       _hasLoaded = true;
+    } finally {
+      _markWarm();
     }
   }
 
@@ -157,6 +170,7 @@ class RoomProvider extends ChangeNotifier {
       _rooms = rooms;
       _applyCounts();
       _hasLoaded = true;
+      _markWarm();
       if (!_seeded && rooms.isEmpty) {
         _seeded = true;
         seedRooms();
@@ -169,6 +183,7 @@ class RoomProvider extends ChangeNotifier {
       debugPrint('[RoomProvider] fetch rooms error: $e');
       _error = e.toString();
       _hasLoaded = true;
+      _markWarm();
       notifyListeners();
     }
   }
@@ -186,11 +201,13 @@ class RoomProvider extends ChangeNotifier {
       _memberRoomIds = members;
       _applyCounts();
       _hasLoaded = true;
+      _markWarm();
       notifyListeners();
       _scheduleDiskSave();
     } catch (e) {
       debugPrint('[RoomProvider] fetch private rooms error: $e');
       _hasLoaded = true;
+      _markWarm();
     }
   }
 

@@ -29,8 +29,15 @@ class StoragePhotoService {
   String newPath(String chatId) =>
       'chat/$chatId/${DateTime.now().microsecondsSinceEpoch}.jpg';
 
-  /// Path avatar user.
+  /// Path avatar user. Versi pakai timestamp (cache-buster): path berubah
+  /// tiap upload → device penonton & CDN Storage tidak lagi menyajikan
+  /// file lama yang ter-cache (penyebab avatar terlihat "gepeng" versi lama
+  /// setelah re-upload).
   String avatarPath(String uid) => 'avatars/$uid.jpg';
+
+  /// Avatar versi unik per upload — dipakai untuk upload BARU.
+  String avatarPathVersioned(String uid) =>
+      'avatars/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
   /// Path foto galeri user (indeks/detik untuk keunikan).
   String photoPath(String uid) =>
@@ -131,13 +138,16 @@ class StoragePhotoService {
   }
 
   /// Upload avatar → Storage. Return path atau null.
+  /// Path DIBERI TIMESTAMP — path baru tiap upload, mem-bypass cache CDN &
+  /// cache device penonton (dulu: path tetap sama → re-upload tetap tampil
+  /// versi lama di HP orang lain).
   Future<String?> uploadAvatar({
     required String uid,
     required String base64,
   }) async {
     try {
       final bytes = base64Decode(base64);
-      final path = avatarPath(uid);
+      final path = avatarPathVersioned(uid);
       await _sb.storage
           .from(_bucket)
           .uploadBinary(
