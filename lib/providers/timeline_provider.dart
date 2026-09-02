@@ -21,6 +21,8 @@ class _ScopeCache {
 
 /// State timeline: feed, like/comment/share/boost, biaya boost.
 class TimelineProvider extends ChangeNotifier {
+  bool _disposed = false;
+
   final TimelineService _service = TimelineService(Supabase.instance.client);
 
   final List<Map<String, dynamic>> _posts = [];
@@ -123,7 +125,7 @@ class TimelineProvider extends ChangeNotifier {
         _cursorBoosted = _scopeCache[scope]!.cursorBoosted;
         _hasMore = _scopeCache[scope]!.hasMore;
         _invalidateView();
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }
     } catch (e) {
       debugPrint('[TimelineProvider] disk load error: $e');
@@ -164,7 +166,7 @@ class TimelineProvider extends ChangeNotifier {
           'isBoosted': row['is_boosted'] ?? cur['isBoosted'],
         };
         _invalidateView();
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }
       return;
     }
@@ -202,7 +204,7 @@ class TimelineProvider extends ChangeNotifier {
     _posts.insert(0, p);
     _invalidateView();
     _syncScopeCache();
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Konversi row DB (snake_case) dari realtime → bentuk PostCard (camelCase).
@@ -354,7 +356,7 @@ class TimelineProvider extends ChangeNotifier {
       _boostBonus = (p['boost_bonus'] as num?)?.toInt() ?? _boostBonus;
       _postsDailyLimit =
           (p['posts_daily_limit'] as num?)?.toInt() ?? _postsDailyLimit;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     } catch (e) {
       debugPrint('[TimelineProvider] pricing error: $e');
     }
@@ -387,7 +389,7 @@ class TimelineProvider extends ChangeNotifier {
         _cursorBoosted = cached.cursorBoosted;
         _hasMore = cached.hasMore;
         _invalidateView();
-        notifyListeners();
+        if (!_disposed) notifyListeners();
         return;
       }
 
@@ -411,7 +413,7 @@ class TimelineProvider extends ChangeNotifier {
         _cursorBoosted = cached.cursorBoosted;
         _hasMore = cached.hasMore;
         _invalidateView();
-        notifyListeners(); // frame pertama instant dari cache
+        if (!_disposed) notifyListeners(); // frame pertama instant dari cache
       } else {
         // Cache memori kosong (cold start) — coba disk.
         _loadDiskScope(scope);
@@ -420,7 +422,7 @@ class TimelineProvider extends ChangeNotifier {
     if (cached == null || cached.posts.isEmpty) {
       // Spinner HANYA saat tidak ada apa pun untuk ditampilkan.
       _loading = true;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
     try {
       final list = await _service.listPosts(
@@ -472,7 +474,7 @@ class TimelineProvider extends ChangeNotifier {
       _hasMore = false;
     } finally {
       _loading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -499,11 +501,11 @@ class TimelineProvider extends ChangeNotifier {
     _scheduleDiskSave();
     if (changed) {
       _invalidateView();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     } else {
       // tidak ada post di cache tapi tetap notify biar _AuthorAvatar
       // rebuild dan ambil base64 baru dari AvatarB64Service cache
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -514,7 +516,7 @@ class TimelineProvider extends ChangeNotifier {
       _posts[i] = {..._posts[i], ...patch};
       _invalidateView();
       _syncScopeCache();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -522,11 +524,12 @@ class TimelineProvider extends ChangeNotifier {
     _posts.removeWhere((p) => p['id'] == id);
     _invalidateView();
     _syncScopeCache();
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _rtSub?.cancel();
     _authSub?.cancel();
     super.dispose();

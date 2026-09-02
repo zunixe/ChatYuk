@@ -17,7 +17,7 @@ begin
     v_chat_id := least(p_caller::text, p_callee::text) || '_' || greatest(p_caller::text, p_callee::text);
     perform net.http_post(
       url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-      headers := jsonb_build_object('Content-Type', 'application/json'),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
       body := jsonb_build_object(
         'token', t,
         'title', p_caller_name,
@@ -64,7 +64,7 @@ begin
     sender_display := coalesce(sender_display, new.sender_name, 'User');
     perform net.http_post(
       url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-      headers := jsonb_build_object('Content-Type', 'application/json'),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
       body := jsonb_build_object(
         'token', receiver_token,
         'title', sender_display,
@@ -108,7 +108,7 @@ begin
     v_chat_id := least(new.caller_id::text, new.callee_id::text) || '_' || greatest(new.caller_id::text, new.callee_id::text);
     perform net.http_post(
       url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-      headers := jsonb_build_object('Content-Type', 'application/json'),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
       body := jsonb_build_object(
         'token', receiver_token,
         'data', jsonb_build_object(

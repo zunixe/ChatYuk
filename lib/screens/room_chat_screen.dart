@@ -18,6 +18,7 @@ import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
+import '../services/chat_service.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/storage_photo_service.dart';
@@ -540,6 +541,28 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   MessageModel? _replyingTo;
+  MessageModel? _editingMessage;
+
+  void _editMessage(MessageModel msg) {
+    setState(() {
+      _editingMessage = msg;
+      _replyingTo = null;
+      _msgCtrl.text = msg.text;
+      _msgCtrl.selection =
+          TextSelection.collapsed(offset: _msgCtrl.text.length);
+    });
+  }
+
+  void _cancelEdit() => setState(() => _editingMessage = null);
+
+  void _replyMessage(MessageModel msg) {
+    setState(() {
+      _replyingTo = msg;
+      _editingMessage = null;
+    });
+  }
+
+  void _cancelReply() => setState(() => _replyingTo = null);
 
   // LayerLink per pesan — anchor action bar (Balas / Hapus) tepat di atas bubble.
   final Map<String, LayerLink> _msgLinks = {};
@@ -552,16 +575,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _actionBar = null;
   }
 
-  void _replyMessage(MessageModel msg) {
-    setState(() => _replyingTo = msg);
-  }
-
-  void _cancelReply() => setState(() => _replyingTo = null);
-
   Future<void> _deleteMessage(MessageModel msg) async {
+    final s = context.read<LocaleProvider>().s;
     final ok = await context.read<ChatProvider>().deleteRoomMessage(msg.id);
     if (ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pesan dihapus')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgDeletedRoom)));
     }
   }
 
@@ -614,6 +632,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     iconBtn(Icons.reply, s.menuReply, () => _replyMessage(msg)),
+                    // Edit hanya pesan teks milik sendiri (foto/voice/pending
+                    // tidak bisa diedit — sama seperti private chat).
+                    if (isMe && msg.type == 'text' && !msg.id.startsWith('pending-'))
+                      iconBtn(Icons.edit, s.editMessageTitle, () => _editMessage(msg)),
                     if (isMe)
                       iconBtn(Icons.delete_outline, s.btnDelete, () => _deleteMessage(msg), danger: true),
                   ],
@@ -638,6 +660,32 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
+
+    // Mode edit pesan sendiri (text): simpan perubahan, tanpa koin/kirim baru.
+    final editing = _editingMessage;
+    if (editing != null && !hasPhoto) {
+      if (text.isEmpty || text == editing.text) {
+        _cancelEdit();
+        return;
+      }
+      _msgCtrl.clear();
+      setState(() => _editingMessage = null);
+      _isSending = true;
+      try {
+        final ok = await ChatService().editRoomMessage(editing.id, text);
+        if (mounted) {
+          final s = context.read<LocaleProvider>().s;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ok ? s.msgEdited : s.errSendFailed),
+            ),
+          );
+        }
+      } finally {
+        _isSending = false;
+      }
+      return;
+    }
 
     final replying = _replyingTo;
     if (hasPhoto) {
@@ -1243,6 +1291,32 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 ],
               ),
             ),
+          if (_editingMessage != null)
+            Container(
+              color: AppTheme.bgCard,
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.edit,
+                    size: 16,
+                    color: AppTheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      s.editingMessage,
+                      style: AppText.bodySmall.copyWith(color: AppTheme.primary),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: _cancelEdit,
+                    color: AppTheme.textSecondary,
+                  ),
+                ],
+              ),
+            ),
           // Pending approval: composer diganti bar info — jangan biarkan user
           // mencoba kirim lalu gagal diam-diam.
           if (isPrivateRoom && _roleChecked && _myRole == null)
@@ -1700,7 +1774,7 @@ class _MessageBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(msg.repliedToSenderName ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.primary)),
+          Text(msg.repliedToSenderName ?? '', style: AppText.label.copyWith(color: AppTheme.primary)),
           Text(msg.repliedToText!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.bodySmall),
         ],
       ),
@@ -2041,7 +2115,6 @@ class _ChatInputState extends State<_ChatInput> {
   bool _isRecordingVoice = false;
   Timer? _voiceTimer;
   int _voiceSeconds = 0;
-  OverlayEntry? _voiceOverlay;
   bool _isVoiceLocked = false;
   bool _isVoicePaused = false;
   // Bulatan lock sedang di-pick-up (ditekan + digeser) — menyembunyikan
@@ -2093,7 +2166,6 @@ class _ChatInputState extends State<_ChatInput> {
 
   Future<void> _stopVoiceRecord() async {
     _voiceTimer?.cancel();
-    _voiceOverlay?.remove(); _voiceOverlay = null;
     if (!_isRecordingVoice) return;
     _isVoiceLocked = false;
     _isVoicePaused = false;
@@ -2111,7 +2183,6 @@ class _ChatInputState extends State<_ChatInput> {
 
   void _cancelVoiceRecord() {
     _voiceTimer?.cancel();
-    _voiceOverlay?.remove(); _voiceOverlay = null;
     _record.cancel();
     setState(() {
       _isRecordingVoice = false;
@@ -2138,8 +2209,6 @@ class _ChatInputState extends State<_ChatInput> {
   void dispose() {
     widget.controller.removeListener(_onChanged);
     _voiceTimer?.cancel();
-    _voiceOverlay?.remove();
-    _voiceOverlay = null;
     _record.dispose();
     super.dispose();
   }

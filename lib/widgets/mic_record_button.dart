@@ -77,6 +77,7 @@ class _MicRecordButtonState extends State<MicRecordButton>
     } else if (!widget.isRecording && old.isRecording) {
       // Recording berakhir (kirim/batal) — reset lock + kembali mengecil.
       _didLock = false;
+      _leaving = false;
       _dragDx = 0;
       _dragDy = 0;
       _wasDragged = false;
@@ -204,6 +205,9 @@ class _MicRecordButtonState extends State<MicRecordButton>
 
   bool _wasPickUp = false;
   bool _wasDragged = false;
+  // Aksi selesai (kirim/batal) — bulatan DIHILANGKAN total sampai parent
+  // selesai menutup rekaman. Mencegah blink "kunci hijau" 1-2 frame.
+  bool _leaving = false;
 
   double get _lockProgress {
     if (_lockedNow) return 1.0;
@@ -219,6 +223,7 @@ class _MicRecordButtonState extends State<MicRecordButton>
 
   // Listener pointer mentah — tidak pakai LongPress (delay ~500ms).
   void _onPointerDown(PointerDownEvent event) {
+    if (_leaving) return;
     final src = _fromShield;
     _fromShield = false;
     // Saat locked & overlay bulatan aktif: HANYA bulatan overlay yang pegang
@@ -355,9 +360,9 @@ class _MicRecordButtonState extends State<MicRecordButton>
       _dragDx = 0;
       _dragDy = 0;
     });
-    _dockShield?.markNeedsBuild();
     if (wasLockGesture) {
       // Lepas setelah lock — bulat tetap dock di atas, rekaman lanjut.
+      _dockShield?.markNeedsBuild();
       return;
     }
     if (widget.isLocked) {
@@ -365,8 +370,11 @@ class _MicRecordButtonState extends State<MicRecordButton>
       // ke kiri = batal. TAP tanpa geser = no-op (pause ada di composer).
       _setPickUp(false);
       if (_wasDragged) {
-        // Bulatan kembali mengecil ke 40px (animasi mulus ke dock).
-        _animCtrl.reverse();
+        // Aksi selesai (kirim/batal) → bulatan DIHILANGKAN total:
+        // overlay dilepas sekarang, jangan biarkan rebuild menampilkan
+        // "kunci hijau di dock" 1-2 frame sebelum parent menutup rekaman.
+        _leaving = true;
+        _removeDockShield();
         if (cancelDrag) {
           widget.onLongPressCancel();
         } else {
@@ -396,11 +404,16 @@ class _MicRecordButtonState extends State<MicRecordButton>
     final wasLockGesture = _didLock;
     _wasDragged = false;
     _setPickUp(false);
+    if (widget.isLocked && !_wasPickUp) {
+      // Aksi terputus (kirim/batal) → hilangkan bulatan total, tanpa blink
+      // kunci hijau.
+      _leaving = true;
+      _removeDockShield();
+    }
     setState(() {
       _dragDx = 0;
       _dragDy = 0;
     });
-    _dockShield?.markNeedsBuild();
     if (wasLockGesture || widget.isLocked) {
       if (cancelDrag) widget.onLongPressCancel();
       return;
@@ -432,7 +445,10 @@ class _MicRecordButtonState extends State<MicRecordButton>
           child: AnimatedBuilder(
             animation: _animCtrl,
             builder: (context, _) {
-              if (_lockedNow && _shieldInserted) {
+              // _leaving: aksi kirim/batal sudah dieksekusi — bulatan
+              // DIHILANGKAN total (tanpa blink kunci hijau) sampai parent
+              // selesai menutup rekaman.
+              if (_leaving || (_lockedNow && _shieldInserted)) {
                 return SizedBox(width: widget.size, height: widget.size);
               }
               // Saat locked: bulatan mengecil ke ukuran awal (40px) di dock —

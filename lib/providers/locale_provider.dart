@@ -3,6 +3,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/strings.dart';
 
 class LocaleProvider extends ChangeNotifier {
+  bool _disposed = false;
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   String _lang = 'id';
   bool _initialized = false;
 
@@ -15,7 +22,7 @@ class LocaleProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _lang = prefs.getString('app_lang') ?? 'id';
     _initialized = true;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> setLang(String lang) async {
@@ -23,7 +30,7 @@ class LocaleProvider extends ChangeNotifier {
     _lang = lang;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('app_lang', lang);
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Set bahasa dari country name (dari geo detection).

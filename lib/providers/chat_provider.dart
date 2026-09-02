@@ -5,6 +5,13 @@ import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
 
 class ChatProvider extends ChangeNotifier {
+  bool _disposed = false;
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   final ChatService _service = ChatService();
   List<String> _blockedUids = [];
   Future<List<String>>? _loadingBlockedUids;
@@ -231,7 +238,7 @@ class ChatProvider extends ChangeNotifier {
     } finally {
       _loadingBlockedUids = null;
     }
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   bool isBlocked(String uid) => _blockedUids.contains(uid);
@@ -241,6 +248,6 @@ class ChatProvider extends ChangeNotifier {
     _service.clearCachedStreams();
     MessageCache.instance.clearAll();
     PhotoCache.instance.clearAll();
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 }

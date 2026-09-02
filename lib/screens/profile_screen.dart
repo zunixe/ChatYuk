@@ -53,11 +53,11 @@ String? _processAvatar(Uint8List bytes) {
   );
   final resized = img.copyResize(
     cropped,
-    width: 300,
-    height: 300,
+    width: 512,
+    height: 512,
     interpolation: img.Interpolation.cubic,
   );
-  final jpg = img.encodeJpg(resized, quality: 88);
+  final jpg = img.encodeJpg(resized, quality: 92);
   return base64Encode(jpg);
 }
 
@@ -323,11 +323,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final picker = ImagePicker();
     final XFile? picked;
     try {
-      picked = await picker.pickImage(
-        source: source,
-        maxWidth: 1080,
-        imageQuality: 90,
-      );
+      // TANPA maxWidth/imageQuality — jangan re-encode di picker. Foto asli
+      // utuh diteruskan ke cropper (kompresi cukup 1x di akhir proses).
+      picked = await picker.pickImage(source: source);
     } catch (e) {
       // Cancel sebelum izin kamera/galeri → PlatformException, jangan error.
       debugPrint('[PROFILE] pickImage error: $e');
@@ -347,6 +345,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       cropped = await ImageCropper().cropImage(
         sourcePath: picked.path,
         aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        compressQuality: 95,
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: s.avatarCamera,
@@ -512,7 +511,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           initial,
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 48,
+                            fontSize: AppGlyph.xl,
                             fontWeight: FontWeight.w800,
                           ),
                         ),

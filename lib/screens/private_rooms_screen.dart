@@ -200,7 +200,7 @@ class _RoomTile extends StatelessWidget {
                   AppTheme.primary.withValues(alpha: 0.15),
               child: Text(
                 '${room['icon'] ?? '🔒'}',
-                style: const TextStyle(fontSize: 18),
+                style: const TextStyle(fontSize: AppGlyph.sm),
               ),
             ),
             if (isLive)
@@ -343,7 +343,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
                     children: [
                       for (final ic in ['🔒', '🎉', '💬', '🎮', '🎵', '⚽'])
                         ChoiceChip(
-                          label: Text(ic, style: const TextStyle(fontSize: 20)),
+                          label: Text(ic, style: const TextStyle(fontSize: AppGlyph.sm)),
                           selected: _icon == ic,
                           onSelected: (_) => setState(() => _icon = ic),
                         ),

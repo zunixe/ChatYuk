@@ -17,7 +17,7 @@ begin
     v_msg := case when p_call_type = 'video' then 'Panggilan video' else 'Panggilan suara' end;
     perform net.http_post(
       url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-      headers := jsonb_build_object('Content-Type', 'application/json'),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
       body := jsonb_build_object(
         'token', t,
         'title', p_name,
@@ -78,7 +78,7 @@ begin
       sender_display := coalesce(nullif(sender_display,''), nullif(new.sender_name,''), 'User');
       perform net.http_post(
         url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-        headers := jsonb_build_object('Content-Type', 'application/json'),
+        headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
         body := jsonb_build_object(
           'token', receiver_token,
           'title', sender_display,
@@ -107,7 +107,7 @@ begin
     sender_display := coalesce(nullif(sender_display,''), nullif(new.sender_name,''), 'User');
     perform net.http_post(
       url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-      headers := jsonb_build_object('Content-Type', 'application/json'),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
       body := jsonb_build_object(
         'token', receiver_token,
         'title', sender_display,

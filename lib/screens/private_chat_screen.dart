@@ -321,6 +321,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _statusSub?.cancel();
     _typingSub?.cancel();
     _typingClearTimer?.cancel();
+    // Voice recording: hentikan timer + native recorder — tanpa ini keluar
+    // screen saat rekam = timer jalan terus + setState after dispose + leak.
+    _voiceTimer?.cancel();
+    _voiceTimer = null;
+    if (_isRecordingVoice) {
+      _isRecordingVoice = false;
+      try {
+        _record.cancel();
+      } catch (_) {}
+    }
     if (activeChatId.value == widget.chatId) {
       activeChatId.value = null;
     }
@@ -732,7 +742,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   bool _isRecordingVoice = false;
   Timer? _voiceTimer;
   int _voiceSeconds = 0;
-  OverlayEntry? _voiceOverlay;
   bool _isVoiceLocked = false;
   bool _isVoicePaused = false;
   // Bulatan lock sedang di-pick-up (ditekan + digeser) — menyembunyikan
@@ -790,7 +799,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   Future<void> _stopVoiceRecord({required bool send}) async {
     _voiceTimer?.cancel();
-    _voiceOverlay?.remove(); _voiceOverlay = null;
     if (!_isRecordingVoice) return;
     _isVoiceLocked = false;
     _isVoicePaused = false;
@@ -844,7 +852,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   void _cancelVoiceRecord() {
     _voiceTimer?.cancel();
-    _voiceOverlay?.remove(); _voiceOverlay = null;
     _record.cancel();
     setState(() {
       _isRecordingVoice = false;

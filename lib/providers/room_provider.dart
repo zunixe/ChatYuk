@@ -8,6 +8,8 @@ import '../services/message_cache.dart';
 import '../services/realtime_hub.dart';
 
 class RoomProvider extends ChangeNotifier {
+  bool _disposed = false;
+
   final RoomService _service = RoomService();
   final ChatService _chat = ChatService();
   List<RoomModel> _rooms = [];
@@ -18,6 +20,7 @@ class RoomProvider extends ChangeNotifier {
   bool _seeded = false;
   StreamSubscription? _countsSub;
   StreamSubscription? _privateSub;
+  StreamSubscription? _presenceSub;
   String? _error;
   Timer? _diskSaveTimer;
   // Warm-up disk cache — auth gate menunggu future ini (maks terbatas)
@@ -44,7 +47,7 @@ class RoomProvider extends ChangeNotifier {
 
   RoomProvider() {
     // Unified fan-out: Presence room juga update counts per-room (RealtimeHub per-room presence)
-    RealtimeHub.instance.roomPresence.listen((msg) {
+    _presenceSub = RealtimeHub.instance.roomPresence.listen((msg) {
       final roomId = msg['roomId'] as String?;
       final state = msg['state'] as Map?;
       if (roomId == null || state == null) return;
@@ -55,7 +58,7 @@ class RoomProvider extends ChangeNotifier {
       if (_counts[roomId] == total) return;
       _counts = {..._counts, roomId: total};
       _applyCounts();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     });
     _subscribeCounts();
     _subscribePrivateRooms();
@@ -70,7 +73,7 @@ class RoomProvider extends ChangeNotifier {
         if (_countsEquals(counts, _counts)) return;
         _counts = counts;
         _applyCounts();
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       },
       onError: (e) {
         debugPrint('[RoomProvider] counts stream error: $e');
@@ -100,7 +103,7 @@ class RoomProvider extends ChangeNotifier {
           .map((e) => '$e')
           .toSet();
       _hasLoaded = true;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     } catch (e) {
       debugPrint('[RoomProvider] disk load error: $e');
       _hasLoaded = true;
@@ -138,7 +141,7 @@ class RoomProvider extends ChangeNotifier {
             _privateRooms = rooms;
             _applyCounts();
             _hasLoaded = true;
-            notifyListeners();
+            if (!_disposed) notifyListeners();
             _scheduleDiskSave();
           },
           onError: (e) {
@@ -153,7 +156,7 @@ class RoomProvider extends ChangeNotifier {
     _country = country;
     _subscribeCounts();
     _subscribePrivateRooms(); // langganan ulang untuk negara baru
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     // Tampilkan cache disk negara itu dulu kalau memori kosong.
     if (_rooms.isEmpty && _privateRooms.isEmpty) _loadDisk();
     await reload();
@@ -176,7 +179,7 @@ class RoomProvider extends ChangeNotifier {
         seedRooms();
       }
       _error = null;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
       _scheduleDiskSave();
       await reloadPrivate();
     } catch (e) {
@@ -184,7 +187,7 @@ class RoomProvider extends ChangeNotifier {
       _error = e.toString();
       _hasLoaded = true;
       _markWarm();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -202,7 +205,7 @@ class RoomProvider extends ChangeNotifier {
       _applyCounts();
       _hasLoaded = true;
       _markWarm();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
       _scheduleDiskSave();
     } catch (e) {
       debugPrint('[RoomProvider] fetch private rooms error: $e');
@@ -234,7 +237,7 @@ class RoomProvider extends ChangeNotifier {
     final res = await _service.joinPrivateRoom(roomId, password: password);
     if (res['ok'] == true) {
       _memberRoomIds = {..._memberRoomIds, roomId};
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
     return res;
   }
@@ -293,9 +296,12 @@ class RoomProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _diskSaveTimer?.cancel();
     _countsSub?.cancel();
     _privateSub?.cancel();
+    _presenceSub?.cancel();
+    _markWarm();
     super.dispose();
   }
 }

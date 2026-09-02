@@ -56,6 +56,8 @@ final RouteTracker routeTracker = RouteTracker();
 /// user berada (tanpa menunggu push), dan supaya user yang sedang di call
 /// otomatis ditandai busy.
 class CallProvider extends ChangeNotifier {
+  bool _disposed = false;
+
   static final CallProvider instance = CallProvider._();
   CallProvider._();
 
@@ -85,7 +87,7 @@ class CallProvider extends ChangeNotifier {
   void setMode(CallMode mode) {
     if (_activeMode == mode) return;
     _activeMode = mode;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Timer? _clearTimer;
@@ -200,7 +202,7 @@ class CallProvider extends ChangeNotifier {
         otherName: remoteName,
       ),
     );
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     return session;
   }
 
@@ -227,11 +229,12 @@ class CallProvider extends ChangeNotifier {
     sess.removeListener(_onActiveSession);
     await CallNotification.cancel();
     await sess.close();
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _incomingSub?.cancel();
     _incomingSub = null;
     _authSub?.cancel();

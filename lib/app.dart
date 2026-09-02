@@ -506,10 +506,9 @@ class _BottomNav extends StatelessWidget {
             const SizedBox(height: 1),
             Text(
               label,
-              style: AppText.caption.copyWith(
+              style: AppText.micro.copyWith(
                 color: color,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                fontSize: 10,
               ),
             ),
           ],

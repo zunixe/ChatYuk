@@ -6,6 +6,8 @@ import '../services/social_service.dart';
 /// State sosial user aktif: following set, friend request inbox count,
 /// dan helper aksi follow/friend/subscribe.
 class SocialProvider extends ChangeNotifier {
+  bool _disposed = false;
+
   final SocialService _service = SocialService(Supabase.instance.client);
 
   final Set<String> _following = {};
@@ -48,7 +50,7 @@ class SocialProvider extends ChangeNotifier {
       _friends.clear();
       _subscribed.clear();
       _friendRequestCount = 0;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     } catch (e) {
       debugPrint('[SocialProvider] clearAnonSocial error: $e');
     }
@@ -89,7 +91,7 @@ class SocialProvider extends ChangeNotifier {
       _friends.clear();
       _subscribed.clear();
       _friendRequestCount = 0;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
       return;
     }
     // Realtime channel dibuat ulang di sini (bukan hanya constructor) —
@@ -99,7 +101,7 @@ class SocialProvider extends ChangeNotifier {
     _frSub = _service.watchFriendRequestCount(uid).listen((count) {
       if (_friendRequestCount != count) {
         _friendRequestCount = count;
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }
     });
     // Muat set awal (following/friends/subscribed) untuk uid sendiri.
@@ -132,7 +134,7 @@ class SocialProvider extends ChangeNotifier {
       _subscribed
         ..clear()
         ..addAll(subs.map((e) => '${e['uid']}'));
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     } catch (e) {
       debugPrint('[SocialProvider] refreshSelfSets error: $e');
     }
@@ -143,7 +145,7 @@ class SocialProvider extends ChangeNotifier {
       final res = await _service.followUser(targetUid);
       if (res['ok'] == true) {
         _following.add(targetUid);
-        notifyListeners();
+        if (!_disposed) notifyListeners();
         return true;
       }
       return false;
@@ -159,7 +161,7 @@ class SocialProvider extends ChangeNotifier {
       if (res['ok'] == true) {
         _following.remove(targetUid);
         _friends.remove(targetUid);
-        notifyListeners();
+        if (!_disposed) notifyListeners();
         return true;
       }
       return false;
@@ -186,7 +188,7 @@ class SocialProvider extends ChangeNotifier {
     try {
       final inbox = await _service.friendRequestInbox();
       _friendRequestCount = inbox.length;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     } catch (e) {
       debugPrint('[SocialProvider] refreshInbox error: $e');
     }
@@ -200,7 +202,7 @@ class SocialProvider extends ChangeNotifier {
       final res = await _service.subscribeCreator(creatorUid, periods: periods);
       if (res['ok'] == true) {
         _subscribed.add(creatorUid);
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }
       return res;
     } catch (e) {
@@ -212,7 +214,7 @@ class SocialProvider extends ChangeNotifier {
   Future<void> unsubscribe(String creatorUid) async {
     await _service.unsubscribeCreator(creatorUid);
     _subscribed.remove(creatorUid);
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<bool> setSubscriptionPrice(int price) async {
@@ -227,6 +229,7 @@ class SocialProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _refreshDebounce?.cancel();
     _frSub?.cancel();
     _authSub?.cancel();

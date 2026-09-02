@@ -214,6 +214,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     _loadPhotos();
   }
 
+  // ── Voice: TIDAK perlu download — VoiceBubble langsung play dari URL
+  // storage publik (voice/...). imageData = voice_path apa adanya.
+
   /// Sisi kiri = peserta pertama sesuai urutan judul (mis. judul
   /// "A & B" → bubble A di kiri, B di kanan). Konsisten, tidak tergantung
   /// siapa yang terakhir kirim pesan. Fallback ke chatId (di-sort) bila
@@ -388,7 +391,14 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       isRegistered: false,
       text: '${m['text'] ?? ''}',
       type: '${m['type'] ?? 'text'}',
-      imageData: '${m['image_data'] ?? ''}',
+      // Voice: RPC kirim voice_path → disimpan di imageData (dipakai
+      // VoiceBubble); di-download jadi base64 oleh _loadVoices().
+      imageData: m['type'] == 'voice'
+          ? '${m['voice_path'] ?? ''}'
+          : '${m['image_data'] ?? ''}',
+      durationMs: m['duration_ms'] is int
+          ? m['duration_ms'] as int
+          : int.tryParse('${m['duration_ms'] ?? ''}'),
       timestamp: parseDate(m['created_at']),
       repliedToId: m['replied_to_id'] is String ? m['replied_to_id'] : null,
       repliedToText: m['replied_to_text'],

@@ -129,7 +129,7 @@ begin
     begin
       perform net.http_post(
         url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-        headers := jsonb_build_object('Content-Type', 'application/json'),
+        headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
         body := jsonb_build_object('token', t, 'title', p_title, 'body', p_body, 'data', p_data)
       );
     exception when others then null;
