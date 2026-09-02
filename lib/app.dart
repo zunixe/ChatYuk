@@ -579,7 +579,9 @@ class _AuthSkeletonScreen extends StatelessWidget {
       width: w,
       height: h,
       decoration: BoxDecoration(
-        color: AppTheme.divider.withValues(alpha: 0.7),
+        // Tint brand (bukan divider abu) — aturan "nol warna abu" +
+        // tetap aman dari kilatan putih logo (warna dekat bgScreen).
+        color: AppTheme.primary.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(r),
       ),
     );
