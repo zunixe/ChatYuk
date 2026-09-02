@@ -17,6 +17,7 @@ import 'providers/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
 import 'services/chat_service.dart';
+import 'services/boot_overlay.dart';
 import 'main.dart';
 import 'screens/entry_screen.dart';
 import 'screens/profile_screen.dart';
@@ -188,10 +189,16 @@ class _AuthGateState extends State<_AuthGate> {
     _maybeScheduleAutoRetry(auth);
 
     if (auth.loading) {
+      // Skeleton first-frame → angkat overlay native. Overlay hanya
+      // bertugas menutup task snapshot HyperOS yang stale-terang; setelah
+      // ini skeleton gelap normal yang tampil.
+      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
       return const _AuthSkeletonScreen();
     }
 
     if (auth.error != null) {
+      // Jalur error jaringan: layar error first-frame → angkat overlay.
+      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
       return Scaffold(
         backgroundColor: AppTheme.bgScreen,
         body: Center(
@@ -225,6 +232,9 @@ class _AuthGateState extends State<_AuthGate> {
     }
 
     if (auth.profile == null) {
+      // Jalur belum login: EntryScreen first-frame → angkat overlay
+      // (MainNav tidak akan ter-build di jalur ini).
+      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
       return EntryScreen();
     }
 
@@ -238,8 +248,48 @@ class _AuthGateState extends State<_AuthGate> {
       future: _warmFuture,
       builder: (context, snap) {
         if (!snap.hasData) return const _AuthSkeletonScreen(withLogo: false);
-        return _MainNav();
+        // Raster MainNav di belakang skeleton 1 frame — swap buffer GPU
+        // (Skia half-present #b6b6b6) tidak pernah sampai ke layar.
+        return _SwapMask(child: _MainNav());
       },
+    );
+  }
+}
+
+/// Poin transisi skeleton → konten. Frame PERTAMA _MainNav (raster paling
+/// berat: IndexedStack + list) ditutup salinan tampilan skeleton; frame
+/// kedua sudah smooth → angkat penutup. Tanpa ini Android menampilkan
+/// buffer clear abu 2-4 frame saat GPU belum siap.
+class _SwapMask extends StatefulWidget {
+  final Widget child;
+  const _SwapMask({required this.child});
+  @override
+  State<_SwapMask> createState() => _SwapMaskState();
+}
+
+class _SwapMaskState extends State<_SwapMask> {
+  bool _covered = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Tahan ~350ms SETELAH frame pertama — Skia masih present 2-5 frame
+      // buffer abu (#b6b6b6) saat raster MainNav berat; mask gelap
+      // menutup semuanya, konten muncul saat benar-benar smooth.
+      Future.delayed(const Duration(milliseconds: 350), () {
+        if (mounted) setState(() => _covered = false);
+      });
+    });
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        widget.child,
+        // Penutup sementara — samakan tampilan dengan warm-gate di atasnya.
+        if (_covered)
+          const Positioned.fill(child: _AuthSkeletonScreen(withLogo: false)),
+      ],
     );
   }
 }

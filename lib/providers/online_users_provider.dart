@@ -44,7 +44,9 @@ class OnlineUsersProvider extends ChangeNotifier {
 
   Future<void> _loadDisk() async {
     try {
-      // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network
+      // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network.
+      // Avatar di-merge dari kv per-uid (sama seperti pesan foto) supaya
+      // list langsung tampil FOTO — bukan inisial → tidak ada pop-in blink.
       final cached = await MessageCache.instance.loadRawList('online_users');
       if (cached.isNotEmpty && _users.isEmpty) {
         try {
@@ -52,11 +54,40 @@ class OnlineUsersProvider extends ChangeNotifier {
               .map((e) => UserModel.fromMap(
                   '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
               .toList();
+          await _mergeAvatarsFromDisk();
           _loaded = true;
           notifyListeners();
         } catch (_) {}
       }
     } catch (_) {}
+  }
+
+  /// Gabungkan avatar tersimpan (kv per-uid) ke list — cold start instan.
+  Future<void> _mergeAvatarsFromDisk() async {
+    if (_users.isEmpty) return;
+    for (int i = 0; i < _users.length; i++) {
+      if (_users[i].avatar.isNotEmpty) continue;
+      try {
+        final obj = await MessageCache.instance.loadRawObj('avatar:${_users[i].uid}');
+        final a = obj['a'] as String?;
+        if (a != null && a.isNotEmpty) {
+          _users[i] = _users[i].copyWith(avatar: a);
+        }
+      } catch (_) {}
+    }
+  }
+
+  /// Simpan avatar per-uid ke kv (fire-and-forget). Hanya tulis kalau avatar
+  /// BERUBAH dari yang terakhir ditulis sesi ini — hemat IO, avatar lama
+  /// yang sama tidak ditulis ulang tiap emit stream.
+  final Map<String, String> _avatarWritten = {};
+  void _persistAvatars(List<UserModel> users) {
+    for (final u in users) {
+      if (u.uid.isEmpty || u.avatar.isEmpty) continue;
+      if (_avatarWritten[u.uid] == u.avatar) continue;
+      _avatarWritten[u.uid] = u.avatar;
+      MessageCache.instance.saveRawObj('avatar:${u.uid}', {'a': u.avatar});
+    }
   }
 
   OnlineUsersProvider() {
@@ -91,10 +122,14 @@ class OnlineUsersProvider extends ChangeNotifier {
         _users = deduped;
         _error = null;
         notifyListeners();
-        // Simpan ke disk untuk cold start berikutnya (tanpa avatar base64 biar kecil)
+        // Simpan ke disk untuk cold start berikutnya (tanpa avatar base64 biar kecil).
+        // Avatar disimpan TERPISAH per-uid (kv terenkripsi, pola sama seperti
+        // pesan foto) supaya cold start langsung tampil foto — tanpa pop-in
+        // dan tanpa download ulang dari network (network hanya bawa update).
         if (deduped.isNotEmpty) {
           final rows = deduped.map((u) => {'uid': u.uid, ...u.toMap(), 'avatar': ''}).toList();
           MessageCache.instance.saveRawList('online_users', rows);
+          _persistAvatars(deduped);
         }
       },
       onError: (e) {
@@ -110,6 +145,7 @@ class OnlineUsersProvider extends ChangeNotifier {
     final idx = _users.indexWhere((u) => u.uid == uid);
     if (idx >= 0 && _users[idx].avatar != base64) {
       _users[idx] = _users[idx].copyWith(avatar: base64);
+      _persistAvatars([_users[idx]]);
       notifyListeners();
     }
   }
@@ -118,6 +154,8 @@ class OnlineUsersProvider extends ChangeNotifier {
     final idx = _users.indexWhere((u) => u.uid == uid);
     if (idx >= 0 && _users[idx].avatar.isNotEmpty) {
       _users[idx] = _users[idx].copyWith(avatar: '');
+      _avatarWritten.remove(uid);
+      MessageCache.instance.removeRawObj('avatar:$uid');
       notifyListeners();
     }
   }
