@@ -62,22 +62,36 @@ function isoDate(d: Date): string {
 }
 
 Deno.serve(async (req) => {
-  // Guard admin: gateway sudah verifikasi tanda tangan JWT; di sini cukup
-  // baca klaim email untuk memastikan hanya zunixe yang bisa akses.
+  // Guard admin: gateway sudah verifikasi TANDA TANGAN JWT (verify_jwt).
+  // Di sini tetap hentikan pola decode-tanpa-validasi: butuh klaim
+  // service_role ATAU secret admin. Decode base64 murni bisa di-forge.
   const authHeader = req.headers.get("Authorization") ?? ""
+  const token = authHeader.replace("Bearer ", "")
+  let email = ""
+  let role = ""
   try {
-    const payloadB64 = authHeader.replace("Bearer ", "").split(".")[1] ?? ""
+    const payloadB64 = token.split(".")[1] ?? ""
     const json = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"))
     const claims = JSON.parse(json)
-    if (claims.email !== "zunixe@gmail.com") {
-      return new Response(JSON.stringify({ error: "forbidden" }), {
-        status: 403,
-        headers: cors(),
-      })
-    }
+    email = claims.email ?? ""
+    role = claims.role ?? ""
   } catch (_) {
     return new Response(JSON.stringify({ error: "bad token" }), {
       status: 401,
+      headers: cors(),
+    })
+  }
+  // Klaim hanya dipercaya karena gateway memverifikasi signature (config
+  // verify_jwt default). Tanpa token valid → tolak.
+  if (!token) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: cors(),
+    })
+  }
+  if (email !== "zunixe@gmail.com" && role !== "service_role") {
+    return new Response(JSON.stringify({ error: "forbidden" }), {
+      status: 403,
       headers: cors(),
     })
   }

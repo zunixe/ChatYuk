@@ -192,6 +192,31 @@ class ChatService {
     }
   }
 
+  /// Edit teks pesan sendiri di room (global & private room). RLS menjamin
+  /// hanya sender_id (auth.uid) yang boleh mengubah pesannya. `edited`
+  /// ditandai bila kolom migrasi ada; kalau belum, fallback hanya ubah text.
+  Future<bool> editRoomMessage(String messageId, String newText) async {
+    try {
+      await _sb
+          .from('messages')
+          .update({'text': newText, 'edited': true})
+          .eq('id', messageId);
+      return true;
+    } catch (e) {
+      debugPrint('[ChatService] editRoomMessage (with edited) error: $e');
+      try {
+        await _sb
+            .from('messages')
+            .update({'text': newText})
+            .eq('id', messageId);
+        return true;
+      } catch (e2) {
+        debugPrint('[ChatService] editRoomMessage (text only) error: $e2');
+        return false;
+      }
+    }
+  }
+
   // ── Private Chat ──
 
   /// Id chat 1:1 deterministik — urutan uid di-sort. Bisa dipanggil tanpa

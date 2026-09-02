@@ -65,11 +65,16 @@ function parsePem(pem) {
   return bytes;
 }
 
+import { checkAppSecret, unauthorized } from '../_shared/auth.ts';
+
 Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') {
       return new Response('Method not allowed', { status: 405 });
     }
+    // Auth: hanya caller yang punya APP_SHARED_SECRET (DB trigger kirim
+    // header yang sama). Tanpa ini siapa pun bisa spam push ke seluruh user.
+    if (!checkAppSecret(req)) return unauthorized();
     const body = await req.json();
     const { token, topic, title, body: msgBody, data } = body;
     if (!token && !topic) {

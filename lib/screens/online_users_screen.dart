@@ -31,16 +31,16 @@ import 'package:image/image.dart' as img;
 
 final _avatarCache = BoundedCache<String, Uint8List>(80);
 
+// Cache byte avatar per-UID GLOBAL — bertahan antar state/widget rebuild.
+// Urutan list bisa berubah tiap event presence; tanpa cache global, state
+// widget ter-recycle → decode ulang → inisial sebentar = kedip.
+final Map<String, Uint8List> _avatarBytesByUid = {};
+final Map<String, String> _avatarLastSrcByUid = {};
+
 void clearAllAvatarCaches() {
   _avatarCache.clear();
-}
-
-Uint8List? _avatarDecodeB64(String b64) {
-  try {
-    return base64Decode(b64);
-  } catch (_) {
-    return null;
-  }
+  _avatarBytesByUid.clear();
+  _avatarLastSrcByUid.clear();
 }
 
 String? _processAvatarImage(Uint8List bytes) {
@@ -52,71 +52,80 @@ String? _processAvatarImage(Uint8List bytes) {
 }
 
 class _AsyncAvatar extends StatefulWidget {
+  final String uid;
   final String avatarB64;
   final String initial;
   final Color color;
-  const _AsyncAvatar({required this.avatarB64, required this.initial, required this.color});
+  const _AsyncAvatar({
+    super.key,
+    required this.uid,
+    required this.avatarB64,
+    required this.initial,
+    required this.color,
+  });
 
   @override
   State<_AsyncAvatar> createState() => _AsyncAvatarState();
 }
 
-class _AsyncAvatarState extends State<_AsyncAvatar>
-    with SingleTickerProviderStateMixin {
+class _AsyncAvatarState extends State<_AsyncAvatar> {
   Uint8List? _bytes;
-  late final AnimationController _fade = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 150),
-    value: 1,
-  );
 
   @override
   void initState() {
     super.initState();
-    final cached = _avatarCache.get(widget.avatarB64);
-    if (cached != null) {
-      _bytes = cached;
-    } else {
-      // Foto pertama kali muncul → fade halus, bukan pop kasar (anti-kedip).
-      _fade.value = 0;
-      compute(_avatarDecodeB64, widget.avatarB64).then((b) {
-        if (b != null && mounted) {
-          _avatarCache.putIfAbsent(widget.avatarB64, () => b);
-          setState(() => _bytes = b);
-          _fade.forward();
-        }
-      });
+    _resolve();
+  }
+
+  void _resolve() {
+    final src = widget.avatarB64;
+    // String sumber sama → tidak ada kerja sama sekali.
+    if (src == (_avatarLastSrcByUid[widget.uid])) {
+      final cached = _avatarBytesByUid[widget.uid];
+      if (cached != null && _bytes != cached) _bytes = cached;
+      return;
     }
+    _avatarLastSrcByUid[widget.uid] = src;
+    if (src.isEmpty) {
+      _bytes = null;
+      return;
+    }
+    // Byte per-uid global ada → pakai langsung, tanpa decode.
+    final byUid = _avatarBytesByUid[widget.uid];
+    if (byUid != null) {
+      _bytes = byUid;
+      return;
+    }
+    Uint8List? b;
+    final cached = _avatarCache.get(src);
+    if (cached != null) {
+      b = cached;
+    } else {
+      try {
+        final decoded = base64Decode(src);
+        _avatarCache.putIfAbsent(src, () => decoded);
+        b = decoded;
+      } catch (_) {
+        b = null;
+      }
+    }
+    if (b == null) {
+      _bytes = null;
+      return;
+    }
+    _bytes = b;
+    _avatarBytesByUid[widget.uid] = b;
   }
 
   @override
   void didUpdateWidget(covariant _AsyncAvatar old) {
     super.didUpdateWidget(old);
-    if (old.avatarB64 != widget.avatarB64) {
-      final cached = _avatarCache.get(widget.avatarB64);
-      if (cached != null) {
-        if (_bytes != cached) setState(() => _bytes = cached);
-      } else {
-        _fade.value = 0;
-        compute(_avatarDecodeB64, widget.avatarB64).then((b) {
-          if (b != null && mounted) {
-            _avatarCache.putIfAbsent(widget.avatarB64, () => b);
-            setState(() => _bytes = b);
-            _fade.forward();
-          }
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _fade.dispose();
-    super.dispose();
+    _resolve();
   }
 
   @override
   Widget build(BuildContext context) {
+    _resolve();
     final b = _bytes;
     if (b == null) {
       return Center(
@@ -124,14 +133,13 @@ class _AsyncAvatarState extends State<_AsyncAvatar>
             style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
       );
     }
-    return FadeTransition(
-      opacity: _fade,
-      child: Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true,
-          errorBuilder: (_, __, ___) => Center(
-                child: Text(widget.initial,
-                    style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
-              )),
-    );
+    // gaplessPlayback: saat bytes berganti (foto benar-benar baru), bitmap
+    // lama dipakai sampai bitmap baru siap — tanpa kedip.
+    return Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => Center(
+              child: Text(widget.initial,
+                  style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
+            ));
   }
 }
 
@@ -281,7 +289,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         setState(() => _uploadingAvatar = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Gagal proses foto')),
+            SnackBar(content: Text(s.errPhotoProcess)),
           );
         }
         return;
@@ -308,7 +316,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       if (mounted) {
         setState(() => _uploadingAvatar = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal upload: $e')),
+          SnackBar(content: Text('${s.errPhotoUpload}$e')),
         );
       }
     }
@@ -346,7 +354,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                           initial,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 48,
+                            fontSize: AppGlyph.xl,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -576,7 +584,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(children: [
-                            Text(user.nickname, style: AppText.bodyStrong.copyWith(fontSize: 13)),
+                            Text(user.nickname, style: AppText.bodyStrong),
                             const SizedBox(width: 6),
                             Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)), child: Text('$unreadCount baru', style: AppText.micro.copyWith(color: AppTheme.danger, fontWeight: FontWeight.w800))),
                             const Spacer(),
@@ -590,7 +598,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
                                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Expanded(child: Text(m.text.isNotEmpty ? m.text : (m.type == 'image' ? '[Foto]' : m.type), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodySmall.copyWith(height: 1.2))),
+                                    Expanded(child: Text(m.text.isNotEmpty ? m.text : (m.type == 'image' ? '[Foto]' : m.type), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodySmall)),
                                     const SizedBox(width: 8),
                                     Text(DateFormat('HH:mm').format(m.timestamp.toLocal()), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
                                   ]),
@@ -1239,7 +1247,13 @@ class _UserCard extends StatelessWidget {
                                 ),
                               ),
                             )
-                          : _AsyncAvatar(avatarB64: user.avatar, initial: user.initial, color: color),
+                          : _AsyncAvatar(
+                              key: ValueKey(user.uid),
+                              uid: user.uid,
+                              avatarB64: user.avatar,
+                              initial: user.initial,
+                              color: color,
+                            ),
                     ),
                     Positioned(
                       right: 0,

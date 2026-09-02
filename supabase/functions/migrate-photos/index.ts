@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { checkAppSecret, unauthorized } from "../_shared/auth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -6,6 +7,8 @@ const bucket = "chat-photos";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  // Auth: operasi massal service_role — hanya caller dengan APP_SHARED_SECRET.
+  if (!checkAppSecret(req)) return unauthorized();
   const { limit = 100 } = await req.json().catch(() => ({}));
   const supabase = createClient(supabaseUrl, serviceKey);
   let migrated = 0;

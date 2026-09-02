@@ -363,6 +363,8 @@ class S {
   String get btnSave => isId ? 'Simpan' : 'Save';
   String get msgEdited => isId ? '(diedit)' : '(edited)';
   String get editMessageTitle => isId ? 'Edit Pesan' : 'Edit Message';
+  String get msgDeletedRoom =>
+      isId ? 'Pesan dihapus' : 'Message deleted';
   String get editingMessage =>
       isId ? 'Sedang mengedit pesan' : 'Editing message';
   String get menuReply => isId ? 'Balas' : 'Reply';
@@ -379,6 +381,11 @@ class S {
   String get avatarDelete => isId ? 'Hapus Foto' : 'Remove Photo';
   String get errPhotoSave =>
       isId ? 'Gagal simpan foto: ' : 'Failed to save photo: ';
+  String get linkPreviewLoading =>
+      isId ? 'Memuat pratinjau...' : 'Loading preview...';
+  String get errPhotoProcess =>
+      isId ? 'Gagal proses foto' : 'Failed to process photo';
+  String get errPhotoUpload => isId ? 'Gagal upload: ' : 'Failed to upload: ';
   String get errPhotoLoad =>
       isId ? 'Gagal membaca gambar' : 'Failed to read image';
   String get errPhotoPermission => isId

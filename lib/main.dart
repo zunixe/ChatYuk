@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
@@ -783,6 +784,11 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   await _initNotificationsFast();
   await warmChatBackground();
   await AppTheme.init();
+  // Kunci portrait dua lapis (manifest sudah portrait — ini lapisan Dart,
+  // menutup edge-case hot-restart / perangkat yang mengabaikan manifest).
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
   runApp(const ChatYukApp());
   // Token FCM lambat (5s) — lazy setelah UI tampil, tidak block TTI
   unawaited(_initFcmTokenLazy());

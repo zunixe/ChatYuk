@@ -2,6 +2,8 @@
 // dan meneruskan ke FCM Topic (1 publish → N subscriber)
 // Dipanggil oleh net.http_post dari trigger notify_*_fanout
 
+import { isServiceRoleJwt, unauthorized } from '../_shared/auth.ts';
+
 const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 const FCM_PROJECTS = [{ id: 'chatyuk-7c9e4', envKey: 'FIREBASE_SERVICE_ACCOUNT' }];
 
@@ -39,6 +41,9 @@ async function sendTopic(topic:string, title:string, body:string, data:Record<st
 Deno.serve(async (req)=>{
   try{
     if(req.method!=='POST') return new Response('Method not allowed',{status:405});
+    // Auth: hanya service_role (dipanggil trigger DB via service role).
+    // Semua user biasa dilarang memicu push massal ke topic.
+    if(!isServiceRoleJwt(req)) return unauthorized();
     const {type, id} = await req.json();
     const supabaseUrl=Deno.env.get('SUPABASE_URL')!; const key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const headers={apikey:key, Authorization:`Bearer ${key}`, 'Content-Type':'application/json'};

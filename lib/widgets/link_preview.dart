@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/locale_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../services/link_preview_service.dart';
@@ -33,12 +35,13 @@ class _LinkPreviewState extends State<LinkPreview> {
 
   @override
   Widget build(BuildContext context) {
+    final lpv = context.watch<LocaleProvider>().s;
     if (_loading) {
       return Container(
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(color: AppTheme.bgInput, borderRadius: BorderRadius.circular(8), border: Border(left: BorderSide(color: AppTheme.primary, width: 3))),
-        child: Row(children: [SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)), SizedBox(width: 8), Text('Loading preview...', style: AppText.caption)]),
+        child: Row(children: [SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)), SizedBox(width: 8), Text(lpv.linkPreviewLoading, style: AppText.caption)]),
       );
     }
     final d = _data;
@@ -64,7 +67,7 @@ class _LinkPreviewState extends State<LinkPreview> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(d.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodyStrong.copyWith(fontSize: 13)),
+                  Text(d.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodyStrong),
                   if (d.description.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(d.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),

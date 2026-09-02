@@ -35,7 +35,7 @@ begin
     sender_display := coalesce(nullif(sender_display,''), nullif(new.sender_name,''), 'User');
     perform net.http_post(
       url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-      headers := jsonb_build_object('Content-Type', 'application/json'),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
       body := jsonb_build_object(
         'token', receiver_token,
         'title', sender_display,
@@ -90,7 +90,7 @@ begin
     begin
       perform net.http_post(
         url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-        headers := jsonb_build_object('Content-Type', 'application/json'),
+        headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
         body := jsonb_build_object(
           'token', rec.fcm_token,
           'title', v_name,
@@ -115,7 +115,7 @@ begin
       if t is not null and t <> '' then
         perform net.http_post(
           url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-          headers := jsonb_build_object('Content-Type', 'application/json'),
+          headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
           body := jsonb_build_object(
             'token', t,
             'title', v_name,

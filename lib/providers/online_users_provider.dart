@@ -17,6 +17,8 @@ bool _usersEqual(List<UserModel> a, List<UserModel> b) {
 }
 
 class OnlineUsersProvider extends ChangeNotifier {
+  bool _disposed = false;
+
   final ChatService _service = ChatService();
   List<UserModel> _users = [];
   StreamSubscription? _sub;
@@ -56,7 +58,7 @@ class OnlineUsersProvider extends ChangeNotifier {
               .toList();
           await _mergeAvatarsFromDisk();
           _loaded = true;
-          notifyListeners();
+          if (!_disposed) notifyListeners();
         } catch (_) {}
       }
     } catch (_) {}
@@ -131,14 +133,14 @@ class OnlineUsersProvider extends ChangeNotifier {
           _debounce = Timer(const Duration(milliseconds: 180), () {
             _users = deduped;
             _error = null;
-            notifyListeners();
+            if (!_disposed) notifyListeners();
           });
           return;
         }
         _debounce?.cancel();
         _users = deduped;
         _error = null;
-        notifyListeners();
+        if (!_disposed) notifyListeners();
         // Simpan ke disk untuk cold start berikutnya (tanpa avatar base64 biar kecil).
         // Avatar disimpan TERPISAH per-uid (kv terenkripsi, pola sama seperti
         // pesan foto) supaya cold start langsung tampil foto — tanpa pop-in
@@ -153,7 +155,7 @@ class OnlineUsersProvider extends ChangeNotifier {
         debugPrint('[OnlineUsersProvider] stream error: $e');
         _loaded = true;
         _error = e.toString();
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       },
     );
   }
@@ -163,7 +165,7 @@ class OnlineUsersProvider extends ChangeNotifier {
     if (idx >= 0 && _users[idx].avatar != base64) {
       _users[idx] = _users[idx].copyWith(avatar: base64);
       _persistAvatars([_users[idx]]);
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -173,12 +175,13 @@ class OnlineUsersProvider extends ChangeNotifier {
       _users[idx] = _users[idx].copyWith(avatar: '');
       _avatarWritten.remove(uid);
       MessageCache.instance.removeRawObj('avatar:$uid');
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _debounce?.cancel();
     _sub?.cancel();
     super.dispose();
