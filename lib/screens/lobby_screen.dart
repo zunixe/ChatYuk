@@ -10,7 +10,6 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import 'room_chat_screen.dart';
-import '../widgets/skeleton_card.dart';
 import 'private_rooms_screen.dart';
 import '../providers/theme_provider.dart';
 
@@ -376,9 +375,17 @@ class _GlobalRoomsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     if (rooms.isEmpty && !loaded) {
-      // Data belum selesai dimuat — jangan tampilkan empty state "no rooms"
-      // yang menyesatkan, tampilkan skeleton saja.
-      return const SkeletonList(count: 6);
+      // Data belum selesai dimuat — loader tema (nol warna abu skeleton).
+      return const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: AppTheme.primary,
+          ),
+        ),
+      );
     }
     if (rooms.isEmpty) {
       return Center(
@@ -415,10 +422,16 @@ class _PrivateRoomsTab extends StatelessWidget {
     final roomProvider = context.watch<RoomProvider>();
     final rooms = roomProvider.privateRooms;
     if (rooms.isEmpty && !roomProvider.hasLoaded) {
-      // Data belum selesai dimuat — skeleton, bukan empty state.
-      return const SkeletonList(
-        count: 6,
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 88),
+      // Data belum selesai dimuat — loader tema, bukan empty state.
+      return const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: AppTheme.primary,
+          ),
+        ),
       );
     }
     return Stack(

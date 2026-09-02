@@ -178,3 +178,9 @@ Jika `supabase db push` timeout lagi:
 2. Alternatif Playwright: buka `https://supabase.com/dashboard/project/fohcucyyejdryryoxitm/sql` → paste SQL → Run → lalu `insert into supabase_migrations...`.
 3. Selalu update file ini + `supabase_migrations.schema_migrations` agar tidak double-apply.
 4. **Pastikan sinkron code ↔ DB**: setiap ubah `notify_call_*` / `call_push` di SQL, cek juga `supabase/functions/send-push/index.ts` (`dataOnlyTypes`) dan `lib/main.dart` (`_firebaseMessagingBackgroundHandler` + `_showLocalNotification`). 3 tempat harus sama tipe `call`/`call_ended`/`call_canceled`.
+
+## 2026-09-02 — Pembersihan device orphan + purge_inactive_accounts patch
+
+- **Isu:** Admin panel devices menampilkan "(profil terhapus)" — baris `user_devices` yatim (profil sudah dihapus cron, device tertinggal).
+- **Fix DB:** `delete from user_devices where user_id not in (select id from profiles)` — 1 orphan dibersihkan. Patch `purge_inactive_accounts`: tambah `delete from public.user_devices where user_id = r.id` sebelum hapus profil → cron berikutnya tidak meninggalkan orphan.
+- **Pembersihan chat akun device (hard delete, 2026-09-02):** 11 chat antar-device (Xiaomi 24129PN74G + Redmi Note 9 Pro) + chat dengan 38 outsider yang hanya pernah chat device-owner → 64 chat rows, ~794 pesan (4 foto + 160 voice) dan file Storage terkait dihapus permanen; 16 outsider yang masih chat user lain DIPERTAHANKAN. Catatan: `storage.objects` tidak bisa di-delete via SQL (trigger protect_delete) — file dihapus via Storage API dari daftar `private_messages.image_path/voice_path` + avatar/galeri profil terhapus.

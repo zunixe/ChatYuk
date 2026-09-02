@@ -18,6 +18,7 @@ import '../services/message_cache.dart';
 import '../services/realtime_hub.dart';
 import '../services/points_service.dart';
 import '../services/screen_secure_service.dart';
+import '../services/storage_photo_service.dart';
 import '../services/notification_prefs_service.dart';
 
 // Shortcut untuk fire-and-forget.
@@ -1176,9 +1177,48 @@ class AuthProvider extends ChangeNotifier {
     _profileSub?.cancel();
     _profileSub = _auth.onMyProfileUpdates().listen((updated) {
       if (_disposed) return;
-      _profile = updated;
-      notifyListeners();
+      _applyProfileUpdate(updated);
     });
+  }
+
+  /// Terapkan update profil lintas-device: kalau avatar berupa path storage
+  /// (re-upload dari device lain), download dulu → sinkronkan cache → baru
+  /// tampilkan. Tanpa ini device kedua menampilkan foto LAMA dari cache.
+  Future<void> _applyProfileUpdate(UserModel updated) async {
+    if (_disposed) return;
+    final avatar = updated.avatar;
+    if (avatar.isNotEmpty &&
+        StoragePhotoService.instance.isAvatarPath(avatar)) {
+      final b64 = await AvatarB64Service.instance.getByPath(avatar);
+      if (_disposed) return;
+      final finalProfile = updated.copyWith(avatar: b64);
+      final uid = finalProfile.uid;
+      if (b64.isNotEmpty) {
+        AvatarB64Service.instance.setForUid(uid, b64);
+        ChatService.setAvatarCacheForUid(uid, b64);
+      }
+      _profile = finalProfile;
+    } else {
+      _profile = updated;
+      if (avatar.isNotEmpty) {
+        AvatarB64Service.instance.setForUid(updated.uid, avatar);
+        ChatService.setAvatarCacheForUid(updated.uid, avatar);
+      }
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Refresh profil dari server (download avatar bila path baru) — dipanggil
+  /// saat app RESUME dari sleep lama, karena event realtime bisa terlewat
+  /// selama proses dibekukan.
+  Future<void> refreshProfile() async {
+    try {
+      final full = await _auth.getProfile(withAvatar: true);
+      if (full == null || _disposed) return;
+      await _applyProfileUpdate(full);
+    } catch (e) {
+      debugPrint('[AUTH] refreshProfile error: $e');
+    }
   }
 
   @override

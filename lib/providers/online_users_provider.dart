@@ -23,22 +23,44 @@ class OnlineUsersProvider extends ChangeNotifier {
   String? _error;
   bool _loaded = false;
   Timer? _debounce;
+  Completer<void>? _warmCompleter;
 
   List<UserModel> get users => _users;
   String? get error => _error;
   bool get hasLoaded => _loaded;
 
-  OnlineUsersProvider() {
-    // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network
-    MessageCache.instance.loadRawList('online_users').then((cached) {
+  /// Tunggu disk cache siap (SQLite + Keystore) — dipakai auth gate supaya
+  /// skeleton tetap tampil sampai data hangat, tanpa blink abu skeleton.
+  Future<void> warmup() {
+    final existing = _warmCompleter;
+    if (existing != null) return existing.future;
+    final c = Completer<void>();
+    _warmCompleter = c;
+    _loadDisk().whenComplete(() {
+      if (!c.isCompleted) c.complete();
+    });
+    return c.future;
+  }
+
+  Future<void> _loadDisk() async {
+    try {
+      // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network
+      final cached = await MessageCache.instance.loadRawList('online_users');
       if (cached.isNotEmpty && _users.isEmpty) {
         try {
-          _users = cached.map((e) => UserModel.fromMap('${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e))).toList();
+          _users = cached
+              .map((e) => UserModel.fromMap(
+                  '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
+              .toList();
           _loaded = true;
           notifyListeners();
         } catch (_) {}
       }
-    });
+    } catch (_) {}
+  }
+
+  OnlineUsersProvider() {
+    unawaited(warmup());
     _sub = _service.getOnlineUsers().listen(
       (users) {
         _loaded = true;

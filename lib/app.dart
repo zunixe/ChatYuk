@@ -29,8 +29,26 @@ import 'widgets/anon_prompt_dialog.dart';
 import 'widgets/call_banner.dart';
 import 'widgets/skeleton_card.dart';
 
-class ChatYukApp extends StatelessWidget {
+class ChatYukApp extends StatefulWidget {
   const ChatYukApp({super.key});
+
+  @override
+  State<ChatYukApp> createState() => _ChatYukAppState();
+}
+
+class _ChatYukAppState extends State<ChatYukApp> {
+  // Provider tab dibuat SEJAK APP START (saat skeleton auth masih tampil) —
+  // disk cache (SQLite) menghangat paralel dengan auth init, sehingga begitu
+  // skeleton hilang tab langsung menampilkan data, TANPA blink abu skeleton.
+  final _roomProvider = RoomProvider();
+  final _onlineUsersProvider = OnlineUsersProvider();
+
+  @override
+  void dispose() {
+    _roomProvider.dispose();
+    _onlineUsersProvider.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +65,8 @@ class ChatYukApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SocialProvider()),
         ChangeNotifierProvider(create: (_) => TimelineProvider()),
         ...AdminGate.extraProviders,
+        ChangeNotifierProvider.value(value: _roomProvider),
+        ChangeNotifierProvider.value(value: _onlineUsersProvider),
         ChangeNotifierProvider(create: (_) => NavProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => localeProvider),
@@ -99,6 +119,10 @@ class _AuthGateState extends State<_AuthGate> {
   DateTime? _lastRecoveryNav;
   Timer? _autoRetryTimer;
   int _autoRetryCount = 0;
+  // Warm-up disk cache (SQLite) — ditunggu MAKSIMAL ini setelah auth siap.
+  // Selama menunggu: layar polos bgScreen TANPA elemen abu (nol blink abu).
+  Future<void>? _warmFuture;
+  static const _warmTimeout = Duration(milliseconds: 800);
 
   // Kalau DNS/network down lama, coba login ulang otomatis tiap 8 detik
   // (maks 3×) — begitu koneksi pulih, app masuk sendiri tanpa sentuhan user.
@@ -169,6 +193,7 @@ class _AuthGateState extends State<_AuthGate> {
 
     if (auth.error != null) {
       return Scaffold(
+        backgroundColor: AppTheme.bgScreen,
         body: Center(
           child: Padding(
             padding: EdgeInsets.all(24),
@@ -203,7 +228,19 @@ class _AuthGateState extends State<_AuthGate> {
       return EntryScreen();
     }
 
-    return _MainNav();
+    // Warm-gate: tunggu disk cache tab pertama siap (maks 800ms) dengan
+    // tampilan polos bgScreen — NOL warna abu — lalu konten langsung utuh.
+    _warmFuture ??= Future.wait([
+      context.read<RoomProvider>().warmFuture,
+      context.read<OnlineUsersProvider>().warmup(),
+    ]).timeout(_warmTimeout, onTimeout: () async => const <void>[]);
+    return FutureBuilder<void>(
+      future: _warmFuture,
+      builder: (context, snap) {
+        if (!snap.hasData) return const _AuthSkeletonScreen(withLogo: false);
+        return _MainNav();
+      },
+    );
   }
 }
 
@@ -215,9 +252,10 @@ class _MainNav extends StatefulWidget {
 }
 
 class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
-  // Provider dibuat sekali sebagai field — bukan di build()
-  final _roomProvider = RoomProvider();
-  final _onlineUsersProvider = OnlineUsersProvider();
+  // Provider tab sudah dibuat di root (_ChatYukAppState) sejak app start —
+  // di sini cukup consume. Dulu: dibuat DI SINI (setelah skeleton auth
+  // hilang) → disk cache baru menghangat saat halaman sudah tampil →
+  // blink abu skeleton beberapa ratus ms.
 
   // Instance halaman dibuat ulang HANYA saat mode terang/gelap berubah —
   // bukan tiap tab switch (menghindari rebuild berlebihan).
@@ -249,8 +287,6 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _roomProvider.dispose();
-    _onlineUsersProvider.dispose();
     super.dispose();
   }
 
@@ -266,6 +302,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // menimpa balik status admin yang sudah di-toggle invisible.
       auth.resyncInvisible();
       auth.goOnline();
+      // Sinkron profil lintas-device: selama sleep, event realtime profil
+      // (ganti avatar dsb.) bisa terlewat → refresh dari server.
+      auth.refreshProfile();
     }
   }
 
@@ -297,12 +336,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       _pagesDark = dark;
     }
     if (!_visitedTabs.contains(tab)) _visitedTabs.add(tab);
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: _roomProvider),
-        ChangeNotifierProvider.value(value: _onlineUsersProvider),
-      ],
-      child: Scaffold(
+    // Provider room/online users sudah tersedia di root — tidak perlu
+    // dideklarasikan ulang di sini (hindari instance ganda).
+    return Scaffold(
         body: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: () => context.read<AuthProvider>().notifyActivity(),
@@ -363,7 +399,6 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         bottomNavigationBar: _BottomNav(currentIndex: tab, onTap: _onNavTap),
-      ),
     );
   }
 }
@@ -473,22 +508,35 @@ class _BadgedIcon extends StatelessWidget {
 
 /// Skeleton loading saat auth check — meniru layout OnlineUsersScreen
 /// (avatar bulat + nama + filter row + list kartu) supaya transisi ke
-/// layar utama terasa mulus, tanpa flash putih/spinner.
+/// layar utama terasa mulus. JANGAN taruh logo app di sini: 62% piksel
+/// logo itu putih — di atas background gelap jadi kilatan putih besar
+/// yang makin terlihat saat cold start (jeda lama → loading lebih lama).
 class _AuthSkeletonScreen extends StatelessWidget {
-  const _AuthSkeletonScreen();
+  const _AuthSkeletonScreen({this.withLogo = true});
+
+  /// false = versi polos TANPA elemen abu — dipakai fase transisi warm-up
+  /// setelah loading selesai, supaya tidak ada kilatan abu apa pun.
+  final bool withLogo;
 
   @override
   Widget build(BuildContext context) {
-    Widget box(double w, double h, {double r = 6, Color? color}) => Container(
+    if (!withLogo) {
+      return Scaffold(
+        backgroundColor: AppTheme.bgScreen,
+        body: const SizedBox.expand(),
+      );
+    }
+    Widget box(double w, double h, {double r = 6}) => Container(
       width: w,
       height: h,
       decoration: BoxDecoration(
-        color: color ?? AppTheme.divider.withValues(alpha: 0.7),
+        color: AppTheme.divider.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(r),
       ),
     );
 
     return Scaffold(
+      backgroundColor: AppTheme.bgScreen,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,7 +572,7 @@ class _AuthSkeletonScreen extends StatelessWidget {
               child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
                 itemCount: 8,
-                itemBuilder: (_, __) => const SkeletonCard(),
+                itemBuilder: (_, _) => const SkeletonCard(),
               ),
             ),
           ],

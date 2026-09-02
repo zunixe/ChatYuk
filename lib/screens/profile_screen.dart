@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -324,9 +325,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       picked = await picker.pickImage(
         source: source,
-        maxWidth: 600,
-        maxHeight: 600,
-        imageQuality: 80,
+        maxWidth: 1080,
+        imageQuality: 90,
       );
     } catch (e) {
       // Cancel sebelum izin kamera/galeri → PlatformException, jangan error.
@@ -340,7 +340,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     if (picked == null) return;
 
-    final bytes = await picked.readAsBytes();
+    // Crop interaktif 1:1 — geser/zoom pilih bagian yang masuk avatar.
+    // Apa yang dilihat user di lingkaran = persis yang tersimpan.
+    final CroppedFile? cropped;
+    try {
+      cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: s.avatarCamera,
+            toolbarColor: AppTheme.bgScreen,
+            toolbarWidgetColor: Colors.white,
+            backgroundColor: Colors.black,
+            activeControlsWidgetColor: AppTheme.primary,
+            lockAspectRatio: true,
+          ),
+          IOSUiSettings(
+            title: s.avatarCamera,
+            aspectRatioLockEnabled: true,
+          ),
+        ],
+      );
+    } catch (e) {
+      debugPrint('[PROFILE] crop error: $e');
+      return;
+    }
+    if (cropped == null) return;
+
+    final bytes = await cropped.readAsBytes();
     if (!mounted) return;
 
     // Proses image di background isolate — tidak block UI thread

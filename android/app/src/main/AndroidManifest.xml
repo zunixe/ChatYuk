@@ -58,6 +58,11 @@
                 <data android:scheme="chatyuk" android:host="referral"/>
             </intent-filter>
         </activity>
+        <!-- Crop UCropActivity (image_cropper) — pilih area foto profil -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

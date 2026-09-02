@@ -2044,6 +2044,9 @@ class _ChatInputState extends State<_ChatInput> {
   OverlayEntry? _voiceOverlay;
   bool _isVoiceLocked = false;
   bool _isVoicePaused = false;
+  // Bulatan lock sedang di-pick-up (ditekan + digeser) — menyembunyikan
+  // tombol pause di composer dan menampilkan kembali "geser untuk batal".
+  bool _voicePickUp = false;
 
   void _lockVoiceRecord() {
     if (mounted) setState(() => _isVoiceLocked = true);
@@ -2082,6 +2085,7 @@ class _ChatInputState extends State<_ChatInput> {
         _voiceSeconds = 0;
         _isVoiceLocked = false;
         _isVoicePaused = false;
+        _voicePickUp = false;
       });
       _startVoiceTimer();
     } catch (_) {}
@@ -2093,6 +2097,7 @@ class _ChatInputState extends State<_ChatInput> {
     if (!_isRecordingVoice) return;
     _isVoiceLocked = false;
     _isVoicePaused = false;
+    _voicePickUp = false;
     final path = await _record.stop();
     setState(() => _isRecordingVoice = false);
     if (path == null) return;
@@ -2112,6 +2117,7 @@ class _ChatInputState extends State<_ChatInput> {
       _isRecordingVoice = false;
       _isVoiceLocked = false;
       _isVoicePaused = false;
+      _voicePickUp = false;
     });
   }
 
@@ -2255,26 +2261,38 @@ class _ChatInputState extends State<_ChatInput> {
                                   style: AppText.bodyStrong.copyWith(color: Colors.red),
                                 ),
                                 const Spacer(),
-                                GestureDetector(
-                                  onTap: () => _isVoicePaused
-                                      ? _resumeVoiceRecord()
-                                      : _pauseVoiceRecord(),
-                                  child: Container(
-                                    width: 30,
-                                    height: 30,
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withValues(alpha: 0.12),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      _isVoicePaused
-                                          ? Icons.play_arrow_rounded
-                                          : Icons.pause_rounded,
-                                      color: Colors.red,
-                                      size: 18,
+                                if (!_isVoiceLocked || _voicePickUp) ...[
+                                  Icon(
+                                    Icons.keyboard_arrow_left_rounded,
+                                    color: AppTheme.textSecondary,
+                                    size: 20,
+                                  ),
+                                  Text(
+                                    s.hintSlideToCancel,
+                                    style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+                                  ),
+                                ] else ...[
+                                  GestureDetector(
+                                    onTap: () => _isVoicePaused
+                                        ? _resumeVoiceRecord()
+                                        : _pauseVoiceRecord(),
+                                    child: Container(
+                                      width: 30,
+                                      height: 30,
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withValues(alpha: 0.12),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        _isVoicePaused
+                                            ? Icons.play_arrow_rounded
+                                            : Icons.pause_rounded,
+                                        color: Colors.red,
+                                        size: 18,
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                                 const SizedBox(width: 16),
                               ],
                             ),
@@ -2330,14 +2348,17 @@ class _ChatInputState extends State<_ChatInput> {
                   duration: const Duration(milliseconds: 180),
                   switchInCurve: Curves.easeOut,
                   switchOutCurve: Curves.easeIn,
-                  layoutBuilder: (currentChild, previousChildren) => Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
-                    children: <Widget>[
-                      ...previousChildren,
-                      if (currentChild != null) currentChild,
-                    ],
-                  ),
+                  // HANYA currentChild — previousChildren dibuang supaya
+                  // tidak ada DUA bulatan bertumpuk saat cross-fade
+                  // (sumber blink biru/gembok saat rekaman dibatalkan).
+                  layoutBuilder: (currentChild, previousChildren) =>
+                      Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.center,
+                        children: <Widget>[
+                          if (currentChild != null) currentChild,
+                        ],
+                      ),
                   transitionBuilder: (child, anim) => FadeTransition(
                     opacity: anim,
                     child: child,
@@ -2353,6 +2374,8 @@ class _ChatInputState extends State<_ChatInput> {
                           onLongPressStart: _startVoiceRecord,
                           onLongPressCancel: _cancelVoiceRecord,
                           onLock: _lockVoiceRecord,
+                          onPickUpChanged: (v) =>
+                              setState(() => _voicePickUp = v),
                           size: 40,
                         )
                       : (widget.controller.text.trim().isEmpty && _decodedPhoto == null
@@ -2363,6 +2386,8 @@ class _ChatInputState extends State<_ChatInput> {
                           onLongPressStart: _startVoiceRecord,
                           onLongPressCancel: _cancelVoiceRecord,
                           onLock: _lockVoiceRecord,
+                          onPickUpChanged: (v) =>
+                              setState(() => _voicePickUp = v),
                           size: 40,
                         )
                           : GestureDetector(
