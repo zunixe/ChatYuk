@@ -97,7 +97,24 @@ class OnlineUsersProvider extends ChangeNotifier {
         _loaded = true;
         // Dedupe by uid — pertahanan kedua terhadap duplikat dari stream.
         final seen = <String>{};
-        final deduped = users.where((u) => seen.add(u.uid)).toList();
+        var deduped = users.where((u) => seen.add(u.uid)).toList();
+        // Merge monotonic: stream bisa emit fast-path TANPA avatar (belum
+        // terdownload) setelah emit dengan avatar — tanpa ini foto yang
+        // sudah tampil tertimpa kosong lalu balik lagi = kedip-kedip.
+        // Avatar lama dipertahankan selama yang baru kosong ATAU masih
+        // path storage (avatars/… — belum jadi base64 siap tampil).
+        if (_users.isNotEmpty) {
+          final prev = {for (final u in _users) u.uid: u.avatar};
+          deduped = deduped
+              .map((u) {
+                final old = prev[u.uid];
+                if (old == null || old.isEmpty) return u;
+                final newIsEmptyOrPath = u.avatar.isEmpty ||
+                    u.avatar.startsWith('avatars/');
+                return newIsEmptyOrPath ? u.copyWith(avatar: old) : u;
+              })
+              .toList();
+        }
         if (_usersEqual(_users, deduped)) return;
         // Debounce avatar-only churn di cold start (fast 50→ slow 100→ avatar batch 20)
         // biar list tidak rebuild 3-4x beruntun yang terlihat kedip.

@@ -991,6 +991,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 );
                               }
                               return Builder(
+                                key: ValueKey('uc-${paged[i].uid}'),
                                 builder: (cardCtx) => _UserCard(
                                   user: paged[i],
                                   onTap: () => _startChat(context, paged[i]),
