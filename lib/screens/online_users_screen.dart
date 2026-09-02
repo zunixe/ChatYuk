@@ -61,8 +61,15 @@ class _AsyncAvatar extends StatefulWidget {
   State<_AsyncAvatar> createState() => _AsyncAvatarState();
 }
 
-class _AsyncAvatarState extends State<_AsyncAvatar> {
+class _AsyncAvatarState extends State<_AsyncAvatar>
+    with SingleTickerProviderStateMixin {
   Uint8List? _bytes;
+  late final AnimationController _fade = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 150),
+    value: 1,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -70,10 +77,13 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     if (cached != null) {
       _bytes = cached;
     } else {
+      // Foto pertama kali muncul → fade halus, bukan pop kasar (anti-kedip).
+      _fade.value = 0;
       compute(_avatarDecodeB64, widget.avatarB64).then((b) {
         if (b != null && mounted) {
           _avatarCache.putIfAbsent(widget.avatarB64, () => b);
           setState(() => _bytes = b);
+          _fade.forward();
         }
       });
     }
@@ -87,14 +97,22 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
       if (cached != null) {
         if (_bytes != cached) setState(() => _bytes = cached);
       } else {
+        _fade.value = 0;
         compute(_avatarDecodeB64, widget.avatarB64).then((b) {
           if (b != null && mounted) {
             _avatarCache.putIfAbsent(widget.avatarB64, () => b);
             setState(() => _bytes = b);
+            _fade.forward();
           }
         });
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _fade.dispose();
+    super.dispose();
   }
 
   @override
@@ -106,11 +124,14 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
             style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
       );
     }
-    return Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => Center(
-              child: Text(widget.initial,
-                  style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
-            ));
+    return FadeTransition(
+      opacity: _fade,
+      child: Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => Center(
+                child: Text(widget.initial,
+                    style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
+              )),
+    );
   }
 }
 
