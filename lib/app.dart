@@ -123,7 +123,7 @@ class _AuthGateState extends State<_AuthGate> {
   // Warm-up disk cache (SQLite) — ditunggu MAKSIMAL ini setelah auth siap.
   // Selama menunggu: layar polos bgScreen TANPA elemen abu (nol blink abu).
   Future<void>? _warmFuture;
-  static const _warmTimeout = Duration(milliseconds: 800);
+  static const _warmTimeout = Duration(milliseconds: 1500);
 
   // Kalau DNS/network down lama, coba login ulang otomatis tiap 8 detik
   // (maks 3×) — begitu koneksi pulih, app masuk sendiri tanpa sentuhan user.
