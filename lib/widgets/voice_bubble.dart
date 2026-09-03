@@ -2,7 +2,27 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../config/theme.dart';
-import '../services/storage_photo_service.dart';
+
+/// Manager player GLOBAL — hanya SATU voice yang playing di seluruh app.
+/// Dulu: tiap bubble punya player sendiri → dua voice bisa play paralel
+/// (audio bercampur). Play bubble baru → bubble lama otomatis pause.
+class _VoicePlayerManager {
+  _VoicePlayerManager._();
+  static final instance = _VoicePlayerManager._();
+
+  AudioPlayer? _current;
+  final _controller = StreamController<AudioPlayer>.broadcast();
+
+  /// Stream: player yang BARU saja mulai play (listener lama pause diri).
+  Stream<AudioPlayer> get started => _controller.stream;
+
+  void started_(AudioPlayer p) {
+    final old = _current;
+    _current = p;
+    if (old != null && old != p) old.pause();
+    _controller.add(p);
+  }
+}
 
 class VoiceBubble extends StatefulWidget {
   final String path; // storage path voice/...
@@ -26,6 +46,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
   StreamSubscription? _completeSub;
+  StreamSubscription? _otherSub;
 
   @override
   void initState() {
@@ -34,6 +55,10 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     _posSub = _player.onPositionChanged.listen((p) => setState(() => _pos = p));
     _durSub = _player.onDurationChanged.listen((d) => setState(() => _dur = d));
     _completeSub = _player.onPlayerComplete.listen((_) => setState(() { _playing = false; _pos = Duration.zero; }));
+    // Bubble lain mulai play → pause diri (satu suara saja di app).
+    _otherSub = _VoicePlayerManager.instance.started.listen((p) {
+      if (p != _player && _playing) setState(() => _playing = false);
+    });
   }
 
   @override
@@ -41,6 +66,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
     _posSub?.cancel();
     _durSub?.cancel();
     _completeSub?.cancel();
+    _otherSub?.cancel();
     _player.dispose();
     super.dispose();
   }
@@ -53,19 +79,13 @@ class _VoiceBubbleState extends State<VoiceBubble> {
       try {
         String? url = _url;
         if (url == null) {
-          // Download bytes then play via temp file or via storage public URL
-          // For now, get public URL from Supabase storage
-          // Use StoragePhotoService to get download URL via public URL
-          // Simplify: download to bytes and play via file
-          final bytes = await StoragePhotoService.instance.downloadBytes(widget.path);
-          if (bytes == null) return;
-          // audioplayers can play from bytes via file - write to temp
-          // For simplicity, use base64 data uri
-          // Instead, use public URL if bucket is public
-          // chat-photos is public, so construct URL
+          // Bucket chat-photos publik — play langsung dari URL publik
+          // (dulu: downloadBytes() cuma untuk cek keberadaan file lalu
+          // dibuang = download ganda tiap play pertama).
           url = 'https://fohcucyyejdryryoxitm.supabase.co/storage/v1/object/public/chat-photos/${widget.path}';
           _url = url;
         }
+        _VoicePlayerManager.instance.started_(_player);
         await _player.play(UrlSource(url));
         setState(() => _playing = true);
       } catch (_) {}

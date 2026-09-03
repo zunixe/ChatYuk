@@ -957,10 +957,11 @@ class ChatService {
       if (repliedToSenderName != null)
         'replied_to_sender_name': repliedToSenderName,
     });
-    // Broadcast untuk skala (tanpa postgres realtime) — fire-and-forget
+    // Broadcast untuk skala (tanpa postgres realtime) — fire-and-forget.
+    // Channel REUSE per chat (putIfAbsent) — dulu: channel baru per pesan
+    // menumpuk di memori + traffic realtime makin berat di chat panjang.
     try {
-      final ch = _sb.channel('private_$chatId');
-      ch.subscribe();
+      final ch = _privateBroadcastChannel(chatId);
       await ch.sendBroadcastMessage(event: 'new_message', payload: {
         'chat_id': chatId,
         'sender_id': senderId,
@@ -973,6 +974,16 @@ class ChatService {
         'duration_ms': durationMs ?? 0,
       });
     } catch (_) {}
+  }
+
+  final Map<String, RealtimeChannel> _privateBroadcastChannels = {};
+
+  RealtimeChannel _privateBroadcastChannel(String chatId) {
+    return _privateBroadcastChannels.putIfAbsent(chatId, () {
+      final ch = _sb.channel('private_$chatId');
+      ch.subscribe();
+      return ch;
+    });
   }
 
   /// Kirim koin ke lawan bicara. Server yang memvalidasi & memotong koin.

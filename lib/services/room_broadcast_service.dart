@@ -171,12 +171,30 @@ class RoomBroadcastSession extends ChangeNotifier {
       unawaited(_prv.requestJoin(roomId));
       await Future.delayed(const Duration(milliseconds: 200));
       await requestStream();
-      // Watchdog: jika tidak ada broadcaster, stop
+      // Watchdog: jika tidak ada broadcaster — bersihkan video beku + tampilkan
+      // "menyambungkan" sampai broadcaster baru re-offer; stop HANYA jika
+      // kosong bertahan 2 siklus (20 detik) — dulu langsung stop (±2 menit
+      // sebelum cronembersihkan) sehingga viewer melihat freeze lama.
+      int _emptyStreak = 0;
       _watchdog = Timer.periodic(const Duration(seconds: 10), (_) async {
         if (_closed) return;
         try {
           final cnt = await _prv.broadcastCount(roomId);
-          if (cnt == 0) stop();
+          if (cnt == 0) {
+            _emptyStreak++;
+            if (remoteReady) {
+              // Video beku (broadcaster crash) — lepas stream & reset.
+              remoteReady = false;
+              for (final r in remoteRenderers.values) {
+                r.srcObject = null;
+              }
+              hasRemoteVideo = false;
+              notifyListeners();
+            }
+            if (_emptyStreak >= 2) stop();
+          } else {
+            _emptyStreak = 0;
+          }
         } catch (_) {}
       });
       // Rejoin TANPA teardown: selama video belum masuk / koneksi mati,
@@ -454,6 +472,11 @@ class RoomBroadcastSession extends ChangeNotifier {
     _pendingCands.remove(uid);
     _pcIds.remove(uid);
     _offerSentAt.remove(uid);
+    // Broadcaster hilang (b_bye/timeout) → reset remoteReady agar rejoin
+    // ping jalan & viewer dapat broadcaster berikutnya tanpa keluar-masuk
+    // room. Dulu: remoteReady masih true → rejoin terlewat → viewer harus
+    // manual keluar-masuk.
+    remoteReady = false;
     hasRemoteVideo = remoteRenderers.isNotEmpty;
     notifyListeners();
   }

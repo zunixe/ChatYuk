@@ -65,17 +65,35 @@ class OnlineUsersProvider extends ChangeNotifier {
   }
 
   /// Gabungkan avatar tersimpan (kv per-uid) ke list — cold start instan.
+  /// Merge PARALEL (batch 20): proses baru setelah lama diem membuat load
+  /// disk + decrypt berat; berurutan bisa melebihi warm-gate timeout →
+  /// list tampil sebelum avatar siap = blink abu → foto.
   Future<void> _mergeAvatarsFromDisk() async {
     if (_users.isEmpty) return;
-    for (int i = 0; i < _users.length; i++) {
-      if (_users[i].avatar.isNotEmpty) continue;
-      try {
-        final obj = await MessageCache.instance.loadRawObj('avatar:${_users[i].uid}');
-        final a = obj['a'] as String?;
-        if (a != null && a.isNotEmpty) {
-          _users[i] = _users[i].copyWith(avatar: a);
+    const batch = 20;
+    for (int i = 0; i < _users.length; i += batch) {
+      final chunk = _users
+          .skip(i)
+          .take(batch)
+          .where((u) => u.avatar.isEmpty)
+          .toList();
+      if (chunk.isEmpty) continue;
+      final results = await Future.wait(chunk.map((u) async {
+        try {
+          final obj = await MessageCache.instance.loadRawObj('avatar:${u.uid}');
+          final a = obj['a'] as String?;
+          return a != null && a.isNotEmpty ? a : '';
+        } catch (_) {
+          return '';
         }
-      } catch (_) {}
+      }));
+      for (int j = 0; j < chunk.length; j++) {
+        if (results[j].isEmpty) continue;
+        final idx = _users.indexWhere((u) => u.uid == chunk[j].uid);
+        if (idx >= 0 && _users[idx].avatar.isEmpty) {
+          _users[idx] = _users[idx].copyWith(avatar: results[j]);
+        }
+      }
     }
   }
 
