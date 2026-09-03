@@ -37,10 +37,16 @@ final _avatarCache = BoundedCache<String, Uint8List>(80);
 final Map<String, Uint8List> _avatarBytesByUid = {};
 final Map<String, String> _avatarLastSrcByUid = {};
 
+// MemoryImage instance STABIL per-UID — dipisahkan total dari data
+// pengguna online yang berganti-ganti tiap event presence. Bitmap di-decode
+// SEKALI per foto; rebuild list berapapun tidak menyentuh bitmap.
+final Map<String, MemoryImage> _avatarImageByUid = {};
+
 void clearAllAvatarCaches() {
   _avatarCache.clear();
   _avatarBytesByUid.clear();
   _avatarLastSrcByUid.clear();
+  _avatarImageByUid.clear();
 }
 
 String? _processAvatarImage(Uint8List bytes) {
@@ -69,7 +75,7 @@ class _AsyncAvatar extends StatefulWidget {
 }
 
 class _AsyncAvatarState extends State<_AsyncAvatar> {
-  Uint8List? _bytes;
+  MemoryImage? _provider;
 
   @override
   void initState() {
@@ -79,42 +85,49 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
 
   void _resolve() {
     final src = widget.avatarB64;
-    // String sumber sama → tidak ada kerja sama sekali.
-    if (src == (_avatarLastSrcByUid[widget.uid])) {
-      final cached = _avatarBytesByUid[widget.uid];
-      if (cached != null && _bytes != cached) _bytes = cached;
-      return;
-    }
+    // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
+    if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) return;
     _avatarLastSrcByUid[widget.uid] = src;
     if (src.isEmpty) {
-      _bytes = null;
+      _provider = null;
       return;
     }
-    // Byte per-uid global ada → pakai langsung, tanpa decode.
-    final byUid = _avatarBytesByUid[widget.uid];
-    if (byUid != null) {
-      _bytes = byUid;
+    // Path storage (avatars/…) belum bisa ditampilkan — pertahankan
+    // bitmap/provider lama sampai b64 siap dari background (anti-blink);
+    // tanpa bitmap lama → inisial, bukan blank putih.
+    if (src.startsWith('avatars/')) return;
+    // Instance MemoryImage stabil per-uid → pakai apa adanya.
+    final stable = _avatarImageByUid[widget.uid];
+    if (stable != null && _provider != stable) {
+      _provider = stable;
       return;
     }
-    Uint8List? b;
-    final cached = _avatarCache.get(src);
-    if (cached != null) {
-      b = cached;
-    } else {
-      try {
-        final decoded = base64Decode(src);
-        _avatarCache.putIfAbsent(src, () => decoded);
-        b = decoded;
-      } catch (_) {
-        b = null;
+    // Decode sinkron (murah — server sudah q70/300px) lalu simpan
+    // instance ImageProvider sekali selamanya untuk uid ini.
+    if (_avatarBytesByUid[widget.uid] == null) {
+      Uint8List? b;
+      final cached = _avatarCache.get(src);
+      if (cached != null) {
+        b = cached;
+      } else {
+        try {
+          final decoded = base64Decode(src);
+          _avatarCache.putIfAbsent(src, () => decoded);
+          b = decoded;
+        } catch (_) {
+          b = null;
+        }
       }
+      if (b == null) {
+        _provider = null;
+        return;
+      }
+      _avatarBytesByUid[widget.uid] = b;
     }
-    if (b == null) {
-      _bytes = null;
-      return;
-    }
-    _bytes = b;
-    _avatarBytesByUid[widget.uid] = b;
+    _provider = _avatarImageByUid.putIfAbsent(
+      widget.uid,
+      () => MemoryImage(_avatarBytesByUid[widget.uid]!),
+    );
   }
 
   @override
@@ -126,20 +139,24 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
   @override
   Widget build(BuildContext context) {
     _resolve();
-    final b = _bytes;
-    if (b == null) {
+    final p = _provider;
+    if (p == null) {
       return Center(
         child: Text(widget.initial,
             style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
       );
     }
-    // gaplessPlayback: saat bytes berganti (foto benar-benar baru), bitmap
-    // lama dipakai sampai bitmap baru siap — tanpa kedip.
-    return Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => Center(
-              child: Text(widget.initial,
-                  style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
-            ));
+    // gaplessPlayback: foto benar-benar baru (bytes beda) → bitmap lama
+    // tetap tampil sampai bitmap baru siap, tanpa blank putih.
+    return Image(
+      image: p,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      errorBuilder: (_, __, ___) => Center(
+        child: Text(widget.initial,
+            style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
+      ),
+    );
   }
 }
 
