@@ -29,16 +29,18 @@ class CallConfig {
   };
 
   /// Fetch Cloudflare TURN credentials, return null kalau gagal.
-  /// Wajib kirim Bearer anon key — tanpa ini gateway Supabase tolak 401
-  /// (verify_jwt default true, tidak ada entri [functions.turn-credentials]
-  /// di config.toml).
+  /// Kirim ACCESS TOKEN user (JWT) — function hanya melayani user login.
+  /// Publishable key ditolak (bukan JWT user). Anon tanpa session → skip
+  /// fetch, fallback openrelay (perilaku aman yang sudah ada).
   static Future<Map<String, dynamic>?> _fetchCloudflare() async {
     try {
+      final token = SupabaseConfig.client.auth.currentSession?.accessToken;
+      if (token == null || token.isEmpty) return null;
       final resp = await http
           .get(
             Uri.parse(_turnFunctionUrl),
             headers: {
-              'Authorization': 'Bearer ${SupabaseConfig.publishableKey}',
+              'Authorization': 'Bearer $token',
             },
           )
           .timeout(const Duration(seconds: 5));
