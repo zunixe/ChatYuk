@@ -348,6 +348,35 @@ class AuthService {
     }, onConflict: 'id');
   }
 
+  /// Daftar install_id yang di-exclude dari ringkasan & daftar perangkat.
+  /// RPC admin — RLS guard zunixe@gmail.com.
+  Future<List<String>> fetchExcludedDevices() async {
+    try {
+      final res = await _sb.rpc('admin_get_excluded_devices');
+      if (res is List) {
+        return res.map((e) => '$e').where((s) => s.isNotEmpty).toList();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('[AUTH] fetchExcludedDevices error: $e');
+      return [];
+    }
+  }
+
+  /// Simpan daftar install_id yang di-exclude. RPC menghapus cache stats
+  /// supaya ringkasan langsung segar.
+  Future<bool> updateExcludedDevices(List<String> installIds) async {
+    try {
+      final res = await _sb.rpc('admin_set_excluded_devices', params: {
+        'p_list': installIds,
+      });
+      return res is List;
+    } catch (e) {
+      debugPrint('[AUTH] updateExcludedDevices error: $e');
+      return false;
+    }
+  }
+
   /// Ambil toggle notifikasi pengingat harian (re-engagement) — admin global.
   Future<bool> fetchReengageEnabled() async {
     try {

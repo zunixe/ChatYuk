@@ -64,6 +64,9 @@ class AuthProvider extends ChangeNotifier {
   bool _reengageEnabled = true;
   bool _requireRegistration = false;
   bool _callAllEnabled = false;
+  // Daftar install_id yang di-exclude admin dari ringkasan & daftar
+  // perangkat (fitur khusus admin, sinkron via app_settings.global).
+  List<String> _excludedDevices = [];
   StreamSubscription<Map<String, dynamic>?>? _appSettingsSub;
   Timer? _settingsPollTimer;
 
@@ -76,6 +79,9 @@ class AuthProvider extends ChangeNotifier {
   bool get reengageEnabled => _reengageEnabled;
   bool get requireRegistration => _requireRegistration;
   bool get callAllEnabled => _callAllEnabled;
+  List<String> get excludedDevices => List.unmodifiable(_excludedDevices);
+  bool isDeviceExcluded(String? installId) =>
+      installId != null && installId.isNotEmpty && _excludedDevices.contains(installId);
   bool get isSignedIn => _auth.isSignedIn;
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
@@ -236,6 +242,7 @@ class AuthProvider extends ChangeNotifier {
         safeUnawaited(_loadWatermarkSetting());
         safeUnawaited(_loadInvisibleSetting());
         safeUnawaited(loadReengageSetting());
+        safeUnawaited(_loadExcludedDevices());
         _listenAppSettings();
         _startSettingsPolling();
         lastError = null;
@@ -565,6 +572,25 @@ class AuthProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Ambil daftar device ter-exclude (admin-only) — hanya untuk sesi
+  /// admin sungguhan; user/dummy tidak perlu datanya.
+  Future<void> _loadExcludedDevices() async {
+    if (!isRealAdmin) return;
+    _excludedDevices = await _auth.fetchExcludedDevices();
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Simpan daftar device ter-exclude (admin-only), lalu refresh daftar
+  /// perangkat supaya item ter-exclude langsung hilang dari tab Perangkat.
+  Future<bool> setExcludedDevices(List<String> installIds) async {
+    final ok = await _auth.updateExcludedDevices(installIds);
+    if (ok && !_disposed) {
+      _excludedDevices = List.of(installIds);
+      notifyListeners();
+    }
+    return ok;
+  }
+
   /// Admin toggle wajib registrasi. Realtime: semua device ikut update
   /// lewat subscription app_settings (tidak perlu polling).
   Future<void> setRequireRegistration(bool enabled) async {
@@ -623,6 +649,16 @@ class AuthProvider extends ChangeNotifier {
         if (reqReg != _requireRegistration) {
           _requireRegistration = reqReg;
           changed = true;
+        }
+        // Sinkron daftar device ter-exclude (admin-only).
+        if (isRealAdmin) {
+          final excl = await _auth.fetchExcludedDevices();
+          final same = excl.length == _excludedDevices.length &&
+              excl.every(_excludedDevices.contains);
+          if (!same) {
+            _excludedDevices = excl;
+            changed = true;
+          }
         }
         debugPrint('[SETTINGS-POLL] callAll=$callAll '
             'cur=$_callAllEnabled changed=$changed');
