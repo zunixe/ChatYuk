@@ -31,30 +31,11 @@ import '../widgets/mic_record_button.dart';
 import '../widgets/composer_link_preview.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/chat_call_overlay.dart';
+import '../widgets/chat_ui_shared.dart';
 import '../main.dart';
 import 'call_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
-
-// Top-level function untuk compute() isolate — decode + resize + encode di background
-String? _processImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) return null;
-  final resized = _resizeMaxSide(decoded, 800);
-  final jpg = img.encodeJpg(resized, quality: 75);
-  return base64Encode(jpg);
-}
-
-// Resize proporsional dengan sisi terpanjang = maxSide.
-img.Image _resizeMaxSide(img.Image src, int maxSide) {
-  final w = src.width;
-  final h = src.height;
-  if (w <= maxSide && h <= maxSide) return src;
-  final scale = maxSide / (w > h ? w : h);
-  final nw = (w * scale).round();
-  final nh = (h * scale).round();
-  return img.copyResize(src, width: nw, height: nh);
-}
 
 // Top-level function untuk compute() isolate — resize 1024 + embed forensic watermark
 String? _processViewOnceImage((Uint8List, String) args) {
@@ -67,9 +48,16 @@ String? _processViewOnceImage((Uint8List, String) args) {
 String? _passthroughImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = _resizeMaxSide(decoded, 1200);
-  final jpg = img.encodeJpg(resized, quality: 82);
-  return base64Encode(jpg);
+  final w = decoded.width;
+  final h = decoded.height;
+  final img.Image resized = (w <= 1200 && h <= 1200)
+      ? decoded
+      : img.copyResize(
+          decoded,
+          width: w > h ? 1200 : null,
+          height: h >= w ? 1200 : null,
+        );
+  return base64Encode(img.encodeJpg(resized, quality: 82));
 }
 
 class PrivateChatScreen extends StatefulWidget {
@@ -1007,7 +995,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       }
       return;
     }
-    final processed = await compute(_processImage, bytes);
+    final processed = await compute(processChatImage, bytes);
     if (processed == null) return;
     if (mounted) {
       setState(() {
@@ -1032,7 +1020,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       return;
     }
     // Decode + resize + encode di background isolate agar UI tidak freeze
-    final base64 = await compute(_processImage, bytes);
+    final base64 = await compute(processChatImage, bytes);
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
@@ -2115,7 +2103,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     padding: EdgeInsets.fromLTRB(14, 6, 0, 10),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: _TypingBubble(isRecording: _showRecording),
+                      child: ChatTypingBubble(isRecording: _showRecording),
                     ),
                   ),
                 Container(
@@ -2374,18 +2362,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                                   TextCapitalization.sentences,
                                             ),
                                           ),
-                                          _InputIconBtn(
+                                          ChatIconButton(
                                             icon: _showAttachRow
                                                 ? Icons.close
                                                 : Icons.add_circle_outline,
-                                            color: AppTheme.primary,
+                                            open: _showAttachRow,
                                             onTap: _toggleAttachRow,
                                             tooltip: s.menuSendPhoto,
                                           ),
                                           const SizedBox(width: 4),
-                                          _InputIconBtn(
+                                          ChatIconButton(
                                             icon: Icons.photo_camera_outlined,
-                                            color: AppTheme.primary,
+                                            open: false,
                                             onTap: () {
                                               setState(() => _showAttachRow = false);
                                               _takePhoto();
@@ -2489,7 +2477,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                   ),
                                   child: Row(
                                     children: [
-                                      _AttachChip(
+                                      ChatAttachChip(
                                         icon: Icons.image_outlined,
                                         color: AppTheme.primary,
                                         label: s.menuSendPhoto,
@@ -2501,7 +2489,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                         },
                                       ),
                                       const SizedBox(width: 8),
-                                      _AttachChip(
+                                      ChatAttachChip(
                                         icon: Icons.timer_outlined,
                                         color: Colors.orange,
                                         label: s.menuViewOnce,
@@ -2517,7 +2505,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                           .watch<PointsProvider>()
                                           .enabled) ...[
                                         const SizedBox(width: 8),
-                                        _AttachChip(
+                                        ChatAttachChip(
                                           icon: Icons.paid_outlined,
                                           color: Colors.amber,
                                           label: s.menuSendCoin,
@@ -2529,7 +2517,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                           },
                                         ),
                                         const SizedBox(width: 8),
-                                        _AttachChip(
+                                        ChatAttachChip(
                                           icon: Icons.card_giftcard,
                                           color: Colors.pinkAccent,
                                           label: s.menuSendGift,
@@ -2676,183 +2664,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 }
 
-// Tombol ikon kecil untuk input bar
-class _InputIconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  final String tooltip;
-  const _InputIconBtn({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    required this.tooltip,
-  });
 
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 30,
-          height: 48,
-          child: Icon(icon, color: color, size: 22),
-        ),
-      ),
-    );
-  }
-}
-
-// Chip menu attach (foto / foto sekali lihat / kirim koin) ala WhatsApp
-class _AttachChip extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final VoidCallback onTap;
-  const _AttachChip({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        // Lebar chip FIXED agar pusat ikon selalu di posisi yang sama —
-        // label yang panjang (mis. "Foto Sekali Lihat") tidak menggeser
-        // posisi ikon, jadi jeda antar ikon rata. Harus muat 4 chip
-        // sekaligus di layar terkecil (Redmi 393dp): 4×82 + 3×10 = 358dp.
-        width: 84,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.35),
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Center(child: Icon(icon, color: Colors.white, size: 24)),
-            ),
-            SizedBox(height: 4),
-            Text(
-              label,
-              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TypingBubble extends StatefulWidget {
-  final bool isRecording;
-  const _TypingBubble({this.isRecording = false});
-
-  @override
-  State<_TypingBubble> createState() => _TypingBubbleState();
-}
-
-class _TypingBubbleState extends State<_TypingBubble>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.isRecording) {
-      return Container(
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppTheme.bgInput,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.mic_rounded, color: Colors.red, size: 16),
-            SizedBox(width: 6),
-            Text(
-              context.read<LocaleProvider>().s.recordingStatus,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
-      );
-    }
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgInput,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(3, (i) {
-          final t =
-              TweenSequence<double>([
-                TweenSequenceItem(
-                  tween: Tween(
-                    begin: 0.3,
-                    end: 1.0,
-                  ).chain(CurveTween(curve: Curves.easeInOut)),
-                  weight: 50,
-                ),
-                TweenSequenceItem(
-                  tween: Tween(
-                    begin: 1.0,
-                    end: 0.3,
-                  ).chain(CurveTween(curve: Curves.easeInOut)),
-                  weight: 50,
-                ),
-              ]).animate(
-                CurvedAnimation(
-                  parent: _ctrl,
-                  curve: Interval(i * 0.15, 1, curve: Curves.linear),
-                ),
-              );
-          return FadeTransition(
-            opacity: t,
-            child: Container(
-              width: 7,
-              height: 7,
-              margin: EdgeInsets.symmetric(horizontal: 2.5),
-              decoration: BoxDecoration(
-                color: AppTheme.textSecondary,
-                shape: BoxShape.circle,
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
 
 // ── View Once / Photo Viewer — pindah ke ../widgets/private_chat_message.dart ──

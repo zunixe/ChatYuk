@@ -35,6 +35,7 @@ import '../widgets/private_chat_message.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/mic_record_button.dart';
 import '../widgets/composer_link_preview.dart';
+import '../widgets/chat_ui_shared.dart';
 import '../widgets/linkify_text.dart';
 import '../widgets/link_preview.dart';
 import '../services/link_preview_service.dart';
@@ -44,20 +45,6 @@ import '../providers/theme_provider.dart';
 import '../services/call_notification.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
-String? _roomProcessImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) return null;
-  final w = decoded.width, h = decoded.height;
-  final img.Image resized = (w <= 800 && h <= 800)
-      ? decoded
-      : img.copyResize(
-          decoded,
-          width: w > h ? 800 : null,
-          height: h >= w ? 800 : null,
-        );
-  return base64Encode(img.encodeJpg(resized, quality: 75));
-}
-
 String? _roomPassthroughImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
@@ -837,7 +824,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       return;
     }
-    final processed = await compute(_roomProcessImage, bytes);
+    final processed = await compute(processChatImage, bytes);
     if (processed == null) return;
     if (mounted) {
       setState(() => _pendingPhotoBase64 = processed);
@@ -857,7 +844,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       return;
     }
-    final base64 = await compute(_roomProcessImage, bytes);
+    final base64 = await compute(processChatImage, bytes);
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
@@ -2395,13 +2382,13 @@ class _ChatInputState extends State<_ChatInput> {
                                   textCapitalization: TextCapitalization.sentences,
                                 ),
                               ),
-                              _RoomInputIconBtn(
+                              ChatIconButton(
                                 open: widget.showAttachRow,
                                 onTap: widget.onToggleAttach,
                                 tooltip: s.menuSendPhoto,
                               ),
                               const SizedBox(width: 2),
-                              _RoomInputIconBtn(
+                              ChatIconButton(
                                 open: false,
                                 onTap: widget.onTakePhoto,
                                 tooltip: s.menuTakePhoto,
@@ -2494,14 +2481,14 @@ class _ChatInputState extends State<_ChatInput> {
                       padding: const EdgeInsets.only(top: 8, left: 4),
                       child: Row(
                         children: [
-                          _RoomAttachChip(
+                          ChatAttachChip(
                             icon: Icons.image_rounded,
                             color: AppTheme.primary,
                             label: s.menuSendPhoto,
                             onTap: widget.onSendPhoto,
                           ),
                           const SizedBox(width: 12),
-                          _RoomAttachChip(
+                          ChatAttachChip(
                             icon: Icons.timer_rounded,
                             color: Colors.orange,
                             label: s.menuViewOnce,
@@ -2513,57 +2500,6 @@ class _ChatInputState extends State<_ChatInput> {
                   : const SizedBox.shrink(),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RoomInputIconBtn extends StatelessWidget {
-  final bool open;
-  final VoidCallback onTap;
-  final String tooltip;
-  final IconData? icon;
-  const _RoomInputIconBtn({
-    required this.open,
-    required this.onTap,
-    required this.tooltip,
-    this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        child: Container(
-          width: 30,
-          height: 30,
-          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
-          ),
-          child: AnimatedRotation(
-            turns: open ? 0.125 : 0,
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutBack,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: ScaleTransition(scale: anim, child: child),
-              ),
-              child: Icon(
-                icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
-                key: ValueKey(icon ?? open),
-                color: AppTheme.primary,
-                size: 20,
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -2638,45 +2574,6 @@ class _SheetIcon extends StatelessWidget {
   }
 }
 
-class _RoomAttachChip extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final VoidCallback onTap;
-  const _RoomAttachChip({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Center(child: Icon(icon, color: color, size: 24)),
-          ),
-          SizedBox(height: 4),
-          Text(
-            label,
-            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 
 /// Stage broadcast setengah layar: video broadcaster + kontrol ringkas.
