@@ -277,14 +277,28 @@ Future<void> fetchDevices() async {
 
   /// Notifikasi device baru — daftar install_id yang sudah dinotifikasi
   /// PERSIST di SharedPreferences, jadi tidak dobel antar restart app.
+  /// Device yang di-exclude admin (app_settings.excluded_devices) tidak
+  /// memicu notifikasi — daftar diambil ringan dari server sekali sesi.
   Future<void> _detectNewDevices(List<Map<String, dynamic>> devices) async {
     if (!_seenDevicesLoaded || _disposed) return; // tunggu armNotifications
+    var excluded = <String>{};
+    try {
+      final rows = await _sb
+          .from('app_settings')
+          .select('excluded_devices')
+          .eq('id', 'global')
+          .maybeSingle()
+          .timeout(const Duration(seconds: 2));
+      final list = rows?['excluded_devices'] as List?;
+      excluded = {for (final e in list ?? const []) '$e'};
+    } catch (_) {}
     for (final d in devices) {
       final installId = '${d['install_id'] ?? ''}';
       if (installId.isEmpty) continue;
       if (_seenDeviceIds.contains(installId)) continue;
       _seenDeviceIds.add(installId);
       await _persistSeenDevice(installId);
+      if (excluded.contains(installId)) continue; // jangan notif excluded
       final nick = '${d['nickname'] ?? '?'}';
       final brand = '${d['brand'] ?? ''}';
       final model = '${d['model'] ?? ''}';

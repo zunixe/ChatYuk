@@ -490,3 +490,54 @@ extension SAdminX on S {
   String get dummyBannerSubtitle =>
       isId ? 'Kamu sedang tampil sebagai %s' : 'You are appearing as %s';
 }
+
+// ── Exclude Device (Pengaturan Global) ──────────────────────────────
+extension SAdminExcludeX on S {
+  String get adminExcludeTitle =>
+      isId ? 'Exclude Perangkat' : 'Exclude Devices';
+
+  String get adminExcludeSubtitle => isId
+      ? 'Perangkat yang di-exclude tidak dihitung di ringkasan (users, aktif, anon) & disembunyikan dari daftar Perangkat'
+      : 'Excluded devices are not counted in the summary (users, active, anon) & hidden from the Devices list';
+
+  String get adminExcludeCount => isId
+      ? '%d perangkat ter-exclude'
+      : '%d device(s) excluded';
+
+  String get adminExcludeNone => isId
+      ? 'Belum ada perangkat yang di-exclude'
+      : 'No devices excluded yet';
+
+  String get adminExcludeAddHint =>
+      isId ? 'Tempel Install ID...' : 'Paste Install ID...';
+
+  String get adminExcludeAdd => isId ? 'Tambah' : 'Add';
+
+  String get adminExcludeRemove => isId ? 'Hapus' : 'Remove';
+
+  String get adminExcludeEmptyId => isId
+      ? 'Install ID tidak boleh kosong'
+      : 'Install ID cannot be empty';
+
+  String get adminExcludeSaved =>
+      isId ? 'Daftar exclude tersimpan' : 'Exclusion list saved';
+
+  String get adminExcludeSaveFailed =>
+      isId ? 'Gagal menyimpan' : 'Failed to save';
+
+  String get adminExcludeDeviceAction =>
+      isId ? 'Exclude perangkat ini' : 'Exclude this device';
+
+  String get adminExcludeDeviceDone => isId
+      ? 'Perangkat di-exclude dari ringkasan'
+      : 'Device excluded from summary';
+
+  String get adminExcludedBadge => isId ? 'EXCLUDED' : 'EXCLUDED';
+
+  String get adminExcludeConfirmRemove => isId
+      ? 'Hapus dari daftar exclude?'
+      : 'Remove from exclusion list?';
+
+  String get adminExcludeAddTitle =>
+      isId ? 'Kelola Perangkat Ter-exclude' : 'Manage Excluded Devices';
+}
