@@ -37,7 +37,7 @@ declare
   result jsonb;
   v_excl uuid[];
 begin
-  select coalesce(array_agg(uid), '{}'::uuid[]) into v_excl
+  select coalesce(array_agg(uuid), '{}'::uuid[]) into v_excl
     from public.admin_excluded_uids();
 
   select jsonb_build_object(
@@ -90,7 +90,7 @@ begin
     raise exception 'Unauthorized';
   end if;
 
-  select coalesce(array_agg(uid), '{}'::uuid[]) into v_excl
+  select coalesce(array_agg(uuid), '{}'::uuid[]) into v_excl
     from public.admin_excluded_uids();
 
   select jsonb_build_object(
@@ -274,8 +274,10 @@ begin
          updated_at = now()
    where id = 'global';
 
-  -- Ringkasan langsung segar (cache TTL 5 menit terlalu lama untuk admin).
-  delete from public.admin_stats_cache;
+  -- Ringkasan langsung segar. WHERE WAJIB ada (ekstensi safeupdate
+  -- menolak DELETE tanpa WHERE — penyebab error "DELETE requires a
+  -- WHERE clause" saat admin simpan exclude device).
+  delete from public.admin_stats_cache where id = 1;
 
   return coalesce(v_clean, '[]'::jsonb);
 end;
