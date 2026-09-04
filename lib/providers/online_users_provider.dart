@@ -44,40 +44,46 @@ class OnlineUsersProvider extends ChangeNotifier {
     return c.future;
   }
 
+  /// Avatar dari disk (kv per-uid) — fallback PERMANEN untuk emission
+  /// stream yang avatarnya masih path/kosong. Diisi sekali oleh _loadDisk,
+  /// dipakai merge stream kapan pun disk selesai (stream bisa menang race).
+  final Map<String, String> _diskAvatars = {};
+
   Future<void> _loadDisk() async {
     try {
       // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network.
       // Avatar di-merge dari kv per-uid (sama seperti pesan foto) supaya
       // list langsung tampil FOTO — bukan inisial → tidak ada pop-in blink.
       final cached = await MessageCache.instance.loadRawList('online_users');
-      if (cached.isNotEmpty && _users.isEmpty) {
-        try {
-          _users = cached
-              .map((e) => UserModel.fromMap(
-                  '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
-              .toList();
-          await _mergeAvatarsFromDisk();
-          _loaded = true;
+      if (cached.isEmpty) return;
+      final diskUsers = cached
+          .map((e) => UserModel.fromMap(
+              '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
+          .toList();
+      await _loadAvatarsToMap(diskUsers);
+      if (_users.isEmpty) {
+        // Disk menang race → tampilkan langsung list disk lengkap dengan foto.
+        _users = diskUsers;
+        _coverWithDiskAvatars();
+        _loaded = true;
+        if (!_disposed) notifyListeners();
+      } else {
+        // Stream menang race → jangan buang hasil disk: cover avatar
+        // path/kosong di list aktif dengan foto disk, lalu notify sekali.
+        if (_coverWithDiskAvatars()) {
           if (!_disposed) notifyListeners();
-        } catch (_) {}
+        }
+        _loaded = true;
       }
     } catch (_) {}
   }
 
-  /// Gabungkan avatar tersimpan (kv per-uid) ke list — cold start instan.
-  /// Merge PARALEL (batch 20): proses baru setelah lama diem membuat load
-  /// disk + decrypt berat; berurutan bisa melebihi warm-gate timeout →
-  /// list tampil sebelum avatar siap = blink abu → foto.
-  Future<void> _mergeAvatarsFromDisk() async {
-    if (_users.isEmpty) return;
+  /// Muat avatar tersimpan (kv per-uid) ke [_diskAvatars] — PARALEL (batch 20)
+  /// supaya cold start tidak melebihi warm-gate timeout.
+  Future<void> _loadAvatarsToMap(List<UserModel> users) async {
     const batch = 20;
-    for (int i = 0; i < _users.length; i += batch) {
-      final chunk = _users
-          .skip(i)
-          .take(batch)
-          .where((u) => u.avatar.isEmpty)
-          .toList();
-      if (chunk.isEmpty) continue;
+    for (int i = 0; i < users.length; i += batch) {
+      final chunk = users.skip(i).take(batch).toList();
       final results = await Future.wait(chunk.map((u) async {
         try {
           final obj = await MessageCache.instance.loadRawObj('avatar:${u.uid}');
@@ -89,12 +95,28 @@ class OnlineUsersProvider extends ChangeNotifier {
       }));
       for (int j = 0; j < chunk.length; j++) {
         if (results[j].isEmpty) continue;
-        final idx = _users.indexWhere((u) => u.uid == chunk[j].uid);
-        if (idx >= 0 && _users[idx].avatar.isEmpty) {
-          _users[idx] = _users[idx].copyWith(avatar: results[j]);
-        }
+        _diskAvatars[chunk[j].uid] = results[j];
       }
     }
+  }
+
+  bool _isRenderableAvatar(String a) =>
+      a.isNotEmpty && !a.startsWith('avatars/');
+
+  /// Cover avatar path/kosong di [_users] dengan [_diskAvatars].
+  /// Return true kalau ada perubahan.
+  bool _coverWithDiskAvatars() {
+    var changed = false;
+    for (int i = 0; i < _users.length; i++) {
+      final u = _users[i];
+      if (_isRenderableAvatar(u.avatar)) continue;
+      final disk = _diskAvatars[u.uid];
+      if (disk != null && disk.isNotEmpty) {
+        _users[i] = u.copyWith(avatar: disk);
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   /// Simpan avatar per-uid ke kv (fire-and-forget). Hanya tulis kalau avatar
@@ -106,6 +128,7 @@ class OnlineUsersProvider extends ChangeNotifier {
       if (u.uid.isEmpty || u.avatar.isEmpty) continue;
       if (_avatarWritten[u.uid] == u.avatar) continue;
       _avatarWritten[u.uid] = u.avatar;
+      _diskAvatars[u.uid] = u.avatar;
       MessageCache.instance.saveRawObj('avatar:${u.uid}', {'a': u.avatar});
     }
   }
@@ -123,15 +146,33 @@ class OnlineUsersProvider extends ChangeNotifier {
         // sudah tampil tertimpa kosong lalu balik lagi = kedip-kedip.
         // Avatar lama dipertahankan selama yang baru kosong ATAU masih
         // path storage (avatars/… — belum jadi base64 siap tampil).
+        // Fallback kedua: avatar disk (_diskAvatars) — cover emission awal
+        // cold start saat _users masih kosong/path (stream menang race).
         if (_users.isNotEmpty) {
           final prev = {for (final u in _users) u.uid: u.avatar};
           deduped = deduped
               .map((u) {
+                final newIsEmptyOrPath = !_isRenderableAvatar(u.avatar);
+                if (!newIsEmptyOrPath) return u;
                 final old = prev[u.uid];
-                if (old == null || old.isEmpty) return u;
-                final newIsEmptyOrPath = u.avatar.isEmpty ||
-                    u.avatar.startsWith('avatars/');
-                return newIsEmptyOrPath ? u.copyWith(avatar: old) : u;
+                if (old != null && _isRenderableAvatar(old)) {
+                  return u.copyWith(avatar: old);
+                }
+                final disk = _diskAvatars[u.uid];
+                if (disk != null && disk.isNotEmpty) {
+                  return u.copyWith(avatar: disk);
+                }
+                return u;
+              })
+              .toList();
+        } else if (_diskAvatars.isNotEmpty) {
+          deduped = deduped
+              .map((u) {
+                if (_isRenderableAvatar(u.avatar)) return u;
+                final disk = _diskAvatars[u.uid];
+                return (disk != null && disk.isNotEmpty)
+                    ? u.copyWith(avatar: disk)
+                    : u;
               })
               .toList();
         }
@@ -192,6 +233,7 @@ class OnlineUsersProvider extends ChangeNotifier {
     if (idx >= 0 && _users[idx].avatar.isNotEmpty) {
       _users[idx] = _users[idx].copyWith(avatar: '');
       _avatarWritten.remove(uid);
+      _diskAvatars.remove(uid);
       MessageCache.instance.removeRawObj('avatar:$uid');
       if (!_disposed) notifyListeners();
     }

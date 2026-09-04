@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'avatar_disk_cache.dart';
+import 'media_disk_cache.dart';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
@@ -106,7 +106,7 @@ class ChatService {
     final cached = _avatarCache[path];
     if (cached != null) return cached;
     // DISK FIRST: baca dari cache lokal (instan, tanpa network).
-    final disk = await AvatarDiskCache.instance.read(path);
+    final disk = await MediaDiskCache.instance.read(path);
     if (disk != null && disk.isNotEmpty) {
       final b64 = base64Encode(disk);
       if (_avatarCache.length >= _avatarCacheMax) {
@@ -119,7 +119,7 @@ class ChatService {
     final b64 = await StoragePhotoService.instance.download(path) ?? '';
     if (b64.isNotEmpty) {
       try {
-        await AvatarDiskCache.instance
+        await MediaDiskCache.instance
             .write(path, Uint8List.fromList(base64Decode(b64)));
       } catch (_) {}
       if (_avatarCache.length >= _avatarCacheMax) {
@@ -1667,6 +1667,9 @@ class ChatService {
                 } catch (_) {}
               }
               if (pendingFast.isNotEmpty) {
+                // Urutan SAMA dengan RPC (last_seen desc) — emission awal dan
+                // emission RPC tidak memindahkan posisi card di layar.
+                pendingFast.sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
                 cached = List.of(pendingFast);
                 if (!controller.isClosed) controller.add(List.unmodifiable(cached));
                 // Background download avatar batch (sama seperti slow path)
@@ -1778,6 +1781,7 @@ class ChatService {
           }
         }
         // Progressive: emit dulu tanpa avatar (instant), avatar nyusul background
+        pending.sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
         cached = List.of(pending);
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
         // Background download avatar batch 20

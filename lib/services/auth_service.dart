@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'avatar_disk_cache.dart';
+import 'media_disk_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -865,7 +865,7 @@ class AuthService {
     // TULIS KE DISK — bytes WebP/JPEG asli, load berikutnya dari lokal.
     if (path.isNotEmpty && base64.isNotEmpty) {
       try {
-        await AvatarDiskCache.instance
+        await MediaDiskCache.instance
             .write(path, Uint8List.fromList(base64Decode(base64)));
       } catch (_) {}
     }
@@ -974,6 +974,22 @@ class AuthService {
     }
   }
 
+
+  /// Download foto galeri dengan DISK FIRST — b64 di-cache disk per path
+  /// (path unik per upload), buka profil berikutnya tanpa network.
+  Future<String> _galleryPhotoB64(String path) async {
+    final disk = await MediaDiskCache.instance.read(path);
+    if (disk != null && disk.isNotEmpty) return base64Encode(disk);
+    final b64 = await StoragePhotoService.instance.download(path) ?? '';
+    if (b64.isNotEmpty) {
+      try {
+        await MediaDiskCache.instance
+            .write(path, Uint8List.fromList(base64Decode(b64)));
+      } catch (_) {}
+    }
+    return b64;
+  }
+
   /// Ambil semua foto galeri milik satu user.
   Future<List<UserPhoto>> getPhotos(String userId) async {
     if (userId.isEmpty) return [];
@@ -988,7 +1004,7 @@ class AuthService {
       // photo bisa berupa PATH storage (foto baru) → download → base64.
       if (photo.isNotEmpty &&
           StoragePhotoService.instance.isGalleryPath(photo)) {
-        photo = await StoragePhotoService.instance.download(photo) ?? '';
+        photo = await _galleryPhotoB64(photo);
       }
       result.add(
         UserPhoto.fromMap('${row['id']}', {
@@ -1021,7 +1037,7 @@ class AuthService {
       if (unlocked &&
           photo.isNotEmpty &&
           StoragePhotoService.instance.isGalleryPath(photo)) {
-        photo = await StoragePhotoService.instance.download(photo) ?? '';
+        photo = await _galleryPhotoB64(photo);
       }
       result.add(
         UserPhoto.fromMap('${m['id']}', {

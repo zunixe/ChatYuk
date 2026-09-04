@@ -214,8 +214,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     _loadPhotos();
   }
 
-  // ── Voice: TIDAK perlu download — VoiceBubble langsung play dari URL
-  // storage publik (voice/...). imageData = voice_path apa adanya.
+  // ── Voice: VoiceBubble cache disk sendiri (play pertama download
+  // sekali, sesi berikutnya dari lokal). imageData = voice_path.
 
   /// Sisi kiri = peserta pertama sesuai urutan judul (mis. judul
   /// "A & B" → bubble A di kiri, B di kanan). Konsisten, tidak tergantung
@@ -392,7 +392,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       text: '${m['text'] ?? ''}',
       type: '${m['type'] ?? 'text'}',
       // Voice: RPC kirim voice_path → disimpan di imageData (dipakai
-      // VoiceBubble); di-download jadi base64 oleh _loadVoices().
+      // VoiceBubble dengan disk cache-nya sendiri).
       imageData: m['type'] == 'voice'
           ? '${m['voice_path'] ?? ''}'
           : '${m['image_data'] ?? ''}',
