@@ -18,7 +18,9 @@
     <!-- uCrop (image_cropper): opt-out edge-to-edge — toolbar atas & tombol
          bawah cropper tertutup system bar di Android 15 (SDK 35) karena
          layout uCrop tidak handle insets. -->
-    <style name="UcropTheme" parent="@style/Theme.AppCompat.DayNight">
+    <style name="UcropTheme" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
         <item name="android:fitsSystemWindows">true</item>
         <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
         <item name="android:statusBarColor">@color/ucrop_status_bar</item>
