@@ -994,6 +994,9 @@ class ChatService {
   }
 
   final Map<String, RealtimeChannel> _privateBroadcastChannels = {};
+  // uid → server path avatar (untuk kv disk cache list online; bytes ada
+  // di MediaDiskCache per path — cold start memuat foto dari disk).
+  final Map<String, String> _onlinePathByUid = {};
 
   RealtimeChannel _privateBroadcastChannel(String chatId) {
     return _privateBroadcastChannels.putIfAbsent(chatId, () {
@@ -1612,8 +1615,10 @@ class ChatService {
     Timer? debounce;
 
     Future<void> syncFromPresence() async {
+      debugPrint('[ONLINE-EMIT] sync start t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       try {
         final state = RealtimeHub.instance.onlinePresenceState;
+        debugPrint('[ONLINE-EMIT] presence state keys=${state.keys.length}');
         // Fast path per-country shard: ambil max 50 uid tanpa expand full O(N) (jangan values.expand untuk 1M)
         List<String> firstNPresenceUids(int n) {
           final out = <String>[];
@@ -1630,6 +1635,7 @@ class ChatService {
         }
 
         final presenceUidsFast = firstNPresenceUids(50);
+        debugPrint('[ONLINE-EMIT] presenceUidsFast=${presenceUidsFast.length}');
         if (presenceUidsFast.isNotEmpty) {
           try {
             const colsFast = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
@@ -1642,6 +1648,10 @@ class ChatService {
                 try {
                   var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
                   if (!seenFast.add(u.uid)) continue;
+                  if (u.avatar.isNotEmpty &&
+                      StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+                    _onlinePathByUid[u.uid] = u.avatar;
+                  }
                   if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
                     final cachedB64 = _avatarCache[u.avatar];
                     if (cachedB64 != null && cachedB64.isNotEmpty) {
@@ -1692,7 +1702,10 @@ class ChatService {
                     }
                   }
                 }
-                if (avatarUpdated && !controller.isClosed) controller.add(List.unmodifiable(cached));
+                if (avatarUpdated) {
+                  debugPrint('[ONLINE-EMIT] avatar batch updated t=${DateTime.now().millisecondsSinceEpoch}');
+                  if (!controller.isClosed) controller.add(List.unmodifiable(cached));
+                }
               }
             }
           } catch (_) {}
@@ -1701,7 +1714,9 @@ class ChatService {
         List<dynamic> rpcRows = [];
         bool usedRpc = false;
         try {
+          debugPrint('[ONLINE-EMIT] calling RPC get_online_users');
           final data = await _sb.rpc('get_online_users', params: {'p_limit': 100}).timeout(const Duration(seconds: 2));
+          debugPrint('[ONLINE-EMIT] RPC done rows=${data is List ? data.length : 0}');
           if (data is List && data.isNotEmpty) {
             rpcRows = data;
             usedRpc = true;
@@ -1757,6 +1772,10 @@ class ChatService {
           try {
             var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
             if (!seen.add(u.uid)) continue;
+            if (u.avatar.isNotEmpty &&
+                StoragePhotoService.instance.isAvatarPath(u.avatar)) {
+              _onlinePathByUid[u.uid] = u.avatar;
+            }
             if (u.avatar.isNotEmpty && StoragePhotoService.instance.isAvatarPath(u.avatar)) {
               final cachedB64 = _avatarCache[u.avatar];
               if (cachedB64 != null && cachedB64.isNotEmpty) {
@@ -1783,6 +1802,18 @@ class ChatService {
         // Progressive: emit dulu tanpa avatar (instant), avatar nyusul background
         pending.sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
         cached = List.of(pending);
+        // Simpan kv list online: avatar = SERVER PATH (ringan). Bytes foto
+        // sudah ada di MediaDiskCache per path — cold start berikutnya
+        // memuat foto dari disk, tanpa network.
+        try {
+          final rows = pending
+              .map((u) => {...u.toMap(), 'avatar': _onlinePathByUid[u.uid] ?? ''})
+              .toList();
+          if (rows.isNotEmpty) {
+            MessageCache.instance.saveRawList('online_users', rows);
+          }
+        } catch (_) {}
+        debugPrint('[ONLINE-EMIT] slow path n=${pending.length} withAvatar=${pending.where((u) => u.avatar.isNotEmpty && !StoragePhotoService.instance.isAvatarPath(u.avatar)).length} t=${DateTime.now().millisecondsSinceEpoch}');
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
         // Background download avatar batch 20
         const avatarBatch = 20;
@@ -1840,6 +1871,7 @@ class ChatService {
             )) {
               return;
             }
+            debugPrint('[ONLINE-EMIT] profile online event → resync');
             debounce?.cancel();
             debounce = Timer(const Duration(milliseconds: 500), syncFromPresence);
           },
@@ -1849,6 +1881,7 @@ class ChatService {
     syncFromPresence();
     // also periodic fallback if presence empty (cold start before track)
     final fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      debugPrint('[ONLINE-EMIT] fallback 30s tick cachedEmpty=${cached.isEmpty}');
       if (cached.isEmpty) syncFromPresence();
     });
     controller.onCancel = () {

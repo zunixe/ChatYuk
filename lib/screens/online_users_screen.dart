@@ -15,6 +15,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
+import '../services/media_disk_cache.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../services/chat_service.dart';
@@ -85,16 +86,36 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
 
   void _resolve() {
     final src = widget.avatarB64;
+    final srcType = src.isEmpty ? 'EMPTY' : src.startsWith('avatars/') ? 'PATH' : 'B64';
     // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
-    if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) return;
+    if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) {
+      debugPrint('[AVATAR] ${widget.uid.substring(0,8)} KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}');
+      return;
+    }
     _avatarLastSrcByUid[widget.uid] = src;
-    // Kosong atau path storage → PERTAHANKAN provider yang sudah ada
-    // (foto tidak boleh hilang/kedip hanya karena emission baru membawa
-    // avatar kosong/path). Provider baru di-set setelah b64 siap.
-    if (src.isEmpty || src.startsWith('avatars/')) return;
+    if (src.isEmpty) {
+      // Kosong → pertahankan provider lama (jangan kedip ke inisial).
+      return;
+    }
+    // PATH storage → baca bytes dari MEDIA DISK CACHE (instan, tanpa
+    // network) → foto langsung tampil bahkan di mount pertama.
+    if (src.startsWith('avatars/')) {
+      final disk = MediaDiskCache.instance.readSync(src);
+      if (disk != null && disk.isNotEmpty) {
+        _avatarBytesByUid[widget.uid] ??= disk;
+        _provider = _avatarImageByUid.putIfAbsent(
+          widget.uid,
+          () => MemoryImage(_avatarBytesByUid[widget.uid]!),
+        );
+        debugPrint('[AVATAR] ${widget.uid.substring(0,8)} FROM-DISK');
+      }
+      // Tidak ada di disk → biarkan inisial; batch network akan mengisi.
+      return;
+    }
     // Instance MemoryImage stabil per-uid → pakai apa adanya.
     final stable = _avatarImageByUid[widget.uid];
     if (stable != null && _provider != stable) {
+      debugPrint('[AVATAR] ${widget.uid.substring(0,8)} SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       _provider = stable;
       return;
     }

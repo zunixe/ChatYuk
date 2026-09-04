@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings_admin.dart';
+import '../providers/admin_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
@@ -574,7 +575,19 @@ class _ExcludedDevicesSheetState extends State<_ExcludedDevicesSheet> {
         backgroundColor: ok ? AppTheme.online : AppTheme.danger,
       ),
     );
-    if (ok) Navigator.pop(context);
+    if (ok) {
+      // Device yang dihapus dari exclude harus LANGSUNG muncul lagi di tab
+      // Perangkat & ringkasan — refresh tanpa nunggu polling 15 detik.
+      // Server sudah hapus cache stats; client cukup fetch ulang + buang
+      // cache detail 60 detik supaya daftar user juga segar.
+      try {
+        final admin = context.read<AdminProvider>();
+        admin.invalidateStatsDetail();
+        unawaited(admin.refreshStats());
+        unawaited(admin.fetchDevices());
+      } catch (_) {}
+      Navigator.pop(context);
+    }
   }
 
   @override
