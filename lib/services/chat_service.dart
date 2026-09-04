@@ -1767,6 +1767,36 @@ class ChatService {
       debounce?.cancel();
       debounce = Timer(const Duration(milliseconds: 300), syncFromPresence);
     });
+    // Realtime profiles UPDATE: user lain yang baru online (termasuk dummy
+    // yang di-set dari admin panel — tanpa device/presence) harus langsung
+    // muncul di daftar. Dulu: sync hanya via presence event sendiri +
+    // fallback saat list kosong → perubahan status dari admin terlihat
+    // sangat terlambat.
+    final profileSyncSub = _sb
+        .channel('online-list-sync')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'profiles',
+          callback: (payload) {
+            if (controller.isClosed) return;
+            final st = payload.newRecord['status'] as String?;
+            // Hanya re-sync saat ada yang masuk jadi online/idle.
+            if (st != 'online' && st != 'idle') return;
+            final ls = DateTime.tryParse(
+              '${payload.newRecord['last_seen'] ?? ''}',
+            );
+            if (ls == null) return;
+            if (ls.toUtc().isBefore(
+              DateTime.now().toUtc().subtract(const Duration(minutes: 30)),
+            )) {
+              return;
+            }
+            debounce?.cancel();
+            debounce = Timer(const Duration(milliseconds: 500), syncFromPresence);
+          },
+        )
+        .subscribe();
     // initial sync
     syncFromPresence();
     // also periodic fallback if presence empty (cold start before track)
@@ -1777,6 +1807,7 @@ class ChatService {
       debounce?.cancel();
       fallbackTimer.cancel();
       sub.cancel();
+      _sb.removeChannel(profileSyncSub);
     };
     return controller.stream;
   }
