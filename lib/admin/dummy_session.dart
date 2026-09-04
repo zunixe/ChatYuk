@@ -42,14 +42,16 @@ class DummySession {
     _adminAccessToken = session?.accessToken;
     _adminRefreshToken = session?.refreshToken;
     await _saveAdminTokens(_adminAccessToken, _adminRefreshToken);
-    // Token lama bisa basi (GoTrue me-revoke saat auto-refresh client).
-    // Fallback: regenerasi sesi dummy ASLI lewat edge function
-    // (admin API + password login) supaya swap selalu berhasil.
-    var refreshToken =
-        await _sb.rpc('admin_get_dummy_token', params: {'p_uid': uid})
-            as String?;
+    // SELALU renew dulu — refresh token GoTrue sifatnya sekali-pakai
+    // (dirotasi tiap pemakaian, dan auto-refresh client app dummy di HP
+    // lain bisa sudah memutar token tersimpan). Pakai token tersimpan
+    // dulu = "kadang berhasil kadang tidak". Renew = deterministik.
+    var refreshToken = await _renewViaEdgeFunction(uid);
     if (refreshToken == null || refreshToken.isEmpty) {
-      refreshToken = await _renewViaEdgeFunction(uid);
+      // Fallback: token tersimpan (bisa basi).
+      refreshToken =
+          await _sb.rpc('admin_get_dummy_token', params: {'p_uid': uid})
+              as String?;
     }
     if (refreshToken == null || refreshToken.isEmpty) {
       throw Exception('dummy_token_missing');
