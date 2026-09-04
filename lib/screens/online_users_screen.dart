@@ -1249,24 +1249,17 @@ class _UserCard extends StatelessWidget {
                         border: Border.all(color: color, width: 1.5),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: user.avatar.isEmpty
-                          ? Center(
-                              child: Text(
-                                user.initial,
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: AppGlyph.avatarInitial(40),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            )
-                          : _AsyncAvatar(
-                              key: ValueKey(user.uid),
-                              uid: user.uid,
-                              avatarB64: user.avatar,
-                              initial: user.initial,
-                              color: color,
-                            ),
+                      // SELALU _AsyncAvatar (jangan ternary inisial↔foto):
+                      // pergantian tipe widget menyebabkan State avatar
+                      // di-dispose/dibuat-ulang tiap emission → kedip.
+                      // Inisial dirender di dalam _AsyncAvatar.
+                      child: _AsyncAvatar(
+                          key: ValueKey(user.uid),
+                          uid: user.uid,
+                          avatarB64: user.avatar,
+                          initial: user.initial,
+                          color: color,
+                        ),
                     ),
                     Positioned(
                       right: 0,
