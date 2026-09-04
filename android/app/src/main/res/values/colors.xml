@@ -4,4 +4,8 @@
      supaya transisi splash -> frame pertama Flutter tidak blink. -->
 <resources>
     <color name="launch_bg">#121212</color>
+    <!-- uCrop cropper: system bar gelap (menu android atas/bawah tidak
+         menutupi toolbar & tombol cropper). -->
+    <color name="ucrop_status_bar">#121212</color>
+    <color name="ucrop_nav_bar">#000000</color>
 </resources>
