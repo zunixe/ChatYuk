@@ -15,6 +15,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
+import '../widgets/skeleton_card.dart';
 import '../services/media_disk_cache.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
@@ -947,15 +948,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   ),
                   Expanded(
                     child: !provider.hasLoaded
-                        ? const Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.4,
-                                color: AppTheme.primary,
-                              ),
+                        ? ListView.builder(
+                            padding: EdgeInsets.fromLTRB(
+                              10,
+                              8,
+                              10,
+                              MediaQuery.of(context).padding.bottom + 12,
                             ),
+                            itemCount: 6,
+                            itemBuilder: (_, _) => const SkeletonCard(),
                           )
                         : users.isEmpty
                         ? Center(
