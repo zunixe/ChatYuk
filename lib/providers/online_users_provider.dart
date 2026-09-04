@@ -122,6 +122,27 @@ class OnlineUsersProvider extends ChangeNotifier {
     return changed;
   }
 
+  /// Bekukan urutan kartu: posisi dari [_users] dipertahankan, emission
+  /// baru hanya menambah user baru di bawah & membuang yang tak lagi online.
+  /// Dulu: sort last_seen desc tiap emission → kartu pindah posisi → terlihat
+  /// kedip/refresh padahal fotonya stabil.
+  List<UserModel> _reorderStable(List<UserModel> prev, List<UserModel> next) {
+    if (prev.isEmpty) return next;
+    final byUid = {for (final u in next) u.uid: u};
+    final result = <UserModel>[];
+    // 1) Posisi lama dipertahankan (in-place update data).
+    for (final u in prev) {
+      final updated = byUid.remove(u.uid);
+      if (updated != null) result.add(updated);
+    }
+    // 2) User baru (belum ada posisi) ditambahkan di bawah.
+    for (final u in next) {
+      final exists = result.any((r) => r.uid == u.uid);
+      if (!exists) result.add(u);
+    }
+    return result;
+  }
+
   /// Simpan avatar per-uid ke kv (fire-and-forget). Hanya tulis kalau avatar
   /// BERUBAH dari yang terakhir ditulis sesi ini — hemat IO, avatar lama
   /// yang sama tidak ditulis ulang tiap emit stream.
@@ -193,14 +214,14 @@ class OnlineUsersProvider extends ChangeNotifier {
         if (isAvatarOnlyChange) {
           _debounce?.cancel();
           _debounce = Timer(const Duration(milliseconds: 180), () {
-            _users = deduped;
+            _users = _reorderStable(_users, deduped);
             _error = null;
             if (!_disposed) notifyListeners();
           });
           return;
         }
         _debounce?.cancel();
-        _users = deduped;
+        _users = _reorderStable(_users, deduped);
         _error = null;
         if (!_disposed) notifyListeners();
         // Simpan ke disk untuk cold start berikutnya (tanpa avatar base64 biar kecil).
