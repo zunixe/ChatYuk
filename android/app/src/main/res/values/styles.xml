@@ -15,4 +15,13 @@
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@color/launch_bg</item>
     </style>
+    <!-- uCrop (image_cropper): opt-out edge-to-edge — toolbar atas & tombol
+         bawah cropper tertutup system bar di Android 15 (SDK 35) karena
+         layout uCrop tidak handle insets. -->
+    <style name="UcropTheme" parent="@style/Theme.AppCompat.DayNight">
+        <item name="android:fitsSystemWindows">true</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:statusBarColor">@color/ucrop_status_bar</item>
+        <item name="android:navigationBarColor">@color/ucrop_nav_bar</item>
+    </style>
 </resources>
