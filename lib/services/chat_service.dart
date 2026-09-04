@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'avatar_disk_cache.dart';
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
@@ -103,8 +105,23 @@ class ChatService {
   Future<String> _avatarB64(String path) async {
     final cached = _avatarCache[path];
     if (cached != null) return cached;
+    // DISK FIRST: baca dari cache lokal (instan, tanpa network).
+    final disk = await AvatarDiskCache.instance.read(path);
+    if (disk != null && disk.isNotEmpty) {
+      final b64 = base64Encode(disk);
+      if (_avatarCache.length >= _avatarCacheMax) {
+        _avatarCache.remove(_avatarCache.keys.first);
+      }
+      _avatarCache[path] = b64;
+      return b64;
+    }
+    // Disk miss → download server → TULIS KE DISK (sumber lokal berikutnya).
     final b64 = await StoragePhotoService.instance.download(path) ?? '';
     if (b64.isNotEmpty) {
+      try {
+        await AvatarDiskCache.instance
+            .write(path, Uint8List.fromList(base64Decode(b64)));
+      } catch (_) {}
       if (_avatarCache.length >= _avatarCacheMax) {
         _avatarCache.remove(_avatarCache.keys.first);
       }
@@ -1629,6 +1646,21 @@ class ChatService {
                     final cachedB64 = _avatarCache[u.avatar];
                     if (cachedB64 != null && cachedB64.isNotEmpty) {
                       u = u.copyWith(avatar: cachedB64);
+                    } else {
+                      // Belum ada b64 di cache: pakai avatar dari emission
+                      // sebelumnya (per uid) — string avatar tidak berubah
+                      // antar-emission → tidak memicu decode ulang/blink.
+                      final prev = cached.where((c) => c.uid == u.uid).firstOrNull;
+                      if (prev != null && prev.avatar.isNotEmpty &&
+                          !StoragePhotoService.instance.isAvatarPath(prev.avatar)) {
+                        u = u.copyWith(avatar: prev.avatar);
+                      }
+                    }
+                  } else if (u.avatar.isEmpty) {
+                    final prev = cached.where((c) => c.uid == u.uid).firstOrNull;
+                    if (prev != null && prev.avatar.isNotEmpty &&
+                        !StoragePhotoService.instance.isAvatarPath(prev.avatar)) {
+                      u = u.copyWith(avatar: prev.avatar);
                     }
                   }
                   pendingFast.add(u);
@@ -1726,6 +1758,18 @@ class ChatService {
               final cachedB64 = _avatarCache[u.avatar];
               if (cachedB64 != null && cachedB64.isNotEmpty) {
                 u = u.copyWith(avatar: cachedB64);
+              } else {
+                final prev = cached.where((c) => c.uid == u.uid).firstOrNull;
+                if (prev != null && prev.avatar.isNotEmpty &&
+                    !StoragePhotoService.instance.isAvatarPath(prev.avatar)) {
+                  u = u.copyWith(avatar: prev.avatar);
+                }
+              }
+            } else if (u.avatar.isEmpty) {
+              final prev = cached.where((c) => c.uid == u.uid).firstOrNull;
+              if (prev != null && prev.avatar.isNotEmpty &&
+                  !StoragePhotoService.instance.isAvatarPath(prev.avatar)) {
+                u = u.copyWith(avatar: prev.avatar);
               }
             }
             pending.add(u);

@@ -929,11 +929,15 @@ class AuthProvider extends ChangeNotifier {
   Future<void> updateIpAddress(String ip) => _auth.updateIpAddress(ip);
 
   Future<void> updateAvatar(String base64) async {
-    await _auth.updateAvatar(base64);
+    final serverPath = await _auth.updateAvatar(base64);
     final uid = _profile?.uid ?? _auth.uid ?? '';
     if (uid.isNotEmpty) {
       AvatarB64Service.instance.setForUid(uid, base64);
       ChatService.setAvatarCacheForUid(uid, base64);
+      // Path baru tercatat — realtime/meta & disk sinkron mengikuti.
+      if (serverPath.isNotEmpty) {
+        AvatarB64Service.instance.setForPath(serverPath, base64);
+      }
     }
     _profile = _profile?.copyWith(avatar: base64);
     if (!_disposed) notifyListeners();

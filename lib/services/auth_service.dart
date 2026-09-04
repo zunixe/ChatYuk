@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'avatar_disk_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -824,10 +825,12 @@ class AuthService {
     }
   }
 
-  Future<void> updateAvatar(String base64) async {
+  /// Update avatar → server + TULIS KE DISK lokal. Return server path.
+  /// Disk = sumber lokal: buka app berikutnya load dari disk, bukan network.
+  Future<String> updateAvatar(String base64) async {
     final id = uid;
-    if (id == null) return;
-    // Validasi base64 adalah JPEG atau PNG yang valid
+    if (id == null) return '';
+    // Validasi base64 adalah JPEG, PNG, atau WebP yang valid
     if (base64.isNotEmpty && !isValidImageBase64(base64)) {
       throw Exception('Invalid image format');
     }
@@ -859,6 +862,14 @@ class AuthService {
       } catch (_) {}
     }
     await _sb.from('profiles').update({'avatar': path}).eq('id', id);
+    // TULIS KE DISK — bytes WebP/JPEG asli, load berikutnya dari lokal.
+    if (path.isNotEmpty && base64.isNotEmpty) {
+      try {
+        await AvatarDiskCache.instance
+            .write(path, Uint8List.fromList(base64Decode(base64)));
+      } catch (_) {}
+    }
+    return path;
   }
 
   Future<void> removeAvatar() async {
