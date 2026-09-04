@@ -69,14 +69,16 @@ String formatTime(DateTime dt) {
   }
 }
 
-/// Validasi bahwa string adalah base64 JPEG atau PNG yang valid.
+/// Validasi bahwa string adalah base64 JPEG, PNG, atau WebP yang valid.
 /// Header JPEG: /9j/ (base64 dari FF D8 FF)
 /// Header PNG: iVBORw0KGgo (base64 dari 89 50 4E 47)
+/// Header WebP: UklGR (base64 dari 52 49 46 46 — "RIFF")
 bool isValidImageBase64(String b64) {
   if (b64.isEmpty) return false;
   final clean = b64.trim();
   return clean.startsWith('/9j/') || // JPEG
-      clean.startsWith('iVBORw0KGgo'); // PNG
+      clean.startsWith('iVBORw0KGgo') || // PNG
+      clean.startsWith('UklGR'); // WebP
 }
 
 String formatRelativeTime(DateTime dt, {bool isId = false}) {
