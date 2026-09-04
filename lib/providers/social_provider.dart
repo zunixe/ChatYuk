@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/social_service.dart';
+import '../services/message_cache.dart';
 
 /// State sosial user aktif: following set, friend request inbox count,
 /// dan helper aksi follow/friend/subscribe.
@@ -12,6 +13,11 @@ class SocialProvider extends ChangeNotifier {
 
   final Set<String> _following = {};
   final Set<String> _friends = {};
+  // UID lawan yang punya friend request pending (SENT oleh saya ATAU
+  // RECEIVED dari dia) — dipakai tombol "Tambah Teman" di list chat agar
+  // render final TANPA RPC per-item (dulu: N RPC my_social_status →
+  // spinner berjejak saat jaringan lambat).
+  final Set<String> _pendingFriendRequests = {};
   final Set<String> _subscribed = {};
   int _friendRequestCount = 0;
 
@@ -24,13 +30,20 @@ class SocialProvider extends ChangeNotifier {
   Set<String> get following => Set.unmodifiable(_following);
   Set<String> get friends => Set.unmodifiable(_friends);
   Set<String> get subscribed => Set.unmodifiable(_subscribed);
+  Set<String> get pendingFriendRequests =>
+      Set.unmodifiable(_pendingFriendRequests);
   int get friendRequestCount => _friendRequestCount;
 
   bool isFollowing(String uid) => _following.contains(uid);
   bool isFriend(String uid) => _friends.contains(uid);
+  bool isPendingFriendRequest(String uid) =>
+      _pendingFriendRequests.contains(uid);
   bool isSubscribed(String uid) => _subscribed.contains(uid);
 
   SocialProvider() {
+    // Warm-up dari disk cache — status teman/pending tampil instan saat
+    // cold start (network refresh menyusul, tanpa spinner di UI).
+    unawaited(_loadDisk());
     _subscribe();
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
       if (state.event == AuthChangeEvent.signedIn ||
@@ -41,6 +54,29 @@ class SocialProvider extends ChangeNotifier {
     });
   }
 
+  /// Muat set sosial dari disk cache (instant, sebelum network refresh).
+  Future<void> _loadDisk() async {
+    try {
+      final rows = await MessageCache.instance.loadRawList('social_sets');
+      if (rows.isEmpty) return;
+      final obj = rows.first;
+      if (_friends.isNotEmpty) return; // server sudah lebih dulu
+      _following
+        ..clear()
+        ..addAll((obj['following'] as List?)?.map((e) => '$e') ?? const []);
+      _friends
+        ..clear()
+        ..addAll((obj['friends'] as List?)?.map((e) => '$e') ?? const []);
+      _pendingFriendRequests
+        ..clear()
+        ..addAll((obj['pending'] as List?)?.map((e) => '$e') ?? const []);
+      _subscribed
+        ..clear()
+        ..addAll((obj['subscribed'] as List?)?.map((e) => '$e') ?? const []);
+      if (!_disposed) notifyListeners();
+    } catch (_) {}
+  }
+
   /// Bersihkan relasi sosial anon (follow/subscribe/friend request) di
   /// server lalu state lokal — dipanggil sebelum anon signOut.
   Future<void> clearAnonSocial() async {
@@ -48,6 +84,7 @@ class SocialProvider extends ChangeNotifier {
       await _service.clearAnonSocial();
       _following.clear();
       _friends.clear();
+      _pendingFriendRequests.clear();
       _subscribed.clear();
       _friendRequestCount = 0;
       if (!_disposed) notifyListeners();
@@ -89,6 +126,7 @@ class SocialProvider extends ChangeNotifier {
       // Logout: bersihkan state akun lama supaya tidak bocor ke akun baru.
       _following.clear();
       _friends.clear();
+      _pendingFriendRequests.clear();
       _subscribed.clear();
       _friendRequestCount = 0;
       if (!_disposed) notifyListeners();
@@ -122,19 +160,46 @@ class SocialProvider extends ChangeNotifier {
     final uid = _service.uid;
     if (uid == null) return;
     try {
-      final following = await _service.socialList('following', uid);
-      final friends = await _service.socialList('friends', uid);
-      final subs = await _service.mySubscriptions();
+      // Tiga fetch paralel + outbox/inbox (pending friend request) —
+      // dulu berurutan; paralel memangkas waktu sinkron di jaringan lambat.
+      final results = await Future.wait([
+        _service.socialList('following', uid),
+        _service.socialList('friends', uid),
+        _service.mySubscriptions(),
+        _service.friendRequestOutbox(),
+        _service.friendRequestInbox(),
+      ]);
       _following
         ..clear()
-        ..addAll(following.map((e) => '${e['uid']}'));
+        ..addAll((results[0] as List).map((e) => '${e['uid']}'));
       _friends
         ..clear()
-        ..addAll(friends.map((e) => '${e['uid']}'));
+        ..addAll((results[1] as List).map((e) => '${e['uid']}'));
       _subscribed
         ..clear()
-        ..addAll(subs.map((e) => '${e['uid']}'));
+        ..addAll((results[2] as List).map((e) => '${e['uid']}'));
+      // Pending = SENT (outbox) + RECEIVED (inbox) yang masih pending.
+      final pending = <String>{
+        for (final e in (results[3] as List))
+          if (e['status'] == null ||
+              e['status'] == 'pending') '${e['uid']}',
+        for (final e in (results[4] as List))
+          if (e['status'] == null ||
+              e['status'] == 'pending') '${e['uid'] ?? e['from_id']}',
+      };
+      _pendingFriendRequests
+        ..clear()
+        ..addAll(pending);
       if (!_disposed) notifyListeners();
+      // Cache disk — buka app berikutnya status teman tampil instan.
+      unawaited(MessageCache.instance.saveRawList('social_sets', [
+        {
+          'following': _following.toList(),
+          'friends': _friends.toList(),
+          'pending': _pendingFriendRequests.toList(),
+          'subscribed': _subscribed.toList(),
+        }
+      ]));
     } catch (e) {
       debugPrint('[SocialProvider] refreshSelfSets error: $e');
     }
@@ -174,7 +239,14 @@ class SocialProvider extends ChangeNotifier {
   Future<String> sendFriendRequest(String targetUid) async {
     try {
       final res = await _service.sendFriendRequest(targetUid);
-      if (res['already_friends'] == true) return 'friends';
+      if (res['already_friends'] == true) {
+        _friends.add(targetUid);
+        _pendingFriendRequests.remove(targetUid);
+      } else {
+        // Optimistic: tombol langsung jadi "Requested" tanpa spinner.
+        _pendingFriendRequests.add(targetUid);
+      }
+      if (!_disposed) notifyListeners();
       return res['status']?.toString() ?? '';
     } catch (e) {
       debugPrint('[SocialProvider] sendFriendRequest error: $e');
