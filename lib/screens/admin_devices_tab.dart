@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../providers/admin_provider.dart';
+import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
@@ -853,6 +854,18 @@ class _DeviceDetailSheet extends StatelessWidget {
                     _kv('${s.adminDeviceLastSeen}', lastSeen),
                   const SizedBox(height: 12),
 
+                  // Exclude perangkat ini dari ringkasan & daftar perangkat.
+                  OutlinedButton.icon(
+                    onPressed: () => _excludeDevice(context, installId),
+                    icon: const Icon(Icons.phonelink_erase_rounded, size: 18),
+                    label: Text(s.adminExcludeDeviceAction),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.danger,
+                      side: const BorderSide(color: AppTheme.danger),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Text(
@@ -898,6 +911,32 @@ class _DeviceDetailSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Exclude perangkat ini: tambah install_id ke daftar exclude, simpan
+  /// via RPC, lalu refresh daftar (item langsung hilang dari tab Perangkat).
+  Future<void> _excludeDevice(BuildContext context, String installId) async {
+    if (installId.isEmpty) return;
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final list = List.of(auth.excludedDevices);
+    if (list.contains(installId)) return;
+    list.add(installId);
+    final ok = await auth.setExcludedDevices(list);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? s.adminExcludeDeviceDone : s.adminExcludeSaveFailed,
+        ),
+        backgroundColor: ok ? AppTheme.online : AppTheme.danger,
+      ),
+    );
+    if (ok) {
+      // Tutup sheet + refresh daftar supaya item ter-exclude langsung hilang.
+      Navigator.pop(context);
+      await context.read<AdminProvider>().fetchDevices();
+    }
   }
 
   Widget _userChip(Map<String, dynamic> u) {

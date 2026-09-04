@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../config/theme.dart';
+import '../services/media_disk_cache.dart';
+import '../services/storage_photo_service.dart';
 
 /// Manager player GLOBAL — hanya SATU voice yang playing di seluruh app.
 /// Dulu: tiap bubble punya player sendiri → dua voice bisa play paralel
@@ -42,7 +44,6 @@ class _VoiceBubbleState extends State<VoiceBubble> {
   bool _playing = false;
   Duration _pos = Duration.zero;
   Duration _dur = Duration.zero;
-  String? _url;
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
   StreamSubscription? _completeSub;
@@ -77,16 +78,27 @@ class _VoiceBubbleState extends State<VoiceBubble> {
       setState(() => _playing = false);
     } else {
       try {
-        String? url = _url;
-        if (url == null) {
-          // Bucket chat-photos publik — play langsung dari URL publik
-          // (dulu: downloadBytes() cuma untuk cek keberadaan file lalu
-          // dibuang = download ganda tiap play pertama).
-          url = 'https://fohcucyyejdryryoxitm.supabase.co/storage/v1/object/public/chat-photos/${widget.path}';
-          _url = url;
+        // DISK FIRST: voice di-cache lokal (per path) — play pertama
+        // download sekali, play berikutnya & sesi berikutnya dari lokal.
+        final disk = await MediaDiskCache.instance.read(widget.path);
+        if (disk != null && disk.isNotEmpty) {
+          final f = await MediaDiskCache.instance.fileFor(widget.path);
+          if (f != null) {
+            _VoicePlayerManager.instance.started_(_player);
+            await _player.play(DeviceFileSource(f.path));
+            setState(() => _playing = true);
+            return;
+          }
         }
+        // Belum ada di disk → download sekali, tulis disk, play file.
+        final bytes = await StoragePhotoService.instance
+            .downloadBytes(widget.path);
+        if (bytes == null || bytes.isEmpty) return;
+        await MediaDiskCache.instance.write(widget.path, bytes);
+        final f = await MediaDiskCache.instance.fileFor(widget.path);
+        if (f == null) return;
         _VoicePlayerManager.instance.started_(_player);
-        await _player.play(UrlSource(url));
+        await _player.play(DeviceFileSource(f.path));
         setState(() => _playing = true);
       } catch (_) {}
     }

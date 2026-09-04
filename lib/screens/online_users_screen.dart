@@ -88,14 +88,10 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
     if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) return;
     _avatarLastSrcByUid[widget.uid] = src;
-    if (src.isEmpty) {
-      _provider = null;
-      return;
-    }
-    // Path storage (avatars/…) belum bisa ditampilkan — pertahankan
-    // bitmap/provider lama sampai b64 siap dari background (anti-blink);
-    // tanpa bitmap lama → inisial, bukan blank putih.
-    if (src.startsWith('avatars/')) return;
+    // Kosong atau path storage → PERTAHANKAN provider yang sudah ada
+    // (foto tidak boleh hilang/kedip hanya karena emission baru membawa
+    // avatar kosong/path). Provider baru di-set setelah b64 siap.
+    if (src.isEmpty || src.startsWith('avatars/')) return;
     // Instance MemoryImage stabil per-uid → pakai apa adanya.
     final stable = _avatarImageByUid[widget.uid];
     if (stable != null && _provider != stable) {

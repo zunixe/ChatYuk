@@ -283,7 +283,7 @@ Future<void> fetchDevices() async {
     if (!_seenDevicesLoaded || _disposed) return; // tunggu armNotifications
     var excluded = <String>{};
     try {
-      final rows = await _sb
+      final rows = await Supabase.instance.client
           .from('app_settings')
           .select('excluded_devices')
           .eq('id', 'global')
