@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
@@ -35,30 +36,34 @@ import 'friend_requests_screen.dart';
 import 'subscriptions_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
-String? _processAvatar(Uint8List bytes) {
-  var decoded = img.decodeImage(bytes);
+Future<String?> _processAvatar(Uint8List bytes) async {
+  // Cropper interaktif sudah menentukan area 1:1 persisnya (user geser/zoom)
+  // — center-crop manual redundant. Encode WebP via native encoder:
+  // 25-35% lebih kecil dari JPEG pada kualitas setara, decode Flutter
+  // natively di semua platform.
+  try {
+    final webp = await FlutterImageCompress.compressWithList(
+      bytes,
+      minWidth: 1024,
+      minHeight: 1024,
+      quality: 90,
+      format: CompressFormat.webp,
+      keepExif: false,
+    );
+    if (webp.isNotEmpty) return base64Encode(webp);
+  } catch (e) {
+    debugPrint('[PROFILE] webp encode failed, fallback jpeg: $e');
+  }
+  // Fallback JPEG q92 kalau encoder WebP gagal di device tertentu.
+  final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  // Terapkan orientasi EXIF — foto kamera bisa tersimpan rotate 90/180°.
-  decoded = img.bakeOrientation(decoded);
-  // Center-crop sisi terkecil → rasio 1:1 tanpa distorsi (tidak gepeng).
-  final w = decoded.width;
-  final h = decoded.height;
-  final side = w < h ? w : h;
-  final cropped = img.copyCrop(
-    decoded,
-    x: (w - side) ~/ 2,
-    y: (h - side) ~/ 2,
-    width: side,
-    height: side,
-  );
   final resized = img.copyResize(
-    cropped,
-    width: 512,
-    height: 512,
+    decoded,
+    width: 1024,
+    height: 1024,
     interpolation: img.Interpolation.cubic,
   );
-  final jpg = img.encodeJpg(resized, quality: 92);
-  return base64Encode(jpg);
+  return base64Encode(img.encodeJpg(resized, quality: 92));
 }
 
 // Galeri foto + preview blur. Return {full, preview}.
@@ -345,6 +350,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       cropped = await ImageCropper().cropImage(
         sourcePath: picked.path,
         aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        maxWidth: 1024,
+        maxHeight: 1024,
         compressQuality: 95,
         uiSettings: [
           AndroidUiSettings(
@@ -371,7 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
 
     // Proses image di background isolate — tidak block UI thread
-    final base64 = await compute(_processAvatar, bytes);
+    final base64 = await _processAvatar(bytes);
     if (base64 == null) {
       if (mounted)
         ScaffoldMessenger.of(
