@@ -28,7 +28,6 @@ import 'screens/chats_screen.dart';
 import 'screens/post_composer_screen.dart';
 import 'widgets/anon_prompt_dialog.dart';
 import 'widgets/call_banner.dart';
-import 'widgets/skeleton_card.dart';
 
 class ChatYukApp extends StatefulWidget {
   const ChatYukApp({super.key});
@@ -575,58 +574,19 @@ class _AuthSkeletonScreen extends StatelessWidget {
         body: const SizedBox.expand(),
       );
     }
-    Widget box(double w, double h, {double r = 6}) => Container(
-      width: w,
-      height: h,
-      decoration: BoxDecoration(
-        // Tint brand (bukan divider abu) — aturan "nol warna abu" +
-        // tetap aman dari kilatan putih logo (warna dekat bgScreen).
-        color: AppTheme.primary.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(r),
-      ),
-    );
-
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 14),
-            Center(
-              child: Container(
-                width: 92,
-                height: 92,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Center(child: box(140, 16)),
-            const SizedBox(height: 6),
-            Center(child: box(90, 11)),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Row(
-                children: [
-                  Expanded(child: box(0, 52, r: 12)),
-                  const SizedBox(width: 12),
-                  Expanded(child: box(0, 52, r: 12)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
-                itemCount: 8,
-                itemBuilder: (_, _) => const SkeletonCard(),
-              ),
-            ),
-          ],
+      // TANPA kotak placeholder — kotak abu yang meniru layout list
+      // terlihat sebagai "kotak abu menutupi list" saat cold start lambat
+      // (Xiaomi mematikan proses → cold start panjang). Cukup spinner.
+      body: Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: AppTheme.primary,
+          ),
         ),
       ),
     );
