@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
+import '../services/media_disk_cache.dart';
 import '../services/message_cache.dart';
 
 bool _usersEqual(List<UserModel> a, List<UserModel> b) {
@@ -50,6 +51,8 @@ class OnlineUsersProvider extends ChangeNotifier {
   final Map<String, String> _diskAvatars = {};
 
   Future<void> _loadDisk() async {
+    // Warm-up MediaDiskCache SEBELUM apa pun — readSync butuh _docs siap.
+    await MediaDiskCache.instance.prewarm();
     try {
       // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network.
       // Avatar di-merge dari kv per-uid (sama seperti pesan foto) supaya
