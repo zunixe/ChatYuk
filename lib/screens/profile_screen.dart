@@ -788,9 +788,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? s.labelGenderFemale
         : '';
     final isAnon = auth.isAnonymous;
-    // Sesi dummy aktif HANYA untuk admin sungguhan — login anon/user biasa
-    // di build admin tidak pernah dianggap sesi admin/dummy.
-    final dummyActive = auth.dummySessionActive && auth.isRealAdmin;
+    // Sesi dummy aktif HANYA bisa dibuat dari panel admin (becomeDummy) —
+    // flag internal AuthService. Dulu: kondisi && isRealAdmin membuat banner
+    // TIDAK PERNAH tampil, karena saat sesi dummy aktif currentUser.email
+    // = email DUMMY (bukan zunixe) → isRealAdmin false → "klik untuk
+    // kembali ke admin" hilang.
+    final dummyActive = auth.dummySessionActive;
     final pp = context.watch<PointsProvider>();
 
     return Scaffold(
@@ -1000,7 +1003,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   // Banner sesi dummy — widget di-inject build admin
                   // (lib/admin/profile_sections.dart) lewat AdminGate.
-                  if (auth.dummySessionActive && auth.isRealAdmin)
+                  // Tanpa isRealAdmin: saat dummy aktif, email session =
+                  // email dummy → isRealAdmin false → banner hilang.
+                  if (auth.dummySessionActive)
                     AdminGate.dummySessionBanner?.call(
                       context, profile?.nickname) ??
                   const SizedBox.shrink(),
