@@ -142,6 +142,14 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  /// Buang cache detail 60 detik — dipakai saat daftar device exclude
+  /// berubah supaya card Overview langsung menampilkan data segar
+  /// (device yang di-unexclude muncul lagi tanpa nunggu cache kadaluarsa).
+  void invalidateStatsDetail() {
+    _detailCache = null;
+    _detailCacheAt = null;
+  }
+
   // ── Bar chart registrasi email per hari ──
   Map<int, int> _regDaily = {};
   bool _regLoading = false;

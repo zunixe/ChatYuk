@@ -1019,6 +1019,16 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               10,
                               MediaQuery.of(context).padding.bottom + 12,
                             ),
+                            // Kartu ikut pindah posisi saat urutan berubah
+                            // (sort last_seen) — State _AsyncAvatar tidak
+                            // di-dispose/recreate → avatar tidak kedip.
+                            findChildIndexCallback: (key) {
+                              final k = key as ValueKey<String>;
+                              final idx = paged.indexWhere(
+                                (u) => 'uc-${u.uid}' == k.value,
+                              );
+                              return idx < 0 ? null : idx;
+                            },
                             itemCount: paged.length + (hasMore ? 1 : 0),
                             itemBuilder: (_, i) {
                               if (i >= paged.length) {
