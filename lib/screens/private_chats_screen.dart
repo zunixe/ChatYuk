@@ -10,7 +10,6 @@ import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
-import '../services/social_service.dart';
 import '../utils.dart';
 import '../widgets/profile_avatar.dart';
 import 'private_chat_screen.dart';
@@ -789,7 +788,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 }
 
 /// Tombol add friend di list pesan untuk user yang terdaftar (registered).
-/// Status: friends / request pending (sent|received) / add friend.
+/// Status dibaca dari SocialProvider (set global, ter-load saat app start +
+/// cache disk) — TANPA RPC per-item (dulu: my_social_status per tombol =
+/// N+1 RPC, spinner berjejak saat jaringan lambat).
 class _FriendButton extends StatefulWidget {
   final String otherUid;
   const _FriendButton({required this.otherUid});
@@ -799,31 +800,7 @@ class _FriendButton extends StatefulWidget {
 }
 
 class _FriendButtonState extends State<_FriendButton> {
-  final SocialService _service = SocialService();
-  bool _pendingRequest = false;
-  bool _loading = true;
   bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final st = await _service.mySocialStatus(widget.otherUid);
-      if (!mounted) return;
-      setState(() {
-        _pendingRequest =
-            st['friend_request_sent'] == true ||
-            st['friend_request_received'] == true;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
 
   Future<void> _send() async {
     final s = context.read<LocaleProvider>().s;
@@ -833,31 +810,22 @@ class _FriendButtonState extends State<_FriendButton> {
       widget.otherUid,
     );
     if (!mounted) return;
-    setState(() {
-      if (res == 'pending' || res == 'friends') _pendingRequest = true;
-      _busy = false;
-    });
-    messenger.showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+    setState(() => _busy = false);
+    if (res != 'rejected') {
+      messenger.showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final isFriend = context.watch<SocialProvider>().isFriend(widget.otherUid);
-    if (_loading) {
-      return SizedBox(
-        width: 14,
-        height: 14,
-        child: CircularProgressIndicator(
-          strokeWidth: 1.5,
-          color: AppTheme.textSecondary,
-        ),
-      );
-    }
-    final done = isFriend || _pendingRequest;
+    final social = context.watch<SocialProvider>();
+    final isFriend = social.isFriend(widget.otherUid);
+    final pending = social.isPendingFriendRequest(widget.otherUid);
+    final done = isFriend || pending;
     final label = isFriend
         ? s.btnFriends
-        : (_pendingRequest ? s.btnFriendRequested : s.btnAddFriend);
+        : (pending ? s.btnFriendRequested : s.btnAddFriend);
     return GestureDetector(
       onTap: done || _busy ? null : _send,
       child: Container(
@@ -870,13 +838,22 @@ class _FriendButtonState extends State<_FriendButton> {
           ),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(
-          label,
-          style: AppText.caption.copyWith(
-            color: done ? AppTheme.textSecondary : AppTheme.primary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        child: _busy
+            ? SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: AppTheme.primary,
+                ),
+              )
+            : Text(
+                label,
+                style: AppText.caption.copyWith(
+                  color: done ? AppTheme.textSecondary : AppTheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
       ),
     );
   }
