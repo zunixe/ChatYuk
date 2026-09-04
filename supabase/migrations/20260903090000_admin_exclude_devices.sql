@@ -37,8 +37,10 @@ declare
   result jsonb;
   v_excl uuid[];
 begin
-  select coalesce(array_agg(uuid), '{}'::uuid[]) into v_excl
-    from public.admin_excluded_uids();
+  -- Alias 'ae' WAJIB: SETOF uuid tanpa alias kolom → referensi 'uuid'
+  -- melempar "column uuid does not exist" (42703).
+  select coalesce(array_agg(ae), '{}'::uuid[]) into v_excl
+    from public.admin_excluded_uids() ae;
 
   select jsonb_build_object(
     'total_users', (select count(*) from profiles
@@ -90,8 +92,10 @@ begin
     raise exception 'Unauthorized';
   end if;
 
-  select coalesce(array_agg(uuid), '{}'::uuid[]) into v_excl
-    from public.admin_excluded_uids();
+  -- Alias 'ae' WAJIB: SETOF uuid tanpa alias kolom → referensi 'uuid'
+  -- melempar "column uuid does not exist" (42703).
+  select coalesce(array_agg(ae), '{}'::uuid[]) into v_excl
+    from public.admin_excluded_uids() ae;
 
   select jsonb_build_object(
     'users_all', coalesce((
