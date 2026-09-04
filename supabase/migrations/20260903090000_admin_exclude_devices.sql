@@ -291,3 +291,60 @@ revoke execute on function public.admin_get_excluded_devices() from public, anon
 revoke execute on function public.admin_set_excluded_devices(jsonb) from public, anon;
 grant execute on function public.admin_get_excluded_devices() to authenticated, service_role;
 grant execute on function public.admin_set_excluded_devices(jsonb) to authenticated, service_role;
+
+-- ── 4) Maps/orang sekitar: device ter-exclude tidak tampil ──
+-- nearby_users mendapat filter yang sama dengan stats: uid yang punya
+-- device ter-exclude disembunyikan dari daftar.
+create or replace function public.nearby_users(p_radius_km double precision default 10)
+ returns table(uid uuid, nickname text, gender text, age integer, country text, city text, status text, avatar text, is_registered boolean, last_seen timestamp with time zone, distance_km double precision)
+ language plpgsql
+ security definer
+ set search_path to 'public'
+as $fn$
+declare
+  me uuid := auth.uid();
+  my_lat double precision;
+  my_lon double precision;
+  radius_m double precision;
+  v_excl uuid[];
+begin
+  if me is null then raise exception 'Not authenticated'; end if;
+  radius_m := least(greatest(coalesce(p_radius_km, 10), 1), 500) * 1000.0;
+
+  select p.lat, p.lon into my_lat, my_lon
+  from public.profiles p where p.id = me;
+
+  if my_lat is null or my_lon is null then
+    raise exception 'No location';
+  end if;
+
+  select coalesce(array_agg(ae), '{}'::uuid[]) into v_excl
+    from public.admin_excluded_uids() ae;
+
+  return query
+  select
+    p.id,
+    p.nickname,
+    p.gender,
+    p.age,
+    p.country,
+    p.city,
+    p.status,
+    p.avatar,
+    p.is_registered,
+    p.last_seen,
+    (earth_distance(ll_to_earth(my_lat, my_lon), ll_to_earth(p.lat, p.lon)) / 1000.0) as distance_km
+  from public.profiles p
+  where p.id <> me
+    and p.lat is not null
+    and p.lon is not null
+    and coalesce(p.share_location, false) = true
+    and p.status in ('online', 'idle')
+    and p.last_seen >= now() - interval '30 minutes'
+    and not (p.id = any(v_excl))
+    and earth_box(ll_to_earth(my_lat, my_lon), radius_m) @> ll_to_earth(p.lat, p.lon)
+    and earth_distance(ll_to_earth(my_lat, my_lon), ll_to_earth(p.lat, p.lon)) <= radius_m
+  order by distance_km asc
+  limit 100;
+end;
+$fn$;
