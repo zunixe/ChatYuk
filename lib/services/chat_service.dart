@@ -1638,7 +1638,7 @@ class ChatService {
         debugPrint('[ONLINE-EMIT] presenceUidsFast=${presenceUidsFast.length}');
         if (presenceUidsFast.isNotEmpty) {
           try {
-            const colsFast = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
+            const colsFast = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen,email';
             final fastRows = await _sb.from('profiles').select(colsFast).inFilter('id', presenceUidsFast).limit(50).timeout(const Duration(seconds: 2));
             if (fastRows.isNotEmpty && !controller.isClosed) {
               // Emit cepat dari presence
@@ -1754,7 +1754,7 @@ class ChatService {
             if (!controller.isClosed) controller.add(List.unmodifiable(cached));
             return;
           }
-          const cols2 = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
+          const cols2 = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen,email';
           rows = await _sb.from('profiles').select(cols2).inFilter('id', filtered2).limit(1000).timeout(const Duration(seconds: 6));
         }
         // Invisible filter untuk path RPC juga
