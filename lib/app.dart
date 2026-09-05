@@ -28,6 +28,7 @@ import 'screens/chats_screen.dart';
 import 'screens/post_composer_screen.dart';
 import 'widgets/anon_prompt_dialog.dart';
 import 'widgets/call_banner.dart';
+import 'widgets/skeleton_card.dart';
 
 class ChatYukApp extends StatefulWidget {
   const ChatYukApp({super.key});
@@ -246,7 +247,7 @@ class _AuthGateState extends State<_AuthGate> {
     return FutureBuilder<void>(
       future: _warmFuture,
       builder: (context, snap) {
-        if (!snap.hasData) return const _AuthSkeletonScreen(withLogo: false);
+        if (!snap.hasData) return const _AuthSkeletonScreen();
         // Raster MainNav di belakang skeleton 1 frame — swap buffer GPU
         // (Skia half-present #b6b6b6) tidak pernah sampai ke layar.
         return _SwapMask(child: _MainNav());
@@ -287,7 +288,7 @@ class _SwapMaskState extends State<_SwapMask> {
         widget.child,
         // Penutup sementara — samakan tampilan dengan warm-gate di atasnya.
         if (_covered)
-          const Positioned.fill(child: _AuthSkeletonScreen(withLogo: false)),
+          const Positioned.fill(child: _AuthSkeletonScreen()),
       ],
     );
   }
@@ -560,33 +561,22 @@ class _BadgedIcon extends StatelessWidget {
 /// logo itu putih — di atas background gelap jadi kilatan putih besar
 /// yang makin terlihat saat cold start (jeda lama → loading lebih lama).
 class _AuthSkeletonScreen extends StatelessWidget {
-  const _AuthSkeletonScreen({this.withLogo = true});
-
-  /// false = versi polos TANPA elemen abu — dipakai fase transisi warm-up
-  /// setelah loading selesai, supaya tidak ada kilatan abu apa pun.
-  final bool withLogo;
+  const _AuthSkeletonScreen();
 
   @override
   Widget build(BuildContext context) {
-    if (!withLogo) {
-      return Scaffold(
-        backgroundColor: AppTheme.bgScreen,
-        body: const SizedBox.expand(),
-      );
-    }
+    // Skeleton SELALU sama dengan list Pengguna Online (tab pertama) — jadi
+    // tidak ada "kotak abu muncul" (flash) saat transisi warm-gate → MainNav.
+    // Dulu: warm-gate layar polos → MainNav skeleton → konten = kotak abu
+    // "nongol" telat (penyebab flash yang dikeluhkan).
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
-      // TANPA kotak placeholder — kotak abu yang meniru layout list
-      // terlihat sebagai "kotak abu menutupi list" saat cold start lambat
-      // (Xiaomi mematikan proses → cold start panjang). Cukup spinner.
-      body: Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: AppTheme.primary,
-          ),
+      body: SafeArea(
+        child: ListView.builder(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: 6,
+          itemBuilder: (_, _) => const SkeletonCard(),
         ),
       ),
     );
