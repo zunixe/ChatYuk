@@ -55,23 +55,21 @@ class OnlineUsersProvider extends ChangeNotifier {
     await MediaDiskCache.instance.prewarm();
     try {
       // Cold start: tampilkan cache disk dulu (<50ms) sebelum fetch network.
-      // Avatar di-merge dari kv per-uid (sama seperti pesan foto) supaya
-      // list langsung tampil FOTO — bukan inisial → tidak ada pop-in blink.
+      // SKIP avatar batch load di cold start — _AsyncAvatar resolve dari
+      // disk sendiri, tidak perlu dimuat ke _diskAvatars dulu. Ini memotong
+      // _loadDisk dari ~6s jadi ~1s di Xiaomi cold start.
       final cached = await MessageCache.instance.loadRawList('online_users');
       if (cached.isNotEmpty) {
         final diskUsers = cached
             .map((e) => UserModel.fromMap(
                 '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
             .toList();
-        await _loadAvatarsToMap(diskUsers);
         if (_users.isEmpty) {
-          // Disk menang race → tampilkan langsung list disk lengkap dengan foto.
+          // Disk menang race → tampilkan langsung list disk.
+          // Avatar resolve via _AsyncAvatar (disk-first, keepProvider).
           _users = diskUsers;
-          _coverWithDiskAvatars();
         } else {
-          // Stream menang race → jangan buang hasil disk: cover avatar
-          // path/kosong di list aktif dengan foto disk, lalu notify sekali.
-          _coverWithDiskAvatars();
+          // Stream menang race → jangan buang hasil disk.
         }
       }
       // SELALU tandai loaded — walau cache kosong (skeleton jangan
