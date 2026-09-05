@@ -756,9 +756,12 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     debugPrint('[PLATFORM-ERROR] $error\n$stack');
     return true;
   };
-  // Paralel: Supabase + Firebase (independen) — hemat 300-800ms
+  // Paralel: Supabase + Firebase + kunci Keystore/SQLite (independen) —
+  // prewarmDb di sini (bukan setelah init) supaya antrean Keystore tidak
+  // menunggu auth selesai. Hemat 0.5-2s di Xiaomi cold start.
   await Future.wait([
     SupabaseConfig.init(),
+    MessageCache.instance.prewarmDb(),
     Future(() async {
       try {
         await Firebase.initializeApp(options: firebaseOptions ?? DefaultFirebaseOptions.currentPlatform);
@@ -775,7 +778,6 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Fire-and-forget yang tidak block TTI
   unawaited(AdminGate.postInit?.call());
   unawaited(MessageCache.instance.clearLegacyV1Only());
-  unawaited(MessageCache.instance.prewarmDb());
   unawaited(PhotoCache.instance.cleanOldPhotos());
   if (_firebaseReady) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);

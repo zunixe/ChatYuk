@@ -241,9 +241,11 @@ class AuthProvider extends ChangeNotifier {
         }
         await AdminGate.restoreDummySession?.call();
         _listenProfile();
-        try {
-          await _loadRequireRegistration().timeout(const Duration(seconds: 2), onTimeout: () => debugPrint('[AUTH] requireReg timeout fallback false'));
-        } catch (e) { debugPrint('[AUTH] requireReg error: $e'); }
+        // Fire-and-forget (dulu await cap 2s): entry screen hanya pakai ini
+        // untuk sembunyikan kartu anon — boleh menyusul, jangan tahan loading.
+        _loadRequireRegistration().then((_) {
+          if (!_disposed) notifyListeners();
+        }).catchError((e) => debugPrint('[AUTH] requireReg error: $e'));
         safeUnawaited(_loadScreenshotSetting());
         safeUnawaited(_loadCallAllSetting());
         safeUnawaited(_loadWatermarkSetting());
