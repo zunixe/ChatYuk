@@ -231,6 +231,33 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
   Map<String, int> _unreadMap = {};
 
+  // Cache decode avatar sendiri — persis pola tile story: bytes di-decode
+  // SEKALI per foto baru; rebuild sebanyak apa pun memakai instance bytes
+  // yang sama → MemoryImage identik → ImageCache hit → tidak kedip
+  // (dulu: base64Decode di dalam build tiap rebuild = decode ulang = kedip).
+  String _ownAvatarB64 = '';
+  Uint8List? _ownAvatarBytes;
+
+  /// Resolve bytes avatar sendiri dengan cache — decode hanya saat string
+  /// base64 BERUBAH (upload foto baru), bukan tiap rebuild.
+  Uint8List? _resolveOwnAvatar(String b64) {
+    if (b64.isEmpty) {
+      _ownAvatarB64 = '';
+      _ownAvatarBytes = null;
+      return null;
+    }
+    if (b64 != _ownAvatarB64) {
+      try {
+        _ownAvatarBytes = base64Decode(b64);
+        _ownAvatarB64 = b64;
+      } catch (_) {
+        _ownAvatarBytes = null;
+        _ownAvatarB64 = '';
+      }
+    }
+    return _ownAvatarBytes;
+  }
+
   late final AnimationController _sharePulse;
   late final Animation<double> _shareScale;
 
@@ -527,13 +554,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final sp = ctx.watch<StoryProvider>();
     final myUid = auth.uid ?? '';
     final items = sp.tray;
-    // Anon: tray tetap tampil (bisa menonton story 'everyone').
-    final showOwnTile = !auth.isAnonymous;
+    // Anon juga bisa bikin story (dipaksa public) → tile + selalu tampil.
+    const showOwnTile = true;
     return SizedBox(
       height: 104,
-      child: items.isEmpty && !showOwnTile
-          ? const SizedBox.shrink()
-          : ListView.separated(
+      child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 2),
               itemCount: items.length + (showOwnTile && !_hasOwn(items) ? 1 : 0),
@@ -971,27 +996,29 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 ),
                               ],
                             ),
-                            child: CircleAvatar(
-                              radius: 27,
-                              backgroundColor:
-                                  AppTheme.primary.withValues(alpha: 0.15),
-                              backgroundImage:
-                                  (auth.profile?.avatar ?? '').isNotEmpty
-                                      ? MemoryImage(
-                                          base64Decode(auth.profile!.avatar))
-                                      : null,
-                              child: (auth.profile?.avatar ?? '').isEmpty
-                                  ? Text(
-                                      (auth.profile?.nickname ?? '?')[0]
-                                          .toUpperCase(),
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: AppGlyph.avatarInitial(54),
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    )
-                                  : null,
-                            ),
+                            child: Builder(builder: (_) {
+                              final bytes =
+                                  _resolveOwnAvatar(auth.profile?.avatar ?? '');
+                              return CircleAvatar(
+                                radius: 27,
+                                backgroundColor: AppTheme.primary
+                                    .withValues(alpha: 0.15),
+                                backgroundImage: bytes != null
+                                    ? MemoryImage(bytes)
+                                    : null,
+                                child: bytes == null
+                                    ? Text(
+                                        (auth.profile?.nickname ?? '?')[0]
+                                            .toUpperCase(),
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: AppGlyph.avatarInitial(54),
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      )
+                                    : null,
+                              );
+                            }),
                           ),
                         ),
                         Positioned(
@@ -1067,27 +1094,28 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           ),
         ),
         iconTheme: IconThemeData(color: AppTheme.textPrimary),
-        // Tombol + story & Orang Sekitar — GestureDetector rapat (tanpa
-        // padding). IconButton tidak dipakai: minimumSize M3 selalu
-        // memaksa 48px walau constraints 32 diberikan.
+        // Tombol + story (SEMUA user — anon juga bisa, dipaksa public
+        // oleh server) & Orang Sekitar (registered only) — GestureDetector
+        // rapat (tanpa padding). IconButton tidak dipakai: minimumSize M3
+        // selalu memaksa 48px walau constraints 32 diberikan.
         actions: [
-          if (!auth.isAnonymous)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Tooltip(
-                    message: s.storyAddTooltip,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _openStoryComposer,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 3),
-                        child: Icon(Icons.add_circle_outline),
-                      ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Tooltip(
+                  message: s.storyAddTooltip,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _openStoryComposer,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 3),
+                      child: Icon(Icons.add_circle_outline),
                     ),
                   ),
+                ),
+                if (!auth.isAnonymous)
                   Tooltip(
                     message: s.nearbyTitle,
                     child: GestureDetector(
@@ -1103,9 +1131,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                       ),
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
+          ),
         ],
       ),
       body: Stack(
@@ -1724,9 +1752,21 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     final p = widget.item.thumbPath;
     if (p.isEmpty) return;
     if (StoragePhotoService.instance.isAvatarPath(p)) return;
+    // Disk dulu (repeat view instan) — baru network + simpan disk.
+    try {
+      final d = MediaDiskCache.instance.readSync(p) ??
+          await MediaDiskCache.instance.read(p);
+      if (d != null && d.isNotEmpty) {
+        if (mounted) setState(() => _thumb = d);
+        return;
+      }
+    } catch (_) {}
     try {
       final b = await StoragePhotoService.instance.downloadBytes(p);
-      if (mounted) setState(() => _thumb = b);
+      if (mounted && b != null && b.isNotEmpty) {
+        setState(() => _thumb = b);
+        unawaited(MediaDiskCache.instance.write(p, b));
+      }
     } catch (_) {}
   }
 

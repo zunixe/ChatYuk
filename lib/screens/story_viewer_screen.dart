@@ -10,6 +10,7 @@ import '../models/story_model.dart';
 import '../providers/locale_provider.dart';
 import '../providers/story_provider.dart';
 import '../services/storage_photo_service.dart';
+import '../services/media_disk_cache.dart';
 import '../utils.dart';
 import '../widgets/story_text_overlay.dart';
 
@@ -86,23 +87,31 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
   }
 
   void _preload(List<StorySlide> slides) async {
-    for (final sl in slides) {
-      if (_localImg.containsKey(sl.imagePath)) continue;
-      _localImg[sl.imagePath] = await _bytes(sl.imagePath);
-      if (mounted) setState(() {});
-    }
+    // Paralel (dulu sequential await — slide ke-N nunggu slide ke-1).
+    await Future.wait(
+      slides.where((sl) => !_localImg.containsKey(sl.imagePath)).map(
+        (sl) async {
+          _localImg[sl.imagePath] = await _bytes(sl.imagePath);
+          if (mounted) setState(() {});
+        },
+      ),
+    );
   }
 
   Future<Uint8List?> _bytes(String path) async {
     final cached = _slideBytesCache[path];
     if (cached != null) return cached;
     try {
-      final b = await StoragePhotoService.instance.downloadBytes(path);
+      // Disk dulu (repeat view instan) — baru network + simpan disk.
+      var b = MediaDiskCache.instance.readSync(path);
+      b ??= await MediaDiskCache.instance.read(path);
+      b ??= await StoragePhotoService.instance.downloadBytes(path);
       if (b != null && b.isNotEmpty) {
         _slideBytesCache[path] = b;
         if (_slideBytesCache.length > 60) {
           _slideBytesCache.remove(_slideBytesCache.keys.first);
         }
+        unawaited(MediaDiskCache.instance.write(path, b));
       }
       return b;
     } catch (_) {
