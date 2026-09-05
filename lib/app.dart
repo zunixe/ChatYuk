@@ -555,11 +555,12 @@ class _BadgedIcon extends StatelessWidget {
   }
 }
 
-/// Skeleton loading saat auth check — meniru layout OnlineUsersScreen
-/// (avatar bulat + nama + filter row + list kartu) supaya transisi ke
-/// layar utama terasa mulus. JANGAN taruh logo app di sini: 62% piksel
-/// logo itu putih — di atas background gelap jadi kilatan putih besar
-/// yang makin terlihat saat cold start (jeda lama → loading lebih lama).
+/// Skeleton loading saat auth check — IDENTIK dengan halaman Pengguna Online
+/// (AppBar gradient + avatar + nama + filter + list kartu) supaya transisi
+/// skeleton → konten TIDAK terlihat sama sekali (layout sama persis).
+/// JANGAN taruh logo app di sini: 62% piksel logo itu putih — di atas
+/// background gelap jadi kilatan putih besar yang makin terlihat saat
+/// cold start (jeda lama → loading lebih lama).
 class _AuthSkeletonScreen extends StatelessWidget {
   const _AuthSkeletonScreen();
 
@@ -576,28 +577,59 @@ class _AuthSkeletonScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
+      appBar: AppBar(
+        backgroundColor: AppTheme.headerGradient.colors.first,
+        automaticallyImplyLeading: false,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            box(100, 18),
+            const SizedBox(height: 2),
+            box(60, 12),
+          ],
+        ),
+        actions: const [
+          SizedBox(width: 48),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 14),
             Center(
-              child: Container(
-                width: 92,
-                height: 92,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
+              child: Stack(
+                children: [
+                  Container(
+                    width: 92,
+                    height: 92,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
-            Center(child: box(140, 16)),
-            const SizedBox(height: 6),
-            Center(child: box(90, 11)),
+            Center(child: box(140, 20, r: 8)),
             const SizedBox(height: 20),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
                   Expanded(child: box(0, 52, r: 12)),
