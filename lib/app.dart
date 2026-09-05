@@ -125,7 +125,10 @@ class _AuthGateState extends State<_AuthGate> {
   // Warm-up disk cache (SQLite) — ditunggu MAKSIMAL ini setelah auth siap.
   // Selama menunggu: layar polos bgScreen TANPA elemen abu (nol blink abu).
   Future<void>? _warmFuture;
-  static const _warmTimeout = Duration(seconds: 8);
+  // Warm-gate: disk HANYA cache — tidak layak menahan skeleton lama.
+  // Cap 2 detik (dulu 8s): kalau Keystore/SQLite lambat, konten tetap
+  // tampil; disk load jalan di belakang dan merge saat selesai.
+  static const _warmTimeout = Duration(seconds: 2);
 
   // Kalau DNS/network down lama, coba login ulang otomatis tiap 8 detik
   // (maks 3×) — begitu koneksi pulih, app masuk sendiri tanpa sentuhan user.
@@ -275,10 +278,10 @@ class _SwapMaskState extends State<_SwapMask> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Tahan ~350ms SETELAH frame pertama — Skia masih present 2-5 frame
+      // Tahan ~200ms SETELAH frame pertama — Skia masih present 2-5 frame
       // buffer abu (#b6b6b6) saat raster MainNav berat; mask gelap
       // menutup semuanya, konten muncul saat benar-benar smooth.
-      Future.delayed(const Duration(milliseconds: 350), () {
+      Future.delayed(const Duration(milliseconds: 200), () {
         if (mounted) setState(() => _covered = false);
       });
     });
