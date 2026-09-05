@@ -673,7 +673,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       appBar: AppBar(
         backgroundColor: AppTheme.bgScreen,
         surfaceTintColor: AppTheme.bgScreen,
-        toolbarHeight: 130,
+        toolbarHeight: 155,
         // Admin Panel di KIRI ATAS — hanya untuk zunixe (bukan sesi dummy).
         // Build user: panelBuilder null → tidak pernah tampil.
         leading: IconButton(
@@ -760,9 +760,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                       ),
                       const SizedBox(height: 10),
-                      // Avatar + nama user sendiri di header
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+                      // Avatar di atas, nama di bawahnya — keduanya di tengah
+                      Column(
                         children: [
                           Stack(
                             clipBehavior: Clip.none,
@@ -786,7 +785,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                     ],
                                   ),
                                   child: CircleAvatar(
-                                    radius: 22,
+                                    radius: 27,
                                     backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
                                     backgroundImage: (auth.profile?.avatar ?? '').isNotEmpty
                                         ? MemoryImage(base64Decode(auth.profile!.avatar))
@@ -796,7 +795,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                             (auth.profile?.nickname ?? '?')[0].toUpperCase(),
                                             style: TextStyle(
                                               color: Colors.white,
-                                              fontSize: AppGlyph.avatarInitial(44),
+                                              fontSize: AppGlyph.avatarInitial(54),
                                               fontWeight: FontWeight.w800,
                                             ),
                                           )
@@ -840,23 +839,28 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               ),
                             ],
                           ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              auth.profile?.nickname ?? '-',
-                              style: AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                          const SizedBox(height: 5),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  auth.profile?.nickname ?? '-',
+                                  style: AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (auth.profile?.isRegistered == true) ...[
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.verified,
+                                  size: 15,
+                                  color: Color(0xFF4A90E2),
+                                ),
+                              ],
+                            ],
                           ),
-                          if (auth.profile?.isRegistered == true) ...[
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.verified,
-                              size: 16,
-                              color: Color(0xFF4A90E2),
-                            ),
-                          ],
                         ],
                       ),
                     ],
