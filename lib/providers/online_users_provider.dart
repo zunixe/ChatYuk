@@ -79,46 +79,8 @@ class OnlineUsersProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Muat avatar tersimpan (kv per-uid) ke [_diskAvatars] — PARALEL (batch 20)
-  /// supaya cold start tidak melebihi warm-gate timeout.
-  Future<void> _loadAvatarsToMap(List<UserModel> users) async {
-    const batch = 20;
-    for (int i = 0; i < users.length; i += batch) {
-      final chunk = users.skip(i).take(batch).toList();
-      final results = await Future.wait(chunk.map((u) async {
-        try {
-          final obj = await MessageCache.instance.loadRawObj('avatar:${u.uid}');
-          final a = obj['a'] as String?;
-          return a != null && a.isNotEmpty ? a : '';
-        } catch (_) {
-          return '';
-        }
-      }));
-      for (int j = 0; j < chunk.length; j++) {
-        if (results[j].isEmpty) continue;
-        _diskAvatars[chunk[j].uid] = results[j];
-      }
-    }
-  }
-
   bool _isRenderableAvatar(String a) =>
       a.isNotEmpty && !a.startsWith('avatars/');
-
-  /// Cover avatar path/kosong di [_users] dengan [_diskAvatars].
-  /// Return true kalau ada perubahan.
-  bool _coverWithDiskAvatars() {
-    var changed = false;
-    for (int i = 0; i < _users.length; i++) {
-      final u = _users[i];
-      if (_isRenderableAvatar(u.avatar)) continue;
-      final disk = _diskAvatars[u.uid];
-      if (disk != null && disk.isNotEmpty) {
-        _users[i] = u.copyWith(avatar: disk);
-        changed = true;
-      }
-    }
-    return changed;
-  }
 
   /// Bekukan urutan kartu: posisi dari [_users] dipertahankan, emission
   /// baru hanya menambah user baru di bawah & membuang yang tak lagi online.
