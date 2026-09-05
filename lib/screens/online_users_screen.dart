@@ -59,11 +59,17 @@ void clearAllAvatarCaches() {
 }
 
 String? _processAvatarImage(Uint8List bytes) {
+  // Fallback SAMA PERSIS dengan profile_screen: JPEG 1024 q92 kalau
+  // encoder WebP gagal di device tertentu (dulu q70 300px — jelek).
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
-  final resized = img.copyResize(decoded, width: 300, height: 300);
-  final jpg = img.encodeJpg(resized, quality: 70);
-  return base64Encode(jpg);
+  final resized = img.copyResize(
+    decoded,
+    width: 1024,
+    height: 1024,
+    interpolation: img.Interpolation.cubic,
+  );
+  return base64Encode(img.encodeJpg(resized, quality: 92));
 }
 
 // Proses avatar SAMA dengan profile_screen: WebP 1024 via native encoder,
