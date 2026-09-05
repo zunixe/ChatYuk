@@ -58,26 +58,26 @@ class OnlineUsersProvider extends ChangeNotifier {
       // Avatar di-merge dari kv per-uid (sama seperti pesan foto) supaya
       // list langsung tampil FOTO — bukan inisial → tidak ada pop-in blink.
       final cached = await MessageCache.instance.loadRawList('online_users');
-      if (cached.isEmpty) return;
-      final diskUsers = cached
-          .map((e) => UserModel.fromMap(
-              '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
-          .toList();
-      await _loadAvatarsToMap(diskUsers);
-      if (_users.isEmpty) {
-        // Disk menang race → tampilkan langsung list disk lengkap dengan foto.
-        _users = diskUsers;
-        _coverWithDiskAvatars();
-        _loaded = true;
-        if (!_disposed) notifyListeners();
-      } else {
-        // Stream menang race → jangan buang hasil disk: cover avatar
-        // path/kosong di list aktif dengan foto disk, lalu notify sekali.
-        if (_coverWithDiskAvatars()) {
-          if (!_disposed) notifyListeners();
+      if (cached.isNotEmpty) {
+        final diskUsers = cached
+            .map((e) => UserModel.fromMap(
+                '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
+            .toList();
+        await _loadAvatarsToMap(diskUsers);
+        if (_users.isEmpty) {
+          // Disk menang race → tampilkan langsung list disk lengkap dengan foto.
+          _users = diskUsers;
+          _coverWithDiskAvatars();
+        } else {
+          // Stream menang race → jangan buang hasil disk: cover avatar
+          // path/kosong di list aktif dengan foto disk, lalu notify sekali.
+          _coverWithDiskAvatars();
         }
-        _loaded = true;
       }
+      // SELALU tandai loaded — walau cache kosong (skeleton jangan
+      // menggantung menunggu network).
+      _loaded = true;
+      if (!_disposed) notifyListeners();
     } catch (_) {}
   }
 
