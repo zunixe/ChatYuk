@@ -184,3 +184,24 @@ Jika `supabase db push` timeout lagi:
 - **Isu:** Admin panel devices menampilkan "(profil terhapus)" — baris `user_devices` yatim (profil sudah dihapus cron, device tertinggal).
 - **Fix DB:** `delete from user_devices where user_id not in (select id from profiles)` — 1 orphan dibersihkan. Patch `purge_inactive_accounts`: tambah `delete from public.user_devices where user_id = r.id` sebelum hapus profil → cron berikutnya tidak meninggalkan orphan.
 - **Pembersihan chat akun device (hard delete, 2026-09-02):** 11 chat antar-device (Xiaomi 24129PN74G + Redmi Note 9 Pro) + chat dengan 38 outsider yang hanya pernah chat device-owner → 64 chat rows, ~794 pesan (4 foto + 160 voice) dan file Storage terkait dihapus permanen; 16 outsider yang masih chat user lain DIPERTAHANKAN. Catatan: `storage.objects` tidak bisa di-delete via SQL (trigger protect_delete) — file dihapus via Storage API dari daftar `private_messages.image_path/voice_path` + avatar/galeri profil terhapus.
+
+## 2026-09-05 — 20260903090000_admin_exclude_devices.sql (RE-APPLY)
+
+- **Masalah:** Versi `admin_stats_detail` di DB live masih DRAFT BROKEN (`select array(select uid) into v_excl from admin_excluded_uids() ae`) → error 42703 "column uid does not exist" setiap dipanggil → SEMUA card admin panel (users/detail) kosong. File di repo sudah diperbaiki (alias `ae` + array_agg) TAPI setelah migration tercatat applied → fix tidak pernah sampai ke DB.
+- **Fix:** Re-apply seluruh isi file via `supabase db query --linked -f` (semua create-or-replace, idempoten). Verifikasi: `admin_stats_detail()` → users_all = 46, `admin_stats()` → total_users = 46.
+- **Juga di-apply:** `20260905090000_dummy_profile_edit_fix.sql` (fix RLS profil dummy + sync nickname + validasi RPC).
+- Kedua version sudah di-insert ke `supabase_migrations.schema_migrations` → `db push` tidak akan re-run.
+
+> Pelajaran: migration yang SUDAH tercatat applied tapi file-nya diedit setelahnya TIDAK akan pernah ter-apply ulang — kalau fix SQL-nya kritis, re-apply manual via `supabase db query --linked -f <file>`.
+
+## 2026-09-05 — 20260905100000_admin_stats_exclude_dummies.sql (APPLY + RE-APPLY)
+
+- **Isi:** Dummy tidak dihitung di ringkasan admin. Helper baru `admin_dummy_uids()`; `admin_stats_compute` filter dummy dari total_users/active_today/registered/anon/poin/top_earners/stuck; `admin_stats_detail` buang dummy dari list users_all/active/registered/anonymous. Cache stats dihapus saat apply. Dummy TETAP tampil untuk end-user (online list, nearby) — hanya hidden dari ringkasan admin. Metrik messages/rooms tidak diubah.
+- **Apply:** via `supabase db query --linked -f supabase/migrations/20260905100000_admin_stats_exclude_dummies.sql` (create-or-replace, idempoten). Verifikasi: total_users=44, users_list=44 (58 profil − 14 uid perangkat-exclude − 6 dummy − overlap). Username perangkat-exclude (AntoSusanto, malamputih, aqila, maufollow*, kamukamu, kamusatu, laptop, playwright) terverifikasi TIDAK tampil.
+- ⚠️ **KEJADIAN 2x DI HARI YANG SAMA:** `admin_stats_detail` di DB live DITIMPA DRAFT BROKEN dari luar sesi ini (bukan dari migration repo):
+  - Ke-1 (pagi): `select array(select uid) into v_excl from admin_excluded_uids() ae` → 42703.
+  - Ke-2 (siang): `select array(select distinct x from (select uid from admin_excluded_uids() union all select uid from dummy_accounts) t(x))` → 42703 juga (SET OF uuid TIDAK punya kolom `uid` — WAJIB pakai alias: `from admin_excluded_uids() ae` lalu `array_agg(ae)`).
+  - Gejala: SEMUA card Users ringkasan admin kosong (RPC error → client catch → `{}`).
+  - Fix: re-apply file migration versi benar via `supabase db query --linked -f`, verifikasi `jsonb_array_length(admin_stats_detail()->'users_all') == admin_stats()->>'total_users'`.
+
+> ⚠️ PERINGATAN UNTUK TOOL/AI LAIN: JANGAN me-apply function admin (`admin_stats_detail`, `admin_stats_compute`, `admin_excluded_uids`) dari draft SQL yang belum lolos uji. Sumber kebenaran = file di `supabase/migrations/`. Khusus `admin_excluded_uids()` yang `RETURNS SETOF uuid`: referensi kolom langsung (`select uid from ...`) PASTI gagal 42703 — wajib alias (`ae`) + `array_agg`/`= any()`. Sebelum menimpa, selalu tes: `supabase db query --linked "select set_config('request.jwt.claims', '{\"email\":\"zunixe@gmail.com\",\"role\":\"authenticated\"}', false); select jsonb_array_length((select public.admin_stats_detail())->'users_all')"`.

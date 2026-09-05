@@ -988,6 +988,11 @@ class AuthProvider extends ChangeNotifier {
     debugPrint('[AUTH] becomeDummy done, uid=$_auth.uid, '
         'flag=${_auth.dummySessionActive}');
     await reloadProfile();
+    // Catat device untuk akun dummy — tanpa ini dummy tidak muncul di tab
+    // Perangkat admin (dummy dibuat via edge function, tidak pernah lewat
+    // alur login yang memanggil syncToServer). Tercatat pakai HP admin
+    // (install_id perangkat aktif saat swap).
+    safeUnawaited(DeviceInfoService.instance.syncToServer());
   }
 
   /// Kembali ke akun admin dari sesi dummy. Return false jika token admin
