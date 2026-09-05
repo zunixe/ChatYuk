@@ -285,16 +285,19 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          StoryTextOverlay(
-                            text: _textCtrl.text,
-                            x: _textX,
-                            y: _textY,
-                            colorIndex: _colorIndex,
-                            sizeIndex: _sizeIndex,
-                            scale: _textScale,
-                            rotation: _textRotation,
-                            withBg: _withBg,
-                          ),
+                          // Preview disembunyikan saat mode ketik (TextField
+                          // yang tampil) — kalau dua-duanya aktif teks dobel.
+                          if (!_showTextArea)
+                            StoryTextOverlay(
+                              text: _textCtrl.text,
+                              x: _textX,
+                              y: _textY,
+                              colorIndex: _colorIndex,
+                              sizeIndex: _sizeIndex,
+                              scale: _textScale,
+                              rotation: _textRotation,
+                              withBg: _withBg,
+                            ),
                           // ── Tong sampah atas tengah — drag teks ke sini
                           //    untuk hapus (muncul saat teks ada & drag aktif) ──
                           if (_hasText && !_showTextArea)
