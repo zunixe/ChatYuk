@@ -508,18 +508,6 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                                               : 'color'),
                                     ),
                                     const Spacer(),
-                                    IconButton(
-                                      tooltip: s.storyTextBgTooltip,
-                                      onPressed: () =>
-                                          setState(() => _withBg = !_withBg),
-                                      icon: Icon(
-                                        Icons.crop_square_rounded,
-                                        color: _withBg
-                                            ? AppTheme.primary
-                                            : Colors.white38,
-                                        size: 20,
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ],
