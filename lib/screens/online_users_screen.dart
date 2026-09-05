@@ -671,13 +671,16 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
-        backgroundColor: AppTheme.headerGradient.colors.first,
+        backgroundColor: AppTheme.bgScreen,
+        surfaceTintColor: AppTheme.bgScreen,
         // Admin Panel di KIRI ATAS — hanya untuk zunixe (bukan sesi dummy).
         // Build user: panelBuilder null → tidak pernah tampil.
         leading: IconButton(
           tooltip: s.searchHint,
-          icon: Icon(_isSearching ? Icons.close : Icons.search_rounded),
-          color: Colors.white,
+          icon: Icon(
+            _isSearching ? Icons.close : Icons.search_rounded,
+            color: AppTheme.textPrimary,
+          ),
           onPressed: () {
             setState(() {
               _isSearching = !_isSearching;
@@ -688,9 +691,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               }
             });
           },
-        ),
-        flexibleSpace: Container(
-          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
@@ -714,17 +714,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                       _search = v;
                       _page = 1;
                     }),
-                    style: AppText.body.copyWith(color: Colors.white),
+                    style: AppText.body.copyWith(color: AppTheme.textPrimary),
                     decoration: InputDecoration(
                       isDense: true,
                       hintText: s.searchHint,
-                      hintStyle: AppText.body.copyWith(color: Colors.white54),
-                      prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 20),
+                      hintStyle: AppText.body.copyWith(color: AppTheme.textSecondary),
+                      prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
                       prefixIconConstraints:
                           const BoxConstraints(minWidth: 36, minHeight: 0),
                       suffixIcon: _search.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear, size: 18, color: Colors.white70),
+                              icon: Icon(Icons.clear, size: 18, color: AppTheme.textSecondary),
                               onPressed: () {
                                 _searchCtrl.clear();
                                 setState(() {
@@ -735,7 +735,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                             )
                           : null,
                       filled: true,
-                      fillColor: Colors.white24,
+                      fillColor: AppTheme.bgCard,
                       contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -752,17 +752,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     children: [
                       Text(
                         s.titleOnline,
-                        style: AppText.title.copyWith(color: Colors.white),
+                        style: AppText.title.copyWith(color: AppTheme.textPrimary),
                       ),
                       Text(
                         '${prov.users.length} ${s.onlineActiveUsers}',
-                        style: AppText.bodySmall.copyWith(color: Colors.white70),
+                        style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                       ),
                     ],
                   ),
                 ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: AppTheme.textPrimary),
         actions: [
           // "Orang Sekitar" (nearby) hanya untuk akun terdaftar — kombinasi
           // lokasi + anon paling sering memicu flag kebijakan Play.

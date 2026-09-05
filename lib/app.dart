@@ -578,11 +578,9 @@ class _AuthSkeletonScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
-        backgroundColor: AppTheme.headerGradient.colors.first,
+        backgroundColor: AppTheme.bgScreen,
+        surfaceTintColor: AppTheme.bgScreen,
         automaticallyImplyLeading: false,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(gradient: AppTheme.headerGradient),
-        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
