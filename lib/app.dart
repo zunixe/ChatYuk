@@ -565,18 +565,56 @@ class _AuthSkeletonScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Skeleton SELALU sama dengan list Pengguna Online (tab pertama) — jadi
-    // tidak ada "kotak abu muncul" (flash) saat transisi warm-gate → MainNav.
-    // Dulu: warm-gate layar polos → MainNav skeleton → konten = kotak abu
-    // "nongol" telat (penyebab flash yang dikeluhkan).
+    Widget box(double w, double h, {double r = 6}) => Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(r),
+      ),
+    );
+
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       body: SafeArea(
-        child: ListView.builder(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: 6,
-          itemBuilder: (_, _) => const SkeletonCard(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 14),
+            Center(
+              child: Container(
+                width: 92,
+                height: 92,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(child: box(140, 16)),
+            const SizedBox(height: 6),
+            Center(child: box(90, 11)),
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  Expanded(child: box(0, 52, r: 12)),
+                  const SizedBox(width: 12),
+                  Expanded(child: box(0, 52, r: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+                itemCount: 8,
+                itemBuilder: (_, _) => const SkeletonCard(),
+              ),
+            ),
+          ],
         ),
       ),
     );
