@@ -19,6 +19,8 @@ import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../widgets/skeleton_card.dart';
 import '../services/media_disk_cache.dart';
+import '../services/storage_photo_service.dart';
+import '../models/story_model.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../services/chat_service.dart';
@@ -27,6 +29,9 @@ import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
+import 'story_composer_screen.dart';
+import 'story_viewer_screen.dart';
+import '../providers/story_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -487,6 +492,110 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     await Share.share(s.shareInviteMsg(link));
   }
 
+  // ── Story: buka komposer (langsung gallery → composer) ──
+  Future<void> _openStoryComposer() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1600,
+    );
+    if (picked == null || !mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StoryComposerScreen(picked: picked),
+      ),
+    );
+    if (mounted) {
+      // Refresh tray (optimistic di provider sudah jalan; ini sinkron
+      // ulang untuk urutan + unseen dari server).
+      context.read<StoryProvider>().refresh(silent: true);
+    }
+  }
+
+  /// Tray story horizontal — kotak portrait rounded + ring gradient
+  /// (belum dilihat) / abu (sudah). Tile pertama = milik sendiri
+  /// (badge + kalau belum ada story).
+  Widget _buildStoryTray(BuildContext ctx, AuthProvider auth) {
+    final sp = ctx.watch<StoryProvider>();
+    final myUid = auth.uid ?? '';
+    final items = sp.tray;
+    // Anon: tray tetap tampil (bisa menonton story 'everyone').
+    final showOwnTile = !auth.isAnonymous;
+    return SizedBox(
+      height: 104,
+      child: items.isEmpty && !showOwnTile
+          ? const SizedBox.shrink()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              itemCount: items.length + (showOwnTile && !_hasOwn(items) ? 1 : 0),
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, i) {
+                // Slot pertama = tile milik sendiri (dari tray kalau ada,
+                // else tile "+").
+                final ownIdx = items.indexWhere((t) => t.own && t.slideCount > 0);
+                if (ownIdx >= 0) {
+                  // Own item sudah di list (urut server: own duluan) —
+                  // render normal, tambah badge "+" kecil.
+                  if (i == ownIdx) {
+                    return _StoryTrayTile(
+                      item: items[i],
+                      onTap: () => _openViewer(sp, i),
+                      isOwnWithAdd: showOwnTile,
+                    );
+                  }
+                  // Geser indeks: sebelum own → i-0 setelah own slot tetap.
+                  final shifted = i > ownIdx ? i - 1 : i;
+                  if (shifted >= items.length ||
+                      items[shifted].authorId == myUid) {
+                    return const SizedBox.shrink();
+                  }
+                  return _StoryTrayTile(
+                    item: items[shifted],
+                    onTap: () => _openViewer(sp, i),
+                  );
+                }
+                // Belum punya story sendiri → tile "+" di depan.
+                if (showOwnTile && i == 0) {
+                  return _OwnAddTile(onTap: _openStoryComposer);
+                }
+                final shifted = i - 1;
+                if (shifted < 0 || shifted >= items.length) {
+                  return const SizedBox.shrink();
+                }
+                return _StoryTrayTile(
+                  item: items[shifted],
+                  onTap: () => _openViewer(sp, shifted),
+                );
+              },
+            ),
+    );
+  }
+
+  bool _hasOwn(List items) =>
+      items.any((t) => t.own && t.slideCount > 0);
+
+  void _openViewer(StoryProvider sp, int index) {
+    final items = sp.tray
+        .where((t) => t.slideCount > 0)
+        .toList();
+    // Re-map index kasar: cari posisi di list tersaring.
+    final filtered = sp.tray.where((t) => t.slideCount > 0).toList();
+    final target = filtered.isEmpty ? 0 : index.clamp(0, filtered.length - 1);
+    if (items.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StoryViewerScreen(
+          items: items,
+          initialIndex: target,
+        ),
+      ),
+    );
+  }
+
   bool _scrollDebounce = false;
 
   void _onScroll() {
@@ -821,120 +930,156 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   ),
                 ),
         ),
-        // Avatar + nama user DI BAWAH toolbar (preferredSize) — tidak ikut
+        // Avatar + nama user + TRAY STORY (preferredSize) — tidak ikut
         // hilang saat mode search aktif.
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
+          preferredSize: const Size.fromHeight(110),
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Stack(
-                  clipBehavior: Clip.none,
+                // ── Kolom avatar sendiri + nickname di bawahnya ──
+                Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    GestureDetector(
-                      onTap: () {
-                        final b64 = auth.profile?.avatar ?? '';
-                        final init = (auth.profile?.nickname ?? '?')[0].toUpperCase();
-                        _showAvatarZoom(b64, AppTheme.primary, init);
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black26,
-                              blurRadius: 6,
-                              offset: Offset(0, 2),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            final b64 = auth.profile?.avatar ?? '';
+                            final init =
+                                (auth.profile?.nickname ?? '?')[0].toUpperCase();
+                            _showAvatarZoom(b64, AppTheme.primary, init);
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 6,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
                             ),
-                          ],
+                            child: CircleAvatar(
+                              radius: 27,
+                              backgroundColor:
+                                  AppTheme.primary.withValues(alpha: 0.15),
+                              backgroundImage:
+                                  (auth.profile?.avatar ?? '').isNotEmpty
+                                      ? MemoryImage(
+                                          base64Decode(auth.profile!.avatar))
+                                      : null,
+                              child: (auth.profile?.avatar ?? '').isEmpty
+                                  ? Text(
+                                      (auth.profile?.nickname ?? '?')[0]
+                                          .toUpperCase(),
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: AppGlyph.avatarInitial(54),
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
                         ),
-                        child: CircleAvatar(
-                          radius: 27,
-                          backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
-                          backgroundImage: (auth.profile?.avatar ?? '').isNotEmpty
-                              ? MemoryImage(base64Decode(auth.profile!.avatar))
-                              : null,
-                          child: (auth.profile?.avatar ?? '').isEmpty
-                              ? Text(
-                                  (auth.profile?.nickname ?? '?')[0].toUpperCase(),
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: AppGlyph.avatarInitial(54),
-                                    fontWeight: FontWeight.w800,
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: GestureDetector(
+                            onTap: _uploadingAvatar
+                                ? null
+                                : _pickAndUploadAvatar,
+                            child: Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 3,
                                   ),
-                                )
-                              : null,
+                                ],
+                              ),
+                              child: _uploadingAvatar
+                                  ? Padding(
+                                      padding: EdgeInsets.all(4),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        color: AppTheme.primary,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.camera_alt,
+                                      color: AppTheme.primary,
+                                      size: 11,
+                                    ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: GestureDetector(
-                        onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 3,
+                    const SizedBox(height: 2),
+                    SizedBox(
+                      width: 72,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              auth.profile?.nickname ?? '-',
+                              style: AppText.bodyStrong.copyWith(
+                                  color: AppTheme.textPrimary),
+                            ),
+                            if (auth.profile?.isRegistered == true) ...[
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.verified,
+                                size: 13,
+                                color: Color(0xFF4A90E2),
                               ),
                             ],
-                          ),
-                          child: _uploadingAvatar
-                              ? Padding(
-                                  padding: EdgeInsets.all(4),
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.5,
-                                    color: AppTheme.primary,
-                                  ),
-                                )
-                              : Icon(
-                                  Icons.camera_alt,
-                                  color: AppTheme.primary,
-                                  size: 11,
-                                ),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    auth.profile?.nickname ?? '-',
-                    style: AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (auth.profile?.isRegistered == true) ...[
-                  const SizedBox(width: 4),
-                  const Icon(
-                    Icons.verified,
-                    size: 15,
-                    color: Color(0xFF4A90E2),
-                  ),
-                ],
+                const SizedBox(width: 10),
+                // ── Tray story horizontal ──
+                Expanded(child: _buildStoryTray(context, auth)),
               ],
             ),
           ),
         ),
         iconTheme: IconThemeData(color: AppTheme.textPrimary),
         actions: [
+          // Tombol + buat story — hanya akun terdaftar (anon dilarang,
+          // server RLS juga menolak). SEBELUM ikon Orang Sekitar.
+          if (!auth.isAnonymous)
+            IconButton(
+              tooltip: s.storyAddTooltip,
+              icon: const Icon(Icons.add_circle_outline),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: _openStoryComposer,
+            ),
           // "Orang Sekitar" (nearby) hanya untuk akun terdaftar — kombinasi
           // lokasi + anon paling sering memicu flag kebijakan Play.
           if (!auth.isAnonymous)
             IconButton(
               tooltip: s.nearbyTitle,
               icon: const Icon(Icons.explore_outlined),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const NearbyScreen()),
@@ -1523,5 +1668,242 @@ class _UserCard extends StatelessWidget {
         ),
       ),
     ));
+  }
+}
+
+// ── Story tray widgets ──────────────────────────────────────────────────────
+
+/// Kotak story satu orang: portrait rounded 64×96, thumbnail slide terbaru,
+/// ring gradient (belum dilihat) / abu (sudah), username di bawah.
+class _StoryTrayTile extends StatefulWidget {
+  final StoryTrayItem item;
+  final VoidCallback onTap;
+  final bool isOwnWithAdd;
+
+  const _StoryTrayTile({
+    required this.item,
+    required this.onTap,
+    this.isOwnWithAdd = false,
+  });
+
+  @override
+  State<_StoryTrayTile> createState() => _StoryTrayTileState();
+}
+
+class _StoryTrayTileState extends State<_StoryTrayTile> {
+  Uint8List? _thumb;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThumb();
+  }
+
+  Future<void> _loadThumb() async {
+    final p = widget.item.thumbPath;
+    if (p.isEmpty) return;
+    if (StoragePhotoService.instance.isAvatarPath(p)) return;
+    try {
+      final b = await StoragePhotoService.instance.downloadBytes(p);
+      if (mounted) setState(() => _thumb = b);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final it = widget.item;
+    // Belum dilihat → ring gradient ungu-biru. Sudah dilihat → border
+    // PUTIH 2px + shadow, sama seperti avatar di header.
+    final seen = !it.hasUnseen;
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: SizedBox(
+        width: 64,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 64,
+                  height: 96,
+                  padding:
+                      seen ? EdgeInsets.zero : const EdgeInsets.all(2.5),
+                  decoration: BoxDecoration(
+                    gradient: seen
+                        ? null
+                        : const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFF9C27B0),
+                              Color(0xFF2196F3)
+                            ],
+                          ),
+                    border: seen
+                        ? Border.all(color: Colors.white, width: 2)
+                        : null,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: seen
+                        ? [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgCard,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _thumb != null
+                        ? Image.memory(_thumb!, fit: BoxFit.cover, alignment: Alignment.center)
+                        : Center(
+                            child: Text(
+                              it.authorName.isNotEmpty
+                                  ? it.authorName[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: AppGlyph.avatarInitial(64),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+                // Gradient + username di dalam card
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    height: 28,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(12),
+                        bottomRight: Radius.circular(12),
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.0),
+                          Colors.black.withValues(alpha: 0.7),
+                        ],
+                      ),
+                    ),
+                    alignment: Alignment.bottomCenter,
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      it.own
+                          ? context.read<LocaleProvider>().s.storyMine
+                          : it.authorName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: AppText.micro.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                if (widget.isOwnWithAdd)
+                  Positioned(
+                    right: -3,
+                    bottom: -3,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: const Icon(Icons.add, size: 13, color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tile "+" milik sendiri saat belum punya story aktif.
+class _OwnAddTile extends StatelessWidget {
+  final VoidCallback onTap;
+  const _OwnAddTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 64,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 64,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppTheme.bgInput,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.divider),
+              ),
+              child: Icon(
+                Icons.add,
+                size: AppGlyph.md,
+                color: AppTheme.primary,
+              ),
+            ),
+            // Label "Tambah" di dalam card (konsisten dgn tile story).
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                height: 28,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(12),
+                    bottomRight: Radius.circular(12),
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.0),
+                      Colors.black.withValues(alpha: 0.7),
+                    ],
+                  ),
+                ),
+                alignment: Alignment.bottomCenter,
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  context.read<LocaleProvider>().s.storyAddToStory,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppText.micro.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
