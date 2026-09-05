@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -30,6 +31,7 @@ import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
 import 'story_composer_screen.dart';
+import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
 import '../providers/story_provider.dart';
 import '../providers/call_provider.dart';
@@ -111,6 +113,13 @@ class _AsyncAvatar extends StatefulWidget {
 class _AsyncAvatarState extends State<_AsyncAvatar> {
   MemoryImage? _provider;
 
+  /// UID pendek untuk log — aman untuk uid kosong/pendek.
+  String get _uid8 => widget.uid.length >= 8
+      ? widget.uid.substring(0, 8)
+      : widget.uid.isEmpty
+          ? '-'
+          : widget.uid;
+
   @override
   void initState() {
     super.initState();
@@ -122,7 +131,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     final srcType = src.isEmpty ? 'EMPTY' : src.startsWith('avatars/') ? 'PATH' : 'B64';
     // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
     if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) {
-      debugPrint('[AVATAR] ${widget.uid.substring(0,8)} KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}');
+      debugPrint('[AVATAR] $_uid8 KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       return;
     }
     _avatarLastSrcByUid[widget.uid] = src;
@@ -140,7 +149,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
           widget.uid,
           () => MemoryImage(_avatarBytesByUid[widget.uid]!),
         );
-        debugPrint('[AVATAR] ${widget.uid.substring(0,8)} FROM-DISK');
+        debugPrint('[AVATAR] $_uid8 FROM-DISK');
       }
       // Tidak ada di disk → biarkan inisial; batch network akan mengisi.
       return;
@@ -148,7 +157,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     // Instance MemoryImage stabil per-uid → pakai apa adanya.
     final stable = _avatarImageByUid[widget.uid];
     if (stable != null && _provider != stable) {
-      debugPrint('[AVATAR] ${widget.uid.substring(0,8)} SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}');
+      debugPrint('[AVATAR] $_uid8 SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       _provider = stable;
       return;
     }
@@ -525,19 +534,22 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     await Share.share(s.shareInviteMsg(link));
   }
 
-  // ── Story: buka komposer (langsung gallery → composer) ──
+  // ── Story: buka komposer (kamera + galeri satu halaman → composer) ──
   Future<void> _openStoryComposer() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1600,
+    // Picker ala IG: preview kamera live + strip galeri di bawah —
+    // jepret ATAU pilih foto galeri dalam satu halaman.
+    final picked = await Navigator.push<File>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const StoryCameraPickerScreen(),
+      ),
     );
     if (picked == null || !mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => StoryComposerScreen(picked: picked),
+        builder: (_) =>
+            StoryComposerScreen(picked: XFile(picked.path)),
       ),
     );
     if (mounted) {
