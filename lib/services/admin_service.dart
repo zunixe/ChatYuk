@@ -267,6 +267,20 @@ class AdminService {
     );
   }
 
+  /// Cek nickname tersedia untuk dummy [excludeUid] (abaikan miliknya
+  /// sendiri saat edit). Nickname unik di profiles — tanpa pre-check ini,
+  /// create/edit dummy dengan nickname duplikat gagal di server dengan
+  /// error generik. Case-sensitive exact match (server RPC yang validasi
+  /// case-insensitive sebagai sumber kebenaran).
+  Future<bool> isNicknameAvailable(String nickname, {String? excludeUid}) async {
+    var query = _sb.from('profiles').select('id');
+    if (excludeUid != null && excludeUid.isNotEmpty) {
+      query = query.neq('id', excludeUid);
+    }
+    final res = await query.eq('nickname', nickname).limit(1).maybeSingle();
+    return res == null;
+  }
+
   /// List semua akun dummy: uid, email, password, nickname, status, last_seen.
   Future<List<Map<String, dynamic>>> listDummies() async {
     final res = await _sb.rpc('admin_list_dummies');

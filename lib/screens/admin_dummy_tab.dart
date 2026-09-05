@@ -9,6 +9,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_service.dart';
 import '../providers/theme_provider.dart';
+import '../utils.dart';
 
 /// Tab Dummy di Admin Panel — buat/daftarkan akun dummy (anonymous, tanpa
 /// email/password) dengan gender/umur/negara/kota, chat sebagai akun itu
@@ -110,8 +111,34 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       _toast(s, s.dummyInvalidInput);
       return;
     }
+    // Validasi sama dengan sheet Edit Profil (3-20, format) — RPC server
+    // juga menolak nickname di luar range ini (dummy_profile_edit_fix).
+    if (nick.length < 3) {
+      _toast(s, s.errNicknameShort);
+      return;
+    }
+    if (nick.length > 20) {
+      _toast(s, s.errNicknameLong);
+      return;
+    }
+    if (!isValidNickname(nick)) {
+      _toast(s, s.errNicknameInvalid);
+      return;
+    }
     setState(() => _busy = true);
     try {
+      // Pre-check duplikat — error spesifik sebelum kirim ke server
+      // (server tetap validasi sebagai sumber kebenaran, case-insensitive).
+      final available = await _svc.isNicknameAvailable(
+        nick,
+        excludeUid: _editingUid,
+      );
+      if (!available) {
+        if (!mounted) return;
+        setState(() => _busy = false);
+        _toast(s, s.errNicknameTaken);
+        return;
+      }
       if (_editingUid != null) {
         await _svc.updateDummyProfile(
           uid: _editingUid!,
