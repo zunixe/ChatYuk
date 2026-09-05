@@ -352,7 +352,12 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                                       ),
                                       cursorColor: Colors.white,
                                       decoration: InputDecoration(
+                                        // Override theme global (filled:true +
+                                        // fillColor) — murni kursor transparan.
+                                        filled: false,
                                         border: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        focusedBorder: InputBorder.none,
                                         isDense: true,
                                         hintText: s.storyAddTextHint,
                                         hintStyle: TextStyle(
