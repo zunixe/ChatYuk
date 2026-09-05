@@ -108,6 +108,33 @@ class AppGlyph {
   static double avatarInitial(double diameter) => diameter * 0.38;
 }
 
+/// Ukuran teks overlay story (di atas foto) — dipakai composer & viewer
+/// lewat widget shared StoryTextOverlay. 3 opsi, ikut skala resmi (16/20/24).
+class StoryText {
+  StoryText._();
+
+  static const double sm = 16;
+  static const double md = 20;
+  static const double lg = 24;
+
+  static double size(int i) => i <= 0 ? sm : (i == 1 ? md : lg);
+
+  /// Palette 8 warna teks overlay (sesuai StoryTextOverlay).
+  static const List<Color> palette = [
+    Color(0xFFFFFFFF), // putih
+    Color(0xFF111111), // hitam
+    Color(0xFFF44336), // merah
+    Color(0xFFEC407A), // pink
+    Color(0xFF9C27B0), // ungu
+    Color(0xFF2196F3), // biru
+    Color(0xFF00BCD4), // cyan
+    Color(0xFFFFEB3B), // kuning
+  ];
+
+  /// Warna default overlay (indeks palette).
+  static const int defaultColorIndex = 0;
+}
+
 class AppTheme {
   AppTheme._();
 

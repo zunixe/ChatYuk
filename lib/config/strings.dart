@@ -855,6 +855,62 @@ class S {
       ? 'Ayo chat bareng di ChatYuk! Download sekarang:\n$link'
       : 'Chat with me on ChatYuk! Download now:\n$link';
   String get shareTooltip => isId ? 'Ajak Teman' : 'Invite Friends';
+
+  // ── Story (ala Instagram) ──
+  String get storyAddTooltip => isId ? 'Buat Story' : 'Create Story';
+  String get storyComposerTitle => isId ? 'Story Baru' : 'New Story';
+  String get storyAddTextHint => isId ? 'Tulis sesuatu…' : 'Say something…';
+  String get storyVisibilityLabel => isId
+      ? 'Siapa yang bisa melihat story ini?'
+      : 'Who can see this story?';
+  String get storyVisibilityEveryone =>
+      isId ? 'Semua orang' : 'Everyone';
+  String get storyVisibilityEveryoneDesc => isId
+      ? 'Termasuk pengguna anonim'
+      : 'Includes anonymous users';
+  String get storyVisibilityRegistered =>
+      isId ? 'Terdaftar saja' : 'Registered only';
+  String get storyVisibilityRegisteredDesc => isId
+      ? 'Hanya pengguna terdaftar'
+      : 'Registered users only';
+  String get storyVisibilityFriends => isId ? 'Teman' : 'Friends';
+  String get storyVisibilityFriendsDesc => isId
+      ? 'Hanya teman dua arah'
+      : 'Mutual friends only';
+  String get storyBtnPublish => isId ? 'Bagikan ke Story' : 'Share to Story';
+  String get storyMine => isId ? 'Story Saya' : 'My Story';
+  String get storyEmptyTray => isId ? 'Belum ada story' : 'No stories yet';
+  String get storyAddToStory => isId ? 'Tambah' : 'Add';
+  String get storyUploading => isId ? 'Mengunggah…' : 'Uploading…';
+  String get storyPublishFail =>
+      isId ? 'Gagal membagikan story' : 'Failed to share story';
+  String get storyDeleted => isId ? 'Story dihapus' : 'Story deleted';
+  String get storyDeleteFail =>
+      isId ? 'Gagal menghapus story' : 'Failed to delete story';
+  String get storyDeleteSlideTitle =>
+      isId ? 'Hapus slide ini?' : 'Delete this slide?';
+  String get storyDeleteSlideMsg => isId
+      ? 'Slide akan dihapus permanen dari story kamu.'
+      : 'This slide will be permanently removed from your story.';
+  String get storyViewersTitle =>
+      isId ? 'Penonton Story' : 'Story Viewers';
+  String get storyViewersEmpty =>
+      isId ? 'Belum ada yang melihat' : 'No views yet';
+  String get storyOwnBadge => isId ? 'Kamu' : 'You';
+  String get storyTextPaletteTooltip =>
+      isId ? 'Warna teks' : 'Text color';
+  String get storyTextSizeTooltip => isId ? 'Ukuran teks' : 'Text size';
+  String get storyTextBgTooltip =>
+      isId ? 'Latar teks' : 'Text background';
+  String get storyAnonBlocked => isId
+      ? 'Story hanya untuk pengguna terdaftar'
+      : 'Stories are for registered users only';
+  String get storySlideLimit => isId
+      ? 'Batas 10 story per 24 jam'
+      : 'Limit is 10 stories per 24 hours';
+  String get storyTapLeftRightHint => isId
+      ? 'Tap sisi kanan/kiri untuk pindah'
+      : 'Tap right/left side to navigate';
   // ── Foto terkunci (paywall) ──
   String get photoLockedTitle => isId ? 'Foto Terkunci' : 'Locked Photo';
   String get photoLockedHint =>
