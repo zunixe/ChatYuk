@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'dart:ui' as ui;
 
 import '../config/strings.dart';
 import '../config/theme.dart';
@@ -61,6 +63,13 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   String _toolsPanel = '';
   bool _showTextArea = false;
 
+  // ── Transformasi foto (zoom/putar/geser) — di-bake ke gambar saat publish ──
+  double _imgScale = 1.0;
+  double _imgScaleBase = 1.0;
+  double _imgRotation = 0;
+  double _imgRotationBase = 0;
+  Offset _imgOffset = Offset.zero;
+
   Color get _textColor => _colorIndex >= 0 &&
           _colorIndex < StoryText.palette.length
       ? StoryText.palette[_colorIndex]
@@ -79,9 +88,41 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     final bytes = await widget.picked.readAsBytes();
     if (!mounted) return;
     setState(() => _bytes = bytes);
-    final b64 = await compute(_processStoryImage, bytes);
-    if (!mounted) return;
-    setState(() => _b64 = b64);
+    try {
+      final b64 = await compute(_processStoryImage, bytes);
+      if (!mounted) return;
+      setState(() => _b64 = b64);
+    } catch (e) {
+      debugPrint('[StoryComposer] process error: $e');
+      // Fallback: pakai bytes mentah — send tidak pernah mati permanen.
+      if (!mounted) return;
+      setState(() => _b64 = base64Encode(bytes));
+    }
+  }
+
+  /// Render foto dgn transformasi jadi PNG bytes (untuk dibake ke final).
+  Future<Uint8List> _renderTransformed(Uint8List src) async {
+    final codec =
+        await ui.instantiateImageCodec(src, targetWidth: 1080);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0,
+        image.width.toDouble(), image.height.toDouble()));
+    canvas.translate(image.width / 2, image.height / 2);
+    canvas.rotate(_imgRotation);
+    canvas.scale(_imgScale);
+    canvas.translate(-image.width / 2 + _imgOffset.dx,
+        -image.height / 2 + _imgOffset.dy);
+    canvas.drawImage(image, Offset.zero, Paint());
+    final picture = recorder.endRecording();
+    final rendered = await picture.toImage(
+        image.width, image.height);
+    final data = await rendered.toByteData(
+        format: ui.ImageByteFormat.png);
+    image.dispose();
+    rendered.dispose();
+    return data!.buffer.asUint8List();
   }
 
   @override
@@ -96,11 +137,18 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
     final uid = auth.uid;
-    if (uid == null || _b64.isEmpty) return;
+    if (uid == null || _bytes == null) return;
     setState(() => _publishing = true);
     try {
+      // Bake transformasi (zoom/rotasi/geser) + teks ke gambar final.
+      final transformed = _imgScale != 1.0 ||
+              _imgRotation != 0 ||
+              _imgOffset != Offset.zero
+          ? await _renderTransformed(_bytes!)
+          : _bytes!;
+      final b64 = await compute(_processStoryImage, transformed);
       final path = await StoragePhotoService.instance
-          .uploadStoryImage(uid: uid, base64: _b64);
+          .uploadStoryImage(uid: uid, base64: b64);
       if (path == null || path.isEmpty) throw Exception('upload_failed');
       final ok = await context.read<StoryProvider>().publish(
             imagePath: path,
@@ -245,23 +293,47 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
               builder: (ctx, c) => Stack(
                 fit: StackFit.expand,
                 children: [
-                  // ── Foto seukuran layar ──
+                  // ── Foto dgn transformasi (zoom/putar/geser) ──
                   Positioned.fill(
-                    child: Image.memory(_bytes!, fit: BoxFit.fitHeight),
+                    child: AnimatedScale(
+                      scale: _showTextArea ? 0.94 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: AnimatedOpacity(
+                        opacity: _showTextArea ? 0.55 : 1.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()
+                            ..translate(_imgOffset.dx, _imgOffset.dy)
+                            ..rotateZ(_imgRotation)
+                            ..scale(_imgScale),
+                          child: Image.memory(_bytes!,
+                              fit: BoxFit.fitHeight),
+                        ),
+                      ),
+                    ),
                   ),
-                  // ── Zona interaktif: drag teks / tap tutup panel ──
+                  // ── Gesture: teks aktif → kontrol teks; else → foto ──
                   Positioned.fill(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onScaleStart: _hasText && !_showTextArea
-                          ? _onScaleStart
-                          : null,
-                      onScaleUpdate: _hasText && !_showTextArea
-                          ? (d) => _onScale(d, c.biggest)
-                          : null,
-                      onScaleEnd: _hasText && !_showTextArea
-                          ? _onScaleEnd
-                          : null,
+                      // FOTO: zoom/putar/geser (kalau tidak sedang edit teks)
+                      onScaleStart: _showTextArea
+                          ? null
+                          : (d) {
+                              _imgScaleBase = _imgScale;
+                              _imgRotationBase = _imgRotation;
+                            },
+                      onScaleUpdate: _showTextArea
+                          ? null
+                          : (d) => setState(() {
+                                _imgScale =
+                                    (_imgScaleBase * d.scale)
+                                        .clamp(1.0, 5.0);
+                                _imgRotation =
+                                    _imgRotationBase + d.rotation;
+                                _imgOffset += d.focalPointDelta;
+                              }),
                       // Klik 2x pada teks jadi → mode edit.
                       onDoubleTap: _hasText && !_showTextArea
                           ? () {
