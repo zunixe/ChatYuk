@@ -14,6 +14,7 @@ class StoryTextOverlay extends StatelessWidget {
   final int colorIndex;
   final int sizeIndex;
   final double scale;
+  final double rotation;
   final bool withBg;
 
   const StoryTextOverlay({
@@ -24,6 +25,7 @@ class StoryTextOverlay extends StatelessWidget {
     this.colorIndex = 0,
     this.sizeIndex = 1,
     this.scale = 1.0,
+    this.rotation = 0,
     this.withBg = false,
   });
 
@@ -51,25 +53,28 @@ class StoryTextOverlay extends StatelessWidget {
           -1 + 2 * y.clamp(0.0, 1.0)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: withBg
-            ? Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
+        child: Transform.rotate(
+          angle: rotation,
+          child: withBg
+              ? Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    text,
+                    style: style,
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : Text(
                   text,
                   style: style,
                   textAlign: TextAlign.center,
                 ),
-              )
-            : Text(
-                text,
-                style: style,
-                textAlign: TextAlign.center,
-              ),
+        ),
       ),
     );
   }
