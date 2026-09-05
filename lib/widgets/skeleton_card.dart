@@ -3,19 +3,19 @@ import '../config/theme.dart';
 
 /// Kartu skeleton placeholder untuk list user (dipakai saat loading).
 /// Dipakai di OnlineUsersScreen & skeleton loading screen auth.
+///
+/// TANPA background kotak — dulu pakai bgCard (putih di light mode /
+/// abu di dark mode) yang terlihat sebagai "kotak putih/abu menutupi
+/// list". Sekarang hanya bentuk placeholder (lingkaran + garis) dengan
+/// tint primary tipis, menyatu dengan bgScreen → nol kotak.
 class SkeletonCard extends StatelessWidget {
   final double height;
   const SkeletonCard({super.key, this.height = 64});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(14),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 12, right: 12),
       child: Row(children: [
         Container(
           width: 40,
