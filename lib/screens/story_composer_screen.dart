@@ -44,9 +44,11 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   // Default di tengah halaman (bukan bawah) supaya kursor tidak
   // ketutup keyboard saat mulai mengetik. User bisa geser manual.
   double _textY = 0.45;
-  // Skala pinch-to-zoom (1 jari = geser, 2 jari = besar/kecil).
+  // Skala pinch-to-zoom (1 jari = geser, 2 jari = besar/kecil + putar).
   double _textScale = 1.0;
   double _scaleBase = 1.0;
+  double _textRotation = 0;
+  double _rotationBase = 0;
   // Drag teks ke tong sampah (atas tengah) → teks dihapus ala IG.
   bool _dragOverTrash = false;
   int _colorIndex = StoryText.defaultColorIndex;
@@ -55,6 +57,8 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   String _visibility = 'registered';
   bool _publishing = false;
   bool _showTextTools = false;
+  // Panel alat aktif di atas bar tombol: '' (tidak ada), 'size', 'color'.
+  String _toolsPanel = '';
   bool _showTextArea = false;
 
   Color get _textColor => _colorIndex >= 0 &&
@@ -137,11 +141,13 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   // focalPointDelta = gerakan, scale = rasio terhadap awal gestur.
   void _onScaleStart(ScaleStartDetails d) {
     _scaleBase = _textScale;
+    _rotationBase = _textRotation;
   }
 
   void _onScale(ScaleUpdateDetails d, Size boxSize) {
     setState(() {
       _textScale = (_scaleBase * d.scale).clamp(0.5, 3.0);
+      _textRotation = _rotationBase + d.rotation;
       if (d.focalPointDelta.distance > 0) {
         _textX =
             (_textX + d.focalPointDelta.dx / boxSize.width).clamp(0.0, 1.0);
@@ -160,8 +166,10 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
         _textCtrl.clear();
         _showTextArea = false;
         _showTextTools = false;
+        _toolsPanel = '';
         _dragOverTrash = false;
         _textScale = 1.0;
+        _textRotation = 0;
         _textX = 0.5;
         _textY = 0.45;
       });
@@ -269,6 +277,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                           setState(() {
                             _showTextTools = false;
                             _showTextArea = false;
+                            _toolsPanel = '';
                           });
                           _textFocus.unfocus();
                         }
@@ -283,6 +292,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                             colorIndex: _colorIndex,
                             sizeIndex: _sizeIndex,
                             scale: _textScale,
+                            rotation: _textRotation,
                             withBg: _withBg,
                           ),
                           // ── Tong sampah atas tengah — drag teks ke sini
@@ -323,13 +333,15 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                                     _onScale(d, c.biggest),
                                 onScaleEnd: _onScaleEnd,
                                 child: Center(
-                                  child: Container(
-                                    width: c.biggest.width - 32,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    // Tanpa border/bubble — teks + kursor
-                                    // langsung di tengah foto.
-                                    child: TextField(
+                                  child: Transform.rotate(
+                                    angle: _textRotation,
+                                    child: Container(
+                                      width: c.biggest.width - 32,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
+                                      // Tanpa border/bubble — teks + kursor
+                                      // langsung di tengah foto.
+                                      child: TextField(
                                       controller: _textCtrl,
                                       focusNode: _textFocus,
                                       keyboardType: TextInputType.multiline,
@@ -373,6 +385,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                                 ),
                               ),
                             ),
+                          ),
                           // ── Tombol "Aa" kanan atas ──
                           Positioned(
                             top: 8,
@@ -425,43 +438,75 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                SizedBox(
-                                  height: 36,
-                                  child: ListView.separated(
-                                    scrollDirection: Axis.horizontal,
-                                    itemCount: StoryText.palette.length,
-                                    separatorBuilder: (_, __) =>
-                                        const SizedBox(width: 8),
-                                    itemBuilder: (_, i) {
-                                      final sel = i == _colorIndex;
-                                      return GestureDetector(
-                                        onTap: () =>
-                                            setState(() => _colorIndex = i),
-                                        child: Container(
-                                          width: 32,
-                                          height: 32,
-                                          decoration: BoxDecoration(
-                                            color: StoryText.palette[i],
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: sel
-                                                  ? Colors.white
-                                                  : Colors.white24,
-                                              width: sel ? 3 : 1,
+                                // Bar ukuran — muncul saat tombol "T" dipilih.
+                                if (_toolsPanel == 'size')
+                                  SizedBox(
+                                    height: 36,
+                                    child: Row(
+                                      children: [
+                                        for (int i = 0; i < 3; i++) ...[
+                                          _sizeBtn(s, i),
+                                          const SizedBox(width: 8),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                // Bar warna — muncul saat tombol warna dipilih.
+                                if (_toolsPanel == 'color')
+                                  SizedBox(
+                                    height: 36,
+                                    child: ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: StoryText.palette.length,
+                                      separatorBuilder: (_, _) =>
+                                          const SizedBox(width: 8),
+                                      itemBuilder: (_, i) {
+                                        final sel = i == _colorIndex;
+                                        return GestureDetector(
+                                          onTap: () =>
+                                              setState(() => _colorIndex = i),
+                                          child: Container(
+                                            width: 32,
+                                            height: 32,
+                                            decoration: BoxDecoration(
+                                              color: StoryText.palette[i],
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: sel
+                                                    ? Colors.white
+                                                    : Colors.white24,
+                                                width: sel ? 3 : 1,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      );
-                                    },
+                                        );
+                                      },
+                                    ),
                                   ),
-                                ),
                                 const SizedBox(height: 8),
+                                // Dua tombol: ukuran (T) + warna. Klik =
+                                // toggle bar opsinya di atas.
                                 Row(
                                   children: [
-                                    for (int i = 0; i < 3; i++) ...[
-                                      _sizeBtn(s, i),
-                                      const SizedBox(width: 8),
-                                    ],
+                                    _toolToggle(
+                                      icon: Icons.title_rounded,
+                                      label: 'T',
+                                      active: _toolsPanel == 'size',
+                                      onTap: () => setState(() =>
+                                          _toolsPanel = _toolsPanel == 'size'
+                                              ? ''
+                                              : 'size'),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    _toolToggle(
+                                      icon: Icons.palette_outlined,
+                                      label: '',
+                                      active: _toolsPanel == 'color',
+                                      onTap: () => setState(() =>
+                                          _toolsPanel = _toolsPanel == 'color'
+                                              ? ''
+                                              : 'color'),
+                                    ),
                                     const Spacer(),
                                     IconButton(
                                       tooltip: s.storyTextBgTooltip,
@@ -496,8 +541,37 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     );
   }
 
-  Widget _sizeBtn(S s, int i) {
-    final label = ['S', 'M', 'L'][i];
+  Widget _toolToggle({
+    required IconData icon,
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 38,
+        height: 36,
+        decoration: BoxDecoration(
+          color: active ? AppTheme.primary : Colors.white12,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: label.isNotEmpty
+            ? Center(
+                child: Text(
+                  label,
+                  style: AppText.label.copyWith(
+                    color: active ? Colors.white : Colors.white70,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              )
+            : Icon(icon, size: 20, color: active ? Colors.white : Colors.white70),
+      ),
+    );
+  }
+
+  Widget _sizeBtn(S s, int i) {    final label = ['S', 'M', 'L'][i];
     final sel = i == _sizeIndex;
     return GestureDetector(
       onTap: () => setState(() => _sizeIndex = i),

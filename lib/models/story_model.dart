@@ -12,6 +12,7 @@ class StorySlide {
   final int textColorIndex;
   final int textSizeIndex;
   final double textScale;
+  final double textRotation;
   final bool textBg;
   final String visibility;
   final DateTime createdAt;
@@ -27,6 +28,7 @@ class StorySlide {
     this.textColorIndex = 0,
     this.textSizeIndex = 1,
     this.textScale = 1.0,
+    this.textRotation = 0,
     this.textBg = false,
     this.visibility = 'registered',
     required this.createdAt,
@@ -44,6 +46,7 @@ class StorySlide {
       textColorIndex: _toInt(m['text_color'], 0),
       textSizeIndex: _toInt(m['text_size'], 1),
       textScale: _toScale(m['text_scale']),
+      textRotation: _toRotation(m['text_rotation']),
       textBg: m['text_bg'] == true,
       visibility: '${m['visibility'] ?? 'registered'}',
       createdAt: parseDate(m['created_at']),
@@ -66,6 +69,16 @@ class StorySlide {
     final n = v is num ? v.toDouble() : double.tryParse('$v');
     if (n == null) return 1.0;
     return n.clamp(0.5, 3.0).toDouble();
+  }
+
+  /// Rotasi radian (bebas, dinormalisasi -pi..pi).
+  static double _toRotation(dynamic v) {
+    final n = v is num ? v.toDouble() : double.tryParse('$v');
+    if (n == null) return 0;
+    double r = n;
+    while (r > 3.14159265) r -= 6.28318530;
+    while (r < -3.14159265) r += 6.28318530;
+    return r;
   }
 }
 

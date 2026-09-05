@@ -496,6 +496,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
               colorIndex: slide.textColorIndex,
               sizeIndex: slide.textSizeIndex,
               scale: slide.textScale,
+              rotation: slide.textRotation,
               withBg: slide.textBg,
             ),
           ],
