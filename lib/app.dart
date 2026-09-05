@@ -388,22 +388,68 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       _pagesDark = dark;
     }
     if (!_visitedTabs.contains(tab)) _visitedTabs.add(tab);
-    // Provider room/online users sudah tersedia di root — tidak perlu
-    // dideklarasikan ulang di sini (hindari instance ganda).
+    final auth = context.watch<AuthProvider>();
+    final s = context.read<LocaleProvider>().s;
+    // Soft gate anon: banner tipis di atas konten saat fitur anon OFF.
+    // Read tetap jalan (anon masih browsing), tulis dicegat di composer.
+    final anonBanner = auth.anonBlocked;
     return Scaffold(
-        body: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => context.read<AuthProvider>().notifyActivity(),
-          onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
-          child: IndexedStack(
-            index: tab,
-            children: [
-              for (var i = 0; i < _pages!.length; i++)
-                _visitedTabs.contains(i)
-                    ? _pages![i]
-                    : const SizedBox.shrink(),
-            ],
-          ),
+        body: Column(
+          children: [
+            if (anonBanner)
+              Material(
+                color: AppTheme.primary.withValues(alpha: 0.12),
+                child: InkWell(
+                  onTap: () => showAnonPromptDialog(context),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 16,
+                              color: AppTheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              s.anonGateBanner,
+                              style: AppText.caption
+                                  .copyWith(color: AppTheme.textPrimary),
+                            ),
+                          ),
+                          Text(
+                            s.anonGateBannerCta,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () => context.read<AuthProvider>().notifyActivity(),
+                onPanDown: (_) =>
+                    context.read<AuthProvider>().notifyActivity(),
+                child: IndexedStack(
+                  index: tab,
+                  children: [
+                    for (var i = 0; i < _pages!.length; i++)
+                      _visitedTabs.contains(i)
+                          ? _pages![i]
+                          : const SizedBox.shrink(),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         floatingActionButton: SizedBox(
           width: 52,

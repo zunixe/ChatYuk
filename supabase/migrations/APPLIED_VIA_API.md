@@ -215,3 +215,11 @@ Jika `supabase db push` timeout lagi:
 - **Apply:** via `supabase db query --linked -f` (bersih, 0 error). Verifikasi: `story_tray()` → `[]` (array kosong, bukan error); kedua tabel ada; publication ✅; cron ✅. Version tercatat di `schema_migrations`.
 - **Client:** `lib/services/story_service.dart`, `lib/providers/story_provider.dart` (registrasi di app.dart), `lib/models/story_model.dart`, `lib/widgets/story_text_overlay.dart`, `lib/screens/story_composer_screen.dart` + `story_viewer_screen.dart`, integrasi tray di `online_users_screen.dart` (header PreferredSize 140, tombol + sebelum Orang Sekitar). `StoryText` token (S16/M20/L24 + palette 8 warna) di `theme.dart`.
 - ⚠️ Catatan palette: `text_color` disimpan sebagai INT indeks palette (0-7), BUKAN hex — konsisten dengan `StoryText.palette` di theme.dart.
+
+## 2026-09-07 — 20260907000000_sync_profile_names.sql (APPLY)
+
+- **Fix:** user ganti username, tapi post/komen/story di timeline masih menampilkan nama lama (snapshot `author_name` tidak pernah di-update saat rename).
+- **Trigger** `trg_sync_profile_names` (after update of nickname on profiles) → sinkron ke `posts.author_name`, `post_comments.author_name`, `stories.author_name`, `user_devices.nickname_snapshot`. Pola sama dengan `sync_profile_to_chats` (20260828050000) — private_chats sudah punya trigger sendiri.
+- **Backfill** semua snapshot lama sekali jalan.
+- **Verifikasi live:** rename `olave` → post ikut jadi nama baru (1/1), rename balik → pulih. Setelah backfill mismatch = 0 di 4 tabel.
+- Tercatat di `schema_migrations`.
