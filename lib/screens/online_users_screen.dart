@@ -937,7 +937,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // ── Kolom avatar sendiri + nickname di bawahnya ──
                 Column(
@@ -1061,28 +1061,43 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           ),
         ),
         iconTheme: IconThemeData(color: AppTheme.textPrimary),
+        // Tombol + story & Orang Sekitar — GestureDetector rapat (tanpa
+        // padding). IconButton tidak dipakai: minimumSize M3 selalu
+        // memaksa 48px walau constraints 32 diberikan.
         actions: [
-          // Tombol + buat story — hanya akun terdaftar (anon dilarang,
-          // server RLS juga menolak). SEBELUM ikon Orang Sekitar.
           if (!auth.isAnonymous)
-            IconButton(
-              tooltip: s.storyAddTooltip,
-              icon: const Icon(Icons.add_circle_outline),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              onPressed: _openStoryComposer,
-            ),
-          // "Orang Sekitar" (nearby) hanya untuk akun terdaftar — kombinasi
-          // lokasi + anon paling sering memicu flag kebijakan Play.
-          if (!auth.isAnonymous)
-            IconButton(
-              tooltip: s.nearbyTitle,
-              icon: const Icon(Icons.explore_outlined),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NearbyScreen()),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Tooltip(
+                    message: s.storyAddTooltip,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _openStoryComposer,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 3),
+                        child: Icon(Icons.add_circle_outline),
+                      ),
+                    ),
+                  ),
+                  Tooltip(
+                    message: s.nearbyTitle,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const NearbyScreen()),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 3),
+                        child: Icon(Icons.explore_outlined),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
