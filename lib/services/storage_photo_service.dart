@@ -47,6 +47,26 @@ class StoragePhotoService {
   String postImagePath(String uid) =>
       'posts/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
 
+  /// Path foto story (slide).
+  String storyPath(String uid) =>
+      'story/$uid/${DateTime.now().microsecondsSinceEpoch}.jpg';
+
+  /// Upload foto story → Storage. Return path atau null.
+  Future<String?> uploadStoryImage({
+    required String uid,
+    required String base64,
+  }) async {
+    try {
+      final bytes = base64Decode(base64);
+      final path = storyPath(uid);
+      await _sb.storage.from(_bucket).uploadBinary(path, bytes);
+      return path;
+    } catch (e) {
+      debugPrint('[StoragePhoto] uploadStoryImage error: $e');
+      return null;
+    }
+  }
+
   /// Path voice message.
   String voicePath(String chatId) =>
       'voice/$chatId/${DateTime.now().microsecondsSinceEpoch}.m4a';

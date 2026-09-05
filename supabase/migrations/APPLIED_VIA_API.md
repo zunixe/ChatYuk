@@ -205,3 +205,13 @@ Jika `supabase db push` timeout lagi:
   - Fix: re-apply file migration versi benar via `supabase db query --linked -f`, verifikasi `jsonb_array_length(admin_stats_detail()->'users_all') == admin_stats()->>'total_users'`.
 
 > ⚠️ PERINGATAN UNTUK TOOL/AI LAIN: JANGAN me-apply function admin (`admin_stats_detail`, `admin_stats_compute`, `admin_excluded_uids`) dari draft SQL yang belum lolos uji. Sumber kebenaran = file di `supabase/migrations/`. Khusus `admin_excluded_uids()` yang `RETURNS SETOF uuid`: referensi kolom langsung (`select uid from ...`) PASTI gagal 42703 — wajib alias (`ae`) + `array_agg`/`= any()`. Sebelum menimpa, selalu tes: `supabase db query --linked "select set_config('request.jwt.claims', '{\"email\":\"zunixe@gmail.com\",\"role\":\"authenticated\"}', false); select jsonb_array_length((select public.admin_stats_detail())->'users_all')"`.
+
+## 2026-09-06 — 20260906000000_stories.sql (APPLY)
+
+- **Fitur Story ala Instagram** — tabel `stories` (1 row = 1 slide, expire 24 jam, append gaya IG) + `story_views` (daftar penonton). Visibility per slide: `everyone` / `registered` (DEFAULT) / `friends` (2 arah via `friend_requests accepted`), semua dikurangi blokir. Anon DILARANG bikin story (RLS insert: registered + max 10 slide/24 jam).
+- **RPC:** `story_tray()` (agregat per author + thumb + has_unseen, own duluan), `story_slides(p_author)`, `create_story(...)` (snap author_name, clamp koordinat teks 0-1, max teks 300), `mark_story_seen` (idempoten), `story_viewers` (pemilik only), `delete_story` (pemilik/admin).
+- **Cron:** `purge-stories` tiap jam :17 (hapus row expire; file Storage dibersihkan terpisah).
+- **Realtime:** `stories` + `story_views` masuk publication `supabase_realtime`.
+- **Apply:** via `supabase db query --linked -f` (bersih, 0 error). Verifikasi: `story_tray()` → `[]` (array kosong, bukan error); kedua tabel ada; publication ✅; cron ✅. Version tercatat di `schema_migrations`.
+- **Client:** `lib/services/story_service.dart`, `lib/providers/story_provider.dart` (registrasi di app.dart), `lib/models/story_model.dart`, `lib/widgets/story_text_overlay.dart`, `lib/screens/story_composer_screen.dart` + `story_viewer_screen.dart`, integrasi tray di `online_users_screen.dart` (header PreferredSize 140, tombol + sebelum Orang Sekitar). `StoryText` token (S16/M20/L24 + palette 8 warna) di `theme.dart`.
+- ⚠️ Catatan palette: `text_color` disimpan sebagai INT indeks palette (0-7), BUKAN hex — konsisten dengan `StoryText.palette` di theme.dart.

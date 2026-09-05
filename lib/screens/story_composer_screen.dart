@@ -41,7 +41,14 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   String _b64 = '';
 
   double _textX = 0.5;
-  double _textY = 0.85;
+  // Default di tengah halaman (bukan bawah) supaya kursor tidak
+  // ketutup keyboard saat mulai mengetik. User bisa geser manual.
+  double _textY = 0.45;
+  // Skala pinch-to-zoom (1 jari = geser, 2 jari = besar/kecil).
+  double _textScale = 1.0;
+  double _scaleBase = 1.0;
+  // Drag teks ke tong sampah (atas tengah) → teks dihapus ala IG.
+  bool _dragOverTrash = false;
   int _colorIndex = StoryText.defaultColorIndex;
   int _sizeIndex = 1;
   bool _withBg = false;
@@ -98,6 +105,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
             textY: _textY,
             textColor: _colorIndex,
             textSize: _sizeIndex,
+            textScale: _textScale,
             textBg: _withBg,
             visibility: _visibility,
             myUid: uid,
@@ -124,11 +132,43 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     }
   }
 
-  void _onDrag(DragUpdateDetails d, Size boxSize) {
+  // ── Pinch-to-zoom + drag (satu handler untuk 1 & 2 jari) ──
+  // onScaleUpdate jalan untuk geser satu jari (scale≈1) maupun cubit:
+  // focalPointDelta = gerakan, scale = rasio terhadap awal gestur.
+  void _onScaleStart(ScaleStartDetails d) {
+    _scaleBase = _textScale;
+  }
+
+  void _onScale(ScaleUpdateDetails d, Size boxSize) {
     setState(() {
-      _textX = (_textX + d.delta.dx / boxSize.width).clamp(0.0, 1.0);
-      _textY = (_textY + d.delta.dy / boxSize.height).clamp(0.0, 1.0);
+      _textScale = (_scaleBase * d.scale).clamp(0.5, 3.0);
+      if (d.focalPointDelta.distance > 0) {
+        _textX =
+            (_textX + d.focalPointDelta.dx / boxSize.width).clamp(0.0, 1.0);
+        _textY =
+            (_textY + d.focalPointDelta.dy / boxSize.height).clamp(0.0, 1.0);
+      }
+      // Zona hapus: atas tengah (di bawah ikon tong sampah).
+      _dragOverTrash =
+          _textY < 0.10 && (_textX - 0.5).abs() < 0.18;
     });
+  }
+
+  void _onScaleEnd(ScaleEndDetails d) {
+    if (_dragOverTrash) {
+      setState(() {
+        _textCtrl.clear();
+        _showTextArea = false;
+        _showTextTools = false;
+        _dragOverTrash = false;
+        _textScale = 1.0;
+        _textX = 0.5;
+        _textY = 0.45;
+      });
+      _textFocus.unfocus();
+      return;
+    }
+    if (_dragOverTrash) setState(() => _dragOverTrash = false);
   }
 
   // ── UX teks ala IG ──
@@ -205,8 +245,24 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                   Positioned.fill(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onPanUpdate: _hasText && !_showTextArea
-                          ? (d) => _onDrag(d, c.biggest)
+                      onScaleStart: _hasText && !_showTextArea
+                          ? _onScaleStart
+                          : null,
+                      onScaleUpdate: _hasText && !_showTextArea
+                          ? (d) => _onScale(d, c.biggest)
+                          : null,
+                      onScaleEnd: _hasText && !_showTextArea
+                          ? _onScaleEnd
+                          : null,
+                      // Klik 2x pada teks jadi → mode edit.
+                      onDoubleTap: _hasText && !_showTextArea
+                          ? () {
+                              setState(() {
+                                _showTextArea = true;
+                                _showTextTools = true;
+                              });
+                              _textFocus.requestFocus();
+                            }
                           : null,
                       onTap: () {
                         if (_showTextTools || _showTextArea) {
@@ -226,8 +282,32 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                             y: _textY,
                             colorIndex: _colorIndex,
                             sizeIndex: _sizeIndex,
+                            scale: _textScale,
                             withBg: _withBg,
                           ),
+                          // ── Tong sampah atas tengah — drag teks ke sini
+                          //    untuk hapus (muncul saat teks ada & drag aktif) ──
+                          if (_hasText && !_showTextArea)
+                            Positioned(
+                              top: 8,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: Icon(
+                                  Icons.delete_outline,
+                                  size: 34,
+                                  color: _dragOverTrash
+                                      ? AppTheme.danger
+                                      : Colors.white54,
+                                  shadows: const [
+                                    Shadow(
+                                      color: Colors.black54,
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           // ── Area teks interaktif ──
                           if (_showTextArea)
                             Positioned(
@@ -238,16 +318,10 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                                   .toDouble(),
                               child: GestureDetector(
                                 onTap: _onTextTap,
-                                onPanUpdate: (d) {
-                                  setState(() {
-                                    _textX = (_textX +
-                                            d.delta.dx / c.biggest.width)
-                                        .clamp(0.0, 1.0);
-                                    _textY = (_textY +
-                                            d.delta.dy / c.biggest.height)
-                                        .clamp(0.0, 1.0);
-                                  });
-                                },
+                                onScaleStart: _onScaleStart,
+                                onScaleUpdate: (d) =>
+                                    _onScale(d, c.biggest),
+                                onScaleEnd: _onScaleEnd,
                                 child: Center(
                                   child: Container(
                                     width: c.biggest.width - 32,
@@ -262,7 +336,8 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                                       maxLines: 3,
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        fontSize: StoryText.size(_sizeIndex),
+                                        fontSize: StoryText.size(_sizeIndex) *
+                                            _textScale,
                                         fontWeight: FontWeight.w800,
                                         color: _textColor,
                                         height: 1.2,
@@ -282,7 +357,8 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                                         hintText: s.storyAddTextHint,
                                         hintStyle: TextStyle(
                                           fontSize:
-                                              StoryText.size(_sizeIndex),
+                                              StoryText.size(_sizeIndex) *
+                                                  _textScale,
                                           fontWeight: FontWeight.w800,
                                           color: Colors.white38,
                                         ),
