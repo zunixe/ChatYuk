@@ -42,6 +42,7 @@ import '../services/link_preview_service.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/anon_prompt_dialog.dart';
 import '../services/call_notification.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
@@ -641,6 +642,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final hasPhoto = _pendingPhotoBase64 != null;
     if (text.isEmpty && !hasPhoto) return;
     if (_isSending) return;
+
+    // Soft gate anon: fitur anon OFF → tawarkan daftar, jangan kirim.
+    final anonAuth = context.read<AuthProvider>();
+    if (anonAuth.anonBlocked) {
+      if (!mounted) return;
+      showAnonPromptDialog(context);
+      return;
+    }
 
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();

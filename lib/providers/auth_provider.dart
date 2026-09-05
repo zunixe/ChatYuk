@@ -86,6 +86,13 @@ class AuthProvider extends ChangeNotifier {
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
 
+  /// Soft gate anon: registrasi wajib ON + sesi ini anon → tulis diblokir
+  /// (server RLS juga menegakkan). Stream settings realtime → getter ini
+  /// berubah otomatis tanpa restart app. Sesi dummy (admin jadi anon)
+  /// dikecualikan — server juga bypass via admin_dummy_uids().
+  bool get anonBlocked =>
+      _requireRegistration && _auth.isAnonymous && !_auth.dummySessionActive;
+
   /// User sesi aktif adalah admin sungguhan (zunixe)? Dipakai untuk
   /// menampilkan/menyembunyikan seluruh UI admin di build admin — login
   /// anon/user biasa di ChatYuk Admin tetap melihat tampilan USER biasa.

@@ -811,8 +811,18 @@ class S {
       ? 'Wajib daftar sebelum masuk'
       : 'Require registration before entering';
   String get descRequireRegistration => isId
-      ? 'Admin — sembunyikan "Mulai Chat Sekarang", hanya Login Google & Daftar Email'
-      : 'Admin — hide "Start Chatting Now", only Google Login & Email Sign Up';
+      ? 'Sembunyikan "Mulai Chat" + akun anon tidak bisa chat/post (tetap bisa lihat-lihat). Akun dummy & admin tetap bebas.'
+      : 'Hide "Start Chatting" + anon accounts cannot chat/post (still can browse). Dummy & admin accounts unaffected.';
+
+  // ── Soft gate anon (fitur anon dinonaktifkan) ──
+  String get anonGateBanner => isId
+      ? 'Fitur akun anon sedang dinonaktifkan — daftar untuk lanjut chat & posting'
+      : 'Anonymous accounts are temporarily disabled — register to continue chatting & posting';
+  String get anonGateBannerCta =>
+      isId ? 'Daftar' : 'Register';
+  String get anonGateBlocked => isId
+      ? 'Akun anon sedang dinonaktifkan. Daftar dengan email atau Google untuk lanjut chat — data kamu tetap tersimpan.'
+      : 'Anonymous accounts are currently disabled. Register with email or Google to continue chatting — your data stays intact.';
 
   // ── Notifikasi pengingat harian (admin) ──
   String get labelReengageNotif =>

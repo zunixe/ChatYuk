@@ -36,6 +36,7 @@ import '../main.dart';
 import 'call_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/anon_prompt_dialog.dart';
 
 // Top-level function untuk compute() isolate — resize 1024 + embed forensic watermark
 String? _processViewOnceImage((Uint8List, String) args) {
@@ -509,6 +510,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final hasPhoto = _pendingPhotoBase64 != null;
     if (text.isEmpty && !hasPhoto) return;
     if (_isSending) return;
+
+    // Soft gate anon: fitur anon OFF → tawarkan daftar, jangan kirim.
+    if (context.read<AuthProvider>().anonBlocked) {
+      if (!mounted) return;
+      showAnonPromptDialog(context);
+      return;
+    }
 
     // Mode edit: kirim langsung mengubah pesan lama (bukan pesan baru).
     if (_editingMessage != null) {
