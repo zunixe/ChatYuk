@@ -1370,6 +1370,29 @@ class _UserCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (user.isRegistered && user.email.isNotEmpty) ...[
+                        const SizedBox(height: 1),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.alternate_email,
+                              size: 11,
+                              color: AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: Text(
+                                user.email,
+                                style: AppText.micro.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
