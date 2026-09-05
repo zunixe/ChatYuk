@@ -3,7 +3,7 @@
      scaffoldBackgroundColor tema gelap app (lib/config/theme.dart _bgScreenDark)
      supaya transisi splash -> frame pertama Flutter tidak blink. -->
 <resources>
-    <color name="launch_bg">#121212</color>
+    <color name="launch_bg">#F0F4F8</color>
     <!-- uCrop cropper: system bar gelap (menu android atas/bawah tidak
          menutupi toolbar & tombol cropper). -->
     <color name="ucrop_status_bar">#121212</color>
