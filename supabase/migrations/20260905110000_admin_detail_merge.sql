@@ -65,7 +65,7 @@ begin
         'status', status,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source
-      ) order by nickname)
+      ) order by last_seen desc nulls last)
       from profiles
       where is_registered = false
         and not (id = any(v_excl))
