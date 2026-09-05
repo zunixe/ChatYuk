@@ -581,7 +581,7 @@ class _AuthSkeletonScreen extends StatelessWidget {
         backgroundColor: AppTheme.bgScreen,
         surfaceTintColor: AppTheme.bgScreen,
         automaticallyImplyLeading: false,
-        toolbarHeight: 155,
+        toolbarHeight: 72,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -589,9 +589,14 @@ class _AuthSkeletonScreen extends StatelessWidget {
             box(100, 18),
             const SizedBox(height: 2),
             box(60, 12),
-            const SizedBox(height: 10),
-            // Avatar di atas, nama di bawah — match halaman asli
-            Column(
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(78),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
                   width: 54,
@@ -611,11 +616,11 @@ class _AuthSkeletonScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(width: 8),
                 box(80, 14),
               ],
             ),
-          ],
+          ),
         ),
         actions: const [
           SizedBox(width: 48),
