@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -57,6 +59,25 @@ String? _processAvatarImage(Uint8List bytes) {
   final resized = img.copyResize(decoded, width: 300, height: 300);
   final jpg = img.encodeJpg(resized, quality: 70);
   return base64Encode(jpg);
+}
+
+// Proses avatar SAMA dengan profile_screen: WebP 1024 via native encoder,
+// fallback JPEG 1024. Crop interaktif sudah menentukan area 1:1.
+Future<String?> _processAvatarWebp(Uint8List bytes) async {
+  try {
+    final webp = await FlutterImageCompress.compressWithList(
+      bytes,
+      minWidth: 1024,
+      minHeight: 1024,
+      quality: 90,
+      format: CompressFormat.webp,
+      keepExif: false,
+    );
+    if (webp.isNotEmpty) return base64Encode(webp);
+  } catch (e) {
+    debugPrint('[ONLINE] webp encode failed, fallback jpeg: $e');
+  }
+  return _processAvatarImage(bytes);
 }
 
 class _AsyncAvatar extends StatefulWidget {
@@ -300,26 +321,63 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     );
     if (source == null || !mounted) return;
 
+    final picker = ImagePicker();
+    final XFile? picked;
+    try {
+      // TANPA maxWidth/imageQuality — foto asli utuh diteruskan ke cropper
+      // (kompresi cukup 1x di akhir proses) — sama dengan profile_screen.
+      picked = await picker.pickImage(source: source);
+    } catch (e) {
+      debugPrint('[ONLINE] pickImage error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.errPhotoPermission)),
+        );
+      }
+      return;
+    }
+    if (picked == null || !mounted) return;
+
+    // Crop interaktif 1:1 — geser/zoom pilih bagian yang masuk avatar.
+    // Apa yang dilihat user di lingkaran = persis yang tersimpan.
+    final CroppedFile? cropped;
+    try {
+      cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        maxWidth: 1024,
+        maxHeight: 1024,
+        compressQuality: 95,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: s.avatarCamera,
+            toolbarColor: AppTheme.bgScreen,
+            toolbarWidgetColor: Colors.white,
+            backgroundColor: Colors.black,
+            activeControlsWidgetColor: AppTheme.primary,
+            lockAspectRatio: true,
+          ),
+          IOSUiSettings(
+            title: s.avatarCamera,
+            aspectRatioLockEnabled: true,
+          ),
+        ],
+      );
+    } catch (e) {
+      debugPrint('[ONLINE] crop error: $e');
+      return;
+    }
+    if (cropped == null || !mounted) return;
+
     setState(() => _uploadingAvatar = true);
     try {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(
-        source: source,
-        maxWidth: 600,
-        maxHeight: 600,
-        imageQuality: 80,
-      );
-      if (picked == null || !mounted) {
-        setState(() => _uploadingAvatar = false);
-        return;
-      }
-      final bytes = await picked.readAsBytes();
+      final bytes = await cropped.readAsBytes();
       if (!mounted) {
         setState(() => _uploadingAvatar = false);
         return;
       }
 
-      final processed = await compute(_processAvatarImage, bytes);
+      final processed = await compute(_processAvatarWebp, bytes);
       if (processed == null || !mounted) {
         setState(() => _uploadingAvatar = false);
         if (mounted) {
@@ -766,7 +824,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         // Avatar + nama user DI BAWAH toolbar (preferredSize) — tidak ikut
         // hilang saat mode search aktif.
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(78),
+          preferredSize: const Size.fromHeight(64),
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(

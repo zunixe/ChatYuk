@@ -592,7 +592,7 @@ class _AuthSkeletonScreen extends StatelessWidget {
           ],
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(78),
+          preferredSize: const Size.fromHeight(64),
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
