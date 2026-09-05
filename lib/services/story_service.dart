@@ -60,7 +60,7 @@ class StoryService {
     int textSize = 1,
     double textScale = 1.0,
     bool textBg = false,
-    String visibility = 'registered',
+    String visibility = 'followers',
   }) async {
     try {
       final res = await _sb.rpc('create_story', params: {

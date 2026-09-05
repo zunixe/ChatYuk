@@ -10,15 +10,41 @@
 --   - Anon: BOLEH bikin, tapi DIPAKSA 'everyone' (server override —
 --     apa pun yang dikirim client, jadikan public).
 
--- 1) Kolom visibility: 'registered' → 'followers' (data lama ikut pindah).
+-- Story: ganti model visibility 'registered' → 'followers' + jembatan
+-- untuk client lama (masih kirim 'registered').
+
+-- 0) Trigger jembatan RACE-SAFE: client build lama masih mengirim
+--    'registered' → rewrite jadi 'followers' SEBELUM constraint swap,
+--    supaya tidak ada celah waktu yang bisa gagal ADD CONSTRAINT.
+create or replace function public.fix_story_visibility() returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.visibility = 'registered' then
+    new.visibility := 'followers';
+  end if;
+  return new;
+end; $$;
+
+drop trigger if exists trg_fix_story_visibility on public.stories;
+create trigger trg_fix_story_visibility
+  before insert or update on public.stories
+  for each row execute function public.fix_story_visibility();
+
+-- 1) Data lama pindah ke 'followers' (trigger juga menutup row baru).
+update public.stories set visibility='followers' where visibility='registered';
+
+-- 2) Swap constraint — aman: trigger menjamin tidak ada 'registered' baru.
 alter table public.stories
   drop constraint if exists stories_visibility_check;
 alter table public.stories
   add constraint stories_visibility_check
   check (visibility in ('everyone','followers','friends'));
-update public.stories set visibility='followers' where visibility='registered';
 alter table public.stories
   alter column visibility set default 'followers';
+
 
 -- 2) RLS insert: registered bebas pilih; anon hanya 'everyone'.
 drop policy if exists stories_insert_own on public.stories;

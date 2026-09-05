@@ -56,7 +56,8 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   int _colorIndex = StoryText.defaultColorIndex;
   int _sizeIndex = 1;
   bool _withBg = false;
-  String _visibility = 'registered';
+  // Default: anon = public (dikunci server), registered = pengikut.
+  String _visibility = 'followers';
   bool _publishing = false;
   bool _showTextTools = false;
   // Panel alat aktif di atas bar tombol: '' (tidak ada), 'size', 'color'.
@@ -80,6 +81,11 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   @override
   void initState() {
     super.initState();
+    // Anon dipaksa public (server juga menegakkan) — set sejak awal
+    // supaya UI langsung benar dan nilai terkirim pasti 'everyone'.
+    if (context.read<AuthProvider>().isAnonymous) {
+      _visibility = 'everyone';
+    }
     _textCtrl.addListener(() => setState(() {}));
     _loadImage();
   }
@@ -655,6 +661,29 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   }
 
   Widget _visibilitySelector(S s) {
+    final isAnon = context.read<AuthProvider>().isAnonymous;
+    // Anon: HANYA public — dikunci server (dipaksa 'everyone').
+    if (isAnon) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white12,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.public, color: Colors.white70, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              s.storyVisibilityEveryone,
+              style: AppText.caption.copyWith(color: Colors.white),
+            ),
+          ],
+        ),
+      );
+    }
+    // Registered: semua orang / pengikut / teman (default pengikut).
     return Row(
       children: [
         Expanded(
@@ -669,8 +698,8 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                     style: AppText.caption),
               ),
               ButtonSegment(
-                value: 'registered',
-                label: Text(s.storyVisibilityRegistered,
+                value: 'followers',
+                label: Text(s.storyVisibilityFollowers,
                     style: AppText.caption),
               ),
               ButtonSegment(

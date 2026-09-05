@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Warna splash & background window saat startup — HARUS sama dengan
-     scaffoldBackgroundColor tema gelap app (lib/config/theme.dart _bgScreenDark)
-     supaya transisi splash -> frame pertama Flutter tidak blink. -->
+<!-- Warna splash & background window saat startup — SAMA dengan
+     scaffoldBackgroundColor tema gelap app (lib/config/theme.dart _bgScreenDark
+     = #121212) supaya transisi splash -> frame pertama Flutter tidak blink
+     putih di HP dark mode. -->
 <resources>
-    <color name="launch_bg">#F0F4F8</color>
+    <color name="launch_bg">#121212</color>
     <!-- uCrop cropper: system bar gelap (menu android atas/bawah tidak
          menutupi toolbar & tombol cropper). -->
     <color name="ucrop_status_bar">#121212</color>
