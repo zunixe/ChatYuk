@@ -295,15 +295,15 @@ class _EntryScreenState extends State<EntryScreen> {
             child: Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Column(
+                // Scroll: keyboard terbuka (ketik nickname) tidak overflow.
+                child: SingleChildScrollView(
+                  child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // Spacer elastis atas (mode wajib daftar) — grup utama tepat di tengah layar
-                    if (requireRegistration)
-                      const Spacer()
-                    else
-                      const SizedBox(height: 4),
+                    // (scroll view: spacer diganti jarak tetap, Column tak lagi flex)
+                    const SizedBox(height: 4),
 
                     // Logo — animasi halus dalam lingkaran transparan
                     // (komposisi sama dengan halaman login).
@@ -536,16 +536,9 @@ class _EntryScreenState extends State<EntryScreen> {
                           ],
                         ),
                       ),
-                    // Spacer elastis — menyerap ruang ekstra (maks 32px), menyusut saat layar sempit
-                    if (requireRegistration)
-                      const SizedBox(height: 24)
-                    else
-                      Expanded(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 32),
-                          child: const SizedBox.shrink(),
-                        ),
-                      ),
+                    // Jarak tetap (dulu Spacer/Expanded max 32px — tak boleh
+                    // flex di dalam scroll view, meledak unbounded)
+                    const SizedBox(height: 24),
 
                     // Divider
                     if (!requireRegistration)
@@ -645,17 +638,9 @@ class _EntryScreenState extends State<EntryScreen> {
                         ),
                       ),
                     ),
-                    // Spacer elastis — menyerap ruang ekstra (maks 32px), menyusut saat layar sempit.
-                    // Mode wajib daftar: spacer penuh simetris dengan atas → grup utama di tengah persis.
-                    if (requireRegistration)
-                      const Spacer()
-                    else
-                      Expanded(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 32),
-                          child: const SizedBox.shrink(),
-                        ),
-                      ),
+                    // Jarak tetap sebelum donasi (dulu Spacer/Expanded — sama,
+                    // tak boleh flex di dalam scroll view)
+                    const SizedBox(height: 24),
 
                     // Donasi
                     Center(
@@ -737,6 +722,7 @@ class _EntryScreenState extends State<EntryScreen> {
                     ),
                     SizedBox(height: 4),
                   ],
+                  ),
                 ),
               ),
             ),

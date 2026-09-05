@@ -16,6 +16,7 @@ import 'providers/call_provider.dart';
 import 'providers/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
+import 'providers/story_provider.dart';
 import 'services/chat_service.dart';
 import 'services/boot_overlay.dart';
 import 'main.dart';
@@ -65,6 +66,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ),
         ChangeNotifierProvider(create: (_) => SocialProvider()),
         ChangeNotifierProvider(create: (_) => TimelineProvider()),
+        ChangeNotifierProvider(create: (_) => StoryProvider()..refresh(silent: true)),
         ...AdminGate.extraProviders,
         ChangeNotifierProvider.value(value: _roomProvider),
         ChangeNotifierProvider.value(value: _onlineUsersProvider),
@@ -580,8 +582,8 @@ class _AuthSkeletonScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: AppTheme.bgScreen,
         surfaceTintColor: AppTheme.bgScreen,
-        automaticallyImplyLeading: false,
         toolbarHeight: 72,
+        leading: Center(child: box(24, 24, r: 12)),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -591,40 +593,77 @@ class _AuthSkeletonScreen extends StatelessWidget {
             box(60, 12),
           ],
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 48,
-                      height: 48,
+                box(24, 24, r: 12),
+                const SizedBox(width: 6),
+                box(24, 24, r: 12),
+              ],
+            ),
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(110),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
                       decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    box(56, 12),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 96,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      itemCount: 3,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: 10),
+                      itemBuilder: (_, __) => Container(
+                        width: 64,
+                        height: 96,
+                        decoration: BoxDecoration(
+                          color:
+                              AppTheme.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                box(80, 14),
               ],
             ),
           ),
         ),
-        actions: const [
-          SizedBox(width: 48),
-        ],
       ),
       body: SafeArea(
         child: Column(

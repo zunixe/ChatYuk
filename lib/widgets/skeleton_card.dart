@@ -50,6 +50,29 @@ class SkeletonCard extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(width: 6),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 11,
+              width: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ],
+        ),
       ]),
     );
   }
