@@ -124,6 +124,14 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
   void initState() {
     super.initState();
     _resolve();
+    // Cek ulang sekali (500ms): tulis disk yang mendarat setelah frame
+    // pertama TANPA rebuild parent (mis. prewarm race) langsung tampil
+    // tanpa nunggu emission stream berikutnya.
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted || _provider != null || widget.avatarB64.isEmpty) return;
+      _resolve();
+      if (_provider != null && mounted) setState(() {});
+    });
   }
 
   void _resolve() {
@@ -200,6 +208,12 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     _resolve();
     final p = _provider;
     if (p == null) {
+      // Avatar ADA (PATH/B64) tapi bytes belum siap → TRANSPARAN, jangan
+      // tampilkan huruf inisial dulu (user tidak mau flash "S" → foto).
+      // Huruf hanya untuk yang memang tidak punya foto (string kosong).
+      if (widget.avatarB64.isNotEmpty) {
+        return const SizedBox.shrink();
+      }
       return Center(
         child: Text(widget.initial,
             style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
@@ -1009,8 +1023,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               ],
                             ),
                             child: Builder(builder: (_) {
-                              final bytes =
-                                  _resolveOwnAvatar(auth.profile?.avatar ?? '');
+                              final b64 =
+                                  auth.profile?.avatar ?? '';
+                              final bytes = _resolveOwnAvatar(b64);
+                              // Huruf inisial HANYA kalau memang tidak ada
+                              // avatar (string kosong). Selama bytes belum
+                              // siap → lingkaran tint polos, tanpa flash "S".
+                              final showInitial = b64.isEmpty;
                               return CircleAvatar(
                                 radius: 27,
                                 backgroundColor: AppTheme.primary
@@ -1018,7 +1037,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 backgroundImage: bytes != null
                                     ? MemoryImage(bytes)
                                     : null,
-                                child: bytes == null
+                                child: showInitial
                                     ? Text(
                                         (auth.profile?.nickname ?? '?')[0]
                                             .toUpperCase(),
