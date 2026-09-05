@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Splash cold start: background gelap + logo ChatYuk di tengah.
+     Tampil selama engine init + frame pertama (lebih lama di debug JIT) —
+     terlihat disengaja, bukan layar putih blank. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/launch_bg" />
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:gravity="center">
         <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:gravity="fill"
+            android:src="@drawable/launch_image" />
+    </item>
 </layer-list>

@@ -878,11 +878,11 @@ class S {
   String get storyVisibilityEveryoneDesc => isId
       ? 'Termasuk pengguna anonim'
       : 'Includes anonymous users';
-  String get storyVisibilityRegistered =>
-      isId ? 'Terdaftar saja' : 'Registered only';
-  String get storyVisibilityRegisteredDesc => isId
-      ? 'Hanya pengguna terdaftar'
-      : 'Registered users only';
+  String get storyVisibilityFollowers =>
+      isId ? 'Pengikut' : 'Followers';
+  String get storyVisibilityFollowersDesc => isId
+      ? 'Hanya yang mengikuti kamu'
+      : 'Only people who follow you';
   String get storyVisibilityFriends => isId ? 'Teman' : 'Friends';
   String get storyVisibilityFriendsDesc => isId
       ? 'Hanya teman dua arah'
@@ -895,6 +895,8 @@ class S {
   String get storyPublishFail =>
       isId ? 'Gagal membagikan story' : 'Failed to share story';
   String get storyDeleted => isId ? 'Story dihapus' : 'Story deleted';
+  String get storyVideoSoon =>
+      isId ? 'Story video segera hadir' : 'Video stories coming soon';
   String get storyDeleteFail =>
       isId ? 'Gagal menghapus story' : 'Failed to delete story';
   String get storyDeleteSlideTitle =>

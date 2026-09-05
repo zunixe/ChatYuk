@@ -97,7 +97,7 @@ class StoryProvider extends ChangeNotifier {
     int textSize = 1,
     double textScale = 1.0,
     bool textBg = false,
-    String visibility = 'registered',
+    String visibility = 'followers',
     required String myUid,
     required String myNickname,
     required String myAvatar,

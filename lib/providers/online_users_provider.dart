@@ -60,10 +60,35 @@ class OnlineUsersProvider extends ChangeNotifier {
       // _loadDisk dari ~6s jadi ~1s di Xiaomi cold start.
       final cached = await MessageCache.instance.loadRawList('online_users');
       if (cached.isNotEmpty) {
-        final diskUsers = cached
+        var diskUsers = cached
             .map((e) => UserModel.fromMap(
                 '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
             .toList();
+        // Batch-load avatar base64 per-uid dari kv — _persistAvatars menulis
+        // tiap sesi TAPI tidak pernah dibaca balik saat cold start, sehingga
+        // _diskAvatars selalu kosong dan avatar selalu flash dari inisial.
+        // Dengan ini frame pertama langsung foto (tanpa placeholder huruf).
+        try {
+          final avatars = await Future.wait(
+            diskUsers.map((u) => u.uid.isEmpty
+                ? Future.value(<String>['', ''])
+                : MessageCache.instance
+                    .loadRawObj('avatar:${u.uid}')
+                    .then((m) => <String>[u.uid, '${m['a'] ?? ''}'],
+                        onError: (_) => <String>[u.uid, ''])),
+          );
+          for (final e in avatars) {
+            if (e[0].isNotEmpty && e[1].isNotEmpty) {
+              _diskAvatars[e[0]] = e[1];
+            }
+          }
+          diskUsers = diskUsers.map((u) {
+            final a = _diskAvatars[u.uid];
+            return (a != null && _isRenderableAvatar(a))
+                ? u.copyWith(avatar: a)
+                : u;
+          }).toList();
+        } catch (_) {}
         if (_users.isEmpty) {
           // Disk menang race → tampilkan langsung list disk.
           // Avatar resolve via _AsyncAvatar (disk-first, keepProvider).

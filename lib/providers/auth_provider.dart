@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -209,6 +210,33 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
+  /// Cache profil sendiri (SharedPreferences): cold start dengan sesi
+  /// existing langsung tampil MainNav dari disk, revalidasi network di
+  /// belakang. Key per-uid supaya ganti akun tidak tertukar.
+  static const _profileCachePrefix = 'cached_profile_v1_';
+
+  Future<UserModel?> _loadCachedProfile() async {
+    try {
+      final uid = _auth.currentUser?.id;
+      if (uid == null || uid.isEmpty) return null;
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_profileCachePrefix$uid');
+      if (raw == null || raw.isEmpty) return null;
+      final map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      return UserModel.fromMap(uid, map);
+    } catch (_) {
+      return null; // corrupt → abaikan, jalur network normal
+    }
+  }
+
+  Future<void> _saveCachedProfile(UserModel p) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          '$_profileCachePrefix${p.uid}', jsonEncode(p.toMap()));
+    } catch (_) {}
+  }
+
   Future<void> _init() async {
     if (_initInProgress) return; // guard re-entry
     _initInProgress = true;
@@ -221,6 +249,18 @@ class AuthProvider extends ChangeNotifier {
     // tampilkan layar error — coba ulang dulu beberapa kali.
     // Optimasi jutaan user: jika session sudah ada (restore), jangan signInAnonymously lagi
     final hasSession = _auth.currentUser != null;
+    // Profil cache: tampilkan MainNav langsung dari disk saat sesi ada,
+    // revalidasi network di belakang. Hemat 0.7-1.7s RPC getProfile.
+    // Stale-while-revalidate: kalau network gagal total tapi cache ada,
+    // tetap tampil konten (jangan layar error).
+    if (hasSession) {
+      final cached = await _loadCachedProfile();
+      if (cached != null && !_disposed) {
+        _profile = cached;
+        _loading = false;
+        notifyListeners();
+      }
+    }
     final maxAttempts = hasSession ? 1 : 2;
     const delays = [2, 3];
     Object? lastError;
@@ -232,11 +272,18 @@ class AuthProvider extends ChangeNotifier {
         // Lite dulu (tanpa avatar) → langsung notify, UI tidak nunggu foto
         _profile = await _auth.getProfile(withAvatar: false);
         debugPrint('[AUTH] getProfile lite -> ${_profile?.uid}');
-        if (_profile != null && !_disposed) notifyListeners();
+        if (_profile != null) {
+          safeUnawaited(_saveCachedProfile(_profile!));
+          if (!_disposed) notifyListeners();
+        }
         // Full avatar fire-and-forget
         if (_profile != null) {
           _auth.getProfile().then((full) {
-            if (full != null && !_disposed) { _profile = full; notifyListeners(); }
+            if (full != null && !_disposed) {
+              _profile = full;
+              safeUnawaited(_saveCachedProfile(full));
+              notifyListeners();
+            }
           });
         }
         await AdminGate.restoreDummySession?.call();
@@ -268,7 +315,10 @@ class AuthProvider extends ChangeNotifier {
     }
     if (lastError != null) {
       debugPrint('[AUTH] _init ERROR: $lastError');
-      _error = lastError.toString();
+      // Cache ada → tetap tampil konten lama, jangan layar error.
+      if (_profile == null) {
+        _error = lastError.toString();
+      }
     } else {
       // FCM token & cleanup di-fire-and-forget — tidak block loading screen
       if (_profile != null) {
@@ -974,6 +1024,17 @@ class AuthProvider extends ChangeNotifier {
       await _auth.goOffline();
       await _auth.signOut();
       _profile = null;
+      // Hapus cache profil supaya login berikutnya tidak tampil data lama.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final keys = prefs
+            .getKeys()
+            .where((k) => k.startsWith(_profileCachePrefix))
+            .toList();
+        for (final k in keys) {
+          await prefs.remove(k);
+        }
+      } catch (_) {}
       if (!_disposed) notifyListeners();
     } finally {
       _manualSignOut = false;
@@ -1026,6 +1087,7 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('[AUTH] reloadProfile lite -> ${lite?.uid} ${lite?.nickname}');
       if (lite != null && !_disposed) {
         _profile = lite;
+        safeUnawaited(_saveCachedProfile(lite));
         notifyListeners();
       }
     } catch (e) {
