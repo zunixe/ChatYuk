@@ -673,6 +673,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       appBar: AppBar(
         backgroundColor: AppTheme.bgScreen,
         surfaceTintColor: AppTheme.bgScreen,
+        toolbarHeight: 130,
         // Admin Panel di KIRI ATAS — hanya untuk zunixe (bukan sesi dummy).
         // Build user: panelBuilder null → tidak pernah tampil.
         leading: IconButton(
@@ -758,6 +759,106 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         '${prov.users.length} ${s.onlineActiveUsers}',
                         style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
                       ),
+                      const SizedBox(height: 10),
+                      // Avatar + nama user sendiri di header
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  final b64 = auth.profile?.avatar ?? '';
+                                  final init = (auth.profile?.nickname ?? '?')[0].toUpperCase();
+                                  _showAvatarZoom(b64, AppTheme.primary, init);
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 6,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
+                                    backgroundImage: (auth.profile?.avatar ?? '').isNotEmpty
+                                        ? MemoryImage(base64Decode(auth.profile!.avatar))
+                                        : null,
+                                    child: (auth.profile?.avatar ?? '').isEmpty
+                                        ? Text(
+                                            (auth.profile?.nickname ?? '?')[0].toUpperCase(),
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: AppGlyph.avatarInitial(44),
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                right: -2,
+                                bottom: -2,
+                                child: GestureDetector(
+                                  onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black26,
+                                          blurRadius: 3,
+                                        ),
+                                      ],
+                                    ),
+                                    child: _uploadingAvatar
+                                        ? Padding(
+                                            padding: EdgeInsets.all(4),
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 1.5,
+                                              color: AppTheme.primary,
+                                            ),
+                                          )
+                                        : Icon(
+                                            Icons.camera_alt,
+                                            color: AppTheme.primary,
+                                            size: 11,
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              auth.profile?.nickname ?? '-',
+                              style: AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (auth.profile?.isRegistered == true) ...[
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.verified,
+                              size: 16,
+                              color: Color(0xFF4A90E2),
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -803,109 +904,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
               return Column(
                 children: [
-                  // ── Foto profil sendiri ──
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                    child: Center(
-                      child: Stack(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              final b64 = auth.profile?.avatar ?? '';
-                              final init = (auth.profile?.nickname ?? '?')[0].toUpperCase();
-                              _showAvatarZoom(b64, AppTheme.primary, init);
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 3),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black26,
-                                    blurRadius: 12,
-                                    offset: Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: CircleAvatar(
-                                radius: 46,
-                                backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
-                                backgroundImage: (auth.profile?.avatar ?? '').isNotEmpty
-                                    ? MemoryImage(base64Decode(auth.profile!.avatar))
-                                    : null,
-                                child: (auth.profile?.avatar ?? '').isEmpty
-                                    ? Text(
-                                        (auth.profile?.nickname ?? '?')[0].toUpperCase(),
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: AppGlyph.avatarInitial(92),
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: GestureDetector(
-                              onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
-                              child: Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black26,
-                                      blurRadius: 4,
-                                    ),
-                                  ],
-                                ),
-                                child: _uploadingAvatar
-                                    ? Padding(
-                                        padding: EdgeInsets.all(6),
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppTheme.primary,
-                                        ),
-                                      )
-                                    : Icon(
-                                        Icons.camera_alt,
-                                        color: AppTheme.primary,
-                                        size: 16,
-                                      ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  // Nama user sendiri + verified badge (seperti profile screen)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        auth.profile?.nickname ?? '-',
-                        style: AppText.headline.copyWith(
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      if (auth.profile?.isRegistered == true) ...[
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.verified,
-                          size: 18,
-                          color: Color(0xFF4A90E2),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 6),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     child: Row(
