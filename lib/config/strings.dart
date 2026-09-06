@@ -923,6 +923,14 @@ class S {
   String get storyTapLeftRightHint => isId
       ? 'Tap sisi kanan/kiri untuk pindah'
       : 'Tap right/left side to navigate';
+  String storyReplyHint(String name) =>
+      isId ? 'Balas $name...' : 'Reply to $name...';
+  String get storyDiscardTitle => isId ? 'Buang story?' : 'Discard story?';
+  String get storyDiscardMsg => isId
+      ? 'Foto dan teks yang belum dibagikan akan hilang.'
+      : 'Unshared photo and text will be lost.';
+  String get storyDiscardYes => isId ? 'Buang' : 'Discard';
+  String get storyKeepEditing => isId ? 'Lanjut' : 'Keep editing';
   // ── Foto terkunci (paywall) ──
   String get photoLockedTitle => isId ? 'Foto Terkunci' : 'Locked Photo';
   String get photoLockedHint =>

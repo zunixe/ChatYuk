@@ -194,11 +194,12 @@ class _AuthGateState extends State<_AuthGate> {
     _maybeScheduleAutoRetry(auth);
 
     if (auth.loading) {
-      // Skeleton first-frame → angkat overlay native. Overlay hanya
-      // bertugas menutup task snapshot HyperOS yang stale-terang; setelah
-      // ini skeleton gelap normal yang tampil.
-      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
-      return const _AuthSkeletonScreen();
+      // SPLASH REPLIKA: bg gelap + logo di tengah — identik dengan
+      // launch_background native, jadi transisi system splash → Flutter
+      // mulus TANPA layar hitam polos selama warmup (init engine,
+      // Supabase, provider). Overlay native tetap bertugas anti-blink
+      // snapshot HyperOS dan diangkat saat konten siap (_SwapMask).
+      return const _SplashReplica();
     }
 
     if (auth.error != null) {
@@ -283,6 +284,9 @@ class _SwapMaskState extends State<_SwapMask> {
       // menutup semuanya, konten muncul saat benar-benar smooth.
       Future.delayed(const Duration(milliseconds: 200), () {
         if (mounted) setState(() => _covered = false);
+        // Konten asli sudah terlihat → angkat overlay splash logo native
+        // (fade 250ms). Ini satu-satunya titik hide untuk jalur login.
+        BootOverlay.hide();
       });
     });
   }
@@ -608,6 +612,32 @@ class _BadgedIcon extends StatelessWidget {
 
 /// Skeleton loading saat auth check — IDENTIK dengan halaman Pengguna Online
 /// (AppBar gradient + avatar + nama + filter + list kartu) supaya transisi
+/// Splash replika di sisi Flutter — muncul pada fase `auth.loading`
+/// (cold start warmup). Bg + logo IDENTIK dengan launch_background native
+/// (drawable-v21) supaya system splash → Flutter splash menyatu mulus,
+/// tidak ada lagi layar hitam polos di tengah cold start.
+class _SplashReplica extends StatelessWidget {
+  const _SplashReplica();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFF121212), // = launch_bg colors.xml
+      child: Center(
+        child: Image.asset(
+          'assets/launch_logo.png',
+          width: 120,
+          height: 120,
+          // Logo sudah sama persis dengan splash native — tanpa animasi
+          // agar transisi tidak terlihat sebagai "ganti layar".
+          gaplessPlayback: true,
+          filterQuality: FilterQuality.medium,
+        ),
+      ),
+    );
+  }
+}
+
 /// skeleton → konten TIDAK terlihat sama sekali (layout sama persis).
 /// JANGAN taruh logo app di sini: 62% piksel logo itu putih — di atas
 /// background gelap jadi kilatan putih besar yang makin terlihat saat

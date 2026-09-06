@@ -18,7 +18,8 @@
 -- ============================================================
 
 -- ── daily_login_bonus: freeze saat OFF ──
-create or replace function public.daily_login_bonus()
+drop function if exists public.daily_login_bonus();
+create function public.daily_login_bonus()
 returns int
 language plpgsql
 security definer
@@ -61,7 +62,8 @@ $$;
 grant execute on function public.daily_login_bonus() to authenticated, service_role;
 
 -- ── room_read_bonus: freeze saat OFF ──
-create or replace function public.room_read_bonus()
+drop function if exists public.room_read_bonus();
+create function public.room_read_bonus()
 returns int
 language plpgsql
 security definer
@@ -93,7 +95,8 @@ $$;
 grant execute on function public.room_read_bonus() to authenticated, service_role;
 
 -- ── one_time_bonus: freeze saat OFF (register_bonus ikut, karena wrapper) ──
-create or replace function public.one_time_bonus(action_key text, bonus int)
+drop function if exists public.one_time_bonus(text, int);
+create function public.one_time_bonus(action_key text, bonus int)
 returns int
 language plpgsql
 security definer
@@ -289,4 +292,11 @@ begin
 end;
 $$;
 revoke execute on function public.claim_weekly_quest(text, int) from public, anon;
+grant execute on function public.claim_weekly_quest(text, int) to authenticated, service_role;
+
+-- Re-grant (fungsi di-drop & recreate di atas, grant lama ikut hilang)
+grant execute on function public.daily_login_bonus() to authenticated, service_role;
+grant execute on function public.room_read_bonus() to authenticated, service_role;
+grant execute on function public.one_time_bonus(text, int) to authenticated, service_role;
+grant execute on function public.send_coins(text, uuid, int) to authenticated, service_role;
 grant execute on function public.claim_weekly_quest(text, int) to authenticated, service_role;

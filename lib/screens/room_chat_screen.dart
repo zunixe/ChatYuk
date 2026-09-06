@@ -38,6 +38,9 @@ import '../widgets/composer_link_preview.dart';
 import '../widgets/chat_ui_shared.dart';
 import '../widgets/linkify_text.dart';
 import '../widgets/link_preview.dart';
+import '../widgets/gift_fly_overlay.dart';
+import '../widgets/room_gift_panel.dart';
+import '../config/gifts.dart';
 import '../services/link_preview_service.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
@@ -92,6 +95,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<UserModel>> _usersStream;
 
+  // ── Room gift (live) ──
+  final _giftFly = GiftFlyController();
+  Set<String> _seenGiftMsgIds = {};
+
   // ── Private room v2 ──
   String? _myRole;
   String? _liveUid;
@@ -121,6 +128,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
     _pointsProv = context.read<PointsProvider>();
+    _msgsStream.listen(_onMessagesForGift);
     if (isPrivateRoom) {
       unawaited(_initPrivate());
     }
@@ -229,6 +237,72 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       if (mounted && g != _isGrantedBroadcast) setState(() => _isGrantedBroadcast = g);
     } catch (e) {
       debugPrint('[BDBG] refreshGrant error: $e');
+    }
+  }
+
+  // ── Room gift (live) ──
+
+  /// Setiap batch pesan masuk, ambil type='gift' yang belum ditampilkan
+  /// → mainkan animasi fly. Stream mengirim snapshot penuh, jadi
+  /// dedup via id pesan.
+  void _onMessagesForGift(List<MessageModel> msgs) {
+    final gifts = msgs.where((m) => m.type == 'gift');
+    for (final m in gifts) {
+      final id = m.id;
+      if (_seenGiftMsgIds.contains(id)) continue;
+      _seenGiftMsgIds.add(id);
+      if (_seenGiftMsgIds.length > 500) _seenGiftMsgIds.clear();
+      final gift = giftById(m.text);
+      if (gift == null) continue;
+      // Snapshot lama tidak diputar ulang: hanya gift yang masuk live
+      // (timestamp < 5 detik lalu) yang dianimasikan.
+      final fresh =
+          DateTime.now().difference(m.timestamp) < const Duration(seconds: 5);
+      if (!fresh) continue;
+      _giftFly.push(gift, m.senderName, 1);
+    }
+  }
+
+  Future<void> _openRoomGiftPanel() async {
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    if (!auth.canUsePaid) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(auth.profile?.isRegistered != true
+            ? s.errCoinRegisterOnly
+            : s.msgVerifyToUsePaid),
+      ));
+      return;
+    }
+    final pick = await RoomGiftPanel.show(context);
+    if (pick == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final res = await _chat.sendRoomGift(
+        widget.room.id,
+        pick.gift.id,
+        qty: pick.qty,
+      );
+      if (res['ok'] == true) {
+        if (res['points'] != null) {
+          _pointsProv?.setPoints((res['points'] as num).toInt());
+        }
+        if (mounted) {
+          _pointsProv?.showPointsToast(
+            context,
+            s.giftSentToast(s.isId ? pick.gift.nameId : pick.gift.nameEn),
+          );
+        }
+      }
+    } catch (e) {
+      final msg = e.toString();
+      messenger.showSnackBar(SnackBar(
+        content: Text(msg.contains('Not enough')
+            ? s.giftInsufficient
+            : msg.contains('registered')
+                ? s.errCoinRegisterOnly
+                : s.errSendCoin),
+      ));
     }
   }
 
@@ -451,6 +525,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
     _livePoll?.cancel();
+    _giftFly.dispose();
     try { _roomLiveChannel?.unsubscribe(); } catch (_) {}
     unawaited(_broadcastSession?.stop());
     if (activeChatId.value == widget.room.id) {
@@ -1352,6 +1427,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               _sendViewOncePhoto();
             },
             onSendVoice: _sendVoiceMessage,
+            onOpenGiftPanel:
+                isPrivateRoom && _myRole != 'owner' ? _openRoomGiftPanel : null,
             pendingPhotoBase64: _pendingPhotoBase64,
             onCancelPhoto: _pendingPhotoBase64 != null
                 ? () => setState(() => _pendingPhotoBase64 = null)
@@ -1359,9 +1436,15 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           ),
         ],
       );
-        if (!showPip) return column;
+        // Overlay gift fly + kombo — di atas semua konten (IgnorePointer,
+        // tidak mengganggu gesture chat/stage).
+        final giftOverlay = GiftFlyOverlay(controller: _giftFly);
+        if (!showPip) {
+          return Stack(children: [column, Positioned.fill(child: giftOverlay)]);
+        }
         return Stack(children: [
           column,
+          Positioned.fill(child: giftOverlay),
           Builder(builder: (context) {
             final mq = MediaQuery.of(context);
             final minW = 100.0, maxW = mq.size.width * 0.8;
@@ -1870,6 +1953,64 @@ class _MessageBubble extends StatelessWidget {
         ],
       );
     }
+    // Bubble gift: emoji besar + nama gift (mirip room streaming).
+    if (msg.type == 'gift') {
+      final gift = giftById(msg.text);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0x26FF2D95), Color(0x26FF8A00)],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: Colors.pinkAccent.withValues(alpha: 0.35),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(gift?.emoji ?? '🎁',
+                    style: const TextStyle(fontSize: 26)),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      gift == null
+                          ? msg.text
+                          : (context.read<LocaleProvider>().s.isId
+                              ? gift.nameId
+                              : gift.nameEn),
+                      style: AppText.label.copyWith(color: _textColor),
+                    ),
+                    Text(
+                      '🎁 gift',
+                      style: AppText.micro.copyWith(
+                        color: Colors.pinkAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              timeStr,
+              style: AppText.micro.copyWith(
+                color: _textColor.withValues(alpha: 0.45),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2087,6 +2228,7 @@ class _ChatInput extends StatefulWidget {
   final VoidCallback onSendViewOnce;
   final String? pendingPhotoBase64;
   final VoidCallback? onCancelPhoto;
+  final VoidCallback? onOpenGiftPanel;
   final void Function(String filePath, int durationMs)? onSendVoice;
   const _ChatInput({
     required this.controller,
@@ -2098,6 +2240,7 @@ class _ChatInput extends StatefulWidget {
     required this.onSendViewOnce,
     this.pendingPhotoBase64,
     this.onCancelPhoto,
+    this.onOpenGiftPanel,
     this.onSendVoice,
   });
 
@@ -2397,6 +2540,17 @@ class _ChatInputState extends State<_ChatInput> {
                                 tooltip: s.menuSendPhoto,
                               ),
                               const SizedBox(width: 2),
+                              // Tombol gift hanya muncul di private room (live)
+                              // dan bila callback aktif (member non-host).
+                              if (widget.onOpenGiftPanel != null) ...[
+                                ChatIconButton(
+                                  open: false,
+                                  onTap: widget.onOpenGiftPanel!,
+                                  tooltip: s.giftTitle,
+                                  icon: Icons.card_giftcard_outlined,
+                                ),
+                                const SizedBox(width: 2),
+                              ],
                               ChatIconButton(
                                 open: false,
                                 onTap: widget.onTakePhoto,

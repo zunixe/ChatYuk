@@ -171,13 +171,13 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
    - Flavor **apkpure** (default; appId `com.chatyuk.chatyuk`):
      ```bash
      KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-       flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+       flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
        --obfuscate --split-debug-info=build/app/symbols
      ```
    - Flavor **play** (Google Play; appId `com.chatyuk.chatyuk` — sama dengan apkpure; `google-services.json` khusus di `android/app/src/play/`):
      ```bash
      KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-       flutter build apk --release --flavor play --dart-define=APP_FLAVOR=play \
+       flutter build apk --release --flavor playProd --dart-define=APP_FLAVOR=play \
        --obfuscate --split-debug-info=build/app/symbols
      ```
    - **Kedua flavor memiliki PERILAKU SAMA** — app chat + koin sebagai digital
@@ -190,13 +190,13 @@ Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
 - AAB untuk Google Play juga pakai flag yang sama (flavor play):
   ```bash
   KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-    flutter build appbundle --release --flavor play --dart-define=APP_FLAVOR=play \
+    flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
     --obfuscate --split-debug-info=build/app/symbols
   ```
 - Debug symbols disimpan di `build/app/symbols` (jangan dihapus) — dipakai `flutter symbolize` untuk baca stack trace saat crash.
 - **JANGAN build flavor `play` / AAB untuk Google Play tanpa instruksi eksplisit dari user.** Default build = flavor `apkpure`. Kalau ragu, tanya dulu.
 - Build flavor `admin` (internal): `-t lib/main_admin.dart` + `--flavor admin` — output `app-admin-release.apk`, appId `com.chatyuk.chatyuk.admin`. DILARANG upload ke store mana pun.
-- Sebelum selesai, selalu: `flutter analyze` → `flutter clean` (WAJIB — build incremental sering tidak memasukkan perubahan terbaru) → `flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols` → copy ke `~/Downloads/chatyuk.apk` → push ke HP (lihat "Build & Push ke HP")
+- Sebelum selesai, selalu: `flutter analyze` → `flutter clean` (WAJIB — build incremental sering tidak memasukkan perubahan terbaru) → `flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols` → copy ke `~/Downloads/chatyuk.apk` → push ke HP (lihat "Build & Push ke HP")
 
 ### Build cepat — LEWATI iOS (WAJIB untuk kerja Android-only)
 Kita HANYA rilis Android (flavor `apkpure`); iOS tidak pernah di-build untuk distribusi.
@@ -207,7 +207,7 @@ yang tidak kita butuhkan. Ganti `flutter clean` dengan pembersihan Android saja:
 rm -rf build/app/outputs build/app/symbols build/app/intermediates \
   build/app/tmp .dart_tool/flutter_build
 # lalu langsung build apkpure (tanpa `flutter clean`):
-flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
 ```
 
@@ -225,7 +225,7 @@ class asli (`FlexParentData`, `StackParentData`, dll) dan pesan Flutter
 ```bash
 rm -rf build/app/outputs build/app/symbols build/app/intermediates \
   build/app/tmp .dart_tool/flutter_build
-flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure
+flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
 cp build/app/outputs/flutter-apk/app-apkpure-release.apk ~/Downloads/chatyuk_dbg.apk
 ```
 
@@ -312,7 +312,7 @@ APK="build/app/outputs/flutter-apk/app-apkpure-release.apk"
 
 flutter clean
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-  flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+  flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
 
 cp "$APK" "$HOME/Downloads/chatyuk.apk"
