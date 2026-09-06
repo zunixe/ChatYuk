@@ -20,7 +20,8 @@ class StoryCameraPickerScreen extends StatefulWidget {
       _StoryCameraPickerScreenState();
 }
 
-class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
+class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
+    with WidgetsBindingObserver {
   final ScrollController _scrollCtrl = ScrollController();
   final List<AssetEntity> _photos = [];
   final Map<String, Uint8List?> _thumbs = {};
@@ -28,8 +29,9 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
   bool _loading = true;
   bool _noPermission = false;
   // Akses SEBAGIAN (Android 14+ "Select photos"): grid hanya berisi foto
-  // pilihan user — tampilkan tile "Tambah foto" untuk perluas pilihan.
+  // pilihan user. Dialog sekali tawarkan perluas/izinkan semua.
   bool _limited = false;
+  bool _promptShown = false;
   bool _hasMore = true;
   int _page = 0;
   static const int _pageSize = 60;
@@ -38,14 +40,80 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scrollCtrl.addListener(_onScroll);
     _loadGallery();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Kembali dari Pengaturan (izin diubah) → muat ulang grid.
+    if (state == AppLifecycleState.resumed && mounted) {
+      _resetAndReload();
+    }
+  }
+
+  /// Reset pagination + muat ulang dari awal.
+  void _resetAndReload() {
+    setState(() {
+      _photos.clear();
+      _thumbKeys.clear();
+      _thumbs.clear();
+      _page = 0;
+      _hasMore = true;
+      _loadingMore = false;
+      _noPermission = false;
+    });
+    _loadGallery();
+  }
+
+  /// Dialog sekali saat akses sebagian: tawarkan pilih foto lain
+  /// (buka pemilih sistem) atau izinkan semua via Pengaturan.
+  void _showPartialDialog() {
+    final s = context.read<LocaleProvider>().s;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: Text(
+          s.storyPartialTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: Text(
+          s.storyPartialDesc,
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await PhotoManager.requestPermissionExtend();
+              if (!mounted) return;
+              _resetAndReload();
+            },
+            child: Text(s.storyPartialAdd),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              PhotoManager.openSetting();
+            },
+            child: Text(s.storyPartialAllowAll),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onScroll() {
@@ -99,6 +167,13 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
           _loading = false;
           _loadingMore = false;
         });
+        // Akses sebagian → tawarkan perluas sekali per buka halaman.
+        if (_limited && !_promptShown) {
+          _promptShown = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _showPartialDialog();
+          });
+        }
       }
       // Thumbnail paralel per batch kecil.
       for (final a in assets) {
@@ -194,14 +269,11 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
                     mainAxisSpacing: 1,
                     crossAxisSpacing: 1,
                   ),
-                  itemCount: _photos.length + 1 + (_limited ? 1 : 0),
+                  itemCount: _photos.length + 1,
                   itemBuilder: (_, i) {
-                    // Kotak PERTAMA = kamera.
+                    // Kotak PERTAMA = kamera, sisanya foto recent langsung.
                     if (i == 0) return _cameraTile();
-                    final j = i - 1;
-                    // Akses sebagian → kotak KEDUA = tambah foto pilihan.
-                    if (_limited && j == 0) return _addMoreTile();
-                    final a = _photos[_limited ? j - 1 : j];
+                    final a = _photos[i - 1];
                     final thumb = _thumbs[a.id];
                     return GestureDetector(
                       onTap: () => _pickPhoto(a),
@@ -215,44 +287,6 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
                     );
                   },
                 ),
-    );
-  }
-
-  /// Kotak tambah foto — akses sebagian: buka pemilih sistem lagi untuk
-  /// perluas foto yang bisa dilihat aplikasi, lalu muat ulang grid.
-  Widget _addMoreTile() {
-    final s = context.read<LocaleProvider>().s;
-    return GestureDetector(
-      onTap: () async {
-        await PhotoManager.requestPermissionExtend();
-        if (!mounted) return;
-        setState(() {
-          _photos.clear();
-          _thumbKeys.clear();
-          _thumbs.clear();
-          _page = 0;
-          _hasMore = true;
-          _loadingMore = false;
-        });
-        _loadGallery();
-      },
-      child: Container(
-        color: Colors.white10,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.add_photo_alternate_outlined,
-                  color: Colors.white70, size: 30),
-              const SizedBox(height: 4),
-              Text(
-                s.storyAddMorePhotos,
-                style: const TextStyle(color: Colors.white70, fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
