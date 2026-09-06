@@ -27,6 +27,9 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
   final Set<String> _thumbKeys = {};
   bool _loading = true;
   bool _noPermission = false;
+  // Akses SEBAGIAN (Android 14+ "Select photos"): grid hanya berisi foto
+  // pilihan user — tampilkan tile "Tambah foto" untuk perluas pilihan.
+  bool _limited = false;
   bool _hasMore = true;
   int _page = 0;
   static const int _pageSize = 60;
@@ -70,6 +73,8 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
         }
         return;
       }
+      final limitedNow = ps == PermissionState.limited;
+      if (mounted) setState(() => _limited = limitedNow);
       final albums = await PhotoManager.getAssetPathList(
         type: RequestType.image,
         onlyAll: true,
@@ -171,7 +176,7 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: _openCamera,
-                    child: const Text('Kamera'),
+                    child: Text(context.read<LocaleProvider>().s.storyCamera),
                   ),
                 ],
               ),
@@ -189,11 +194,14 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
                     mainAxisSpacing: 1,
                     crossAxisSpacing: 1,
                   ),
-                  itemCount: _photos.length + 1,
+                  itemCount: _photos.length + 1 + (_limited ? 1 : 0),
                   itemBuilder: (_, i) {
                     // Kotak PERTAMA = kamera.
                     if (i == 0) return _cameraTile();
-                    final a = _photos[i - 1];
+                    final j = i - 1;
+                    // Akses sebagian → kotak KEDUA = tambah foto pilihan.
+                    if (_limited && j == 0) return _addMoreTile();
+                    final a = _photos[_limited ? j - 1 : j];
                     final thumb = _thumbs[a.id];
                     return GestureDetector(
                       onTap: () => _pickPhoto(a),
@@ -207,6 +215,44 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen> {
                     );
                   },
                 ),
+    );
+  }
+
+  /// Kotak tambah foto — akses sebagian: buka pemilih sistem lagi untuk
+  /// perluas foto yang bisa dilihat aplikasi, lalu muat ulang grid.
+  Widget _addMoreTile() {
+    final s = context.read<LocaleProvider>().s;
+    return GestureDetector(
+      onTap: () async {
+        await PhotoManager.requestPermissionExtend();
+        if (!mounted) return;
+        setState(() {
+          _photos.clear();
+          _thumbKeys.clear();
+          _thumbs.clear();
+          _page = 0;
+          _hasMore = true;
+          _loadingMore = false;
+        });
+        _loadGallery();
+      },
+      child: Container(
+        color: Colors.white10,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add_photo_alternate_outlined,
+                  color: Colors.white70, size: 30),
+              const SizedBox(height: 4),
+              Text(
+                s.storyAddMorePhotos,
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

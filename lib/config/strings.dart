@@ -897,6 +897,10 @@ class S {
   String get storyDeleted => isId ? 'Story dihapus' : 'Story deleted';
   String get storyVideoSoon =>
       isId ? 'Story video segera hadir' : 'Video stories coming soon';
+  String get storyCamera =>
+      isId ? 'Kamera' : 'Camera';
+  String get storyAddMorePhotos =>
+      isId ? 'Tambah foto' : 'Add photos';
   String get storyDeleteFail =>
       isId ? 'Gagal menghapus story' : 'Failed to delete story';
   String get storyDeleteSlideTitle =>
