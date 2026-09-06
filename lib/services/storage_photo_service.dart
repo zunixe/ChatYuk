@@ -148,6 +148,24 @@ class StoragePhotoService {
     }
   }
 
+  /// Thumbnail kecil via transformasi server (jauh lebih ringan dari file
+  /// full untuk tile 64px). Fallback ke download full kalau transform
+  /// tidak didukung server — thumbnail tidak boleh gagal total.
+  Future<Uint8List?> downloadThumbBytes(String path,
+      {int width = 160, int quality = 70}) async {
+    try {
+      final bytes = await _sb.storage.from(_bucket).download(
+            path,
+            transform:
+                TransformOptions(width: width, quality: quality),
+          );
+      if (bytes.isNotEmpty) return bytes;
+    } catch (e) {
+      debugPrint('[StoragePhoto] thumb transform gagal, fallback full: $e');
+    }
+    return downloadBytes(path);
+  }
+
   /// Hapus foto dari Storage (logout/admin). Best-effort.
   Future<void> delete(String path) async {
     try {

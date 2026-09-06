@@ -293,6 +293,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     super.initState();
     _scrollCtrl.addListener(_onScroll);
     _loadFilter();
+    // Story tray refresh DITUNDA ke post-frame pertama (bukan saat
+    // provider dibuat) — RPC + realtime subscribe jangan berebut
+    // dengan raster frame pertama.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        context.read<StoryProvider>().refresh(silent: true);
+      } catch (_) {}
+    });
     _sharePulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -1833,20 +1842,24 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     final p = widget.item.thumbPath;
     if (p.isEmpty) return;
     if (StoragePhotoService.instance.isAvatarPath(p)) return;
+    // Kunci cache beda dari full image (thumb 160px vs full) — hash FNV,
+    // string apa pun aman.
+    final key = '$p#thumb160';
     // Disk dulu (repeat view instan) — baru network + simpan disk.
     try {
-      final d = MediaDiskCache.instance.readSync(p) ??
-          await MediaDiskCache.instance.read(p);
+      final d = MediaDiskCache.instance.readSync(key) ??
+          await MediaDiskCache.instance.read(key);
       if (d != null && d.isNotEmpty) {
         if (mounted) setState(() => _thumb = d);
         return;
       }
     } catch (_) {}
     try {
-      final b = await StoragePhotoService.instance.downloadBytes(p);
+      // Thumb server-side (KB, bukan MB) — fallback full otomatis.
+      final b = await StoragePhotoService.instance.downloadThumbBytes(p);
       if (mounted && b != null && b.isNotEmpty) {
         setState(() => _thumb = b);
-        unawaited(MediaDiskCache.instance.write(p, b));
+        unawaited(MediaDiskCache.instance.write(key, b));
       }
     } catch (_) {}
   }
@@ -1904,7 +1917,13 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: _thumb != null
-                        ? Image.memory(_thumb!, fit: BoxFit.cover, alignment: Alignment.center)
+                        ? Image.memory(_thumb!,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.center,
+                            // Decode kecil (tile 64px, x2 density) — hemat
+                            // CPU/memory raster frame pertama.
+                            cacheWidth: 128,
+                            cacheHeight: 192)
                         : Center(
                             child: Text(
                               it.authorName.isNotEmpty

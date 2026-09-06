@@ -66,7 +66,10 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ),
         ChangeNotifierProvider(create: (_) => SocialProvider()),
         ChangeNotifierProvider(create: (_) => TimelineProvider()),
-        ChangeNotifierProvider(create: (_) => StoryProvider()..refresh(silent: true)),
+        // Refresh perdana story DITUNDA ke post-frame (di
+        // OnlineUsersScreen.initState) — RPC story_tray + subscribe
+        // realtime jangan berebut CPU/network dengan frame pertama.
+        ChangeNotifierProvider(create: (_) => StoryProvider()),
         ...AdminGate.extraProviders,
         ChangeNotifierProvider.value(value: _roomProvider),
         ChangeNotifierProvider.value(value: _onlineUsersProvider),
