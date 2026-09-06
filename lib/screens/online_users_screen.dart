@@ -30,6 +30,7 @@ import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
+import 'user_info_screen.dart';
 import 'story_composer_screen.dart';
 import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
@@ -476,8 +477,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     }
   }
 
-  void _showAvatarZoom(String b64, Color bgColor, String initial) {
-    Uint8List? bytes;
+  void _showAvatarZoom(String b64, Color bgColor, String initial) {    Uint8List? bytes;
     if (b64.isNotEmpty) {
       try {
         bytes = base64Decode(b64);
@@ -529,6 +529,31 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     );
   }
 
+  /// Zoom foto profil user lain: pakai bytes cache global kalau ada (b64
+  /// langsung / path dari disk), else download path → tampilkan dialog.
+  Future<void> _zoomUserAvatar(UserModel user, Color color) async {
+    Uint8List? bytes = _avatarBytesByUid[user.uid];
+    final src = user.avatar;
+    if (bytes == null && src.isNotEmpty && !src.startsWith('avatars/')) {
+      try {
+        bytes = base64Decode(src);
+      } catch (_) {}
+    }
+    if (bytes == null && src.startsWith('avatars/')) {
+      try {
+        bytes = MediaDiskCache.instance.readSync(src) ??
+            await MediaDiskCache.instance.read(src) ??
+            await StoragePhotoService.instance.downloadBytes(src);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    if (bytes != null && bytes.isNotEmpty) {
+      _showAvatarZoom(base64Encode(bytes), color, user.initial);
+    } else {
+      _showAvatarZoom('', color, user.initial);
+    }
+  }
+
   @override
   void dispose() {
     _scrollCtrl.removeListener(_onScroll);
@@ -573,75 +598,172 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     }
   }
 
-  /// Tray story horizontal — kotak portrait rounded + ring gradient
-  /// (belum dilihat) / abu (sudah). Tile pertama = milik sendiri
-  /// (badge + kalau belum ada story).
-  Widget _buildStoryTray(BuildContext ctx, AuthProvider auth) {
-    final sp = ctx.watch<StoryProvider>();
-    final myUid = auth.uid ?? '';
-    final items = sp.tray;
-    // Anon juga bisa bikin story (dipaksa public) → tile + selalu tampil.
-    const showOwnTile = true;
-    return SizedBox(
-      height: 104,
-      child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              itemCount: items.length + (showOwnTile && !_hasOwn(items) ? 1 : 0),
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (_, i) {
-                // Slot pertama = tile milik sendiri (dari tray kalau ada,
-                // else tile "+").
-                final ownIdx = items.indexWhere((t) => t.own && t.slideCount > 0);
-                if (ownIdx >= 0) {
-                  // Own item sudah di list (urut server: own duluan) —
-                  // render normal, tambah badge "+" kecil.
-                  if (i == ownIdx) {
-                    return _StoryTrayTile(
-                      item: items[i],
-                      onTap: () => _openViewer(sp, i),
-                      isOwnWithAdd: showOwnTile,
+  /// Avatar + nama sendiri sebagai TILE PERTAMA tray (ikut scroll
+  /// horizontal seperti IG — bukan nempel di luar list).
+  Widget _buildOwnAvatarTile(AuthProvider auth) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onTap: () {
+                  final b64 = auth.profile?.avatar ?? '';
+                  final init =
+                      (auth.profile?.nickname ?? '?')[0].toUpperCase();
+                  _showAvatarZoom(b64, AppTheme.primary, init);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Builder(builder: (_) {
+                    final b64 = auth.profile?.avatar ?? '';
+                    final bytes = _resolveOwnAvatar(b64);
+                    // Huruf inisial HANYA kalau memang tidak ada
+                    // avatar (string kosong). Selama bytes belum
+                    // siap → lingkaran tint polos, tanpa flash "S".
+                    final showInitial = b64.isEmpty;
+                    return CircleAvatar(
+                      radius: 27,
+                      backgroundColor:
+                          AppTheme.primary.withValues(alpha: 0.15),
+                      backgroundImage:
+                          bytes != null ? MemoryImage(bytes) : null,
+                      child: showInitial
+                          ? Text(
+                              (auth.profile?.nickname ?? '?')[0]
+                                  .toUpperCase(),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: AppGlyph.avatarInitial(54),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            )
+                          : null,
                     );
-                  }
-                  // Geser indeks: sebelum own → i-0 setelah own slot tetap.
-                  final shifted = i > ownIdx ? i - 1 : i;
-                  if (shifted >= items.length ||
-                      items[shifted].authorId == myUid) {
-                    return const SizedBox.shrink();
-                  }
-                  return _StoryTrayTile(
-                    item: items[shifted],
-                    onTap: () => _openViewer(sp, i),
-                  );
-                }
-                // Belum punya story sendiri → tile "+" di depan.
-                if (showOwnTile && i == 0) {
-                  return _OwnAddTile(onTap: _openStoryComposer);
-                }
-                final shifted = i - 1;
-                if (shifted < 0 || shifted >= items.length) {
-                  return const SizedBox.shrink();
-                }
-                return _StoryTrayTile(
-                  item: items[shifted],
-                  onTap: () => _openViewer(sp, shifted),
-                );
-              },
+                  }),
+                ),
+              ),
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: GestureDetector(
+                  onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 3,
+                        ),
+                      ],
+                    ),
+                    child: _uploadingAvatar
+                        ? Padding(
+                            padding: EdgeInsets.all(4),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: AppTheme.primary,
+                            ),
+                          )
+                        : Icon(
+                            Icons.camera_alt,
+                            color: AppTheme.primary,
+                            size: 11,
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          SizedBox(
+            width: 72,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    auth.profile?.nickname ?? '-',
+                    style: AppText.bodyStrong
+                        .copyWith(color: AppTheme.textPrimary),
+                  ),
+                  if (auth.profile?.isRegistered == true) ...[
+                    const SizedBox(width: 2),
+                    const Icon(
+                      Icons.verified,
+                      size: 13,
+                      color: Color(0xFF4A90E2),
+                    ),
+                  ],
+                ],
+              ),
             ),
+          ),
+        ],
+      ),
     );
   }
 
-  bool _hasOwn(List items) =>
-      items.any((t) => t.own && t.slideCount > 0);
+  /// Tray story horizontal — kotak portrait rounded + ring gradient
+  /// (belum dilihat) / putih (sudah). Slot 0 = avatar sendiri (ikut
+  /// scroll); lalu tile "+" kalau belum punya story; lalu tile story.
+  Widget _buildStoryTray(BuildContext ctx, AuthProvider auth) {
+    final sp = ctx.watch<StoryProvider>();
+    // Hanya item berisi slide (slideCount>0) yang tampil & bisa dibuka.
+    final items = sp.tray.where((t) => t.slideCount > 0).toList();
+    // Anon juga bisa bikin story (dipaksa public) → tile + selalu tampil.
+    const showOwnTile = true;
+    final showAdd = showOwnTile && !items.any((t) => t.own);
+    return SizedBox(
+      height: 132,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        itemCount: 1 + items.length + (showAdd ? 1 : 0),
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, i) {
+          // Slot 0 = avatar sendiri (ikut scroll seperti IG).
+          if (i == 0) return _buildOwnAvatarTile(auth);
+          final j = i - 1;
+          // Slot berikutnya = tile "+" kalau belum punya story sendiri.
+          if (showAdd && j == 0) {
+            return _OwnAddTile(onTap: _openStoryComposer);
+          }
+          final it = items[showAdd ? j - 1 : j];
+          final idx = showAdd ? j - 1 : j;
+          return _StoryTrayTile(
+            item: it,
+            // Badge "+" di tile sendiri untuk tambah slide baru —
+            // buka composer (sama seperti tombol + di AppBar).
+            isOwnWithAdd: showOwnTile && it.own,
+            onTap: () => _openViewer(items, idx),
+            onAddTap: (showOwnTile && it.own) ? _openStoryComposer : null,
+          );
+        },
+      ),
+    );
+  }
 
-  void _openViewer(StoryProvider sp, int index) {
-    final items = sp.tray
-        .where((t) => t.slideCount > 0)
-        .toList();
-    // Re-map index kasar: cari posisi di list tersaring.
-    final filtered = sp.tray.where((t) => t.slideCount > 0).toList();
-    final target = filtered.isEmpty ? 0 : index.clamp(0, filtered.length - 1);
+  void _openViewer(List<StoryTrayItem> items, int index) {
     if (items.isEmpty) return;
+    final target = index.clamp(0, items.length - 1);
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -971,157 +1093,44 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                 )
               : Consumer<OnlineUsersProvider>(
                   key: const ValueKey('title'),
-                  builder: (_, prov, __) => Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        s.titleOnline,
-                        style: AppText.title.copyWith(color: AppTheme.textPrimary),
-                      ),
-                      Text(
-                        '${prov.users.length} ${s.onlineActiveUsers}',
-                        style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-                      ),
-                    ],
-                  ),
+                  builder: (_, prov, __) {
+                    // Hitung sama seperti list: exclude self + blocked +
+                    // dedupe by uid/nickname, supaya angka = jumlah kartu.
+                    final chat = context.read<ChatProvider>();
+                    final seenU = <String>{};
+                    final seenN = <String>{};
+                    final n = prov.users
+                        .where((u) =>
+                            u.uid != auth.uid &&
+                            u.uid.isNotEmpty &&
+                            !chat.isBlocked(u.uid) &&
+                            seenU.add(u.uid) &&
+                            seenN.add(u.nickname.toLowerCase()))
+                        .length;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          s.titleOnline,
+                          style: AppText.title.copyWith(color: AppTheme.textPrimary),
+                        ),
+                        Text(
+                          '$n ${s.onlineActiveUsers}',
+                          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    );
+                  },
                 ),
         ),
         // Avatar + nama user + TRAY STORY (preferredSize) — tidak ikut
         // hilang saat mode search aktif.
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(110),
+          preferredSize: const Size.fromHeight(146),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // ── Kolom avatar sendiri + nickname di bawahnya ──
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        GestureDetector(
-                          onTap: () {
-                            final b64 = auth.profile?.avatar ?? '';
-                            final init =
-                                (auth.profile?.nickname ?? '?')[0].toUpperCase();
-                            _showAvatarZoom(b64, AppTheme.primary, init);
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black26,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Builder(builder: (_) {
-                              final b64 =
-                                  auth.profile?.avatar ?? '';
-                              final bytes = _resolveOwnAvatar(b64);
-                              // Huruf inisial HANYA kalau memang tidak ada
-                              // avatar (string kosong). Selama bytes belum
-                              // siap → lingkaran tint polos, tanpa flash "S".
-                              final showInitial = b64.isEmpty;
-                              return CircleAvatar(
-                                radius: 27,
-                                backgroundColor: AppTheme.primary
-                                    .withValues(alpha: 0.15),
-                                backgroundImage: bytes != null
-                                    ? MemoryImage(bytes)
-                                    : null,
-                                child: showInitial
-                                    ? Text(
-                                        (auth.profile?.nickname ?? '?')[0]
-                                            .toUpperCase(),
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: AppGlyph.avatarInitial(54),
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      )
-                                    : null,
-                              );
-                            }),
-                          ),
-                        ),
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: GestureDetector(
-                            onTap: _uploadingAvatar
-                                ? null
-                                : _pickAndUploadAvatar,
-                            child: Container(
-                              width: 20,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black26,
-                                    blurRadius: 3,
-                                  ),
-                                ],
-                              ),
-                              child: _uploadingAvatar
-                                  ? Padding(
-                                      padding: EdgeInsets.all(4),
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 1.5,
-                                        color: AppTheme.primary,
-                                      ),
-                                    )
-                                  : Icon(
-                                      Icons.camera_alt,
-                                      color: AppTheme.primary,
-                                      size: 11,
-                                    ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    SizedBox(
-                      width: 72,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              auth.profile?.nickname ?? '-',
-                              style: AppText.bodyStrong.copyWith(
-                                  color: AppTheme.textPrimary),
-                            ),
-                            if (auth.profile?.isRegistered == true) ...[
-                              const SizedBox(width: 2),
-                              const Icon(
-                                Icons.verified,
-                                size: 13,
-                                color: Color(0xFF4A90E2),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 10),
-                // ── Tray story horizontal ──
-                Expanded(child: _buildStoryTray(context, auth)),
-              ],
-            ),
+            child: _buildStoryTray(context, auth),
           ),
         ),
         iconTheme: IconThemeData(color: AppTheme.textPrimary),
@@ -1176,7 +1185,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   .where((u) => u.uid != auth.uid && !chat.isBlocked(u.uid))
                   .toList();
 
+              // Pertahanan tampilan: dedupe by uid (dan nickname) — jika ada
+              // duplikat lolos dari stream/cache, kartu tidak boleh tampil 2x.
+              final seenU = <String>{};
+              final seenN = <String>{};
               final users = allUsers.where((u) {
+                if (!seenU.add(u.uid)) return false;
+                if (!seenN.add(u.nickname.toLowerCase())) return false;
                 if (_negara != 'all' && u.country != _negara) return false;
                 if (_gender != 'all' && u.gender != _gender) return false;
                 if (_search.isNotEmpty &&
@@ -1335,6 +1350,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 builder: (cardCtx) => _UserCard(
                                   user: paged[i],
                                   onTap: () => _startChat(context, paged[i]),
+                                  onAvatarTap: (c) =>
+                                      _zoomUserAvatar(paged[i], c),
                                   onLongPressStart: unreadMap[paged[i].uid] != null && unreadMap[paged[i].uid]! > 0
                                       ? (d) => _showUnreadBubble(cardCtx, paged[i], unreadMap[paged[i].uid]!, d.globalPosition)
                                       : null,
@@ -1488,11 +1505,13 @@ class _FilterDropdown extends StatelessWidget {
 class _UserCard extends StatelessWidget {
   final UserModel user;
   final VoidCallback onTap;
+  final void Function(Color avatarColor) onAvatarTap;
   final void Function(LongPressStartDetails)? onLongPressStart;
   final int unreadCount;
   const _UserCard({
     required this.user,
     required this.onTap,
+    required this.onAvatarTap,
     this.onLongPressStart,
     this.unreadCount = 0,
   });
@@ -1533,6 +1552,12 @@ class _UserCard extends StatelessWidget {
         : s.statusOnline;
 
     return GestureDetector(
+      // SELURUH kartu bisa di-tap → buka chat (tadi area kosong tanpa
+      // handler → "kadang bisa kadang nggak" tergantung posisi jempol).
+      // Zona dalam (avatar/nama/subtitle/follow/chat) tetap menang di
+      // area masing-masing (detector terdalam menang arena).
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
       onLongPressStart: onLongPressStart,
       child: Container(
         margin: EdgeInsets.only(bottom: 8),
@@ -1547,24 +1572,23 @@ class _UserCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: onTap,
-          child: Padding(
+        // Tanpa onTap di level kartu: 3 zona punya handler sendiri
+        // (avatar→zoom, username→profil, ikon chat→chat).
+        child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color.withValues(alpha: 0.15),
+                    GestureDetector(
+                      onTap: () => onAvatarTap(color),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: color.withValues(alpha: 0.15),
                         border: Border.all(color: color, width: 1.5),
                       ),
                       clipBehavior: Clip.antiAlias,
@@ -1579,6 +1603,7 @@ class _UserCard extends StatelessWidget {
                           initial: user.initial,
                           color: color,
                         ),
+                      ),
                     ),
                     Positioned(
                       right: 0,
@@ -1619,10 +1644,21 @@ class _UserCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(
-                              user.nickname,
-                              style: AppText.bodyStrong,
-                              overflow: TextOverflow.ellipsis,
+                            child: GestureDetector(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => UserInfoScreen(
+                                    userId: user.uid,
+                                    fallbackName: user.nickname,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                user.nickname,
+                                style: AppText.bodyStrong,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
                           if (user.gender == 'male' ||
@@ -1649,13 +1685,24 @@ class _UserCard extends StatelessWidget {
                           ],
                         ],
                       ),
-                      Text(
-                        '$genderLabel ${user.age} · ${user.city}, ${user.country}',
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.textSecondary,
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => UserInfoScreen(
+                              userId: user.uid,
+                              fallbackName: user.nickname,
+                            ),
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        child: Text(
+                          '$genderLabel ${user.age} · ${user.city}, ${user.country}',
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -1725,17 +1772,20 @@ class _UserCard extends StatelessWidget {
                             },
                           ),
                         const SizedBox(width: 6),
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: AppTheme.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.chat_bubble_outline,
-                            color: AppTheme.primary,
-                            size: 17,
+                        GestureDetector(
+                          onTap: onTap,
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.chat_bubble_outline,
+                              color: AppTheme.primary,
+                              size: 17,
+                            ),
                           ),
                         ),
                       ],
@@ -1745,8 +1795,6 @@ class _UserCard extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
     ));
   }
 }
@@ -1759,11 +1807,13 @@ class _StoryTrayTile extends StatefulWidget {
   final StoryTrayItem item;
   final VoidCallback onTap;
   final bool isOwnWithAdd;
+  final VoidCallback? onAddTap;
 
   const _StoryTrayTile({
     required this.item,
     required this.onTap,
     this.isOwnWithAdd = false,
+    this.onAddTap,
   });
 
   @override
@@ -1819,7 +1869,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
               children: [
                 Container(
                   width: 64,
-                  height: 96,
+                  height: 114,
                   padding:
                       seen ? EdgeInsets.zero : const EdgeInsets.all(2.5),
                   decoration: BoxDecoration(
@@ -1908,17 +1958,25 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                 ),
                 if (widget.isOwnWithAdd)
                   Positioned(
-                    right: -3,
-                    bottom: -3,
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
+                    // DI DALAM bounds tile (right:2, bottom:2) — dulu -3
+                    // (di luar tile) sehingga tidak pernah bisa di-tap.
+                    right: 2,
+                    bottom: 2,
+                    // Badge "+" punya handler sendiri (buka composer) —
+                    // lebih dalam dari GestureDetector tile → menang arena.
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.onAddTap ?? widget.onTap,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: const Icon(Icons.add, size: 13, color: Colors.white),
                       ),
-                      child: const Icon(Icons.add, size: 13, color: Colors.white),
                     ),
                   ),
               ],
@@ -1946,7 +2004,7 @@ class _OwnAddTile extends StatelessWidget {
           children: [
             Container(
               width: 64,
-              height: 96,
+              height: 114,
               decoration: BoxDecoration(
                 color: AppTheme.bgInput,
                 borderRadius: BorderRadius.circular(12),

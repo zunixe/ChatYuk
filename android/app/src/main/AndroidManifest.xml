@@ -22,6 +22,10 @@
         android:maxSdkVersion="32"
         tools:replace="android:maxSdkVersion"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <!-- Galeri foto/video story (Android 13+ wajib ini; READ_EXTERNAL_STORAGE
+         diabaikan sistem di API 33+. Aman di API lama — otomatis diabaikan.) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <application
         android:label="${appName}"
         android:name="${applicationName}"

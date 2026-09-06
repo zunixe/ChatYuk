@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -20,7 +21,12 @@ import 'dart:convert';
 String _processStoryImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return '';
-  final resized = img.copyResize(decoded, width: 1080);
+  // Resize sisi TERPANJANG ke 1440 — foto portrait maupun landscape tetap
+  // tajam satu layar HP saat ditampilkan fit di viewer (tanpa crop).
+  final isPortrait = decoded.height >= decoded.width;
+  final resized = isPortrait
+      ? img.copyResize(decoded, height: 1440)
+      : img.copyResize(decoded, width: 1440);
   final jpg = img.encodeJpg(resized, quality: 85);
   return base64Encode(jpg);
 }
@@ -45,7 +51,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   double _textX = 0.5;
   // Default di tengah halaman (bukan bawah) supaya kursor tidak
   // ketutup keyboard saat mulai mengetik. User bisa geser manual.
-  double _textY = 0.45;
+  double _textY = 0.36;
   // Skala pinch-to-zoom (1 jari = geser, 2 jari = besar/kecil + putar).
   double _textScale = 1.0;
   double _scaleBase = 1.0;
@@ -63,6 +69,21 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   // Panel alat aktif di atas bar tombol: '' (tidak ada), 'size', 'color'.
   String _toolsPanel = '';
   bool _showTextArea = false;
+  // Mode edit (keyboard) vs select (drag). TextField HANYA tampil saat
+  // edit — saat select tampil teks statis supaya drag selalu sampai
+  // ke detector area (tidak direbut TextField → kadang bisa kadang tidak).
+  bool _textEditing = false;
+  // Rebuild HANYA saat teks kosong↔isi (untuk ikon sampah). Ketikan
+  // per-huruf TIDAK rebuild — full-rebuild tiap huruf balapan dengan
+  // IME dan terbukti menutup keyboard sendiri di composer.
+  bool _textWasEmpty = true;
+  // Drag teks sedang berjalan (1 jari di area teks) — tong sampah tampil.
+  bool _textDragging = false;
+  // Gestur saat ini menggeser TEKS (routing manual di 1 detector —
+  // tanpa arena, tanpa balapan). False = foto / mati.
+  bool _draggingText = false;
+  // Posisi tap (lokal kartu) — untuk bedakan tap teks vs tap foto.
+  Offset? _tapDownLocal;
 
   // ── Transformasi foto (zoom/putar/geser) — di-bake ke gambar saat publish ──
   double _imgScale = 1.0;
@@ -81,12 +102,37 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   @override
   void initState() {
     super.initState();
+    // Nav bar Android opaque hitam selama composer aktif — tanpa ini
+    // area bawah (menu android) transparan/translusen karena edge-to-edge.
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      systemNavigationBarColor: Colors.black,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
+    // Nav bar DISEMBUNYIKAN selama composer aktif — tumit jempol sering
+    // nyenggol tombol back 3-button saat ngetik → keyboard ketutup sendiri
+    // padahal fokus tidak hilang. Back tetap via tombol AppBar + gesture.
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: [SystemUiOverlay.top],
+    );
     // Anon dipaksa public (server juga menegakkan) — set sejak awal
     // supaya UI langsung benar dan nilai terkirim pasti 'everyone'.
     if (context.read<AuthProvider>().isAnonymous) {
       _visibility = 'everyone';
     }
-    _textCtrl.addListener(() => setState(() {}));
+    _textCtrl.addListener(() {
+      final empty = _textCtrl.text.trim().isEmpty;
+      if (empty != _textWasEmpty) {
+        _textWasEmpty = empty;
+        if (mounted) setState(() {});
+      }
+    });
+    _textFocus.addListener(() {
+      final editing = _textFocus.hasFocus;
+      if (editing != _textEditing && mounted) {
+        setState(() => _textEditing = editing);
+      }
+    });
     _loadImage();
   }
 
@@ -133,6 +179,12 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
 
   @override
   void dispose() {
+    // Kembalikan nav bar default (transparan) saat keluar composer.
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _textCtrl.dispose();
     _textFocus.dispose();
     super.dispose();
@@ -216,21 +268,33 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
 
   void _onScaleEnd(ScaleEndDetails d) {
     if (_dragOverTrash) {
-      setState(() {
-        _textCtrl.clear();
-        _showTextArea = false;
-        _showTextTools = false;
-        _toolsPanel = '';
-        _dragOverTrash = false;
-        _textScale = 1.0;
-        _textRotation = 0;
-        _textX = 0.5;
-        _textY = 0.45;
-      });
-      _textFocus.unfocus();
+      _deleteText();
       return;
     }
-    if (_dragOverTrash) setState(() => _dragOverTrash = false);
+    if (_dragOverTrash || _textDragging) {
+      setState(() {
+        _dragOverTrash = false;
+        _textDragging = false;
+      });
+    }
+  }
+
+  /// Hapus teks (drag ke sampah / tap ikon sampah saat teks kepilih).
+  void _deleteText() {
+    setState(() {
+      _textCtrl.clear();
+      _showTextArea = false;
+      _showTextTools = false;
+      _toolsPanel = '';
+      _dragOverTrash = false;
+      _textDragging = false;
+      _draggingText = false;
+      _textScale = 1.0;
+      _textRotation = 0;
+      _textX = 0.5;
+      _textY = 0.36;
+    });
+    _textFocus.unfocus();
   }
 
   // ── UX teks ala IG ──
@@ -240,40 +304,112 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   void _toggleTextArea() {
     setState(() {
       _showTextArea = !_showTextArea;
-      if (_showTextArea) _showTextTools = true;
+      if (_showTextArea) {
+        _showTextTools = true;
+        // TextField harus ADA di tree dulu sebelum fokus diminta.
+        _textEditing = true;
+      }
     });
     if (_showTextArea) {
-      _textFocus.requestFocus();
+      _textCtrl.selection =
+          TextSelection.collapsed(offset: _textCtrl.text.length);
+      // Tunggu rebuild selesai baru minta fokus (keyboard).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _textFocus.requestFocus();
+      });
     } else {
       _textFocus.unfocus();
     }
   }
 
-  void _onTextTap() {
-    // Tap area teks → tampilkan/munculkan panel gaya (warna + ukuran).
-    setState(() => _showTextTools = true);
-    _textFocus.requestFocus();
+  /// Tinggi kartu foto (pixel) — dipakai hitung posisi absolut TextField
+  /// edit di layer atas (posisi teks statis pakai koordinat kartu).
+  double _cardHeight(BuildContext ctx) {
+    return MediaQuery.of(ctx).size.height -
+        MediaQuery.of(ctx).padding.top -
+        40 /* AppBar */ -
+        20 /* top offset kartu */ -
+        (MediaQuery.of(ctx).padding.bottom + 68) /* bottom offset */;
+  }
+
+  TextStyle _composerTextStyle() {    return TextStyle(
+      fontSize: StoryText.size(_sizeIndex) * _textScale,
+      fontWeight: FontWeight.w800,
+      color: _textColor,
+      height: 1.2,
+      shadows: [
+        Shadow(
+          color: Colors.black.withValues(alpha: 0.6),
+          blurRadius: 6,
+          offset: const Offset(1, 1),
+        ),
+      ],
+    );
+  }
+
+  /// Preview teks mode SELECT — gaya identik TextField edit supaya
+  /// tidak ada lompatan visual saat pindah mode.
+  Widget _selectPreview(S s) {
+    final t = _textCtrl.text;
+    final body = t.isEmpty
+        ? Text(
+            s.storyAddTextHint,
+            style: TextStyle(
+              fontSize: StoryText.size(_sizeIndex) * _textScale,
+              fontWeight: FontWeight.w800,
+              color: Colors.white38,
+            ),
+            textAlign: TextAlign.center,
+          )
+        : Text(
+            t,
+            style: _composerTextStyle(),
+            textAlign: TextAlign.center,
+          );
+    if (!_withBg || t.isEmpty) return body;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: body,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      // Back (sistem/gesture) → konfirmasi dulu, jangan langsung keluar.
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmExit();
+      },
+      child: Scaffold(
       // Foto TETAP seukuran layar walau keyboard muncul — panel bawah
       // naik sejajar keyboard lewat viewInsets (foto tidak dimenezkan).
       resizeToAvoidBottomInset: false,
       backgroundColor: Colors.black,
+      // Toolbar ATAS DIPENDEK — maksimalkan ruang foto (toolbar default
+      // M3 56px + title besar makan layar; story butuh preview maksimal).
       appBar: AppBar(
+        toolbarHeight: 40,
         backgroundColor: Colors.black87,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.white, size: 20),
+        titleSpacing: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, size: 20),
+          onPressed: _confirmExit,
+        ),
         title: Text(
           s.storyComposerTitle,
-          style: AppText.title.copyWith(color: Colors.white),
+          style: AppText.bodyStrong.copyWith(color: Colors.white),
         ),
         actions: [
           if (_publishing)
             const Padding(
-              padding: EdgeInsets.all(14),
+              padding: EdgeInsets.all(10),
               child: SizedBox(
                 width: 18,
                 height: 18,
@@ -286,7 +422,9 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
           else
             IconButton(
               tooltip: s.storyBtnPublish,
-              icon: const Icon(Icons.send_rounded, color: AppTheme.primary),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.send_rounded,
+                  color: AppTheme.primary, size: 20),
               onPressed: _b64.isEmpty ? null : _publish,
             ),
         ],
@@ -299,14 +437,27 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
               builder: (ctx, c) => Stack(
                 fit: StackFit.expand,
                 children: [
-                  // ── Foto dgn transformasi (zoom/putar/geser) ──
-                  Positioned.fill(
-                    child: AnimatedScale(
-                      scale: _showTextArea ? 0.94 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: AnimatedOpacity(
-                        opacity: _showTextArea ? 0.55 : 1.0,
-                        duration: const Duration(milliseconds: 200),
+                  // ── Kartu foto = ukuran story di viewer (WYSIWYG) ──
+                  // Body mulai di bawah AppBar 40px → top:20 badan =
+                  // padTop+60 absolut (pas dengan kartu viewer). Bottom
+                  // padBottom+68 = ruang kolom balasan di viewer.
+                  // Border putih tipis = batas area story yang jelas.
+                  Positioned(
+                    top: 20,
+                    bottom: MediaQuery.of(ctx).padding.bottom + 68,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Colors.white24,
+                          width: 1,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        // Foto TETAP — tidak mengecil/redup saat ketik teks.
                         child: Transform(
                           alignment: Alignment.center,
                           transform: Matrix4.identity()
@@ -314,43 +465,155 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                             ..rotateZ(_imgRotation)
                             ..scale(_imgScale),
                           child: Image.memory(_bytes!,
-                              fit: BoxFit.fitHeight),
+                              // COVER (fill) — foto memenuhi kartu
+                              // persis seperti tampil di viewer nanti
+                              // (WYSIWYG). Kelebihan zoom ter-clip rapi,
+                              // tidak transparan.
+                              fit: BoxFit.cover),
                         ),
                       ),
                     ),
                   ),
                   // ── Gesture: teks aktif → kontrol teks; else → foto ──
-                  Positioned.fill(
-                    child: GestureDetector(
+                  Positioned(
+                    top: 20,
+                    bottom:
+                        MediaQuery.of(ctx).padding.bottom + 68,
+                    left: 0,
+                    right: 0,
+                    child: LayoutBuilder(
+                      builder: (kctx, k) => GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      // FOTO: zoom/putar/geser (kalau tidak sedang edit teks)
-                      onScaleStart: _showTextArea
-                          ? null
-                          : (d) {
-                              _imgScaleBase = _imgScale;
-                              _imgRotationBase = _imgRotation;
-                            },
-                      onScaleUpdate: _showTextArea
-                          ? null
-                          : (d) => setState(() {
-                                _imgScale =
-                                    (_imgScaleBase * d.scale)
-                                        .clamp(1.0, 5.0);
-                                _imgRotation =
-                                    _imgRotationBase + d.rotation;
-                                _imgOffset += d.focalPointDelta;
-                              }),
-                      // Klik 2x pada teks jadi → mode edit.
-                      onDoubleTap: _hasText && !_showTextArea
-                          ? () {
+                      // SATU detector untuk semua gestur kartu (tanpa arena).
+                      // MODE TEKS (_showTextArea): SEMUA gestur hanya ke teks
+                      // — foto DIKUNCI total (tidak bisa ke-zoom/putar/geser
+                      // walau cubit dimulai di luar teks). Selesai teks
+                      // (tap luar / Aa) baru foto bisa dipilih lagi.
+                      // MODE FOTO: semua gestur ke foto.
+                      onScaleStart: (d) {
+                        _draggingText = false;
+                        _imgScaleBase = _imgScale;
+                        _imgRotationBase = _imgRotation;
+                        if (_showTextArea) {
+                          _onScaleStart(d);
+                        }
+                      },
+                      onScaleUpdate: (d) {
+                        if (!_showTextArea) {
+                          // FOTO: zoom/putar/geser.
+                          setState(() {
+                            _imgScale =
+                                (_imgScaleBase * d.scale).clamp(1.0, 5.0);
+                            _imgRotation =
+                                _imgRotationBase + d.rotation;
+                            _imgOffset += d.focalPointDelta;
+                          });
+                          return;
+                        }
+                        // TEKS: saat ngetik (keyboard kebuka), 1 jari milik
+                        // kursor TextField — jangan rebut. Selain itu
+                        // (keyboard tutup / 2 jari) semua ke teks.
+                        if (_textFocus.hasFocus && d.pointerCount < 2) {
+                          return;
+                        }
+                        if (!_draggingText) {
+                          _draggingText = true;
+                          if (!_textDragging) {
+                            setState(() => _textDragging = true);
+                          }
+                        }
+                        _onScale(d, k.biggest);
+                      },
+                      onScaleEnd: (d) {
+                        if (_draggingText) {
+                          _draggingText = false;
+                          _onScaleEnd(d);
+                        }
+                      },
+                      onTapDown: (d) {
+                        _tapDownLocal =
+                            (kctx.findRenderObject() as RenderBox?)
+                                ?.globalToLocal(d.globalPosition);
+                      },
+                      // 1 tap teks = SELECT (bisa digeser ke sampah).
+                      // 2 tap teks = EDIT (keyboard). Tap gambar = foto.
+                      onDoubleTap: () {
+                        // Keyboard lagi kebuka → abaikan semua.
+                        if (_textFocus.hasFocus) return;
+                        // Double-tap TEPAT di teks → mode edit (keyboard).
+                        final p = _tapDownLocal;
+                        if (!_hasText || p == null) return;
+                        final w = k.biggest.width;
+                        final h = k.biggest.height;
+                        final hit =
+                            (p.dx - _textX * w).abs() < w * 0.35 &&
+                                (p.dy - _textY * h).abs() < 120;
+                        if (!hit) return;
+                        setState(() {
+                          _showTextArea = true;
+                          _showTextTools = true;
+                          // TextField harus ADA di tree dulu sebelum fokus.
+                          _textEditing = true;
+                        });
+                        _textCtrl.selection = TextSelection.collapsed(
+                            offset: _textCtrl.text.length);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _textFocus.requestFocus();
+                        });
+                      },
+                      onTap: () {
+                        // Keyboard lagi kebuka → tap luar diabaikan
+                        // (keyboard cuma tutup via Aa / back / publish).
+                        // Jadi ngetik tidak pernah ketutup sendiri.
+                        if (_textFocus.hasFocus) return;
+                        final p = _tapDownLocal;
+                        _tapDownLocal = null;
+                        if (p == null) return;
+                        final w = k.biggest.width;
+                        final h = k.biggest.height;
+                        // Tap IKON SAMPAH saat teks kepilih → hapus langsung.
+                        if (_showTextArea &&
+                            _hasText &&
+                            (p.dx - w / 2).abs() < 40 &&
+                            p.dy < 60) {
+                          _deleteText();
+                          return;
+                        }
+                        // Tap kena teks yang sudah jadi → SELECT / EDIT.
+                        // Tap gambar → pilih gambar (mode foto).
+                        if (_hasText) {
+                          final hitText =
+                              (p.dx - _textX * w).abs() < w * 0.35 &&
+                                  (p.dy - _textY * h).abs() < 120;
+                          if (hitText) {
+                            // Lagi ngetik (fokus di TextField) → jangan
+                            // ganggu (tap ini untuk pindah kursor).
+                            if (_textFocus.hasFocus) return;
+                            if (_showTextArea) {
+                              // Sudah kepilih → tap lagi = EDIT (keyboard).
+                              // (Double-tap sering kalah arena vs pinch,
+                              // jadi tap-kedua jadi jalan utama.)
+                              setState(() {
+                                _showTextTools = true;
+                                _textEditing = true;
+                              });
+                              _textCtrl.selection =
+                                  TextSelection.collapsed(
+                                      offset: _textCtrl.text.length);
+                              WidgetsBinding.instance
+                                  .addPostFrameCallback((_) {
+                                if (mounted) _textFocus.requestFocus();
+                              });
+                            } else {
+                              // Belum kepilih → SELECT (bisa drag ke sampah).
                               setState(() {
                                 _showTextArea = true;
                                 _showTextTools = true;
                               });
-                              _textFocus.requestFocus();
                             }
-                          : null,
-                      onTap: () {
+                            return;
+                          }
+                        }
                         if (_showTextTools || _showTextArea) {
                           setState(() {
                             _showTextTools = false;
@@ -377,8 +640,9 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                               withBg: _withBg,
                             ),
                           // ── Tong sampah atas tengah — drag teks ke sini
-                          //    untuk hapus (muncul saat teks ada & drag aktif) ──
-                          if (_hasText && !_showTextArea)
+                          // untuk hapus (selalu tampil kalau teks ada:
+                          // terlihat saat select, drag, maupun preview) ──
+                          if (_hasText)
                             Positioned(
                               top: 8,
                               left: 0,
@@ -399,109 +663,101 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                                 ),
                               ),
                             ),
-                          // ── Area teks interaktif ──
-                          if (_showTextArea)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              top: (c.biggest.height * _textY - 60)
-                                  .clamp(8.0, c.biggest.height - 200)
-                                  .toDouble(),
-                              child: GestureDetector(
-                                onTap: _onTextTap,
-                                onScaleStart: _onScaleStart,
-                                onScaleUpdate: (d) =>
-                                    _onScale(d, c.biggest),
-                                onScaleEnd: _onScaleEnd,
-                                child: Center(
-                                  child: Transform.rotate(
-                                    angle: _textRotation,
-                                    child: Container(
-                                      width: c.biggest.width - 32,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 2),
-                                      // Tanpa border/bubble — teks + kursor
-                                      // langsung di tengah foto.
-                                      child: TextField(
-                                      controller: _textCtrl,
-                                      focusNode: _textFocus,
-                                      keyboardType: TextInputType.multiline,
-                                      maxLines: 3,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
+                        ],
+                      ),
+                    ),
+                    ),
+                  ),
+                  // ── Area teks: DI LUAR semua gesture detector (struktur
+                  // persis kolom chat — tanpa arena, tanpa onDoubleTap).
+                  // SELECT = teks statis (IgnorePointer, drag via detector
+                  // luar). EDIT = TextField live. Posisi identik keduanya.
+                  if (_showTextArea)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: (MediaQuery.of(ctx).padding.top +
+                              60 +
+                              _cardHeight(ctx) * _textY -
+                              60)
+                          .clamp(
+                              MediaQuery.of(ctx).padding.top + 60,
+                              MediaQuery.of(ctx).padding.top +
+                                  60 +
+                                  _cardHeight(ctx) -
+                                  200)
+                          .toDouble(),
+                      child: Center(
+                        child: Transform.rotate(
+                          angle: _textRotation,
+                          child: Container(
+                            width: MediaQuery.of(ctx).size.width - 32,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            child: _textEditing
+                                ? TextField(
+                                    controller: _textCtrl,
+                                    focusNode: _textFocus,
+                                    keyboardType: TextInputType.multiline,
+                                    maxLines: 3,
+                                    textAlign: TextAlign.center,
+                                    style: _composerTextStyle(),
+                                    cursorColor: Colors.white,
+                                    textInputAction: TextInputAction.newline,
+                                    decoration: InputDecoration(
+                                      filled: false,
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      isDense: true,
+                                      hintText: s.storyAddTextHint,
+                                      hintStyle: TextStyle(
                                         fontSize: StoryText.size(_sizeIndex) *
                                             _textScale,
                                         fontWeight: FontWeight.w800,
-                                        color: _textColor,
-                                        height: 1.2,
-                                        shadows: [
-                                          Shadow(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.6),
-                                            blurRadius: 6,
-                                            offset: const Offset(1, 1),
-                                          ),
-                                        ],
-                                      ),
-                                      cursorColor: Colors.white,
-                                      decoration: InputDecoration(
-                                        // Override theme global (filled:true +
-                                        // fillColor) — murni kursor transparan.
-                                        filled: false,
-                                        border: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        focusedBorder: InputBorder.none,
-                                        isDense: true,
-                                        hintText: s.storyAddTextHint,
-                                        hintStyle: TextStyle(
-                                          fontSize:
-                                              StoryText.size(_sizeIndex) *
-                                                  _textScale,
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.white38,
-                                        ),
+                                        color: Colors.white38,
                                       ),
                                     ),
+                                  )
+                                : IgnorePointer(
+                                    child: _selectPreview(s),
                                   ),
-                                ),
-                              ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  // ── Tombol "Aa" kanan atas kartu — SEJAJAR body (di luar
+                  // detector gestur supaya tap-nya tidak bocor ke bawah).
+                  Positioned(
+                    top: 28,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: _toggleTextArea,
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: _showTextArea
+                              ? Colors.white
+                              : Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Aa',
+                            style: AppText.label.copyWith(
+                              color: _showTextArea
+                                  ? Colors.black
+                                  : Colors.white,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
-                          // ── Tombol "Aa" kanan atas ──
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: GestureDetector(
-                              onTap: _toggleTextArea,
-                              child: Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: _showTextArea
-                                      ? Colors.white
-                                      : Colors.black54,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    'Aa',
-                                    style: AppText.label.copyWith(
-                                      color: _showTextArea
-                                          ? Colors.black
-                                          : Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                   // ── Overlay bawah: panel gaya + bar visibility —
-                  //    naik sejajar keyboard (foto tetap ukuran layar). ──
+                  //    naik sejajar keyboard + TIDAK overlap nav bar. ──
                   Positioned(
                     left: 0,
                     right: 0,
@@ -607,7 +863,44 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                 ],
               ),
             ),
+      ),
     );
+  }
+
+  /// Back → konfirmasi dulu (Buang / Lanjut). Langsung keluar hanya
+  /// kalau belum ada edit (teks kosong + foto utuh) atau saat publish.
+  Future<void> _confirmExit() async {
+    if (_publishing) return;
+    final dirty = _hasText ||
+        _imgScale != 1.0 ||
+        _imgRotation != 0 ||
+        _imgOffset != Offset.zero;
+    if (!dirty) {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+    final s = context.read<LocaleProvider>().s;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.storyDiscardTitle),
+        content: Text(s.storyDiscardMsg),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.storyKeepEditing),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              s.storyDiscardYes,
+              style: AppText.button.copyWith(color: AppTheme.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) Navigator.pop(context);
   }
 
   Widget _toolToggle({
