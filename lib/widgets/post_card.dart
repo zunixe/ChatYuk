@@ -11,6 +11,7 @@ import '../providers/locale_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../services/post_photo_cache.dart';
 import '../services/avatar_service.dart';
+import '../services/media_disk_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../services/timeline_service.dart';
 import '../utils.dart';
@@ -1036,7 +1037,7 @@ String _timeAgoShort(DateTime t) {
 /// (path storage atau base64) supaya TIDAK query profil per post.
 /// Kotak rounded (sama dengan avatar di Pesan), bukan lingkaran.
 /// Fallback ke ProfileAvatar (query + cache per uid) jika payload kosong.
-class _AuthorAvatar extends StatelessWidget {
+class _AuthorAvatar extends StatefulWidget {
   final Map<String, dynamic> post;
   final String name;
   final double size;
@@ -1047,89 +1048,107 @@ class _AuthorAvatar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final uid = post['authorId'] as String? ?? '';
-    final avatar = post['authorAvatar'] as String? ?? '';
-    if (avatar.isEmpty) {
-      return ProfileAvatar(
-        uid: uid,
-        name: name,
-        size: size,
-        borderRadius: size / 2,
-      );
-    }
-    final isPath = StoragePhotoService.instance.isAvatarPath(avatar);
-    return FutureBuilder<String>(
-      future: isPath
-          ? AvatarB64Service.instance.getByPath(avatar)
-          : Future.value(avatar),
-      builder: (_, snap) {
-        final b64 = snap.data ?? '';
-        if (b64.isEmpty) {
-          return ProfileAvatar(
-            uid: uid,
-            name: name,
-            size: size,
-            borderRadius: size / 2,
-          );
-        }
-        return _RoundedAvatar(
-          base64: b64,
-          size: size,
-          fallback: ProfileAvatar(
-            uid: uid,
-            name: name,
-            size: size,
-            borderRadius: size / 2,
-          ),
-        );
-      },
-    );
-  }
+  State<_AuthorAvatar> createState() => _AuthorAvatarState();
 }
 
-/// Avatar kotak rounded dari base64 — pola sama dengan Pesan (rounded
-/// square), decode async di isolate + cache sederhana.
-class _RoundedAvatar extends StatefulWidget {
-  final String base64;
-  final double size;
-  final Widget fallback;
-  const _RoundedAvatar({
-    required this.base64,
-    required this.size,
-    required this.fallback,
-  });
-
-  @override
-  State<_RoundedAvatar> createState() => _RoundedAvatarState();
-}
-
-class _RoundedAvatarState extends State<_RoundedAvatar> {
+class _AuthorAvatarState extends State<_AuthorAvatar> {
+  // Resolve SATU tahap langsung ke bytes per identitas avatar (fetch +
+  // decode) — tanpa FutureBuilder dua tahap (fallback → future → decode
+  // → foto) yang terlihat kedip. Rebuild/scroll tidak memicu kerja ulang.
+  static final _bytesCache = <String, Uint8List>{};
   Uint8List? _bytes;
-  static final _cache = <String, Uint8List>{};
+  String? _resolvedFor;
 
   @override
   void initState() {
     super.initState();
-    final cached = _cache[widget.base64];
-    if (cached != null) {
-      _bytes = cached;
-      return;
-    }
-    _decode();
-  }
-
-  Future<void> _decode() async {
-    final bytes = await compute(_decodeAvatarB64, widget.base64);
-    if (!mounted || bytes == null) return;
-    if (_cache.length < 60) _cache[widget.base64] = bytes;
-    setState(() => _bytes = bytes);
+    // Jalur SINKRON dulu: cache statis → disk → decode B64 inline.
+    // Berhasil = frame pertama langsung foto (tanpa fallback inisial).
+    // Gagal (perlu network) = jalur async seperti dulu.
+    if (!_resolveSync()) _resolveAsync();
   }
 
   @override
+  void didUpdateWidget(_AuthorAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post['authorAvatar'] != widget.post['authorAvatar']) {
+      _bytes = null;
+      _resolvedFor = null;
+      if (!_resolveSync()) _resolveAsync();
+    }
+  }
+
+  /// Resolve sinkron sebelum frame pertama. Return true kalau bytes
+  /// langsung tersedia (tidak perlu setState — build() jalan sesudahnya).
+  bool _resolveSync() {
+    final avatar = widget.post['authorAvatar'] as String? ?? '';
+    if (avatar.isEmpty) return false;
+    _resolvedFor = avatar;
+    try {
+      final cached = _bytesCache[avatar];
+      if (cached != null) {
+        _bytes = cached;
+        return true;
+      }
+      if (StoragePhotoService.instance.isAvatarPath(avatar)) {
+        final disk = MediaDiskCache.instance.readSync(avatar);
+        if (disk != null && disk.isNotEmpty) {
+          if (_bytesCache.length < 60) _bytesCache[avatar] = disk;
+          _bytes = disk;
+          return true;
+        }
+        return false;
+      }
+      // B64 inline kecil → decode sinkron langsung (tanpa compute).
+      if (avatar.length < 200000) {
+        final b = base64Decode(avatar);
+        if (b.isNotEmpty) {
+          if (_bytesCache.length < 60) _bytesCache[avatar] = b;
+          _bytes = b;
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<void> _resolveAsync() async {
+    final avatar = widget.post['authorAvatar'] as String? ?? '';
+    if (avatar.isEmpty) return;
+    if (_resolvedFor == avatar && _bytes != null) return;
+    _resolvedFor = avatar;
+    final cached = _bytesCache[avatar];
+    if (cached != null) {
+      if (mounted) setState(() => _bytes = cached);
+      return;
+    }
+    final isPath = StoragePhotoService.instance.isAvatarPath(avatar);
+    final b64 =
+        isPath ? await AvatarB64Service.instance.getByPath(avatar) : avatar;
+    if (b64.isEmpty || !mounted) return;
+    if (_resolvedFor != avatar) return;
+    final bytes = await compute(_decodeAvatarB64, b64);
+    if (bytes == null || !mounted || _resolvedFor != avatar) return;
+    if (_bytesCache.length < 60) _bytesCache[avatar] = bytes;
+    setState(() => _bytes = bytes);
+  }
+
+  Widget _fallback(String uid) => ProfileAvatar(
+        uid: uid,
+        name: widget.name,
+        size: widget.size,
+        borderRadius: widget.size / 2,
+      );
+
+  @override
   Widget build(BuildContext context) {
+    final uid = widget.post['authorId'] as String? ?? '';
+    final avatar = widget.post['authorAvatar'] as String? ?? '';
+    if (avatar.isEmpty) return _fallback(uid);
     final bytes = _bytes;
-    if (bytes == null) return widget.fallback;
+    // Belum siap → fallback (ProfileAvatar ikut lazy-load dari lokal,
+    // jadi satu pop-in halus, bukan kedip berulang).
+    if (bytes == null || _resolvedFor != avatar) return _fallback(uid);
     return ClipRRect(
       borderRadius: BorderRadius.circular(widget.size / 2),
       child: Image.memory(
