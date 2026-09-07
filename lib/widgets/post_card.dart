@@ -411,7 +411,14 @@ class _PostCardState extends State<PostCard> {
             padding: EdgeInsets.fromLTRB(12, 12, 12, 8),
             child: Row(
               children: [
-                GestureDetector(onTap: _openProfile, child: _AuthorAvatar(post: _p, name: name, size: 38)),
+                // Tap avatar = zoom foto (internal); tap nama = profil.
+                IgnorePointer(
+                  ignoring: true,
+                  child: GestureDetector(
+                    onTap: _openProfile,
+                    child: _AuthorAvatar(post: _p, name: name, size: 38, onAvatarTap: _zoomAuthorPhoto),
+                  ),
+                ),
                 SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -805,6 +812,56 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
+  /// Zoom foto avatar author (InteractiveViewer ala menu online) — tap
+  /// avatar di header post, tanpa pindah ke halaman profil.
+  void _zoomAuthorPhoto(Uint8List? bytes) {
+    final name = _p['authorName'] as String? ?? 'Anon';
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: bytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(bytes, fit: BoxFit.contain),
+                      )
+                    : CircleAvatar(
+                        radius: 90,
+                        backgroundColor: AppTheme.primary,
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: AppGlyph.xl,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _timeAgo(DateTime t) => _timeAgoShort(t);
 }
 
@@ -1041,10 +1098,14 @@ class _AuthorAvatar extends StatefulWidget {
   final Map<String, dynamic> post;
   final String name;
   final double size;
+  /// Tap avatar → zoom foto (dipisah dari tap nama → profil), pola sama
+  /// dengan menu online. Menerima bytes hasil resolve (null = inisial).
+  final void Function(Uint8List? bytes)? onAvatarTap;
   const _AuthorAvatar({
     required this.post,
     required this.name,
     required this.size,
+    this.onAvatarTap,
   });
 
   @override
@@ -1144,12 +1205,23 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
   Widget build(BuildContext context) {
     final uid = widget.post['authorId'] as String? ?? '';
     final avatar = widget.post['authorAvatar'] as String? ?? '';
-    if (avatar.isEmpty) return _fallback(uid);
+    final tap = widget.onAvatarTap == null
+        ? null
+        : () => widget.onAvatarTap!(_bytes);
+    if (avatar.isEmpty) {
+      return tap == null
+          ? _fallback(uid)
+          : GestureDetector(onTap: tap, child: _fallback(uid));
+    }
     final bytes = _bytes;
     // Belum siap → fallback (ProfileAvatar ikut lazy-load dari lokal,
     // jadi satu pop-in halus, bukan kedip berulang).
-    if (bytes == null || _resolvedFor != avatar) return _fallback(uid);
-    return ClipRRect(
+    if (bytes == null || _resolvedFor != avatar) {
+      return tap == null
+          ? _fallback(uid)
+          : GestureDetector(onTap: tap, child: _fallback(uid));
+    }
+    final img = ClipRRect(
       borderRadius: BorderRadius.circular(widget.size / 2),
       child: Image.memory(
         bytes,
@@ -1159,6 +1231,7 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
         gaplessPlayback: true,
       ),
     );
+    return tap == null ? img : GestureDetector(onTap: tap, child: img);
   }
 }
 
