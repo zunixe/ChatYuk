@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -412,13 +411,7 @@ class _PostCardState extends State<PostCard> {
             child: Row(
               children: [
                 // Tap avatar = zoom foto (internal); tap nama = profil.
-                IgnorePointer(
-                  ignoring: true,
-                  child: GestureDetector(
-                    onTap: _openProfile,
-                    child: _AuthorAvatar(post: _p, name: name, size: 38, onAvatarTap: _zoomAuthorPhoto),
-                  ),
-                ),
+                _AuthorAvatar(post: _p, name: name, size: 38, onAvatarTap: _zoomAuthorPhoto),
                 SizedBox(width: 10),
                 Expanded(
                   child: Column(

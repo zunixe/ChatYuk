@@ -30,7 +30,6 @@ import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
-import 'user_info_screen.dart';
 import 'story_composer_screen.dart';
 import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
@@ -1654,15 +1653,7 @@ class _UserCard extends StatelessWidget {
                         children: [
                           Flexible(
                             child: GestureDetector(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => UserInfoScreen(
-                                    userId: user.uid,
-                                    fallbackName: user.nickname,
-                                  ),
-                                ),
-                              ),
+                              onTap: onTap,
                               child: Text(
                                 user.nickname,
                                 style: AppText.bodyStrong,
@@ -1695,15 +1686,7 @@ class _UserCard extends StatelessWidget {
                         ],
                       ),
                       GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => UserInfoScreen(
-                              userId: user.uid,
-                              fallbackName: user.nickname,
-                            ),
-                          ),
-                        ),
+                        onTap: onTap,
                         child: Text(
                           '$genderLabel ${user.age} · ${user.city}, ${user.country}',
                           style: AppText.bodySmall.copyWith(
