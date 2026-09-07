@@ -1287,6 +1287,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                             icon: Icons.public,
                             items: ['all', ...allCountries],
                             labels: [s.filterAll, ...allCountries],
+                            searchable: true,
                             onChanged: (v) {
                               setState(() {
                                 _negara = v;
@@ -1524,6 +1525,9 @@ class _FilterDropdown extends StatelessWidget {
   final List<String> items;
   final List<String> labels;
   final ValueChanged<String> onChanged;
+  // true = klik membuka bottom sheet dengan pencarian (141 negara);
+  // false = DropdownButton biasa (3 opsi gender).
+  final bool searchable;
 
   const _FilterDropdown({
     required this.value,
@@ -1532,41 +1536,151 @@ class _FilterDropdown extends StatelessWidget {
     required this.items,
     required this.labels,
     required this.onChanged,
+    this.searchable = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InputDecorator(
+    final decorator = InputDecorator(
       decoration: InputDecoration(
         isDense: true,
         prefixIcon: Icon(icon, size: 20, color: AppTheme.textSecondary),
         labelText: label,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          isDense: true,
-          menuMaxHeight: 400,
-          items: [
-            for (int i = 0; i < items.length; i++)
-              DropdownMenuItem(
-                value: items[i],
-                child: Text(
-                  labels[i],
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: AppText.bodySmall,
+      child: searchable
+          ? Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    // Tampilkan label pilihan aktif (bukan value internal).
+                    labels[items.indexOf(value).clamp(0, labels.length - 1)],
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: AppText.bodySmall.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
                 ),
+                Icon(Icons.arrow_drop_down, color: AppTheme.textSecondary),
+              ],
+            )
+          : DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: value,
+                isExpanded: true,
+                isDense: true,
+                menuMaxHeight: 400,
+                items: [
+                  for (int i = 0; i < items.length; i++)
+                    DropdownMenuItem(
+                      value: items[i],
+                      child: Text(
+                        labels[i],
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: AppText.bodySmall,
+                      ),
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v != null) onChanged(v);
+                },
               ),
-          ],
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        ),
-      ),
+            ),
     );
+    if (!searchable) return decorator;
+    return GestureDetector(
+      onTap: () => _openSearchSheet(context),
+      child: decorator,
+    );
+  }
+
+  /// Bottom sheet cari negara: TextField filter live + list hasil.
+  Future<void> _openSearchSheet(BuildContext context) async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) {
+        final s = sheetCtx.watch<LocaleProvider>().s;
+        var filtered = List<MapEntry<String, String>>.generate(
+          items.length,
+          (i) => MapEntry(items[i], labels[i]),
+        );
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheet) => SafeArea(
+            child: SizedBox(
+              height: MediaQuery.of(sheetCtx).size.height * 0.75,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                    child: Row(
+                      children: [
+                        Text(label,
+                            style: AppText.title.copyWith(
+                                color: AppTheme.textPrimary)),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => Navigator.pop(sheetCtx),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: TextField(
+                      autofocus: true,
+                      onChanged: (q) {
+                        setSheet(() {
+                          final lq = q.trim().toLowerCase();
+                          filtered = [
+                            for (int i = 0; i < items.length; i++)
+                              if (lq.isEmpty ||
+                                  labels[i].toLowerCase().contains(lq))
+                                MapEntry(items[i], labels[i]),
+                          ];
+                        });
+                      },
+                      decoration: InputDecoration(
+                        isDense: true,
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        hintText: s.searchCountry,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final v = filtered[i].key;
+                        final l = filtered[i].value;
+                        final selected = v == value;
+                        return ListTile(
+                          dense: true,
+                          title: Text(l, style: AppText.bodySmall),
+                          trailing: selected
+                              ? const Icon(Icons.check,
+                                  size: 18, color: AppTheme.primary)
+                              : null,
+                          onTap: () => Navigator.pop(sheetCtx, v),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (result != null && result != value) onChanged(result);
   }
 }
 

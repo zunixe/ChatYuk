@@ -17,6 +17,8 @@ class S {
       isId ? 'Pilih nickname kamu...' : 'Choose your nickname...';
   String get labelAge => isId ? 'Umur' : 'Age';
   String get labelCountry => isId ? 'Negara' : 'Country';
+  String get searchCountry =>
+      isId ? 'Cari negara...' : 'Search country...';
   String get labelCity => isId ? 'Kota' : 'City';
   String get labelGenderMale => isId ? 'Laki-laki' : 'Male';
   String get labelGenderFemale => isId ? 'Perempuan' : 'Female';
