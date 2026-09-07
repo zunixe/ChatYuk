@@ -60,10 +60,22 @@ class OnlineUsersProvider extends ChangeNotifier {
       // _loadDisk dari ~6s jadi ~1s di Xiaomi cold start.
       final cached = await MessageCache.instance.loadRawList('online_users');
       if (cached.isNotEmpty) {
-        var diskUsers = cached
-            .map((e) => UserModel.fromMap(
-                '${e['uid'] ?? e['id'] ?? ''}', Map<String, dynamic>.from(e)))
-            .toList();
+        // Dedupe by uid + buang row tanpa uid — cache lama (sebelum fix
+        // chat_service save tanpa 'uid') bisa berisi row uid='' yang membuat
+        // kartu sendiri tidak terfilter & dedupe kacau → user tampil 2x.
+        final seenUids = <String>{};
+        final seenNicks = <String>{};
+        var diskUsers = <UserModel>[];
+        for (final e in cached) {
+          final uid = '${e['uid'] ?? e['id'] ?? ''}';
+          if (uid.isEmpty || !seenUids.add(uid)) continue;
+          final u = UserModel.fromMap(uid, Map<String, dynamic>.from(e));
+          // Row uid='' lama disimpan tanpa uid — dedupe per nickname sebagai
+          // pertahanan kedua supaya 2 row sama tidak dirender 2 kartu.
+          final nk = u.nickname.toLowerCase();
+          if (!seenNicks.add(nk)) continue;
+          diskUsers.add(u);
+        }
         // Batch-load avatar base64 per-uid dari kv — _persistAvatars menulis
         // tiap sesi TAPI tidak pernah dibaca balik saat cold start, sehingga
         // _diskAvatars selalu kosong dan avatar selalu flash dari inisial.
@@ -90,9 +102,9 @@ class OnlineUsersProvider extends ChangeNotifier {
           }).toList();
         } catch (_) {}
         if (_users.isEmpty) {
-          // Disk menang race → tampilkan langsung list disk.
+          // Disk menang race → tampilkan langsung list disk (deduped di atas).
           // Avatar resolve via _AsyncAvatar (disk-first, keepProvider).
-          _users = diskUsers;
+          _users = List.of(diskUsers);
         } else {
           // Stream menang race → jangan buang hasil disk.
         }
@@ -147,9 +159,12 @@ class OnlineUsersProvider extends ChangeNotifier {
     _sub = _service.getOnlineUsers().listen(
       (users) {
         _loaded = true;
-        // Dedupe by uid — pertahanan kedua terhadap duplikat dari stream.
+        // Dedupe by uid + buang row tanpa uid — pertahanan terhadap duplikat
+        // dari stream maupun cache disk berformat lama (uid='').
         final seen = <String>{};
-        var deduped = users.where((u) => seen.add(u.uid)).toList();
+        var deduped = users
+            .where((u) => u.uid.isNotEmpty && seen.add(u.uid))
+            .toList();
         // Merge monotonic: stream bisa emit fast-path TANPA avatar (belum
         // terdownload) setelah emit dengan avatar — tanpa ini foto yang
         // sudah tampil tertimpa kosong lalu balik lagi = kedip-kedip.

@@ -1,9 +1,11 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'env.dart';
+
 class SupabaseConfig {
-  static const String url = 'https://fohcucyyejdryryoxitm.supabase.co';
-  static const String publishableKey =
-      'sb_publishable_aFQQbXscy1mqVq5jHX7p2w_wzs2GAKg';
+  // Nilai dari lib/config/env.dart (dart-define, fallback prod).
+  static String get url => AppEnv.supabaseUrl;
+  static String get publishableKey => AppEnv.supabaseAnonKey;
 
   /// Link share aplikasi — langsung ke Google Play.
   /// (Dulu: edge function /r dengan uid untuk tracking klik; tracking

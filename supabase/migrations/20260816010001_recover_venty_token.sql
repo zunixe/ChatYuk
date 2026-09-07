@@ -10,6 +10,11 @@ declare
   v_sid uuid;
   v_rt text;
 begin
+  -- Replay bersih: user Venty hanya ada di prod — skip jika tidak ada
+  if not exists (select 1 from auth.users where id = v_uid::uuid) then
+    return;
+  end if;
+
   -- Buang sesi + refresh token basi milik Venty (force logout semua device)
   delete from auth.refresh_tokens where user_id = v_uid;
   delete from auth.sessions where user_id = v_uid::uuid;

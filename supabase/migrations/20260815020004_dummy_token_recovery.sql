@@ -31,6 +31,12 @@ declare
   old_maria_gender text; old_maria_age int; old_maria_country text; old_maria_city text;
   old_sandra_gender text; old_sandra_age int; old_sandra_country text; old_sandra_city text;
 begin
+  -- Replay-guard: user Maria/Sandra lama hanya ada di prod, skip jika tidak ada
+  if not exists (select 1 from auth.users where id = old_maria)
+     or not exists (select 1 from auth.users where id = old_sandra) then
+    return;
+  end if;
+
   -- Save old profile data
   select nickname, gender, age, country, city
   into old_maria_nick, old_maria_gender, old_maria_age, old_maria_country, old_maria_city

@@ -26,7 +26,7 @@ Catatan biar tidak bolak-balik build karena perubahan tidak muncul di device.
    cd /Users/zunixe/Documents/ChatYuk
    flutter clean
    KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-     flutter build appbundle --release --flavor play \
+     flutter build appbundle --release --flavor playProd \
      --dart-define=APP_FLAVOR=play \
      --obfuscate --split-debug-info=build/app/symbols
    ```
@@ -100,7 +100,7 @@ flutter pub get
 
 # 2. Build release (flavor apkpure — fitur penuh) + obfuscation
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-  flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+  flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
 ```
 
@@ -117,7 +117,7 @@ rm -rf build/app/outputs build/app/symbols build/app/intermediates \
   build/app/tmp .dart_tool/flutter_build
 
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-  flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+  flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
 ```
 
@@ -171,7 +171,7 @@ adb -s 192.168.18.33:37501 shell am start -n com.chatyuk.chatyuk/.MainActivity
 
 ```bash
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-  flutter build appbundle --release --flavor play --dart-define=APP_FLAVOR=play \
+  flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
   --obfuscate --split-debug-info=build/app/symbols
 ```
 

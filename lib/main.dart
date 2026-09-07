@@ -25,6 +25,7 @@ import 'providers/nav_provider.dart';
 import 'screens/incoming_call_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
+import 'config/env.dart';
 import 'config/supabase_config.dart';
 import 'config/theme.dart';
 import 'services/auth_service.dart';
@@ -764,6 +765,12 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     MessageCache.instance.prewarmDb(),
     Future(() async {
       try {
+        // Flavor dev (Supabase local): Firebase dev belum dikonfigurasi —
+        // skip init supaya build & runtime jalan tanpa google-services.json.
+        if (AppEnv.isDev) {
+          debugPrint('[FIREBASE] dev mode: FCM dinonaktifkan');
+          return;
+        }
         await Firebase.initializeApp(options: firebaseOptions ?? DefaultFirebaseOptions.currentPlatform);
         _firebaseReady = true;
       } on UnsupportedError catch (e) {
