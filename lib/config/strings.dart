@@ -19,6 +19,10 @@ class S {
   String get labelCountry => isId ? 'Negara' : 'Country';
   String get searchCountry =>
       isId ? 'Cari negara...' : 'Search country...';
+  String selCountriesCount(int n) =>
+      isId ? '$n negara' : '$n countries';
+  String get filterReset => isId ? 'Reset' : 'Reset';
+  String get filterApply => isId ? 'Terapkan' : 'Apply';
   String get labelCity => isId ? 'Kota' : 'City';
   String get labelGenderMale => isId ? 'Laki-laki' : 'Male';
   String get labelGenderFemale => isId ? 'Perempuan' : 'Female';
