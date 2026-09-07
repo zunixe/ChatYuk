@@ -1743,7 +1743,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     return Scaffold(
       extendBody: true,
       backgroundColor: Colors.transparent,
-      resizeToAvoidBottomInset: true,
+      // FALSE: background chat TIDAK ikut bergeser saat keyboard muncul
+      // (satu halaman tetap). List & composer mengatur inset sendiri
+      // via viewInsets/MediaQuery — layout konten tidak meng-krem bg.
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         titleSpacing: 0,
         title: Row(
@@ -1983,8 +1986,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     ),
             ),
           ),
+          // Konten (list + composer) naik di atas keyboard via padding
+          // viewInsets sendiri — bg tetap fullscreen diam (tidak ikut
+          // bergeser), karena resizeToAvoidBottomInset: false di atas.
           Positioned.fill(
-            child: Column(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: Column(
               children: [
                 Expanded(
                   child: Stack(
@@ -2542,14 +2552,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                 )
                               : const SizedBox.shrink(),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_showCallOverlay)
+                       ],
+                     ),
+                   ),
+                 ),
+               ],
+             ),
+           ),
+           ),
+           if (_showCallOverlay)
             Positioned.fill(
               child: ChatCallOverlay(
                 session: CallProvider.instance.activeSession!,
