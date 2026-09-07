@@ -21,6 +21,10 @@ class AvatarB64Service {
   final Map<String, String> _pathCache = {};
   final Set<String> _inflight = {};
   final Set<String> _bgRefreshed = {};
+  // In-flight dedup: caller kedua MENUNGGU hasil yang sama, bukan return
+  // '' instan — dulu penyebab race "inisial → foto" saat halaman profil
+  // mem-fetch avatar yang sama dari 2 titik sekaligus.
+  final Map<String, Future<String>> _pathJobs = {};
   static const _maxCache = 100;
 
   /// Kembalikan base64 avatar user ('' jika tidak ada / gagal).
@@ -182,19 +186,14 @@ class AvatarB64Service {
     if (path.isEmpty) return '';
     final cached = _pathCache[path];
     if (cached != null) return cached;
-    // Fetch serentak untuk path yang sama: antre bounded (bukan '' langsung)
-    // supaya pemanggil tanpa retry (FutureBuilder timeline) tetap dapat
-    // hasil asli, bukan fallback permanen.
-    if (_inflight.contains(path)) {
-      for (var i = 0; i < 20; i++) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        final done = _pathCache[path];
-        if (done != null) return done;
-        if (!_inflight.contains(path)) break;
-      }
-      return _pathCache[path] ?? '';
-    }
-    _inflight.add(path);
+    final job = _pathJobs[path];
+    if (job != null) return job;
+    final future = _downloadPath(path);
+    _pathJobs[path] = future;
+    return future;
+  }
+
+  Future<String> _downloadPath(String path) async {
     try {
       final b64 = await _downloadWithDisk(path);
       if (_pathCache.length >= _maxCache)
@@ -205,7 +204,7 @@ class AvatarB64Service {
       _pathCache[path] = '';
       return '';
     } finally {
-      _inflight.remove(path);
+      _pathJobs.remove(path);
     }
   }
 }

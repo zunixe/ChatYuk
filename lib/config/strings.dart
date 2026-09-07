@@ -1161,6 +1161,7 @@ class S {
   String get socialSubscribers => isId ? 'Subscriber' : 'Subscribers';
   String get btnFollow => isId ? 'Ikuti' : 'Follow';
   String get btnUnfollow => isId ? 'Berhenti Ikuti' : 'Unfollow';
+  String get btnChatNow => isId ? 'Chat' : 'Chat';
   String get msgRegisterToFollow => isId ? 'Daftar dulu untuk mengikuti' : 'Register to follow';
   String get msgTargetNotRegistered => isId ? 'Akun ini belum terdaftar, tidak bisa diikuti' : 'This account is not registered and cannot be followed';
   String get btnAddFriend => isId ? 'Tambah Teman' : 'Add Friend';
