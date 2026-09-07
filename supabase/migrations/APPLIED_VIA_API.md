@@ -223,3 +223,10 @@ Jika `supabase db push` timeout lagi:
 - **Backfill** semua snapshot lama sekali jalan.
 - **Verifikasi live:** rename `olave` → post ikut jadi nama baru (1/1), rename balik → pulih. Setelah backfill mismatch = 0 di 4 tabel.
 - Tercatat di `schema_migrations`.
+
+## 2026-09-07 — 20260907150000_follow_count_join_profiles.sql (APPLY)
+
+- **Masalah:** profil SimpleMe menampilkan Pengikut = 2, tapi list saat diklik hanya 1. Penyebab: baris `follows` ORPHAN (follower `e69529ec-...` sudah tidak ada di `profiles` — profil terhapus, baris follow tertinggal dari riwayat hapus manual/pra-FK). `follow_count_sync` menghitung baris orphan; `social_list()` inner-join `profiles` sehingga orphan tidak tampil → counter vs list beda.
+- **Isi:** (1) delete follows orphan, (2) rewrite `follow_count_sync` → hitung HANYA follows yang kedua profilnya ada (join profiles — identik semantik `social_list`), (3) backfill semua profiles.
+- **Apply:** via `supabase db query --linked -f` (idempoten). Tercatat di `schema_migrations` (version `20260907150000`).
+- **Verifikasi live:** SimpleMe `followers_count = 1` = `actual_list_count = 1` ✓, playwright 1/1 ✓. Total follows = 3 (tanpa orphan).
