@@ -1169,23 +1169,68 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             _stageMinimized &&
             _liveUid != null &&
             _broadcastSession != null;
+        // Bottom bar 3-state (private room): sebelum role selesai dicek,
+        // tampilkan composer yang SAMA tapi non-interaktif — layout stabil
+        // sejak frame pertama, tidak ada fase aktif-palsu lalu hilang.
+        // SafeArea bawah: composer tidak kepotong nav bar Android.
+        final Widget bottomBar;
+        if (isPrivateRoom && _roleChecked && _myRole == null) {
+          // Pending approval: composer diganti bar info — jangan biarkan user
+          // mencoba kirim lalu gagal diam-diam.
+          bottomBar = Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            color: AppTheme.bgCard,
+            child: Row(
+              children: [
+                Icon(Icons.lock_outline_rounded, size: 18, color: Colors.orange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    s.privateRoomNeedApproval,
+                    style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          );
+        } else {
+          final input = _ChatInput(
+            controller: _msgCtrl,
+            onSend: _send,
+            showAttachRow: _showAttachRow,
+            onToggleAttach: _toggleAttachRow,
+            onTakePhoto: () {
+              setState(() => _showAttachRow = false);
+              _takePhoto();
+            },
+            onSendPhoto: () {
+              setState(() => _showAttachRow = false);
+              _sendPhoto();
+            },
+            onSendViewOnce: () {
+              setState(() => _showAttachRow = false);
+              _sendViewOncePhoto();
+            },
+            onSendVoice: _sendVoiceMessage,
+            onOpenGiftPanel:
+                isPrivateRoom && _myRole != 'owner' ? _openRoomGiftPanel : null,
+            pendingPhotoBase64: _pendingPhotoBase64,
+            onCancelPhoto: _pendingPhotoBase64 != null
+                ? () => setState(() => _pendingPhotoBase64 = null)
+                : null,
+          );
+          bottomBar = (isPrivateRoom && !_roleChecked)
+              ? AbsorbPointer(
+                  absorbing: true,
+                  child: Opacity(opacity: 0.55, child: input),
+                )
+              : input;
+        }
         final column = Column(
         children: [
-          // Banner hanya setelah role selesai dicek — mencegah blink
-          // "menunggu persetujuan" di awal load untuk member biasa.
-          if (isPrivateRoom && _roleChecked && _myRole == null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              color: Colors.orange.withValues(alpha: 0.12),
-              child: Row(
-                children: [
-                  const Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(s.privateRoomNeedApproval, style: AppText.bodySmall.copyWith(color: Colors.orange.shade800))),
-                ],
-              ),
-            ),
+          // Banner "menunggu persetujuan" kini mengambang di atas list pesan
+          // (overlay) — tidak menggeser layout saat muncul.
           if (isPrivateRoom && isGrantedBroadcast && (!iAmBroadcasting || _broadcastStarting))
             GestureDetector(
               onTap: _broadcastStarting ? null : _onStartBroadcastTap,
@@ -1261,8 +1306,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             ),
 
           Expanded(
-            child: StreamBuilder<List<MessageModel>>(
-              stream: _msgsStream,
+            child: Stack(
+              children: [
+                StreamBuilder<List<MessageModel>>(
+                  stream: _msgsStream,
               builder: (_, snap) {
                 final s = context.read<LocaleProvider>().s;
                 final msgs = snap.data ?? [];
@@ -1338,6 +1385,40 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   },
                 );
               },
+                ),
+                // Banner approval mengambang — hanya setelah role dicek,
+                // tidak menggeser list pesan saat muncul.
+                if (isPrivateRoom && _roleChecked && _myRole == null)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Color.alphaBlend(
+                          Colors.orange.withValues(alpha: 0.12),
+                          AppTheme.bgCard,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(s.privateRoomNeedApproval, style: AppText.bodySmall.copyWith(color: Colors.orange.shade800))),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
 
@@ -1388,51 +1469,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 ],
               ),
             ),
-          // Pending approval: composer diganti bar info — jangan biarkan user
-          // mencoba kirim lalu gagal diam-diam.
-          if (isPrivateRoom && _roleChecked && _myRole == null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              color: AppTheme.bgCard,
-              child: Row(
-                children: [
-                  Icon(Icons.lock_outline_rounded, size: 18, color: Colors.orange),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      s.privateRoomNeedApproval,
-                      style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-          _ChatInput(
-            controller: _msgCtrl,
-            onSend: _send,
-            showAttachRow: _showAttachRow,
-            onToggleAttach: _toggleAttachRow,
-            onTakePhoto: () {
-              setState(() => _showAttachRow = false);
-              _takePhoto();
-            },
-            onSendPhoto: () {
-              setState(() => _showAttachRow = false);
-              _sendPhoto();
-            },
-            onSendViewOnce: () {
-              setState(() => _showAttachRow = false);
-              _sendViewOncePhoto();
-            },
-            onSendVoice: _sendVoiceMessage,
-            onOpenGiftPanel:
-                isPrivateRoom && _myRole != 'owner' ? _openRoomGiftPanel : null,
-            pendingPhotoBase64: _pendingPhotoBase64,
-            onCancelPhoto: _pendingPhotoBase64 != null
-                ? () => setState(() => _pendingPhotoBase64 = null)
-                : null,
+          // Bottom bar 3-state didefinisikan di atas (bottomBar) —
+          // SafeArea bawah agar tidak kepotong nav bar Android.
+          SafeArea(
+            top: false,
+            child: bottomBar,
           ),
         ],
       );

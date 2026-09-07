@@ -120,7 +120,7 @@ class TimelineProvider extends ChangeNotifier {
       if (scope == _scope && _posts.isEmpty && notify) {
         _posts
           ..clear()
-          ..addAll(posts);
+          ..addAll(_excludeOwn(posts, scope));
         _cursor = _scopeCache[scope]!.cursor;
         _cursorBoosted = _scopeCache[scope]!.cursorBoosted;
         _hasMore = _scopeCache[scope]!.hasMore;
@@ -362,6 +362,17 @@ class TimelineProvider extends ChangeNotifier {
     }
   }
 
+  /// Scope 'following' tidak menampilkan post sendiri (ada tab Postinganku).
+  /// Filter client untuk cache basi (memori/disk) — server (list_posts)
+  /// sudah tidak mengirimnya lagi.
+  List<Map<String, dynamic>> _excludeOwn(
+      List<Map<String, dynamic>> posts, String scope) {
+    if (scope != 'following') return posts;
+    final me = Supabase.instance.client.auth.currentUser?.id;
+    if (me == null) return posts;
+    return posts.where((p) => '${p['authorId']}' != me).toList();
+  }
+
   Future<void> load(String scope, {bool refresh = false}) async {
     // Kalau sedang loading scope LAIN, tetap emit cache scope baru dulu
     // supaya tab switch terasa instant, lalu lanjut fetch setelah selesai.
@@ -384,7 +395,7 @@ class TimelineProvider extends ChangeNotifier {
       if (fresh) {
         _posts
           ..clear()
-          ..addAll(cached.posts);
+          ..addAll(_excludeOwn(cached.posts, scope));
         _cursor = cached.cursor;
         _cursorBoosted = cached.cursorBoosted;
         _hasMore = cached.hasMore;
@@ -408,7 +419,7 @@ class TimelineProvider extends ChangeNotifier {
       if (cached != null && cached.posts.isNotEmpty) {
         _posts
           ..clear()
-          ..addAll(cached.posts);
+          ..addAll(_excludeOwn(cached.posts, scope));
         _cursor = cached.cursor;
         _cursorBoosted = cached.cursorBoosted;
         _hasMore = cached.hasMore;
@@ -425,11 +436,12 @@ class TimelineProvider extends ChangeNotifier {
       if (!_disposed) notifyListeners();
     }
     try {
-      final list = await _service.listPosts(
+      final fetched = await _service.listPosts(
         scope,
         cursor: refresh ? null : _cursor,
         cursorBoosted: refresh ? false : _cursorBoosted,
       );
+      final list = _excludeOwn(fetched, scope);
       if (list.isEmpty) {
         _hasMore = false;
         if (refresh) {

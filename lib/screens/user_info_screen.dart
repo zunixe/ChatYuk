@@ -36,6 +36,9 @@ class UserInfoScreen extends StatefulWidget {
 class _UserInfoScreenState extends State<UserInfoScreen> {
   UserModel? _profile;
   bool _loading = true;
+  // Gagal total (timeout/network) saat profil masih null — tampilkan
+  // error + tombol retry, jangan spinner selamanya.
+  bool _loadError = false;
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
   String _status = 'offline';
@@ -66,7 +69,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   Future<void> _loadSocial() async {
     try {
-      final st = await SocialService().mySocialStatus(widget.userId);
+      final st = await SocialService()
+          .mySocialStatus(widget.userId)
+          .timeout(_loadTimeout);
       if (!mounted) return;
       setState(() {
         _following = st['following'] == true;
@@ -308,23 +313,42 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         });
   }
 
+  static const _loadTimeout = Duration(seconds: 10);
+
   Future<void> _load() async {
     UserModel? p;
     try {
-      p = await AuthService().getProfileById(widget.userId);
+      p = await AuthService()
+          .getProfileById(widget.userId)
+          .timeout(_loadTimeout);
     } catch (_) {}
     if (mounted) {
       setState(() {
-        _profile = p;
+        if (p != null) _profile = p;
         _loading = false;
+        // Profil tetap null = gagal total (bukan user tanpa data).
+        _loadError = _profile == null;
       });
       _subscribeStatus(p);
     }
   }
 
+  void _retryLoad() {
+    setState(() {
+      _loading = true;
+      _loadError = false;
+      _loadingPhotos = true;
+    });
+    _load();
+    _loadPhotos();
+    _loadSocial();
+  }
+
   Future<void> _loadPhotos() async {
     try {
-      final photos = await AuthService().getPhotosWithAccess(widget.userId);
+      final photos = await AuthService()
+          .getPhotosWithAccess(widget.userId)
+          .timeout(_loadTimeout);
       if (mounted) setState(() => _photos = photos);
     } catch (_) {}
     if (mounted) setState(() => _loadingPhotos = false);
@@ -518,8 +542,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         ],
       ),
       body: _loading
-          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
-          : SingleChildScrollView(
+          ? _LoadingPlaceholder(name: widget.fallbackName)
+          : (_loadError && _profile == null)
+              ? _LoadErrorView(onRetry: _retryLoad)
+              : SingleChildScrollView(
               // padding bawah + tinggi nav bar Android supaya card galeri
               // (terakhir) tidak tertutup gesture bar / 3-tombol.
               padding: EdgeInsets.fromLTRB(
@@ -1142,6 +1168,98 @@ class _UserPhotoViewerState extends State<_UserPhotoViewer> {
             maxScale: 4,
             child: AsyncPhotoViewer(base64: widget.photos[i].photo),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Loading instan: nama + inisial langsung tampil dari fallback, spinner
+/// kecil di bawah — tidak ada layar kosong muter-muter.
+class _LoadingPlaceholder extends StatelessWidget {
+  final String name;
+  const _LoadingPlaceholder({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 50,
+            backgroundColor: AppTheme.accent,
+            child: Text(
+              (name.isNotEmpty ? name[0] : '?').toUpperCase(),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: AppGlyph.avatarInitial(100),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            name.isNotEmpty ? name : '…',
+            style: AppText.headline.copyWith(color: AppTheme.textPrimary),
+          ),
+          const SizedBox(height: 16),
+          const SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Gagal total (timeout/network) — pesan jelas + tombol coba lagi.
+class _LoadErrorView extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _LoadErrorView({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 48,
+              color: AppTheme.textSecondary,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              s.msgServerError,
+              style: AppText.bodyStrong.copyWith(
+                color: AppTheme.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              s.msgServerErrorHint,
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(s.btnRetry),
+            ),
+          ],
         ),
       ),
     );

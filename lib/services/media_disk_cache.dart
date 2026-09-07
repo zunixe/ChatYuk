@@ -31,6 +31,20 @@ class MediaDiskCache {
   bool _indexLoaded = false;
   String? _docs;
 
+  /// True bila prewarm sudah jalan — readSync aman dipakai.
+  bool get isReady => _docs != null;
+
+  /// Tunggu prewarm siap, terbatas [timeout] — supaya pemanggil tidak
+  /// memvonis disk-miss (lalu fetch network sia-sia) saat boot.
+  Future<void> waitReady(
+      {Duration timeout = const Duration(seconds: 1)}) async {
+    if (_docs != null) return;
+    final sw = Stopwatch()..start();
+    while (_docs == null && sw.elapsed < timeout) {
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
   String _fileName(String serverPath) {
     var h = 0x811c9dc5;
     for (final c in serverPath.codeUnits) {
