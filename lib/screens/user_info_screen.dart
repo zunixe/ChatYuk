@@ -289,6 +289,71 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     }
   }
 
+  /// Buka chat pribadi dengan user yang sedang dilihat.
+  /// Buat/ambil chatId dulu, lalu push PrivateChatScreen.
+  Future<void> _startChat() async {
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final chat = context.read<ChatProvider>();
+    final profile = _profile;
+    final name = profile?.nickname ?? widget.fallbackName;
+    final myUid = auth.uid;
+    if (myUid == null) return;
+    try {
+      final active = await chat.isUserActive(widget.userId);
+      if (!mounted) return;
+      if (!active) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errUserNotFound)));
+        return;
+      }
+      final chatId = await chat.startPrivateChat(
+        myUid: myUid,
+        otherUid: widget.userId,
+        myName: auth.profile?.nickname ?? '',
+        otherName: name,
+        myGender: auth.profile?.gender ?? '',
+        otherGender: profile?.gender ?? '',
+        myCountry: auth.profile?.country ?? '',
+        otherCountry: profile?.country ?? '',
+        myAge: auth.profile?.age ?? 0,
+        otherAge: profile?.age ?? 0,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PrivateChatScreen(
+            chatId: chatId,
+            otherName: name,
+            otherUid: widget.userId,
+            otherGender: profile?.gender ?? '',
+            otherCountry: profile?.country ?? '',
+            otherCity: profile?.city ?? '',
+            otherAge: profile?.age ?? 0,
+            otherRegistered: profile?.isRegistered ?? false,
+          ),
+        ),
+      );
+      // Refresh status sosial setelah balik dari chat (bisa follow dari sana).
+      if (mounted) _loadSocial();
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (!mounted) return;
+      if (msg.contains('23503') ||
+          msg.contains('foreign key') ||
+          msg.contains('42501')) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errUserNotFound)));
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
+      }
+    }
+  }
+
   /// Subscribe status dengan seed dari profil yang baru di-fetch,
   /// supaya dot status benar sejak frame pertama tanpa query tambahan.
   void _subscribeStatus(UserModel? fresh) {
@@ -574,6 +639,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     ],
                   ),
                   SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -593,6 +659,13 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           size: 20,
                           color: Color(0xFF4A90E2),
                         ),
+                      ],
+                      // Ikon chat kecil di samping username — klik langsung chat.
+                      // Anon BOLEH chat (sama dengan perilaku menu online) —
+                      // dulu disembunyikan untuk anon = inkonsisten.
+                      if (auth.uid != widget.userId) ...[
+                        SizedBox(width: 8),
+                        _ChatIconButton(onTap: _startChat),
                       ],
                     ],
                   ),
@@ -1008,6 +1081,35 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   Widget _statDivider() {
     return Container(width: 1, height: 38, color: AppTheme.divider);
+  }
+}
+
+class _ChatIconButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ChatIconButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    return Tooltip(
+      message: s.btnChatNow,
+      child: Material(
+        color: AppTheme.primary.withValues(alpha: 0.12),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: const Padding(
+            padding: EdgeInsets.all(6),
+            child: Icon(
+              Icons.chat_bubble_rounded,
+              size: 18,
+              color: AppTheme.primary,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
