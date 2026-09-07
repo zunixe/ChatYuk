@@ -289,13 +289,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         AutomaticKeepAliveClientMixin,
         SingleTickerProviderStateMixin,
         WidgetsBindingObserver {
-  String _negara = 'all';
+  // Multi-select negara: kosong = Semua. Persist via prefs (JSON list).
+  List<String> _negaraSel = const [];
   String _gender = 'all';
   String _search = '';
   bool _isSearching = false;
   int _page = 1;
   static const int _pageSize = 20;
-  static const _prefKeyNegara = 'filter_negara';
+  static const _prefKeyNegara = 'filter_negara'; // legacy single
+  static const _prefKeyNegaraList = 'filter_negara_multi';
   final ScrollController _scrollCtrl = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
@@ -410,14 +412,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   Future<void> _loadFilter() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _negara = prefs.getString(_prefKeyNegara) ?? 'all';
+      // Migrasi legacy single ('all' | 1 negara) → list.
+      final legacy = prefs.getString(_prefKeyNegara);
+      _negaraSel = prefs.getStringList(_prefKeyNegaraList) ??
+          (legacy != null && legacy != 'all' ? [legacy] : const []);
       _gender = 'all';
     });
   }
 
   Future<void> _saveFilter() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefKeyNegara, _negara);
+    await prefs.setStringList(_prefKeyNegaraList, _negaraSel);
   }
 
   bool _uploadingAvatar = false;
@@ -1260,7 +1265,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               final users = allUsers.where((u) {
                 if (!seenU.add(u.uid)) return false;
                 if (!seenN.add(u.nickname.toLowerCase())) return false;
-                if (_negara != 'all' && u.country != _negara) return false;
+                if (_negaraSel.isNotEmpty &&
+                    !_negaraSel.contains(u.country)) {
+                  return false;
+                }
                 if (_gender != 'all' && u.gender != _gender) return false;
                 if (_search.isNotEmpty &&
                     !u.nickname.toLowerCase().contains(_search.toLowerCase())) {
@@ -1281,16 +1289,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     child: Row(
                       children: [
                         Expanded(
-                          child: _FilterDropdown(
-                            value: _negara,
+                          child: _MultiCountryDropdown(
                             label: s.labelCountry,
                             icon: Icons.public,
-                            items: ['all', ...allCountries],
-                            labels: [s.filterAll, ...allCountries],
-                            searchable: true,
+                            items: allCountries,
+                            labels: allCountries,
+                            selected: _negaraSel,
                             onChanged: (v) {
                               setState(() {
-                                _negara = v;
+                                _negaraSel = v;
                                 _page = 1;
                               });
                               _saveFilter();
@@ -1525,9 +1532,6 @@ class _FilterDropdown extends StatelessWidget {
   final List<String> items;
   final List<String> labels;
   final ValueChanged<String> onChanged;
-  // true = klik membuka bottom sheet dengan pencarian (141 negara);
-  // false = DropdownButton biasa (3 opsi gender).
-  final bool searchable;
 
   const _FilterDropdown({
     required this.value,
@@ -1536,151 +1540,295 @@ class _FilterDropdown extends StatelessWidget {
     required this.items,
     required this.labels,
     required this.onChanged,
-    this.searchable = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final decorator = InputDecorator(
+    return InputDecorator(
       decoration: InputDecoration(
         isDense: true,
         prefixIcon: Icon(icon, size: 20, color: AppTheme.textSecondary),
         labelText: label,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
-      child: searchable
-          ? Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    // Tampilkan label pilihan aktif (bukan value internal).
-                    labels[items.indexOf(value).clamp(0, labels.length - 1)],
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: AppText.bodySmall.copyWith(
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          isDense: true,
+          menuMaxHeight: 400,
+          items: [
+            for (int i = 0; i < items.length; i++)
+              DropdownMenuItem(
+                value: items[i],
+                child: Text(
+                  labels[i],
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: AppText.bodySmall,
                 ),
-                Icon(Icons.arrow_drop_down, color: AppTheme.textSecondary),
-              ],
-            )
-          : DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: value,
-                isExpanded: true,
-                isDense: true,
-                menuMaxHeight: 400,
-                items: [
-                  for (int i = 0; i < items.length; i++)
-                    DropdownMenuItem(
-                      value: items[i],
-                      child: Text(
-                        labels[i],
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style: AppText.bodySmall,
-                      ),
-                    ),
-                ],
-                onChanged: (v) {
-                  if (v != null) onChanged(v);
-                },
               ),
-            ),
-    );
-    if (!searchable) return decorator;
-    return GestureDetector(
-      onTap: () => _openSearchSheet(context),
-      child: decorator,
+          ],
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+        ),
+      ),
     );
   }
+}
 
-  /// Bottom sheet cari negara: TextField filter live + list hasil.
-  Future<void> _openSearchSheet(BuildContext context) async {
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.bgCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetCtx) {
-        final s = sheetCtx.watch<LocaleProvider>().s;
-        var filtered = List<MapEntry<String, String>>.generate(
-          items.length,
-          (i) => MapEntry(items[i], labels[i]),
-        );
-        return StatefulBuilder(
-          builder: (sheetCtx, setSheet) => SafeArea(
-            child: SizedBox(
-              height: MediaQuery.of(sheetCtx).size.height * 0.75,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                    child: Row(
-                      children: [
-                        Text(label,
-                            style: AppText.title.copyWith(
-                                color: AppTheme.textPrimary)),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          onPressed: () => Navigator.pop(sheetCtx),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: TextField(
-                      autofocus: true,
-                      onChanged: (q) {
-                        setSheet(() {
-                          final lq = q.trim().toLowerCase();
-                          filtered = [
-                            for (int i = 0; i < items.length; i++)
-                              if (lq.isEmpty ||
-                                  labels[i].toLowerCase().contains(lq))
-                                MapEntry(items[i], labels[i]),
-                          ];
-                        });
-                      },
-                      decoration: InputDecoration(
-                        isDense: true,
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        hintText: s.searchCountry,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) {
-                        final v = filtered[i].key;
-                        final l = filtered[i].value;
-                        final selected = v == value;
-                        return ListTile(
-                          dense: true,
-                          title: Text(l, style: AppText.bodySmall),
-                          trailing: selected
-                              ? const Icon(Icons.check,
-                                  size: 18, color: AppTheme.primary)
-                              : null,
-                          onTap: () => Navigator.pop(sheetCtx, v),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+/// Multi-select negara — panel TERANCUNG menempel di bawah field (bukan
+/// bottom sheet): search live + checklist + footer Reset/Terapkan.
+/// Kosong = Semua. Commit hanya saat Terapkan (tap luar = batal).
+class _MultiCountryDropdown extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final List<String> items;
+  final List<String> labels;
+  final List<String> selected;
+  final ValueChanged<List<String>> onChanged;
+
+  const _MultiCountryDropdown({
+    required this.label,
+    required this.icon,
+    required this.items,
+    required this.labels,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  State<_MultiCountryDropdown> createState() => _MultiCountryDropdownState();
+}
+
+class _MultiCountryDropdownState extends State<_MultiCountryDropdown> {
+  final LayerLink _link = LayerLink();
+  final OverlayPortalController _portal = OverlayPortalController();
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+  Set<String> _temp = {};
+  Size _fieldSize = Size.zero;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  String _fieldText() {
+    final s = context.read<LocaleProvider>().s;
+    final n = widget.selected.length;
+    if (n == 0) return s.filterAll;
+    if (n == 1) {
+      final idx = widget.items
+          .indexOf(widget.selected.first)
+          .clamp(0, widget.labels.length - 1);
+      return widget.labels[idx];
+    }
+    return s.selCountriesCount(n);
+  }
+
+  void _togglePanel() {
+    if (_portal.isShowing) {
+      _portal.hide();
+      return;
+    }
+    final rb = context.findRenderObject() as RenderBox;
+    _fieldSize = rb.size;
+    _temp = widget.selected.toSet();
+    _searchCtrl.clear();
+    _query = '';
+    _portal.show();
+  }
+
+  void _apply() {
+    widget.onChanged(widget.items.where(_temp.contains).toList());
+    _portal.hide();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: (overlayCtx) {
+        final filtered = [
+          for (int i = 0; i < widget.items.length; i++)
+            if (_query.isEmpty ||
+                widget.labels[i].toLowerCase().contains(_query))
+              i,
+        ];
+        return Stack(
+          children: [
+            // Penutup: tap di luar = batal (tanpa commit).
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _portal.hide(),
               ),
             ),
-          ),
+            CompositedTransformFollower(
+              link: _link,
+              targetAnchor: Alignment.bottomLeft,
+              followerAnchor: Alignment.topLeft,
+              offset: const Offset(0, 4),
+              showWhenUnlinked: false,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: _fieldSize.width,
+                  constraints: const BoxConstraints(maxHeight: 340),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgCard,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.divider),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                        child: TextField(
+                          controller: _searchCtrl,
+                          autofocus: true,
+                          style: AppText.bodySmall
+                              .copyWith(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            prefixIcon: const Icon(Icons.search, size: 18),
+                            hintText: s.searchCountry,
+                            hintStyle: AppText.bodySmall
+                                .copyWith(color: AppTheme.textSecondary),
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 8),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: AppTheme.divider),
+                            ),
+                          ),
+                          onChanged: (q) =>
+                              setState(() => _query = q.trim().toLowerCase()),
+                        ),
+                      ),
+                      Flexible(
+                        child: filtered.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Text('-',
+                                    style: AppText.bodySmall.copyWith(
+                                        color: AppTheme.textSecondary)),
+                              )
+                            : ListView.builder(
+                                shrinkWrap: true,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                itemCount: filtered.length,
+                                itemBuilder: (_, i) {
+                                  final idx = filtered[i];
+                                  final checked =
+                                      _temp.contains(widget.items[idx]);
+                                  return CheckboxListTile(
+                                    dense: true,
+                                    visualDensity: VisualDensity.compact,
+                                    value: checked,
+                                    title: Text(widget.labels[idx],
+                                        style: AppText.bodySmall.copyWith(
+                                            color: AppTheme.textPrimary)),
+                                    controlAffinity:
+                                        ListTileControlAffinity.trailing,
+                                    activeColor: AppTheme.primary,
+                                    checkboxShape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    onChanged: (v) {
+                                      setState(() {
+                                        if (v == true) {
+                                          _temp.add(widget.items[idx]);
+                                        } else {
+                                          _temp.remove(widget.items[idx]);
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                      Divider(height: 1, color: AppTheme.divider),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+                        child: Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => setState(() => _temp = {}),
+                              icon: const Icon(Icons.filter_alt_off_outlined,
+                                  size: 16),
+                              label: Text(s.filterReset),
+                              style: TextButton.styleFrom(
+                                  foregroundColor: AppTheme.textSecondary),
+                            ),
+                            const Spacer(),
+                            FilledButton.icon(
+                              onPressed: _apply,
+                              icon: const Icon(Icons.check, size: 16),
+                              label:
+                                  Text('${s.filterApply} (${_temp.length})'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppTheme.primary,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
+      child: CompositedTransformTarget(
+        link: _link,
+        child: GestureDetector(
+          onTap: _togglePanel,
+          child: InputDecorator(
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: Icon(widget.icon,
+                  size: 20, color: AppTheme.textSecondary),
+              labelText: widget.label,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              suffixIcon: widget.selected.isEmpty
+                  ? Icon(Icons.arrow_drop_down,
+                      color: AppTheme.textSecondary)
+                  : GestureDetector(
+                      onTap: () => widget.onChanged(const []),
+                      child: Icon(Icons.close,
+                          size: 18, color: AppTheme.textSecondary),
+                    ),
+            ),
+            child: Text(
+              _fieldText(),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style:
+                  AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
+            ),
+          ),
+        ),
+      ),
     );
-    if (result != null && result != value) onChanged(result);
   }
 }
 
