@@ -291,15 +291,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         WidgetsBindingObserver {
   // Multi-select negara: kosong = Semua. Persist via prefs (JSON list).
   List<String> _negaraSel = const [];
-  // Multi-select gender: kosong = Semua.
-  List<String> _genderSel = const [];
+  // Single-select gender: all | male | female. Persist via prefs.
+  String _gender = 'all';
   String _search = '';
   bool _isSearching = false;
   int _page = 1;
   static const int _pageSize = 20;
   static const _prefKeyNegara = 'filter_negara'; // legacy single
   static const _prefKeyNegaraList = 'filter_negara_multi';
-  static const _prefKeyGenderList = 'filter_gender_multi';
+  static const _prefKeyGender = 'filter_gender';
   final ScrollController _scrollCtrl = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
@@ -418,14 +418,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       final legacy = prefs.getString(_prefKeyNegara);
       _negaraSel = prefs.getStringList(_prefKeyNegaraList) ??
           (legacy != null && legacy != 'all' ? [legacy] : const []);
-      _genderSel = prefs.getStringList(_prefKeyGenderList) ?? const [];
+      _gender = prefs.getString(_prefKeyGender) ?? 'all';
     });
   }
 
   Future<void> _saveFilter() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_prefKeyNegaraList, _negaraSel);
-    await prefs.setStringList(_prefKeyGenderList, _genderSel);
+    await prefs.setString(_prefKeyGender, _gender);
   }
 
   bool _uploadingAvatar = false;
@@ -1272,8 +1272,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     !_negaraSel.contains(u.country)) {
                   return false;
                 }
-                if (_genderSel.isNotEmpty &&
-                    !_genderSel.contains(u.gender)) {
+                if (_gender != 'all' && u.gender != _gender) {
                   return false;
                 }
                 if (_search.isNotEmpty &&
@@ -1313,16 +1312,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _MultiSelectDropdown(
+                          child: _SingleDropdown(
+                            value: _gender,
                             label: 'Gender',
                             icon: Icons.person_outline,
-                            items: const ['male', 'female'],
-                            labels: [s.filterMale, s.filterFemale],
-                            selected: _genderSel,
-                            countText: s.selGendersCount,
+                            items: const ['all', 'male', 'female'],
+                            labels: [s.filterAll, s.filterMale, s.filterFemale],
                             onChanged: (v) {
                               setState(() {
-                                _genderSel = v;
+                                _gender = v;
                                 _page = 1;
                               });
                               _saveFilter();
@@ -1536,6 +1534,155 @@ class _BubbleTailPainter extends CustomPainter {
 /// Multi-select negara — panel TERANCUNG menempel di bawah field (bukan
 /// bottom sheet): search live + checklist + footer Reset/Terapkan.
 /// Kosong = Semua. Commit hanya saat Terapkan (tap luar = batal).
+/// Single-select dropdown — panel TERANCUNG sama seperti multi-select
+/// tapi tanpa search/footer: tap opsi → langsung terapkan + tutup.
+class _SingleDropdown extends StatefulWidget {
+  final String value;
+  final String label;
+  final IconData icon;
+  final List<String> items;
+  final List<String> labels;
+  final ValueChanged<String> onChanged;
+
+  const _SingleDropdown({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.items,
+    required this.labels,
+    required this.onChanged,
+  });
+
+  @override
+  State<_SingleDropdown> createState() => _SingleDropdownState();
+}
+
+class _SingleDropdownState extends State<_SingleDropdown> {
+  final LayerLink _link = LayerLink();
+  final OverlayPortalController _portal = OverlayPortalController();
+  Size _fieldSize = Size.zero;
+  double _fieldLeft = 0;
+
+  void _togglePanel() {
+    if (_portal.isShowing) {
+      _portal.hide();
+      return;
+    }
+    final rb = context.findRenderObject() as RenderBox;
+    _fieldSize = rb.size;
+    _fieldLeft = rb.localToGlobal(Offset.zero).dx;
+    _portal.show();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: (overlayCtx) {
+        final screenW = MediaQuery.of(overlayCtx).size.width;
+        final availW = screenW - _fieldLeft - 8;
+        final panelW = _fieldSize.width.clamp(0.0, availW).toDouble();
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _portal.hide(),
+              ),
+            ),
+            CompositedTransformFollower(
+              link: _link,
+              targetAnchor: Alignment.bottomLeft,
+              followerAnchor: Alignment.topLeft,
+              offset: const Offset(0, 4),
+              showWhenUnlinked: false,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: panelW,
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgCard,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.divider),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int i = 0; i < widget.items.length; i++)
+                        InkWell(
+                          onTap: () {
+                            widget.onChanged(widget.items[i]);
+                            _portal.hide();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.labels[i],
+                                    style: AppText.bodySmall.copyWith(
+                                      color: widget.items[i] == widget.value
+                                          ? AppTheme.primary
+                                          : AppTheme.textPrimary,
+                                      fontWeight:
+                                          widget.items[i] == widget.value
+                                              ? FontWeight.w700
+                                              : FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                                if (widget.items[i] == widget.value)
+                                  const Icon(Icons.check,
+                                      size: 16, color: AppTheme.primary),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      child: CompositedTransformTarget(
+        link: _link,
+        child: GestureDetector(
+          onTap: _togglePanel,
+          child: InputDecorator(
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: Icon(widget.icon,
+                  size: 20, color: AppTheme.textSecondary),
+              labelText: widget.label,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: Text(
+              widget.labels[widget.items
+                  .indexOf(widget.value)
+                  .clamp(0, widget.labels.length - 1)],
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MultiSelectDropdown extends StatefulWidget {
   final String label;
   final IconData icon;
