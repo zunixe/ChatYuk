@@ -2018,27 +2018,14 @@ class _OwnAddTile extends StatelessWidget {
                 color: AppTheme.primary,
               ),
             ),
-            // Label "Tambah" di dalam card (konsisten dgn tile story).
+            // Label "Tambah" di dalam card — TANPA gradient shadow,
+            // warna teks mengikuti mode gelap/terang.
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: Container(
                 height: 28,
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(12),
-                    bottomRight: Radius.circular(12),
-                  ),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.0),
-                      Colors.black.withValues(alpha: 0.7),
-                    ],
-                  ),
-                ),
                 alignment: Alignment.bottomCenter,
                 padding: const EdgeInsets.only(bottom: 3),
                 child: Text(
@@ -2047,7 +2034,7 @@ class _OwnAddTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: AppText.micro.copyWith(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
