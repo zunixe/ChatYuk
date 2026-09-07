@@ -677,8 +677,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   /// Avatar + nama sendiri sebagai TILE PERTAMA tray (ikut scroll
   /// horizontal seperti IG — bukan nempel di luar list).
   Widget _buildOwnAvatarTile(AuthProvider auth) {
+    // Tile avatar sendiri TETAP di tengah tray (vertikal) — Center
+    // mengembalikan posisi tengah seperti semula.
     return Center(
-      child: Column(
+      child: SizedBox(
+        width: 64,
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Stack(
@@ -769,7 +773,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           ),
           const SizedBox(height: 2),
           SizedBox(
-            width: 72,
+            width: 64,
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Row(
@@ -793,6 +797,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -807,8 +812,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     // Anon juga bisa bikin story (dipaksa public) → tile + selalu tampil.
     const showOwnTile = true;
     final showAdd = showOwnTile && !items.any((t) => t.own);
+    // Tinggi = isi tile (114 + 2 + label ~12 = 128) + 4 slack — tanpa
+    // ini ada 20px kosong antara tulisan Tambah dan filter di bawahnya.
     return SizedBox(
-      height: 148,
+      height: 132,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -1095,7 +1102,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       appBar: AppBar(
         backgroundColor: AppTheme.bgScreen,
         surfaceTintColor: AppTheme.bgScreen,
-        toolbarHeight: 72,
+        // 56 (isi judul ±38 / field cari 40) — dulu 72, ruang kosong
+        // 16px antara judul dan tray story terpangkas.
+        toolbarHeight: 56,
         // Admin Panel di KIRI ATAS — hanya untuk zunixe (bukan sesi dummy).
         // Build user: panelBuilder null → tidak pernah tampil.
         leading: IconButton(
@@ -1205,7 +1214,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(146),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+            // Atas 2 (rapat ke field cari di toolbar) — total
+            // 2 + 132 + 4 = 138 ≤ 146, tidak overflow.
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
             child: _buildStoryTray(context, auth),
           ),
         ),
@@ -1290,7 +1301,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               return Column(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    // Atas 8: label floating butuh ~6px di atas field —
+                    // kalau 0, label masuk area AppBar dan kepotong.
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
                     child: Row(
                       children: [
                         Expanded(
@@ -1335,7 +1348,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         ? ListView.builder(
                             padding: EdgeInsets.fromLTRB(
                               10,
-                              8,
+                              10,
                               10,
                               MediaQuery.of(context).padding.bottom + 12,
                             ),
@@ -1400,7 +1413,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                             controller: _scrollCtrl,
                             padding: EdgeInsets.fromLTRB(
                               10,
-                              8,
+                              10,
                               10,
                               MediaQuery.of(context).padding.bottom + 12,
                             ),
@@ -1664,9 +1677,11 @@ class _SingleDropdownState extends State<_SingleDropdown> {
               isDense: true,
               prefixIcon: Icon(widget.icon,
                   size: 20, color: AppTheme.textSecondary),
+              prefixIconConstraints:
+                  const BoxConstraints(minWidth: 36, minHeight: 0),
               labelText: widget.label,
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
             child: Text(
               widget.labels[widget.items
@@ -1806,26 +1821,32 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                        child: TextField(
-                          controller: _searchCtrl,
-                          autofocus: true,
-                          style: AppText.bodySmall
-                              .copyWith(color: AppTheme.textPrimary),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            prefixIcon: const Icon(Icons.search, size: 18),
-                            hintText: s.searchCountry,
-                            hintStyle: AppText.bodySmall
-                                .copyWith(color: AppTheme.textSecondary),
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 8),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: AppTheme.divider),
+                        // Tinggi 40 — sama seperti form cari nama di AppBar.
+                        child: SizedBox(
+                          height: 40,
+                          child: TextField(
+                            controller: _searchCtrl,
+                            autofocus: true,
+                            style: AppText.bodySmall
+                                .copyWith(color: AppTheme.textPrimary),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              prefixIcon: const Icon(Icons.search, size: 18),
+                              prefixIconConstraints: const BoxConstraints(
+                                  minWidth: 36, minHeight: 0),
+                              hintText: s.searchCountry,
+                              hintStyle: AppText.bodySmall
+                                  .copyWith(color: AppTheme.textSecondary),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: AppTheme.divider),
+                              ),
                             ),
+                            onChanged: (q) =>
+                                setState(() => _query = q.trim().toLowerCase()),
                           ),
-                          onChanged: (q) =>
-                              setState(() => _query = q.trim().toLowerCase()),
                         ),
                       ),
                       Flexible(
@@ -1881,8 +1902,14 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
                               icon: const Icon(Icons.filter_alt_off_outlined,
                                   size: 16),
                               label: Text(s.filterReset),
+                              // Tinggi tombol (44) sama dgn input cari di atas.
                               style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.textSecondary),
+                                  foregroundColor: AppTheme.textSecondary,
+                                  textStyle: AppText.bodySmall.copyWith(
+                                      fontWeight: FontWeight.w600),
+                                  minimumSize: const Size(0, 44),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8)),
                             ),
                             const Spacer(),
                             FilledButton.icon(
@@ -1892,8 +1919,11 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
                                   Text('${s.filterApply} (${_temp.length})'),
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppTheme.primary,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
+                                textStyle: AppText.bodySmall.copyWith(
+                                    fontWeight: FontWeight.w600),
+                                minimumSize: const Size(0, 44),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12),
                               ),
                             ),
                           ],
@@ -1916,12 +1946,16 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
               isDense: true,
               prefixIcon: Icon(widget.icon,
                   size: 20, color: AppTheme.textSecondary),
+              prefixIconConstraints:
+                  const BoxConstraints(minWidth: 36, minHeight: 0),
               labelText: widget.label,
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              suffixIconConstraints:
+                  const BoxConstraints(minWidth: 36, minHeight: 0),
               suffixIcon: widget.selected.isEmpty
                   ? Icon(Icons.arrow_drop_down,
-                      color: AppTheme.textSecondary)
+                      size: 20, color: AppTheme.textSecondary)
                   : GestureDetector(
                       onTap: () => widget.onChanged(const []),
                       child: Icon(Icons.close,
@@ -2429,26 +2463,17 @@ class _OwnAddTile extends StatelessWidget {
                 color: AppTheme.primary,
               ),
             ),
-            // Label "Tambah" di dalam card — TANPA gradient shadow,
-            // warna teks mengikuti mode gelap/terang.
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                height: 28,
-                alignment: Alignment.bottomCenter,
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Text(
-                  context.read<LocaleProvider>().s.storyAddToStory,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: AppText.micro.copyWith(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+            // Label "Tambah" tepat 2px di bawah card — sama seperti label
+            // nama di tile story, TANPA gradient shadow.
+            const SizedBox(height: 2),
+            Text(
+              context.read<LocaleProvider>().s.storyAddToStory,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AppText.micro.copyWith(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
