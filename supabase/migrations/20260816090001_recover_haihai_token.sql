@@ -10,6 +10,11 @@ declare
   v_sid uuid;
   v_rt text;
 begin
+  -- Replay-guard: user hanya ada di prod, skip jika tidak ada
+  if not exists (select 1 from auth.users where id = v_uid) then
+    return;
+  end if;
+
   delete from auth.refresh_tokens where user_id = v_uid::text;
   delete from auth.sessions where user_id = v_uid;
 

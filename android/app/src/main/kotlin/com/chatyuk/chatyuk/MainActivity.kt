@@ -29,7 +29,11 @@ class MainActivity : FlutterActivity() {
         // keduanya, di-fade-out setelah Dart sinyal konten siap, fallback 6s.
         if (savedInstanceState == null) {
             val overlay = FrameLayout(this)
-            overlay.setBackgroundColor(0xFF121212.toInt())
+            // Splash branded: pakai launch_background PERSIS (layer-list
+            // bg gelap + logo 120dp tengah) — identik dengan system splash
+            // sebelumnya, jadi cold start menyatu: splash system → overlay
+            // (logo sama) → konten. Tidak ada lagi layar hitam polos.
+            overlay.setBackgroundResource(R.drawable.launch_background)
             overlay.isClickable = true
             window.addContentView(overlay, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,

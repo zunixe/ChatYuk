@@ -897,6 +897,16 @@ class S {
   String get storyDeleted => isId ? 'Story dihapus' : 'Story deleted';
   String get storyVideoSoon =>
       isId ? 'Story video segera hadir' : 'Video stories coming soon';
+  String get storyCamera =>
+      isId ? 'Kamera' : 'Camera';
+  String get storyPartialTitle =>
+      isId ? 'Akses foto terbatas' : 'Limited photo access';
+  String get storyPartialDesc =>
+      isId ? 'Hanya sebagian foto yang terlihat. Pilih foto lain atau izinkan semua di Pengaturan.' : 'Only some photos are visible. Select more photos or allow all in Settings.';
+  String get storyPartialAdd =>
+      isId ? 'Pilih foto' : 'Select photos';
+  String get storyPartialAllowAll =>
+      isId ? 'Izinkan semua' : 'Allow all';
   String get storyDeleteFail =>
       isId ? 'Gagal menghapus story' : 'Failed to delete story';
   String get storyDeleteSlideTitle =>
@@ -923,6 +933,14 @@ class S {
   String get storyTapLeftRightHint => isId
       ? 'Tap sisi kanan/kiri untuk pindah'
       : 'Tap right/left side to navigate';
+  String storyReplyHint(String name) =>
+      isId ? 'Balas $name...' : 'Reply to $name...';
+  String get storyDiscardTitle => isId ? 'Buang story?' : 'Discard story?';
+  String get storyDiscardMsg => isId
+      ? 'Foto dan teks yang belum dibagikan akan hilang.'
+      : 'Unshared photo and text will be lost.';
+  String get storyDiscardYes => isId ? 'Buang' : 'Discard';
+  String get storyKeepEditing => isId ? 'Lanjut' : 'Keep editing';
   // ── Foto terkunci (paywall) ──
   String get photoLockedTitle => isId ? 'Foto Terkunci' : 'Locked Photo';
   String get photoLockedHint =>
