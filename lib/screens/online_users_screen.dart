@@ -30,7 +30,6 @@ import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
-import 'user_info_screen.dart';
 import 'story_composer_screen.dart';
 import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
@@ -1714,15 +1713,7 @@ class _UserCard extends StatelessWidget {
                         children: [
                           Flexible(
                             child: GestureDetector(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => UserInfoScreen(
-                                    userId: user.uid,
-                                    fallbackName: user.nickname,
-                                  ),
-                                ),
-                              ),
+                              onTap: onTap,
                               child: Text(
                                 user.nickname,
                                 style: AppText.bodyStrong,
@@ -1755,15 +1746,7 @@ class _UserCard extends StatelessWidget {
                         ],
                       ),
                       GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => UserInfoScreen(
-                              userId: user.uid,
-                              fallbackName: user.nickname,
-                            ),
-                          ),
-                        ),
+                        onTap: onTap,
                         child: Text(
                           '$genderLabel ${user.age} · ${user.city}, ${user.country}',
                           style: AppText.bodySmall.copyWith(
@@ -2074,17 +2057,25 @@ class _OwnAddTile extends StatelessWidget {
                 color: AppTheme.primary,
               ),
             ),
-            const SizedBox(height: 2),
-            SizedBox(
-              width: 64,
-              child: Text(
-                context.read<LocaleProvider>().s.storyAddToStory,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: AppText.micro.copyWith(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
+            // Label "Tambah" di dalam card — TANPA gradient shadow,
+            // warna teks mengikuti mode gelap/terang.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                height: 28,
+                alignment: Alignment.bottomCenter,
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  context.read<LocaleProvider>().s.storyAddToStory,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppText.micro.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),

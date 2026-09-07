@@ -1314,6 +1314,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 final s = context.read<LocaleProvider>().s;
                 final msgs = snap.data ?? [];
                 if (msgs.isEmpty) {
+                  // Stream belum emit (data == null) → jangan tampilkan empty
+                  // state — mencegah flash "mulai percakapan" saat buka room
+                  // yang ada isinya. Empty state hanya setelah stream selesai.
+                  if (snap.data == null) return const SizedBox.shrink();
                   return Center(
                     child: Builder(
                       builder: (ctx) {
