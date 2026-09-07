@@ -291,13 +291,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         WidgetsBindingObserver {
   // Multi-select negara: kosong = Semua. Persist via prefs (JSON list).
   List<String> _negaraSel = const [];
-  String _gender = 'all';
+  // Multi-select gender: kosong = Semua.
+  List<String> _genderSel = const [];
   String _search = '';
   bool _isSearching = false;
   int _page = 1;
   static const int _pageSize = 20;
   static const _prefKeyNegara = 'filter_negara'; // legacy single
   static const _prefKeyNegaraList = 'filter_negara_multi';
+  static const _prefKeyGenderList = 'filter_gender_multi';
   final ScrollController _scrollCtrl = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
   StreamSubscription<List<PrivateChatInfo>>? _unreadSub;
@@ -416,13 +418,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       final legacy = prefs.getString(_prefKeyNegara);
       _negaraSel = prefs.getStringList(_prefKeyNegaraList) ??
           (legacy != null && legacy != 'all' ? [legacy] : const []);
-      _gender = 'all';
+      _genderSel = prefs.getStringList(_prefKeyGenderList) ?? const [];
     });
   }
 
   Future<void> _saveFilter() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_prefKeyNegaraList, _negaraSel);
+    await prefs.setStringList(_prefKeyGenderList, _genderSel);
   }
 
   bool _uploadingAvatar = false;
@@ -1269,7 +1272,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     !_negaraSel.contains(u.country)) {
                   return false;
                 }
-                if (_gender != 'all' && u.gender != _gender) return false;
+                if (_genderSel.isNotEmpty &&
+                    !_genderSel.contains(u.gender)) {
+                  return false;
+                }
                 if (_search.isNotEmpty &&
                     !u.nickname.toLowerCase().contains(_search.toLowerCase())) {
                   return false;
@@ -1289,12 +1295,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     child: Row(
                       children: [
                         Expanded(
-                          child: _MultiCountryDropdown(
+                          child: _MultiSelectDropdown(
                             label: s.labelCountry,
                             icon: Icons.public,
                             items: allCountries,
                             labels: allCountries,
                             selected: _negaraSel,
+                            countText: s.selCountriesCount,
                             onChanged: (v) {
                               setState(() {
                                 _negaraSel = v;
@@ -1306,15 +1313,16 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _FilterDropdown(
-                            value: _gender,
+                          child: _MultiSelectDropdown(
                             label: 'Gender',
                             icon: Icons.person_outline,
-                            items: const ['all', 'male', 'female'],
-                            labels: [s.filterAll, s.filterMale, s.filterFemale],
+                            items: const ['male', 'female'],
+                            labels: [s.filterMale, s.filterFemale],
+                            selected: _genderSel,
+                            countText: s.selGendersCount,
                             onChanged: (v) {
                               setState(() {
-                                _gender = v;
+                                _genderSel = v;
                                 _page = 1;
                               });
                               _saveFilter();
@@ -1525,90 +1533,40 @@ class _BubbleTailPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _FilterDropdown extends StatelessWidget {
-  final String value;
-  final String label;
-  final IconData icon;
-  final List<String> items;
-  final List<String> labels;
-  final ValueChanged<String> onChanged;
-
-  const _FilterDropdown({
-    required this.value,
-    required this.label,
-    required this.icon,
-    required this.items,
-    required this.labels,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InputDecorator(
-      decoration: InputDecoration(
-        isDense: true,
-        prefixIcon: Icon(icon, size: 20, color: AppTheme.textSecondary),
-        labelText: label,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          isDense: true,
-          menuMaxHeight: 400,
-          items: [
-            for (int i = 0; i < items.length; i++)
-              DropdownMenuItem(
-                value: items[i],
-                child: Text(
-                  labels[i],
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: AppText.bodySmall,
-                ),
-              ),
-          ],
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        ),
-      ),
-    );
-  }
-}
-
 /// Multi-select negara — panel TERANCUNG menempel di bawah field (bukan
 /// bottom sheet): search live + checklist + footer Reset/Terapkan.
 /// Kosong = Semua. Commit hanya saat Terapkan (tap luar = batal).
-class _MultiCountryDropdown extends StatefulWidget {
+class _MultiSelectDropdown extends StatefulWidget {
   final String label;
   final IconData icon;
   final List<String> items;
   final List<String> labels;
   final List<String> selected;
+  final String Function(int n) countText;
   final ValueChanged<List<String>> onChanged;
 
-  const _MultiCountryDropdown({
+  const _MultiSelectDropdown({
     required this.label,
     required this.icon,
     required this.items,
     required this.labels,
     required this.selected,
+    required this.countText,
     required this.onChanged,
   });
 
   @override
-  State<_MultiCountryDropdown> createState() => _MultiCountryDropdownState();
+  State<_MultiSelectDropdown> createState() => _MultiSelectDropdownState();
 }
 
-class _MultiCountryDropdownState extends State<_MultiCountryDropdown> {
+class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
   final LayerLink _link = LayerLink();
   final OverlayPortalController _portal = OverlayPortalController();
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
   Set<String> _temp = {};
   Size _fieldSize = Size.zero;
+  double _fieldLeft = 0;
 
   @override
   void dispose() {
@@ -1626,7 +1584,7 @@ class _MultiCountryDropdownState extends State<_MultiCountryDropdown> {
           .clamp(0, widget.labels.length - 1);
       return widget.labels[idx];
     }
-    return s.selCountriesCount(n);
+    return widget.countText(n);
   }
 
   void _togglePanel() {
@@ -1636,6 +1594,7 @@ class _MultiCountryDropdownState extends State<_MultiCountryDropdown> {
     }
     final rb = context.findRenderObject() as RenderBox;
     _fieldSize = rb.size;
+    _fieldLeft = rb.localToGlobal(Offset.zero).dx;
     _temp = widget.selected.toSet();
     _searchCtrl.clear();
     _query = '';
@@ -1653,6 +1612,10 @@ class _MultiCountryDropdownState extends State<_MultiCountryDropdown> {
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: (overlayCtx) {
+        // Lebar: field + 96px ke kanan, clamp ke tepi layar (field kanan).
+        final screenW = MediaQuery.of(overlayCtx).size.width;
+        final availW = screenW - _fieldLeft - 8;
+        final panelW = (_fieldSize.width + 96).clamp(0.0, availW).toDouble();
         final filtered = [
           for (int i = 0; i < widget.items.length; i++)
             if (_query.isEmpty ||
@@ -1677,7 +1640,7 @@ class _MultiCountryDropdownState extends State<_MultiCountryDropdown> {
               child: Material(
                 color: Colors.transparent,
                 child: Container(
-                  width: _fieldSize.width,
+                  width: panelW,
                   constraints: const BoxConstraints(maxHeight: 340),
                   decoration: BoxDecoration(
                     color: AppTheme.bgCard,
