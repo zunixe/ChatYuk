@@ -91,6 +91,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
 
   StoryTrayItem get _item => widget.items[_person];
   bool get _own => _item.own;
+  bool get _isAdmin => context.read<AuthProvider>().isRealAdmin;
 
   Future<void> _loadPerson() async {
     _autoTimer?.cancel();
@@ -513,7 +514,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_own && !_loading && _slides.isNotEmpty) ...[
+                  if ((_own || _isAdmin) && !_loading && _slides.isNotEmpty) ...[
                     _HeaderBtn(
                       icon: Icons.visibility,
                       onPressed: _showViewers,

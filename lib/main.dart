@@ -31,6 +31,7 @@ import 'config/theme.dart';
 import 'services/auth_service.dart';
 import 'utils.dart';
 import 'services/message_cache.dart';
+import 'services/media_disk_cache.dart';
 import 'services/photo_cache.dart';
 import 'services/chat_background.dart';
 import 'services/notification_prefs_service.dart';
@@ -763,6 +764,9 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   await Future.wait([
     SupabaseConfig.init(),
     MessageCache.instance.prewarmDb(),
+    // Index disk media siap sebelum frame pertama — readSync avatar
+    // (Online/Chat/Timeline) langsung hit, tanpa prewarm race.
+    MediaDiskCache.instance.prewarm(),
     Future(() async {
       try {
         // Flavor dev (Supabase local): Firebase dev belum dikonfigurasi —

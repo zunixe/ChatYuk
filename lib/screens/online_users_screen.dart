@@ -111,8 +111,20 @@ class _AsyncAvatar extends StatefulWidget {
   State<_AsyncAvatar> createState() => _AsyncAvatarState();
 }
 
+/// Decode base64 avatar di isolate — B64 besar dari network tidak boleh
+/// block UI thread saat scroll list online.
+Uint8List? _decodeAvatarB64Iso(String b64) {
+  try {
+    return base64Decode(b64);
+  } catch (_) {
+    return null;
+  }
+}
+
 class _AsyncAvatarState extends State<_AsyncAvatar> {
   MemoryImage? _provider;
+  Timer? _poll;
+  String? _asyncResolvingFor;
 
   /// UID pendek untuk log — aman untuk uid kosong/pendek.
   String get _uid8 => widget.uid.length >= 8
@@ -125,14 +137,28 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
   void initState() {
     super.initState();
     _resolve();
-    // Cek ulang sekali (500ms): tulis disk yang mendarat setelah frame
-    // pertama TANPA rebuild parent (mis. prewarm race) langsung tampil
-    // tanpa nunggu emission stream berikutnya.
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (!mounted || _provider != null || widget.avatarB64.isEmpty) return;
+    // Poll bounded (~2s): tulis disk / bytes async yang mendarat setelah
+    // frame pertama TANPA rebuild parent (prewarm race, decode isolate)
+    // langsung tampil tanpa nunggu emission stream berikutnya.
+    var ticks = 0;
+    _poll = Timer.periodic(const Duration(milliseconds: 300), (t) {
+      if (!mounted || _provider != null || ticks++ >= 7) {
+        t.cancel();
+        return;
+      }
+      if (widget.avatarB64.isEmpty) return;
       _resolve();
-      if (_provider != null && mounted) setState(() {});
+      if (_provider != null && mounted) {
+        setState(() {});
+        t.cancel();
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
   }
 
   void _resolve() {
@@ -177,6 +203,24 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
       final cached = _avatarCache.get(src);
       if (cached != null) {
         b = cached;
+      } else if (src.length > 100000 && _asyncResolvingFor != src) {
+        // B64 besar dari network batch → decode di isolate agar scroll
+        // tidak jank; poll initState menampilkan hasilnya saat siap.
+        _asyncResolvingFor = src;
+        compute(_decodeAvatarB64Iso, src).then((decoded) {
+          _asyncResolvingFor = null;
+          if (decoded == null || decoded.isEmpty) return;
+          _avatarCache.putIfAbsent(src, () => decoded);
+          _avatarBytesByUid[widget.uid] ??= decoded;
+          _avatarImageByUid.putIfAbsent(
+            widget.uid,
+            () => MemoryImage(_avatarBytesByUid[widget.uid]!),
+          );
+          if (mounted) setState(() => _provider = _avatarImageByUid[widget.uid]);
+        });
+        return;
+      } else if (src.length > 100000) {
+        return;
       } else {
         try {
           final decoded = base64Decode(src);
@@ -242,7 +286,10 @@ class OnlineUsersScreen extends StatefulWidget {
 }
 
 class _OnlineUsersScreenState extends State<OnlineUsersScreen>
-    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
+    with
+        AutomaticKeepAliveClientMixin,
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver {
   String _negara = 'all';
   String _gender = 'all';
   String _search = '';
@@ -289,8 +336,20 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   bool get wantKeepAlive => true;
 
   @override
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Balik dari background → sinkron ulang tray (tangkap delete/update
+    // story yang terjadi saat channel realtime mati).
+    if (state == AppLifecycleState.resumed && mounted) {
+      try {
+        context.read<StoryProvider>().refresh(silent: true);
+      } catch (_) {}
+    }
+  }
+
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scrollCtrl.addListener(_onScroll);
     _loadFilter();
     // Story tray refresh DITUNDA ke post-frame pertama (bukan saat
@@ -565,6 +624,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
@@ -741,7 +801,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     const showOwnTile = true;
     final showAdd = showOwnTile && !items.any((t) => t.own);
     return SizedBox(
-      height: 132,
+      height: 148,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -1938,43 +1998,6 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                           ),
                   ),
                 ),
-                // Gradient + username di dalam card
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    height: 28,
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(12),
-                        bottomRight: Radius.circular(12),
-                      ),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.0),
-                          Colors.black.withValues(alpha: 0.7),
-                        ],
-                      ),
-                    ),
-                    alignment: Alignment.bottomCenter,
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      it.own
-                          ? context.read<LocaleProvider>().s.storyMine
-                          : it.authorName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: AppText.micro.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
                 if (widget.isOwnWithAdd)
                   Positioned(
                     // DI DALAM bounds tile (right:2, bottom:2) — dulu -3
@@ -2000,6 +2023,22 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                   ),
               ],
             ),
+            const SizedBox(height: 2),
+            SizedBox(
+              width: 64,
+              child: Text(
+                it.own
+                    ? context.read<LocaleProvider>().s.storyMine
+                    : it.authorName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: AppText.micro.copyWith(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -2018,8 +2057,8 @@ class _OwnAddTile extends StatelessWidget {
       onTap: onTap,
       child: SizedBox(
         width: 64,
-        child: Stack(
-          clipBehavior: Clip.none,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 64,
@@ -2035,38 +2074,17 @@ class _OwnAddTile extends StatelessWidget {
                 color: AppTheme.primary,
               ),
             ),
-            // Label "Tambah" di dalam card (konsisten dgn tile story).
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                height: 28,
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(12),
-                    bottomRight: Radius.circular(12),
-                  ),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.0),
-                      Colors.black.withValues(alpha: 0.7),
-                    ],
-                  ),
-                ),
-                alignment: Alignment.bottomCenter,
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Text(
-                  context.read<LocaleProvider>().s.storyAddToStory,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: AppText.micro.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+            const SizedBox(height: 2),
+            SizedBox(
+              width: 64,
+              child: Text(
+                context.read<LocaleProvider>().s.storyAddToStory,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: AppText.micro.copyWith(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),

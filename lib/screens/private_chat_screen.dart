@@ -2486,7 +2486,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                   child: Row(
                                     children: [
                                       ChatAttachChip(
-                                        icon: Icons.image_outlined,
+                                        icon: Icons.image_rounded,
                                         color: AppTheme.primary,
                                         label: s.menuSendPhoto,
                                         onTap: () {
@@ -2498,7 +2498,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                       ),
                                       const SizedBox(width: 8),
                                       ChatAttachChip(
-                                        icon: Icons.timer_outlined,
+                                        icon: Icons.timer_rounded,
                                         color: Colors.orange,
                                         label: s.menuViewOnce,
                                         onTap: () {

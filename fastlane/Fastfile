@@ -15,14 +15,30 @@ platform :android do
     track = options[:track] || "alpha"
 
     gradle(
-      task: "bundlePlayRelease",
+      task: "bundlePlayProdRelease",
       project_dir: "android"
     )
 
     upload_to_play_store(
       package_name: "com.chatyuk.chatyuk",
       track: track,
-      aab: "build/app/outputs/bundle/playRelease/app-play-release.aab",
+      aab: "build/app/outputs/bundle/playProdRelease/app-play-prod-release.aab",
+      json_key: "fastlane/google-play.json",
+      release_status: "completed",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Upload AAB yang sudah di-build flutter (obfuscated) TANPA rebuild gradle — gradle rebuild menghapus obfuscation Dart"
+  lane :play_upload do |options|
+    track = options[:track] || "alpha"
+
+    upload_to_play_store(
+      package_name: "com.chatyuk.chatyuk",
+      track: track,
+      aab: "build/app/outputs/bundle/playProdRelease/app-play-prod-release.aab",
       json_key: "fastlane/google-play.json",
       release_status: "completed",
       skip_upload_metadata: true,

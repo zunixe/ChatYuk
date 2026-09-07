@@ -53,17 +53,26 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
   }
 
   Future<void> _load() async {
-    final b64 = await AvatarB64Service.instance.get(widget.uid);
-    if (!mounted || b64.isEmpty) return;
-    final cached = _bytesCache[b64];
-    if (cached != null) {
-      setState(() => _bytes = cached);
-      return;
+    // Retry bila hasil kosong — fetch serentak untuk uid yang sama
+    // mengembalikan '' (inflight) dan widget ini tidak boleh menyerah
+    // (kalau tidak, avatar stuck inisial sampai rebuild = kedip).
+    for (var attempt = 0; attempt < 10; attempt++) {
+      final b64 = await AvatarB64Service.instance.get(widget.uid);
+      if (!mounted) return;
+      if (b64.isNotEmpty) {
+        final cached = _bytesCache[b64];
+        if (cached != null) {
+          setState(() => _bytes = cached);
+          return;
+        }
+        final bytes = await compute(_decodeAvatarB64, b64);
+        if (!mounted || bytes == null) return;
+        if (_bytesCache.length < 60) _bytesCache[b64] = bytes;
+        setState(() => _bytes = bytes);
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 300));
     }
-    final bytes = await compute(_decodeAvatarB64, b64);
-    if (!mounted || bytes == null) return;
-    if (_bytesCache.length < 60) _bytesCache[b64] = bytes;
-    setState(() => _bytes = bytes);
   }
 
   @override
