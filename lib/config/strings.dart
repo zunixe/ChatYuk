@@ -74,16 +74,22 @@ class S {
   String get roomNameLabel => isId ? 'Nama room' : 'Room name';
   String get roomNameHint => isId ? '3–30 karakter' : '3–30 characters';
   String get roomIconLabel => isId ? 'Ikon' : 'Icon';
-  String get roomPasswordOpt =>
-      isId ? 'Password (opsional)' : 'Password (optional)';
   String get roomPasswordHint =>
-      isId ? 'Kosongkan bila tanpa password' : 'Leave empty for no password';
-  String get roomExpiryInfoNoPw => isId
-      ? 'Tanpa password: grup permanen, tidak kedaluwarsa'
-      : 'No password: group is permanent, never expires';
-  String get roomExpiryInfoPw => isId
-      ? 'Dengan password: berlaku 7 hari, bisa diperpanjang'
-      : 'With password: valid 7 days, extendable';
+      isId ? 'Minimal 4 karakter' : 'At least 4 characters';
+  String get createGroupSubtitle => isId
+      ? 'Ruang chat untuk komunitasmu'
+      : 'A chat space for your community';
+  String get groupAccessLabel => isId ? 'Akses grup' : 'Group access';
+  String get groupNoPwTitle => isId ? 'Tanpa password' : 'No password';
+  String get groupNoPwDesc => isId
+      ? 'Permanen · tidak kedaluwarsa'
+      : 'Permanent · never expires';
+  String get groupPwTitle => isId ? 'Dengan password' : 'With password';
+  String get groupPwDesc => isId
+      ? 'Berlaku 7 hari · bisa diperpanjang'
+      : 'Valid 7 days · extendable';
+  String get errPasswordRequired =>
+      isId ? 'Isi password grup dulu' : 'Enter a group password first';
   String get labelYourCoins => isId ? 'Koin kamu' : 'Your coins';
   String roomCreateCost(int c) => isId ? 'Biaya: $c koin' : 'Cost: $c coins';
   String get errRoomNameLen => isId
@@ -1274,7 +1280,7 @@ class S {
   String get menuReadAll =>
       isId ? 'Tandai semua dibaca' : 'Mark all as read';
   String get tabGroups => isId ? 'Grup' : 'Groups';
-  String get tabRooms => isId ? 'Room' : 'Rooms';
+  String get tabRooms => isId ? 'Global Room' : 'Global Room';
   String get titleTimeline => isId ? 'Timeline' : 'Timeline';
   String get hintWritePost =>
       isId ? 'Tulis sesuatu...' : "Share what's on your mind...";
