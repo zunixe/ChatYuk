@@ -139,6 +139,33 @@ class ChatService {
         StoragePhotoService.instance.isVoicePath(m.imageData);
   }
 
+  /// Path voice yang sedang diunduh — cegah dobel download (prefetch
+  /// riwayat + realtime arrival + tap user bisa memicu bersamaan).
+  static final Set<String> _voiceDownloadInflight = {};
+
+  /// Pastikan audio voice ada di MediaDiskCache (cache yang dibaca
+  /// VoiceBubble saat play). Fire-and-forget; skip kalau sudah di disk;
+  /// aman dipanggil berulang dari jalur mana pun.
+  static Future<void> prefetchVoiceBytes(String path) async {
+    if (path.isEmpty || !StoragePhotoService.instance.isVoicePath(path)) {
+      return;
+    }
+    if (_voiceDownloadInflight.contains(path)) return;
+    try {
+      final f = await MediaDiskCache.instance.fileFor(path);
+      if (f != null) return; // sudah di disk — tap play instan
+      _voiceDownloadInflight.add(path);
+      final bytes = await StoragePhotoService.instance.downloadBytes(path);
+      if (bytes != null && bytes.isNotEmpty) {
+        await MediaDiskCache.instance.write(path, bytes);
+      }
+    } catch (e) {
+      debugPrint('[ChatService] voice prefetch: $e');
+    } finally {
+      _voiceDownloadInflight.remove(path);
+    }
+  }
+
   /// Unduh audio voice message ke cache lokal (base64 via PhotoCache) —
   /// dipakai VoiceBubble untuk play offline tanpa fetch ulang.
   Future<void> _downloadVoiceToCache(String cacheKey, MessageModel msg) async {
@@ -146,8 +173,13 @@ class ChatService {
       if (msg.imageData.isEmpty) return;
       if (!StoragePhotoService.instance.isVoicePath(msg.imageData)) return;
       final existing = await PhotoCache.instance.load(cacheKey, msg.id);
-      if (existing != null && existing.isNotEmpty) return;
+      if (existing != null && existing.isNotEmpty) {
+        // Path sudah tercatat — pastikan bytes-nya juga ada di disk.
+        unawaited(prefetchVoiceBytes(msg.imageData));
+        return;
+      }
       await PhotoCache.instance.save(cacheKey, msg.id, msg.imageData);
+      unawaited(prefetchVoiceBytes(msg.imageData));
     } catch (e) {
       debugPrint('[ChatService] voice cache ${msg.id}: $e');
     }
@@ -435,6 +467,24 @@ class ChatService {
     // Chunk kecil → foto pertama muncul cepat, sisanya menyusul berurutan.
     void loadPhotosAsync(List<MessageModel> models) {
       if (models.isEmpty) return;
+      // Voice: prefetch audio TERBARU di background (lazy) supaya tap play
+      // langsung dari disk. Dibatasi 10 terbaru agar hemat kuota; voice lama
+      // tetap on-demand saat di-tap (dengan spinner di bubble).
+      final voices = models
+          .where((m) =>
+              m.type == 'voice' &&
+              m.imageData.isNotEmpty &&
+              StoragePhotoService.instance.isVoicePath(m.imageData))
+          .toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      if (voices.isNotEmpty) {
+        unawaited(() async {
+          for (final m in voices.take(10)) {
+            if (controller.isClosed) return;
+            await ChatService.prefetchVoiceBytes(m.imageData);
+          }
+        }());
+      }
       final photos = models.where((m) {
         return m.type == 'image' ||
             m.type == 'view_once' ||
@@ -1679,6 +1729,23 @@ class ChatService {
 
     controller.onCancel = () => _sb.removeChannel(channel);
     return controller.stream;
+  }
+
+  /// Ambil last_seen satu user (untuk "terakhir dilihat" di header chat).
+  Future<DateTime?> getUserLastSeen(String uid) async {
+    if (uid.isEmpty) return null;
+    try {
+      final row = await _sb
+          .from('profiles')
+          .select('last_seen')
+          .eq('id', uid)
+          .maybeSingle();
+      final v = row?['last_seen'] as String?;
+      return v == null ? null : DateTime.tryParse(v)?.toLocal();
+    } catch (e) {
+      debugPrint('[chat] getUserLastSeen error: $e');
+      return null;
+    }
   }
 
   Stream<List<UserModel>> getOnlineUsers() {

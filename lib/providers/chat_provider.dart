@@ -125,6 +125,10 @@ class ChatProvider extends ChangeNotifier {
   Stream<String> getUserStatus(String uid, {String? initialStatus}) =>
       _service.getUserStatus(uid, initialStatus: initialStatus);
 
+  /// last_seen satu user (untuk "terakhir dilihat" di header chat).
+  Future<DateTime?> getUserLastSeen(String uid) =>
+      _service.getUserLastSeen(uid);
+
   Stream<String> getTypingStream(String chatId) =>
       _service.getTypingStream(chatId);
 
