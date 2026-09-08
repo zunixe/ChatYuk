@@ -85,12 +85,15 @@ class RoomService {
 
   /// Ambil private room untuk satu negara (yang belum kedaluwarsa).
   Future<List<RoomModel>> fetchPrivateRooms(String country) async {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
     final rows = await _sb
         .from('rooms')
         .select(_roomCols)
         .eq('country', country)
         .eq('is_private', true)
-        .gt('expires_at', DateTime.now().toUtc().toIso8601String())
+        // Grup tanpa password = permanen (expires_at NULL) — jangan
+        // difilter keluar seperti grup expired.
+        .or('expires_at.is.null,expires_at.gt.$nowIso')
         .order('created_at', ascending: false);
     return rows.map((row) => RoomModel.fromMap('${row['id']}', row)).toList();
   }

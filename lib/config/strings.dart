@@ -73,6 +73,12 @@ class S {
       isId ? 'Password (opsional)' : 'Password (optional)';
   String get roomPasswordHint =>
       isId ? 'Kosongkan bila tanpa password' : 'Leave empty for no password';
+  String get roomExpiryInfoNoPw => isId
+      ? 'Tanpa password: grup permanen, tidak kedaluwarsa'
+      : 'No password: group is permanent, never expires';
+  String get roomExpiryInfoPw => isId
+      ? 'Dengan password: berlaku 7 hari, bisa diperpanjang'
+      : 'With password: valid 7 days, extendable';
   String get labelYourCoins => isId ? 'Koin kamu' : 'Your coins';
   String roomCreateCost(int c) => isId ? 'Biaya: $c koin' : 'Cost: $c coins';
   String get errRoomNameLen => isId
@@ -1085,6 +1091,14 @@ class S {
   String get mRatedApp => isId ? 'Rate aplikasi' : 'Rate the app';
   String get mCompletedProfile => isId ? 'Lengkapi profil' : 'Complete profile';
   String get mInvitedFriend => isId ? 'Invite teman' : 'Invite a friend';
+  String get roomInviteTitle => isId ? 'Undang ke grup' : 'Invite to group';
+  String get roomInviteHint => isId
+      ? 'Pilih dari yang pernah chat denganmu (teman/bukan)'
+      : 'Pick from people you have chatted with (friends or not)';
+  String get roomInvitedOk =>
+      isId ? 'Berhasil diundang ke grup' : 'Invited to group';
+  String get roomInviteFull =>
+      isId ? 'Grup penuh' : 'Group is full';
   String get mFirstPhoto => isId ? 'Kirim foto pertama' : 'Send first photo';
   String get mFirstRoomChat => isId ? 'Chat room pertama' : 'First room chat';
   String get btnRetry => isId ? 'Coba Lagi' : 'Retry';
@@ -1251,6 +1265,7 @@ class S {
   String get tabFollowing => isId ? 'Mengikuti' : 'Following';
   String get tabMine => isId ? 'Postinganku' : 'My Posts';
   String get tabMessages => isId ? 'Pesan' : 'Messages';
+  String get tabGroups => isId ? 'Grup' : 'Groups';
   String get tabRooms => isId ? 'Room' : 'Rooms';
   String get titleTimeline => isId ? 'Timeline' : 'Timeline';
   String get hintWritePost =>

@@ -201,6 +201,46 @@ extension SAdminX on S {
       ? 'User bisa request masuk lagi, tapi harus di-approve.'
       : 'They can request again but must be approved.';
 
+  // ── Menu ⋮ grup ala WA ──
+  String get menuAddMembers => isId ? 'Tambah anggota' : 'Add members';
+  String get menuGroupInfo => isId ? 'Info grup' : 'Group info';
+  String get menuGroupMedia => isId ? 'Media grup' : 'Group media';
+  String get menuSearchMessages => isId ? 'Cari pesan' : 'Search messages';
+  String get menuMuteNotif => isId ? 'Bisukan notifikasi' : 'Mute notifications';
+  String get menuUnmuteNotif =>
+      isId ? 'Nyalakan notifikasi' : 'Unmute notifications';
+  String get menuMore => isId ? 'Lainnya' : 'More';
+  String get menuExitGroup => isId ? 'Keluar grup' : 'Exit group';
+  String get menuDeleteGroup => isId ? 'Hapus grup' : 'Delete group';
+  String get exitGroupTitle =>
+      isId ? 'Keluar dari grup?' : 'Exit this group?';
+  String get exitGroupBody => isId
+      ? 'Kamu tidak lagi menerima pesan dari grup ini.'
+      : 'You will stop receiving messages from this group.';
+  String get deleteGroupTitle => isId ? 'Hapus grup ini?' : 'Delete this group?';
+  String get deleteGroupBody => isId
+      ? 'Grup dan semua pesannya hilang permanen untuk semua member.'
+      : 'The group and all its messages are permanently gone for everyone.';
+  String get groupInfoOwner => isId ? 'Pemilik' : 'Owner';
+  String get groupInfoMembers => isId ? 'Anggota' : 'Members';
+  String get groupInfoCreated => isId ? 'Dibuat' : 'Created';
+  String get groupInfoExpiry => isId ? 'Berlaku sampai' : 'Valid until';
+  String get groupInfoPermanent => isId ? 'Permanen' : 'Permanent';
+  String get groupInfoExpired => isId ? 'Kedaluwarsa' : 'Expired';
+  String get groupInfoToken => isId ? 'Token undangan' : 'Invite token';
+  String get groupInfoTokenCopied =>
+      isId ? 'Token tersalin' : 'Token copied';
+  String get groupMediaEmpty =>
+      isId ? 'Belum ada foto di grup ini' : 'No photos in this group yet';
+  String get roomSearchHint =>
+      isId ? 'Cari di grup ini...' : 'Search in this group...';
+  String get roomSearchEmpty =>
+      isId ? 'Tidak ada pesan cocok' : 'No matching messages';
+  String get roomMutedOn =>
+      isId ? 'Notifikasi grup dibisukan' : 'Group notifications muted';
+  String get roomMutedOff =>
+      isId ? 'Notifikasi grup dinyalakan' : 'Group notifications on';
+
   String get adminContactEmpty =>
       isId ? 'Belum ada pesan kontak' : 'No contact messages yet';
 

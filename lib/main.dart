@@ -376,8 +376,12 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   // Chat yang dibisukan → tidak ada notifikasi (foreground).
   // NOTE: `type` dideklarasikan di bawah — pakai data mentah di sini.
   final _fcmType = data['type'];
+  // Chat/room yang dibisukan → tidak ada notifikasi (foreground).
+  // NOTE: `type` dideklarasikan di bawah — pakai data mentah di sini.
+  // chatKey mencakup roomId (mute per-room pakai set yang sama).
   if (chatKey.isNotEmpty &&
       (_fcmType == 'message' ||
+          _fcmType == 'room' ||
           (_fcmType == null && data.containsKey('chatId'))) &&
       await NotificationPrefsService.isChatMuted(chatKey)) {
     return;
