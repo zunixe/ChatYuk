@@ -186,6 +186,8 @@ class AppTheme {
 
   // ── Status (konstan) ──
   static const Color online = Color(0xFF4CAF50);
+  // Hijau tua untuk badge jumlah online — kontras di atas bgCard terang.
+  static const Color onlineDark = Color(0xFF2E7D32);
   static const Color idle = Color(0xFFFFB300);
   static const Color offline = Color(0xFFBDBDBD);
   static const Color danger = Color(0xFFF44336);

@@ -62,6 +62,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final shouldShow = await NotificationPrefsService.shouldShowForFcmType(type as String?);
   debugPrint('[NOTIF_BG] type=$type shouldShow=$shouldShow data=$data');
   if (!shouldShow) return;
+  // Chat yang dibisukan → tidak ada notifikasi (background).
+  final bgChatId = '${data['chatId'] ?? ''}';
+  if (bgChatId.isNotEmpty &&
+      (type == 'message' || (type == null && data.containsKey('chatId'))) &&
+      await NotificationPrefsService.isChatMuted(bgChatId)) {
+    return;
+  }
   // call_ended → panggilan selesai/dibatalkan. UPDATE notif call yang sama
   // (id = callId) jadi "Call ended". Langsung show dengan id sama (update
   // in-place) tanpa cancel dulu — cancel+show di MIUI justru menyisakan
@@ -366,6 +373,15 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   if (data['type'] == 'call') return;
   final chatKey = data['chatId'] ?? data['roomId'] ?? '';
   if (chatKey.isNotEmpty && activeChatId.value == chatKey) return;
+  // Chat yang dibisukan → tidak ada notifikasi (foreground).
+  // NOTE: `type` dideklarasikan di bawah — pakai data mentah di sini.
+  final _fcmType = data['type'];
+  if (chatKey.isNotEmpty &&
+      (_fcmType == 'message' ||
+          (_fcmType == null && data.containsKey('chatId'))) &&
+      await NotificationPrefsService.isChatMuted(chatKey)) {
+    return;
+  }
 
   final s = localeProvider.s;
   final type = data['type'];

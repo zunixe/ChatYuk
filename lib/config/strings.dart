@@ -274,7 +274,6 @@ class S {
   String get noPrivateChatsHint => isId
       ? 'Klik user di chat room untuk mulai'
       : 'Tap a user in a chat room to start';
-  String get startConversation => msgStartConversation;
   String get noMessages => isId ? 'Belum ada pesan' : 'No messages yet';
   String get timeJustNow => isId ? 'Baru' : 'Now';
   String get labelToday => isId ? 'Hari ini' : 'Today';
@@ -343,6 +342,16 @@ class S {
   String deleteSelectedSuccess(int n) =>
       isId ? '$n chat dihapus' : '$n chats deleted';
   String selectedCount(int n) => isId ? '$n terpilih' : '$n selected';
+  String get btnArchive => isId ? 'Arsipkan' : 'Archive';
+  String get btnUnarchive => isId ? 'Keluarkan dari Arsip' : 'Unarchive';
+  String get msgArchived => isId ? 'Chat diarsipkan' : 'Chat archived';
+  String get msgUnarchived =>
+      isId ? 'Chat dikeluarkan dari arsip' : 'Chat unarchived';
+  String get msgMuted =>
+      isId ? 'Notifikasi chat dimatikan' : 'Chat notifications muted';
+  String get msgUnmuted =>
+      isId ? 'Notifikasi chat dinyalakan' : 'Chat notifications unmuted';
+  String labelArchived(int n) => isId ? 'Diarsipkan ($n)' : 'Archived ($n)';
 
   // ── Profile ──
   String get titleProfile => isId ? 'Profil' : 'Profile';
@@ -580,8 +589,6 @@ class S {
       isId ? 'Tunggu giliran atau angkat tangan' : 'Wait your turn or raise hand';
 
   String get btnClose => isId ? 'Tutup' : 'Close';
-  String get msgStartConversation =>
-      isId ? 'Mulai percakapan!' : 'Start the conversation!';
   String get errGeneric => isId ? 'Gagal: ' : 'Failed: ';
   String get errUserNotFound =>
       isId ? 'Pengguna tidak ditemukan' : 'User not found';

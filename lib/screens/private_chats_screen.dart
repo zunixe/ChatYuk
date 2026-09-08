@@ -37,6 +37,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _selected = {};
   bool get _selectionMode => _selected.isNotEmpty;
+  // Tampilan arsip (gaya WhatsApp): list hanya chat terarsip.
+  bool _showArchived = false;
+  int _archivedCount = 0;
   List<PrivateChatInfo> _lastFiltered = [];
   List<PrivateChatInfo> _lastChats = [];
 
@@ -47,39 +50,201 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     });
   }
 
-  Future<void> _showPinOptions(BuildContext ctx, PrivateChatInfo chat, bool isPinned) async {
-    final s = ctx.read<LocaleProvider>().s;
-    final action = await showModalBottomSheet<String>(
-      context: ctx,
-      backgroundColor: AppTheme.bgCard,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(leading: Icon(isPinned ? Icons.push_pin_outlined : Icons.push_pin, color: AppTheme.primary), title: Text(isPinned ? s.btnUnpin : s.btnPin), onTap: () => Navigator.pop(ctx, isPinned ? 'unpin' : 'pin')),
-          ListTile(leading: const Icon(Icons.delete_outline, color: AppTheme.danger), title: Text(s.btnDeleteChat, style: const TextStyle(color: AppTheme.danger)), onTap: () => Navigator.pop(ctx, 'delete')),
-        ]),
-      ),
-    );
-    if (!mounted || action == null) return;
-    final uid = ctx.read<AuthProvider>().uid;
-    if (uid == null) return;
-    if (action == 'pin' || action == 'unpin') {
-      final pin = action == 'pin';
+  void _clearSelection() => setState(() => _selected.clear());
+
+  /// Aksi massal gaya WhatsApp — pin, mute, arsip untuk semua terpilih.
+  /// Tombol menampilkan AKSI (misal semua sudah pin → tawarkan unpin).
+  Future<void> _pinSelected(String uid, bool pin) async {
+    final s = context.read<LocaleProvider>().s;
+    final chat = context.read<ChatProvider>();
+    final ids = _selected.toList();
+    _clearSelection();
+    for (final id in ids) {
       try {
-        await ctx.read<ChatProvider>().pinChat(chat.chatId, pin, myUid: uid);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(pin ? s.msgPinned : s.msgUnpinned)));
-        // optimistic sudah di atas, tidak perlu refresh manual (biar tidak kedip)
+        await chat.pinChat(id, pin, myUid: uid);
       } catch (_) {}
-    } else if (action == 'delete') {
-      await _deleteChat(uid, chat.chatId);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(pin ? s.msgPinned : s.msgUnpinned)),
+      );
     }
   }
 
-  void _selectAll(List<PrivateChatInfo> chats) {
-    setState(() => _selected.addAll(chats.map((c) => c.chatId)));
+  Future<void> _muteSelected(String uid, bool mute) async {
+    final s = context.read<LocaleProvider>().s;
+    final chat = context.read<ChatProvider>();
+    final ids = _selected.toList();
+    _clearSelection();
+    for (final id in ids) {
+      try {
+        await chat.muteChat(id, mute, myUid: uid);
+      } catch (_) {}
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mute ? s.msgMuted : s.msgUnmuted)),
+      );
+    }
   }
 
-  void _clearSelection() => setState(() => _selected.clear());
+  Future<void> _archiveSelected(String uid, bool archive) async {
+    final s = context.read<LocaleProvider>().s;
+    final chat = context.read<ChatProvider>();
+    final ids = _selected.toList();
+    _clearSelection();
+    for (final id in ids) {
+      try {
+        await chat.archiveChat(id, archive, myUid: uid);
+      } catch (_) {}
+    }
+    // Habis unarchive → kembali ke list utama (tampilan arsip kini kosong).
+    if (!archive && mounted) setState(() => _showArchived = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(archive ? s.msgArchived : s.msgUnarchived)),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteSelected(String uid) async {
+    final s = context.read<LocaleProvider>().s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(s.btnDeleteSelected, style: TextStyle(color: AppTheme.textPrimary)),
+        content: Text(s.deleteSelectedConfirm(_selected.length), style: TextStyle(color: AppTheme.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.btnDeleteSelected, style: const TextStyle(color: AppTheme.danger))),
+        ],
+      ),
+    );
+    if (ok == true) _deleteSelected(uid);
+  }
+
+  /// Ikon aksi bar seleksi gaya WhatsApp: pin, hapus, mute, arsip.
+  /// Ikon = AKSI yang akan dijalankan (semua sudah pin → tawarkan unpin).
+  List<Widget> _selectionActions(String uid, S s) {
+    final byId = <String, PrivateChatInfo>{
+      for (final c in _lastChats) c.chatId: c
+    };
+    var allPinned = _selected.isNotEmpty;
+    var allMuted = _selected.isNotEmpty;
+    for (final id in _selected) {
+      final c = byId[id];
+      if (c == null || !c.isPinnedFor(uid)) allPinned = false;
+      if (c == null || !c.isMutedFor(uid)) allMuted = false;
+    }
+    return [
+      IconButton(
+        tooltip: allPinned ? s.btnUnpin : s.btnPin,
+        icon: Icon(allPinned ? Icons.push_pin_outlined : Icons.push_pin),
+        onPressed: () => _pinSelected(uid, !allPinned),
+      ),
+      IconButton(
+        tooltip: s.btnDeleteChat,
+        icon: const Icon(Icons.delete_outline, color: AppTheme.danger),
+        onPressed: () => _confirmDeleteSelected(uid),
+      ),
+      IconButton(
+        tooltip: allMuted ? s.btnUnmute : s.btnMute,
+        icon: Icon(allMuted
+            ? Icons.notifications_active
+            : Icons.notifications_off_outlined),
+        onPressed: () => _muteSelected(uid, !allMuted),
+      ),
+      if (!_showArchived)
+        IconButton(
+          tooltip: s.btnArchive,
+          icon: const Icon(Icons.archive_outlined),
+          onPressed: () => _archiveSelected(uid, true),
+        )
+      else
+        IconButton(
+          tooltip: s.btnUnarchive,
+          icon: const Icon(Icons.unarchive),
+          onPressed: () => _archiveSelected(uid, false),
+        ),
+    ];
+  }
+
+  /// Bar seleksi dalam body (mode embedded — tab Chat tidak punya AppBar sendiri).
+  Widget _selectionBar(String uid, S s) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.divider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: AppTheme.isDark ? 0.2 : 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: s.btnCancel,
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _clearSelection,
+          ),
+          Text(
+            s.selectedCount(_selected.length),
+            style: AppText.bodyStrong,
+          ),
+          const Spacer(),
+          ..._selectionActions(uid, s),
+        ],
+      ),
+    );
+  }
+
+  /// Baris "Diarsipkan (n)" — ketuk untuk buka/tutup tampilan arsip.
+  Widget _archivedToggle(S s) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => setState(() {
+        _showArchived = !_showArchived;
+        _selected.clear();
+        _page = 1;
+      }),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.divider),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _showArchived ? Icons.unarchive : Icons.archive_outlined,
+              size: 20,
+              color: AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              s.labelArchived(_archivedCount),
+              style:
+                  AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
+            ),
+            const Spacer(),
+            Icon(
+              _showArchived ? Icons.expand_less : Icons.expand_more,
+              size: 20,
+              color: AppTheme.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _deleteSelected(String uid) async {
     final ids = _selected.toList();
@@ -87,6 +252,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     for (final id in ids) {
       await _deleteChat(uid, id);
     }
+    // Kalau hapus dari tampilan arsip sampai habis → kembali ke utama.
+    if (_showArchived && mounted) setState(() => _showArchived = false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.read<LocaleProvider>().s.deleteSelectedSuccess(ids.length))),
@@ -94,26 +261,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     }
   }
 
-  Future<void> _deleteAll(String uid, List<PrivateChatInfo> chats) async {
-    final s = context.read<LocaleProvider>().s;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        title: Text(s.btnDeleteAll, style: TextStyle(color: AppTheme.textPrimary)),
-        content: Text(s.deleteAllConfirm, style: TextStyle(color: AppTheme.textSecondary)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.btnDeleteAll, style: const TextStyle(color: AppTheme.danger))),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    _clearSelection();
-    for (final c in chats) {
-      await _deleteChat(uid, c.chatId);
-    }
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.deleteAllSuccess)));
+  Future<void> _deleteChat(String uid, String chatId) async {
+    await context.read<ChatProvider>().hideChat(uid, chatId);
   }
 
   @override
@@ -138,10 +287,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       _initial = null;
       _stream = null;
     }
-  }
-
-  Future<void> _deleteChat(String uid, String chatId) async {
-    await context.read<ChatProvider>().hideChat(uid, chatId);
   }
 
   @override
@@ -228,46 +373,45 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
         return b.lastMessageAt.compareTo(a.lastMessageAt);
       });
       _lastFiltered = filtered;
+      final myUid = auth.uid ?? '';
+      _archivedCount =
+          _lastChats.where((c) => c.isArchivedFor(myUid)).length;
+      // Pengaman: arsip kosong tapi masih di tampilan arsip (mis. habis
+      // unarchive) → paksa kembali ke list utama agar halaman tak kosong.
+      if (_showArchived && _archivedCount == 0) _showArchived = false;
+      // Tampilan arsip: hanya chat terarsip. Normal: arsip disembunyikan.
+      _lastFiltered = _showArchived
+          ? filtered.where((c) => c.isArchivedFor(myUid)).toList()
+          : filtered.where((c) => !c.isArchivedFor(myUid)).toList();
     }
 
-    return Scaffold(
+    return PopScope(
+      // Back sistem saat seleksi aktif = batal seleksi dulu.
+      canPop: !_selectionMode,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _clearSelection();
+      },
+      child: Scaffold(
       backgroundColor: AppTheme.bgScreen,
-      appBar: widget.embedded ? null : AppBar(title: Text(_selectionMode ? s.selectedCount(_selected.length) : s.titlePrivateChat)),
+      appBar: widget.embedded
+          ? null
+          : _selectionMode
+              ? AppBar(
+                  leading: IconButton(
+                    tooltip: s.btnCancel,
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: _clearSelection,
+                  ),
+                  title: Text(s.selectedCount(_selected.length)),
+                  actions: _selectionActions(auth.uid!, s),
+                )
+              : AppBar(title: Text(s.titlePrivateChat)),
       body: Column(
         children: [
-          AnimatedContainer(
-            duration: Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            margin: EdgeInsets.fromLTRB(16, 10, 16, 10),
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _selectionMode ? AppTheme.primary.withValues(alpha: AppTheme.isDark ? 0.18 : 0.08) : AppTheme.bgCard,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _selectionMode ? AppTheme.primary.withValues(alpha: 0.25) : AppTheme.divider, width: 1),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: AppTheme.isDark ? 0.2 : 0.06), blurRadius: 8, offset: Offset(0, 2))],
-            ),
-            child: Row(
-                children: [
-                  if (_selectionMode) ...[
-                    TextButton.icon(icon: Icon(_selected.length == _lastFiltered.length ? Icons.deselect : Icons.select_all, size: 18), label: Text(_selected.length == _lastFiltered.length ? s.btnDeselectAll : s.btnSelectAll, style: AppText.caption), onPressed: () {
-                      if (_selected.length == _lastFiltered.length) _clearSelection(); else _selectAll(_lastFiltered);
-                    }),
-                    SizedBox(width: 8),
-                    TextButton.icon(icon: Icon(Icons.delete_outline, size: 18, color: AppTheme.danger), label: Text(s.btnDeleteSelected, style: AppText.caption.copyWith(color: AppTheme.danger)), onPressed: _selected.isEmpty ? null : () async {
-                      final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(backgroundColor: AppTheme.bgCard, title: Text(s.btnDeleteSelected, style: TextStyle(color: AppTheme.textPrimary)), content: Text(s.deleteSelectedConfirm(_selected.length), style: TextStyle(color: AppTheme.textSecondary)), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)), TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.btnDeleteSelected, style: const TextStyle(color: AppTheme.danger)))]));
-                      if (ok == true) _deleteSelected(auth.uid!);
-                    }),
-                    Spacer(),
-                    TextButton(onPressed: _clearSelection, child: Text(s.btnCancel, style: AppText.caption)),
-                  ] else ...[
-                    if (_lastFiltered.isNotEmpty)
-                      TextButton.icon(icon: Icon(Icons.delete_sweep, size: 18, color: AppTheme.danger), label: Text(s.btnDeleteAll, style: AppText.caption.copyWith(color: AppTheme.danger)), onPressed: () => _deleteAll(auth.uid!, _lastFiltered)),
-                    Spacer(),
-                    TextButton.icon(icon: Icon(Icons.checklist, size: 18), label: Text(s.btnSelectAll, style: AppText.caption), onPressed: () => _selectAll(_lastFiltered)),
-                  ],
-                ],
-              ),
-            ),
+          // Mode embedded (tab Chat): bar seleksi gaya WA di dalam body.
+          if (_selectionMode && widget.embedded)
+            _selectionBar(auth.uid!, s),
+          if (_archivedCount > 0) _archivedToggle(s),
           Expanded(
             child: StreamBuilder<List<PrivateChatInfo>>(
               stream: _stream,
@@ -337,7 +481,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                   controller: _scrollCtrl,
                   padding: EdgeInsets.fromLTRB(
                     16,
-                    4,
+                    10,
                     16,
                     MediaQuery.of(context).padding.bottom + 16,
                   ),
@@ -367,7 +511,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     final isSelected = _selected.contains(chat.chatId);
                     final isPinned = chat.isPinnedFor(auth.uid ?? '');
                     return GestureDetector(
-                      onLongPress: () => _showPinOptions(context, chat, isPinned),
+                      // Tahan = mulai seleksi (gaya WhatsApp), ketuk = tambah/kurangi.
+                      onLongPress: () {
+                        if (!_selectionMode) _toggleSelect(chat.chatId);
+                      },
                       child: Dismissible(
                       key: ValueKey(chat.chatId),
                       direction: DismissDirection.horizontal,
@@ -514,10 +661,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  if (_selectionMode) ...[
-                                    Checkbox(value: isSelected, onChanged: (_) => _toggleSelect(chat.chatId), activeColor: AppTheme.primary),
-                                    SizedBox(width: 4),
-                                  ],
                                    ProfileAvatar(
                                     uid: otherUid,
                                     name: otherName,
@@ -639,7 +782,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                               ),
                                           ],
                                         ),
-                                        SizedBox(height: 2),
+                                        SizedBox(height: 4),
                                         Builder(builder: (_) {
                                           final otherStatus = statusMap[otherUid] ?? 'offline';
                                           final isOnline = otherStatus == 'online';
@@ -649,7 +792,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                             maxLines: 1, overflow: TextOverflow.ellipsis,
                                           );
                                         }),
-                                        SizedBox(height: 2),
+                                        SizedBox(height: 4),
                                         Text(
                                           '${chat.messageCount} ${s.chatMsgCount}',
                                           style: AppText.caption.copyWith(
@@ -710,6 +853,15 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                             color: AppTheme.textSecondary,
                                           ),
                                         ),
+                                        // Tanda bisu gaya WA di samping jam.
+                                        if (chat.isMutedFor(auth.uid ?? '')) ...[
+                                          const SizedBox(height: 4),
+                                          Icon(
+                                            Icons.notifications_off,
+                                            size: 14,
+                                            color: AppTheme.textSecondary,
+                                          ),
+                                        ],
                                         if (unread > 0) ...[
                                           const SizedBox(height: 4),
                                           Container(
@@ -752,7 +904,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
               },
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

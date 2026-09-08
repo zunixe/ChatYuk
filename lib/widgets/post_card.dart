@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../config/strings.dart';
@@ -483,24 +484,25 @@ class _PostCardState extends State<PostCard> {
             child: Row(
               children: [
                 _iconAction(
+                  // Phosphor: outline saat mati, fill merah saat suka.
                   icon: isLiked
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
+                      ? PhosphorIconsFill.heart
+                      : PhosphorIconsRegular.heart,
                   color: isLiked ? AppTheme.danger : AppTheme.textSecondary,
                   scale: isLiked ? 1.2 : 1,
                   count: likeCount,
                   onTap: _like,
                 ),
                 _iconAction(
-                  // Speech bubble bulat — icon comment khas Threads.
-                  icon: Icons.chat_bubble_outline_rounded,
+                  // Phosphor chat-circle — sekeluarga dengan heart.
+                  icon: PhosphorIconsRegular.chatCircle,
                   color: AppTheme.textSecondary,
                   count: commentCount,
                   onTap: _comment,
                 ),
                 _iconAction(
-                  // Paper plane — icon share khas Threads.
-                  icon: Icons.send_outlined,
+                  // Phosphor paper-plane-tilt (gaya Threads).
+                  icon: PhosphorIconsRegular.paperPlaneTilt,
                   color: AppTheme.textSecondary,
                   count: shareCount,
                   onTap: _share,
@@ -676,7 +678,7 @@ class _PostCardState extends State<PostCard> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -684,7 +686,7 @@ class _PostCardState extends State<PostCard> {
                 scale: scale,
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.elasticOut,
-                child: Icon(icon, size: 20, color: color),
+                child: Icon(icon, size: 18, color: color),
               ),
               if (showCount) ...[
                 const SizedBox(width: 4),
@@ -1003,24 +1005,22 @@ class _CommentsListState extends State<_CommentsList> {
                       children: [
                         _CommentAction(
                           icon: isLiked
-                              ? Icons.favorite
-                              : Icons.favorite_border,
+                              ? PhosphorIconsFill.heart
+                              : PhosphorIconsRegular.heart,
                           color: isLiked
                               ? AppTheme.danger
                               : AppTheme.textSecondary,
                           count: likeCount,
                           onTap: () => _like(c),
                         ),
-                        SizedBox(width: 16),
                         _CommentAction(
-                          icon: Icons.chat_bubble_outline,
+                          icon: PhosphorIconsRegular.chatCircle,
                           color: AppTheme.textSecondary,
                           count: null,
                           onTap: () => widget.onReply?.call(id, name),
                         ),
-                        SizedBox(width: 16),
                         _CommentAction(
-                          icon: Icons.send_outlined,
+                          icon: PhosphorIconsRegular.paperPlaneTilt,
                           color: AppTheme.textSecondary,
                           count: shareCount,
                           onTap: () => _share(c),
@@ -1056,7 +1056,9 @@ class _CommentAction extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        // Ritme proporsional dengan bar aksi utama (ikon 18/pad 8 →
+        // ikon 14/pad 6): jarak antar-ikon datang dari padding item.
+        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

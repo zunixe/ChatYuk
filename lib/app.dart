@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
@@ -521,6 +522,18 @@ class _BottomNav extends StatelessWidget {
     final s = context.watch<LocaleProvider>().s;
     final uid = context.select<AuthProvider, String?>((a) => a.uid);
     final chat = context.read<ChatProvider>();
+    // Badge hijau = jumlah user berstatus online (di luar diri sendiri
+    // & yang diblokir) — cermin filter list tab Online tanpa filter
+    // negara/gender/search.
+    final onlineCount = context
+        .select<OnlineUsersProvider, int>(
+          (p) => p.users
+              .where((u) =>
+                  u.uid != uid &&
+                  !chat.isBlocked(u.uid) &&
+                  u.status == 'online')
+              .length,
+        );
 
     return StreamBuilder<List<PrivateChatInfo>>(
       stream: uid != null ? chat.getMyPrivateChats(uid) : const Stream.empty(),
@@ -533,12 +546,16 @@ class _BottomNav extends StatelessWidget {
           shape: const CircularNotchedRectangle(),
           notchMargin: 6,
           padding: EdgeInsets.zero,
-          height: 56,
+          height: 52,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _navItem(Icons.group_rounded, s.navOnline, 0),
-              _navItem(Icons.chat_bubble, s.navChats, 1, badge: totalUnread),
+              _navItem(Icons.group_rounded, s.navOnline, 0,
+                  badge: onlineCount,
+                  badgeColor: AppTheme.onlineDark,
+                  badgePill: true),
+              _navItem(Icons.chat_bubble, s.navChats, 1,
+                  badge: totalUnread, badgePill: true),
               const SizedBox(width: 48),
               _navItem(Icons.dynamic_feed_rounded, s.navTimeline, 2),
               _navItem(Icons.person, s.navProfile, 3),
@@ -549,26 +566,81 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _navItem(IconData icon, String label, int index, {int badge = 0}) {
+  Widget _navItem(IconData icon, String label, int index,
+      {int badge = 0,
+      Color badgeColor = AppTheme.danger,
+      bool badgePill = false}) {
     final selected = currentIndex == index;
-    final color = selected ? AppTheme.primary : AppTheme.textSecondary;
-    return InkWell(
+    // Pil terpilih = soft transparan ala WhatsApp: tint primary tipis
+    // di belakang ikon solid — kalem, tidak norak.
+    final iconColor = selected ? AppTheme.primary : AppTheme.textSecondary;
+    final labelColor = selected ? AppTheme.primary : AppTheme.textSecondary;
+    // Tanpa InkWell — ripple kotak meliputi ikon+teks dihilangkan.
+    // opaque → seluruh area item (termasuk padding transparan) ikut
+    // menerima tap; tanpa ini tap di tepi sering "tidak kena".
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => onTap(index),
-      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _BadgedIcon(icon: icon, count: badge, color: color),
-            const SizedBox(height: 1),
-            Text(
-              label,
-              style: AppText.micro.copyWith(
-                color: color,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
+            // Gaya NavigationBar M3 (seperti ScanOrder): pil muncul fade +
+            // melebar dari tengah di belakang ikon, kurva emphasized M3
+            // Cubic(0.2, 0, 0, 1) — bukan crossfade warna. Ukuran 68x30
+            // gepeng proporsional (radius = tinggi/2 = 15).
+            // Bulge sin() bikin pil sedikit mengembang di tengah animasi
+            // (efek melebar smooth), ikon ikut pop 0.85→1.
+            // Dua tahap: opacity full dalam 25% pertama (~125ms) supaya
+            // tap terasa respon instan; lebar pakai easeOutExpo — ngacir
+            // di awal lalu melambat lembut di akhir (500ms). Collapse
+            // tetap 250ms emphasized biar responsif.
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: selected ? 0 : 1, end: selected ? 1 : 0),
+              duration: Duration(milliseconds: selected ? 500 : 250),
+              curve: selected
+                  ? Curves.linear
+                  : const Cubic(0.2, 0.0, 0.0, 1.0),
+              builder: (context, t, child) {
+                final w = t >= 1 ? 1.0 : 1 - math.pow(2, -10 * t).toDouble();
+                final o = (t / 0.25).clamp(0.0, 1.0);
+                final bulge = 1 + 0.08 * math.sin(w * math.pi);
+                return SizedBox(
+                width: 68,
+                height: 30,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(
+                      opacity: selected ? o : t,
+                      child: Container(
+                        width: 68 * w * bulge,
+                        height: 30 * (0.6 + 0.4 * w),
+                        decoration: BoxDecoration(
+                          color:
+                              AppTheme.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                      ),
+                    ),
+                    Transform.scale(
+                      scale: 0.85 + 0.15 * (t * 3).clamp(0.0, 1.0),
+                      child: child!,
+                    ),
+                  ],
+                ),
+              );
+              },
+              child: _BadgedIcon(
+                  icon: icon,
+                  count: badge,
+                  color: iconColor,
+                  badgeColor: badgeColor,
+                  badgePill: badgePill),
             ),
+            const SizedBox(height: 1),
+            Text(label, style: AppText.micro.copyWith(color: labelColor)),
           ],
         ),
       ),
@@ -580,7 +652,14 @@ class _BadgedIcon extends StatelessWidget {
   final IconData icon;
   final int count;
   final Color? color;
-  const _BadgedIcon({required this.icon, required this.count, this.color});
+  final Color badgeColor;
+  final bool badgePill;
+  const _BadgedIcon(
+      {required this.icon,
+      required this.count,
+      this.color,
+      this.badgeColor = AppTheme.danger,
+      this.badgePill = false});
 
   @override
   Widget build(BuildContext context) {
@@ -593,14 +672,19 @@ class _BadgedIcon extends StatelessWidget {
         Positioned(
           right: -8,
           top: -4,
+          // Pil (mis. badge online): kapsul hijau tua; default: bulet
+          // 16px tanpa border, baru memanjang kalau 2 digit ke atas.
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            constraints: const BoxConstraints(minWidth: 14),
+            width: badgePill || count >= 10 ? null : 16,
+            height: 16,
+            padding: EdgeInsets.symmetric(
+                horizontal: badgePill ? 6 : (count < 10 ? 0 : 4)),
+            constraints: const BoxConstraints(minWidth: 16),
             decoration: BoxDecoration(
-              color: AppTheme.danger,
+              color: badgeColor,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white, width: 1),
             ),
+            alignment: Alignment.center,
             child: Text(
               count > 99 ? '99+' : '$count',
               style: AppText.micro.copyWith(color: Colors.white),

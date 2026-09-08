@@ -12,6 +12,7 @@ import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
+import 'notification_prefs_service.dart';
 
 // Concurrency limiter: max N operasi paralel, sisanya antri.
 class _Semaphore {
@@ -1355,6 +1356,8 @@ class ChatService {
       pinnedAt: (d['pinnedAt'] as Map<dynamic, dynamic>? ?? {}).map(
         (k, v) => MapEntry(k.toString(), parseDate(v)),
       ),
+      mutedBy: List<String>.from(d['mutedBy'] ?? const []),
+      archivedBy: List<String>.from(d['archivedBy'] ?? const []),
     );
   }
 
@@ -1386,6 +1389,55 @@ class ChatService {
       }
     }
     await _sb.rpc('pin_private_chat', params: {'p_chat_id': chatId, 'p_pin': pin});
+  }
+
+  /// Mute/unmute notifikasi chat — pola sama seperti pin: optimistic
+  /// update cache + cermin lokal (dipakai gate notif di main.dart) + RPC.
+  /// RPC butuh migrasi 20260909000000_mute_archive_chats.sql.
+  Future<void> mutePrivateChat(String chatId, bool mute, {String? myUidParam}) async {
+    final myUid = myUidParam ?? _sb.auth.currentUser?.id;
+    if (myUid != null) {
+      final last = _privateChatsLast[myUid];
+      if (last != null) {
+        final idx = last.indexWhere((c) => c.chatId == chatId);
+        if (idx >= 0) {
+          final old = last[idx];
+          final next = mute
+              ? (old.mutedBy.contains(myUid) ? old.mutedBy : [...old.mutedBy, myUid])
+              : old.mutedBy.where((id) => id != myUid).toList();
+          final list = List<PrivateChatInfo>.from(last)..[idx] = old.copyWith(mutedBy: next);
+          _privateChatsLast[myUid] = list;
+          _privateChatsStreams[myUid]?.add(List.unmodifiable(list));
+          _scheduleChatListSave(myUid);
+        }
+      }
+    }
+    await NotificationPrefsService.setChatMuted(chatId, mute);
+    await _sb.rpc('mute_private_chat', params: {'p_chat_id': chatId, 'p_mute': mute});
+  }
+
+  /// Archive/unarchive chat — optimistic update + RPC.
+  /// Chat terarsip difilter di layar (tidak di service) agar daftar
+  /// arsip bisa ditampilkan dari cache yang sama.
+  Future<void> archivePrivateChat(String chatId, bool archive, {String? myUidParam}) async {
+    final myUid = myUidParam ?? _sb.auth.currentUser?.id;
+    if (myUid != null) {
+      final last = _privateChatsLast[myUid];
+      if (last != null) {
+        final idx = last.indexWhere((c) => c.chatId == chatId);
+        if (idx >= 0) {
+          final old = last[idx];
+          final next = archive
+              ? (old.archivedBy.contains(myUid) ? old.archivedBy : [...old.archivedBy, myUid])
+              : old.archivedBy.where((id) => id != myUid).toList();
+          final list = List<PrivateChatInfo>.from(last)..[idx] = old.copyWith(archivedBy: next);
+          _privateChatsLast[myUid] = list;
+          _privateChatsStreams[myUid]?.add(List.unmodifiable(list));
+          _scheduleChatListSave(myUid);
+        }
+      }
+    }
+    await _sb.rpc('archive_private_chat', params: {'p_chat_id': chatId, 'p_archive': archive});
   }
 
   static int _comparePinned(PrivateChatInfo a, PrivateChatInfo b, String myUid) {
@@ -2135,6 +2187,8 @@ class PrivateChatInfo {
   final Map<String, DateTime> lastReadAt;
   final List<String> pinnedBy;
   final Map<String, DateTime> pinnedAt;
+  final List<String> mutedBy;
+  final List<String> archivedBy;
 
   PrivateChatInfo({
     required this.chatId,
@@ -2151,10 +2205,14 @@ class PrivateChatInfo {
     this.lastReadAt = const {},
     this.pinnedBy = const [],
     this.pinnedAt = const {},
+    this.mutedBy = const [],
+    this.archivedBy = const [],
   });
 
   bool isPinnedFor(String uid) => pinnedBy.contains(uid);
   DateTime? pinnedAtFor(String uid) => pinnedAt[uid];
+  bool isMutedFor(String uid) => mutedBy.contains(uid);
+  bool isArchivedFor(String uid) => archivedBy.contains(uid);
 
   Map<String, dynamic> toMap() => {
     'chatId': chatId,
@@ -2171,6 +2229,8 @@ class PrivateChatInfo {
     'lastReadAt': lastReadAt.map((k, v) => MapEntry(k, v.toIso8601String())),
     'pinnedBy': pinnedBy,
     'pinnedAt': pinnedAt.map((k, v) => MapEntry(k, v.toIso8601String())),
+    'mutedBy': mutedBy,
+    'archivedBy': archivedBy,
   };
 
   static Map<String, String> _strMap(dynamic v) =>
@@ -2205,6 +2265,8 @@ class PrivateChatInfo {
       pinnedAt: ((d['pinnedAt'] as Map?) ?? {}).map(
         (k, v) => MapEntry('$k', DateTime.tryParse('$v') ?? DateTime(2000)),
       ),
+      mutedBy: List<String>.from(d['mutedBy'] ?? const []),
+      archivedBy: List<String>.from(d['archivedBy'] ?? const []),
     );
   }
 
@@ -2223,6 +2285,8 @@ class PrivateChatInfo {
     Map<String, DateTime>? lastReadAt,
     List<String>? pinnedBy,
     Map<String, DateTime>? pinnedAt,
+    List<String>? mutedBy,
+    List<String>? archivedBy,
   }) {
     return PrivateChatInfo(
       chatId: chatId ?? this.chatId,
@@ -2240,6 +2304,8 @@ class PrivateChatInfo {
       lastReadAt: lastReadAt ?? this.lastReadAt,
       pinnedBy: pinnedBy ?? this.pinnedBy,
       pinnedAt: pinnedAt ?? this.pinnedAt,
+      mutedBy: mutedBy ?? this.mutedBy,
+      archivedBy: archivedBy ?? this.archivedBy,
     );
   }
 }

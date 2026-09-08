@@ -1314,28 +1314,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 final s = context.read<LocaleProvider>().s;
                 final msgs = snap.data ?? [];
                 if (msgs.isEmpty) {
-                  // Stream belum emit (data == null) → jangan tampilkan empty
-                  // state — mencegah flash "mulai percakapan" saat buka room
-                  // yang ada isinya. Empty state hanya setelah stream selesai.
-                  if (snap.data == null) return const SizedBox.shrink();
-                  return Center(
-                    child: Builder(
-                      builder: (ctx) {
-                        final s = ctx.read<LocaleProvider>().s;
-                        return Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('👋', style: TextStyle(fontSize: AppGlyph.xl)),
-                            SizedBox(height: 8),
-                            Text(
-                              s.msgStartConversation,
-                              style: TextStyle(color: AppTheme.textSecondary),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  );
+                  // Room baru/kosong — tampilkan layar kosong saja,
+                  // tanpa ikon/teks "mulai percakapan".
+                  return const SizedBox.shrink();
                 }
                 if (msgs.length > _lastMsgCount && _isNearBottom) {
                   _lastMsgCount = msgs.length;
