@@ -130,7 +130,7 @@ class _GroupListState extends State<_GroupList> {
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: () => _showCreateRoomDialog(context),
+              onTap: () => showCreateGroupDialog(context),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -190,7 +190,8 @@ const _roomIconChoices = [
   '🌸',
 ];
 
-Future<void> _showCreateRoomDialog(BuildContext context) async {
+/// Dialog buat grup — publik: dipakai FAB tab Grup DAN menu ⋮ chat list.
+Future<void> showCreateGroupDialog(BuildContext context) async {
   final s = context.read<LocaleProvider>().s;
   final points = context.read<PointsProvider>();
   final auth = context.read<AuthProvider>();
@@ -221,60 +222,104 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
     return;
   }
 
+  bool usePw = false;
+
   await showDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setInner) {
-        final hasPw = pwCtrl.text.trim().isNotEmpty;
-        final paidCost = hasPw
-            ? points.roomCreatePwPaid
-            : points.roomCreatePaid;
+        final paidCost =
+            usePw ? points.roomCreatePwPaid : points.roomCreatePaid;
         final bonusCost = paidCost * points.bonusMultiplier;
-        return AlertDialog(
+        return Dialog(
           backgroundColor: AppTheme.bgCard,
-          title: Text(s.createGroupTitle),
-          content: SingleChildScrollView(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppTheme.primaryDark,
+                            AppTheme.primary,
+                            AppTheme.accent,
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.group_add_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.createGroupTitle, style: AppText.title),
+                          const SizedBox(height: 2),
+                          Text(
+                            s.createGroupSubtitle,
+                            style: AppText.bodySmall.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(s.groupNameLabel, style: AppText.label),
+                const SizedBox(height: 6),
                 TextField(
                   controller: nameCtrl,
                   maxLength: 30,
-                  style: TextStyle(color: AppTheme.textPrimary),
+                  style: AppText.body.copyWith(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
-                    labelText: s.groupNameLabel,
                     hintText: s.groupNameHint,
-                    labelStyle: TextStyle(color: AppTheme.textSecondary),
+                    prefixIcon: const Icon(Icons.edit_rounded, size: 18),
                   ),
                 ),
-                SizedBox(height: 8),
-                Text(
-                  s.roomIconLabel,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                SizedBox(height: 4),
+                const SizedBox(height: 14),
+                Text(s.roomIconLabel, style: AppText.label),
+                const SizedBox(height: 6),
                 Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: _roomIconChoices
                       .map(
                         (e) => GestureDetector(
                           onTap: () => setInner(() => icon = e),
                           child: Container(
-                            width: 38,
-                            height: 38,
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
                               color: icon == e
-                                  ? AppTheme.primary.withValues(alpha: 0.25)
+                                  ? AppTheme.primary.withValues(alpha: 0.15)
                                   : AppTheme.bgScreen,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: icon == e
                                     ? AppTheme.primary
-                                    : Colors.transparent,
+                                    : AppTheme.textSecondary.withValues(
+                                        alpha: 0.25,
+                                      ),
                                 width: 1.5,
                               ),
                             ),
@@ -289,117 +334,183 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
                       )
                       .toList(),
                 ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: pwCtrl,
-                  obscureText: true,
-                  onChanged: (_) => setInner(() {}),
-                  style: TextStyle(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: s.roomPasswordOpt,
-                    hintText: s.roomPasswordHint,
-                    labelStyle: TextStyle(color: AppTheme.textSecondary),
-                  ),
+                const SizedBox(height: 14),
+                Text(s.groupAccessLabel, style: AppText.label),
+                const SizedBox(height: 6),
+                _AccessCard(
+                  selected: !usePw,
+                  icon: Icons.all_inclusive_rounded,
+                  color: AppTheme.online,
+                  title: s.groupNoPwTitle,
+                  desc: s.groupNoPwDesc,
+                  onTap: () => setInner(() => usePw = false),
                 ),
-                SizedBox(height: 6),
-                // Info expiry: tanpa password = permanen, password = 7 hari.
-                Text(
-                  pwCtrl.text.trim().isEmpty
-                      ? s.roomExpiryInfoNoPw
-                      : s.roomExpiryInfoPw,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
+                const SizedBox(height: 8),
+                _AccessCard(
+                  selected: usePw,
+                  icon: Icons.lock_rounded,
+                  color: AppTheme.primary,
+                  title: s.groupPwTitle,
+                  desc: s.groupPwDesc,
+                  onTap: () => setInner(() => usePw = true),
                 ),
-                SizedBox(height: 12),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  child: usePw
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: TextField(
+                            controller: pwCtrl,
+                            obscureText: true,
+                            onChanged: (_) => setInner(() {}),
+                            style: AppText.body.copyWith(
+                              color: AppTheme.textPrimary,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: s.roomPasswordHint,
+                              prefixIcon:
+                                  const Icon(Icons.key_rounded, size: 18),
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
                 // Biaya + saldo koin — sembunyikan saat sistem poin OFF (room gratis diam-diam)
-                if (points.enabled && !isAdmin)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          s.paidOrBonus(paidCost, bonusCost),
-                          style: TextStyle(
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.w600,
+                if (points.enabled && !isAdmin) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text(
+                          '🪙',
+                          style: TextStyle(fontSize: AppGlyph.sm),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            s.paidOrBonus(paidCost, bonusCost),
+                            style: AppText.bodyStrong.copyWith(
+                              color: AppTheme.primary,
+                            ),
                           ),
                         ),
-                      ),
-                      Text(
-                        '${s.labelYourCoins}: ${points.points}',
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.textSecondary,
+                        Text(
+                          '${points.points}',
+                          style: AppText.bodyStrong.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                ],
+                const SizedBox(height: 16),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () async {
+                      final name = nameCtrl.text.trim();
+                      if (name.length < 3 || name.length > 30) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text(s.errRoomNameLen)),
+                        );
+                        return;
+                      }
+                      if (usePw && pwCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text(s.errPasswordRequired)),
+                        );
+                        return;
+                      }
+                      if (points.enabled &&
+                          !isAdmin &&
+                          points.points < paidCost &&
+                          points.points < bonusCost) {
+                        Navigator.pop(ctx);
+                        points.showOutOfPointsDialog(context, s.isId);
+                        return;
+                      }
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        final res = await context
+                            .read<RoomProvider>()
+                            .createPrivateRoom(
+                              name: name,
+                              icon: icon,
+                              password: usePw ? pwCtrl.text.trim() : null,
+                            );
+                        if (res['points'] != null) {
+                          points.setPoints((res['points'] as num).toInt());
+                        }
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        messenger.showSnackBar(
+                          SnackBar(content: Text(s.groupCreated)),
+                        );
+                        if (context.mounted) {
+                          // List milikku berubah (grup baru) — muat ulang.
+                          _GroupListState.reloadCurrent(context);
+                        }
+                      } catch (e) {
+                        final msg = e.toString();
+                        final show = msg.contains('Room limit')
+                            ? s.errGroupLimit
+                            : msg.contains('REGISTERED_ONLY')
+                            ? s.msgVerifyToUsePaid
+                            : msg.contains('Not enough')
+                            ? s.errCoinInsufficient
+                            : msg.contains('Invalid room name')
+                            ? s.errRoomNameLen
+                            : s.errSendCoin;
+                        messenger.showSnackBar(SnackBar(content: Text(show)));
+                      }
+                    },
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppTheme.primaryDark,
+                            AppTheme.primary,
+                            AppTheme.accent,
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primary.withValues(alpha: 0.35),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        s.btnCreateGroup,
+                        style: AppText.button.copyWith(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(s.btnCancel),
+                ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(s.btnCancel),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-              ),
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                if (name.length < 3 || name.length > 30) {
-                  ScaffoldMessenger.of(
-                    ctx,
-                  ).showSnackBar(SnackBar(content: Text(s.errRoomNameLen)));
-                  return;
-                }
-                if (points.enabled &&
-                    !isAdmin &&
-                    points.points < paidCost &&
-                    points.points < bonusCost) {
-                  Navigator.pop(ctx);
-                  points.showOutOfPointsDialog(context, s.isId);
-                  return;
-                }
-                final messenger = ScaffoldMessenger.of(context);
-                try {
-                  final res = await context
-                      .read<RoomProvider>()
-                      .createPrivateRoom(
-                        name: name,
-                        icon: icon,
-                        password: hasPw ? pwCtrl.text.trim() : null,
-                      );
-                  if (res['points'] != null)
-                    points.setPoints((res['points'] as num).toInt());
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  messenger.showSnackBar(
-                    SnackBar(content: Text(s.groupCreated)),
-                  );
-                  if (context.mounted) {
-                    // List milikku berubah (grup baru) — muat ulang.
-                    _GroupListState.reloadCurrent(context);
-                  }
-                } catch (e) {
-                  final msg = e.toString();
-                  final show = msg.contains('Room limit')
-                      ? s.errGroupLimit
-                      : msg.contains('REGISTERED_ONLY')
-                      ? s.msgVerifyToUsePaid
-                      : msg.contains('Not enough')
-                      ? s.errCoinInsufficient
-                      : msg.contains('Invalid room name')
-                      ? s.errRoomNameLen
-                      : s.errSendCoin;
-                  messenger.showSnackBar(SnackBar(content: Text(show)));
-                }
-              },
-              child: Text(
-                s.btnCreateGroup,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
         );
       },
     ),
@@ -801,8 +912,102 @@ class _GroupCard extends StatelessWidget {
   }
 }
 
-class _SheetIcon extends StatelessWidget {
+/// Kartu pilihan akses grup: tanpa password (permanen) vs password (7 hari).
+/// Terpilih = border + tint warna aksen + radio terisi.
+class _AccessCard extends StatelessWidget {
+  final bool selected;
   final IconData icon;
+  final Color color;
+  final String title;
+  final String desc;
+  final VoidCallback onTap;
+  const _AccessCard({
+    required this.selected,
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.desc,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected
+                ? color.withValues(alpha: 0.10)
+                : AppTheme.bgScreen,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? color
+                  : AppTheme.textSecondary.withValues(alpha: 0.25),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppText.bodyStrong),
+                    const SizedBox(height: 2),
+                    Text(
+                      desc,
+                      style: AppText.caption.copyWith(
+                        color: selected ? color : AppTheme.textSecondary,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selected ? color : Colors.transparent,
+                  border: Border.all(
+                    color: selected
+                        ? color
+                        : AppTheme.textSecondary.withValues(alpha: 0.4),
+                    width: 1.5,
+                  ),
+                ),
+                child: selected
+                    ? const Icon(Icons.check_rounded,
+                        color: Colors.white, size: 14)
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetIcon extends StatelessWidget {  final IconData icon;
   final Color color;
   const _SheetIcon({required this.icon, required this.color});
 
