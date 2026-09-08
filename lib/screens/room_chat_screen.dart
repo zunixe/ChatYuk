@@ -260,6 +260,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   /// dedup via id pesan.
   void _onMessagesForGift(List<MessageModel> msgs) {
     _lastMsgs = msgs;
+    // Cap peta key lompat-pesan — tanpa ini tumbuh tanpa batas di
+    // sesi panjang (GlobalKey per pesan yang pernah dirender).
+    if (_msgKeys.length > 500) {
+      final keep = msgs.map((m) => m.id).toSet();
+      _msgKeys.removeWhere((k, _) => !keep.contains(k));
+    }
     final gifts = msgs.where((m) => m.type == 'gift');
     for (final m in gifts) {
       final id = m.id;
@@ -453,16 +459,25 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   void _onGroupMenu(String v) {
     switch (v) {
       case 'add':
-        final memberIds = <String>{};
-        for (final m in _lastMsgs) {
-          memberIds.add(m.senderId);
-        }
-        showGroupInvitePicker(
-          context: context,
-          roomId: widget.room.id,
-          excludeUids: memberIds,
-          onInvited: () {},
-        );
+        unawaited(() async {
+          // Exclude MEMBER ASLI (bukan tebakan dari pengirim pesan) —
+          // tanpa ini member lama bisa muncul lagi di picker.
+          final memberIds = <String>{};
+          try {
+            final members = await PrivateRoomService.instance
+                .listMembers(widget.room.id);
+            for (final m in members) {
+              memberIds.add('${m['user_id'] ?? ''}');
+            }
+          } catch (_) {}
+          if (!mounted) return;
+          await showGroupInvitePicker(
+            context: context,
+            roomId: widget.room.id,
+            excludeUids: memberIds,
+            onInvited: () {},
+          );
+        }());
         break;
       case 'info':
         Navigator.push(
@@ -570,9 +585,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                         hintText: s.roomSearchHint,
                       ),
                       onChanged: (q) {
+                        // Debounce: guard sheet tertutup dulu, baru sentuh
+                        // controller (setelah dispose = exception).
                         Future.delayed(
                             const Duration(milliseconds: 350), () {
-                          if (qCtrl.text == q) doSearch(q);
+                          if (!ctx.mounted) return;
+                          if (qCtrl.text != q) return;
+                          doSearch(q);
                         });
                       },
                     ),

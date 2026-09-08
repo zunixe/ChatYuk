@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -62,9 +63,18 @@ class _GroupMediaScreenState extends State<GroupMediaScreen> {
     }
   }
 
+  // Placeholder 1x1 abu untuk thumb yang belum siap — Image.memory
+  // dengan 0 bytes melempar exception di viewer.
+  static final Uint8List _placeholder = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+      'AAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+
   void _open(int index) {
     final thumbs = _paths
-        .map((p) => _thumbs[p] ?? Uint8List(0))
+        .map((p) {
+          final t = _thumbs[p];
+          return (t != null && t.isNotEmpty) ? t : _placeholder;
+        })
         .toList(growable: false);
     PostPhotoViewer.show(
       context,

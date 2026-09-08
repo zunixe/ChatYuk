@@ -7,6 +7,8 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/room_provider.dart';
+import '../services/private_room_service.dart';
+import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/room_icon.dart';
 import 'room_chat_screen.dart';
 
@@ -20,30 +22,65 @@ class GroupScreen extends StatefulWidget {
 }
 
 class _GroupScreenState extends State<GroupScreen> {
-  @override
-  void initState() {
-    super.initState();
-    // Refresh list grup saat tab dibuka.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<RoomProvider>().reloadPrivate();
-    });
-  }
+  /// Akses statis untuk memuat-ulang list dari dialog buat grup.
+  static final GlobalKey<_GroupListState> _listKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
-    return const _GroupList();
+    return _GroupList(key: _listKey);
   }
 }
 
-class _GroupList extends StatelessWidget {
-  const _GroupList();
+class _GroupList extends StatefulWidget {
+  const _GroupList({super.key});
+  @override
+  State<_GroupList> createState() => _GroupListState();
+}
+
+class _GroupListState extends State<_GroupList> {
+  List<RoomModel> _rooms = [];
+  bool _loading = true;
+
+  /// Muat-ulang dari luar (dialog buat grup) — key statis di GroupScreen.
+  static void reloadCurrent(BuildContext context) {
+    final st = context.findAncestorStateOfType<_GroupListState>();
+    st?._load();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+  /// List grup MILIKKU dari RPC list_my_private_rooms (member-only,
+  /// tanpa filter negara). Grup expired disembunyikan kecuali milik
+  /// sendiri (owner bisa perpanjang).
+  Future<void> _load() async {
+    try {
+      final myUid = PrivateRoomService.instance.uid ?? '';
+      final rows = await PrivateRoomService.instance.listMyRooms();
+      final rooms = <RoomModel>[];
+      for (final r in rows) {
+        final m = RoomModel.fromMap('${r['id'] ?? ''}', r);
+        final expired =
+            m.expiresAt != null && m.expiresAt!.isBefore(DateTime.now());
+        if (expired && m.ownerId != myUid) continue;
+        rooms.add(m);
+      }
+      if (!mounted) return;
+      setState(() {
+        _rooms = rooms;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final roomProvider = context.watch<RoomProvider>();
-    final rooms = roomProvider.privateRooms;
-    if (rooms.isEmpty && !roomProvider.hasLoaded) {
-      // Data belum selesai dimuat — loader tema, bukan empty state.
+    if (_loading) {
       return const Center(
         child: SizedBox(
           width: 24,
@@ -57,7 +94,7 @@ class _GroupList extends StatelessWidget {
     }
     return Stack(
       children: [
-        if (rooms.isEmpty)
+        if (_rooms.isEmpty)
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -83,8 +120,8 @@ class _GroupList extends StatelessWidget {
         else
           ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-            itemCount: rooms.length,
-            itemBuilder: (_, i) => _GroupCard(room: rooms[i]),
+            itemCount: _rooms.length,
+            itemBuilder: (_, i) => _GroupCard(room: _rooms[i]),
           ),
         Positioned(
           right: 16,
@@ -160,6 +197,12 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
   // Admin privilege hanya ada di build admin (flavor-gate) —
   // bukan lagi cek email runtime.
   final isAdmin = AdminGate.enabled;
+  // Gate ANON: bikin grup khusus terdaftar (server juga menolak).
+  // Sesi dummy (admin jadi anon) diizinkan — server bypass dummy.
+  if (auth.isAnonymous && !auth.dummySessionActive) {
+    showAnonPromptDialog(context);
+    return;
+  }
   final nameCtrl = TextEditingController();
   final pwCtrl = TextEditingController();
   String icon = '🔒';
@@ -333,10 +376,16 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
                   messenger.showSnackBar(
                     SnackBar(content: Text(s.groupCreated)),
                   );
+                  if (context.mounted) {
+                    // List milikku berubah (grup baru) — muat ulang.
+                    _GroupListState.reloadCurrent(context);
+                  }
                 } catch (e) {
                   final msg = e.toString();
                   final show = msg.contains('Room limit')
                       ? s.errGroupLimit
+                      : msg.contains('REGISTERED_ONLY')
+                      ? s.msgVerifyToUsePaid
                       : msg.contains('Not enough')
                       ? s.errCoinInsufficient
                       : msg.contains('Invalid room name')
