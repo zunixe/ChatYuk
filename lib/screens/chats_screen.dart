@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
+import '../widgets/anon_prompt_dialog.dart';
+import 'group_screen.dart';
 import 'private_chats_screen.dart';
 import 'lobby_screen.dart';
 
-/// Menu "Chat" gabungan: sub-tab Pesan (private) + Room.
+/// Menu "Chat" gabungan: sub-tab Pesan (private) + Grup + Room.
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
 
@@ -15,7 +18,7 @@ class ChatsScreen extends StatefulWidget {
 
 class _ChatsScreenState extends State<ChatsScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tab = TabController(length: 2, vsync: this);
+  late final TabController _tab = TabController(length: 3, vsync: this);
   bool _isSearching = false;
   final _searchCtrl = TextEditingController();
   String _query = '';
@@ -34,6 +37,19 @@ class _ChatsScreenState extends State<ChatsScreen>
         _searchCtrl.clear();
         _query = '';
       });
+    }
+    // Tab Grup khusus terdaftar (tap maupun swipe) — anon dikembalikan
+    // ke tab sebelumnya + dialog ajakan daftar (pola timeline _onNavTap).
+    if (_tab.index == 1 && mounted) {
+      final registered =
+          context.read<AuthProvider>().profile?.isRegistered ?? false;
+      if (!registered) {
+        showAnonPromptDialog(context);
+        final prev = _tab.previousIndex == 1 ? 0 : _tab.previousIndex;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _tab.index == 1) _tab.index = prev;
+        });
+      }
     }
   }
 
@@ -149,6 +165,7 @@ class _ChatsScreenState extends State<ChatsScreen>
           unselectedLabelColor: Colors.white70,
           tabs: [
             Tab(text: s.tabMessages),
+            Tab(text: s.tabGroups),
             Tab(text: s.tabRooms),
           ],
         ),
@@ -157,6 +174,7 @@ class _ChatsScreenState extends State<ChatsScreen>
         controller: _tab,
         children: [
           PrivateChatsScreen(embedded: true, externalQuery: _query),
+          const GroupScreen(),
           LobbyScreen(embedded: true),
         ],
       ),

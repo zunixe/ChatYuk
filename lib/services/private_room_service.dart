@@ -79,6 +79,15 @@ class PrivateRoomService {
     });
   }
 
+  /// Undang user langsung jadi member (owner/admin saja — server menegakkan).
+  /// Target: siapa pun yang pernah chat (teman/bukan). Bypass approval.
+  Future<void> invite(String roomId, String targetUid) async {
+    await _sb.rpc('invite_to_room', params: {
+      'p_room_id': roomId,
+      'p_uid': targetUid,
+    });
+  }
+
   Future<void> leave(String roomId) async {
     await _sb.rpc('leave_private_room', params: {'p_room_id': roomId});
   }

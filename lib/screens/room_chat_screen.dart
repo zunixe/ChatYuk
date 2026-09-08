@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
+import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
@@ -29,6 +30,9 @@ import '../main.dart';
 import '../services/private_room_service.dart';
 import '../services/room_broadcast_service.dart';
 import 'room_members_sheet.dart';
+import 'group_info_screen.dart';
+import 'group_media_screen.dart';
+import '../services/notification_prefs_service.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
@@ -101,6 +105,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   // ── Private room v2 ──
   String? _myRole;
+  bool _muted = false;
+  String? _highlightId;
+  final Map<String, GlobalKey> _msgKeys = {};
+  ChatMessageStream? _msgsHandle;
+  List<MessageModel> _lastMsgs = const [];
   String? _liveUid;
   int _pendingCount = 0;
   RoomBroadcastSession? _broadcastSession;
@@ -125,6 +134,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _chat = context.read<ChatProvider>();
     activeChatId.value = widget.room.id;
     final msgsHandle = _chat.getRoomMessages(widget.room.id);
+    _msgsHandle = msgsHandle;
     _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
     _pointsProv = context.read<PointsProvider>();
@@ -176,6 +186,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         } catch (_) {}
       }
       await _refreshLiveUid();
+      try {
+        _muted = await NotificationPrefsService.isChatMuted(widget.room.id);
+      } catch (_) {}
       try {
         final granted = await PrivateRoomService.instance.myBroadcastGranted(widget.room.id);
         _isGrantedBroadcast = granted || _liveUid == _auth.uid;
@@ -246,6 +259,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   /// → mainkan animasi fly. Stream mengirim snapshot penuh, jadi
   /// dedup via id pesan.
   void _onMessagesForGift(List<MessageModel> msgs) {
+    _lastMsgs = msgs;
     final gifts = msgs.where((m) => m.type == 'gift');
     for (final m in gifts) {
       final id = m.id;
@@ -435,8 +449,304 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     );
   }
 
-  Future<void> _openMembersSheet() async {
+  /// Menu ⋮ grup ala WA: tambah anggota, info, media, cari, bisu, lainnya.
+  void _onGroupMenu(String v) {
+    switch (v) {
+      case 'add':
+        final memberIds = <String>{};
+        for (final m in _lastMsgs) {
+          memberIds.add(m.senderId);
+        }
+        showGroupInvitePicker(
+          context: context,
+          roomId: widget.room.id,
+          excludeUids: memberIds,
+          onInvited: () {},
+        );
+        break;
+      case 'info':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => GroupInfoScreen(
+              room: widget.room,
+              myRole: _myRole ?? 'member',
+            ),
+          ),
+        );
+        break;
+      case 'media':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => GroupMediaScreen(room: widget.room),
+          ),
+        );
+        break;
+      case 'search':
+        _openRoomSearch();
+        break;
+      case 'mute':
+        _toggleMute();
+        break;
+      case 'more':
+        _showMoreMenu();
+        break;
+    }
+  }
+
+  Future<void> _toggleMute() async {
+    final s = context.read<LocaleProvider>().s;
+    final next = !_muted;
+    try {
+      await NotificationPrefsService.setChatMuted(widget.room.id, next);
+      if (!mounted) return;
+      setState(() => _muted = next);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(next ? s.roomMutedOn : s.roomMutedOff)),
+      );
+    } catch (_) {}
+  }
+
+  /// Cari pesan dalam room: sheet hasil → tap lompat ke pesan
+  /// (loadOlder berulang bila belum termuat, maks 10x).
+  Future<void> _openRoomSearch() async {
+    final s = context.read<LocaleProvider>().s;
+    final qCtrl = TextEditingController();
+    List<Map<String, dynamic>> results = [];
+    bool searching = false;
     await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          Future<void> doSearch(String q) async {
+            final query = q.trim();
+            if (query.length < 2) {
+              setSheet(() => results = []);
+              return;
+            }
+            setSheet(() => searching = true);
+            try {
+              final rows = await Supabase.instance.client
+                  .from('messages')
+                  .select('id,text,sender_name,sender_id,inserted_at')
+                  .eq('room_id', widget.room.id)
+                  .ilike('text', '%$query%')
+                  .order('inserted_at', ascending: false)
+                  .limit(30);
+              if (ctx.mounted) {
+                setSheet(() {
+                  results = (rows as List)
+                      .map((e) => Map<String, dynamic>.from(e as Map))
+                      .toList();
+                  searching = false;
+                });
+              }
+            } catch (_) {
+              if (ctx.mounted) setSheet(() => searching = false);
+            }
+          }
+
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.of(ctx).size.height * 0.7,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                    child: TextField(
+                      autofocus: true,
+                      style:
+                          AppText.body.copyWith(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        prefixIcon:
+                            const Icon(Icons.search_rounded, size: 20),
+                        hintText: s.roomSearchHint,
+                      ),
+                      onChanged: (q) {
+                        Future.delayed(
+                            const Duration(milliseconds: 350), () {
+                          if (qCtrl.text == q) doSearch(q);
+                        });
+                      },
+                    ),
+                  ),
+                  if (searching)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2.2),
+                      ),
+                    )
+                  else if (results.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(s.roomSearchEmpty,
+                          style: AppText.bodySmall.copyWith(
+                              color: AppTheme.textSecondary)),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: results.length,
+                        itemBuilder: (_, i) {
+                          final r = results[i];
+                          return ListTile(
+                            dense: true,
+                            title: Text('${r['text'] ?? ''}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.bodySmall),
+                            subtitle: Text(
+                                '${r['sender_name'] ?? '?'}',
+                                style: AppText.caption.copyWith(
+                                    color: AppTheme.textSecondary)),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _jumpToMessage('${r['id'] ?? ''}');
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    qCtrl.dispose();
+  }
+
+  /// Lompat ke pesan: loadOlder berulang bila belum termuat (maks 10x),
+  /// lalu scroll + highlight 2 detik.
+  Future<void> _jumpToMessage(String id) async {
+    if (id.isEmpty || _msgsHandle == null) return;
+    for (var i = 0;
+        i < 10 && !_lastMsgs.any((m) => m.id == id);
+        i++) {
+      try {
+        await _msgsHandle!.loadOlder();
+      } catch (_) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+    if (!mounted) return;
+    final key = _msgKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx == null) return;
+    setState(() => _highlightId = id);
+    await Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.5,
+      duration: const Duration(milliseconds: 300),
+    );
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _highlightId = null);
+  }
+
+  /// Submenu "Lainnya": keluar grup (+ hapus grup khusus owner).
+  void _showMoreMenu() {
+    final s = context.read<LocaleProvider>().s;
+    final isOwner = _myRole == 'owner';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.exit_to_app_rounded),
+              title: Text(s.menuExitGroup),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirm(s.exitGroupTitle, s.exitGroupBody, _exitGroup);
+              },
+            ),
+            if (isOwner)
+              ListTile(
+                leading:
+                    Icon(Icons.delete_outline_rounded, color: AppTheme.danger),
+                title: Text(s.menuDeleteGroup,
+                    style: TextStyle(color: AppTheme.danger)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirm(
+                      s.deleteGroupTitle, s.deleteGroupBody, _deleteGroup);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirm(String title, String body, Future<void> Function() fn) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(context.read<LocaleProvider>().s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await fn();
+            },
+            child: Text(context.read<LocaleProvider>().s.btnDelete),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exitGroup() async {
+    try {
+      await PrivateRoomService.instance.leave(widget.room.id);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: AppTheme.danger),
+      );
+    }
+  }
+
+  Future<void> _deleteGroup() async {
+    try {
+      await RoomService().deleteRoom(widget.room.id);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: AppTheme.danger),
+      );
+    }
+  }
+
+  Future<void> _openMembersSheet() async {    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -1149,6 +1459,77 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               ),
               onPressed: _openMembersSheet,
             ),
+            PopupMenuButton<String>(
+              tooltip: s.menuMore,
+              icon: const Icon(Icons.more_vert),
+              onSelected: _onGroupMenu,
+              itemBuilder: (_) => [
+                if (canModerate)
+                  PopupMenuItem(
+                    value: 'add',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.person_add_alt_rounded,
+                          size: 20),
+                      title: Text(s.menuAddMembers),
+                    ),
+                  ),
+                PopupMenuItem(
+                  value: 'info',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading:
+                        const Icon(Icons.info_outline_rounded, size: 20),
+                    title: Text(s.menuGroupInfo),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'media',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.photo_library_outlined,
+                        size: 20),
+                    title: Text(s.menuGroupMedia),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'search',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.search_rounded, size: 20),
+                    title: Text(s.menuSearchMessages),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'mute',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                        _muted
+                            ? Icons.notifications_off_outlined
+                            : Icons.notifications_outlined,
+                        size: 20),
+                    title: Text(
+                        _muted ? s.menuUnmuteNotif : s.menuMuteNotif),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'more',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading:
+                        const Icon(Icons.more_horiz_rounded, size: 20),
+                    title: Text(s.menuMore),
+                  ),
+                ),
+              ],
+            ),
           ] else ...[
             Padding(
               padding: const EdgeInsets.only(right: 10),
@@ -1350,12 +1731,17 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                       return DateChip(label: item.dateLabel!);
                     final m = item.msg!;
                     final isMe = m.senderId == auth.uid;
-                    return CompositedTransformTarget(
+                    final mkey = _msgKeys.putIfAbsent(m.id, () => GlobalKey());
+                    return Container(
+                      color: _highlightId == m.id
+                          ? AppTheme.primary.withValues(alpha: 0.22)
+                          : Colors.transparent,
+                      child: CompositedTransformTarget(
                       link: _linkFor(m.id),
                       child: GestureDetector(
                         onLongPressStart: (d) => _onMessageLongPress(d, m, _linkFor(m.id)),
                         child: _MessageBubble(
-                          key: ValueKey(m.id),
+                          key: mkey,
                           msg: m,
                           isMe: isMe,
                           color: Color(
@@ -1365,6 +1751,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                           roomId: widget.room.id,
                           onTapUser: () => _onTapUser(m, auth),
                         ),
+                      ),
                       ),
                     );
                   },
