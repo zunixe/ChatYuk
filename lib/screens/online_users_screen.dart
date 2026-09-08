@@ -1344,15 +1344,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     ),
                   ),
                   Expanded(
-                    child: !provider.hasLoaded
-                        ? ListView.builder(
-                            padding: EdgeInsets.fromLTRB(
-                              10,
-                              10,
-                              10,
-                              MediaQuery.of(context).padding.bottom + 12,
-                            ),
-                            itemCount: 6,
+                      child: !provider.hasLoaded
+                          ? ListView.builder(
+                              padding: EdgeInsets.fromLTRB(
+                                10,
+                                4,
+                                10,
+                                MediaQuery.of(context).padding.bottom + 12,
+                              ),
+                              itemCount: 6,
                             itemBuilder: (_, _) => const SkeletonCard(),
                           )
                         : users.isEmpty
@@ -1409,14 +1409,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               ],
                             ),
                           )
-                        : ListView.builder(
-                            controller: _scrollCtrl,
-                            padding: EdgeInsets.fromLTRB(
-                              10,
-                              10,
-                              10,
-                              MediaQuery.of(context).padding.bottom + 12,
-                            ),
+                          : ListView.builder(
+                              controller: _scrollCtrl,
+                              padding: EdgeInsets.fromLTRB(
+                                10,
+                                4,
+                                10,
+                                MediaQuery.of(context).padding.bottom + 12,
+                              ),
                             // Kartu ikut pindah posisi saat urutan berubah
                             // (sort last_seen) — State _AsyncAvatar tidak
                             // di-dispose/recreate → avatar tidak kedip.
