@@ -12,6 +12,7 @@ import '../providers/points_provider.dart';
 import 'room_chat_screen.dart';
 import 'private_rooms_screen.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/room_icon.dart';
 
 class LobbyScreen extends StatefulWidget {
   final bool embedded;
@@ -1006,20 +1007,7 @@ class _PrivateRoomCard extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      room.icon,
-                      style: TextStyle(fontSize: AppGlyph.md),
-                    ),
-                  ),
-                ),
+                RoomIcon(category: room.category, emoji: room.icon),
                 SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -1165,20 +1153,7 @@ class _RoomCard extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      room.icon,
-                      style: TextStyle(fontSize: AppGlyph.md),
-                    ),
-                  ),
-                ),
+                RoomIcon(category: room.category, emoji: room.icon),
                 SizedBox(width: 10),
                 Expanded(
                   child: Column(
