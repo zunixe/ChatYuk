@@ -20,6 +20,7 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../services/chat_service.dart';
+import '../services/message_cache.dart';
 import '../services/chat_background.dart';
 import '../services/call_service.dart';
 import '../services/forensic_watermark.dart';
@@ -146,6 +147,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     super.initState();
     _openedAt = DateTime.now();
     activeChatId.value = widget.chatId;
+    // Lazy load centang-2: baca last-read tersimpan dari disk DULU supaya
+    // pesan yang sudah dibaca langsung centang 2 — tanpa menunggu network.
+    // Network tetap sumber kebenaran dan me-refresh diam-diam bila berubah.
+    _loadCachedRead();
     // Rebuild saat status call berubah (overlay video dalam chat muncul/hilang).
     CallProvider.instance.addListener(_onCallChanged);
     // Buka keyboard → tutup baris menu attach (mirip WhatsApp)
@@ -267,6 +272,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       final read = info?.lastReadAt[widget.otherUid];
       if (read != _otherLastRead) {
         setState(() => _otherLastRead = read);
+        // Persist untuk cold start berikutnya — read receipt hanya maju,
+        // tidak pernah mundur, jadi aman ditimpa nilai network terbaru.
+        if (read != null) _persistRead(read);
       }
     });
 
@@ -296,6 +304,30 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void _hideActionBar() {
     _actionBar?.remove();
     _actionBar = null;
+  }
+
+  /// Baca last-read tersimpan (kv terenkripsi) — dipanggil di initState agar
+  /// centang-2 tampil instan. Hanya mengisi kalau state masih null (network
+  /// yang datang belakangan selalu menang bila lebih baru).
+  Future<void> _loadCachedRead() async {
+    try {
+      final obj = await MessageCache.instance
+          .loadRawObj('read:${widget.chatId}');
+      final iso = obj[widget.otherUid] as String?;
+      final t = iso == null ? null : DateTime.tryParse(iso);
+      if (t != null && mounted && _otherLastRead == null) {
+        setState(() => _otherLastRead = t);
+      }
+    } catch (_) {}
+  }
+
+  /// Simpan last-read network (fire-and-forget) untuk cold start berikutnya.
+  void _persistRead(DateTime t) {
+    try {
+      MessageCache.instance.saveRawObj('read:${widget.chatId}', {
+        widget.otherUid: t.toIso8601String(),
+      });
+    } catch (_) {}
   }
 
   @override
