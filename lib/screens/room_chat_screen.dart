@@ -132,7 +132,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     WidgetsBinding.instance.addObserver(this);
     _auth = context.read<AuthProvider>();
     _chat = context.read<ChatProvider>();
-    activeChatId.value = widget.room.id;
+    // DEFER seperti private chat — hindari setState-during-build glitch.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) activeChatId.value = widget.room.id;
+    });
     final msgsHandle = _chat.getRoomMessages(widget.room.id);
     _msgsHandle = msgsHandle;
     _msgsStream = msgsHandle.stream;
