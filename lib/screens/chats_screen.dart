@@ -169,7 +169,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                   onSelected: (v) {
                     switch (v) {
                       case 'new_group':
-                        _tab.animateTo(1);
+                        showCreateGroupDialog(context);
                         break;
                       case 'read_all':
                         final uid = context.read<AuthProvider>().uid;
