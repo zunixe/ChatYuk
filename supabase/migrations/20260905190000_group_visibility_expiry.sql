@@ -30,7 +30,8 @@ create or replace function public.create_private_room(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+-- extensions: crypt/gen_salt (pgcrypto) dipakai saat password diisi.
+set search_path = public, extensions
 as $fn$
 declare
   uid uuid := auth.uid(); points_on boolean;
