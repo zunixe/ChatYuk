@@ -31,12 +31,12 @@ class _GroupScreenState extends State<GroupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const _PrivateRoomsTab();
+    return const _GroupList();
   }
 }
 
-class _PrivateRoomsTab extends StatelessWidget {
-  const _PrivateRoomsTab();
+class _GroupList extends StatelessWidget {
+  const _GroupList();
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
@@ -65,14 +65,14 @@ class _PrivateRoomsTab extends StatelessWidget {
                 Text('🔒', style: TextStyle(fontSize: AppGlyph.xl)),
                 SizedBox(height: 12),
                 Text(
-                  s.noPrivateRooms,
+                  s.noGroups,
                   style: AppText.bodyStrong.copyWith(
                     color: AppTheme.textSecondary,
                   ),
                 ),
                 SizedBox(height: 4),
                 Text(
-                  s.noPrivateRoomsHint,
+                  s.noGroupsHint,
                   style: AppText.bodySmall.copyWith(
                     color: AppTheme.textSecondary,
                   ),
@@ -84,7 +84,7 @@ class _PrivateRoomsTab extends StatelessWidget {
           ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
             itemCount: rooms.length,
-            itemBuilder: (_, i) => _PrivateRoomCard(room: rooms[i]),
+            itemBuilder: (_, i) => _GroupCard(room: rooms[i]),
           ),
         Positioned(
           right: 16,
@@ -124,7 +124,7 @@ class _PrivateRoomsTab extends StatelessWidget {
                     const Icon(Icons.add_rounded, color: Colors.white, size: 18),
                     const SizedBox(width: 6),
                     Text(
-                      s.btnCreateRoom,
+                      s.btnCreateGroup,
                       style: AppText.bodyStrong.copyWith(color: Colors.white),
                     ),
                   ],
@@ -189,7 +189,7 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
         final bonusCost = paidCost * points.bonusMultiplier;
         return AlertDialog(
           backgroundColor: AppTheme.bgCard,
-          title: Text(s.createRoomTitle),
+          title: Text(s.createGroupTitle),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -200,8 +200,8 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
                   maxLength: 30,
                   style: TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
-                    labelText: s.roomNameLabel,
-                    hintText: s.roomNameHint,
+                    labelText: s.groupNameLabel,
+                    hintText: s.groupNameHint,
                     labelStyle: TextStyle(color: AppTheme.textSecondary),
                   ),
                 ),
@@ -331,12 +331,12 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
                     points.setPoints((res['points'] as num).toInt());
                   if (ctx.mounted) Navigator.pop(ctx);
                   messenger.showSnackBar(
-                    SnackBar(content: Text(s.roomCreated)),
+                    SnackBar(content: Text(s.groupCreated)),
                   );
                 } catch (e) {
                   final msg = e.toString();
                   final show = msg.contains('Room limit')
-                      ? s.errRoomLimit
+                      ? s.errGroupLimit
                       : msg.contains('Not enough')
                       ? s.errCoinInsufficient
                       : msg.contains('Invalid room name')
@@ -346,7 +346,7 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
                 }
               },
               child: Text(
-                s.btnCreateRoom,
+                s.btnCreateGroup,
                 style: const TextStyle(color: Colors.white),
               ),
             ),
@@ -357,9 +357,9 @@ Future<void> _showCreateRoomDialog(BuildContext context) async {
   );
 }
 
-class _PrivateRoomCard extends StatelessWidget {
+class _GroupCard extends StatelessWidget {
   final RoomModel room;
-  const _PrivateRoomCard({required this.room});
+  const _GroupCard({required this.room});
 
   int get _daysLeft {
     if (room.expiresAt == null) return 0;

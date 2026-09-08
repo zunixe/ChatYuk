@@ -100,7 +100,7 @@ class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
         backgroundColor: AppTheme.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: Text(
-          s.createRoomTitle,
+          s.createPrivateRoomTitle,
           style: AppText.label.copyWith(color: Colors.white),
         ),
         onPressed: () => _openCreate(context),
@@ -317,7 +317,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
-        title: Text(s.createRoomTitle, style: AppText.title),
+        title: Text(s.createPrivateRoomTitle, style: AppText.title),
       ),
       body: _createdId != null
           ? _qrView(s)
@@ -360,7 +360,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.add),
-                      label: Text(s.btnCreateRoom),
+                      label: Text(s.btnCreateGroup),
                       onPressed: _creating ? null : _create,
                     ),
                   ),
