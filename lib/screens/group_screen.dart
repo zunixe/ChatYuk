@@ -52,7 +52,7 @@ class _GroupListState extends State<_GroupList> {
     super.initState();
     _load();
   }
-  /// List grup MILIKKU dari RPC list_my_private_rooms (member-only,
+  /// List grup MILIKKU dari RPC list_my_groups (member-only,
   /// tanpa filter negara). Grup expired disembunyikan kecuali milik
   /// sendiri (owner bisa perpanjang).
   Future<void> _load() async {
