@@ -1348,7 +1348,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                           ? ListView.builder(
                               padding: EdgeInsets.fromLTRB(
                                 10,
-                                4,
+                                10,
                                 10,
                                 MediaQuery.of(context).padding.bottom + 12,
                               ),
@@ -1413,7 +1413,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               controller: _scrollCtrl,
                               padding: EdgeInsets.fromLTRB(
                                 10,
-                                4,
+                                10,
                                 10,
                                 MediaQuery.of(context).padding.bottom + 12,
                               ),
