@@ -1448,10 +1448,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 12),
-
                   // Sosial — angka fans/following + akses list
                   if (!isAnon) ...[
+                    SizedBox(height: 12),
                     _SectionLabel(label: s.socialFollowers),
                     SizedBox(height: 6),
                     _SectionCard(
@@ -1588,11 +1587,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ],
                     ),
-                    SizedBox(height: 12),
                   ],
 
                   // Poin ChatYuk — diletakkan di antara My Photos dan Pengaturan
                   if (pp.enabled) ...[
+                    SizedBox(height: 12),
                     _SectionLabel(label: s.pointsTitle),
                     SizedBox(height: 6),
                     _SectionCard(
