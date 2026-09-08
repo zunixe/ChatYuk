@@ -1270,6 +1270,9 @@ class S {
   String get tabFollowing => isId ? 'Mengikuti' : 'Following';
   String get tabMine => isId ? 'Postinganku' : 'My Posts';
   String get tabMessages => isId ? 'Pesan' : 'Messages';
+  String get menuNewGroup => isId ? 'Grup Baru' : 'New group';
+  String get menuReadAll =>
+      isId ? 'Tandai semua dibaca' : 'Mark all as read';
   String get tabGroups => isId ? 'Grup' : 'Groups';
   String get tabRooms => isId ? 'Room' : 'Rooms';
   String get titleTimeline => isId ? 'Timeline' : 'Timeline';
