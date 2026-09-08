@@ -40,10 +40,12 @@ class _ChatsScreenState extends State<ChatsScreen>
     }
     // Tab Grup khusus terdaftar (tap maupun swipe) — anon dikembalikan
     // ke tab sebelumnya + dialog ajakan daftar (pola timeline _onNavTap).
+    // Sesi dummy (admin jadi anon) diizinkan — bukan anon sungguhan.
     if (_tab.index == 1 && mounted) {
-      final registered =
-          context.read<AuthProvider>().profile?.isRegistered ?? false;
-      if (!registered) {
+      final auth = context.read<AuthProvider>();
+      final allowed = (auth.profile?.isRegistered ?? false) ||
+          auth.dummySessionActive;
+      if (!allowed) {
         showAnonPromptDialog(context);
         final prev = _tab.previousIndex == 1 ? 0 : _tab.previousIndex;
         WidgetsBinding.instance.addPostFrameCallback((_) {
