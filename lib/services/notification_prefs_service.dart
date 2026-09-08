@@ -33,6 +33,31 @@ class NotificationPrefsService {
     await prefs.setBool(_key(type), enabled);
   }
 
+  // ── Mute per-chat (cermin lokal dari muted_by server) ──
+  // Dipakai gate notif di main.dart (foreground + background isolate)
+  // supaya chat yang dibisukan tidak memunculkan notifikasi.
+  static const _mutedChatsKey = 'muted_chats';
+
+  static Future<void> setChatMuted(String chatId, bool muted) async {
+    if (chatId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_mutedChatsKey) ?? [];
+    final set = list.toSet();
+    if (muted) {
+      set.add(chatId);
+    } else {
+      set.remove(chatId);
+    }
+    await prefs.setStringList(_mutedChatsKey, set.toList());
+  }
+
+  static Future<bool> isChatMuted(String chatId) async {
+    if (chatId.isEmpty) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_mutedChatsKey) ?? [];
+    return list.contains(chatId);
+  }
+
   static Future<bool> shouldShowForFcmType(String? fcmType) async {
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool('notif_enabled') ?? true)) return false;

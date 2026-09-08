@@ -1902,28 +1902,31 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
                               icon: const Icon(Icons.filter_alt_off_outlined,
                                   size: 16),
                               label: Text(s.filterReset),
-                              // Tinggi tombol (44) sama dgn input cari di atas.
+                              // Tinggi 40 — sama dengan field cari & Terapkan.
                               style: TextButton.styleFrom(
                                   foregroundColor: AppTheme.textSecondary,
                                   textStyle: AppText.bodySmall.copyWith(
                                       fontWeight: FontWeight.w600),
-                                  minimumSize: const Size(0, 44),
+                                  minimumSize: const Size(0, 40),
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8)),
                             ),
                             const Spacer(),
-                            FilledButton.icon(
-                              onPressed: _apply,
-                              icon: const Icon(Icons.check, size: 16),
-                              label:
-                                  Text('${s.filterApply} (${_temp.length})'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppTheme.primary,
-                                textStyle: AppText.bodySmall.copyWith(
-                                    fontWeight: FontWeight.w600),
-                                minimumSize: const Size(0, 44),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12),
+                            // Tinggi dikunci 40 — sama persis dengan field cari negara.
+                            SizedBox(
+                              height: 40,
+                              child: FilledButton.icon(
+                                onPressed: _apply,
+                                icon: const Icon(Icons.check, size: 16),
+                                label:
+                                    Text('${s.filterApply} (${_temp.length})'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.primary,
+                                  textStyle: AppText.bodySmall.copyWith(
+                                      fontWeight: FontWeight.w600),
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 12),
+                                ),
                               ),
                             ),
                           ],

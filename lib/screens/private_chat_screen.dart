@@ -2005,29 +2005,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           final msgs = snap.data ?? [];
                           final all = [...msgs, ..._pending];
                           if (all.isEmpty) {
-                            // Stream belum emit (data == null) → jangan tampilkan empty state —
-                            // mencegah flash "Mulai percakapan!" saat buka chat yang ada isinya.
-                            // Hanya tampilkan empty state setelah stream selesai (data != null).
-                            if (snap.data == null)
-                              return const SizedBox.shrink();
-                            return Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    '👋',
-                                    style: TextStyle(fontSize: AppGlyph.xl),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    s.startConversation,
-                                    style: TextStyle(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
+                            // Chat baru/kosong — tampilkan layar kosong saja,
+                            // tanpa ikon/teks "mulai percakapan".
+                            return const SizedBox.shrink();
                           }
                           // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
                           // pola WhatsApp — item list berisi pesan + separator tanggal.
