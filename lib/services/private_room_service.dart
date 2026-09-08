@@ -180,7 +180,7 @@ class PrivateRoomService {
 
   Future<List<Map<String, dynamic>>> listMyRooms() async {
     try {
-      final res = await _sb.rpc('list_my_private_rooms', params: {'p_uid': uid});
+      final res = await _sb.rpc('list_my_groups', params: {'p_uid': uid});
       if (res is List) return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       if (res is Map && res['data'] is List) {
         return (res['data'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
