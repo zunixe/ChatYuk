@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import 'group_screen.dart';
@@ -160,6 +161,46 @@ class _ChatsScreenState extends State<ChatsScreen>
                 ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        // Menu ⋮ gaya WA: Grup Baru + Tandai semua dibaca (tab Pesan).
+        actions: isPesanTab
+            ? [
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (v) {
+                    switch (v) {
+                      case 'new_group':
+                        _tab.animateTo(1);
+                        break;
+                      case 'read_all':
+                        final uid = context.read<AuthProvider>().uid;
+                        if (uid == null || uid.isEmpty) return;
+                        context.read<ChatProvider>().markAllChatsRead(uid);
+                        break;
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'new_group',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.group_add_rounded, size: 20),
+                        title: Text(s.menuNewGroup),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'read_all',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.done_all_rounded, size: 20),
+                        title: Text(s.menuReadAll),
+                      ),
+                    ),
+                  ],
+                ),
+              ]
+            : null,
         bottom: TabBar(
           controller: _tab,
           indicatorColor: Colors.white,

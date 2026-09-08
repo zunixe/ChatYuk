@@ -167,6 +167,20 @@ class ChatProvider extends ChangeNotifier {
     await _service.markAsRead(chatId, uid);
   }
 
+  /// Tandai SEMUA chat pribadi dibaca (menu ⋮ chat list). Return jumlah
+  /// chat yang benar-benar berubah (skip yang sudah 0).
+  Future<int> markAllChatsRead(String uid) async {
+    final snapshot = _service.lastPrivateChatsSnapshot(uid) ?? const [];
+    var count = 0;
+    for (final c in snapshot) {
+      if ((c.unreadCounts[uid] ?? 0) > 0) {
+        await _service.markAsRead(c.chatId, uid);
+        count++;
+      }
+    }
+    return count;
+  }
+
   /// Tandai dibaca dari monitor admin (RPC SECURITY DEFINER khusus admin —
   /// mark_chat_read biasa kena RLS participant saat dipanggil akun admin).
   Future<void> markAsReadAdmin(String chatId, String uid) async {
