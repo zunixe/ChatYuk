@@ -38,6 +38,7 @@ import 'call_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
+import '../utils.dart';
 
 // Top-level function untuk compute() isolate — resize 1024 + embed forensic watermark
 String? _processViewOnceImage((Uint8List, String) args) {
@@ -107,6 +108,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   StreamSubscription<List<MessageModel>>? _msgsSub;
   StreamSubscription<String>? _statusSub;
   String _otherStatus = 'offline';
+  DateTime? _otherLastSeen;
   String _otherCountry = '';
   String _otherCity = '';
   List<String> _otherHashtags = const [];
@@ -450,7 +452,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         .listen((status) {
           if (!mounted) return;
           setState(() => _otherStatus = status);
-          // Fetch last_seen saat status idle agar bisa tampilkan "terakhir dilihat"
+          // Fetch last_seen saat status TIDAK online agar bisa tampilkan
+          // "terakhir dilihat" di header; saat online tidak perlu (null).
+          if (status == 'online') {
+            if (_otherLastSeen != null) {
+              setState(() => _otherLastSeen = null);
+            }
+          } else {
+            context
+                .read<ChatProvider>()
+                .getUserLastSeen(widget.otherUid)
+                .then((t) {
+              if (!mounted || t == null) return;
+              setState(() => _otherLastSeen = t);
+            });
+          }
         });
   }
 
@@ -1890,6 +1906,27 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                       ),
                                     ],
                                   ],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            // Baris status/last-seen di bawah hashtag —
+                            // hijau saat online, "terakhir dilihat …" saat tidak.
+                            if (!isBlocked && _otherStatus == 'online')
+                              Text(
+                                s.statusOnline,
+                                style: AppText.caption.copyWith(
+                                  color: const Color(0xFF69F0AE),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            else if (!isBlocked && _otherLastSeen != null)
+                              Text(
+                                '${s.lastSeenAt} ${formatRelativeTime(_otherLastSeen!, isId: s.isId)}',
+                                style: AppText.caption.copyWith(
+                                  color: Colors.white70,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

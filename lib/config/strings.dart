@@ -256,6 +256,7 @@ class S {
   String get statusIdle => isId ? 'Idle' : 'Idle';
   String get statusOffline => isId ? 'Offline' : 'Offline';
   String get statusInvisible => isId ? 'Invisible' : 'Invisible';
+  String get lastSeenAt => isId ? 'Terakhir dilihat' : 'Last seen';
   String get typingStatus => isId ? 'Sedang mengetik' : 'Typing';
   String get recordingStatus =>
       isId ? 'Merekam suara...' : 'Recording voice...';
