@@ -49,7 +49,7 @@ class S {
   String get navProfile => isId ? 'Profil' : 'Profile';
 
   // ── Lobby / Rooms ──
-  String get titleRooms => isId ? 'Pilih Room' : 'Choose a Room';
+  String get titleRooms => isId ? 'Global Room' : 'Global Room';
   String get searchRoom => isId ? 'Cari Room' : 'Search Room';
   String get roomOnlineCount => isId ? 'online' : 'online';
   String get noRooms => isId ? 'Belum ada room tersedia' : 'No rooms available';
@@ -57,15 +57,20 @@ class S {
   // ── Private Rooms ──
   String get tabGlobalRoom => isId ? 'Room Global' : 'Global Room';
   String get tabPrivateRoom => isId ? 'Room Private' : 'Private Room';
-  String get noPrivateRooms =>
-      isId ? 'Belum ada room private' : 'No private rooms yet';
-  String get noPrivateRoomsHint =>
-      isId ? 'Buat room-mu sendiri di bawah' : 'Create your own room below';
-  String get btnCreateRoom => isId ? 'Buat Room' : 'Create Room';
+  String get noGroups =>
+      isId ? 'Belum ada grup' : 'No groups yet';
+  String get noGroupsHint =>
+      isId ? 'Buat grup-mu sendiri' : 'Create your own group';
+  String get btnCreateGroup => isId ? 'Buat Grup' : 'Create Group';
   String get roomShowMembers => isId ? 'Lihat anggota' : 'View members';
   String get roomShowChat => isId ? 'Kembali ke chat' : 'Back to chat';
-  String get createRoomTitle =>
+  String get createGroupTitle =>
+      isId ? 'Buat Grup' : 'Create Group';
+  // Layar QR private room (admin build) — tetap "Room", bukan "Grup".
+  String get createPrivateRoomTitle =>
       isId ? 'Buat Room Private' : 'Create Private Room';
+  String get groupNameLabel => isId ? 'Nama grup' : 'Group name';
+  String get groupNameHint => isId ? '3–30 karakter' : '3–30 characters';
   String get roomNameLabel => isId ? 'Nama room' : 'Room name';
   String get roomNameHint => isId ? '3–30 karakter' : '3–30 characters';
   String get roomIconLabel => isId ? 'Ikon' : 'Icon';
@@ -84,9 +89,9 @@ class S {
   String get errRoomNameLen => isId
       ? 'Nama room harus 3–30 karakter'
       : 'Room name must be 3–30 characters';
-  String get errRoomLimit =>
-      isId ? 'Maksimal 2 room aktif' : 'Max 2 active rooms';
-  String get roomCreated => isId ? 'Room berhasil dibuat' : 'Room created';
+  String get errGroupLimit =>
+      isId ? 'Maksimal 2 grup aktif' : 'Max 2 active groups';
+  String get groupCreated => isId ? 'Grup berhasil dibuat' : 'Group created';
   String get joinRoomTitle => isId ? 'Masuk Room' : 'Join Room';
   String joinRoomCost(int c) =>
       isId ? 'Biaya masuk: $c koin' : 'Entry cost: $c coins';
