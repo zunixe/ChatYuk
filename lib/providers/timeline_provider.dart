@@ -27,7 +27,10 @@ class TimelineProvider extends ChangeNotifier {
 
   final List<Map<String, dynamic>> _posts = [];
   List<Map<String, dynamic>> _postsView = const [];
-  bool _loading = false;
+  // TRUE sejak awal: frame pertama Timeline tidak boleh flash empty state
+  // "Ketuk +" — tunggu disk/network selesai dulu (posts.isEmpty && loading
+  // = spinner). Falsify hanya di load()/_loadDiskScope setelah sumber siap.
+  bool _loading = true;
   bool _hasMore = true;
   DateTime? _cursor;
   bool _cursorBoosted = false;
@@ -106,7 +109,11 @@ class TimelineProvider extends ChangeNotifier {
     try {
       final obj = await MessageCache.instance.loadRawObj('timeline_$scope');
       final rawPosts = obj['posts'];
-      if (rawPosts is! List || rawPosts.isEmpty) return;
+      if (rawPosts is! List || rawPosts.isEmpty) {
+        // Disk kosong untuk scope ini — loading dibiarkan hidup sampai
+        // network selesai (jangan flash empty state palsu).
+        return;
+      }
       if (_scopeCache[scope] != null && _scopeCache[scope]!.posts.isNotEmpty) {
         return; // sudah ada data lebih baru
       }
