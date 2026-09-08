@@ -1004,7 +1004,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // ── Body ──
           SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
+              // Top 10 = sama dengan jarak card pertama timeline ke atas
+              // (list padding 4 + margin card 6) — konsisten antar halaman.
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

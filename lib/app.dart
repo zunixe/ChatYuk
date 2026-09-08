@@ -91,20 +91,35 @@ class _ChatYukAppState extends State<ChatYukApp> {
           // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
           // tapi tetap menghormati preferensi aksesibilitas user.
           builder: (context, child) => WithForegroundTask(
-            child: Stack(
-              children: [
-                MediaQuery.withClampedTextScaling(
-                  minScaleFactor: 0.9,
-                  maxScaleFactor: 1.3,
-                  child: child ?? const SizedBox.shrink(),
-                ),
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: CallBanner(),
-                ),
-              ],
+            // Pelapor aktivitas GLOBAL: setiap sentuhan di layar APAPUN
+            // (chat/room/profil/dialog/bottom-sheet) me-reset timer idle
+            // dan mengembalikan idle→online. Dulu hanya body _MainNav yang
+            // melapor, sehingga user yang lama di layar chat tercatat
+            // 'idle' di server walau sedang aktif mengetik.
+            // Listener hanya mengamati (tidak rebut gesture), murah:
+            // tanpa idle→online cuma cancel+restart satu Timer.
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) {
+                try {
+                  context.read<AuthProvider>().notifyActivity();
+                } catch (_) {}
+              },
+              child: Stack(
+                children: [
+                  MediaQuery.withClampedTextScaling(
+                    minScaleFactor: 0.9,
+                    maxScaleFactor: 1.3,
+                    child: child ?? const SizedBox.shrink(),
+                  ),
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: CallBanner(),
+                  ),
+                ],
+              ),
             ),
           ),
           home: _AuthGate(),

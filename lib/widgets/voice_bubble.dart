@@ -42,6 +42,7 @@ class VoiceBubble extends StatefulWidget {
 class _VoiceBubbleState extends State<VoiceBubble> {
   final AudioPlayer _player = AudioPlayer();
   bool _playing = false;
+  bool _loading = false;
   Duration _pos = Duration.zero;
   Duration _dur = Duration.zero;
   StreamSubscription? _posSub;
@@ -77,7 +78,10 @@ class _VoiceBubbleState extends State<VoiceBubble> {
       await _player.pause();
       setState(() => _playing = false);
     } else {
+      // Tap ganda saat unduh + path kosong — abaikan (anti double-download).
+      if (_loading || widget.path.isEmpty) return;
       try {
+        setState(() => _loading = true);
         // DISK FIRST: voice di-cache lokal (per path) — play pertama
         // download sekali, play berikutnya & sesi berikutnya dari lokal.
         final disk = await MediaDiskCache.instance.read(widget.path);
@@ -86,7 +90,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
           if (f != null) {
             _VoicePlayerManager.instance.started_(_player);
             await _player.play(DeviceFileSource(f.path));
-            setState(() => _playing = true);
+            if (mounted) setState(() => _playing = true);
             return;
           }
         }
@@ -96,11 +100,14 @@ class _VoiceBubbleState extends State<VoiceBubble> {
         if (bytes == null || bytes.isEmpty) return;
         await MediaDiskCache.instance.write(widget.path, bytes);
         final f = await MediaDiskCache.instance.fileFor(widget.path);
-        if (f == null) return;
+        if (f == null || !mounted) return;
         _VoicePlayerManager.instance.started_(_player);
         await _player.play(DeviceFileSource(f.path));
-        setState(() => _playing = true);
-      } catch (_) {}
+        if (mounted) setState(() => _playing = true);
+      } catch (_) {
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
     }
   }
 
@@ -132,7 +139,16 @@ class _VoiceBubbleState extends State<VoiceBubble> {
                   height: 32,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
-                  child: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 20),
+                  child: _loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 20),
                 ),
               ),
               const SizedBox(width: 10),
