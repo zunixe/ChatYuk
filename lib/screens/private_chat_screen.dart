@@ -148,7 +148,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void initState() {
     super.initState();
     _openedAt = DateTime.now();
-    activeChatId.value = widget.chatId;
+    // DEFER: ValueNotifier jangan ditulis saat build phase — listener
+    // (ValueListenableBuilder) sedang build → markNeedsBuild error yang
+    // terlihat sebagai glitch/frame rusak saat pindah tab.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) activeChatId.value = widget.chatId;
+    });
     // Lazy load centang-2: baca last-read tersimpan dari disk DULU supaya
     // pesan yang sudah dibaca langsung centang 2 — tanpa menunggu network.
     // Network tetap sumber kebenaran dan me-refresh diam-diam bila berubah.
