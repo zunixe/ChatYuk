@@ -707,22 +707,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final cities = getCitiesForCountry(_negara);
     if (cities.isEmpty) return const SizedBox.shrink();
     final validKota = cities.contains(_kota) ? _kota : cities.first;
-    return DropdownButtonFormField<String>(
-      key: ValueKey('city-$validKota'),
-      initialValue: validKota,
-      decoration: InputDecoration(labelText: s.labelCity),
-      isExpanded: true,
-      menuMaxHeight: 350,
-      items: [
-        for (final k in cities)
-          DropdownMenuItem(
-            value: k,
-            child: Text(k, overflow: TextOverflow.ellipsis),
-          ),
-      ],
-      onChanged: (v) {
-        if (v != null) setState(() => _kota = v);
-      },
+    // Widget SAMA dengan umur & negara → tinggi field dijamin identik.
+    return SearchDropdown<String>(
+      value: validKota,
+      label: s.labelCity,
+      icon: Icons.location_city_outlined,
+      items: cities,
+      labels: cities,
+      textStyle: AppText.body,
+      searchHint: s.searchCity,
+      emptyText: s.searchNoResult,
+      onChanged: (v) => setState(() => _kota = v),
     );
   }
 }
