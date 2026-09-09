@@ -326,16 +326,22 @@ class _ProfileGate extends StatelessWidget {
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: const ModalBarrier(
+              child: ModalBarrier(
                 dismissible: false,
-                color: Colors.black54,
+                color: Colors.black.withValues(alpha: 0.2),
               ),
             ),
           ),
           Positioned.fill(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+                // Angkat popup saat keyboard naik (pengganti resize Scaffold).
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: 360,
