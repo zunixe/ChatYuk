@@ -359,9 +359,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         _record.cancel();
       } catch (_) {}
     }
-    if (activeChatId.value == widget.chatId) {
-      activeChatId.value = null;
-    }
+    // DEFER: dispose saat tree terkunci (unmount IndexedStack) — penulisan
+    // notifier memicu markNeedsBuild pada CallBanner → glitch.
+    final chatToClear = widget.chatId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (activeChatId.value == chatToClear) activeChatId.value = null;
+    });
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     _inputFocus.dispose();

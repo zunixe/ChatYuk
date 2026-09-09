@@ -110,6 +110,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   final Map<String, GlobalKey> _msgKeys = {};
   ChatMessageStream? _msgsHandle;
   List<MessageModel> _lastMsgs = const [];
+  // Strip user online persisten: tahan list terakhir saat stream blip
+  // kosong; teks "tidak ada yang online" hanya setelah kosong terkonfirmasi.
+  List<UserModel> _lastRoomUsers = const [];
+  Timer? _roomUsersEmptyTimer;
+  bool _roomUsersEmpty = false;
   String? _liveUid;
   int _pendingCount = 0;
   RoomBroadcastSession? _broadcastSession;
@@ -856,13 +861,18 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
+    _roomUsersEmptyTimer?.cancel();
     _livePoll?.cancel();
     _giftFly.dispose();
     try { _roomLiveChannel?.unsubscribe(); } catch (_) {}
     unawaited(_broadcastSession?.stop());
-    if (activeChatId.value == widget.room.id) {
-      activeChatId.value = null;
-    }
+    // DEFER: dispose berjalan saat widget tree terkunci (unmount IndexedStack
+    // saat pindah tab) — menulis ValueNotifier sekarang memicu
+    // markNeedsBuild pada CallBanner → glitch "widget tree was locked".
+    final roomToClear = widget.room.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (activeChatId.value == roomToClear) activeChatId.value = null;
+    });
     final uid = _auth.uid;
     if (uid != null) {
       _chat.leaveRoom(widget.room.id, uid);
@@ -1406,6 +1416,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     context.watch<ThemeProvider>();
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
+    final points = context.read<PointsProvider>();
 
     return Scaffold(
       backgroundColor: AppTheme.bgCard,
@@ -1616,8 +1627,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               _sendViewOncePhoto();
             },
             onSendVoice: _sendVoiceMessage,
-            onOpenGiftPanel:
-                isPrivateRoom && _myRole != 'owner' ? _openRoomGiftPanel : null,
+            // Gift (fitur koin) hanya bila sistem koin aktif — hilang
+            // total saat dimatikan admin (ikut flag points.enabled).
+            onOpenGiftPanel: points.enabled &&
+                    isPrivateRoom &&
+                    _myRole != 'owner'
+                ? _openRoomGiftPanel
+                : null,
             pendingPhotoBase64: _pendingPhotoBase64,
             onCancelPhoto: _pendingPhotoBase64 != null
                 ? () => setState(() => _pendingPhotoBase64 = null)
@@ -1680,8 +1696,97 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               child: StreamBuilder<List<UserModel>>(
                 stream: _usersStream,
                 builder: (_, snap) {
-                  final users = snap.data ?? [];
+                  // Persisten anti-glitch: stream presence bisa blip kosong
+                  // sesaat (realtime/heartbeat race). Tahan list terakhir;
+                  // kosong hanya diakui setelah 4 detik konsisten.
+                  final data = snap.data;
+                  if (data != null && data.isNotEmpty) {
+                    _lastRoomUsers = data;
+                    _roomUsersEmpty = false;
+                    _roomUsersEmptyTimer?.cancel();
+                  } else if (data != null &&
+                      data.isEmpty &&
+                      _lastRoomUsers.isNotEmpty &&
+                      !_roomUsersEmpty) {
+                    _roomUsersEmptyTimer?.cancel();
+                    _roomUsersEmptyTimer = Timer(
+                      const Duration(seconds: 4),
+                      () {
+                        if (mounted) {
+                          setState(() => _roomUsersEmpty = true);
+                        }
+                      },
+                    );
+                  }
+                  final cached =
+                      _roomUsersEmpty ? const <UserModel>[] : _lastRoomUsers;
+                  // "Kamu" optimistis: presence sendiri (joinRoom upsert)
+                  // butuh roundtrip network → chip sendiri telat muncul
+                  // dan menggeser strip. Sisipkan langsung dari profil.
+                  final users = [...cached];
+                  final myUid = auth.uid;
+                  final me = auth.profile;
+                  if (myUid != null &&
+                      me != null &&
+                      !users.any((u) => u.uid == myUid)) {
+                    final now = DateTime.now();
+                    users.insert(
+                      0,
+                      UserModel(
+                        uid: myUid,
+                        nickname: me.nickname,
+                        gender: me.gender,
+                        age: me.age,
+                        country: me.country,
+                        city: me.city,
+                        ipAddress: '',
+                        status: 'online',
+                        avatar: me.avatar,
+                        isRegistered: me.isRegistered,
+                        loginAt: now,
+                        createdAt: now,
+                        lastSeen: now,
+                      ),
+                    );
+                  }
                   if (users.isEmpty) {
+                    // Belum pernah load → placeholder bulat (tinggi sama,
+                    // tanpa teks kedip). Sudah load & kosong → teks info.
+                    if (data == null) {
+                      return ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        itemCount: 4,
+                        itemBuilder: (_, __) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: AppTheme.primary.withValues(
+                                  alpha: 0.10,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                width: 36,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary.withValues(
+                                    alpha: 0.10,
+                                  ),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
                     return Center(
                       child: Text(
                         s.noOnlineUsers,
@@ -1696,6 +1801,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     itemCount: users.length,
                     itemBuilder: (_, i) => _UserChip(
+                      key: ValueKey(users[i].uid),
                       user: users[i],
                       myUid: auth.uid,
                       color: Color(
@@ -1715,7 +1821,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   stream: _msgsStream,
               builder: (_, snap) {
                 final s = context.read<LocaleProvider>().s;
-                final msgs = snap.data ?? [];
+                // Persisten anti-glitch bawah: saat stream belum emit /
+                // blip kosong, tampilkan batch terakhir (_lastMsgs diisi
+                // listener tiap emisi) — list tidak kedip hilang.
+                final raw = snap.data;
+                final msgs = (raw == null || raw.isEmpty) &&
+                        _lastMsgs.isNotEmpty
+                    ? _lastMsgs
+                    : (raw ?? []);
                 if (msgs.isEmpty) {
                   // Room baru/kosong — tampilkan layar kosong saja,
                   // tanpa ikon/teks "mulai percakapan".
@@ -2200,7 +2313,8 @@ class _UserChip extends StatelessWidget {
   final UserModel user;
   final String? myUid;
   final Color color;
-  const _UserChip({required this.user, this.myUid, required this.color});
+  const _UserChip(
+      {super.key, required this.user, this.myUid, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -2975,8 +3089,9 @@ class _ChatInputState extends State<_ChatInput> {
                                 tooltip: s.menuSendPhoto,
                               ),
                               const SizedBox(width: 2),
-                              // Tombol gift hanya muncul di private room (live)
-                              // dan bila callback aktif (member non-host).
+                              // Tombol gift HANYA bila sistem koin aktif —
+                              // tidak ada slot cadangan: + dan kamera tetap
+                              // rapat seperti desain asli.
                               if (widget.onOpenGiftPanel != null) ...[
                                 ChatIconButton(
                                   open: false,
