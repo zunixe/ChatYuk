@@ -94,3 +94,92 @@ class SkeletonList extends StatelessWidget {
     );
   }
 }
+
+/// Skeleton bentuk POST timeline (bukan baris user): header avatar+nama,
+/// 2 baris caption, kotak foto, baris aksi. Bahasa visual sama dengan
+/// SkeletonCard (tanpa background kotak, tint primary tipis di bgScreen).
+class PostSkeletonCard extends StatelessWidget {
+  const PostSkeletonCard({super.key});
+
+  Widget _bar(double w, double h, double r, double alpha) => Container(
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          color: AppTheme.primary.withValues(alpha: alpha),
+          borderRadius: BorderRadius.circular(r),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _bar(120, 14, 6, 0.10),
+                  const SizedBox(height: 6),
+                  _bar(80, 11, 6, 0.08),
+                ],
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          _bar(double.infinity, 14, 6, 0.10),
+          const SizedBox(height: 6),
+          _bar(220, 11, 6, 0.08),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            height: 180,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(children: [
+            _bar(64, 16, 8, 0.08),
+            const SizedBox(width: 16),
+            _bar(64, 16, 8, 0.08),
+            const SizedBox(width: 16),
+            _bar(64, 16, 8, 0.08),
+          ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// ListView berisi beberapa PostSkeletonCard — placeholder feed timeline.
+class PostSkeletonList extends StatelessWidget {
+  final int count;
+  final EdgeInsets padding;
+  const PostSkeletonList(
+      {super.key,
+      this.count = 3,
+      this.padding = const EdgeInsets.only(top: 4, bottom: 88)});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: padding,
+      itemCount: count,
+      itemBuilder: (_, __) => const PostSkeletonCard(),
+    );
+  }
+}
