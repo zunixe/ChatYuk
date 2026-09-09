@@ -424,15 +424,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Mode popup: judul + deskripsi di dalam form pengganti AppBar.
-            if (profileOnly) ...[
-              Text(
-                s.msgCompleteProfile,
-                style: AppText.title,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-            ],
             // Kartu form — satu grup utuh, komposisi sama dengan login.
             // Mode popup: kartu kecil mengambang di atas halaman.
             Container(
@@ -445,6 +436,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Mode popup: judul di dalam kartu pengganti AppBar.
+                  if (profileOnly) ...[
+                    Text(
+                      s.msgCompleteProfile,
+                      style: AppText.title,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   // Email & Password — hanya tampil di mode full
                   if (!profileOnly) ...[
                     TextField(
