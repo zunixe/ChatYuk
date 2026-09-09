@@ -326,16 +326,29 @@ class _ProfileGate extends StatelessWidget {
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: 420,
-                    maxHeight: screenH * 0.85,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: 360,
+                      maxHeight: screenH * 0.85,
+                    ),
+                    // Bayangan luar supaya kartu terlihat mengambang.
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            blurRadius: 32,
+                            offset: const Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: RegisterScreen(mode: RegisterMode.profileOnly),
+                      ),
+                    ),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: RegisterScreen(mode: RegisterMode.profileOnly),
-                  ),
-                ),
               ),
             ),
           ),
