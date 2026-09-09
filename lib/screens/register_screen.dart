@@ -13,6 +13,7 @@ import '../services/device_info_service.dart';
 import '../main.dart';
 import 'login_screen.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/search_dropdown.dart';
 
 enum RegisterMode { full, profileOnly }
 
@@ -682,23 +683,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _countryDropdown(s) {
-    return DropdownButtonFormField<String>(
-      // Key memaksa rebuild saat deteksi geo mengubah _negara — tanpa ini
-      // initialValue (dibaca sekali) tidak ikut ter-update setelah _detectGeo.
-      key: ValueKey('country-$_negara'),
-      initialValue: _negara,
-      decoration: InputDecoration(labelText: s.labelCountry),
-      isExpanded: true,
-      menuMaxHeight: 350,
-      items: [
-        for (final n in kotaByNegara.keys)
-          DropdownMenuItem(
-            value: n,
-            child: Text(n, overflow: TextOverflow.ellipsis),
-          ),
-      ],
+    final countries = kotaByNegara.keys.toList();
+    return SearchDropdown(
+      // Key dipertahankan semantiknya (geo-detect update) — SearchDropdown
+      // membaca widget.value tiap build, jadi tidak butuh key rebuild.
+      value: countries.contains(_negara) ? _negara : countries.first,
+      label: s.labelCountry,
+      icon: null,
+      items: countries,
+      labels: countries,
+      textStyle: AppText.body,
+      searchHint: s.searchCountry,
+      emptyText: s.searchNoResult,
       onChanged: (v) {
-        if (v == null) return;
         final cities = getCitiesForCountry(v);
         setState(() {
           _negara = v;
