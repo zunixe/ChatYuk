@@ -411,6 +411,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final s = context.watch<LocaleProvider>().s;
     final profileOnly = widget.mode == RegisterMode.profileOnly;
     return Scaffold(
+      backgroundColor: profileOnly ? Colors.transparent : null,
       // Mode popup (di dalam _ProfileGate): tanpa AppBar sendiri supaya
       // tidak terlihat seperti halaman — judul ada di dalam form.
       appBar: profileOnly
@@ -432,14 +433,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            // Kartu form — satu grup utuh, komposisi sama dengan login
+            // Mode popup: tanpa kartu — form melayang langsung di atas halaman.
             Container(
               padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.bgCard,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.divider, width: 1.5),
-              ),
+              decoration: profileOnly
+                  ? null
+                  : BoxDecoration(
+                      color: AppTheme.bgCard,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.divider, width: 1.5),
+                    ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -507,8 +510,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     focusNode: _nicknameFocus,
                     onChanged: _onNicknameChanged,
                     style: TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: s.labelUsername,
+                      decoration: InputDecoration(
+                        // Mode popup: tanpa fill — field melayang transparan.
+                        filled: !profileOnly,
+                        labelText: s.labelUsername,
                       hintText: s.hintNickname,
                       prefixIcon: const Icon(Icons.person_outline),
                       errorText: null,
@@ -656,12 +661,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Widget _genderCard(String value, String emoji, Color color, String label) {
     final selected = _gender == value;
+    final popup = widget.mode == RegisterMode.profileOnly;
     return GestureDetector(
       onTap: () => setState(() => _gender = value),
       child: Container(
         padding: EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: AppTheme.bgCard,
+          // Mode popup: tanpa fill — melayang transparan.
+          color: popup ? Colors.transparent : AppTheme.bgCard,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected ? color : AppTheme.divider,
@@ -690,6 +697,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final ages = [for (int i = 18; i <= 80; i++) i];
     // Widget SAMA dengan negara → tinggi field dijamin identik.
     return SearchDropdown<int>(
+      flat: widget.mode == RegisterMode.profileOnly,
       value: ages.contains(_age) ? _age : ages.first,
       label: s.labelAge,
       icon: null,
@@ -703,6 +711,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _countryDropdown(s) {
     final countries = kotaByNegara.keys.toList();
     return SearchDropdown(
+      flat: widget.mode == RegisterMode.profileOnly,
       // Key dipertahankan semantiknya (geo-detect update) — SearchDropdown
       // membaca widget.value tiap build, jadi tidak butuh key rebuild.
       value: countries.contains(_negara) ? _negara : countries.first,
@@ -729,6 +738,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final validKota = cities.contains(_kota) ? _kota : cities.first;
     // Widget SAMA dengan umur & negara → tinggi field dijamin identik.
     return SearchDropdown<String>(
+      flat: widget.mode == RegisterMode.profileOnly,
       value: validKota,
       label: s.labelCity,
       icon: Icons.location_city_outlined,
