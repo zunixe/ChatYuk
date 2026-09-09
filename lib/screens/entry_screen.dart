@@ -145,22 +145,10 @@ class _EntryScreenState extends State<EntryScreen> {
           await context.read<AuthProvider>().confirmLinkGoogle();
         } else {
           context.read<AuthProvider>().cancelLinkGoogle();
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  const RegisterScreen(mode: RegisterMode.profileOnly),
-            ),
-          );
+          // Gate profil di _AuthGate menampilkan popup isian otomatis.
         }
       } else if (result == 'new') {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                const RegisterScreen(mode: RegisterMode.profileOnly),
-          ),
-        );
+        // Gate profil di _AuthGate menampilkan popup isian otomatis.
       } else if (result == 'exists') {
         // Profile sudah ada — _AuthGate sudah menampilkan halaman utama,
         // tidak perlu navigasi tambahan (EntryScreen adalah home).
