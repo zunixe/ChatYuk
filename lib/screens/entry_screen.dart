@@ -17,6 +17,7 @@ import 'login_screen.dart';
 import 'donate_screen.dart';
 import 'legal_screen.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/search_dropdown.dart';
 
 class EntryScreen extends StatefulWidget {
   const EntryScreen({super.key});
@@ -829,29 +830,16 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Widget _countryDropdown(S s) {
-    return DropdownButtonFormField<String>(
-      key: ValueKey('country-$_negara'),
-      initialValue: _negara,
-      style: AppText.body,
-      isExpanded: true,
-      menuMaxHeight: 350,
-      decoration: InputDecoration(
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        labelText: s.labelCountry,
-      ),
-      items: [
-        for (final n in kotaByNegara.keys)
-          DropdownMenuItem(
-            value: n,
-            child: Text(n, overflow: TextOverflow.ellipsis),
-          ),
-      ],
+    final countries = kotaByNegara.keys.toList();
+    return SearchDropdown(
+      value: countries.contains(_negara) ? _negara : countries.first,
+      label: s.labelCountry,
+      icon: Icons.public_rounded,
+      items: countries,
+      labels: countries,
+      searchHint: s.searchCountry,
+      emptyText: s.searchNoResult,
       onChanged: (v) {
-        if (v == null) return;
         final cities = getCitiesForCountry(v);
         setState(() {
           _negara = v;
