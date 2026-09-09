@@ -6,6 +6,7 @@ import '../providers/locale_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../widgets/post_card.dart';
 import '../widgets/anon_prompt_dialog.dart';
+import '../widgets/skeleton_card.dart';
 import 'post_composer_screen.dart';
 import '../providers/theme_provider.dart';
 
@@ -233,17 +234,10 @@ class _TimelineScreenState extends State<TimelineScreen>
                 ],
               )
             : posts.isEmpty && loading
-            ? // Loader tema saat load pertama (nol warna abu skeleton).
-              const Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
-                    color: AppTheme.primary,
-                  ),
-                ),
-              )
+            // Skeleton saat load pertama — terasa instan & konsisten
+            // dengan layar online (user lebih suka skeleton daripada
+            // spinner/muter-muter).
+            ? const SkeletonList(count: 5)
             : ListView.builder(
                 controller: _scroll,
                 physics: const AlwaysScrollableScrollPhysics(),

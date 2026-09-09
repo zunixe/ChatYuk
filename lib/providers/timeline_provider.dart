@@ -443,14 +443,19 @@ class TimelineProvider extends ChangeNotifier {
       if (!_disposed) notifyListeners();
     }
     try {
-      final fetched = await _service.listPosts(
-        scope,
-        cursor: refresh ? null : _cursor,
-        cursorBoosted: refresh ? false : _cursorBoosted,
-      );
+      // Timeout: socket stall tidak boleh bikin spinner selamanya.
+      final fetched = await _service
+          .listPosts(
+            scope,
+            cursor: refresh ? null : _cursor,
+            cursorBoosted: refresh ? false : _cursorBoosted,
+          )
+          .timeout(const Duration(seconds: 10));
       final list = _excludeOwn(fetched, scope);
       if (list.isEmpty) {
         _hasMore = false;
+        // Hapus feed HANYA bila server sukses menjawab kosong — network
+        // error/timeout tidak boleh menghapus data lama (offline-safe).
         if (refresh) {
           _posts.clear();
           _invalidateView();
@@ -490,7 +495,8 @@ class TimelineProvider extends ChangeNotifier {
       _scheduleDiskSave();
     } catch (e) {
       debugPrint('[TimelineProvider] load error: $e');
-      _hasMore = false;
+      // _hasMore TIDAK diubah — pagination tetap bisa retry saat scroll
+      // (error sementara bukan berarti ujung feed).
     } finally {
       _loading = false;
       if (!_disposed) notifyListeners();
