@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:provider/provider.dart';
@@ -321,7 +322,16 @@ class _ProfileGate extends StatelessWidget {
       child: Stack(
         children: [
           child,
-          const ModalBarrier(dismissible: false, color: Colors.transparent),
+          // Blur latar belakang (list tetap terlihat samar, kartu tetap tajam).
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: const ModalBarrier(
+                dismissible: false,
+                color: Colors.black54,
+              ),
+            ),
+          ),
           Positioned.fill(
             child: Center(
               child: SingleChildScrollView(
