@@ -13,6 +13,7 @@ import 'room_chat_screen.dart';
 import 'private_rooms_screen.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/room_icon.dart';
+import '../widgets/search_dropdown.dart';
 
 class LobbyScreen extends StatefulWidget {
   final bool embedded;
@@ -145,37 +146,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   ),
                   SizedBox(width: 10),
                   Expanded(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: roomProvider.country,
-                        isExpanded: true,
-                        isDense: true,
-                        menuMaxHeight: 400,
-                        hint: Text(
-                          s.lobbyCountryHint,
-                          style: AppText.bodySmall.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                        style: AppText.body.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                        items: [
-                          for (final c in allCountries)
-                            DropdownMenuItem(
-                              value: c,
-                              child: Text(
-                                c,
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                                style: AppText.body,
-                              ),
-                            ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) _onCountryChanged(v);
-                        },
-                      ),
+                    child: SearchDropdown(
+                      value: roomProvider.country,
+                      label: s.lobbyCountryHint,
+                      icon: Icons.public_rounded,
+                      items: allCountries,
+                      labels: allCountries,
+                      onChanged: (v) => _onCountryChanged(v),
                     ),
                   ),
                 ],
