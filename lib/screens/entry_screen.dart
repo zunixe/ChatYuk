@@ -806,26 +806,16 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Widget _ageDropdown(S s) {
-    return DropdownButtonFormField<int>(
-      initialValue: _age,
-      style: AppText.body,
-      isExpanded: true,
-      menuMaxHeight: 350,
-      decoration: InputDecoration(
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        labelText: s.labelAge,
-      ),
-      items: [
-        for (int i = 18; i <= 60; i++)
-          DropdownMenuItem(value: i, child: Text('$i')),
-      ],
-      onChanged: (v) {
-        if (v != null) setState(() => _age = v);
-      },
+    final ages = [for (int i = 18; i <= 60; i++) i];
+    // Widget SAMA dengan negara → tinggi field dijamin identik.
+    return SearchDropdown<int>(
+      value: ages.contains(_age) ? _age : ages.first,
+      label: s.labelAge,
+      icon: null,
+      items: ages,
+      labels: [for (final a in ages) '$a'],
+      textStyle: AppText.body,
+      onChanged: (v) => setState(() => _age = v),
     );
   }
 
