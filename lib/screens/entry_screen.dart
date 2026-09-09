@@ -834,9 +834,13 @@ class _EntryScreenState extends State<EntryScreen> {
     return SearchDropdown(
       value: countries.contains(_negara) ? _negara : countries.first,
       label: s.labelCountry,
-      icon: Icons.public_rounded,
+      // Tanpa prefix icon + style AppText.body (bukan bodySmall) supaya
+      // tinggi & ukuran teks field persis sama dengan dropdown Umur di
+      // sampingnya.
+      icon: null,
       items: countries,
       labels: countries,
+      textStyle: AppText.body,
       searchHint: s.searchCountry,
       emptyText: s.searchNoResult,
       onChanged: (v) {
