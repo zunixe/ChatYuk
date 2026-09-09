@@ -181,6 +181,15 @@ class _SearchDropdownState extends State<SearchDropdown> {
               prefixIconConstraints:
                   const BoxConstraints(minWidth: 36, minHeight: 0),
               labelText: widget.label,
+              // Suffix panah dropdown — sama dengan DropdownButtonFormField
+              // (24px + margin 8) supaya tinggi field identik dengan Umur.
+              suffixIcon: Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 28,
+                color: AppTheme.textSecondary,
+              ),
+              suffixIconConstraints:
+                  const BoxConstraints(minWidth: 32, minHeight: 0),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 12,
