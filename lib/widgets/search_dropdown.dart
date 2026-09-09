@@ -3,17 +3,19 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 
 /// Dropdown single-select TERANCUNG (menempel di bawah field) dengan
-/// pencarian live — dipakai filter negara (online) & negara (Global Room).
-/// 141 negara tak muat di DropdownButton biasa.
-class SearchDropdown extends StatefulWidget {
-  final String value;
+/// pencarian live opsional — dipakai filter negara (online), negara
+/// (Global Room/entry/register) & umur. Generic: T = String (negara)
+/// atau int (umur) — SEMUA dropdown memakai widget ini supaya tinggi &
+/// gaya field dijamin identik antar halaman.
+class SearchDropdown<T> extends StatefulWidget {
+  final T value;
   final String label;
   // Nullable — null = tanpa prefix icon (field lebih pendek, sama dengan
   // DropdownButtonFormField di entry/register).
   final IconData? icon;
-  final List<String> items;
+  final List<T> items;
   final List<String> labels;
-  final ValueChanged<String> onChanged;
+  final ValueChanged<T> onChanged;
   // Kalau null → field cari disembunyikan (cocok utk pilihan sedikit).
   final String? searchHint;
   final String? emptyText;
@@ -33,10 +35,10 @@ class SearchDropdown extends StatefulWidget {
   });
 
   @override
-  State<SearchDropdown> createState() => _SearchDropdownState();
+  State<SearchDropdown<T>> createState() => _SearchDropdownState<T>();
 }
 
-class _SearchDropdownState extends State<SearchDropdown> {
+class _SearchDropdownState<T> extends State<SearchDropdown<T>> {
   final LayerLink _link = LayerLink();
   final OverlayPortalController _portal = OverlayPortalController();
   final TextEditingController _searchCtrl = TextEditingController();
@@ -84,7 +86,7 @@ class _SearchDropdownState extends State<SearchDropdown> {
     final out = <int>[];
     for (int i = 0; i < widget.items.length; i++) {
       if (widget.labels[i].toLowerCase().contains(q) ||
-          widget.items[i].toLowerCase().contains(q)) {
+          widget.items[i].toString().toLowerCase().contains(q)) {
         out.add(i);
       }
     }

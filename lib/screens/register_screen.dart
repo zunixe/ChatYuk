@@ -667,18 +667,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _ageDropdown(s) {
-    return DropdownButtonFormField<int>(
-      initialValue: _age,
-      decoration: InputDecoration(labelText: s.labelAge),
-      isExpanded: true,
-      menuMaxHeight: 300,
-      items: [
-        for (int i = 18; i <= 80; i++)
-          DropdownMenuItem(value: i, child: Text('$i')),
-      ],
-      onChanged: (v) {
-        if (v != null) setState(() => _age = v);
-      },
+    final ages = [for (int i = 18; i <= 80; i++) i];
+    // Widget SAMA dengan negara → tinggi field dijamin identik.
+    return SearchDropdown<int>(
+      value: ages.contains(_age) ? _age : ages.first,
+      label: s.labelAge,
+      icon: null,
+      items: ages,
+      labels: [for (final a in ages) '$a'],
+      textStyle: AppText.body,
+      onChanged: (v) => setState(() => _age = v),
     );
   }
 
