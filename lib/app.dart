@@ -31,6 +31,7 @@ import 'screens/post_composer_screen.dart';
 import 'widgets/anon_prompt_dialog.dart';
 import 'widgets/call_banner.dart';
 import 'widgets/skeleton_card.dart';
+import 'screens/register_screen.dart';
 
 class ChatYukApp extends StatefulWidget {
   const ChatYukApp({super.key});
@@ -256,11 +257,23 @@ class _AuthGateState extends State<_AuthGate> {
       );
     }
 
-    if (auth.profile == null) {
-      // Jalur belum login: EntryScreen first-frame → angkat overlay
-      // (MainNav tidak akan ter-build di jalur ini).
+    // Non-anon (Google/email) yang login ulang tanpa melengkapi profil →
+    // masuk ke app TAPI terkunci popup isian profil (bukan halaman
+    // terpisah). Tetap muncul walau logout-login email sama sampai profil
+    // diisi. Anon bebas (pakai AnonPromptDialog per fitur).
+    final needsProfile = !auth.isAnonymous &&
+        (auth.profile == null ||
+            (auth.profile?.nickname.trim().isEmpty ?? true) ||
+            !(auth.profile?.isRegistered ?? false));
+
+    if (auth.profile == null && auth.isAnonymous) {
+      // Jalur anon belum isi form: EntryScreen first-frame → angkat overlay.
       WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
       return EntryScreen();
+    }
+
+    if (needsProfile) {
+      return _ProfileGate(child: _MainNav());
     }
 
     // Warm-gate: tunggu disk cache tab pertama siap (maks 800ms) dengan
@@ -290,6 +303,46 @@ class _SwapMask extends StatefulWidget {
   const _SwapMask({required this.child});
   @override
   State<_SwapMask> createState() => _SwapMaskState();
+}
+
+/// Gerbang profil wajib isi: aplikasi tampil di belakang (pengguna online)
+/// tapi TERTUTUP barrier — user tidak bisa interaksi apa pun sampai form
+/// profil (nickname/gender/umur/negara/kota) disubmit. Setelah submit,
+/// registerProfile → reloadProfile → isRegistered true → gate rebuild dan
+/// popup hilang sendiri. Back button juga diblok (canPop: false).
+class _ProfileGate extends StatelessWidget {
+  final Widget child;
+  const _ProfileGate({required this.child});
+  @override
+  Widget build(BuildContext context) {
+    final screenH = MediaQuery.sizeOf(context).height;
+    return PopScope(
+      canPop: false,
+      child: Stack(
+        children: [
+          child,
+          const ModalBarrier(dismissible: false, color: Colors.black87),
+          Positioned.fill(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 420,
+                    maxHeight: screenH * 0.85,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: RegisterScreen(mode: RegisterMode.profileOnly),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SwapMaskState extends State<_SwapMask> {

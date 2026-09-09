@@ -131,23 +131,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // E2: Login sukses tapi masih belum ada profile → arahkan ke form profil
-      if (auth.profile == null) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => RegisterScreen(
-              prefillEmail: email,
-              mode: RegisterMode.profileOnly,
-            ),
-          ),
-        );
-        return;
-      }
-
-      // B2: postFrameCallback untuk hindari race condition _AuthGate rebuild
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-      });
+      // E2: Login sukses tapi profil belum lengkap → _AuthGate menampilkan
+      // popup pengunci profil otomatis; cukup kembali ke halaman utama.
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } on AuthException catch (e) {
       // B6: Gunakan AuthException bukan string matching
       if (!mounted) return;
@@ -278,22 +264,11 @@ class _LoginScreenState extends State<LoginScreen> {
           await context.read<AuthProvider>().confirmLinkGoogle();
         } else {
           context.read<AuthProvider>().cancelLinkGoogle();
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  const RegisterScreen(mode: RegisterMode.profileOnly),
-            ),
-          );
+          // Gate profil di _AuthGate yang menampilkan popup isian —
+          // tidak perlu push halaman register terpisah.
         }
       } else if (result == 'new') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                const RegisterScreen(mode: RegisterMode.profileOnly),
-          ),
-        );
+        // Gate profil di _AuthGate menampilkan popup isian otomatis.
       } else if (result == 'exists') {
         // Profile sudah ada — pop LoginScreen yang di-push di atas _AuthGate
         // supaya halaman utama (dari _AuthGate) terlihat.
