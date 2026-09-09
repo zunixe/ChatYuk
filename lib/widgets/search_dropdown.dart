@@ -8,13 +8,16 @@ import '../config/theme.dart';
 class SearchDropdown extends StatefulWidget {
   final String value;
   final String label;
-  final IconData icon;
+  // Nullable — null = tanpa prefix icon (field lebih pendek, sama dengan
+  // DropdownButtonFormField di entry/register).
+  final IconData? icon;
   final List<String> items;
   final List<String> labels;
   final ValueChanged<String> onChanged;
   // Kalau null → field cari disembunyikan (cocok utk pilihan sedikit).
   final String? searchHint;
   final String? emptyText;
+  final TextStyle? textStyle;
 
   const SearchDropdown({
     super.key,
@@ -26,6 +29,7 @@ class SearchDropdown extends StatefulWidget {
     required this.onChanged,
     this.searchHint,
     this.emptyText,
+    this.textStyle,
   });
 
   @override
@@ -170,13 +174,17 @@ class _SearchDropdownState extends State<SearchDropdown> {
           child: InputDecorator(
             decoration: InputDecoration(
               isDense: true,
-              prefixIcon: Icon(widget.icon,
-                  size: 20, color: AppTheme.textSecondary),
+              prefixIcon: widget.icon == null
+                  ? null
+                  : Icon(widget.icon,
+                      size: 20, color: AppTheme.textSecondary),
               prefixIconConstraints:
                   const BoxConstraints(minWidth: 36, minHeight: 0),
               labelText: widget.label,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
             child: Text(
               widget.labels[widget.items
@@ -184,7 +192,8 @@ class _SearchDropdownState extends State<SearchDropdown> {
                   .clamp(0, widget.labels.length - 1)],
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
+              style: widget.textStyle ??
+                  AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
             ),
           ),
         ),
