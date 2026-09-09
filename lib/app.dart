@@ -321,7 +321,7 @@ class _ProfileGate extends StatelessWidget {
       child: Stack(
         children: [
           child,
-          const ModalBarrier(dismissible: false, color: Colors.black87),
+          const ModalBarrier(dismissible: false, color: Colors.transparent),
           Positioned.fill(
             child: Center(
               child: SingleChildScrollView(
