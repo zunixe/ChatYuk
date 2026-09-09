@@ -226,10 +226,17 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
               ),
             ),
             Expanded(
-              child: ListView(
+              // Lazy: antrean + password kecil via SliverToBoxAdapter,
+              // daftar anggota (bisa ratusan) via SliverList.builder.
+              child: CustomScrollView(
                 controller: scrollCtrl,
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                children: [
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                   // Antrean approval (hanya owner/admin).
                   if (canModerate) ...[
                     Text(
@@ -292,9 +299,18 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                     ]),
                     const Divider(height: 24),
                   ],
-                  // Member list.
-                  for (final m in _members) ...[
-                    ListTile(
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Daftar anggota LAZY via SliverList (pengganti for eager).
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    sliver: SliverList.builder(
+                      itemCount: _members.length,
+                      itemBuilder: (_, i) {
+                        final m = _members[i];
+                        return ListTile(
                       dense: true,
                       leading: CircleAvatar(
                         radius: 16,
@@ -369,8 +385,10 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                         ],
                       ),
                       trailing: _memberActions(m),
+                        );
+                      },
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

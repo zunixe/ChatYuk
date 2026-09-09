@@ -36,6 +36,7 @@ class MessageModel {
   });
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
+    final deleted = map['isDeleted'] == true;
     return MessageModel(
       // Prefer id dari map — bisa int (dari server PostgREST) atau String
       // (dari cache). Fallback ke argumen kalau null/kosong.
@@ -44,13 +45,17 @@ class MessageModel {
       senderName: map['senderName'] ?? 'Anon',
       senderGender: map['senderGender'] ?? 'other',
       isRegistered: map['isRegistered'] == true,
-      text: map['text'] ?? '',
-      type: map['type'] ?? 'text',
+      // PRIVASI: pesan terhapus TIDAK PERNAH membawa isi — teks & media
+      // dikosongkan di sumber (cache lama yang belum ber-flag tetap aman).
+      text: deleted ? '' : (map['text'] ?? ''),
+      type: deleted ? 'text' : (map['type'] ?? 'text'),
       edited: map['edited'] == true,
-      isDeleted: map['isDeleted'] == true,
+      isDeleted: deleted,
       // imageData: base64 lama ATAU path storage (voicePath/imagePath).
       // Pakai isNotEmpty (bukan ??) karena '' bukan null — path harus tetap terpakai.
-      imageData: _firstNonEmpty([map['imageData'], map['voicePath'], map['voice_path'], map['imagePath'], map['image_path']]),
+      imageData: deleted
+          ? ''
+          : _firstNonEmpty([map['imageData'], map['voicePath'], map['voice_path'], map['imagePath'], map['image_path']]),
       timestamp: parseDate(map['timestamp'] ?? map['createdAt']),
       repliedToId: map['repliedToId'] is String ? map['repliedToId'] : null,
       repliedToText: map['repliedToText'],
@@ -73,10 +78,13 @@ class MessageModel {
       'senderName': senderName,
       'senderGender': senderGender,
       'isRegistered': isRegistered,
-      'text': text,
-      'type': type,
-      'imageData': imageData,
+      // PRIVASI: isi pesan terhapus tidak masuk cache disk.
+      'text': isDeleted ? '' : text,
+      'type': isDeleted ? 'text' : type,
+      'imageData': isDeleted ? '' : imageData,
       'timestamp': timestamp.toUtc().toIso8601String(),
+      'edited': edited,
+      'isDeleted': isDeleted,
       'repliedToId': repliedToId,
       'repliedToText': repliedToText,
       'repliedToSenderName': repliedToSenderName,
@@ -95,18 +103,21 @@ class MessageModel {
     String? repliedToSenderName,
     int? durationMs,
   }) {
+    final newDeleted = isDeleted ?? this.isDeleted;
+    // PRIVASI: begitu berstatus terhapus, konten dikosongkan — update
+    // realtime (is_deleted=true) tidak menyisakan teks/media di memori.
     return MessageModel(
       id: id,
       senderId: senderId,
       senderName: senderName,
       senderGender: senderGender,
       isRegistered: isRegistered,
-      text: text ?? this.text,
-      type: type ?? this.type,
-      imageData: imageData ?? this.imageData,
+      text: newDeleted ? '' : (text ?? this.text),
+      type: newDeleted ? 'text' : (type ?? this.type),
+      imageData: newDeleted ? '' : (imageData ?? this.imageData),
       timestamp: timestamp,
       edited: edited ?? this.edited,
-      isDeleted: isDeleted ?? this.isDeleted,
+      isDeleted: newDeleted,
       repliedToId: repliedToId ?? this.repliedToId,
       repliedToText: repliedToText ?? this.repliedToText,
       repliedToSenderName: repliedToSenderName ?? this.repliedToSenderName,
