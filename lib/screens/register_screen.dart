@@ -411,14 +411,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final s = context.watch<LocaleProvider>().s;
     final profileOnly = widget.mode == RegisterMode.profileOnly;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(profileOnly ? s.msgCompleteProfile : s.titleRegister),
-      ),
+      // Mode popup (di dalam _ProfileGate): tanpa AppBar sendiri supaya
+      // tidak terlihat seperti halaman — judul ada di dalam form.
+      appBar: profileOnly
+          ? null
+          : AppBar(
+              title: Text(s.titleRegister),
+            ),
       body: SingleChildScrollView(
         padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Mode popup: judul + deskripsi di dalam form pengganti AppBar.
+            if (profileOnly) ...[
+              Text(
+                s.msgCompleteProfile,
+                style: AppText.title,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+            ],
             // Kartu form — satu grup utuh, komposisi sama dengan login
             Container(
               padding: EdgeInsets.all(20),
@@ -614,20 +627,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Link ke login
-            Center(
-              child: TextButton(
-                onPressed: () => Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                ),
-                child: Text(
-                  s.btnLoginEmail,
-                  style: const TextStyle(color: AppTheme.primary),
+            // Link ke login — hanya mode full. Mode popup user SUDAH login
+            // (Google), jadi link ini tidak relevan dan disembunyikan.
+            if (!profileOnly) ...[
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  ),
+                  child: Text(
+                    s.btnLoginEmail,
+                    style: const TextStyle(color: AppTheme.primary),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
+            ],
           ],
         ),
       ),
