@@ -608,7 +608,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   _cityDropdown(s),
                   const SizedBox(height: 20),
 
-                  // Tombol Daftar
+                  // Tombol Daftar (mode popup: LENGKAPI — baru bisa chat
+                  // setelah ini disubmit).
                   ElevatedButton(
                     onPressed: _loading ? null : _register,
                     child: _loading
@@ -620,7 +621,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : Text(s.btnRegister, style: AppText.button),
+                        : Text(
+                            profileOnly ? s.btnComplete : s.btnRegister,
+                            style: AppText.button,
+                          ),
                   ),
                 ],
               ),
