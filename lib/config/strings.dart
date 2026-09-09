@@ -19,6 +19,8 @@ class S {
   String get labelCountry => isId ? 'Negara' : 'Country';
   String get searchCountry =>
       isId ? 'Cari negara...' : 'Search country...';
+  String get searchCity =>
+      isId ? 'Cari kota...' : 'Search city...';
   String selCountriesCount(int n) =>
       isId ? '$n negara' : '$n countries';
   String selGendersCount(int n) =>

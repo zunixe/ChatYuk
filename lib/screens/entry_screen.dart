@@ -848,35 +848,17 @@ class _EntryScreenState extends State<EntryScreen> {
     if (cities.isEmpty) return const SizedBox.shrink();
     // Ensure _kota is valid for current country
     final validKota = cities.contains(_kota) ? _kota : cities.first;
-    return DropdownButtonFormField<String>(
-      key: ValueKey('city-$validKota'),
-      initialValue: validKota,
-      style: AppText.body,
-      isExpanded: true,
-      menuMaxHeight: 350,
-      decoration: InputDecoration(
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        labelText: s.labelCity,
-        prefixIcon: Icon(
-          Icons.location_city_outlined,
-          size: 20,
-          color: AppTheme.textSecondary,
-        ),
-      ),
-      items: [
-        for (final k in cities)
-          DropdownMenuItem(
-            value: k,
-            child: Text(k, overflow: TextOverflow.ellipsis),
-          ),
-      ],
-      onChanged: (v) {
-        if (v != null) setState(() => _kota = v);
-      },
+    // Widget SAMA dengan umur & negara → tinggi field dijamin identik.
+    return SearchDropdown<String>(
+      value: validKota,
+      label: s.labelCity,
+      icon: Icons.location_city_outlined,
+      items: cities,
+      labels: cities,
+      textStyle: AppText.body,
+      searchHint: s.searchCity,
+      emptyText: s.searchNoResult,
+      onChanged: (v) => setState(() => _kota = v),
     );
   }
 }
