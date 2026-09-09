@@ -144,15 +144,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     }
     if (nickname.isEmpty) {
-      _snack(s.errNicknameEmpty);
+      if (profileOnly) {
+        _popupError(s.errNicknameEmpty);
+      } else {
+        _snack(s.errNicknameEmpty);
+      }
       return;
     }
     if (nickname.length < 3) {
-      _snack(s.errNicknameShort);
+      if (profileOnly) {
+        _popupError(s.errNicknameShort);
+      } else {
+        _snack(s.errNicknameShort);
+      }
       return;
     }
     if (nickname.length > 20) {
-      _snack(s.errNicknameLong);
+      if (profileOnly) {
+        _popupError(s.errNicknameLong);
+      } else {
+        _snack(s.errNicknameLong);
+      }
       return;
     }
     if (_nicknameError != null) {
@@ -266,9 +278,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           if (msg.contains('nickname') || msg.contains('profiles_nickname')) {
             setState(() => _nicknameError = s.errNicknameTaken);
             _nicknameFocus.requestFocus();
+          } else if (profileOnly) {
+            _popupError(s.errEmailAlreadyUsed);
           } else {
             _snack(s.errEmailAlreadyUsed);
           }
+        } else if (profileOnly) {
+          _popupError('${s.errGeneric}$e');
         } else {
           _snack('${s.errGeneric}$e');
         }
@@ -285,6 +301,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // Mode popup: snackbar tertutup overlay _ProfileGate (blur) — error
+  // ditampilkan inline di dalam kartu supaya selalu terlihat paling atas.
+  void _popupError(String msg) {
+    if (!mounted) return;
+    setState(() => _nicknameError = msg);
+    _nicknameFocus.requestFocus();
   }
 
   /// Dialog masukkan kode OTP + kirim ulang. Return true bila terverifikasi.
@@ -410,16 +434,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final profileOnly = widget.mode == RegisterMode.profileOnly;
-    return Scaffold(
-      backgroundColor: profileOnly ? Colors.transparent : null,
-      // Mode popup (di dalam _ProfileGate): tanpa AppBar sendiri supaya
-      // tidak terlihat seperti halaman — judul ada di dalam form.
-      appBar: profileOnly
-          ? null
-          : AppBar(
-              title: Text(s.titleRegister),
-            ),
-      body: SingleChildScrollView(
+    final form = SingleChildScrollView(
         padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -652,7 +667,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ],
           ],
         ),
-      ),
+      );
+    // Mode popup: tanpa Scaffold — Scaffold mengembang ke maxHeight
+    // sehingga kartu tidak tepat di tengah; Material transparan cukup
+    // (Material ancestor untuk TextField sudah ada dari _MainNav).
+    if (profileOnly) {
+      return Material(color: Colors.transparent, child: form);
+    }
+    return Scaffold(
+      appBar: AppBar(title: Text(s.titleRegister)),
+      body: form,
     );
   }
 
