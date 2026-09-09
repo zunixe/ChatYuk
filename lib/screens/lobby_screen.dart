@@ -152,6 +152,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       icon: Icons.public_rounded,
                       items: allCountries,
                       labels: allCountries,
+                      searchHint: s.searchCountry,
+                      emptyText: s.searchNoResult,
                       onChanged: (v) => _onCountryChanged(v),
                     ),
                   ),

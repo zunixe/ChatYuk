@@ -12,6 +12,9 @@ class SearchDropdown extends StatefulWidget {
   final List<String> items;
   final List<String> labels;
   final ValueChanged<String> onChanged;
+  // Kalau null → field cari disembunyikan (cocok utk pilihan sedikit).
+  final String? searchHint;
+  final String? emptyText;
 
   const SearchDropdown({
     super.key,
@@ -21,6 +24,8 @@ class SearchDropdown extends StatefulWidget {
     required this.items,
     required this.labels,
     required this.onChanged,
+    this.searchHint,
+    this.emptyText,
   });
 
   @override
@@ -30,8 +35,18 @@ class SearchDropdown extends StatefulWidget {
 class _SearchDropdownState extends State<SearchDropdown> {
   final LayerLink _link = LayerLink();
   final OverlayPortalController _portal = OverlayPortalController();
+  final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
   Size _fieldSize = Size.zero;
   double _fieldLeft = 0;
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
 
   void _togglePanel() {
     if (_portal.isShowing) {
@@ -41,7 +56,35 @@ class _SearchDropdownState extends State<SearchDropdown> {
     final rb = context.findRenderObject() as RenderBox;
     _fieldSize = rb.size;
     _fieldLeft = rb.localToGlobal(Offset.zero).dx;
+    setState(() {
+      _query = '';
+      _searchCtrl.clear();
+    });
     _portal.show();
+    // Fokus field cari setelah panel terpasang supaya keyboard langsung naik.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _portal.isShowing) _searchFocus.requestFocus();
+    });
+  }
+
+  void _hidePanel() {
+    _searchFocus.unfocus();
+    _portal.hide();
+  }
+
+  List<int> get _filtered {
+    if (_query.isEmpty) {
+      return List<int>.generate(widget.items.length, (i) => i);
+    }
+    final q = _query.toLowerCase();
+    final out = <int>[];
+    for (int i = 0; i < widget.items.length; i++) {
+      if (widget.labels[i].toLowerCase().contains(q) ||
+          widget.items[i].toLowerCase().contains(q)) {
+        out.add(i);
+      }
+    }
+    return out;
   }
 
   @override
@@ -57,7 +100,7 @@ class _SearchDropdownState extends State<SearchDropdown> {
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => _portal.hide(),
+                onTap: _hidePanel,
               ),
             ),
             CompositedTransformFollower(
@@ -85,38 +128,33 @@ class _SearchDropdownState extends State<SearchDropdown> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      for (int i = 0; i < widget.items.length; i++)
-                        InkWell(
-                          onTap: () {
-                            widget.onChanged(widget.items[i]);
-                            _portal.hide();
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 12),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    widget.labels[i],
-                                    style: AppText.bodySmall.copyWith(
-                                      color: widget.items[i] == widget.value
-                                          ? AppTheme.primary
-                                          : AppTheme.textPrimary,
-                                      fontWeight:
-                                          widget.items[i] == widget.value
-                                              ? FontWeight.w700
-                                              : FontWeight.w400,
-                                    ),
-                                  ),
-                                ),
-                                if (widget.items[i] == widget.value)
-                                  const Icon(Icons.check,
-                                      size: 16, color: AppTheme.primary),
-                              ],
+                      if (widget.searchHint != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                          child: TextField(
+                            controller: _searchCtrl,
+                            focusNode: _searchFocus,
+                            onChanged: (v) =>
+                                setState(() => _query = v.trim()),
+                            style: AppText.bodySmall.copyWith(
+                                color: AppTheme.textPrimary),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: widget.searchHint,
+                              hintStyle: AppText.bodySmall.copyWith(
+                                  color: AppTheme.textSecondary),
+                              prefixIcon: Icon(Icons.search,
+                                  size: 18, color: AppTheme.textSecondary),
+                              prefixIconConstraints: const BoxConstraints(
+                                  minWidth: 32, minHeight: 0),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 8),
                             ),
                           ),
                         ),
+                      Flexible(
+                        child: _buildItemList(),
+                      ),
                     ],
                   ),
                 ),
@@ -150,6 +188,62 @@ class _SearchDropdownState extends State<SearchDropdown> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Daftar item terfilter + scroll (141 negara tak muat satu layar).
+  Widget _buildItemList() {
+    final idx = _filtered;
+    if (idx.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        child: Text(
+          widget.emptyText ?? '',
+          style:
+              AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        ),
+      );
+    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 300),
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        itemCount: idx.length,
+        itemBuilder: (_, k) {
+          final i = idx[k];
+          final selected = widget.items[i] == widget.value;
+          return InkWell(
+            onTap: () {
+              widget.onChanged(widget.items[i]);
+              _hidePanel();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.labels[i],
+                      style: AppText.bodySmall.copyWith(
+                        color: selected
+                            ? AppTheme.primary
+                            : AppTheme.textPrimary,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                  if (selected)
+                    const Icon(Icons.check,
+                        size: 16, color: AppTheme.primary),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
