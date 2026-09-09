@@ -625,6 +625,7 @@ class S {
   String get hintPassword =>
       isId ? 'Minimal 8 karakter' : 'At least 8 characters';
   String get btnRegister => isId ? 'DAFTAR' : 'REGISTER';
+  String get btnComplete => isId ? 'LENGKAPI' : 'COMPLETE';
   String get btnLogin => isId ? 'MASUK' : 'LOGIN';
   String get btnRegisterEmail =>
       isId ? 'Daftar dengan Email' : 'Register with Email';
