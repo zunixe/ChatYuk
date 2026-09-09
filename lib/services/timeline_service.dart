@@ -59,31 +59,29 @@ class TimelineService {
   /// Daftar post. scope 'all' | 'following'.
   /// Cursor keyset: (is_boosted desc, created_at desc) → p_cursor_boosted +
   /// p_cursor. Konsisten dengan ORDER BY di RPC.
+  /// Daftar post per scope. MELEMPAR saat gagal — pemanggil (provider)
+  /// harus bisa bedakan "server kosong" vs "network error" supaya data
+  /// lama tidak terhapus saat offline.
   Future<List<Map<String, dynamic>>> listPosts(
     String scope, {
     int limit = 30,
     DateTime? cursor,
     bool cursorBoosted = false,
   }) async {
-    try {
-      final res = await _sb.rpc(
-        'list_posts',
-        params: {
-          'p_scope': scope,
-          'p_limit': limit,
-          'p_cursor': cursor?.toUtc().toIso8601String(),
-          'p_cursor_boosted': cursorBoosted,
-        },
-      );
-      final posts = res is Map ? res['posts'] : null;
-      if (posts is List) {
-        return posts.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      }
-      return [];
-    } catch (e) {
-      debugPrint('[TimelineService] listPosts error: $e');
-      return [];
+    final res = await _sb.rpc(
+      'list_posts',
+      params: {
+        'p_scope': scope,
+        'p_limit': limit,
+        'p_cursor': cursor?.toUtc().toIso8601String(),
+        'p_cursor_boosted': cursorBoosted,
+      },
+    );
+    final posts = res is Map ? res['posts'] : null;
+    if (posts is List) {
+      return posts.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     }
+    return [];
   }
 
   /// Komentar sebuah post (termasuk likeCount/shareCount/isLiked dari RPC).
