@@ -234,10 +234,10 @@ class _TimelineScreenState extends State<TimelineScreen>
                 ],
               )
             : posts.isEmpty && loading
-            // Skeleton saat load pertama — terasa instan & konsisten
+            // Skeleton bentuk post — terasa instan & konsisten
             // dengan layar online (user lebih suka skeleton daripada
             // spinner/muter-muter).
-            ? const SkeletonList(count: 5)
+            ? const PostSkeletonList(count: 3)
             : ListView.builder(
                 controller: _scroll,
                 physics: const AlwaysScrollableScrollPhysics(),
