@@ -102,9 +102,11 @@ class OnlineUsersProvider extends ChangeNotifier {
           }).toList();
         } catch (_) {}
         if (_users.isEmpty) {
-          // Disk menang race → tampilkan langsung list disk (deduped di atas).
+          // Disk menang race → tampilkan langsung list disk (deduped di atas),
+          // tapi tetap lewat sort bucket supaya frame pertama sudah rapi
+          // (online di atas, paling lama offline di bawah).
           // Avatar resolve via _AsyncAvatar (disk-first, keepProvider).
-          _users = List.of(diskUsers);
+          _users = _reorderStable([], diskUsers);
         } else {
           // Stream menang race → jangan buang hasil disk.
         }
@@ -119,25 +121,58 @@ class OnlineUsersProvider extends ChangeNotifier {
   bool _isRenderableAvatar(String a) =>
       a.isNotEmpty && !a.startsWith('avatars/');
 
-  /// Bekukan urutan kartu: posisi dari [_users] dipertahankan, emission
-  /// baru hanya menambah user baru di bawah & membuang yang tak lagi online.
-  /// Dulu: sort last_seen desc tiap emission → kartu pindah posisi → terlihat
-  /// kedip/refresh padahal fotonya stabil.
+  /// Rank status untuk urutan kartu: online paling atas, lalu idle,
+  /// lalu offline/lainnya paling bawah.
+  int _statusRank(String s) {
+    if (s == 'online') return 0;
+    if (s == 'idle') return 1;
+    return 2;
+  }
+
+  /// Urutan kartu: online di atas, lalu idle, lalu offline — di dalam
+  /// bucket yang sama yang paling lama tidak online paling bawah
+  /// (lastSeen terlama).
+  /// Anti-kedip: posisi dalam bucket yang sama DIPERTAHANKAN antar-emission
+  /// (heartbeat tiap 120 dtk mengubah lastSeen user aktif — tanpa ini kartu
+  /// online bertukar posisi terus). Kartu hanya pindah saat status bucket-nya
+  /// berubah (baru online naik, baru offline turun), atau user baru muncul
+  /// (menempel di ujung bucket-nya, urut lastSeen desc antar sesama baru).
   List<UserModel> _reorderStable(List<UserModel> prev, List<UserModel> next) {
-    if (prev.isEmpty) return next;
+    int cmpUser(UserModel a, UserModel b) {
+      final r = _statusRank(a.status).compareTo(_statusRank(b.status));
+      if (r != 0) return r;
+      return b.lastSeen.compareTo(a.lastSeen);
+    }
+
+    // Load pertama (belum ada posisi): sort penuh bucket + lastSeen desc.
+    if (prev.isEmpty) {
+      final sorted = List<UserModel>.of(next);
+      sorted.sort(cmpUser);
+      return sorted;
+    }
     final byUid = {for (final u in next) u.uid: u};
-    final result = <UserModel>[];
-    // 1) Posisi lama dipertahankan (in-place update data).
+    final prevByUid = {for (final u in prev) u.uid: u};
+    // 1) User lama yang bucket-nya TETAP: update data, posisi dipertahankan.
+    final buckets = <List<UserModel>>[[], [], []];
     for (final u in prev) {
       final updated = byUid.remove(u.uid);
-      if (updated != null) result.add(updated);
+      if (updated == null) continue; // hilang dari stream → buang
+      final old = prevByUid[u.uid]!;
+      if (_statusRank(old.status) == _statusRank(updated.status)) {
+        buckets[_statusRank(updated.status)].add(updated);
+      } else {
+        // 2) Status bucket BERUBAH: masuk antrean pindah (di bawah).
+        byUid[u.uid] = updated;
+      }
     }
-    // 2) User baru (belum ada posisi) ditambahkan di bawah.
-    for (final u in next) {
-      final exists = result.any((r) => r.uid == u.uid);
-      if (!exists) result.add(u);
+    // 3) Pindahan + pendatang baru: urut lastSeen desc, tempel di ujung
+    // bucket-nya (baru online = bawah section online, dst — tidak
+    // menggeser kartu lama yang sudah stabil).
+    final moved = byUid.values.toList()..sort(cmpUser);
+    for (final u in moved) {
+      buckets[_statusRank(u.status)].add(u);
     }
-    return result;
+    return [...buckets[0], ...buckets[1], ...buckets[2]];
   }
 
   /// Simpan avatar per-uid ke kv (fire-and-forget). Hanya tulis kalau avatar
