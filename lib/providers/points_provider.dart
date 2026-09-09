@@ -18,7 +18,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _claimed120min = false;
   Timer? _onlineTickTimer;
   bool _onboardingShown = false;
+  // Default TRUE TAPI _enabledConfirmed=false: UI fitur koin (gift dsb.)
+  // baru tampil setelah flag server terkonfirmasi — mencegah kilatan
+  // gift muncul-lalu-hilang di frame awal saat admin mematikan koin.
   bool _enabled = true;
+  bool _enabledConfirmed = false;
   StreamSubscription<bool>? _enabledSub;
   StreamSubscription<int>? _pointsSub;
   StreamSubscription<AuthState>? _authSub;
@@ -30,7 +34,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// (app_settings.points_enabled). Saat dimatikan, koin disembunyikan
   /// untuk SEMUA user termasuk admin build. Dulu ada over-ride admin/dev
   /// yang membuat koin selalu tampil di build admin padahal dimatikan.
-  bool get enabled => _enabled;
+  bool get enabled => _enabledConfirmed && _enabled;
+
+  /// Flag server sudah terkonfirmasi (fetch/subscribe balik) — dipakai
+  /// UI untuk memutuskan menampilkan fitur koin tanpa kilatan awal.
+  bool get enabledConfirmed => _enabledConfirmed;
   int get loginStreak => _loginStreak;
   int _loginStreak = 0;
   int _lastStreakBonus = 0;
@@ -188,6 +196,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       _enabledSub ??= _service.watchEnabled().listen((value) {
         if (_disposed) return;
+        _enabledConfirmed = true;
         _enabled = value;
         notifyListeners();
       });
@@ -199,6 +208,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> refreshEnabled() async {
     try {
       _enabled = await _service.fetchEnabled();
+      _enabledConfirmed = true;
       if (!_disposed) notifyListeners();
     } catch (e) {
       debugPrint('[POINTS] fetchEnabled error: $e');

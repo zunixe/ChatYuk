@@ -61,21 +61,16 @@ class ChatIconButton extends StatelessWidget {
             color: AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
           ),
           child: AnimatedRotation(
+            // Rotasi saja (+ → ✕), TANPA crossfade ikon: crossfade
+            // menumpuk dua glif 180ms sehingga terlihat seperti ikon
+            // rusak/glitch di tengah transisi.
             turns: open ? 0.125 : 0,
             duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutBack,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: ScaleTransition(scale: anim, child: child),
-              ),
-              child: Icon(
-                icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
-                key: ValueKey(icon ?? open),
-                color: AppTheme.primary,
-                size: 20,
-              ),
+            curve: Curves.easeOutCubic,
+            child: Icon(
+              icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
+              color: AppTheme.primary,
+              size: 20,
             ),
           ),
         ),

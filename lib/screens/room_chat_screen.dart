@@ -1068,6 +1068,21 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       return;
     }
 
+    // Private room: cek role SEBELUM kirim — komposer interaktif sejak
+    // awal (tanpa gerbang loading). Bukan member → snackbar ajak join.
+    if (isPrivateRoom && !_roleChecked) {
+      _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
+      _roleChecked = true;
+      if (!mounted) return;
+      setState(() {});
+      if (_myRole == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.read<LocaleProvider>().s.privateRoomNeedApproval)),
+        );
+        return;
+      }
+    }
+
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
     final uid = auth.uid;
@@ -1416,7 +1431,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     context.watch<ThemeProvider>();
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final points = context.read<PointsProvider>();
+    final points = context.watch<PointsProvider>();
 
     return Scaffold(
       backgroundColor: AppTheme.bgCard,
@@ -1639,12 +1654,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 ? () => setState(() => _pendingPhotoBase64 = null)
                 : null,
           );
-          bottomBar = (isPrivateRoom && !_roleChecked)
-              ? AbsorbPointer(
-                  absorbing: true,
-                  child: Opacity(opacity: 0.55, child: input),
-                )
-              : input;
+          bottomBar = input;
         }
         final column = Column(
         children: [
@@ -1844,6 +1854,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 }
                 // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
                 // pola WhatsApp — item list berisi pesan + separator tanggal.
+                // PRIVASI: kumpulan id pesan terhapus — quote reply yang
+                // menunjuk pesan ini dirender "Pesan dihapus", bukan isinya.
+                final deletedIds = {
+                  for (final m in msgs)
+                    if (m.isDeleted) m.id,
+                };
                 final items = <ChatItem>[];
                 String? prevDateKey;
                 for (final m in msgs) {
@@ -1885,6 +1901,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                           ),
                           roomId: widget.room.id,
                           onTapUser: () => _onTapUser(m, auth),
+                          deletedIds: deletedIds,
                         ),
                       ),
                       ),
@@ -2370,6 +2387,9 @@ class _MessageBubble extends StatelessWidget {
   final Color color;
   final String roomId;
   final VoidCallback onTapUser;
+  /// Set pesan ( room) yang berstatus terhapus — dipakai untuk meredam
+  /// quote reply yang menunjuk pesan terhapus (isi tidak boleh bocor).
+  final Set<String> deletedIds;
   const _MessageBubble({
     super.key,
     required this.msg,
@@ -2377,6 +2397,7 @@ class _MessageBubble extends StatelessWidget {
     required this.color,
     required this.roomId,
     required this.onTapUser,
+    this.deletedIds = const {},
   });
 
   // Warna teks bubble mengikuti tema (gelap di light mode, terang di dark mode)
@@ -2391,6 +2412,11 @@ class _MessageBubble extends StatelessWidget {
   // Konten bubble: foto / view-once / teks — dipakai untuk pesan sendiri & orang lain.
   Widget _replyQuote(BuildContext context) {
     if (msg.repliedToText == null || msg.repliedToText!.isEmpty) return const SizedBox.shrink();
+    final s = context.read<LocaleProvider>().s;
+    // PRIVASI: target reply terhapus → quote tampil "Pesan dihapus".
+    final targetDeleted =
+        msg.repliedToId != null && deletedIds.contains(msg.repliedToId);
+    final quoteText = targetDeleted ? s.messageDeleted : msg.repliedToText!;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -2403,7 +2429,14 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(msg.repliedToSenderName ?? '', style: AppText.label.copyWith(color: AppTheme.primary)),
-          Text(msg.repliedToText!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.bodySmall),
+          Text(
+            quoteText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.bodySmall.copyWith(
+              fontStyle: targetDeleted ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
         ],
       ),
     );

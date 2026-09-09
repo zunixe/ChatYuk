@@ -193,6 +193,9 @@ class MessageBubble extends StatelessWidget {
   // Link anchor milik bubble ini (dibuat & dikelola oleh screen agar stabil
   // antar rebuild ListView — lihat _msgLinks di private_chat_screen).
   final LayerLink link;
+  /// PRIVASI: id pesan (chat/room) yang terhapus — quote reply yang
+  /// menunjuk salah satunya dirender "Pesan dihapus", bukan isinya.
+  final Set<String> deletedIds;
   const MessageBubble({
     super.key,
     required this.msg,
@@ -206,6 +209,7 @@ class MessageBubble extends StatelessWidget {
     this.isRoom = false,
     this.onLongPressMenu,
     required this.link,
+    this.deletedIds = const {},
   });
 
   @override
@@ -283,41 +287,54 @@ class MessageBubble extends StatelessWidget {
                     children: [
                       if (msg.repliedToText != null &&
                           msg.repliedToText!.isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isMe
-                                ? Colors.white.withValues(alpha: 0.15)
-                                : AppTheme.bgScreen.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border(
-                              left: BorderSide(
-                                color: AppTheme.primary,
-                                width: 3,
-                              ),
+                        Builder(builder: (ctx) {
+                          final s = ctx.read<LocaleProvider>().s;
+                          // PRIVASI: target reply terhapus → "Pesan dihapus".
+                          final targetDeleted = msg.repliedToId != null &&
+                              deletedIds.contains(msg.repliedToId);
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
                             ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                msg.repliedToSenderName ?? '',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
+                            decoration: BoxDecoration(
+                              color: isMe
+                                  ? Colors.white.withValues(alpha: 0.15)
+                                  : AppTheme.bgScreen.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border(
+                                left: BorderSide(
+                                  color: AppTheme.primary,
+                                  width: 3,
                                 ),
                               ),
-                              Text(
-                                msg.repliedToText!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  msg.repliedToSenderName ?? '',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  targetDeleted
+                                      ? s.messageDeleted
+                                      : msg.repliedToText!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontStyle: targetDeleted
+                                        ? FontStyle.italic
+                                        : FontStyle.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
                       if (msg.type == 'voice' && msg.imageData.isNotEmpty)
                         VoiceBubble(
                           path: msg.imageData,

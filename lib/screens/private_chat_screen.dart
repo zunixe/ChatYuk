@@ -2125,6 +2125,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                   msg.type == 'image' &&
                                   msg.imageData.isEmpty &&
                                   i >= 50;
+                              // PRIVASI: kumpulan id pesan terhapus — quote
+                              // reply yang menunjuk pesan ini dirender
+                              // "Pesan dihapus", bukan isinya.
+                              final deletedIds = {
+                                for (final m in all)
+                                  if (m.isDeleted) m.id,
+                              };
                               return MessageBubble(
                                 key: ValueKey(msg.id),
                                 link: _linkFor(msg.id),
@@ -2136,6 +2143,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                 isImageDeferred: isImageDeferred,
                                 onRetryImage: _msgsHandleFetchImage,
                                 onLongPressMenu: _onMessageLongPress,
+                                deletedIds: deletedIds,
                               );
                             },
                           );
