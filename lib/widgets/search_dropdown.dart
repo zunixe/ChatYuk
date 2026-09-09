@@ -20,6 +20,8 @@ class SearchDropdown<T> extends StatefulWidget {
   final String? searchHint;
   final String? emptyText;
   final TextStyle? textStyle;
+  // true = field tanpa fill (melayang transparan, utk popup profil).
+  final bool flat;
 
   const SearchDropdown({
     super.key,
@@ -32,6 +34,7 @@ class SearchDropdown<T> extends StatefulWidget {
     this.searchHint,
     this.emptyText,
     this.textStyle,
+    this.flat = false,
   });
 
   @override
@@ -173,9 +176,11 @@ class _SearchDropdownState<T> extends State<SearchDropdown<T>> {
         link: _link,
         child: GestureDetector(
           onTap: _togglePanel,
-          child: InputDecorator(
-            decoration: InputDecoration(
-              isDense: true,
+            child: InputDecorator(
+              decoration: InputDecoration(
+                // Mode flat: tanpa fill bgInput dari theme.
+                filled: !widget.flat,
+                isDense: true,
               prefixIcon: widget.icon == null
                   ? null
                   : Icon(widget.icon,
