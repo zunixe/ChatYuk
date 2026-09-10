@@ -1878,8 +1878,9 @@ class ChatService {
           } catch (_) {}
           final uids = {...presenceUids, ...dbUids}.toList();
           if (uids.isEmpty) {
-            cached = [];
-            if (!controller.isClosed) controller.add(List.unmodifiable(cached));
+            // Jangan kosongkan list yang sudah tampil (emit kosong bikin
+            // list online kedip hilang-muncul) — biarkan fallback tick
+            // yang mengoreksi kalau memang sepi sungguhan.
             return;
           }
           String? invisibleUid2;
@@ -1889,8 +1890,7 @@ class ChatService {
           } catch (_) {}
           final filtered2 = invisibleUid2 == null ? uids : uids.where((id) => id != invisibleUid2).toList();
           if (filtered2.isEmpty) {
-            cached = [];
-            if (!controller.isClosed) controller.add(List.unmodifiable(cached));
+            // Sama: skip emit kosong, jangan timpa list terisi.
             return;
           }
           const cols2 = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen,email';
@@ -1940,6 +1940,12 @@ class ChatService {
         }
         // Progressive: emit dulu tanpa avatar (instant), avatar nyusul background
         pending.sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
+        // Anti-hilang-semua: hasil slow path KOSONG saat cache sebelumnya
+        // terisi → jangan timpa (kemungkinan network blip), biarkan
+        // fallback tick retry. Timer grace di provider sebagai lapis 2.
+        if (pending.isEmpty && cached.isNotEmpty) {
+          return;
+        }
         cached = List.of(pending);
         // Simpan kv list online: avatar = SERVER PATH (ringan). Bytes foto
         // sudah ada di MediaDiskCache per path — cold start berikutnya

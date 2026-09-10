@@ -119,7 +119,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
               Navigator.pop(ctx);
               _act(fn);
             },
-            child: const Text('OK'),
+            child: Text(s.btnOk),
           ),
         ],
       ),

@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as lpn;
@@ -152,7 +153,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       ? (type == 'call'
             ? 'is calling you'
             : type == 'message'
-            ? (data['body'] as String?) ?? 'New message'
+            // Urutan fallback: data['body'] (trigger baru) → data['message']
+            // (payload lama) → 'New message'. Jangan tampilkan string kosong.
+            ? ((data['body'] as String?)?.isNotEmpty == true
+                  ? data['body'] as String
+                  : ((data['message'] as String?)?.isNotEmpty == true
+                        ? data['message'] as String
+                        : 'New message'))
             : type == 'broadcast'
             ? 'is live in ${data['roomName'] ?? 'Room'}'
             : type == 'online'
@@ -408,7 +415,12 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
                 ? s.notifCallingVideoBody
                 : s.notifCallingVoiceBody)
             : type == 'message'
-            ? (data['body'] as String?) ?? s.notifNewMessageBody
+            // Sama seperti background handler: body → message → fallback.
+            ? ((data['body'] as String?)?.isNotEmpty == true
+                  ? data['body'] as String
+                  : ((data['message'] as String?)?.isNotEmpty == true
+                        ? data['message'] as String
+                        : s.notifNewMessageBody))
             : type == 'broadcast'
             ? s.notifBroadcastBody((data['roomName'] as String?) ?? 'Room')
             : isOnline
@@ -770,6 +782,9 @@ Future<void> main() => bootstrap();
 Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   WidgetsFlutterBinding.ensureInitialized();
   kFirebaseOptionsOverride = firebaseOptions;
+  // Crashlytics butuh Firebase ter-init dulu — aktifkan pasca-init di bawah.
+  // Handler di sini hanya dlog; setelah FlutterError.crashlytics disambung,
+  // error berikutnya otomatis terkirim (dan error sebelum init tetap ter-log).
   FlutterError.onError = (details) {
     dlog('[FLUTTER-ERROR] ${details.exception}');
     dlog('[FLUTTER-ERROR] ${details.stack}');
@@ -781,7 +796,6 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // Paralel: Supabase + Firebase + kunci Keystore/SQLite (independen) —
   // prewarmDb di sini (bukan setelah init) supaya antrean Keystore tidak
   // menunggu auth selesai. Hemat 0.5-2s di Xiaomi cold start.
-  dlog('[BOOT] step-0 bootstrap start');
   await Future.wait([
     SupabaseConfig.init(),
     MessageCache.instance.prewarmDb(),
@@ -798,6 +812,15 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
         }
         await Firebase.initializeApp(options: firebaseOptions ?? DefaultFirebaseOptions.currentPlatform);
         _firebaseReady = true;
+        // Crash reporting aktif hanya di rilis — debug jangan spam console
+        // (default: enabled in release, disabled in debug).
+        await FirebaseCrashlytics.instance
+            .setCrashlyticsCollectionEnabled(kReleaseMode);
+        FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+        PlatformDispatcher.instance.onError = (error, stack) {
+          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+          return true;
+        };
       } on UnsupportedError catch (e) {
         dlog('[FIREBASE] iOS belum dikonfigurasi, lewati: $e');
       } on FirebaseException catch (e) {
@@ -807,7 +830,6 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
       }
     }),
   ]);
-  dlog('[BOOT] step-1 Future.wait selesai');
   // Fire-and-forget yang tidak block TTI
   unawaited(AdminGate.postInit?.call());
   unawaited(MessageCache.instance.clearLegacyV1Only());
@@ -817,11 +839,8 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   }
   // Channel + permission cepat (tanpa getToken 5s) — getToken lazy setelah runApp
   await _initNotificationsFast();
-  dlog('[BOOT] step-2 notif selesai');
   await warmChatBackground();
-  dlog('[BOOT] step-3 bg image selesai');
   await AppTheme.init();
-  dlog('[BOOT] step-4 theme selesai');
   // Kunci portrait dua lapis (manifest sudah portrait — ini lapisan Dart,
   // menutup edge-case hot-restart / perangkat yang mengabaikan manifest).
   SystemChrome.setPreferredOrientations([

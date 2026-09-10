@@ -418,7 +418,9 @@ class MessageBubble extends StatelessWidget {
                       else if (msg.type == 'image' &&
                           msg.imageData.isEmpty &&
                           isImageDeferred)
-                        DeferredImage(onTap: () => onRetryImage?.call(msg.id))
+                        DeferredImage(
+                          onTap: () async => onRetryImage?.call(msg.id),
+                        )
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')
                         Stack(
@@ -647,32 +649,62 @@ class MessageBubble extends StatelessWidget {
   }
 }
 
-// Image yang belum di-load (pesan lama di luar window 50) — tampilkan icon refresh.
-class DeferredImage extends StatelessWidget {
-  final VoidCallback? onTap;
+// Image yang belum di-load (pesan lama di luar window 50) — placeholder
+// dengan auto-load di latar (screen memanggil fetchImage otomatis);
+// tap = retry manual. Spinner saat fetch berjalan (feedback nyata,
+// dulu: klik "tidak berefek" karena fetch gagal diam-diam).
+class DeferredImage extends StatefulWidget {
+  final Future<void> Function()? onTap;
   const DeferredImage({super.key, this.onTap});
+
+  @override
+  State<DeferredImage> createState() => _DeferredImageState();
+}
+
+class _DeferredImageState extends State<DeferredImage> {
+  bool _busy = false;
 
   @override
   Widget build(BuildContext context) {
     final s = context.read<LocaleProvider>().s;
     return GestureDetector(
-      onTap: onTap,
+      onTap: _busy
+          ? null
+          : () async {
+              setState(() => _busy = true);
+              try {
+                await widget.onTap?.call();
+              } finally {
+                if (mounted) setState(() => _busy = false);
+              }
+            },
       child: Container(
         width: 200,
         height: 120,
         color: AppTheme.bgInput,
         alignment: Alignment.center,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.refresh, color: AppTheme.textSecondary, size: 22),
-            SizedBox(height: 4),
-            Text(
-              s.msgPhotoTapToLoad,
-              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
+        child: _busy
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: AppTheme.primary,
+                ),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.refresh, color: AppTheme.textSecondary, size: 22),
+                  SizedBox(height: 4),
+                  Text(
+                    s.msgPhotoTapToLoad,
+                    style: AppText.caption.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

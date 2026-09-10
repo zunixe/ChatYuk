@@ -1100,6 +1100,14 @@ class AuthService {
     await _sb.from('user_photos').delete().eq('id', photoId);
   }
 
+  /// Hapus akun sendiri (Google Play account deletion requirement).
+  /// RPC server-side: arsip ke deleted_users lalu purge profil + auth user.
+  /// Melempar exception dengan kode server: NOT_AUTHENTICATED,
+  /// ADMIN_DELETE_FORBIDDEN, PROFILE_NOT_FOUND.
+  Future<void> deleteMyAccount() async {
+    await _sb.rpc('delete_my_account');
+  }
+
   Future<void> signOut() async {
     // Logout saat sesi dummy = KEMBALI ke admin, bukan menghancurkan sesi
     // dummy di server (signOut GoTrue akan me-revoke refresh token dummy

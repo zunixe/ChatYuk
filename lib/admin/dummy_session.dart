@@ -147,11 +147,19 @@ class DummySession {
       dlog('[DUMMY] backToAdmin setSession ok, landed=$landed');
       if (!AdminGate.isRealAdmin(landed)) {
         dlog('[DUMMY] backToAdmin landed on non-admin — tokens poisoned?');
+        // Token basi/tertukar → bersihkan flag & token supaya UI tidak
+        // "setengah admin" (banner dummy nempel di akun yang salah).
+        AuthService.instance.markDummyState(active: false);
+        await clearStored();
         return false;
       }
       return true;
     } catch (e) {
       dlog('[DUMMY] backToAdmin setSession failed: $e');
+      // Token admin kedaluwarsa → flag dummy HARUS dibersihkan; kalau tidak,
+      // setelah login manual banner dummy tetap tampil (state basi).
+      AuthService.instance.markDummyState(active: false);
+      await clearStored();
       return false;
     }
   }
@@ -171,7 +179,16 @@ class DummySession {
       dlog('[DUMMY] restore check error: $e');
       return;
     }
-    if (!isDummy) return;
+    if (!isDummy) {
+      // Sesi aktif bukan dummy → flag basi (sisa recovery gagal) harus
+      // dibersihkan supaya banner dummy tidak nempel di akun yang salah.
+      if (AuthService.instance.dummySessionActive) {
+        AuthService.instance.markDummyState(active: false);
+        await clearStored();
+        dlog('[DUMMY] restore: flag basi dibersihkan (sesi bukan dummy)');
+      }
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     final refresh = prefs.getString(_kAdminRefreshToken);
     final access = prefs.getString(_kAdminAccessToken);

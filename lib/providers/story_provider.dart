@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../utils.dart';
 
 import '../models/story_model.dart';
+import '../services/rt_resilient.dart';
 import '../services/story_service.dart';
 
 /// State story: tray (daftar author aktif), slide per author yang sedang
@@ -39,8 +40,20 @@ class StoryProvider extends ChangeNotifier {
   }
 
   StoryProvider() {
-    _storiesSub = _service.watchStories().listen((_) => _scheduleRefresh());
-    _viewsSub = _service.watchStoryViews().listen((_) => _scheduleRefresh());
+    // Resilient: tanpa onError, error channel MEMBUNUH subscription
+    // (tray story freeze sampai restart).
+    _storiesSub = listenResilient<String>(
+      () => _service.watchStories(),
+      (_) => _scheduleRefresh(),
+      isDisposed: () => _disposed,
+      onError: (e) => dlog('[StoryProvider] stories stream error: $e'),
+    );
+    _viewsSub = listenResilient<String>(
+      () => _service.watchStoryViews(),
+      (_) => _scheduleRefresh(),
+      isDisposed: () => _disposed,
+      onError: (e) => dlog('[StoryProvider] views stream error: $e'),
+    );
   }
 
   void _scheduleRefresh() {

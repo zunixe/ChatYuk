@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../utils.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
+import '../services/rt_resilient.dart';
 import '../services/media_disk_cache.dart';
 import '../services/message_cache.dart';
 
@@ -27,6 +28,8 @@ class OnlineUsersProvider extends ChangeNotifier {
   String? _error;
   bool _loaded = false;
   Timer? _debounce;
+  // Grace emit kosong (anti list kedip hilang) — lihat _onUsers.
+  Timer? _emptyGrace;
   Completer<void>? _warmCompleter;
 
   List<UserModel> get users => _users;
@@ -192,9 +195,44 @@ class OnlineUsersProvider extends ChangeNotifier {
 
   OnlineUsersProvider() {
     unawaited(warmup());
-    _sub = _service.getOnlineUsers().listen(
-      (users) {
+    // Resilient: error channel me-restart subscription otomatis (dulu:
+    // list online freeze sampai restart).
+    _sub = listenResilient<List<UserModel>>(
+      () => _service.getOnlineUsers(),
+      _onUsers,
+      isDisposed: () => _disposed,
+      onError: (e) {
+        dlog('[OnlineUsersProvider] stream error: $e');
         _loaded = true;
+        _error = e.toString();
+        if (!_disposed) notifyListeners();
+      },
+    );
+  }
+
+  void _onUsers(List<UserModel> users) {
+        _loaded = true;
+        // ── ANTI-HILANG-SEMUA (grace period emit kosong) ──
+        // Fast-path presence bisa emit KOSONG sesaat (belum sync) — dulu
+        // itu menimpa list yang sudah terisi → seluruh list kedip hilang,
+        // muncul lagi saat RPC slow path balik. Sekarang: emit kosong saat
+        // list terisi ditahan 8 detik; emit berisi sebelum timer habis
+        // membatalkannya (nol kedip). Timer habis = memang sepi sungguhan.
+        if (users.isEmpty && _users.isNotEmpty) {
+          _emptyGrace?.cancel();
+          _emptyGrace = Timer(const Duration(seconds: 8), () {
+            if (_disposed || _users.isNotEmpty) return;
+            _debounce?.cancel();
+            _error = null;
+            if (!_disposed) notifyListeners();
+          });
+          return;
+        }
+        if (users.isNotEmpty) {
+          // Emit berisi datang → batalkan pending kosong.
+          _emptyGrace?.cancel();
+          _emptyGrace = null;
+        }
         // Dedupe by uid + buang row tanpa uid — pertahanan terhadap duplikat
         // dari stream maupun cache disk berformat lama (uid='').
         final seen = <String>{};
@@ -269,14 +307,6 @@ class OnlineUsersProvider extends ChangeNotifier {
           MessageCache.instance.saveRawList('online_users', rows);
           _persistAvatars(deduped);
         }
-      },
-      onError: (e) {
-        dlog('[OnlineUsersProvider] stream error: $e');
-        _loaded = true;
-        _error = e.toString();
-        if (!_disposed) notifyListeners();
-      },
-    );
   }
 
   void updateAvatarForUid(String uid, String base64) {
@@ -303,6 +333,7 @@ class OnlineUsersProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _debounce?.cancel();
+    _emptyGrace?.cancel();
     _sub?.cancel();
     super.dispose();
   }
