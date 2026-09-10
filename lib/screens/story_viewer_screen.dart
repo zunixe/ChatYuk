@@ -387,12 +387,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Foto slide — kartu rounded ala IG: tidak full-bleed, ada
-          // bingkai di semua sisi. Atas di bawah header, bawah di atas
-          // kolom balasan (story orang) atau nav bar (story sendiri).
+          // Foto slide — kartu rounded full-bleed kiri-kanan, SAMA untuk
+          // owner & viewer. Kolom balasan melayang di atas foto (bukan
+          // mengurangi area) sehingga lebar foto selalu penuh.
           Positioned(
             top: MediaQuery.of(context).padding.top + 60,
-            bottom: MediaQuery.of(context).padding.bottom + (_own ? 10 : 68),
+            bottom: MediaQuery.of(context).padding.bottom + 10,
             left: 0,
             right: 0,
             child: ClipRRect(
