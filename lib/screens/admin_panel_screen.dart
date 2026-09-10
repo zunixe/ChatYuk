@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as lpn;
@@ -15,6 +17,7 @@ import '../providers/admin_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_service.dart';
+import '../services/avatar_service.dart';
 import '../services/geo_service.dart';
 import '../utils.dart';
 import 'admin_chat_list_screen.dart';
@@ -707,22 +710,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: item.$4.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: TextStyle(
-                        color: item.$4,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                _AdminAvatar(
+                  uid: '${u['id'] ?? ''}',
+                  name: name,
+                  color: item.$4,
                 ),
                 SizedBox(width: 10),
                 Expanded(
@@ -924,29 +915,32 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                             style: TextStyle(color: AppTheme.textSecondary),
                           ),
                         )
-                      : ListView(
+                      : ListView.builder(
                           controller: scrollCtrl,
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                          children: [
-                            if (key == 'users_all' ||
-                                key == 'users_active' ||
-                                key == 'users_registered' ||
-                                key == 'users_anonymous')
-                              for (final u in list)
-                                userRow(u as Map<String, dynamic>),
-                            if (key == 'rooms_active')
-                              for (final r in list)
-                                row(
-                                  '${r['room_name'] ?? r['room_id'] ?? '?'}',
-                                  (r['is_private'] == true)
-                                      ? s.roomPrivateLabel
-                                      : '',
-                                  '${r['user_count'] ?? 0} ${s.roomOnlineCount}',
-                                ),
-                            if (key == 'messages_today')
-                              for (final m in list)
-                                msgRow(m as Map<String, dynamic>),
-                          ],
+                          // Builder = baris (termasuk fetch avatar) hanya
+                          // jalan untuk viewport yang tampil → lazy & ringan.
+                          itemCount: list.length,
+                          itemBuilder: (_, i) {
+                            if (key == 'rooms_active') {
+                              final r = list[i] as Map<String, dynamic>;
+                              return row(
+                                '${r['room_name'] ?? r['room_id'] ?? '?'}',
+                                (r['is_private'] == true)
+                                    ? s.roomPrivateLabel
+                                    : '',
+                                '${r['user_count'] ?? 0} ${s.roomOnlineCount}',
+                              );
+                            }
+                            if (key == 'messages_today') {
+                              return msgRow(
+                                list[i] as Map<String, dynamic>,
+                              );
+                            }
+                            return userRow(
+                              list[i] as Map<String, dynamic>,
+                            );
+                          },
                         ),
                 ),
               ],
@@ -2755,6 +2749,125 @@ class _RegistrationsChartCardState extends State<_RegistrationsChartCard> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (ctx) => const _RegistrationsSheet(),
+    );
+  }
+}
+
+/// Avatar lazy per-baris di list Users admin (Ringkasan): fetch avatar
+/// hanya saat baris tampil (sheet memakai ListView.builder) + cache
+/// RAM/disk via AvatarB64Service. Tap → zoom besar. Tanpa foto → inisial.
+class _AdminAvatar extends StatefulWidget {
+  final String uid;
+  final String name;
+  final Color color;
+  const _AdminAvatar({
+    required this.uid,
+    required this.name,
+    required this.color,
+  });
+
+  @override
+  State<_AdminAvatar> createState() => _AdminAvatarState();
+}
+
+class _AdminAvatarState extends State<_AdminAvatar> {
+  Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (widget.uid.isEmpty) return;
+    try {
+      final b64 = await AvatarB64Service.instance.get(widget.uid);
+      if (!mounted || b64.isEmpty) return;
+      setState(() => _bytes = base64Decode(b64));
+    } catch (_) {}
+  }
+
+  void _zoom() {
+    final bytes = _bytes;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: bytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(bytes, fit: BoxFit.contain),
+                      )
+                    : CircleAvatar(
+                        radius: 90,
+                        backgroundColor: widget.color,
+                        child: Text(
+                          widget.name.isNotEmpty
+                              ? widget.name[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: AppGlyph.xl,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _zoom,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: _bytes != null
+              ? Colors.transparent
+              : widget.color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: _bytes != null
+              ? Image.memory(_bytes!, fit: BoxFit.cover)
+              : Center(
+                  child: Text(
+                    widget.name.isNotEmpty
+                        ? widget.name[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      fontSize: AppGlyph.avatarInitial(34),
+                      color: widget.color,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+        ),
+      ),
     );
   }
 }

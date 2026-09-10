@@ -974,6 +974,16 @@ class _CommentsListState extends State<_CommentsList> {
     _busy = false;
   }
 
+  Future<void> _share(Map<String, dynamic> c) async {
+    final id = (c['id'] as num?)?.toInt() ?? 0;
+    try {
+      final res = await TimelineService().shareComment(id);
+      final count = (res['share_count'] as num?)?.toInt();
+      if (!mounted) return;
+      if (count != null) setState(() => c['shareCount'] = count);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _items ?? [];
@@ -989,73 +999,82 @@ class _CommentsListState extends State<_CommentsList> {
         final isReply = ((c['parentId'] as num?)?.toInt() ?? 0) > 0;
         final createdAt = DateTime.tryParse(c['createdAt'] as String? ?? '');
         final likeCount = (c['likeCount'] as num?)?.toInt() ?? 0;
+        final shareCount = (c['shareCount'] as num?)?.toInt() ?? 0;
         final isLiked = c['isLiked'] == true;
         final name = c['authorName'] as String? ?? 'Anon';
         final text = c['text'] as String? ?? '';
+        final id = (c['id'] as num?)?.toInt() ?? 0;
         return Padding(
           padding: EdgeInsets.only(left: isReply ? 26 : 0, bottom: 12),
           // Bar luar rata bawah → like sejajar baris terakhir teks.
           // Bar dalam rata atas → avatar tetap di atas.
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
+                child: Text(
+                  (name.isEmpty ? 'A' : name[0]).toUpperCase(),
+                  style: AppText.label.copyWith(color: AppTheme.primary),
+                ),
+              ),
+              SizedBox(width: 10),
               Expanded(
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: AppTheme.primary.withValues(
-                        alpha: 0.15,
-                      ),
-                      child: Text(
-                        (name.isEmpty ? 'A' : name[0]).toUpperCase(),
-                        style: AppText.label.copyWith(
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  name,
-                                  style: AppText.label,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (createdAt != null) ...[
-                                SizedBox(width: 6),
-                                Text(
-                                  '· ${_timeAgoShort(createdAt)}',
-                                  style: AppText.micro.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ],
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            style: AppText.label,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          SizedBox(height: 2),
-                          Text(text, style: AppText.bodySmall),
+                        ),
+                        if (createdAt != null) ...[
+                          SizedBox(width: 6),
+                          Text(
+                            '· ${_timeAgoShort(createdAt)}',
+                            style: AppText.micro.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
                         ],
-                      ),
+                      ],
+                    ),
+                    SizedBox(height: 2),
+                    Text(text, style: AppText.bodySmall),
+                    SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _CommentAction(
+                          icon: isLiked
+                              ? PhosphorIconsFill.heart
+                              : PhosphorIconsRegular.heart,
+                          color: isLiked
+                              ? AppTheme.danger
+                              : AppTheme.textSecondary,
+                          count: likeCount,
+                          onTap: () => _like(c),
+                        ),
+                        _CommentAction(
+                          icon: PhosphorIconsRegular.chatCircle,
+                          color: AppTheme.textSecondary,
+                          count: null,
+                          onTap: () => widget.onReply?.call(id, name),
+                        ),
+                        _CommentAction(
+                          icon: PhosphorIconsRegular.paperPlaneTilt,
+                          color: AppTheme.textSecondary,
+                          count: shareCount,
+                          onTap: () => _share(c),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-              // Like doang, mentok kanan card.
-              _CommentAction(
-                icon: isLiked
-                    ? PhosphorIconsFill.heart
-                    : PhosphorIconsRegular.heart,
-                color: isLiked ? AppTheme.danger : AppTheme.textSecondary,
-                count: likeCount,
-                onTap: () => _like(c),
               ),
             ],
           ),
