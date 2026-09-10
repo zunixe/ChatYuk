@@ -262,8 +262,10 @@ class _AuthGateState extends State<_AuthGate> {
     // Non-anon (Google/email) yang login ulang tanpa melengkapi profil →
     // masuk ke app TAPI terkunci popup isian profil (bukan halaman
     // terpisah). Tetap muncul walau logout-login email sama sampai profil
-    // diisi. Anon bebas (pakai AnonPromptDialog per fitur).
+    // diisi. Anon bebas (pakai AnonPromptDialog per fitur). Sesi dummy
+    // admin juga bebas — bukan user sungguhan.
     final needsProfile = !auth.isAnonymous &&
+        !auth.dummySessionActive &&
         (auth.profile == null ||
             (auth.profile?.nickname.trim().isEmpty ?? true) ||
             !(auth.profile?.isRegistered ?? false));
