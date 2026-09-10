@@ -710,28 +710,37 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
   Widget _buildSlide() {
     final slide = _slides[_slide];
     final bytes = _localImg[slide.imagePath];
-    // VIEWER = FULL SCREEN (cover) — story selalu memenuhi layar.
-    // Yang letterbox (fit) hanya di composer.
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (bytes != null)
-          Image.memory(bytes, fit: BoxFit.cover)
-        else
-          Container(color: Colors.white10),
-          StoryTextOverlay(
-            text: slide.textOverlay,
-            x: slide.textX,
-            y: slide.textY,
-            colorIndex: slide.textColorIndex,
-            sizeIndex: slide.textSizeIndex,
-            scale: slide.textScale,
-            rotation: slide.textRotation,
-            withBg: slide.textBg,
+    // Proporsional 9:16 seperti kotak preview tray (64x114, cover) —
+    // layar HP lebih jangkung dari 9:16 sehingga full-screen cover
+    // memotong atas-bawah dan tidak sesuai aslinya. Letterbox hitam.
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: 9 / 16,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (bytes != null)
+                Image.memory(bytes, fit: BoxFit.cover)
+              else
+                Container(color: Colors.white10),
+              StoryTextOverlay(
+                text: slide.textOverlay,
+                x: slide.textX,
+                y: slide.textY,
+                colorIndex: slide.textColorIndex,
+                sizeIndex: slide.textSizeIndex,
+                scale: slide.textScale,
+                rotation: slide.textRotation,
+                withBg: slide.textBg,
+              ),
+            ],
           ),
-        ],
-      );
-    }
+        ),
+      ),
+    );
+  }
 }
 
 /// Tombol header viewer yang rapat — IconButton Material 3 selalu

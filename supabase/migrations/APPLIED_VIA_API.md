@@ -230,3 +230,11 @@ Jika `supabase db push` timeout lagi:
 - **Isi:** (1) delete follows orphan, (2) rewrite `follow_count_sync` → hitung HANYA follows yang kedua profilnya ada (join profiles — identik semantik `social_list`), (3) backfill semua profiles.
 - **Apply:** via `supabase db query --linked -f` (idempoten). Tercatat di `schema_migrations` (version `20260907150000`).
 - **Verifikasi live:** SimpleMe `followers_count = 1` = `actual_list_count = 1` ✓, playwright 1/1 ✓. Total follows = 3 (tanpa orphan).
+
+## 2026-09-10 — 20260910000001_admin_chat_last_read.sql (APPLY)
+
+- **Masalah:** Monitor chat admin (`admin_chat_view_screen.dart`) hardcode `isRead: isMe` → SEMUA bubble kanan selalu centang-2, tidak sesuai chat asli (centang-1). Akar tambahan: `_markDummyRead` memanggil RPC `admin_mark_chat_read` yang SELALU gagal `Not authorized` dari sesi dummy (guard minta email admin) — DB tidak pernah berubah, makanya chat asli benar tetap centang-1.
+- **Isi:** RPC baru `admin_get_chat_last_read(p_chat_id)` → `last_read_at` (jsonb map uid→waktu), SECURITY DEFINER + guard admin (sama dengan RPC monitor lain). READ-ONLY.
+- **Client:** `AdminService.getChatLastRead` + `AdminProvider.fetchChatLastRead`; view hitung `isRead` per pesan vs last-read PENERIMA (cermin logika chat asli, kedua sisi), fallback centang-1; `_markDummyRead` + panggilannya DIHAPUS (monitoring read-only — intip tidak boleh membalikkan receipt orang).
+- **Apply:** via Management API (catatan: `ConvertTo-Json` PS 5.1 merusak string SQL multi-baris jadi objek — bangun body JSON manual). Tercatat di `schema_migrations`.
+- **Verifikasi:** `select proname from pg_proc where proname='admin_get_chat_last_read'` → 1 row; `select admin_get_chat_last_read('nonexistent')` → `{}`.

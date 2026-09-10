@@ -756,6 +756,16 @@ Future<void> fetchDevices() async {
     if (!_disposed) notifyListeners();
   }
 
+  /// last_read_at chat (uid → ISO) untuk hitung centang-2 monitor.
+  Future<Map<String, String>> fetchChatLastRead(String chatId) async {
+    try {
+      return await _service.getChatLastRead(chatId);
+    } catch (e) {
+      dlog('[ADMIN] fetchChatLastRead error: $e');
+      return {};
+    }
+  }
+
   /// Fetch image_data untuk satu foto (retry / thumb).
   Future<String> fetchMessageImage(int messageId) async {
     try {
