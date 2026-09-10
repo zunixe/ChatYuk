@@ -1796,6 +1796,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       pp.checkAndShowStreakToast(context, s.isId);
     });
 
+    // Header dinamis: AppBar 56px standar kepotong bila 3-4 baris
+    // (nama + subtitle + hashtag + status). Tinggi mengikuti baris tampil.
+    final headerRows =
+        1 +
+        (subtitle.isNotEmpty ? 1 : 0) +
+        (_otherHashtags.isNotEmpty ? 1 : 0) +
+        ((!isBlocked && (_otherStatus == 'online' || _otherLastSeen != null))
+            ? 1
+            : 0);
+    final toolbarH = headerRows <= 2 ? 56.0 : 56.0 + (headerRows - 2) * 15.0;
+
     return Scaffold(
       extendBody: true,
       backgroundColor: Colors.transparent,
@@ -1804,6 +1815,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       // via viewInsets/MediaQuery — layout konten tidak meng-krem bg.
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
+        toolbarHeight: toolbarH,
         titleSpacing: 0,
         title: Row(
           children: [
