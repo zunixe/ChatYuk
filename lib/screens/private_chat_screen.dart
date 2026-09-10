@@ -111,20 +111,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   DateTime? _otherLastSeen;
   String _otherCountry = '';
   String _otherCity = '';
-  List<String> _otherHashtags = const [];
   bool _otherRegistered = false;
   bool _wasBlocked = false;
 
-  static const List<Color> _hashColors = [
-    Color(0xFFFFD740),
-    Color(0xFFFF80AB),
-    Color(0xFF69F0AE),
-    Color(0xFFFFAB40),
-    Color(0xFFB388FF),
-    Color(0xFF80D8FF),
-  ];
-
-  Color _hashColor(int i) => _hashColors[i % _hashColors.length];
   final List<MessageModel> _pending = [];
   // LayerLink per pesan — dipakai anchor action bar (icon Balas/Edit/Hapus)
   // tepat di atas bubble. CompositedTransformFollower ikut mengikuti bubble
@@ -299,7 +288,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       setState(() {
         _otherCity = city;
         _otherCountry = country;
-        _otherHashtags = p.hashtags;
         // Fix: profil lawan di-fetch live — bukan cuma dari param,
         // supaya chat yang dibuka lewat notifikasi ikut tahu status
         // terdaftar lawan (tombol call & icon verified).
@@ -1796,15 +1784,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       pp.checkAndShowStreakToast(context, s.isId);
     });
 
-    // Header dinamis: AppBar 56px standar kepotong bila 3-4 baris
-    // (nama + subtitle + hashtag + status). Tinggi mengikuti baris tampil.
+    // Header rapat seperti semula: maks 2 baris (nama + subtitle atau
+    // status) — AppBar standar 56px. Hashtag tidak lagi di header.
     final headerRows =
-        1 +
-        (subtitle.isNotEmpty ? 1 : 0) +
-        (_otherHashtags.isNotEmpty ? 1 : 0) +
-        ((!isBlocked && (_otherStatus == 'online' || _otherLastSeen != null))
-            ? 1
-            : 0);
+        1 + ((subtitle.isNotEmpty || (!isBlocked && _otherStatus == 'online') || (!isBlocked && _otherLastSeen != null)) ? 1 : 0);
     final toolbarH = headerRows <= 2 ? 56.0 : 56.0 + (headerRows - 2) * 15.0;
 
     return Scaffold(
@@ -1901,37 +1884,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (subtitle.isNotEmpty)
-                              Text(
-                                subtitle,
-                                style: AppText.bodySmall.copyWith(
-                                  color: Colors.white70,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            if (_otherHashtags.isNotEmpty)
-                              Text.rich(
-                                TextSpan(
-                                  children: [
-                                    for (final e
-                                        in _otherHashtags.asMap().entries) ...[
-                                      if (e.key > 0) TextSpan(text: '  '),
-                                      TextSpan(
-                                        text: '#${e.value}',
-                                        style: AppText.caption.copyWith(
-                                          color: _hashColor(e.key),
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            // Baris status/last-seen di bawah hashtag —
-                            // hijau saat online, "terakhir dilihat …" saat tidak.
+                        if (subtitle.isNotEmpty)
+                          Text(
+                            subtitle,
+                            style: AppText.bodySmall.copyWith(
+                              color: Colors.white70,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        // Baris status/last-seen — hijau saat online,
+                        // "terakhir dilihat …" saat tidak. Hashtag sengaja
+                        // tidak ditampilkan di header (user request).
                             if (!isBlocked && _otherStatus == 'online')
                               Text(
                                 s.statusOnline,
