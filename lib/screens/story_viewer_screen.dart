@@ -387,12 +387,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Foto slide — kartu rounded full-bleed kiri-kanan, SAMA untuk
-          // owner & viewer. Kolom balasan melayang di atas foto (bukan
-          // mengurangi area) sehingga lebar foto selalu penuh.
+          // Foto slide — full-bleed kiri-kanan, SAMA untuk owner & viewer.
+          // Foto mulai dari tepi atas (di belakang header melayang) dan
+          // berakhir DI ATAS kolom balasan (tidak overlap) — area yang
+          // lebih tinggi membuat lebar penuh selalu muat.
           Positioned(
-            top: MediaQuery.of(context).padding.top + 60,
-            bottom: MediaQuery.of(context).padding.bottom + 10,
+            top: 0,
+            bottom:
+                MediaQuery.of(context).padding.bottom + (_own ? 10 : 68),
             left: 0,
             right: 0,
             child: ClipRRect(
