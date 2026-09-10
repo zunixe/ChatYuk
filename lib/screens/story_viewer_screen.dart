@@ -713,30 +713,34 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     // Proporsional mengikuti kotak preview tray: tile 64x114 dengan
     // ring 2.5 → area gambar 59x109, cover + center SAMA di keduanya
     // sehingga crop persis identik (9:16 generik meleset ~4%).
-    // Layar HP lebih jangkung → letterbox hitam.
+    // Full-bleed kiri-kanan (padding 0) + sudut rounded, letterbox hitam
+    // atas-bawah karena layar lebih jangkung.
     return Container(
       color: Colors.black,
       child: Center(
-        child: AspectRatio(
-          aspectRatio: 59 / 109,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (bytes != null)
-                Image.memory(bytes, fit: BoxFit.cover)
-              else
-                Container(color: Colors.white10),
-              StoryTextOverlay(
-                text: slide.textOverlay,
-                x: slide.textX,
-                y: slide.textY,
-                colorIndex: slide.textColorIndex,
-                sizeIndex: slide.textSizeIndex,
-                scale: slide.textScale,
-                rotation: slide.textRotation,
-                withBg: slide.textBg,
-              ),
-            ],
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: AspectRatio(
+            aspectRatio: 59 / 109,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (bytes != null)
+                  Image.memory(bytes, fit: BoxFit.cover)
+                else
+                  Container(color: Colors.white10),
+                StoryTextOverlay(
+                  text: slide.textOverlay,
+                  x: slide.textX,
+                  y: slide.textY,
+                  colorIndex: slide.textColorIndex,
+                  sizeIndex: slide.textSizeIndex,
+                  scale: slide.textScale,
+                  rotation: slide.textRotation,
+                  withBg: slide.textBg,
+                ),
+              ],
+            ),
           ),
         ),
       ),
