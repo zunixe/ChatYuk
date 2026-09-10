@@ -551,6 +551,7 @@ class TimelineProvider extends ChangeNotifier {
           _hasMore = more;
           _invalidateView();
           _syncScopeCache();
+          _prefetchComments();
         } else {
           // Scope bukan tab aktif (prewarm) — cukup isi cache, jangan
           // sentuh feed tampilan.
@@ -577,6 +578,33 @@ class TimelineProvider extends ChangeNotifier {
       if (_scope == scope) _loading = false;
       if (!_disposed) notifyListeners();
     }
+  }
+
+  /// Prefetch komentar post teratas yang ada komentarnya — sheet comment
+  /// dibuka instan dari cache (jaringan tethering lambat). Fire-and-forget:
+  /// tidak menunda render feed, skip yang sudah ada di cache.
+  void _prefetchComments() {
+    if (_disposed) return;
+    var n = 0;
+    for (final p in _posts) {
+      if (n >= 5) break;
+      final id = '${p['id'] ?? ''}';
+      final cc = (p['commentCount'] as num?)?.toInt() ?? 0;
+      if (id.isEmpty || cc <= 0 || _commentCache.containsKey(id)) continue;
+      n++;
+      unawaited(_fetchCommentsBg(id));
+    }
+  }
+
+  Future<void> _fetchCommentsBg(String postId) async {
+    try {
+      final list = await _service
+          .comments(postId)
+          .timeout(const Duration(seconds: 10));
+      if (_disposed) return;
+      // Hanya isi bila masih kosong — jangan timpa optimistic user.
+      _commentCache.putIfAbsent(postId, () => list);
+    } catch (_) {}
   }
 
   /// Update avatar di semua post milik uid — dipanggil setelah ganti foto

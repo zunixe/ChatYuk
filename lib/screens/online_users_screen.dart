@@ -2149,9 +2149,9 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     final p = widget.item.thumbPath;
     if (p.isEmpty) return;
     if (StoragePhotoService.instance.isAvatarPath(p)) return;
-    // Kunci cache beda dari full image (thumb 160px vs full) — hash FNV,
-    // string apa pun aman.
-    final key = '$p#thumb160';
+    // Kunci cache beda dari full image + mencakup dimensi (thumb lawas
+    // 160px tanpa resize aspeknya hancur di server — jangan dipakai lagi).
+    final key = '$p#thumb160x296';
     // Disk dulu (repeat view instan) — baru network + simpan disk.
     try {
       final d = MediaDiskCache.instance.readSync(key) ??
@@ -2163,7 +2163,13 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     } catch (_) {}
     try {
       // Thumb server-side (KB, bukan MB) — fallback full otomatis.
-      final b = await StoragePhotoService.instance.downloadThumbBytes(p);
+      // Proporsional mengikuti tile 59x109: height+cover eksplisit
+      // (width saja tanpa resize dihancurkan server jadi 160x1440).
+      final b = await StoragePhotoService.instance.downloadThumbBytes(
+        p,
+        height: 296,
+        resize: ResizeMode.cover,
+      );
       if (mounted && b != null && b.isNotEmpty) {
         setState(() => _thumb = b);
         unawaited(MediaDiskCache.instance.write(key, b));

@@ -710,14 +710,15 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
   Widget _buildSlide() {
     final slide = _slides[_slide];
     final bytes = _localImg[slide.imagePath];
-    // Proporsional 9:16 seperti kotak preview tray (64x114, cover) —
-    // layar HP lebih jangkung dari 9:16 sehingga full-screen cover
-    // memotong atas-bawah dan tidak sesuai aslinya. Letterbox hitam.
+    // Proporsional mengikuti kotak preview tray: tile 64x114 dengan
+    // ring 2.5 → area gambar 59x109, cover + center SAMA di keduanya
+    // sehingga crop persis identik (9:16 generik meleset ~4%).
+    // Layar HP lebih jangkung → letterbox hitam.
     return Container(
       color: Colors.black,
       child: Center(
         child: AspectRatio(
-          aspectRatio: 9 / 16,
+          aspectRatio: 59 / 109,
           child: Stack(
             fit: StackFit.expand,
             children: [
