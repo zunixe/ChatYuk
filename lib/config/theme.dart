@@ -155,12 +155,9 @@ class AppTheme {
   }
 
   // ── Brand (konstan di kedua mode) ──
-  // Indigo-blue modern (#2563EB, skill UI/UX rekomendasi) — menggantikan
-  // Material Blue #2196F3. Gradient FAB/header otomatis ikut karena
-  // seluruh screen memakai token ini.
-  static const Color primary = Color(0xFF2563EB);
-  static const Color primaryDark = Color(0xFF1D4ED8);
-  static const Color accent = Color(0xFF06B6D4);
+  static const Color primary = Color(0xFF2196F3);
+  static const Color primaryDark = Color(0xFF1976D2);
+  static const Color accent = Color(0xFF00BCD4);
 
   // ── Palet light ──
   static const _bgScreenLight = Color(0xFFF0F4F8);
@@ -199,7 +196,7 @@ class AppTheme {
   static const Color idle = Color(0xFFFFB300);
   static const Color offline = Color(0xFFBDBDBD);
   static const Color danger = Color(0xFFF44336);
-  static const Color male = Color(0xFF2563EB);
+  static const Color male = Color(0xFF2196F3);
   static const Color female = Color(0xFFE91E63);
 
   /// Gradient header/AppBar — ikut mode (gelap di dark mode).
