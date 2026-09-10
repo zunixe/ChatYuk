@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -9,6 +11,7 @@ import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/skeleton_card.dart';
 import 'post_composer_screen.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/empty_state_view.dart';
 
 /// Timeline feed: tab Semua / Mengikuti + infinite scroll + refresh.
 class TimelineScreen extends StatefulWidget {
@@ -27,6 +30,9 @@ class _TimelineScreenState extends State<TimelineScreen>
   final Map<int, double> _scrollOffsets = {};
   final TextEditingController _searchCtrl = TextEditingController();
   String _search = '';
+  // Hasil debounce _search — filter list pakai ini, bukan _search mentah.
+  String _appliedSearch = '';
+  Timer? _searchDebounce;
   bool _isSearching = false;
 
   @override
@@ -39,6 +45,7 @@ class _TimelineScreenState extends State<TimelineScreen>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _tab.removeListener(_onTabChanged);
     _tab.dispose();
     _scroll.removeListener(_onScroll);
@@ -54,6 +61,16 @@ class _TimelineScreenState extends State<TimelineScreen>
       // di posisi yang sama (klik terasa instan, tidak lompat ke atas).
       if (_scroll.hasClients) _scrollOffsets[_current] = _scroll.offset;
       _current = _tab.index;
+      // Reset search saat ganti tab — filter basi dari tab lama tidak
+      // boleh membawa hasil ke scope baru.
+      _searchCtrl.clear();
+      _searchDebounce?.cancel();
+      if (_search.isNotEmpty || _appliedSearch.isNotEmpty) {
+        setState(() {
+          _search = '';
+          _appliedSearch = '';
+        });
+      }
       _load(refresh: true);
       // Pulihkan posisi scroll scope baru setelah frame ter-render.
       final target = _scrollOffsets[_current];
@@ -95,11 +112,17 @@ class _TimelineScreenState extends State<TimelineScreen>
     );
     final hasMore = context.select<TimelineProvider, bool>((t) => t.hasMore);
     final loading = context.select<TimelineProvider, bool>((t) => t.loading);
+    final fetchFailed = context.select<TimelineProvider, bool>(
+      (t) => t.fetchFailed,
+    );
     final scope = _scope;
-    final posts = _search.isEmpty
+    // Debounce search: filter pakai _appliedSearch (di-update 250ms
+    // setelah keystroke terakhir) — tiap huruf tidak rebuild seluruh list.
+    final effectiveSearch = _appliedSearch;
+    final posts = effectiveSearch.isEmpty
         ? postsRaw
         : postsRaw.where((p) {
-            final q = _search.toLowerCase();
+            final q = effectiveSearch.toLowerCase();
             final text = (p['text'] as String? ?? '').toLowerCase();
             final name = (p['authorName'] as String? ?? '').toLowerCase();
             return text.contains(q) || name.contains(q);
@@ -144,7 +167,21 @@ class _TimelineScreenState extends State<TimelineScreen>
                   child: TextField(
                     controller: _searchCtrl,
                     autofocus: true,
-                    onChanged: (v) => setState(() => _search = v),
+                    onChanged: (v) {
+                      _search = v;
+                      // Debounce 250ms — filter berat hanya jalan setelah
+                      // user berhenti mengetik, bukan tiap keystroke.
+                      _searchDebounce?.cancel();
+                      _searchDebounce = Timer(
+                        const Duration(milliseconds: 250),
+                        () {
+                          if (mounted) {
+                            setState(() => _appliedSearch = _search);
+                          }
+                        },
+                      );
+                      setState(() {});
+                    },
                     style: AppText.body.copyWith(color: Colors.white),
                     decoration: InputDecoration(
                       isDense: true,
@@ -198,38 +235,84 @@ class _TimelineScreenState extends State<TimelineScreen>
               // Empty state HANYA saat fetch selesai & benar-benar kosong. Saat
               // loading pertama kali (atau tab switch) tampilkan spinner — jangan
               // blink ke "Belum ada postingan" kalau sebenarnya ada data.
-              child: posts.isEmpty && !loading
+              child: posts.isEmpty && !loading && fetchFailed
+            // Fetch gagal (network/RPC) — BUKAN feed kosong. Tampilkan
+            // pesan error + tombol coba lagi, jangan empty state palsu.
             ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   SizedBox(
                     height: 400,
-                    child: _EmptyState(
-                      title: scope == 'all'
-                          ? s.emptyTimeline
-                          : scope == 'following'
-                          ? s.emptyFollowing
-                          : s.emptyMine,
-                      hint: scope == 'all'
-                          ? s.emptyTimelineHint
-                          : scope == 'following'
-                          ? s.emptyFollowingHint
-                          : s.emptyMineHint,
-                      // Semua tab: "Ketuk +" bisa diklik — seragam, anon popup, registered ke composer
-                      actionLabel: s.emptyTimelineCta,
-                      onAction: () {
-                        final auth = context.read<AuthProvider>();
-                        if (!(auth.profile?.isRegistered ?? false)) {
-                          showAnonPromptDialog(context);
-                          return;
-                        }
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const PostComposerScreen(),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.wifi_off_rounded,
+                          size: 40,
+                          color: AppTheme.textSecondary,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          s.msgServerError,
+                          style: AppText.bodyStrong.copyWith(
+                            color: AppTheme.textSecondary,
                           ),
-                        );
-                      },
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: () => _load(refresh: true),
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: Text(s.btnRetry),
+                        ),
+                      ],
                     ),
+                  ),
+                ],
+              )
+            : posts.isEmpty && !loading
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: 400,
+                    // Search aktif + hasil filter kosong → bukan feed
+                    // kosong; jangan tampilkan CTA "Ketuk +" palsu.
+                    child: effectiveSearch.isNotEmpty
+                        ? Center(
+                            child: Text(
+                              s.searchNoResult,
+                              style: AppText.bodyStrong.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          )
+                        : EmptyStateView(
+                            icon: Icons.dynamic_feed_rounded,
+                            title: scope == 'all'
+                                ? s.emptyTimeline
+                                : scope == 'following'
+                                ? s.emptyFollowing
+                                : s.emptyMine,
+                            hint: scope == 'all'
+                                ? s.emptyTimelineHint
+                                : scope == 'following'
+                                ? s.emptyFollowingHint
+                                : s.emptyMineHint,
+                            // Semua tab: "Ketuk +" bisa diklik — seragam, anon popup, registered ke composer
+                            actionLabel: s.emptyTimelineCta,
+                            onAction: () {
+                              final auth = context.read<AuthProvider>();
+                              if (!(auth.profile?.isRegistered ?? false)) {
+                                showAnonPromptDialog(context);
+                                return;
+                              }
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const PostComposerScreen(),
+                                ),
+                              );
+                            },
+                          ),
                   ),
                 ],
               )
@@ -281,112 +364,3 @@ class _TimelineScreenState extends State<TimelineScreen>
   bool get wantKeepAlive => true;
 }
 
-class _EmptyState extends StatelessWidget {
-  final String title;
-  final String hint;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-  const _EmptyState({
-    required this.title,
-    required this.hint,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Lingkaran + ikon — komposisi sama dengan halaman Online.
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 88,
-                  height: 88,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                Icon(
-                  Icons.dynamic_feed_rounded,
-                  size: 48,
-                  color: AppTheme.primary,
-                ),
-                Positioned(
-                  right: 4,
-                  bottom: 4,
-                  child: Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: AppTheme.accent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                    ),
-                    child: Icon(Icons.add, color: Colors.white, size: 14),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Text(title, style: AppText.bodyStrong, textAlign: TextAlign.center),
-            SizedBox(height: 6),
-            Text(
-              hint,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 14),
-            if (actionLabel != null)
-              FilledButton(onPressed: onAction, child: Text(actionLabel!))
-            else
-              // Petunjuk tombol +
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      s.emptyTimelineCta,
-                      style: AppText.caption.copyWith(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}

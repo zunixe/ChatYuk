@@ -183,7 +183,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       _shareUrlCtrl.text = '${data['share_url'] ?? ''}';
       if (mounted) setState(() => _pointSettingsLoaded = true);
     } catch (e) {
-      debugPrint('[ADMIN] loadPointSettings error: $e');
+      dlog('[ADMIN] loadPointSettings error: $e');
     }
   }
 

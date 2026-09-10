@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PointsService {
@@ -179,7 +179,7 @@ class PointsService {
       final res = await _sb.rpc('room_pricing');
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
-      debugPrint('[PointsService] roomPricing error: $e');
+      dlog('[PointsService] roomPricing error: $e');
     }
     return {
       'create_paid': 100,

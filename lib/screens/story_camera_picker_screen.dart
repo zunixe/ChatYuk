@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/locale_provider.dart';
+import '../config/theme.dart';
 import 'story_camera_capture_screen.dart';
 
 /// Picker foto story — GRID:
@@ -84,11 +86,11 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
         backgroundColor: const Color(0xFF1C1C1E),
         title: Text(
           s.storyPartialTitle,
-          style: const TextStyle(color: Colors.white, fontSize: 16),
+          style: AppText.bodyStrong.copyWith(color: Colors.white),
         ),
         content: Text(
           s.storyPartialDesc,
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
+          style: AppText.bodySmall.copyWith(color: Colors.white70),
         ),
         actions: [
           TextButton(
@@ -143,9 +145,17 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
       }
       final limitedNow = ps == PermissionState.limited;
       if (mounted) setState(() => _limited = limitedNow);
+      // modifiedDate = urut berdasar kapan file terakhir berubah di
+      // galeri — foto terbaru (termasuk yang baru di-save/download)
+      // selalu di atas. Default createDate bikin foto lama yang baru
+      // di-copy/download nyangkut di urutan atas.
       final albums = await PhotoManager.getAssetPathList(
         type: RequestType.image,
         onlyAll: true,
+        filterOption: FilterOptionGroup()
+          ..addOrderOption(
+            const OrderOption(type: OrderOptionType.updateDate, asc: false),
+          ),
       );
       if (albums.isEmpty) {
         if (mounted) {
@@ -185,7 +195,7 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
         });
       }
     } catch (e) {
-      debugPrint('[StoryGrid] gallery error: $e');
+      dlog('[StoryGrid] gallery error: $e');
       if (mounted) {
         setState(() {
           _loading = false;
@@ -210,7 +220,7 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
       final f = await asset.file;
       if (f != null && mounted) Navigator.pop(context, f);
     } catch (e) {
-      debugPrint('[StoryGrid] pick error: $e');
+      dlog('[StoryGrid] pick error: $e');
     }
   }
 
@@ -224,11 +234,7 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           s.storyAddTooltip,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
+          style: AppText.title.copyWith(color: Colors.white),
         ),
       ),
       body: _noPermission

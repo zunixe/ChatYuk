@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 
@@ -62,7 +63,7 @@ class StoragePhotoService {
       await _sb.storage.from(_bucket).uploadBinary(path, bytes);
       return path;
     } catch (e) {
-      debugPrint('[StoragePhoto] uploadStoryImage error: $e');
+      dlog('[StoragePhoto] uploadStoryImage error: $e');
       return null;
     }
   }
@@ -82,7 +83,7 @@ class StoragePhotoService {
       await _sb.storage.from(_bucket).uploadBinary(path, bytes);
       return path;
     } catch (e) {
-      debugPrint('[StoragePhoto] uploadPostImage error: $e');
+      dlog('[StoragePhoto] uploadPostImage error: $e');
       return null;
     }
   }
@@ -98,7 +99,7 @@ class StoragePhotoService {
       await _sb.storage.from(_bucket).uploadBinary(path, bytes);
       return path;
     } catch (e) {
-      debugPrint('[StoragePhoto] upload error: $e');
+      dlog('[StoragePhoto] upload error: $e');
       return null;
     }
   }
@@ -117,7 +118,7 @@ class StoragePhotoService {
           );
       return path;
     } catch (e) {
-      debugPrint('[StoragePhoto] uploadVoice error: $e');
+      dlog('[StoragePhoto] uploadVoice error: $e');
       return null;
     }
   }
@@ -131,7 +132,7 @@ class StoragePhotoService {
       if (bytes.isEmpty) return null;
       return base64Encode(bytes);
     } catch (e) {
-      debugPrint('[StoragePhoto] download error: $e');
+      dlog('[StoragePhoto] download error: $e');
       return null;
     }
   }
@@ -143,7 +144,7 @@ class StoragePhotoService {
       if (bytes.isEmpty) return null;
       return bytes;
     } catch (e) {
-      debugPrint('[StoragePhoto] downloadBytes error: $e');
+      dlog('[StoragePhoto] downloadBytes error: $e');
       return null;
     }
   }
@@ -161,7 +162,7 @@ class StoragePhotoService {
           );
       if (bytes.isNotEmpty) return bytes;
     } catch (e) {
-      debugPrint('[StoragePhoto] thumb transform gagal, fallback full: $e');
+      dlog('[StoragePhoto] thumb transform gagal, fallback full: $e');
     }
     return downloadBytes(path);
   }
@@ -171,7 +172,7 @@ class StoragePhotoService {
     try {
       await _sb.storage.from(_bucket).remove([path]);
     } catch (e) {
-      debugPrint('[StoragePhoto] delete error: $e');
+      dlog('[StoragePhoto] delete error: $e');
     }
   }
 
@@ -195,7 +196,7 @@ class StoragePhotoService {
           );
       return path;
     } catch (e) {
-      debugPrint('[StoragePhoto] uploadAvatar error: $e');
+      dlog('[StoragePhoto] uploadAvatar error: $e');
       return null;
     }
   }
@@ -211,7 +212,7 @@ class StoragePhotoService {
       await _sb.storage.from(_bucket).uploadBinary(path, bytes);
       return path;
     } catch (e) {
-      debugPrint('[StoragePhoto] uploadPhoto error: $e');
+      dlog('[StoragePhoto] uploadPhoto error: $e');
       return null;
     }
   }

@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
@@ -105,14 +106,14 @@ class DeviceInfoService {
         }
       }
     } catch (e) {
-      debugPrint('[DEVICE] collectDevice failed: $e');
+      dlog('[DEVICE] collectDevice failed: $e');
     }
 
     try {
       final p = await PackageInfo.fromPlatform();
       appVersion = p.version;
     } catch (e) {
-      debugPrint('[DEVICE] packageInfo failed: $e');
+      dlog('[DEVICE] packageInfo failed: $e');
     }
 
     return (
@@ -154,7 +155,7 @@ class DeviceInfoService {
         'p_nickname': nickname,
       });
     } catch (e) {
-      debugPrint('[DEVICE] syncToServer error: $e');
+      dlog('[DEVICE] syncToServer error: $e');
     }
   }
 }

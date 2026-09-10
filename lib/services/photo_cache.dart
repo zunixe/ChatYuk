@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'message_cache.dart';
@@ -198,7 +199,7 @@ class PhotoCache {
         }
       }
     } catch (e) {
-      debugPrint('[PhotoCache] loadMany error: $e');
+      dlog('[PhotoCache] loadMany error: $e');
     }
     return result;
   }
@@ -269,7 +270,7 @@ class PhotoCache {
         await folder.delete(recursive: true);
       }
     } catch (e) {
-      debugPrint('[PhotoCache] clearAll ignored: $e');
+      dlog('[PhotoCache] clearAll ignored: $e');
     }
   }
 
@@ -288,7 +289,7 @@ class PhotoCache {
         }
       }
     } catch (e) {
-      debugPrint('[PhotoCache] clearAll ignored: $e');
+      dlog('[PhotoCache] clearAll ignored: $e');
     }
   }
 }

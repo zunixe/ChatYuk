@@ -9,7 +9,7 @@
 // Build rilis (APKPure/Play/Uptodown) memakai entry default
 // lib/main.dart — tanpa flag -t apa pun.
 // ============================================================
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter/widgets.dart';
 
 import 'admin/admin_wiring.dart';
@@ -21,7 +21,7 @@ Future<void> main() async {
   try {
     wireAdmin();
   } catch (e, st) {
-    debugPrint('[WIRE-CRASH] $e\n$st');
+    dlog('[WIRE-CRASH] $e\n$st');
     rethrow;
   }
   await bootstrap(firebaseOptions: DefaultFirebaseOptionsAdmin.currentPlatform);

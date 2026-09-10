@@ -192,6 +192,7 @@ class _PostCardState extends State<PostCard> {
                   Padding(
                     padding: EdgeInsets.fromLTRB(16, 4, 8, 16),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
                           child: Container(
@@ -205,29 +206,60 @@ class _PostCardState extends State<PostCard> {
                             ),
                             child: TextField(
                               controller: ctrl,
-                              style: TextStyle(color: AppTheme.textPrimary),
+                              style: AppText.body,
                               decoration: InputDecoration(
                                 hintText: replying
                                     ? s.hintReplyTo(replyToName)
                                     : s.hintComment,
+                                hintStyle: AppText.body.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                                filled: false,
                                 border: InputBorder.none,
                                 enabledBorder: InputBorder.none,
                                 focusedBorder: InputBorder.none,
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 16,
-                                  vertical: 12,
+                                  vertical: 10,
                                 ),
-                                isDense: true,
                               ),
+                              minLines: 1,
+                              maxLines: 4,
+                              keyboardType: TextInputType.multiline,
+                              textCapitalization: TextCapitalization.sentences,
                               textInputAction: TextInputAction.send,
                               onSubmitted: (_) =>
                                   _sendComment(ctx2, ctrl, replyToId),
                             ),
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.send, color: AppTheme.primary),
-                          onPressed: () => _sendComment(ctx2, ctrl, replyToId),
+                        const SizedBox(width: 8),
+                        // Tombol send bulatan — gaya sama dengan composer
+                        // private chat (40px, primary, ikon putih).
+                        GestureDetector(
+                          onTap: () => _sendComment(ctx2, ctrl, replyToId),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primary.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.send_rounded,
+                              size: 20,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -303,15 +335,27 @@ class _PostCardState extends State<PostCard> {
 
   Future<void> _share() async {
     final s = context.read<LocaleProvider>().s;
+    final author = _p['authorName'] as String? ?? 'Anon';
+    final text = (_p['text'] as String? ?? '').trim();
+    // Link post → Play Store (identitas post via id) + teks author.
+    final link =
+        'https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
+    final content = text.isEmpty
+        ? '$author\n\n$link'
+        : '$author: $text\n\n$link';
+    // Counter HANYA bertambah saat user benar-benar menyelesaikan share
+    // (status success) — tap icon lalu batal tidak dihitung.
+    final result = await Share.share(
+      content,
+      subject: author,
+    );
+    if (result.status != ShareResultStatus.success) return;
     try {
       await TimelineService().sharePost(_id);
       if (!mounted) return;
       final c = ((_p['shareCount'] as num?)?.toInt() ?? 0) + 1;
       context.read<TimelineProvider>().updatePost(_id, {'shareCount': c});
     } catch (_) {}
-    final author = _p['authorName'] as String? ?? 'Anon';
-    final text = (_p['text'] as String? ?? '').trim();
-    await Share.share(text.isEmpty ? author : '$author: $text');
     if (mounted) {
       ScaffoldMessenger.of(
         context,
@@ -930,16 +974,6 @@ class _CommentsListState extends State<_CommentsList> {
     _busy = false;
   }
 
-  Future<void> _share(Map<String, dynamic> c) async {
-    final id = (c['id'] as num?)?.toInt() ?? 0;
-    try {
-      final res = await TimelineService().shareComment(id);
-      final count = (res['share_count'] as num?)?.toInt();
-      if (!mounted) return;
-      if (count != null) setState(() => c['shareCount'] = count);
-    } catch (_) {}
-  }
-
   @override
   Widget build(BuildContext context) {
     final items = _items ?? [];
@@ -955,80 +989,73 @@ class _CommentsListState extends State<_CommentsList> {
         final isReply = ((c['parentId'] as num?)?.toInt() ?? 0) > 0;
         final createdAt = DateTime.tryParse(c['createdAt'] as String? ?? '');
         final likeCount = (c['likeCount'] as num?)?.toInt() ?? 0;
-        final shareCount = (c['shareCount'] as num?)?.toInt() ?? 0;
         final isLiked = c['isLiked'] == true;
         final name = c['authorName'] as String? ?? 'Anon';
         final text = c['text'] as String? ?? '';
-        final id = (c['id'] as num?)?.toInt() ?? 0;
         return Padding(
           padding: EdgeInsets.only(left: isReply ? 26 : 0, bottom: 12),
+          // Bar luar rata bawah → like sejajar baris terakhir teks.
+          // Bar dalam rata atas → avatar tetap di atas.
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
-                child: Text(
-                  (name.isEmpty ? 'A' : name[0]).toUpperCase(),
-                  style: AppText.label.copyWith(color: AppTheme.primary),
-                ),
-              ),
-              SizedBox(width: 10),
               Expanded(
-                child: Column(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            name,
-                            style: AppText.label,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: AppTheme.primary.withValues(
+                        alpha: 0.15,
+                      ),
+                      child: Text(
+                        (name.isEmpty ? 'A' : name[0]).toUpperCase(),
+                        style: AppText.label.copyWith(
+                          color: AppTheme.primary,
                         ),
-                        if (createdAt != null) ...[
-                          SizedBox(width: 6),
-                          Text(
-                            '· ${_timeAgoShort(createdAt)}',
-                            style: AppText.micro.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
-                    SizedBox(height: 2),
-                    Text(text, style: AppText.bodySmall),
-                    SizedBox(height: 4),
-                    Row(
-                      children: [
-                        _CommentAction(
-                          icon: isLiked
-                              ? PhosphorIconsFill.heart
-                              : PhosphorIconsRegular.heart,
-                          color: isLiked
-                              ? AppTheme.danger
-                              : AppTheme.textSecondary,
-                          count: likeCount,
-                          onTap: () => _like(c),
-                        ),
-                        _CommentAction(
-                          icon: PhosphorIconsRegular.chatCircle,
-                          color: AppTheme.textSecondary,
-                          count: null,
-                          onTap: () => widget.onReply?.call(id, name),
-                        ),
-                        _CommentAction(
-                          icon: PhosphorIconsRegular.paperPlaneTilt,
-                          color: AppTheme.textSecondary,
-                          count: shareCount,
-                          onTap: () => _share(c),
-                        ),
-                      ],
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  name,
+                                  style: AppText.label,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (createdAt != null) ...[
+                                SizedBox(width: 6),
+                                Text(
+                                  '· ${_timeAgoShort(createdAt)}',
+                                  style: AppText.micro.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          SizedBox(height: 2),
+                          Text(text, style: AppText.bodySmall),
+                        ],
+                      ),
                     ),
                   ],
                 ),
+              ),
+              // Like doang, mentok kanan card.
+              _CommentAction(
+                icon: isLiked
+                    ? PhosphorIconsFill.heart
+                    : PhosphorIconsRegular.heart,
+                color: isLiked ? AppTheme.danger : AppTheme.textSecondary,
+                count: likeCount,
+                onTap: () => _like(c),
               ),
             ],
           ),

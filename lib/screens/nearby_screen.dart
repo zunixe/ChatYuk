@@ -195,7 +195,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+        ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     }
   }

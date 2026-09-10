@@ -55,6 +55,9 @@ class S {
   String get searchRoom => isId ? 'Cari Room' : 'Search Room';
   String get roomOnlineCount => isId ? 'online' : 'online';
   String get noRooms => isId ? 'Belum ada room tersedia' : 'No rooms available';
+  String get noRoomsHint => isId
+      ? 'Room akan muncul saat ada yang membuat'
+      : 'Rooms will appear once someone creates one';
 
   // ── Private Rooms ──
   String get tabGlobalRoom => isId ? 'Room Global' : 'Global Room';

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/room_model.dart';
 import '../services/room_service.dart';
 import '../services/chat_service.dart';
 import '../services/message_cache.dart';
+import '../services/private_room_service.dart';
 import '../services/realtime_hub.dart';
 
 class RoomProvider extends ChangeNotifier {
@@ -45,6 +47,71 @@ class RoomProvider extends ChangeNotifier {
   String? get error => _error;
   bool get hasLoaded => _hasLoaded;
 
+  // ── My groups (tab Grup) — cache memori + TTL + disk: klik tab instan ──
+  List<RoomModel> _myGroups = [];
+  DateTime? _myGroupsAt;
+  String? _myGroupsUid;
+  bool _myGroupsLoading = false;
+  static const _myGroupsTtl = Duration(seconds: 30);
+  List<RoomModel> get myGroups => _myGroups;
+  bool get myGroupsLoading => _myGroupsLoading;
+
+  Future<void> loadMyGroups({bool refresh = false}) async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    if (_myGroupsLoading) return;
+    final fresh = !refresh &&
+        _myGroupsAt != null &&
+        _myGroupsUid == uid &&
+        DateTime.now().difference(_myGroupsAt!) < _myGroupsTtl;
+    if (fresh) return;
+    _myGroupsLoading = true;
+    if (!_disposed) notifyListeners();
+    // Cache disk dulu kalau memori kosong — tampil instan tanpa spinner.
+    if (_myGroups.isEmpty) await _loadMyGroupsDisk(uid);
+    try {
+      final rows = await PrivateRoomService.instance.listMyRooms();
+      final groups = rows
+          .map((r) => RoomModel.fromMap('${r['id'] ?? ''}', r))
+          .toList();
+      if (!_disposed) {
+        _myGroups = groups;
+        _myGroupsAt = DateTime.now();
+        _myGroupsUid = uid;
+        _scheduleMyGroupsSave();
+      }
+    } catch (e) {
+      dlog('[RoomProvider] load my groups error: $e');
+    } finally {
+      _myGroupsLoading = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<void> _loadMyGroupsDisk(String uid) async {
+    try {
+      final obj = await MessageCache.instance.loadRawObj('my_groups_$uid');
+      final raw = obj['groups'];
+      if (raw is! List || raw.isEmpty) return;
+      if (_myGroups.isNotEmpty) return;
+      _myGroups = raw
+          .map((e) => RoomModel.fromMap(
+              '${(e as Map)['id'] ?? ''}', Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      dlog('[RoomProvider] my groups disk load error: $e');
+    }
+  }
+
+  void _scheduleMyGroupsSave() {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    MessageCache.instance.saveRawObj(
+      'my_groups_$uid',
+      {'groups': _myGroups.map((r) => r.toMap()).toList()},
+    );
+  }
+
   RoomProvider() {
     // Unified fan-out: Presence room juga update counts per-room (RealtimeHub per-room presence)
     _presenceSub = RealtimeHub.instance.roomPresence.listen((msg) {
@@ -76,7 +143,7 @@ class RoomProvider extends ChangeNotifier {
         if (!_disposed) notifyListeners();
       },
       onError: (e) {
-        debugPrint('[RoomProvider] counts stream error: $e');
+        dlog('[RoomProvider] counts stream error: $e');
       },
     );
   }
@@ -105,7 +172,7 @@ class RoomProvider extends ChangeNotifier {
       _hasLoaded = true;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[RoomProvider] disk load error: $e');
+      dlog('[RoomProvider] disk load error: $e');
       _hasLoaded = true;
     } finally {
       _markWarm();
@@ -145,7 +212,7 @@ class RoomProvider extends ChangeNotifier {
             _scheduleDiskSave();
           },
           onError: (e) {
-            debugPrint('[RoomProvider] private rooms stream error: $e');
+            dlog('[RoomProvider] private rooms stream error: $e');
           },
         );
   }
@@ -183,7 +250,7 @@ class RoomProvider extends ChangeNotifier {
       _scheduleDiskSave();
       await reloadPrivate();
     } catch (e) {
-      debugPrint('[RoomProvider] fetch rooms error: $e');
+      dlog('[RoomProvider] fetch rooms error: $e');
       _error = e.toString();
       _hasLoaded = true;
       _markWarm();
@@ -208,7 +275,7 @@ class RoomProvider extends ChangeNotifier {
       if (!_disposed) notifyListeners();
       _scheduleDiskSave();
     } catch (e) {
-      debugPrint('[RoomProvider] fetch private rooms error: $e');
+      dlog('[RoomProvider] fetch private rooms error: $e');
       _hasLoaded = true;
       _markWarm();
     }

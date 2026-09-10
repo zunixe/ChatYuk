@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/call_config.dart';
@@ -125,7 +126,7 @@ class CallService {
       ),
       callback: (payload) {
         if (controller.isClosed) return;
-        debugPrint(
+        dlog(
           '[CallService] onCallStatus -> ${payload.newRecord['status']}',
         );
         controller.add(payload.newRecord['status'] as String? ?? '');
@@ -199,7 +200,7 @@ class CallService {
     String type, {
     Map<String, dynamic>? payload,
   }) async {
-    debugPrint('[CallService] sendSignal callId=$callId type=$type');
+    dlog('[CallService] sendSignal callId=$callId type=$type');
     try {
       await _sb.from('call_signals').insert({
         'call_id': callId,
@@ -208,7 +209,7 @@ class CallService {
         'payload': {...?payload},
       });
     } catch (e) {
-      debugPrint('[CallService] sendSignal error: $e');
+      dlog('[CallService] sendSignal error: $e');
     }
   }
 
@@ -328,11 +329,11 @@ class CallSession extends ChangeNotifier {
   /// Siapkan renderer + media lokal + peer connection + listener sinyal.
   /// Belum membuat offer — caller menunggu callee jawab.
   Future<void> init() async {
-    debugPrint(
+    dlog(
       '[ICE] ===== init#${hashCode} start isCaller=$isCaller callId=$callId (pc=${_pc != null}) =====',
     );
     if (_pc != null) {
-      debugPrint(
+      dlog(
         '[ICE] init() already ran (pc exists) -> skip to avoid phase reset',
       );
       return;
@@ -360,7 +361,7 @@ class CallSession extends ChangeNotifier {
           if (isCaller && _phase == CallPhase.ringing) {
             _ringTimer?.cancel();
             _phase = CallPhase.connecting;
-            debugPrint('[SESSION] answered#${hashCode} caller -> connecting');
+            dlog('[SESSION] answered#${hashCode} caller -> connecting');
             notifyListeners();
             _createOffer();
           }
@@ -390,7 +391,7 @@ class CallSession extends ChangeNotifier {
 
     if (isCaller) {
       _phase = CallPhase.ringing;
-      debugPrint(
+      dlog(
         '[SESSION] init#${hashCode} tail -> ringing (caller)',
       ); // Caller menyerah setelah 30 detik tidak dijawab → cancel.
       _ringTimer = Timer(const Duration(seconds: 30), () {
@@ -407,7 +408,7 @@ class CallSession extends ChangeNotifier {
       });
     } else {
       _phase = CallPhase.connecting;
-      debugPrint('[SESSION] init#${hashCode} tail -> connecting (callee)');
+      dlog('[SESSION] init#${hashCode} tail -> connecting (callee)');
     }
     notifyListeners();
     // Re-sync berkala sebagai jaring pengaman bila realtime signal terlewat.
@@ -424,7 +425,7 @@ class CallSession extends ChangeNotifier {
 
       _pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _pc!.onTrack = (event) async {
-        debugPrint('[ICE] onTrack kind=${event.track.kind}');
+        dlog('[ICE] onTrack kind=${event.track.kind}');
         // Sender menaruh audio + video dalam satu stream lokal yang sama,
         // jadi event.streams.first untuk kedua track adalah objek stream
         // identik yang sudah memuat video. Pakai stream ini langsung (bukan
@@ -441,7 +442,7 @@ class CallSession extends ChangeNotifier {
         }
         _remoteStream = stream;
         remoteRenderer.srcObject = stream;
-        debugPrint(
+        dlog(
           '[ICE] remoteStream videoTracks=${stream.getVideoTracks().length} audioTracks=${stream.getAudioTracks().length}',
         );
         // JANGAN set inCall dari onTrack: track remote bisa tiba SEBELUM
@@ -453,7 +454,7 @@ class CallSession extends ChangeNotifier {
         if (!_closed) notifyListeners();
       };
       _pc!.onIceCandidate = (candidate) {
-        debugPrint('[ICE] local candidate: ${candidate.candidate}');
+        dlog('[ICE] local candidate: ${candidate.candidate}');
         _service.sendSignal(
           callId,
           'candidate',
@@ -461,7 +462,7 @@ class CallSession extends ChangeNotifier {
         );
       };
       _pc!.onConnectionState = (state) {
-        debugPrint('[ICE] connectionState: $state');
+        dlog('[ICE] connectionState: $state');
         if (_closed) return;
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
           if (!_closed && _phase != CallPhase.inCall) {
@@ -480,7 +481,7 @@ class CallSession extends ChangeNotifier {
                 return;
               if (cur == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
                   cur == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-                debugPrint('[ICE] grace-timeout still $cur -> bye + _finish');
+                dlog('[ICE] grace-timeout still $cur -> bye + _finish');
                 try {
                   await _service.sendSignal(callId, 'bye');
                   await _service.updateStatus(callId, 'ended');
@@ -513,7 +514,7 @@ class CallSession extends ChangeNotifier {
         final cur = _pc?.connectionState;
         if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected)
           return;
-        debugPrint(
+        dlog(
           '[ICE] 15s timeout still $cur phase=$_phase -> bye + _finish error',
         );
         try {
@@ -523,12 +524,12 @@ class CallSession extends ChangeNotifier {
         _finish(CallEndReason.error);
       });
       _pc!.onIceConnectionState = (state) {
-        debugPrint('[ICE] iceConnectionState: $state');
+        dlog('[ICE] iceConnectionState: $state');
         if (_closed) return;
         if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
             state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
           if (_phase != CallPhase.inCall) {
-            debugPrint('[ICE] iceConnected -> SET inCall');
+            dlog('[ICE] iceConnected -> SET inCall');
             _phase = CallPhase.inCall;
             _connectedAt = _connectedAt ?? DateTime.now();
             notifyListeners();
@@ -536,10 +537,10 @@ class CallSession extends ChangeNotifier {
         }
       };
       _pc!.onIceGatheringState = (state) {
-        debugPrint('[ICE] iceGatheringState: $state');
+        dlog('[ICE] iceGatheringState: $state');
       };
       _pc!.onSignalingState = (state) {
-        debugPrint('[ICE] signalingState: $state');
+        dlog('[ICE] signalingState: $state');
       };
       for (final track in _localStream!.getTracks()) {
         await _pc!.addTrack(track, _localStream!);
@@ -559,7 +560,7 @@ class CallSession extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('[CallSession] media/peer setup failed: $e');
+      dlog('[CallSession] media/peer setup failed: $e');
       if (!_closed) {
         _phase = CallPhase.error;
         notifyListeners();
@@ -579,7 +580,7 @@ class CallSession extends ChangeNotifier {
         payload: {'sdp': offer.toMap()},
       );
     } catch (e) {
-      debugPrint('[CallSession] createOffer failed: $e');
+      dlog('[CallSession] createOffer failed: $e');
     }
   }
 
@@ -589,7 +590,7 @@ class CallSession extends ChangeNotifier {
       if (_processedSignalIds.contains(id)) return;
       _processedSignalIds.add(id);
     }
-    debugPrint(
+    dlog(
       '[CallSession] onSignal type=${msg['type']} isCaller=$isCaller pc=${_pc != null}',
     );
     if (_closed) return;
@@ -609,7 +610,7 @@ class CallSession extends ChangeNotifier {
         final c = msg['candidate'] as Map<String, dynamic>?;
         if (c != null) {
           _pendingCandidates.add(c);
-          debugPrint('[ICE] queue candidate (pc not ready)');
+          dlog('[ICE] queue candidate (pc not ready)');
         }
       }
       return;
@@ -623,7 +624,7 @@ class CallSession extends ChangeNotifier {
           if (existing != null) {
             // Offer duplikat (realtime + sync polling) → abaikan; memproses
             // ulang membuat negosiasi & fase UI kacau.
-            debugPrint('[ICE] duplicate offer ignored');
+            dlog('[ICE] duplicate offer ignored');
             return;
           }
           await _pc!.setRemoteDescription(
@@ -679,7 +680,7 @@ class CallSession extends ChangeNotifier {
           final rd = await _pc!.getRemoteDescription();
           if (rd == null) {
             _pendingCandidates.add(c);
-            debugPrint('[ICE] queue candidate (remoteDescription null)');
+            dlog('[ICE] queue candidate (remoteDescription null)');
             return;
           }
           try {
@@ -695,7 +696,7 @@ class CallSession extends ChangeNotifier {
             if ((e.toString().contains('remoteDescription') ||
                 e.toString().contains('InvalidState'))) {
               _pendingCandidates.add(c);
-              debugPrint('[ICE] queue candidate (add failed, will retry)');
+              dlog('[ICE] queue candidate (add failed, will retry)');
             } else {
               rethrow;
             }
@@ -704,7 +705,7 @@ class CallSession extends ChangeNotifier {
           final en = msg['enabled'];
           if (en is bool) {
             _remoteCameraOn = en;
-            debugPrint('[CallSession] remoteCameraOn=$_remoteCameraOn');
+            dlog('[CallSession] remoteCameraOn=$_remoteCameraOn');
             notifyListeners();
           }
           break;
@@ -718,7 +719,7 @@ class CallSession extends ChangeNotifier {
           await _handleWatchCandidate(msg);
       }
     } catch (e) {
-      debugPrint('[CallSession] signal error: $e');
+      dlog('[CallSession] signal error: $e');
     }
   }
 
@@ -781,9 +782,9 @@ class CallSession extends ChangeNotifier {
           'cameraOn': callType == 'video' ? _cameraOn : false,
         },
       );
-      debugPrint('[WATCH] offer sent to watcher=$watcher');
+      dlog('[WATCH] offer sent to watcher=$watcher');
     } catch (e) {
-      debugPrint('[WATCH] handle watch_request failed: $e');
+      dlog('[WATCH] handle watch_request failed: $e');
       final broken = _watchPcs.remove(watcher);
       try {
         await broken?.close();
@@ -817,7 +818,7 @@ class CallSession extends ChangeNotifier {
       }
       _watchPendingCands.remove(watcher);
     } catch (e) {
-      debugPrint('[WATCH] handle watch_answer failed: $e');
+      dlog('[WATCH] handle watch_answer failed: $e');
     }
   }
 
@@ -843,7 +844,7 @@ class CallSession extends ChangeNotifier {
         ),
       );
     } catch (e) {
-      debugPrint('[WATCH] candidate error: $e');
+      dlog('[WATCH] candidate error: $e');
     }
   }
 
@@ -902,7 +903,7 @@ class CallSession extends ChangeNotifier {
     final curState = _pc?.connectionState;
     if (curState == RTCPeerConnectionState.RTCPeerConnectionStateConnected &&
         _phase != CallPhase.inCall) {
-      debugPrint('[ICE] sync safety-net -> SET inCall');
+      dlog('[ICE] sync safety-net -> SET inCall');
       _phase = CallPhase.inCall;
       _connectedAt = _connectedAt ?? DateTime.now();
       notifyListeners();
@@ -975,7 +976,7 @@ class CallSession extends ChangeNotifier {
 
   void _finish(CallEndReason reason) {
     if (_closed) return;
-    debugPrint('[CallService] _finish reason=$reason phase=$_phase');
+    dlog('[CallService] _finish reason=$reason phase=$_phase');
     _closed = true;
     _endReason = reason;
     _ringTimer?.cancel();

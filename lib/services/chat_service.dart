@@ -160,7 +160,7 @@ class ChatService {
         await MediaDiskCache.instance.write(path, bytes);
       }
     } catch (e) {
-      debugPrint('[ChatService] voice prefetch: $e');
+      dlog('[ChatService] voice prefetch: $e');
     } finally {
       _voiceDownloadInflight.remove(path);
     }
@@ -181,7 +181,7 @@ class ChatService {
       await PhotoCache.instance.save(cacheKey, msg.id, msg.imageData);
       unawaited(prefetchVoiceBytes(msg.imageData));
     } catch (e) {
-      debugPrint('[ChatService] voice cache ${msg.id}: $e');
+      dlog('[ChatService] voice cache ${msg.id}: $e');
     }
   }
 
@@ -253,7 +253,7 @@ class ChatService {
           .eq('id', messageId);
       return true;
     } catch (e) {
-      debugPrint('[ChatService] editRoomMessage (with edited) error: $e');
+      dlog('[ChatService] editRoomMessage (with edited) error: $e');
       try {
         await _sb
             .from('messages')
@@ -261,7 +261,7 @@ class ChatService {
             .eq('id', messageId);
         return true;
       } catch (e2) {
-        debugPrint('[ChatService] editRoomMessage (text only) error: $e2');
+        dlog('[ChatService] editRoomMessage (text only) error: $e2');
         return false;
       }
     }
@@ -293,7 +293,7 @@ class ChatService {
           .eq('id', messageId);
       return true;
     } catch (e) {
-      debugPrint('[ChatService] editPrivateMessage (with edited) error: $e');
+      dlog('[ChatService] editPrivateMessage (with edited) error: $e');
       try {
         await _sb
             .from('private_messages')
@@ -301,7 +301,7 @@ class ChatService {
             .eq('id', messageId);
         return true;
       } catch (e2) {
-        debugPrint('[ChatService] editPrivateMessage (text only) error: $e2');
+        dlog('[ChatService] editPrivateMessage (text only) error: $e2');
         return false;
       }
     }
@@ -317,7 +317,7 @@ class ChatService {
           .eq('id', messageId);
       return true;
     } catch (e) {
-      debugPrint('[ChatService] deletePrivateMessage error: $e');
+      dlog('[ChatService] deletePrivateMessage error: $e');
       return false;
     }
   }
@@ -364,7 +364,7 @@ class ChatService {
         try {
           await MessageCache.instance.saveMessages(cacheKey, _current);
         } catch (e) {
-          debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+          dlog('[ChatService] clearViewOnceImage ignored: $e');
         }
       });
     }
@@ -426,7 +426,7 @@ class ChatService {
             for (var j = 0; j < chunk.length; j++) {
               final m = chunk[j];
               final data = results[j];
-              debugPrint('[PHOTO-DBG] drain ${m.id} srcLen=${(byId[m.id] ?? '').length} dlLen=${data.length}');
+              dlog('[PHOTO-DBG] drain ${m.id} srcLen=${(byId[m.id] ?? '').length} dlLen=${data.length}');
               if (data.isEmpty) continue;
               // save() menyimpan full-res + membuat thumbnail (dikembalikan).
               // Bubble pakai thumbnail supaya decode cepat; full-res di PhotoCache.
@@ -447,7 +447,7 @@ class ChatService {
             }
           }
         } catch (e) {
-          debugPrint(
+          dlog(
             '[photo download] ${batch.map((m) => m.id).join(',')} error: $e',
           );
         } finally {
@@ -540,7 +540,7 @@ class ChatService {
           .toList();
       for (final m in list) {
         if (m.type == 'image' || m.type == 'view_once' || m.type == 'voice') {
-          debugPrint('[PHOTO-DBG] fetchServer ${m.id} type=${m.type} imgLen=${m.imageData.length} head=${m.imageData.isEmpty ? '' : m.imageData.substring(0, m.imageData.length > 30 ? 30 : m.imageData.length)}');
+          dlog('[PHOTO-DBG] fetchServer ${m.id} type=${m.type} imgLen=${m.imageData.length} head=${m.imageData.isEmpty ? '' : m.imageData.substring(0, m.imageData.length > 30 ? 30 : m.imageData.length)}');
         }
       }
       return list;
@@ -593,7 +593,7 @@ class ChatService {
         }
         final swServer = Stopwatch()..start();
         final server = await fetchServer(limit: 100);
-        debugPrint(
+        dlog(
           '[CACHE-TIME] $cacheKey server=${swServer.elapsedMilliseconds}ms n=${server.length}',
         );
         if (controller.isClosed) return;
@@ -628,7 +628,7 @@ class ChatService {
         // Foto di-load background — teks tidak menunggu decrypt foto.
         loadPhotosAsync(merged);
       } catch (e) {
-        debugPrint('[_cachedMessagesStream] fetch error: $e');
+        dlog('[_cachedMessagesStream] fetch error: $e');
         // Fallback: tampilkan cache hanya kalau server gagal.
         // Filter hiddenCutoff TETAP diterapkan — cache lokal bisa berisi
         // history sebelum delete yang tidak boleh muncul lagi.
@@ -689,7 +689,7 @@ class ChatService {
                 }
               }
             } catch (e) {
-              debugPrint('[photo save] ${msg.id} error: $e');
+              dlog('[photo save] ${msg.id} error: $e');
             }
           } else if (msg.type == 'image' ||
               msg.type == 'view_once' ||
@@ -716,11 +716,11 @@ class ChatService {
             ..._current.sublist(insertAt),
           ];
           lastRealtime = DateTime.now();
-          debugPrint(
+          dlog(
             '[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal',
           );
           if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'voice') {
-            debugPrint('[PHOTO-DBG] rt-insert ${msg.id} type=${msg.type} imgLen=${msg.imageData.length} head=${msg.imageData.isEmpty ? '' : msg.imageData.substring(0, msg.imageData.length > 30 ? 30 : msg.imageData.length)}');
+            dlog('[PHOTO-DBG] rt-insert ${msg.id} type=${msg.type} imgLen=${msg.imageData.length} head=${msg.imageData.isEmpty ? '' : msg.imageData.substring(0, msg.imageData.length > 30 ? 30 : msg.imageData.length)}');
           }
           controller.add(_current);
           scheduleCacheSave();
@@ -850,7 +850,7 @@ class ChatService {
           }
         }
       } catch (e) {
-        debugPrint('[chat pagination] loadOlder error: $e');
+        dlog('[chat pagination] loadOlder error: $e');
       } finally {
         _loadingOlder = false;
         while (_loadMoreReqs.isNotEmpty) {
@@ -893,7 +893,7 @@ class ChatService {
           scheduleCacheSave();
         }
       } catch (e) {
-        debugPrint('[chat pagination] fetchImage $messageId error: $e');
+        dlog('[chat pagination] fetchImage $messageId error: $e');
       }
     }
 
@@ -1119,7 +1119,7 @@ class ChatService {
       final res = await _sb.rpc('list_gifts');
       if (res is List) return res.cast<Map<String, dynamic>>();
     } catch (e) {
-      debugPrint('[ChatService] listGifts fallback local: $e');
+      dlog('[ChatService] listGifts fallback local: $e');
     }
     return kGiftCatalog
         .map(
@@ -1147,7 +1147,7 @@ class ChatService {
           .update({'type': 'view_once_expired'})
           .eq('id', messageId);
     } catch (e) {
-      debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+      dlog('[ChatService] clearViewOnceImage ignored: $e');
     }
   }
 
@@ -1175,7 +1175,7 @@ class ChatService {
       // realtime dari RPC ini menyusul dan menyinkronkan via _applyChatEvent.
       _applyLocalRead(uid, chatId);
     } catch (e) {
-      debugPrint('[DEBUG-READ] RPC FAIL chat=$chatId uid=$uid err=$e');
+      dlog('[DEBUG-READ] RPC FAIL chat=$chatId uid=$uid err=$e');
     }
   }
 
@@ -1190,7 +1190,7 @@ class ChatService {
       );
       _applyLocalRead(uid, chatId);
     } catch (e) {
-      debugPrint('[DEBUG-READ-ADMIN] RPC FAIL chat=$chatId uid=$uid err=$e');
+      dlog('[DEBUG-READ-ADMIN] RPC FAIL chat=$chatId uid=$uid err=$e');
     }
   }
 
@@ -1363,7 +1363,7 @@ class ChatService {
     try {
       hiddenSet = await getHiddenChats(myUid);
     } catch (e) {
-      debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+      dlog('[ChatService] clearViewOnceImage ignored: $e');
     }
     _privateChatsHidden[myUid] = hiddenSet;
     final list = rows
@@ -1538,7 +1538,7 @@ class ChatService {
         final rows = await _fetchPrivateChatRows(myUid);
         _privateChatsLast[myUid] = rows;
         _lastChatReloadAt[myUid] = DateTime.now();
-        debugPrint(
+        dlog(
           '[getMyPrivateChats] fetched ${rows.length} chats for $myUid',
         );
         if (!controller.isClosed) controller.add(rows);
@@ -1547,7 +1547,7 @@ class ChatService {
               .saveRawList(myUid, rows.map((c) => c.toMap()).toList());
         }
       } catch (e) {
-        debugPrint('[getMyPrivateChats] fetch error for $myUid: $e');
+        dlog('[getMyPrivateChats] fetch error for $myUid: $e');
       }
     }
 
@@ -1627,7 +1627,7 @@ class ChatService {
           await unhideChat(myUid, chatId);
           // Row private_chats berubah → channel di atas yang apply ke list.
         } catch (e) {
-          debugPrint('[ChatService] clearViewOnceImage ignored: $e');
+          dlog('[ChatService] clearViewOnceImage ignored: $e');
         }
       },
     );
@@ -1698,7 +1698,7 @@ class ChatService {
           controller.add(_current);
         }
       } catch (e) {
-        debugPrint('[chat] fetchStatus error: $e');
+        dlog('[chat] fetchStatus error: $e');
       }
     }
 
@@ -1743,7 +1743,7 @@ class ChatService {
       final v = row?['last_seen'] as String?;
       return v == null ? null : DateTime.tryParse(v)?.toLocal();
     } catch (e) {
-      debugPrint('[chat] getUserLastSeen error: $e');
+      dlog('[chat] getUserLastSeen error: $e');
       return null;
     }
   }
@@ -1754,10 +1754,10 @@ class ChatService {
     Timer? debounce;
 
     Future<void> syncFromPresence() async {
-      debugPrint('[ONLINE-EMIT] sync start t=${DateTime.now().millisecondsSinceEpoch % 100000}');
+      dlog('[ONLINE-EMIT] sync start t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       try {
         final state = RealtimeHub.instance.onlinePresenceState;
-        debugPrint('[ONLINE-EMIT] presence state keys=${state.keys.length}');
+        dlog('[ONLINE-EMIT] presence state keys=${state.keys.length}');
         // Fast path per-country shard: ambil max 50 uid tanpa expand full O(N) (jangan values.expand untuk 1M)
         List<String> firstNPresenceUids(int n) {
           final out = <String>[];
@@ -1774,7 +1774,7 @@ class ChatService {
         }
 
         final presenceUidsFast = firstNPresenceUids(50);
-        debugPrint('[ONLINE-EMIT] presenceUidsFast=${presenceUidsFast.length}');
+        dlog('[ONLINE-EMIT] presenceUidsFast=${presenceUidsFast.length}');
         if (presenceUidsFast.isNotEmpty) {
           try {
             const colsFast = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen,email';
@@ -1842,7 +1842,7 @@ class ChatService {
                   }
                 }
                 if (avatarUpdated) {
-                  debugPrint('[ONLINE-EMIT] avatar batch updated t=${DateTime.now().millisecondsSinceEpoch}');
+                  dlog('[ONLINE-EMIT] avatar batch updated t=${DateTime.now().millisecondsSinceEpoch}');
                   if (!controller.isClosed) controller.add(List.unmodifiable(cached));
                 }
               }
@@ -1853,9 +1853,9 @@ class ChatService {
         List<dynamic> rpcRows = [];
         bool usedRpc = false;
         try {
-          debugPrint('[ONLINE-EMIT] calling RPC get_online_users');
+          dlog('[ONLINE-EMIT] calling RPC get_online_users');
           final data = await _sb.rpc('get_online_users', params: {'p_limit': 100}).timeout(const Duration(seconds: 2));
-          debugPrint('[ONLINE-EMIT] RPC done rows=${data is List ? data.length : 0}');
+          dlog('[ONLINE-EMIT] RPC done rows=${data is List ? data.length : 0}');
           if (data is List && data.isNotEmpty) {
             rpcRows = data;
             usedRpc = true;
@@ -1935,7 +1935,7 @@ class ChatService {
             }
             pending.add(u);
           } catch (e) {
-            debugPrint('[getOnlineUsers] skip bad row: $e');
+            dlog('[getOnlineUsers] skip bad row: $e');
           }
         }
         // Progressive: emit dulu tanpa avatar (instant), avatar nyusul background
@@ -1952,7 +1952,7 @@ class ChatService {
             MessageCache.instance.saveRawList('online_users', rows);
           }
         } catch (_) {}
-        debugPrint('[ONLINE-EMIT] slow path n=${pending.length} withAvatar=${pending.where((u) => u.avatar.isNotEmpty && !StoragePhotoService.instance.isAvatarPath(u.avatar)).length} t=${DateTime.now().millisecondsSinceEpoch}');
+        dlog('[ONLINE-EMIT] slow path n=${pending.length} withAvatar=${pending.where((u) => u.avatar.isNotEmpty && !StoragePhotoService.instance.isAvatarPath(u.avatar)).length} t=${DateTime.now().millisecondsSinceEpoch}');
         if (!controller.isClosed) controller.add(List.unmodifiable(cached));
         // Background download avatar batch 20
         const avatarBatch = 20;
@@ -1976,7 +1976,7 @@ class ChatService {
         }
         if (avatarUpdated && !controller.isClosed) controller.add(List.unmodifiable(cached));
       } catch (e) {
-        debugPrint('[getOnlineUsers] presence fetch error: $e');
+        dlog('[getOnlineUsers] presence fetch error: $e');
         if (!controller.isClosed) controller.addError(e);
       }
     }
@@ -2010,7 +2010,7 @@ class ChatService {
             )) {
               return;
             }
-            debugPrint('[ONLINE-EMIT] profile online event → resync');
+            dlog('[ONLINE-EMIT] profile online event → resync');
             debounce?.cancel();
             debounce = Timer(const Duration(milliseconds: 500), syncFromPresence);
           },
@@ -2020,7 +2020,7 @@ class ChatService {
     syncFromPresence();
     // also periodic fallback if presence empty (cold start before track)
     final fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      debugPrint('[ONLINE-EMIT] fallback 30s tick cachedEmpty=${cached.isEmpty}');
+      dlog('[ONLINE-EMIT] fallback 30s tick cachedEmpty=${cached.isEmpty}');
       if (cached.isEmpty) syncFromPresence();
     });
     controller.onCancel = () {
@@ -2173,12 +2173,15 @@ class ChatService {
         }
         if (!controller.isClosed) controller.add(map);
       } catch (e) {
-        debugPrint('[getRoomOnlineCounts] rpc error country=$country: $e');
+        dlog('[getRoomOnlineCounts] rpc error country=$country: $e');
       }
     }
 
     fetch();
-    timer = Timer.periodic(const Duration(seconds: 15), (_) => fetch());
+    // 30 detik cukup untuk badge jumlah online per room — realtime
+    // presence list tab Online adalah jalur utama; 15s seumur sesi
+    // terlalu boros RPC hanya untuk angka.
+    timer = Timer.periodic(const Duration(seconds: 30), (_) => fetch());
     // Cleanup stale presence di background (idempotent)
     _sb.rpc('cleanup_room_presence', params: {'p_minutes': 10}).catchError((_) {});
     controller.onCancel = () {
@@ -2187,9 +2190,6 @@ class ChatService {
     };
     return controller.stream;
   }
-
-  @Deprecated('Use getRoomOnlineCounts(country: ...) per-country shard')
-  Stream<Map<String, int>> getRoomOnlineCountsLegacy() => getRoomOnlineCounts();
 
   // ── Block / Report ──
 

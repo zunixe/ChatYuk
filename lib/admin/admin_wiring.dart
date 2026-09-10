@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
@@ -12,12 +12,12 @@ import 'profile_sections.dart';
 /// Pasang semua modul admin ke AdminGate. Dipanggil HANYA dari
 /// lib/main_admin.dart — build rilis tidak pernah meng-import file ini.
 void wireAdmin() {
-  debugPrint('[WIRE] 1');
+  dlog('[WIRE] 1');
   AuthService.googleWebClientIdOverride =
       '599111437536-hg56bq0nc2m6kig6hg41lmrbtfel5n2c.apps.googleusercontent.com';
-  debugPrint('[WIRE] 2');
+  dlog('[WIRE] 2');
   AdminGate.postInit = DummySession.installTokenPersistence;
-  debugPrint('[WIRE] 3');
+  dlog('[WIRE] 3');
   AdminGate.panelBuilder = (_) => const AdminPanelScreen();
   AdminGate.becomeDummyImpl = DummySession.becomeDummy;
   AdminGate.backToAdminImpl = DummySession.backToAdmin;
@@ -30,5 +30,5 @@ void wireAdmin() {
   ];
   AdminGate.profileSettingsHeader = adminSettingsHeader;
   AdminGate.profileSettingsTail = adminSettingsTail;
-  debugPrint('[WIRE] done');
+  dlog('[WIRE] done');
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'storage_photo_service.dart';
@@ -96,7 +97,7 @@ class PostPhotoCache {
       }
       return thumb;
     } catch (e) {
-      debugPrint('[PostPhotoCache] thumb error: $e');
+      dlog('[PostPhotoCache] thumb error: $e');
       return null;
     } finally {
       _inflight.remove(path);
@@ -165,7 +166,7 @@ class PostPhotoCache {
         List.generate(toFetch.length.clamp(0, 4), (_) => worker()),
       );
     } catch (e) {
-      debugPrint('[PostPhotoCache] loadMany error: $e');
+      dlog('[PostPhotoCache] loadMany error: $e');
     } finally {
       for (final p in claimed) {
         _inflight.remove(p);
@@ -191,7 +192,7 @@ class PostPhotoCache {
       _writeFileAsync(folder, f, full);
       return base64Encode(full);
     } catch (e) {
-      debugPrint('[PostPhotoCache] full error: $e');
+      dlog('[PostPhotoCache] full error: $e');
       return null;
     }
   }
@@ -217,7 +218,7 @@ class PostPhotoCache {
       _writeFileAsync(folder, _fileFor(folder, path), thumb);
       return thumb;
     } catch (e) {
-      debugPrint('[PostPhotoCache] save error: $e');
+      dlog('[PostPhotoCache] save error: $e');
       return null;
     }
   }
@@ -232,7 +233,7 @@ class PostPhotoCache {
         await folder.delete(recursive: true);
       }
     } catch (e) {
-      debugPrint('[PostPhotoCache] clearAll ignored: $e');
+      dlog('[PostPhotoCache] clearAll ignored: $e');
     }
   }
 }

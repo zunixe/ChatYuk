@@ -77,7 +77,7 @@ class _MissionsScreenState extends State<MissionsScreen>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+        ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     } finally {
       if (mounted) setState(() => _claiming = null);

@@ -33,6 +33,9 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  # Font brand (Poppins) — dipakai AppText untuk judul/CTA.
+  google_fonts: ^6.2.1
+
   # Supabase
   supabase_flutter: ^2.8.4
 

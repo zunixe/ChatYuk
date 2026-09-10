@@ -754,7 +754,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _schedulePendingConfirmFallback();
     } catch (e) {
       // Kirim gagal → kembalikan koin yang sudah terpotong.
-      debugPrint('[send] gagal chat=${widget.chatId}: $e');
+      dlog('[send] gagal chat=${widget.chatId}: $e');
       safeUnawaited(pp.refundChatPoint('text'));
       if (mounted) {
         setState(() => _pending.remove(pending));
@@ -894,10 +894,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       await context.read<ChatProvider>().sendPrivateMessage(chatId: chatId, senderId: uid, senderName: profile.nickname, senderGender: profile.gender, text: '', type: 'voice', imageData: storagePath, durationMs: recordedMs);
       try { await f.delete(); } catch (_) {}
     } catch (e) {
-      debugPrint('[Voice] send error: $e');
+      dlog('[Voice] send error: $e');
       if (mounted) {
         setState(() => _pending.remove(optimistic));
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${context.read<LocaleProvider>().s.errSendFailed}$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)));
       }
     }
   }
@@ -1745,7 +1745,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       (c) => c.isBlocked(widget.otherUid),
     );
     final s = context.watch<LocaleProvider>().s;
-    debugPrint('[CHAT-BUILD] callAllEnabled=${auth.callAllEnabled} '
+    dlog('[CHAT-BUILD] callAllEnabled=${auth.callAllEnabled} '
         'meRegistered=${auth.profile?.isRegistered} '
         'otherRegistered=$_otherRegistered/${widget.otherRegistered}');
     // Saat unblock: re-subscribe status realtime

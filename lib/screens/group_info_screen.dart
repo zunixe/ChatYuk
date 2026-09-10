@@ -90,8 +90,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: Center(
-                      child: Text(room.icon,
-                          style: const TextStyle(fontSize: 44)),
+                      child: Text(room.icon, style: TextStyle(fontSize: AppGlyph.xl)),
                     ),
                   ),
                 ),

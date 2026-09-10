@@ -21,12 +21,13 @@ import '../services/points_service.dart';
 import '../services/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
 import '../services/notification_prefs_service.dart';
+import '../utils.dart';
 
 // Shortcut untuk fire-and-forget.
 // Tidak membungkam error: log biar kegagalan tetap terlihat di debug.
 void safeUnawaited(Future<void> future) {
   future.catchError((Object e, StackTrace st) {
-    debugPrint('[AUTH] safeUnawaited error: $e\n$st');
+    dlog('[AUTH] safeUnawaited error: $e\n$st');
   });
 }
 
@@ -110,7 +111,7 @@ class AuthProvider extends ChangeNotifier {
   bool get notificationsEnabled => _notificationsEnabled;
 
   AuthProvider() {
-    debugPrint('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
+    dlog('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
     _listenAuthState();
     _init();
     loadNotificationPref();
@@ -149,10 +150,10 @@ class AuthProvider extends ChangeNotifier {
       final ok = await _auth.bindReferrer(referrer);
       if (ok) {
         await PointsService().claimReferralReward();
-        debugPrint('[AUTH] referral bind+claim OK for $referrer');
+        dlog('[AUTH] referral bind+claim OK for $referrer');
       }
     } catch (e) {
-      debugPrint('[AUTH] referral bind error: $e');
+      dlog('[AUTH] referral bind error: $e');
     }
   }
 
@@ -189,15 +190,15 @@ class AuthProvider extends ChangeNotifier {
         try {
           final restored = await AdminGate.backToAdminImpl!();
           if (restored && !_disposed) {
-            debugPrint('[AUTH] signedOut tapi admin dipulihkan, re-init');
+            dlog('[AUTH] signedOut tapi admin dipulihkan, re-init');
             await _init();
             return;
           }
         } catch (e) {
-          debugPrint('[AUTH] signedOut recovery error: $e');
+          dlog('[AUTH] signedOut recovery error: $e');
         }
       }
-      debugPrint(
+      dlog(
         '[AUTH] SIGNED_OUT unexpected, resetting profile (session hilang)',
       );
       _idleTimer?.cancel();
@@ -206,9 +207,18 @@ class AuthProvider extends ChangeNotifier {
       _profileSub?.cancel();
       _isIdle = false;
       _profile = null;
+      // Safety-net logout paksa (sesi kedaluwarsa/kick server): tutup
+      // stream & channel chat milik user lama — logout manual sudah
+      // menangani via ChatProvider.reset() di ProfileScreen.
+      _onSignedOut?.call();
       if (!_disposed) notifyListeners();
     });
   }
+
+  /// Hook opsional: dipasang root widget untuk membersihkan resource
+  /// chat saat signedOut TIDAK lewat tombol logout (sesi mati).
+  void Function()? _onSignedOut;
+  set onSignedOut(void Function()? cb) => _onSignedOut = cb;
 
   /// Cache profil sendiri (SharedPreferences): cold start dengan sesi
   /// existing langsung tampil MainNav dari disk, revalidasi network di
@@ -240,7 +250,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _init() async {
     if (_initInProgress) return; // guard re-entry
     _initInProgress = true;
-    debugPrint('[AUTH] _init start');
+    dlog('[AUTH] _init start');
     _loading = true;
     _error = null;
     if (!_disposed) notifyListeners();
@@ -266,12 +276,12 @@ class AuthProvider extends ChangeNotifier {
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        debugPrint('[AUTH] _init attempt $attempt/$maxAttempts hasSession=$hasSession');
+        dlog('[AUTH] _init attempt $attempt/$maxAttempts hasSession=$hasSession');
         if (!hasSession) await _auth.signInAnonymously();
-        debugPrint('[AUTH] signInAnonymously OK');
+        dlog('[AUTH] signInAnonymously OK');
         // Lite dulu (tanpa avatar) → langsung notify, UI tidak nunggu foto
         _profile = await _auth.getProfile(withAvatar: false);
-        debugPrint('[AUTH] getProfile lite -> ${_profile?.uid}');
+        dlog('[AUTH] getProfile lite -> ${_profile?.uid}');
         if (_profile != null) {
           safeUnawaited(_saveCachedProfile(_profile!));
           if (!_disposed) notifyListeners();
@@ -292,7 +302,7 @@ class AuthProvider extends ChangeNotifier {
         // untuk sembunyikan kartu anon — boleh menyusul, jangan tahan loading.
         _loadRequireRegistration().then((_) {
           if (!_disposed) notifyListeners();
-        }).catchError((e) => debugPrint('[AUTH] requireReg error: $e'));
+        }).catchError((e) => dlog('[AUTH] requireReg error: $e'));
         safeUnawaited(_loadScreenshotSetting());
         safeUnawaited(_loadCallAllSetting());
         safeUnawaited(_loadWatermarkSetting());
@@ -305,7 +315,7 @@ class AuthProvider extends ChangeNotifier {
         break;
       } catch (e) {
         lastError = e;
-        debugPrint('[AUTH] _init attempt $attempt failed: $e');
+        dlog('[AUTH] _init attempt $attempt failed: $e');
         if (_disposed) return;
         if (attempt < maxAttempts) {
           await Future.delayed(Duration(seconds: delays[attempt - 1]));
@@ -314,7 +324,7 @@ class AuthProvider extends ChangeNotifier {
       }
     }
     if (lastError != null) {
-      debugPrint('[AUTH] _init ERROR: $lastError');
+      dlog('[AUTH] _init ERROR: $lastError');
       // Cache ada → tetap tampil konten lama, jangan layar error.
       if (_profile == null) {
         _error = lastError.toString();
@@ -348,7 +358,7 @@ class AuthProvider extends ChangeNotifier {
     _loading = false;
     _initInProgress = false;
     if (!_disposed) notifyListeners();
-    debugPrint('[AUTH] _init done loading=false');
+    dlog('[AUTH] _init done loading=false');
   }
 
   /// Login anonim (fallback saat session hilang).
@@ -519,7 +529,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _auth.updateReengageEnabled(enabled);
     } catch (e) {
-      debugPrint('[AUTH] updateReengageEnabled error: $e');
+      dlog('[AUTH] updateReengageEnabled error: $e');
     }
   }
 
@@ -530,7 +540,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _auth.updateCallAllEnabled(enabled);
     } catch (e) {
-      debugPrint('[AUTH] updateCallAllEnabled error: $e');
+      dlog('[AUTH] updateCallAllEnabled error: $e');
     }
   }
 
@@ -542,7 +552,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _auth.updateScreenshotEnabled(enabled);
     } catch (e) {
-      debugPrint('[AUTH] updateScreenshotEnabled error: $e');
+      dlog('[AUTH] updateScreenshotEnabled error: $e');
     }
   }
 
@@ -559,7 +569,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _auth.updateWatermarkEnabled(enabled);
     } catch (e) {
-      debugPrint('[AUTH] updateWatermarkEnabled error: $e');
+      dlog('[AUTH] updateWatermarkEnabled error: $e');
     }
   }
 
@@ -615,7 +625,7 @@ class AuthProvider extends ChangeNotifier {
         if (uid != null) safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''));
       }
     } catch (e) {
-      debugPrint('[AUTH] updateInvisibleEnabled error: $e');
+      dlog('[AUTH] updateInvisibleEnabled error: $e');
     }
     if (!_disposed) notifyListeners();
   }
@@ -658,7 +668,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _auth.updateRequireRegistration(enabled);
     } catch (e) {
-      debugPrint('[AUTH] updateRequireRegistration error: $e');
+      dlog('[AUTH] updateRequireRegistration error: $e');
     }
   }
 
@@ -673,7 +683,7 @@ class AuthProvider extends ChangeNotifier {
         .listen((row) {
           if (_disposed) return;
           if (row == null) return;
-          debugPrint('[SETTINGS] row call_all_enabled='
+          dlog('[SETTINGS] row call_all_enabled='
               '${row['call_all_enabled']} '
               'require_registration=${row['require_registration']}');
           var changed = false;
@@ -688,14 +698,15 @@ class AuthProvider extends ChangeNotifier {
             changed = true;
           }
           if (changed && !_disposed) notifyListeners();
-        }, onError: (e) => debugPrint('[SETTINGS] stream error: $e'),
-           onDone: () => debugPrint('[SETTINGS] stream DONE'));
+        }, onError: (e) => dlog('[SETTINGS] stream error: $e'),
+           onDone: () => dlog('[SETTINGS] stream DONE'));
   }
 
-  /// Polling cadangan bila websocket realtime mati — max delay 30 detik (hemat untuk jutaan user, realtime tetap utama).
+  /// Polling cadangan bila websocket realtime mati — 5 menit (realtime
+  /// tetap jalur utama; 30s seumur app terlalu boros RPC per user).
   void _startSettingsPolling() {
     _settingsPollTimer?.cancel();
-    _settingsPollTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _settingsPollTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
       if (_disposed || !_auth.isSignedIn) return;
       try {
         final callAll = await _auth.fetchCallAllEnabled();
@@ -719,11 +730,11 @@ class AuthProvider extends ChangeNotifier {
             changed = true;
           }
         }
-        debugPrint('[SETTINGS-POLL] callAll=$callAll '
+        dlog('[SETTINGS-POLL] callAll=$callAll '
             'cur=$_callAllEnabled changed=$changed');
         if (changed && !_disposed) notifyListeners();
       } catch (e) {
-        debugPrint('[SETTINGS-POLL] error: $e');
+        dlog('[SETTINGS-POLL] error: $e');
       }
     });
   }
@@ -834,13 +845,13 @@ class AuthProvider extends ChangeNotifier {
       final res = await pointsService.dailyLoginBonus();
       final newPoints = (res['points'] as num?)?.toInt() ?? old;
       _profile = _profile?.copyWith(points: newPoints);
-      debugPrint(
+      dlog(
         '[AUTH] dailyLoginBonus: $old -> $newPoints (streak ${res['streak']})',
       );
       // Toast akan ditampilkan oleh PointsProvider di screen yang aktif
       // via checkAndShowOnlineToast / PointsProvider listener
     } catch (e) {
-      debugPrint('[AUTH] dailyLoginBonus error: $e');
+      dlog('[AUTH] dailyLoginBonus error: $e');
     }
   }
 
@@ -851,9 +862,9 @@ class AuthProvider extends ChangeNotifier {
       if (!enabled) return;
       final newPoints = await pointsService.registerBonus();
       _profile = _profile?.copyWith(points: newPoints);
-      debugPrint('[AUTH] registerBonus -> $newPoints');
+      dlog('[AUTH] registerBonus -> $newPoints');
     } catch (e) {
-      debugPrint('[AUTH] registerBonus error: $e');
+      dlog('[AUTH] registerBonus error: $e');
     }
   }
 
@@ -904,7 +915,7 @@ class AuthProvider extends ChangeNotifier {
     required String city,
     String ipAddress = '',
   }) async {
-    debugPrint('[AUTH] registerProfile START: $nickname inst=$instanceId');
+    dlog('[AUTH] registerProfile START: $nickname inst=$instanceId');
     try {
       _profile = await _auth.registerProfile(
         nickname: nickname,
@@ -927,7 +938,7 @@ class AuthProvider extends ChangeNotifier {
           msg.contains('row-level security') ||
           msg.contains('42501');
       if (userInvalid) {
-        debugPrint(
+        dlog(
           '[AUTH] registerProfile failed (stale anon), refreshing session: $e',
         );
         _manualSignOut = true;
@@ -949,11 +960,11 @@ class AuthProvider extends ChangeNotifier {
         rethrow;
       }
     }
-    debugPrint(
+    dlog(
       '[AUTH] registerProfile DONE: ${_profile?.uid} inst=$instanceId hasListeners=$hasListeners',
     );
     if (!_disposed) notifyListeners();
-    debugPrint(
+    dlog(
       '[AUTH] notifyListeners called, profile=${_profile?.uid} inst=$instanceId hasListeners=$hasListeners',
     );
     resetIdleTimer();
@@ -1055,7 +1066,7 @@ class AuthProvider extends ChangeNotifier {
     // Belt-and-suspenders: pastikan flag sesi dummy ter-set di service yang
     // dipakai provider ini (impl juga set, tapi jangan bergantung binding).
     _auth.markDummyState(active: true, uid: uid);
-    debugPrint('[AUTH] becomeDummy done, uid=$_auth.uid, '
+    dlog('[AUTH] becomeDummy done, uid=$_auth.uid, '
         'flag=${_auth.dummySessionActive}');
     await reloadProfile();
     // Catat device untuk akun dummy — tanpa ini dummy tidak muncul di tab
@@ -1084,7 +1095,7 @@ class AuthProvider extends ChangeNotifier {
     // pindah ke profil user baru saat swap sesi dummy ⇄ admin.
     try {
       final lite = await _auth.getProfile(withAvatar: false);
-      debugPrint('[AUTH] reloadProfile lite -> ${lite?.uid} ${lite?.nickname}');
+      dlog('[AUTH] reloadProfile lite -> ${lite?.uid} ${lite?.nickname}');
       if (lite != null && !_disposed) {
         _profile = lite;
         safeUnawaited(_saveCachedProfile(lite));
@@ -1092,14 +1103,14 @@ class AuthProvider extends ChangeNotifier {
       }
     } catch (e) {
       // Jaringan flaky — jangan biarkan exception menggagalkan swap.
-      debugPrint('[AUTH] reloadProfile lite FAILED: $e');
+      dlog('[AUTH] reloadProfile lite FAILED: $e');
     }
     // Tahap lengkap: avatar (cache per path, biasanya instan).
     try {
       _profile = await _auth.getProfile();
-      debugPrint('[AUTH] reloadProfile full -> ${_profile?.uid}');
+      dlog('[AUTH] reloadProfile full -> ${_profile?.uid}');
     } catch (e) {
-      debugPrint('[AUTH] reloadProfile full FAILED: $e');
+      dlog('[AUTH] reloadProfile full FAILED: $e');
     }
     _listenProfile();
     _restartPresenceTimers();
@@ -1212,7 +1223,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await LocationService().updateMyLocation();
     } catch (e) {
-      debugPrint('[AUTH] location on online error: $e');
+      dlog('[AUTH] location on online error: $e');
     }
   }
 
@@ -1249,7 +1260,7 @@ class AuthProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('[AUTH] _initLocation error: $e');
+      dlog('[AUTH] _initLocation error: $e');
     }
   }
 
@@ -1333,7 +1344,7 @@ class AuthProvider extends ChangeNotifier {
       if (full == null || _disposed) return;
       await _applyProfileUpdate(full);
     } catch (e) {
-      debugPrint('[AUTH] refreshProfile error: $e');
+      dlog('[AUTH] refreshProfile error: $e');
     }
   }
 

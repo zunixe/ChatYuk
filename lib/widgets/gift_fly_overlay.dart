@@ -144,7 +144,7 @@ class _ComboBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(gift.emoji, style: const TextStyle(fontSize: 16)),
+          Text(gift.emoji, style: TextStyle(fontSize: AppGlyph.sm)),
           const SizedBox(width: 6),
           Text(
             'x$count',
@@ -218,7 +218,7 @@ class _FlyBannerState extends State<_FlyBanner>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(widget.item.gift.emoji,
-                    style: const TextStyle(fontSize: 18)),
+                    style: TextStyle(fontSize: AppGlyph.md)),
                 const SizedBox(width: 6),
                 Text(
                   widget.item.sender,

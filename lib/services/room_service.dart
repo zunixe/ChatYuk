@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/room_model.dart';
 import '../config/supabase_config.dart';
@@ -67,7 +67,7 @@ class RoomService {
 
   Future<void> updateOnlineCount(String roomId, int count) async {
     // Online count dihitung dari room_presence — tidak perlu simpan, tapi pertahankan API.
-    debugPrint(
+    dlog(
       '[room] updateOnlineCount deprecation: roomId=$roomId count=$count',
     );
   }
@@ -79,7 +79,7 @@ class RoomService {
     try {
       await _sb.rpc('cleanup_expired_rooms');
     } catch (e) {
-      debugPrint('[room] cleanupExpired error: $e');
+      dlog('[room] cleanupExpired error: $e');
     }
   }
 
@@ -107,7 +107,7 @@ class RoomService {
           .eq('user_id', uid);
       return rows.map((r) => '${r['room_id']}').toSet();
     } catch (e) {
-      debugPrint('[room] fetchMyMemberships error: $e');
+      dlog('[room] fetchMyMemberships error: $e');
       return {};
     }
   }
@@ -198,7 +198,7 @@ class RoomService {
           .maybeSingle();
       return row;
     } catch (e) {
-      debugPrint('[room] fetchRoomById error: $e');
+      dlog('[room] fetchRoomById error: $e');
       return null;
     }
   }

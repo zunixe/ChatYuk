@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message_model.dart';
@@ -193,7 +194,7 @@ class MessageCache {
         );
       }
     } catch (e) {
-      debugPrint('[MessageCache] saveMessages $chatKey ignored: $e');
+      dlog('[MessageCache] saveMessages $chatKey ignored: $e');
     }
   }
 
@@ -306,13 +307,13 @@ class MessageCache {
       final sw = Stopwatch()..start();
       await _ensureDb();
       final msgs = await MessageStore.instance.loadMessages(chatKey);
-      debugPrint(
+      dlog(
         '[CACHE-TIME] $chatKey sqlite=${sw.elapsedMilliseconds}ms n=${msgs.length}',
       );
       _memCacheUpdate(chatKey, msgs);
       return msgs;
     } catch (e) {
-      debugPrint('[MessageCache] loadMessages $chatKey error: $e');
+      dlog('[MessageCache] loadMessages $chatKey error: $e');
       return [];
     }
   }

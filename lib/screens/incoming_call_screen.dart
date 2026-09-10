@@ -13,6 +13,7 @@ import '../services/chat_service.dart';
 import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
+import '../utils.dart';
 
 /// Layar panggilan masuk — muncul saat ada call realtime atau push FCM.
 /// Accept → ganti ke CallScreen (role callee). Decline → status declined.
@@ -110,7 +111,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   Future<void> _accept({required CallMode mode}) async {
     if (_busy) return;
     _busy = true;
-    debugPrint('[ACCEPT] tap mode=$mode callId=${widget.callId}');
+    dlog('[ACCEPT] tap mode=$mode callId=${widget.callId}');
     await _stopRingtone();
     try {
       await _service.updateStatus(widget.callId, 'answered');

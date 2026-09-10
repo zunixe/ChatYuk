@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'room_media_service.dart';
 
 /// Stub SFU untuk Cloudflare Calls.
@@ -21,7 +22,7 @@ class SfuRoomService extends RoomMediaService {
 
   @override
   Future<void> start() async {
-    debugPrint('[SFU] stub start room=$roomId isBroadcaster=$isBroadcaster — belum diimplementasi, fallback ke mesh');
+    dlog('[SFU] stub start room=$roomId isBroadcaster=$isBroadcaster — belum diimplementasi, fallback ke mesh');
     // TODO: implementasi Cloudflare Calls
     // 1. POST /functions/v1/cf-calls-token {roomId, isBroadcaster}
     // 2. dapat {url, token}
@@ -32,7 +33,7 @@ class SfuRoomService extends RoomMediaService {
 
   @override
   Future<void> stop() async {
-    debugPrint('[SFU] stub stop room=$roomId');
+    dlog('[SFU] stub stop room=$roomId');
     onEnded?.call();
     notifyListeners();
   }

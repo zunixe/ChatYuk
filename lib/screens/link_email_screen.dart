@@ -74,7 +74,7 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
       if (msg.contains('already') || msg.contains('taken')) {
         _snack(s.errEmailAlreadyUsed);
       } else {
-        _snack('${s.errGeneric}$e');
+        _snack(s.errGeneric);
       }
     } finally {
       if (mounted) setState(() => _loading = false);

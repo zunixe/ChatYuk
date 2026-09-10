@@ -6,6 +6,7 @@ import '../config/strings.dart';
 import '../providers/locale_provider.dart';
 import '../services/points_service.dart';
 import '../providers/theme_provider.dart';
+import '../utils.dart';
 
 class PointHistoryScreen extends StatefulWidget {
   const PointHistoryScreen({super.key});
@@ -34,7 +35,7 @@ class _PointHistoryScreenState extends State<PointHistoryScreen> {
         _loading = false;
       });
     } catch (e) {
-      debugPrint('[PointHistory] load error: $e');
+      dlog('[PointHistory] load error: $e');
       if (!mounted) return;
       setState(() => _loading = false);
     }

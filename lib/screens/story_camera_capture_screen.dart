@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../utils.dart';
 
 /// Layar jepret kamera fullscreen — dibuka dari kotak kamera di grid picker.
 /// Preview live (depan/belakang), flash, shutter. Return [File] foto hasil
@@ -51,10 +52,10 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
   }
 
   Future<void> _setup() async {
-    debugPrint('[StoryCam] setup start');
+    dlog('[StoryCam] setup start');
     try {
       final st = await Permission.camera.request();
-      debugPrint('[StoryCam] camera permission: $st');
+      dlog('[StoryCam] camera permission: $st');
       if (st.isPermanentlyDenied || st.isRestricted) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -72,12 +73,12 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
         return;
       }
     } catch (e) {
-      debugPrint('[StoryCam] permission request error: $e');
+      dlog('[StoryCam] permission request error: $e');
     }
     try {
       _cameras = await availableCameras();
     } catch (e) {
-      debugPrint('[StoryCam] availableCameras error: $e');
+      dlog('[StoryCam] availableCameras error: $e');
     }
     if (_cameras.isEmpty) {
       if (mounted) Navigator.pop(context);
@@ -104,7 +105,7 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
       await ctrl.initialize().timeout(const Duration(seconds: 10));
       await ctrl.setFlashMode(_flash);
     } catch (e) {
-      debugPrint('[StoryCam] init error: $e');
+      dlog('[StoryCam] init error: $e');
       await ctrl.dispose();
       if (identical(_ctrl, ctrl)) {
         _ctrl = null;
@@ -137,7 +138,7 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
       if (!mounted) return;
       Navigator.pop(context, File(x.path));
     } catch (e) {
-      debugPrint('[StoryCam] shoot error: $e');
+      dlog('[StoryCam] shoot error: $e');
       if (mounted) setState(() => _capturing = false);
     }
   }

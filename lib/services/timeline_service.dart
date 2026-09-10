@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Service timeline: feed postingan, like, comment, share, boost.
@@ -96,7 +96,7 @@ class TimelineService {
       }
       return [];
     } catch (e) {
-      debugPrint('[TimelineService] comments error: $e');
+      dlog('[TimelineService] comments error: $e');
       return [];
     }
   }
@@ -135,7 +135,7 @@ class TimelineService {
       final res = await _sb.rpc('timeline_pricing');
       return _map(res);
     } catch (e) {
-      debugPrint('[TimelineService] pricing error: $e');
+      dlog('[TimelineService] pricing error: $e');
       return {'boost_paid': 50, 'boost_bonus': 150, 'posts_daily_limit': 5};
     }
   }

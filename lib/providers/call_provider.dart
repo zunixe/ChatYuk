@@ -5,6 +5,7 @@ import '../main.dart';
 import '../screens/incoming_call_screen.dart';
 import '../services/call_service.dart';
 import '../services/call_notification.dart';
+import '../utils.dart';
 
 enum CallMode { fullscreen, chat }
 
@@ -111,7 +112,7 @@ class CallProvider extends ChangeNotifier {
     _incomingSub?.cancel();
     _incomingSub = null;
     _incomingSub = _service.onIncomingCall().listen(_onIncoming);
-    debugPrint('[CallProvider] listening incoming calls (uid=${_service.uid})');
+    dlog('[CallProvider] listening incoming calls (uid=${_service.uid})');
   }
 
   void _onIncoming(Map<String, dynamic> row) async {
@@ -183,7 +184,7 @@ class CallProvider extends ChangeNotifier {
       myGender: myGender,
       pendingSignals: pendingSignals,
     );
-    debugPrint(
+    dlog(
       '[PROVIDER] startSession#${session.hashCode} call=$callId mode=$mode isCaller=$isCaller (prev=${_activeSession?.hashCode})',
     );
     _activeSession = session;
@@ -221,7 +222,7 @@ class CallProvider extends ChangeNotifier {
     _clearTimer?.cancel();
     _clearTimer = null;
     final sess = _activeSession!;
-    debugPrint('[PROVIDER] clearSession#${sess.hashCode} call=${sess.callId}');
+    dlog('[PROVIDER] clearSession#${sess.hashCode} call=${sess.callId}');
     _activeSession = null;
     _activeMode = null;
     _activeChatId = null;
