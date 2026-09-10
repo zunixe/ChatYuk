@@ -152,13 +152,23 @@ class StoragePhotoService {
   /// Thumbnail kecil via transformasi server (jauh lebih ringan dari file
   /// full untuk tile 64px). Fallback ke download full kalau transform
   /// tidak didukung server — thumbnail tidak boleh gagal total.
+  /// height/resize WAJIB diisi untuk hasil proporsional: server
+  /// menghancurkan aspek bila hanya width tanpa resize (kasus nyata:
+  /// story 960x1440 → 160x1440). Story tile 59x109: height 296 + cover.
   Future<Uint8List?> downloadThumbBytes(String path,
-      {int width = 160, int quality = 70}) async {
+      {int width = 160,
+      int? height,
+      ResizeMode? resize,
+      int quality = 70}) async {
     try {
       final bytes = await _sb.storage.from(_bucket).download(
             path,
-            transform:
-                TransformOptions(width: width, quality: quality),
+            transform: TransformOptions(
+              width: width,
+              height: height,
+              resize: resize,
+              quality: quality,
+            ),
           );
       if (bytes.isNotEmpty) return bytes;
     } catch (e) {

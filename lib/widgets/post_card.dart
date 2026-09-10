@@ -916,6 +916,9 @@ class _CommentsList extends StatefulWidget {
 class _CommentsListState extends State<_CommentsList> {
   List<Map<String, dynamic>>? _items;
   bool _busy = false;
+  // true setelah fetch pertama selesai (atau cache ada) — sebelum itu
+  // tampilkan skeleton, bukan kotak kosong.
+  bool _loaded = false;
 
   @override
   void initState() {
@@ -924,7 +927,10 @@ class _CommentsListState extends State<_CommentsList> {
     final cached = context.read<TimelineProvider>().getCachedComments(
       widget.postId,
     );
-    if (cached != null) _items = List.from(cached);
+    if (cached != null) {
+      _items = List.from(cached);
+      _loaded = true;
+    }
     _load();
   }
 
@@ -932,7 +938,10 @@ class _CommentsListState extends State<_CommentsList> {
     final list = await TimelineService().comments(widget.postId);
     if (!mounted) return;
     context.read<TimelineProvider>().cacheComments(widget.postId, list);
-    setState(() => _items = list);
+    setState(() {
+      _items = list;
+      _loaded = true;
+    });
   }
 
   /// Tambah komentar optimistic ke list lokal (dipanggil via GlobalKey).
@@ -976,17 +985,33 @@ class _CommentsListState extends State<_CommentsList> {
 
   Future<void> _share(Map<String, dynamic> c) async {
     final id = (c['id'] as num?)?.toInt() ?? 0;
+    final s = context.read<LocaleProvider>().s;
+    final author = c['authorName'] as String? ?? 'Anon';
+    final text = (c['text'] as String? ?? '').trim();
+    // Sama seperti share post: sheet sistem dulu, counter + snackbar
+    // hanya bila user benar-benar menyelesaikan share.
+    final link =
+        'https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
+    final content = text.isEmpty ? '$author\n\n$link' : '$author: $text\n\n$link';
+    final result = await Share.share(content, subject: author);
+    if (result.status != ShareResultStatus.success) return;
     try {
       final res = await TimelineService().shareComment(id);
       final count = (res['share_count'] as num?)?.toInt();
       if (!mounted) return;
-      if (count != null) setState(() => c['shareCount'] = count);
+      if (count != null) {
+        setState(() => c['shareCount'] = count);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.msgShared)));
+      }
     } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
     final items = _items ?? [];
+    if (!_loaded && items.isEmpty) return const _CommentSkeleton();
     if (items.isEmpty) {
       return const SizedBox(height: 80);
     }
@@ -1080,6 +1105,56 @@ class _CommentsListState extends State<_CommentsList> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Skeleton baris komentar saat fetch pertama (gantikan kotak kosong 80px
+/// supaya sheet terasa instan).
+class _CommentSkeleton extends StatelessWidget {
+  const _CommentSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget bar(double w) => Container(
+          width: w,
+          height: 10,
+          decoration: BoxDecoration(
+            color: AppTheme.bgInput,
+            borderRadius: BorderRadius.circular(5),
+          ),
+        );
+    return Column(
+      children: [
+        for (var i = 0; i < 3; i++)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgInput,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      bar(90),
+                      const SizedBox(height: 6),
+                      bar(double.infinity),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
