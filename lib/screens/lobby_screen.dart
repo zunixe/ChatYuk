@@ -115,51 +115,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
       body: Column(
         children: [
           // Pilih negara (hanya room global — tab Grup punya layar sendiri).
+          // Field saja tanpa kartu & ikon samping (seperti filter online).
           Padding(
             padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.bgCard,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.public_rounded,
-                      color: AppTheme.primary,
-                      size: 20,
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: SearchDropdown(
-                      value: roomProvider.country,
-                      label: s.lobbyCountryHint,
-                      icon: Icons.public_rounded,
-                      items: allCountries,
-                      labels: allCountries,
-                      searchHint: s.searchCountry,
-                      emptyText: s.searchNoResult,
-                      onChanged: (v) => _onCountryChanged(v),
-                    ),
-                  ),
-                ],
-              ),
+            child: SearchDropdown(
+              value: roomProvider.country,
+              label: s.lobbyCountryHint,
+              icon: Icons.public_rounded,
+              items: allCountries,
+              labels: allCountries,
+              searchHint: s.searchCountry,
+              emptyText: s.searchNoResult,
+              onChanged: (v) => _onCountryChanged(v),
             ),
           ),
           Expanded(
