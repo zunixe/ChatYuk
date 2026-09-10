@@ -62,7 +62,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         _loading = false;
       });
     } catch (e) {
-      debugPrint('[DUMMY] list error: $e');
+      dlog('[DUMMY] list error: $e');
       if (!mounted) return;
       setState(() {
         _error = e.toString();
@@ -163,7 +163,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       _editingUid = null;
       await _load();
     } catch (e) {
-      debugPrint('[DUMMY] register error: $e');
+      dlog('[DUMMY] register error: $e');
       _toast(s, _editingUid != null ? s.dummyUpdateFail : s.dummyRegisterFail);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -176,7 +176,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       await _load();
       _toast(s, s.dummyStatusSet);
     } catch (e) {
-      debugPrint('[DUMMY] set status error: $e');
+      dlog('[DUMMY] set status error: $e');
       _toast(s, s.dummySetStatusFail);
     }
   }
@@ -218,7 +218,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         ),
       );
     } catch (e) {
-      debugPrint('[DUMMY] chat as error: $e');
+      dlog('[DUMMY] chat as error: $e');
       _toast(s, s.dummySwapFailed);
     }
   }
@@ -253,7 +253,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       await _load();
       _toast(s, s.dummyDeleted);
     } catch (e) {
-      debugPrint('[DUMMY] delete error: $e');
+      dlog('[DUMMY] delete error: $e');
       _toast(s, s.dummyListFail);
     }
   }

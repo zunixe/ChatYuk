@@ -52,7 +52,7 @@ Future<String?> _processAvatar(Uint8List bytes) async {
     );
     if (webp.isNotEmpty) return base64Encode(webp);
   } catch (e) {
-    debugPrint('[PROFILE] webp encode failed, fallback jpeg: $e');
+    dlog('[PROFILE] webp encode failed, fallback jpeg: $e');
   }
   // Fallback JPEG q92 kalau encoder WebP gagal di device tertentu.
   final decoded = img.decodeImage(bytes);
@@ -171,7 +171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${s.errProfileSave} $e')));
+        ).showSnackBar(SnackBar(content: Text(s.errProfileSave)));
       }
     }
     if (mounted) setState(() => _savingHashtags = false);
@@ -243,7 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         imageQuality: 85,
       );
     } catch (e) {
-      debugPrint('[PROFILE] pickImage error: $e');
+      dlog('[PROFILE] pickImage error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s.errPhotoPermission)),
@@ -288,7 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted)
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${s.errPhotoSave}$e')));
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoSave)));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -333,7 +333,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       picked = await picker.pickImage(source: source);
     } catch (e) {
       // Cancel sebelum izin kamera/galeri → PlatformException, jangan error.
-      debugPrint('[PROFILE] pickImage error: $e');
+      dlog('[PROFILE] pickImage error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s.errPhotoPermission)),
@@ -369,7 +369,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       );
     } catch (e) {
-      debugPrint('[PROFILE] crop error: $e');
+      dlog('[PROFILE] crop error: $e');
       return;
     }
     if (cropped == null) return;
@@ -405,7 +405,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${s.errPhotoSave}$e')));
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoSave)));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -725,7 +725,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 if (sheetCtx.mounted) {
                                   setSheet(() {
                                     loading = false;
-                                    error = '${s.errGeneric}$e';
+                                    error = s.errGeneric; dlog(e.toString(), tag: 'PROFILE');
                                   });
                                 }
                               }

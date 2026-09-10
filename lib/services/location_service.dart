@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'geo_service.dart';
@@ -29,7 +29,7 @@ class LocationService {
         return 'ip';
       }
     } catch (e) {
-      debugPrint('[location] ip fallback error: $e');
+      dlog('[location] ip fallback error: $e');
     }
     return null;
   }
@@ -64,11 +64,11 @@ class LocationService {
             );
             return (pos.latitude, pos.longitude);
           } catch (e) {
-            debugPrint('[location] getCurrentPosition $acc error: $e');
+            dlog('[location] getCurrentPosition $acc error: $e');
           }
         }
       } catch (e) {
-        debugPrint('[location] current position error: $e');
+        dlog('[location] current position error: $e');
       }
       try {
         final last = await Geolocator.getLastKnownPosition();
@@ -77,11 +77,11 @@ class LocationService {
           return (last.latitude, last.longitude);
         }
       } catch (e) {
-        debugPrint('[location] last known error: $e');
+        dlog('[location] last known error: $e');
       }
       return null;
     } catch (e) {
-      debugPrint('[location] device position error: $e');
+      dlog('[location] device position error: $e');
       return null;
     }
   }
@@ -102,7 +102,7 @@ class LocationService {
       return perm == LocationPermission.always ||
           perm == LocationPermission.whileInUse;
     } catch (e) {
-      debugPrint('[location] requestPermission error: $e');
+      dlog('[location] requestPermission error: $e');
       return false;
     }
   }
@@ -113,7 +113,7 @@ class LocationService {
     try {
       await Geolocator.openAppSettings();
     } catch (e) {
-      debugPrint('[location] openAppSettings error: $e');
+      dlog('[location] openAppSettings error: $e');
     }
   }
 
@@ -136,7 +136,7 @@ class LocationService {
         },
       );
     } catch (e) {
-      debugPrint('[location] save error: $e');
+      dlog('[location] save error: $e');
     }
   }
 
@@ -147,7 +147,7 @@ class LocationService {
     try {
       await _sb.from('profiles').update({'share_location': value}).eq('id', id);
     } catch (e) {
-      debugPrint('[location] setShareLocation error: $e');
+      dlog('[location] setShareLocation error: $e');
     }
   }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
@@ -717,16 +718,16 @@ class _MessageImageState extends State<MessageImage> {
 
   Future<void> _decode(int key) async {
     var data = widget.imageData;
-    debugPrint('[PHOTO-DBG] MessageImage ${widget.messageId} inLen=${data.length} isPath=${StoragePhotoService.instance.isPath(data)}');
+    dlog('[PHOTO-DBG] MessageImage ${widget.messageId} inLen=${data.length} isPath=${StoragePhotoService.instance.isPath(data)}');
     // PATH storage (belum base64) → download dulu. decodeImageB64 melempar
     // null untuk input non-base64, jadi jangan memanggilnya dengan path.
     if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
       data = await StoragePhotoService.instance.download(data) ?? '';
-      debugPrint('[PHOTO-DBG] MessageImage ${widget.messageId} downloaded len=${data.length}');
+      dlog('[PHOTO-DBG] MessageImage ${widget.messageId} downloaded len=${data.length}');
     }
     if (data.isEmpty) return;
     final decoded = await compute(decodeImageB64, data);
-    debugPrint('[PHOTO-DBG] MessageImage ${widget.messageId} decoded=${decoded != null && decoded.width > 0}');
+    dlog('[PHOTO-DBG] MessageImage ${widget.messageId} decoded=${decoded != null && decoded.width > 0}');
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       // Decode gagal — jangan cache null (dipaksa `!` dulu bikin crash).
       return;
@@ -1239,11 +1240,11 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF1E88E5), Color(0xFF00BCD4)],
+                  colors: [AppTheme.primaryDark, AppTheme.accent],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF00BCD4).withValues(alpha: 0.18),
+                    color: AppTheme.accent.withValues(alpha: 0.18),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),

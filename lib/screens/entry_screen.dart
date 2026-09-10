@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
-import '../config/strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/geo_service.dart';
@@ -17,7 +15,8 @@ import 'login_screen.dart';
 import 'donate_screen.dart';
 import 'legal_screen.dart';
 import '../providers/theme_provider.dart';
-import '../widgets/search_dropdown.dart';
+import '../widgets/profile_form_card.dart';
+import '../widgets/auth_header.dart';
 
 class EntryScreen extends StatefulWidget {
   const EntryScreen({super.key});
@@ -155,12 +154,12 @@ class _EntryScreenState extends State<EntryScreen> {
       }
       // 'exists' — profile sudah ada, _AuthGate handle navigasi otomatis
     } catch (e, st) {
-      debugPrint('[GOOGLE] signInWithGoogle error: $e');
-      debugPrint('[GOOGLE] stack: $st');
+      dlog('[GOOGLE] signInWithGoogle error: $e');
+      dlog('[GOOGLE] stack: $st');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${s.errGoogleSignIn}$e')));
+        ).showSnackBar(SnackBar(content: Text(s.errGoogleSignIn)));
       }
     } finally {
       // Reset spinner di semua path (sukses, batal, error).
@@ -203,7 +202,7 @@ class _EntryScreenState extends State<EntryScreen> {
 
     _entered = true;
     setState(() => _loading = true);
-    debugPrint('[ENTRY] _enter start nick=$nick');
+    dlog('[ENTRY] _enter start nick=$nick');
     Object? lastError;
     for (var attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -231,7 +230,7 @@ class _EntryScreenState extends State<EntryScreen> {
           } catch (_) {}
         }
         lastError = e;
-        debugPrint('[ENTRY] registerProfile attempt $attempt ERROR: $e');
+        dlog('[ENTRY] registerProfile attempt $attempt ERROR: $e');
         if (attempt < 3) await Future.delayed(Duration(milliseconds: attempt == 1 ? 500 : 800));
       }
     }
@@ -248,18 +247,18 @@ class _EntryScreenState extends State<EntryScreen> {
         } else {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('${s.errGeneric}$lastError')));
+          ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
         }
       }
       return;
     }
-    debugPrint('[ENTRY] registerProfile returned OK');
+    dlog('[ENTRY] registerProfile returned OK');
     // Catat identitas perangkat + install ID untuk pelacakan admin.
     unawaited(
       DeviceInfoService.instance.syncToServer(ipAddress: _ipAddress),
     );
     if (mounted) setState(() => _loading = false);
-    debugPrint('[ENTRY] _enter done, loading=false');
+    dlog('[ENTRY] _enter done, loading=false');
   }
 
   @override
@@ -294,236 +293,36 @@ class _EntryScreenState extends State<EntryScreen> {
                     // (scroll view: spacer diganti jarak tetap, Column tak lagi flex)
                     const SizedBox(height: 4),
 
-                    // Logo — animasi halus dalam lingkaran transparan
-                    // (komposisi sama dengan halaman login).
-                    Center(
-                      child: Container(
-                        padding: EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: 0.08),
-                          shape: BoxShape.circle,
-                        ),
-                        child: _AnimatedLogo(),
-                      ),
-                    ),
-                    SizedBox(height: 4),
-
-                    // Title — light mode: gradient cerah; dark mode: solid redup (tidak
-                    // seterang ikon/putih) supaya nyaman & tetap terbaca.
-                    if (AppTheme.isDark)
-                      Text(
-                        s.appTagline,
-                        textAlign: TextAlign.center,
-                        style: AppText.display.copyWith(
-                          color: const Color(0xFFAEB9C4),
-                          letterSpacing: 0.5,
-                          shadows: [
-                            Shadow(
-                              blurRadius: 10,
-                              color: Colors.black.withValues(alpha: 0.7),
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      ShaderMask(
-                        shaderCallback: (bounds) =>
-                            AppTheme.headerGradient.createShader(bounds),
-                        child: Text(
-                          s.appTagline,
-                          textAlign: TextAlign.center,
-                          style: AppText.display.copyWith(
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                            shadows: [
-                              Shadow(
-                                blurRadius: 10,
-                                color: Colors.black.withValues(alpha: 0.65),
-                                offset: Offset(0, 2),
-                              ),
-                              Shadow(
-                                blurRadius: 20,
-                                color: Colors.black.withValues(alpha: 0.45),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    SizedBox(height: 1),
-                    Text(
-                      s.appSubtagline,
-                      textAlign: TextAlign.center,
-                      style: AppText.bodySmall.copyWith(
-                        color: AppTheme.textSecondary,
-                        shadows: [
-                          Shadow(
-                            blurRadius: 6,
-                            color: Colors.black.withValues(alpha: 0.8),
-                            offset: Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                    ),
+                    // Header — widget yang SAMA dengan layar daftar.
+                    AuthHeader(s: s),
                     SizedBox(height: 6),
 
-                    // Kartu form — satu grup utuh, komposisi sama dengan login
+                    // Kartu form — widget yang SAMA dengan popup profil.
                     if (!requireRegistration)
-                      Container(
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppTheme.bgCard,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: AppTheme.divider,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Nickname
-                            TextField(
-                              controller: _nicknameCtrl,
-                              focusNode: _nicknameFocus,
-                              onChanged: _onNicknameChanged,
-                              style: TextStyle(color: AppTheme.textPrimary),
-                              decoration: InputDecoration(
-                                prefixIcon: Icon(
-                                  Icons.person_outline,
-                                  size: 20,
-                                  color: AppTheme.textSecondary,
-                                ),
-                                labelText: s.labelUsername,
-                                hintText: s.hintNickname,
-                                suffixIcon: _nicknameError != null
-                                    ? Icon(Icons.cancel, color: AppTheme.danger)
-                                    : _nicknameCtrl.text.length >= 3
-                                    ? Icon(
-                                        Icons.check_circle,
-                                        color: Colors.green,
-                                      )
-                                    : null,
-                                enabledBorder: _nicknameError != null
-                                    ? OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: AppTheme.danger,
-                                          width: 1.5,
-                                        ),
-                                      )
-                                    : null,
-                                focusedBorder: _nicknameError != null
-                                    ? OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: AppTheme.danger,
-                                          width: 2,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                              textInputAction: TextInputAction.done,
-                              onSubmitted: (_) => _enter(),
-                            ),
-                            if (_nicknameError != null)
-                              Container(
-                                margin: EdgeInsets.only(top: 6),
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.danger.withValues(
-                                    alpha: 0.10,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: AppTheme.danger.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.info_outline,
-                                      color: AppTheme.danger,
-                                      size: 18,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _nicknameError!,
-                                        style: AppText.bodySmall.copyWith(
-                                          color: AppTheme.danger,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            SizedBox(height: 10),
-
-                            // Gender
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _genderCard(
-                                    'female',
-                                    '👩',
-                                    AppTheme.female,
-                                    s.labelGenderFemale,
-                                  ),
-                                ),
-                                SizedBox(width: 10),
-                                Expanded(
-                                  child: _genderCard(
-                                    'male',
-                                    '👨',
-                                    AppTheme.male,
-                                    s.labelGenderMale,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 10),
-
-                            // Umur & Negara — proporsi sama seperti kartu gender
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(child: _ageDropdown(s)),
-                                SizedBox(width: 10),
-                                Expanded(child: _countryDropdown(s)),
-                              ],
-                            ),
-                            SizedBox(height: 10),
-
-                            // Kota
-                            _cityDropdown(s),
-                            SizedBox(height: 12),
-
-                            // Button
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _loading ? null : _enter,
-                                child: _loading
-                                    ? SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : Text(
-                                        s.btnStartChat,
-                                        style: TextStyle(letterSpacing: 1),
-                                      ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      ProfileFormCard(
+                        s: s,
+                        nicknameCtrl: _nicknameCtrl,
+                        nicknameFocus: _nicknameFocus,
+                        nicknameError: _nicknameError,
+                        onNicknameChanged: _onNicknameChanged,
+                        onNicknameSubmitted: _enter,
+                        gender: _gender,
+                        onGenderChanged: (v) => setState(() => _gender = v),
+                        age: _age,
+                        onAgeChanged: (v) => setState(() => _age = v),
+                        country: _negara,
+                        onCountryChanged: (v) {
+                          final cities = getCitiesForCountry(v);
+                          setState(() {
+                            _negara = v;
+                            _kota = cities.isNotEmpty ? cities.first : '';
+                          });
+                        },
+                        city: _kota,
+                        onCityChanged: (v) => setState(() => _kota = v),
+                        loading: _loading,
+                        submitLabel: s.btnStartChat,
+                        onSubmit: _enter,
                       ),
                     // Jarak tetap (dulu Spacer/Expanded max 32px — tak boleh
                     // flex di dalam scroll view, meledak unbounded)
@@ -721,179 +520,4 @@ class _EntryScreenState extends State<EntryScreen> {
     );
   }
 
-  Widget _genderCard(String value, String emoji, Color color, String label) {
-    final selected = _gender == value;
-    return GestureDetector(
-      onTap: () => setState(() => _gender = value),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? color : AppTheme.divider,
-            width: selected ? 2 : 1.5,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? color : AppTheme.textSecondary,
-                  width: 2,
-                ),
-              ),
-              child: selected
-                  ? Center(
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: color,
-                        ),
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                style: AppText.label.copyWith(
-                  letterSpacing: 0,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 5),
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color.withValues(alpha: 0.15),
-              ),
-              child: Center(
-                child: Text(
-                  emoji,
-                  style: const TextStyle(fontSize: AppGlyph.sm),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _ageDropdown(S s) {
-    final ages = [for (int i = 18; i <= 60; i++) i];
-    // Widget SAMA dengan negara → tinggi field dijamin identik.
-    return SearchDropdown<int>(
-      value: ages.contains(_age) ? _age : ages.first,
-      label: s.labelAge,
-      icon: null,
-      items: ages,
-      labels: [for (final a in ages) '$a'],
-      textStyle: AppText.body,
-      onChanged: (v) => setState(() => _age = v),
-    );
-  }
-
-  Widget _countryDropdown(S s) {
-    final countries = kotaByNegara.keys.toList();
-    return SearchDropdown(
-      value: countries.contains(_negara) ? _negara : countries.first,
-      label: s.labelCountry,
-      // Tanpa prefix icon + style AppText.body (bukan bodySmall) supaya
-      // tinggi & ukuran teks field persis sama dengan dropdown Umur di
-      // sampingnya.
-      icon: null,
-      items: countries,
-      labels: countries,
-      textStyle: AppText.body,
-      searchHint: s.searchCountry,
-      emptyText: s.searchNoResult,
-      onChanged: (v) {
-        final cities = getCitiesForCountry(v);
-        setState(() {
-          _negara = v;
-          _kota = cities.isNotEmpty ? cities.first : '';
-        });
-      },
-    );
-  }
-
-  Widget _cityDropdown(S s) {
-    final cities = getCitiesForCountry(_negara);
-    if (cities.isEmpty) return const SizedBox.shrink();
-    // Ensure _kota is valid for current country
-    final validKota = cities.contains(_kota) ? _kota : cities.first;
-    // Widget SAMA dengan umur & negara → tinggi field dijamin identik.
-    return SearchDropdown<String>(
-      value: validKota,
-      label: s.labelCity,
-      icon: Icons.location_city_outlined,
-      items: cities,
-      labels: cities,
-      textStyle: AppText.body,
-      searchHint: s.searchCity,
-      emptyText: s.searchNoResult,
-      onChanged: (v) => setState(() => _kota = v),
-    );
-  }
-}
-
-/// Logo app dengan animasi halus: ayun kiri-kanan, mengambang naik-turun,
-/// dan denyut opacity seperti asap. Skala seragam → ikon tetap proporsional.
-class _AnimatedLogo extends StatefulWidget {
-  const _AnimatedLogo();
-
-  @override
-  State<_AnimatedLogo> createState() => _AnimatedLogoState();
-}
-
-class _AnimatedLogoState extends State<_AnimatedLogo>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, child) {
-        final t = _ctrl.value * 2 * math.pi;
-        return Transform.translate(
-          offset: Offset(math.sin(t) * 8, math.sin(t * 2) * 5 - 2),
-          child: Opacity(
-            opacity: 0.85 + 0.15 * math.sin(t * 2 + math.pi / 2),
-            child: Transform.scale(
-              scale: 1.0 + 0.05 * math.sin(t),
-              child: child,
-            ),
-          ),
-        );
-      },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Image.asset('assets/app_icon.png', width: 56, height: 56),
-      ),
-    );
-  }
 }

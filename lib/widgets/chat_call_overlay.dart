@@ -7,6 +7,7 @@ import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
 import 'profile_avatar.dart';
+import '../utils.dart';
 
 /// Overlay panggilan video dalam chat (gaya OmeTV, split setengah):
 /// - Video lawan mengisi layar ATAS (default 50%) — BISA di-drag vertikal
@@ -49,7 +50,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   @override
   void initState() {
     super.initState();
-    debugPrint('[OVERLAY-LIFE] init#${widget.session.hashCode}');
+    dlog('[OVERLAY-LIFE] init#${widget.session.hashCode}');
     widget.session.addListener(_onSession);
   }
 
@@ -57,7 +58,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   void didUpdateWidget(covariant ChatCallOverlay old) {
     super.didUpdateWidget(old);
     if (old.session != widget.session) {
-      debugPrint(
+      dlog(
         '[OVERLAY-LIFE] swap#${old.session.hashCode}->#${widget.session.hashCode}',
       );
       old.session.removeListener(_onSession);
@@ -67,7 +68,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
 
   @override
   void dispose() {
-    debugPrint('[OVERLAY-LIFE] dispose#${widget.session.hashCode}');
+    dlog('[OVERLAY-LIFE] dispose#${widget.session.hashCode}');
     widget.session.removeListener(_onSession);
     super.dispose();
   }
@@ -149,7 +150,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
     final showRemote = inCall && isVideo && sess.hasRemoteVideo;
     final effSwap = _swapped && showLocal && showRemote;
 
-    debugPrint(
+    dlog(
       '[OVERLAY] sess#${sess.hashCode} phase=${sess.phase} call=${sess.callType} cam=${sess.cameraOn} '
       'showLocal=$showLocal showRemote=$inCall&&$isVideo&&${sess.hasRemoteVideo} '
       'localSrc=${sess.localRenderer.srcObject != null} '

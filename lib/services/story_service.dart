@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/story_model.dart';
@@ -25,7 +25,7 @@ class StoryService {
       }
       return [];
     } catch (e) {
-      debugPrint('[Story] fetchTray error: $e');
+      dlog('[Story] fetchTray error: $e');
       return [];
     }
   }
@@ -45,7 +45,7 @@ class StoryService {
       }
       return [];
     } catch (e) {
-      debugPrint('[Story] fetchSlides error: $e');
+      dlog('[Story] fetchSlides error: $e');
       return [];
     }
   }
@@ -77,7 +77,7 @@ class StoryService {
       if (res is Map) return '${res['id'] ?? ''}';
       return '';
     } catch (e) {
-      debugPrint('[Story] createStory error: $e');
+      dlog('[Story] createStory error: $e');
       return '';
     }
   }
@@ -87,7 +87,7 @@ class StoryService {
     try {
       await _sb.rpc('mark_story_seen', params: {'p_story_id': storyId});
     } catch (e) {
-      debugPrint('[Story] markSeen error: $e');
+      dlog('[Story] markSeen error: $e');
     }
   }
 
@@ -104,7 +104,7 @@ class StoryService {
       }
       return [];
     } catch (e) {
-      debugPrint('[Story] fetchViewers error: $e');
+      dlog('[Story] fetchViewers error: $e');
       return [];
     }
   }
@@ -118,7 +118,7 @@ class StoryService {
       if (res is Map) return '${res['image_path'] ?? ''}';
       return '';
     } catch (e) {
-      debugPrint('[Story] deleteStory error: $e');
+      dlog('[Story] deleteStory error: $e');
       return '';
     }
   }

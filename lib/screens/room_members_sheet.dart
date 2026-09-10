@@ -83,7 +83,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: AppTheme.danger),
+        SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric), backgroundColor: AppTheme.danger),
       );
     }
   }
@@ -96,7 +96,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgPasswordReset)));
       _pwCtrl.clear();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric)));
     } finally {
       if (mounted) setState(() => _pwSaving = false);
     }

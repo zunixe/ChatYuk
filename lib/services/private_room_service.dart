@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import 'room_service.dart';
@@ -235,7 +235,7 @@ class PrivateRoomService {
         'payload': payload,
       });
     } catch (e) {
-      debugPrint('[PRIVROOM] sendSignal $type error: $e');
+      dlog('[PRIVROOM] sendSignal $type error: $e');
     }
   }
 

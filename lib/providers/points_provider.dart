@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/points_service.dart';
 import '../config/theme.dart';
+import '../utils.dart';
 
 class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   final PointsService _service = PointsService(Supabase.instance.client);
@@ -84,7 +85,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _bonusMultiplier = (p['multiplier'] as num?)?.toInt() ?? _bonusMultiplier;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[POINTS] refreshRoomPricing error: $e');
+      dlog('[POINTS] refreshRoomPricing error: $e');
     }
   }
 
@@ -96,7 +97,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _photoUnlockPerm = c.$2;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[POINTS] refreshPhotoCosts error: $e');
+      dlog('[POINTS] refreshPhotoCosts error: $e');
     }
   }
 
@@ -109,7 +110,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _points = (w['total'] as num?)?.toInt() ?? _points;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[POINTS] getWallet error: $e');
+      dlog('[POINTS] getWallet error: $e');
     }
   }
 
@@ -149,7 +150,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
       });
     } catch (e) {
-      debugPrint('[POINTS] auth listener error: $e');
+      dlog('[POINTS] auth listener error: $e');
     }
   }
 
@@ -178,7 +179,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       // Ambil rincian awal saat subscribe
       refreshWallet();
     } catch (e) {
-      debugPrint('[POINTS] watchOwnPoints error: $e');
+      dlog('[POINTS] watchOwnPoints error: $e');
     }
   }
 
@@ -201,7 +202,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       });
     } catch (e) {
-      debugPrint('[POINTS] watchEnabled error: $e');
+      dlog('[POINTS] watchEnabled error: $e');
     }
   }
 
@@ -211,7 +212,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _enabledConfirmed = true;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[POINTS] fetchEnabled error: $e');
+      dlog('[POINTS] fetchEnabled error: $e');
     }
   }
 
@@ -495,12 +496,12 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       resetOnlineTrackers();
       if (!_disposed) notifyListeners();
       if (_points > old) {
-        debugPrint(
+        dlog(
           '[POINTS] dailyLoginBonus +${_points - old} streak=$_loginStreak -> $_points',
         );
       }
     } catch (e) {
-      debugPrint('[POINTS] dailyLoginBonus error: $e');
+      dlog('[POINTS] dailyLoginBonus error: $e');
     }
   }
 
@@ -527,7 +528,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (!_disposed) notifyListeners();
       return _points > old;
     } catch (e) {
-      debugPrint('[POINTS] newChatBonus error: $e');
+      dlog('[POINTS] newChatBonus error: $e');
       return false;
     }
   }
@@ -545,10 +546,10 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       return remaining;
     } on PostgrestException catch (e) {
       if (e.message.contains('Not enough points')) return -1;
-      debugPrint('[POINTS] deduct error: $e');
+      dlog('[POINTS] deduct error: $e');
       return -2;
     } catch (e) {
-      debugPrint('[POINTS] deduct error: $e');
+      dlog('[POINTS] deduct error: $e');
       return -2;
     }
   }
@@ -561,7 +562,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _points = await _service.refundChatPoint(msgType);
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[POINTS] refundChatPoint error: $e');
+      dlog('[POINTS] refundChatPoint error: $e');
     }
   }
 
@@ -571,7 +572,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _points = await _service.roomReadBonus();
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[POINTS] roomReadBonus error: $e');
+      dlog('[POINTS] roomReadBonus error: $e');
     }
   }
 
@@ -583,7 +584,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (!_disposed) notifyListeners();
       return _points > old;
     } catch (e) {
-      debugPrint('[POINTS] oneTimeBonus error: $e');
+      dlog('[POINTS] oneTimeBonus error: $e');
       return false;
     }
   }
@@ -598,7 +599,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (!_disposed) notifyListeners();
       return _points > old ? _points - old : 0;
     } catch (e) {
-      debugPrint('[POINTS] rewardPhotoSlot error: $e');
+      dlog('[POINTS] rewardPhotoSlot error: $e');
       return 0;
     }
   }
@@ -616,7 +617,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
           e.message.contains('Not enough topup')) {
         throw 'topup';
       }
-      debugPrint('[POINTS] unlockPhoto error: $e');
+      dlog('[POINTS] unlockPhoto error: $e');
       rethrow;
     }
   }
@@ -629,7 +630,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (!_disposed) notifyListeners();
       return _points > old;
     } catch (e) {
-      debugPrint('[POINTS] registerBonus error: $e');
+      dlog('[POINTS] registerBonus error: $e');
       return false;
     }
   }
@@ -667,7 +668,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
             try {
               entry.remove();
             } catch (e) {
-              debugPrint('[PointsProvider] showPointsToast ignored: $e');
+              dlog('[PointsProvider] showPointsToast ignored: $e');
             }
           },
         ),
@@ -677,11 +678,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
         try {
           entry.remove();
         } catch (e) {
-          debugPrint('[PointsProvider] showPointsToast ignored: $e');
+          dlog('[PointsProvider] showPointsToast ignored: $e');
         }
       });
     } catch (e) {
-      debugPrint('[PointsProvider] showPointsToast ignored: $e');
+      dlog('[PointsProvider] showPointsToast ignored: $e');
     }
   }
 

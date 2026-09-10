@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 import '../models/message_model.dart';
@@ -97,7 +97,7 @@ class MessageStore {
         return MessageModel.fromMap('${r['id']}', map);
       }).toList();
     } catch (e) {
-      debugPrint('[STORE] load $chatKey error: $e');
+      dlog('[STORE] load $chatKey error: $e');
       return const [];
     }
   }
@@ -133,7 +133,7 @@ class MessageStore {
         await batch.commit(noResult: true);
       });
     } catch (e) {
-      debugPrint('[STORE] save $chatKey error: $e');
+      dlog('[STORE] save $chatKey error: $e');
     }
   }
 
@@ -143,7 +143,7 @@ class MessageStore {
     try {
       await db.delete(_table, where: 'chat_key = ?', whereArgs: [chatKey]);
     } catch (e) {
-      debugPrint('[STORE] clear $chatKey error: $e');
+      dlog('[STORE] clear $chatKey error: $e');
     }
   }
 
@@ -154,7 +154,7 @@ class MessageStore {
       await db.delete(_table);
       await db.delete('kv');
     } catch (e) {
-      debugPrint('[STORE] clearAll error: $e');
+      dlog('[STORE] clearAll error: $e');
     }
   }
 
@@ -171,7 +171,7 @@ class MessageStore {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     } catch (e) {
-      debugPrint('[STORE] kv save $key error: $e');
+      dlog('[STORE] kv save $key error: $e');
     }
   }
 
@@ -189,7 +189,7 @@ class MessageStore {
       if (rows.isEmpty) return null;
       return rows.first['json'] as String?;
     } catch (e) {
-      debugPrint('[STORE] kv load $key error: $e');
+      dlog('[STORE] kv load $key error: $e');
       return null;
     }
   }
@@ -200,7 +200,7 @@ class MessageStore {
     try {
       await db.delete('kv', where: 'key = ?', whereArgs: [key]);
     } catch (e) {
-      debugPrint('[STORE] kv remove $key error: $e');
+      dlog('[STORE] kv remove $key error: $e');
     }
   }
 
@@ -211,7 +211,7 @@ class MessageStore {
     try {
       await db.delete('kv');
     } catch (e) {
-      debugPrint('[STORE] clearKv error: $e');
+      dlog('[STORE] clearKv error: $e');
     }
   }
 }

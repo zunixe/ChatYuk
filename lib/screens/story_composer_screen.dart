@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -145,7 +146,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
       if (!mounted) return;
       setState(() => _b64 = b64);
     } catch (e) {
-      debugPrint('[StoryComposer] process error: $e');
+      dlog('[StoryComposer] process error: $e');
       // Fallback: pakai bytes mentah — send tidak pernah mati permanen.
       if (!mounted) return;
       setState(() => _b64 = base64Encode(bytes));
@@ -232,7 +233,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
         );
       }
     } catch (e) {
-      debugPrint('[StoryComposer] publish error: $e');
+      dlog('[StoryComposer] publish error: $e');
       if (mounted) {
         setState(() => _publishing = false);
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/social_service.dart';
 import '../services/message_cache.dart';
@@ -20,6 +21,10 @@ class SocialProvider extends ChangeNotifier {
   final Set<String> _pendingFriendRequests = {};
   final Set<String> _subscribed = {};
   int _friendRequestCount = 0;
+
+  /// Hook opsional: dipanggil saat graf follow berubah (follow/unfollow)
+  /// — TimelineProvider memakai ini untuk meng-invalidasi cache followee.
+  void Function()? onFollowGraphChanged;
 
   StreamSubscription<int>? _frSub;
   StreamSubscription<AuthState>? _authSub;
@@ -89,7 +94,7 @@ class SocialProvider extends ChangeNotifier {
       _friendRequestCount = 0;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[SocialProvider] clearAnonSocial error: $e');
+      dlog('[SocialProvider] clearAnonSocial error: $e');
     }
   }
 
@@ -201,7 +206,7 @@ class SocialProvider extends ChangeNotifier {
         }
       ]));
     } catch (e) {
-      debugPrint('[SocialProvider] refreshSelfSets error: $e');
+      dlog('[SocialProvider] refreshSelfSets error: $e');
     }
   }
 
@@ -210,12 +215,13 @@ class SocialProvider extends ChangeNotifier {
       final res = await _service.followUser(targetUid);
       if (res['ok'] == true) {
         _following.add(targetUid);
+        onFollowGraphChanged?.call();
         if (!_disposed) notifyListeners();
         return true;
       }
       return false;
     } catch (e) {
-      debugPrint('[SocialProvider] follow error: $e');
+      dlog('[SocialProvider] follow error: $e');
       return false;
     }
   }
@@ -226,12 +232,13 @@ class SocialProvider extends ChangeNotifier {
       if (res['ok'] == true) {
         _following.remove(targetUid);
         _friends.remove(targetUid);
+        onFollowGraphChanged?.call();
         if (!_disposed) notifyListeners();
         return true;
       }
       return false;
     } catch (e) {
-      debugPrint('[SocialProvider] unfollow error: $e');
+      dlog('[SocialProvider] unfollow error: $e');
       return false;
     }
   }
@@ -249,7 +256,7 @@ class SocialProvider extends ChangeNotifier {
       if (!_disposed) notifyListeners();
       return res['status']?.toString() ?? '';
     } catch (e) {
-      debugPrint('[SocialProvider] sendFriendRequest error: $e');
+      dlog('[SocialProvider] sendFriendRequest error: $e');
       return '';
     }
   }
@@ -262,7 +269,7 @@ class SocialProvider extends ChangeNotifier {
       _friendRequestCount = inbox.length;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[SocialProvider] refreshInbox error: $e');
+      dlog('[SocialProvider] refreshInbox error: $e');
     }
   }
 
@@ -278,7 +285,7 @@ class SocialProvider extends ChangeNotifier {
       }
       return res;
     } catch (e) {
-      debugPrint('[SocialProvider] subscribe error: $e');
+      dlog('[SocialProvider] subscribe error: $e');
       rethrow;
     }
   }
@@ -294,7 +301,7 @@ class SocialProvider extends ChangeNotifier {
       final res = await _service.setSubscriptionPrice(price);
       return res['ok'] == true;
     } catch (e) {
-      debugPrint('[SocialProvider] setSubscriptionPrice error: $e');
+      dlog('[SocialProvider] setSubscriptionPrice error: $e');
       return false;
     }
   }

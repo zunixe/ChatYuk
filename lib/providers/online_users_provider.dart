@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/media_disk_cache.dart';
@@ -270,7 +271,7 @@ class OnlineUsersProvider extends ChangeNotifier {
         }
       },
       onError: (e) {
-        debugPrint('[OnlineUsersProvider] stream error: $e');
+        dlog('[OnlineUsersProvider] stream error: $e');
         _loaded = true;
         _error = e.toString();
         if (!_disposed) notifyListeners();

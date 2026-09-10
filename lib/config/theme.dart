@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Skala tipografi resmi ChatYuk — 8 ukuran, 11 token.
@@ -58,11 +59,15 @@ class AppText {
   );
 
   // 16 w700 — label tombol CTA (warna ikut foregroundColor tombol)
-  static TextStyle get button =>
-      const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.2);
+  // Heading & CTA memakai Poppins (brand); body chat tetap Roboto.
+  static TextStyle get button => GoogleFonts.poppins(
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+  );
 
   // 16 w700 — judul kartu / section (admin)
-  static TextStyle get titleEmphasis => TextStyle(
+  static TextStyle get titleEmphasis => GoogleFonts.poppins(
     fontSize: 16,
     fontWeight: FontWeight.w700,
     height: 1.25,
@@ -70,7 +75,7 @@ class AppText {
   );
 
   // 17 w700 — judul AppBar, dialog, bottom sheet
-  static TextStyle get title => TextStyle(
+  static TextStyle get title => GoogleFonts.poppins(
     fontSize: 17,
     fontWeight: FontWeight.w700,
     height: 1.25,
@@ -78,7 +83,7 @@ class AppText {
   );
 
   // 20 w800 — nama user di header profil
-  static TextStyle get headline => TextStyle(
+  static TextStyle get headline => GoogleFonts.poppins(
     fontSize: 20,
     fontWeight: FontWeight.w800,
     height: 1.2,
@@ -86,7 +91,7 @@ class AppText {
   );
 
   // 24 w800 — saldo wallet, angka hero, tagline
-  static TextStyle get display => TextStyle(
+  static TextStyle get display => GoogleFonts.poppins(
     fontSize: 24,
     fontWeight: FontWeight.w800,
     height: 1.15,
@@ -150,9 +155,12 @@ class AppTheme {
   }
 
   // ── Brand (konstan di kedua mode) ──
-  static const Color primary = Color(0xFF2196F3);
-  static const Color primaryDark = Color(0xFF1976D2);
-  static const Color accent = Color(0xFF00BCD4);
+  // Indigo-blue modern (#2563EB, skill UI/UX rekomendasi) — menggantikan
+  // Material Blue #2196F3. Gradient FAB/header otomatis ikut karena
+  // seluruh screen memakai token ini.
+  static const Color primary = Color(0xFF2563EB);
+  static const Color primaryDark = Color(0xFF1D4ED8);
+  static const Color accent = Color(0xFF06B6D4);
 
   // ── Palet light ──
   static const _bgScreenLight = Color(0xFFF0F4F8);
@@ -191,7 +199,7 @@ class AppTheme {
   static const Color idle = Color(0xFFFFB300);
   static const Color offline = Color(0xFFBDBDBD);
   static const Color danger = Color(0xFFF44336);
-  static const Color male = Color(0xFF2196F3);
+  static const Color male = Color(0xFF2563EB);
   static const Color female = Color(0xFFE91E63);
 
   /// Gradient header/AppBar — ikut mode (gelap di dark mode).
@@ -249,6 +257,8 @@ class AppTheme {
         onError: Colors.white,
       ),
       appBarTheme: AppBarTheme(
+        // Dark: #1B2A3A = warna pertama headerGradient — flat AppBar
+        // (room chat, dialog) menyatu dengan screens bergradient header.
         backgroundColor: isLight ? primary : const Color(0xFF1B2A3A),
         elevation: 0,
         centerTitle: true,

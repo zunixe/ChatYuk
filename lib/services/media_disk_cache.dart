@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Cache DISK untuk semua media dari Supabase Storage (avatar, galeri
@@ -77,7 +78,7 @@ class MediaDiskCache {
         if (t != null) _index[k] = t;
       });
     } catch (e) {
-      debugPrint('[MediaDisk] index load error: $e');
+      dlog('[MediaDisk] index load error: $e');
     }
   }
 
@@ -89,7 +90,7 @@ class MediaDiskCache {
         flush: true,
       );
     } catch (e) {
-      debugPrint('[MediaDisk] index save error: $e');
+      dlog('[MediaDisk] index save error: $e');
     }
   }
 
@@ -103,7 +104,7 @@ class MediaDiskCache {
       if (!d.existsSync()) d.createSync(recursive: true);
       await _loadIndex();
     } catch (e) {
-      debugPrint('[MediaDisk] prewarm error: $e');
+      dlog('[MediaDisk] prewarm error: $e');
     }
   }
 
@@ -118,7 +119,7 @@ class MediaDiskCache {
       unawaited(_saveIndex());
       return f.readAsBytesSync();
     } catch (e) {
-      debugPrint('[MediaDisk] read error: $e');
+      dlog('[MediaDisk] read error: $e');
       return null;
     }
   }
@@ -132,7 +133,7 @@ class MediaDiskCache {
       if (!f.existsSync()) return null;
       return f.readAsBytesSync();
     } catch (e) {
-      debugPrint('[MediaDisk] readSync error: $e');
+      dlog('[MediaDisk] readSync error: $e');
       return null;
     }
   }
@@ -157,7 +158,7 @@ class MediaDiskCache {
       _index[serverPath] = DateTime.now();
       unawaited(_saveIndex());
     } catch (e) {
-      debugPrint('[MediaDisk] write error: $e');
+      dlog('[MediaDisk] write error: $e');
     }
   }
 
@@ -195,7 +196,7 @@ class MediaDiskCache {
       _index.removeWhere((k, v) => !existing.contains(_fileName(k)));
       unawaited(_saveIndex());
     } catch (e) {
-      debugPrint('[MediaDisk] quota error: $e');
+      dlog('[MediaDisk] quota error: $e');
     }
   }
 
@@ -229,7 +230,7 @@ class MediaDiskCache {
       }
       unawaited(_saveIndex());
     } catch (e) {
-      debugPrint('[MediaDisk] keepOnly error: $e');
+      dlog('[MediaDisk] keepOnly error: $e');
     }
   }
 

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 
@@ -68,7 +68,7 @@ class GeoService {
         lon: lon,
       );
     } catch (e) {
-      debugPrint('[geo] detectByCoordinates error: $e');
+      dlog('[geo] detectByCoordinates error: $e');
       return null;
     }
   }
@@ -81,7 +81,7 @@ class GeoService {
         final info = await _tryProvider('$base$ip');
         if (info != null) return info;
       } catch (e) {
-        debugPrint('[geo] detectByIp $ip error: $e');
+        dlog('[geo] detectByIp $ip error: $e');
       }
     }
     return null;
@@ -129,7 +129,7 @@ class GeoService {
         lon: lon,
       );
     } catch (e) {
-      debugPrint('[geo] detect error: $e');
+      dlog('[geo] detect error: $e');
       return null;
     }
   }

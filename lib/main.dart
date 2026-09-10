@@ -60,7 +60,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final data = message.data;
   final type = data['type'];
   final shouldShow = await NotificationPrefsService.shouldShowForFcmType(type as String?);
-  debugPrint('[NOTIF_BG] type=$type shouldShow=$shouldShow data=$data');
+  dlog('[NOTIF_BG] type=$type shouldShow=$shouldShow data=$data');
   if (!shouldShow) return;
   // Chat yang dibisukan → tidak ada notifikasi (background).
   final bgChatId = '${data['chatId'] ?? ''}';
@@ -83,7 +83,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await _ensureAndroidChannels(plugin);
     final key = data['callId'] ?? data['chatId'] ?? '';
     if (key.isEmpty) return;
-    debugPrint('[NOTIF_BG] call_ended key=$key data=$data');
+    dlog('[NOTIF_BG] call_ended key=$key data=$data');
     String _pick(Map d, List<String> keys, String fallback) {
       for (final k in keys) {
         final v = d[k];
@@ -266,7 +266,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
     if (data['type'] == 'room' && (data['ownerId'] as String?) == currentUid) return;
   }
   final shouldShow = await NotificationPrefsService.shouldShowForFcmType(data['type'] as String?);
-  debugPrint('[NOTIF_FG] type=${data['type']} shouldShow=$shouldShow data=$data');
+  dlog('[NOTIF_FG] type=${data['type']} shouldShow=$shouldShow data=$data');
   if (!shouldShow) return;
   // call_ended → update notif call yang sama jadi "Call ended" + tutup
   // IncomingCallScreen & foreground service jika masih tampil (sinkron DB
@@ -275,7 +275,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   if (data['type'] == 'call_ended') {
     final key = data['callId'] ?? data['chatId'] ?? '';
     if (key.isEmpty) return;
-    debugPrint('[NOTIF] call_ended key=$key title=${data['otherName']} body=${data['body']}');
+    dlog('[NOTIF] call_ended key=$key title=${data['otherName']} body=${data['body']}');
     // Langsung update notif yang sama (id = callId) tanpa cancel dulu — cancel+show
     // di MIUI menyisakan ghost kosong.
     // Tutup IncomingCallScreen yang mungkin masih nongol (app foreground)
@@ -621,15 +621,15 @@ Future<void> _initNotificationsFast() async {
     try {
       final androidImpl = localNotifications.resolvePlatformSpecificImplementation<lpn.AndroidFlutterLocalNotificationsPlugin>();
       final granted = await androidImpl?.requestNotificationsPermission();
-      debugPrint('[NOTIF] POST_NOTIFICATIONS granted=$granted');
-    } catch (e) { debugPrint('[NOTIF] requestNotificationsPermission error: $e'); }
+      dlog('[NOTIF] POST_NOTIFICATIONS granted=$granted');
+    } catch (e) { dlog('[NOTIF] requestNotificationsPermission error: $e'); }
   }
-  if (!_firebaseReady) { debugPrint('[FCM] dilewati, Firebase belum init'); _initDeepLinks(); return; }
+  if (!_firebaseReady) { dlog('[FCM] dilewati, Firebase belum init'); _initDeepLinks(); return; }
   final messaging = FirebaseMessaging.instance;
   final settingsNow = await messaging.getNotificationSettings();
   if (settingsNow.authorizationStatus != AuthorizationStatus.authorized) {
     final perm = await messaging.requestPermission(alert: true, badge: true, sound: true);
-    if (perm.authorizationStatus != AuthorizationStatus.authorized) debugPrint('FCM permission denied');
+    if (perm.authorizationStatus != AuthorizationStatus.authorized) dlog('FCM permission denied');
   }
   FirebaseMessaging.onMessage.listen(_showLocalNotification);
   FirebaseMessaging.onMessageOpenedApp.listen(_openFromMessage);
@@ -642,9 +642,9 @@ Future<void> _initFcmTokenLazy() async {
   if (!_firebaseReady) return;
   final messaging = FirebaseMessaging.instance;
   String? token;
-  try { token = await messaging.getToken().timeout(const Duration(seconds: 5)); } catch (e) { debugPrint('FCM getToken failed: $e'); }
+  try { token = await messaging.getToken().timeout(const Duration(seconds: 5)); } catch (e) { dlog('FCM getToken failed: $e'); }
   if (token != null) {
-    debugPrint('FCM token: ${token.substring(0, 20)}...');
+    dlog('FCM token: ${token.substring(0, 20)}...');
     final auth = AuthService();
     if (auth.isSignedIn) unawaited(auth.updateFcmToken(token));
     else unawaited(_waitForSession().then((ready) { if (ready) unawaited(AuthService().updateFcmToken(token!)); }));
@@ -663,11 +663,11 @@ void _initDeepLinks() {
   // Link saat app sudah berjalan di foreground
   appLinks.uriLinkStream.listen(
     (uri) {
-      if (kDebugMode) debugPrint('[DEEPLINK] incoming: $uri');
+      if (kDebugMode) dlog('[DEEPLINK] incoming: $uri');
       _handleDeepLink(uri);
     },
     onError: (e) {
-      if (kDebugMode) debugPrint('[DEEPLINK] stream error: $e');
+      if (kDebugMode) dlog('[DEEPLINK] stream error: $e');
     },
   );
 
@@ -676,14 +676,14 @@ void _initDeepLinks() {
       .getInitialLink()
       .then((uri) {
         if (uri != null) {
-          if (kDebugMode) debugPrint('[DEEPLINK] initial: $uri');
+          if (kDebugMode) dlog('[DEEPLINK] initial: $uri');
           WidgetsBinding.instance.addPostFrameCallback(
             (_) => _handleDeepLink(uri),
           );
         }
       })
       .catchError((e) {
-        if (kDebugMode) debugPrint('[DEEPLINK] getInitialLink error: $e');
+        if (kDebugMode) dlog('[DEEPLINK] getInitialLink error: $e');
       });
 }
 
@@ -697,7 +697,7 @@ Future<void> _setRecoverySession(
       accessToken: accessToken,
     );
   } catch (e) {
-    if (kDebugMode) debugPrint('[DEEPLINK] setSession error: $e');
+    if (kDebugMode) dlog('[DEEPLINK] setSession error: $e');
   }
 }
 
@@ -734,7 +734,7 @@ void _handleDeepLink(Uri uri) {
   // chatyuk://login-callback — Supabase password recovery / email confirm
   if (uri.host == 'login-callback') {
     final type = uri.queryParameters['type'];
-    if (kDebugMode) debugPrint('[DEEPLINK] login-callback type=$type');
+    if (kDebugMode) dlog('[DEEPLINK] login-callback type=$type');
     // Supabase SDK menangani session via onAuthStateChange — tidak perlu
     // extract token manual di sini. Navigator ke ResetPasswordScreen dipicu
     // oleh passwordRecovery event di _AuthGate (app.dart).
@@ -748,7 +748,7 @@ void _handleDeepLink(Uri uri) {
       final refreshToken = params['refresh_token'];
       final linkType = params['type'];
       if (accessToken != null && refreshToken != null) {
-        if (kDebugMode) debugPrint('[DEEPLINK] setting session type=$linkType');
+        if (kDebugMode) dlog('[DEEPLINK] setting session type=$linkType');
         // Set session recovery MANUAL. Deep link custom scheme (chatyuk://)
         // tidak selalu memicu session otomatis di SDK — tanpa session,
         // updateUser (set password baru) akan gagal.
@@ -771,16 +771,17 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   WidgetsFlutterBinding.ensureInitialized();
   kFirebaseOptionsOverride = firebaseOptions;
   FlutterError.onError = (details) {
-    debugPrint('[FLUTTER-ERROR] ${details.exception}');
-    debugPrint('[FLUTTER-ERROR] ${details.stack}');
+    dlog('[FLUTTER-ERROR] ${details.exception}');
+    dlog('[FLUTTER-ERROR] ${details.stack}');
   };
   PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('[PLATFORM-ERROR] $error\n$stack');
+    dlog('[PLATFORM-ERROR] $error\n$stack');
     return true;
   };
   // Paralel: Supabase + Firebase + kunci Keystore/SQLite (independen) —
   // prewarmDb di sini (bukan setelah init) supaya antrean Keystore tidak
   // menunggu auth selesai. Hemat 0.5-2s di Xiaomi cold start.
+  dlog('[BOOT] step-0 bootstrap start');
   await Future.wait([
     SupabaseConfig.init(),
     MessageCache.instance.prewarmDb(),
@@ -792,20 +793,21 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
         // Flavor dev (Supabase local): Firebase dev belum dikonfigurasi —
         // skip init supaya build & runtime jalan tanpa google-services.json.
         if (AppEnv.isDev) {
-          debugPrint('[FIREBASE] dev mode: FCM dinonaktifkan');
+          dlog('[FIREBASE] dev mode: FCM dinonaktifkan');
           return;
         }
         await Firebase.initializeApp(options: firebaseOptions ?? DefaultFirebaseOptions.currentPlatform);
         _firebaseReady = true;
       } on UnsupportedError catch (e) {
-        debugPrint('[FIREBASE] iOS belum dikonfigurasi, lewati: $e');
+        dlog('[FIREBASE] iOS belum dikonfigurasi, lewati: $e');
       } on FirebaseException catch (e) {
-        if (e.code == 'duplicate-app') _firebaseReady = true; else debugPrint('[FIREBASE] init gagal: $e');
+        if (e.code == 'duplicate-app') _firebaseReady = true; else dlog('[FIREBASE] init gagal: $e');
       } catch (e) {
-        debugPrint('[FIREBASE] init error: $e');
+        dlog('[FIREBASE] init error: $e');
       }
     }),
   ]);
+  dlog('[BOOT] step-1 Future.wait selesai');
   // Fire-and-forget yang tidak block TTI
   unawaited(AdminGate.postInit?.call());
   unawaited(MessageCache.instance.clearLegacyV1Only());
@@ -815,8 +817,11 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   }
   // Channel + permission cepat (tanpa getToken 5s) — getToken lazy setelah runApp
   await _initNotificationsFast();
+  dlog('[BOOT] step-2 notif selesai');
   await warmChatBackground();
+  dlog('[BOOT] step-3 bg image selesai');
   await AppTheme.init();
+  dlog('[BOOT] step-4 theme selesai');
   // Kunci portrait dua lapis (manifest sudah portrait — ini lapisan Dart,
   // menutup edge-case hot-restart / perangkat yang mengabaikan manifest).
   SystemChrome.setPreferredOrientations([

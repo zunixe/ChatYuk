@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/timeline_service.dart';
 import '../services/message_cache.dart';
@@ -31,10 +32,18 @@ class TimelineProvider extends ChangeNotifier {
   // "Ketuk +" — tunggu disk/network selesai dulu (posts.isEmpty && loading
   // = spinner). Falsify hanya di load()/_loadDiskScope setelah sumber siap.
   bool _loading = true;
+  // Future fetch per-scope yang sedang berjalan — dedupe antara klik tab,
+  // pull-refresh, pagination, dan prewarm tanpa saling menimpa.
+  final Map<String, Future<void>> _inFlight = {};
   bool _hasMore = true;
   DateTime? _cursor;
   bool _cursorBoosted = false;
   String _scope = 'all';
+  // Error terakhir fetch scope aktif — dipakai UI membedakan "feed kosong"
+  // (server sukses jawab kosong) vs "network error" (jangan tampilkan
+  // empty state palsu; tawarkan tombol coba lagi).
+  bool _lastFetchFailed = false;
+  String _scopeError = 'all';
   Set<String> _followedIds = {};
   Set<String> _subscribedIds = {};
   Set<String> _blockedIds = {};
@@ -64,10 +73,16 @@ class TimelineProvider extends ChangeNotifier {
   bool get loading => _loading;
   bool get hasMore => _hasMore;
 
+  /// Feed aktif gagal di-fetch (network/RPC error) — bukan kosong sungguhan.
+  bool get fetchFailed => _lastFetchFailed && _scopeError == _scope;
+
   TimelineProvider() {
     _listenRealtime();
     refreshPricing();
-    _loadDiskScope('all');
+    // Disk cache SEMUA scope — cold start tab mana pun tampil instan.
+    for (final s in const ['all', 'following', 'mine']) {
+      _loadDiskScope(s);
+    }
     // Supabase signOut men-teardown semua channel realtime — subscribe
     // ulang saat user baru login supaya live-update timeline tetap jalan.
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
@@ -77,6 +92,10 @@ class TimelineProvider extends ChangeNotifier {
       }
     });
   }
+
+  /// Follow/unfollow terjadi → buang TTL cache, fetch berikutnya segar.
+  /// Dipanggil via SocialProvider.onFollowGraphChanged (di-wiring di app.dart).
+  void invalidateFollowedIds() => _followedIdsAt = null;
 
   // ── Persist feed ke disk (encrypted) — cold start tampil instan ──────────
   Timer? _diskSaveTimer;
@@ -88,13 +107,14 @@ class TimelineProvider extends ChangeNotifier {
           : e.value,
   };
 
-  void _scheduleDiskSave() {
+  void _scheduleDiskSave([String? scope]) {
+    final target = scope ?? _scope;
     _diskSaveTimer?.cancel();
     _diskSaveTimer = Timer(const Duration(seconds: 2), () {
-      final rows = _scopeCache[_scope]?.posts;
+      final rows = _scopeCache[target]?.posts;
       if (rows == null || rows.isEmpty) return;
       MessageCache.instance.saveRawObj(
-        'timeline_$_scope',
+        'timeline_$target',
         {
           'posts': rows.map(_postForDisk).toList(),
           'cursor': _cursor?.toIso8601String(),
@@ -135,7 +155,7 @@ class TimelineProvider extends ChangeNotifier {
         if (!_disposed) notifyListeners();
       }
     } catch (e) {
-      debugPrint('[TimelineProvider] disk load error: $e');
+      dlog('[TimelineProvider] disk load error: $e');
     }
   }
 
@@ -302,6 +322,7 @@ class TimelineProvider extends ChangeNotifier {
   /// Hapus semua cache saat logout.
   void resetCache() {
     _diskSaveTimer?.cancel();
+    _inFlight.clear();
     _scopeCache.clear();
     _commentCache.clear();
     _posts.clear();
@@ -315,7 +336,17 @@ class TimelineProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _refreshFollowedIds() async {
+  // TTL cache followee — switch tab all⇄following bolak-balik tidak
+  // mem-fetch daftar follows penuh berulang-ulang (query + network).
+  DateTime? _followedIdsAt;
+  static const _followedIdsTtl = Duration(seconds: 60);
+
+  Future<void> _refreshFollowedIds({bool force = false}) async {
+    if (!force &&
+        _followedIdsAt != null &&
+        DateTime.now().difference(_followedIdsAt!) < _followedIdsTtl) {
+      return; // cache masih segar
+    }
     try {
       final me = Supabase.instance.client.auth.currentUser?.id;
       if (me == null) return;
@@ -324,8 +355,9 @@ class TimelineProvider extends ChangeNotifier {
           .select('followee_id')
           .eq('follower_id', me);
       _followedIds = rows.map((r) => '${r['followee_id']}').toSet();
+      _followedIdsAt = DateTime.now();
     } catch (e) {
-      debugPrint('[TimelineProvider] followed ids error: $e');
+      dlog('[TimelineProvider] followed ids error: $e');
     }
   }
 
@@ -352,7 +384,7 @@ class TimelineProvider extends ChangeNotifier {
         return b == me ? d : b;
       }).toSet();
     } catch (e) {
-      debugPrint('[TimelineProvider] visibility sets error: $e');
+      dlog('[TimelineProvider] visibility sets error: $e');
     }
   }
 
@@ -365,8 +397,88 @@ class TimelineProvider extends ChangeNotifier {
           (p['posts_daily_limit'] as num?)?.toInt() ?? _postsDailyLimit;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[TimelineProvider] pricing error: $e');
+      dlog('[TimelineProvider] pricing error: $e');
     }
+  }
+
+  /// Prewarm SEMUA scope di background (dipanggil belakangan setelah app
+  /// selesai warm-up) — saat user tap tab Timeline (termasuk Mengikuti &
+  /// Postinganku) data sudah di memori, tidak ada spinner RPC pertama.
+  /// Fetch scope non-aktif hanya mengisi cache — TIDAK menyentuh feed yang
+  /// sedang dilihat user.
+  Future<void> prewarm() async {
+    if (_disposed) return;
+    await Future.wait([
+      for (final s in const ['all', 'following', 'mine'])
+        if (_lastLoadedAt[s] == null) _fetchScope(s, refresh: true),
+    ]);
+  }
+
+  /// Fetch satu scope dengan dedupe (klik tab / pull-refresh / pagination /
+  /// prewarm tidak saling menimpa). Hasil di-apply ke feed tampilan HANYA
+  /// bila scope tersebut masih tab aktif — sumber utama bug "Ketuk +"
+  /// palsu & konten tab salah.
+  Future<void> _fetchScope(String scope, {required bool refresh}) async {
+    final inFlight = _inFlight[scope];
+    if (inFlight != null) return inFlight;
+    final fut = _fetchScopeInner(scope, refresh: refresh);
+    _inFlight[scope] = fut;
+    try {
+      await fut;
+    } finally {
+      _inFlight.remove(scope);
+    }
+  }
+
+  /// Siapkan feed tampilan untuk scope: emit cache instan, atau bersihkan
+  /// post tab lain + skeleton. Post tab lain TIDAK BOLEH terbawa ke tab
+  /// baru (dulu jadi sumber konten salah & empty state palsu).
+  void _prepareVisible(String scope) {
+    _scope = scope;
+    _lastFetchFailed = false;
+    _cursor = null;
+    _cursorBoosted = false;
+    _hasMore = true;
+    final cached = _scopeCache[scope];
+    final fresh = cached != null &&
+        cached.posts.isNotEmpty &&
+        _lastLoadedAt[scope] != null &&
+        DateTime.now().difference(_lastLoadedAt[scope]!) <
+            const Duration(seconds: 30);
+    if (fresh) {
+      _posts
+        ..clear()
+        ..addAll(_excludeOwn(cached.posts, scope));
+      _cursor = cached.cursor;
+      _cursorBoosted = cached.cursorBoosted;
+      _hasMore = cached.hasMore;
+      _invalidateView();
+      if (!_disposed) notifyListeners();
+      return;
+    }
+    if (cached != null && cached.posts.isNotEmpty) {
+      // Frame pertama instant dari cache — server menyusul update fresh.
+      _posts
+        ..clear()
+        ..addAll(_excludeOwn(cached.posts, scope));
+      _cursor = cached.cursor;
+      _cursorBoosted = cached.cursorBoosted;
+      _hasMore = cached.hasMore;
+      _invalidateView();
+    } else {
+      // Cache memori kosong — skeleton dulu, disk cache menyusul (async).
+      _posts.clear();
+      _invalidateView();
+      _loadDiskScope(scope);
+      _loading = true;
+    }
+    // Cache daftar followee/subscriber/blokir untuk filter realtime.
+    if (scope == 'following') _refreshFollowedIds();
+    if (scope == 'all') {
+      _refreshFollowedIds();
+      _refreshVisibilitySets();
+    }
+    if (!_disposed) notifyListeners();
   }
 
   /// Scope 'following' tidak menampilkan post sendiri (ada tab Postinganku).
@@ -381,67 +493,12 @@ class TimelineProvider extends ChangeNotifier {
   }
 
   Future<void> load(String scope, {bool refresh = false}) async {
-    // Kalau sedang loading scope LAIN, tetap emit cache scope baru dulu
-    // supaya tab switch terasa instant, lalu lanjut fetch setelah selesai.
-    if (_loading && _scope == scope) return;
-    final cached = _scopeCache[scope];
-    final fresh = cached != null &&
-        cached.posts.isNotEmpty &&
-        _lastLoadedAt[scope] != null &&
-        DateTime.now().difference(_lastLoadedAt[scope]!) <
-            const Duration(seconds: 30);
-    _scope = scope;
-    if (refresh) {
-      _cursor = null;
-      _cursorBoosted = false;
-      _hasMore = true;
+    if (refresh) _prepareVisible(scope);
+    await _fetchScope(scope, refresh: refresh);
+  }
 
-      // Tab yang datanya masih fresh: langsung pakai cache & SELESAI —
-      // tanpa network, tanpa flag loading. Ini yang bikin klik tab terasa
-      // secepat pindah menu chat.
-      if (fresh) {
-        _posts
-          ..clear()
-          ..addAll(_excludeOwn(cached.posts, scope));
-        _cursor = cached.cursor;
-        _cursorBoosted = cached.cursorBoosted;
-        _hasMore = cached.hasMore;
-        _invalidateView();
-        if (!_disposed) notifyListeners();
-        return;
-      }
-
-      // Cache daftar followee — dipakai filter realtime untuk scope
-      // 'following' (payload realtime tidak membawa is_following).
-      if (scope == 'following') _refreshFollowedIds();
-      // Cache subscriber + blokir (dan followee) untuk filter visibilitas
-      // feed realtime di scope 'all'/'following'.
-      if (scope == 'all') {
-        _refreshFollowedIds();
-        _refreshVisibilitySets();
-      }
-      // Emit cache scope baru DULU — instant tanpa network.
-      // Konten tab sebelumnya diganti atomik dengan cache tab baru.
-      // Server menyusul dan update feed dengan data fresh.
-      if (cached != null && cached.posts.isNotEmpty) {
-        _posts
-          ..clear()
-          ..addAll(_excludeOwn(cached.posts, scope));
-        _cursor = cached.cursor;
-        _cursorBoosted = cached.cursorBoosted;
-        _hasMore = cached.hasMore;
-        _invalidateView();
-        if (!_disposed) notifyListeners(); // frame pertama instant dari cache
-      } else {
-        // Cache memori kosong (cold start) — coba disk.
-        _loadDiskScope(scope);
-      }
-    }
-    if (cached == null || cached.posts.isEmpty) {
-      // Spinner HANYA saat tidak ada apa pun untuk ditampilkan.
-      _loading = true;
-      if (!_disposed) notifyListeners();
-    }
+  Future<void> _fetchScopeInner(String scope, {required bool refresh}) async {
+    final active = _scope == scope;
     try {
       // Timeout: socket stall tidak boleh bikin spinner selamanya.
       final fetched = await _service
@@ -451,54 +508,73 @@ class TimelineProvider extends ChangeNotifier {
             cursorBoosted: refresh ? false : _cursorBoosted,
           )
           .timeout(const Duration(seconds: 10));
+      if (_disposed) return;
       final list = _excludeOwn(fetched, scope);
       if (list.isEmpty) {
-        _hasMore = false;
-        // Hapus feed HANYA bila server sukses menjawab kosong — network
-        // error/timeout tidak boleh menghapus data lama (offline-safe).
+        if (active) _hasMore = false;
         if (refresh) {
-          _posts.clear();
-          _invalidateView();
-          // Hapus cache scope ini — memang kosong dari server.
+          // Hapus feed HANYA bila server sukses menjawab kosong — network
+          // error/timeout tidak boleh menghapus data lama (offline-safe).
           _scopeCache.remove(scope);
-        }
-      } else {
-        final now = DateTime.now();
-        if (refresh) {
-          // Ganti seluruh feed dengan halaman pertama yang fresh (atomik).
-          _posts
-            ..clear()
-            ..addAll(list);
-        } else {
-          final seen = _posts.map((p) => p['id']).toSet();
-          for (final p in list) {
-            if (!seen.contains(p['id'])) _posts.add(p);
+          if (active) {
+            _posts.clear();
+            _invalidateView();
           }
         }
-        // Cursor keyset konsisten dengan ORDER BY (is_boosted desc, created_at desc).
+      } else {
         final last = list.last;
         final lastCreated = last['createdAt'];
         // RPC list_posts mengembalikan createdAt sebagai String ISO-8601
         // (jsonb_build_object), BUKAN DateTime — parse dulu, kalau gagal
         // fallback now (halaman berikutnya tetap jalan, bukan stuck).
-        _cursor = lastCreated is DateTime
+        final cursor = lastCreated is DateTime
             ? lastCreated
-            : (DateTime.tryParse('$lastCreated') ?? now);
-        _cursorBoosted = last['isBoosted'] == true;
-        // Halaman lebih pendek dari limit → sudah ujung feed.
-        if (list.length < 30) _hasMore = false;
-        _invalidateView();
+            : (DateTime.tryParse('$lastCreated') ?? DateTime.now());
+        final boosted = last['isBoosted'] == true;
+        final more = list.length >= 30;
+        if (active) {
+          if (refresh) {
+            // Ganti seluruh feed dengan halaman pertama yang fresh (atomik).
+            _posts
+              ..clear()
+              ..addAll(list);
+          } else {
+            final seen = _posts.map((p) => p['id']).toSet();
+            for (final p in list) {
+              if (!seen.contains(p['id'])) _posts.add(p);
+            }
+          }
+          // Cursor keyset konsisten dengan ORDER BY (is_boosted desc,
+          // created_at desc).
+          _cursor = cursor;
+          _cursorBoosted = boosted;
+          _hasMore = more;
+          _invalidateView();
+          _syncScopeCache();
+        } else {
+          // Scope bukan tab aktif (prewarm) — cukup isi cache, jangan
+          // sentuh feed tampilan.
+          _scopeCache[scope] = _ScopeCache(
+            posts: list,
+            cursor: cursor,
+            cursorBoosted: boosted,
+            hasMore: more,
+          );
+        }
       }
-      // Simpan hasil fetch terbaru ke cache scope ini.
-      _syncScopeCache();
       _lastLoadedAt[scope] = DateTime.now();
-      _scheduleDiskSave();
+      _scheduleDiskSave(scope);
     } catch (e) {
-      debugPrint('[TimelineProvider] load error: $e');
+      dlog('[TimelineProvider] load $scope error: $e');
+      // Tandai gagal — UI menampilkan retry, BUKAN empty state palsu.
+      if (_scope == scope) {
+        _lastFetchFailed = true;
+        _scopeError = scope;
+      }
       // _hasMore TIDAK diubah — pagination tetap bisa retry saat scroll
       // (error sementara bukan berarti ujung feed).
     } finally {
-      _loading = false;
+      if (_scope == scope) _loading = false;
       if (!_disposed) notifyListeners();
     }
   }

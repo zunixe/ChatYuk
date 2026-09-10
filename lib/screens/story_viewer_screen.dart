@@ -702,7 +702,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
       if (!mounted) return;
       setState(() => _sendingReply = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${s.errSendFailed}$e')),
+        SnackBar(content: Text(s.errSendFailed)),
       );
     }
   }

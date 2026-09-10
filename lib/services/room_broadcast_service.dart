@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -88,7 +89,7 @@ class RoomBroadcastSession extends ChangeNotifier {
       // Cap 4: cek jumlah broadcaster aktif sebelum ambil kamera
       final cnt = await _prv.broadcastCount(roomId);
       if (cnt >= kMaxBroadcasters) {
-        debugPrint('[BROADCAST] cap 4 reached, abort start');
+        dlog('[BROADCAST] cap 4 reached, abort start');
         await stop();
         throw Exception('Broadcast full (4/4)');
       }
@@ -101,7 +102,7 @@ class RoomBroadcastSession extends ChangeNotifier {
         localRendererReady = true;
         await _prv.startBroadcast(roomId);
       } catch (e) {
-        debugPrint('[BROADCAST] getUserMedia/startBroadcast failed: $e');
+        dlog('[BROADCAST] getUserMedia/startBroadcast failed: $e');
         await stop();
         rethrow;
       }
@@ -126,14 +127,14 @@ class RoomBroadcastSession extends ChangeNotifier {
               st == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
               st == RTCPeerConnectionState.RTCPeerConnectionStateClosed;
           if (st != null && dead) {
-            debugPrint('[BROADCAST] re-offer to ${entry.key} state=$st');
+            dlog('[BROADCAST] re-offer to ${entry.key} state=$st');
             unawaited(_makeOfferTo(entry.key));
             continue;
           }
           final sentAt = _offerSentAt[entry.key];
           if (sentAt != null &&
               DateTime.now().difference(sentAt) > const Duration(seconds: 8)) {
-            debugPrint('[BROADCAST] re-offer to ${entry.key} (no answer >8s)');
+            dlog('[BROADCAST] re-offer to ${entry.key} (no answer >8s)');
             unawaited(_makeOfferTo(entry.key));
           }
         }
@@ -207,7 +208,7 @@ class RoomBroadcastSession extends ChangeNotifier {
         try {
           final cnt = await _prv.broadcastCount(roomId);
           if (cnt > 0) {
-            debugPrint('[BROADCAST] viewer re-ping (no video yet)');
+            dlog('[BROADCAST] viewer re-ping (no video yet)');
             await requestStream();
           }
         } catch (_) {}
@@ -265,7 +266,7 @@ class RoomBroadcastSession extends ChangeNotifier {
               DateTime.now().toUtc();
           final last = _lastOfferAt[from];
           if (last != null && !ca.isAfter(last)) {
-            debugPrint('[BROADCAST] duplicate/stale offer ignored for $from');
+            dlog('[BROADCAST] duplicate/stale offer ignored for $from');
             return;
           }
           _lastOfferAt[from] = ca;
@@ -350,7 +351,7 @@ class RoomBroadcastSession extends ChangeNotifier {
         });
       };
       pc.onConnectionState = (st) {
-        debugPrint('[BROADCAST] peer $viewerUid state=$st');
+        dlog('[BROADCAST] peer $viewerUid state=$st');
         // Hanya proses event dari pc yang MASIH AKTIF di _peers — event
         // Closed dari pc lama yang baru diganti tidak boleh menghapus
         // pc baru (race re-offer yang dulu bikin video blank abadi).
@@ -378,7 +379,7 @@ class RoomBroadcastSession extends ChangeNotifier {
       });
       notifyListeners();
     } catch (e) {
-      debugPrint('[BROADCAST] offer to $viewerUid failed: $e');
+      dlog('[BROADCAST] offer to $viewerUid failed: $e');
     } finally {
       _offerBusy.remove(viewerUid);
     }
@@ -387,30 +388,30 @@ class RoomBroadcastSession extends ChangeNotifier {
   Future<void> _handleAnswer(String from, Map<String, dynamic> payload) async {
     final sdp = payload['sdp'] as Map<String, dynamic>?;
     final pc = _peers[from];
-    debugPrint('[BROADCAST] b_answer from=$from hasPc=${pc != null} pcId=${payload['pcId']} expected=${_pcIds[from]}');
+    dlog('[BROADCAST] b_answer from=$from hasPc=${pc != null} pcId=${payload['pcId']} expected=${_pcIds[from]}');
     if (!isBroadcaster || sdp == null || pc == null) return;
     // Binding: answer harus milik offer/pc TERAKHIR untuk viewer ini.
     // Answer dari pc lama (race 2 offer) ditolak — mencegah SDP mismatch.
     final pcId = '${payload['pcId'] ?? ''}';
     if (pcId.isNotEmpty && pcId != (_pcIds[from] ?? '')) {
-      debugPrint('[BROADCAST] b_answer from stale pc ignored for $from');
+      dlog('[BROADCAST] b_answer from stale pc ignored for $from');
       return;
     }
     // Guard state: answer hanya valid saat punya offer pending (have-local-offer).
     // Tanpa ini, answer basi/dobel → "wrong state: stable" dan peer hang.
     final local = await pc.getLocalDescription();
-    debugPrint('[BROADCAST] b_answer local=${local?.type}');
+    dlog('[BROADCAST] b_answer local=${local?.type}');
     if (local == null || local.type != 'offer') return;
     final remote = await pc.getRemoteDescription();
     if (remote != null) {
-      debugPrint('[BROADCAST] b_answer duplicate ignored for $from');
+      dlog('[BROADCAST] b_answer duplicate ignored for $from');
       return;
     }
     try {
       await pc.setRemoteDescription(
         RTCSessionDescription(sdp['sdp'], sdp['type']),
       );
-      debugPrint('[BROADCAST] b_answer applied for $from');
+      dlog('[BROADCAST] b_answer applied for $from');
       _offerSentAt.remove(from);
       for (final c in List<Map<String, dynamic>>.from(_pendingCands[from] ?? const [])) {
         try {
@@ -423,7 +424,7 @@ class RoomBroadcastSession extends ChangeNotifier {
       }
       _pendingCands.remove(from);
     } catch (e) {
-      debugPrint('[BROADCAST] answer from $from failed: $e');
+      dlog('[BROADCAST] answer from $from failed: $e');
     }
   }
 
@@ -527,7 +528,7 @@ class RoomBroadcastSession extends ChangeNotifier {
         await Helper.switchCamera(tracks.first);
       }
     } catch (e) {
-      debugPrint('[BROADCAST] switchCamera error: $e');
+      dlog('[BROADCAST] switchCamera error: $e');
     }
   }
 
@@ -543,7 +544,7 @@ class RoomBroadcastSession extends ChangeNotifier {
     // broadcaster tak pernah dapat answer → video blank abadi.)
     final offerPcId = '${payload['pcId'] ?? ''}';
     if (offerPcId.isNotEmpty && offerPcId == _viewerAcceptedPcId) {
-      debugPrint('[BROADCAST] duplicate offer (same pcId) ignored');
+      dlog('[BROADCAST] duplicate offer (same pcId) ignored');
       return;
     }
     try {
@@ -561,7 +562,7 @@ class RoomBroadcastSession extends ChangeNotifier {
       remoteReady = false;
 
       pc.onConnectionState = (st) {
-        debugPrint('[BROADCAST] viewer pc state=$st');
+        dlog('[BROADCAST] viewer pc state=$st');
         // Guard identitas: event dari pc lama (yang diganti re-offer) tidak
         // boleh me-reset status pc baru.
         if (!identical(_peers[broadcasterUid], pc)) return;
@@ -621,9 +622,9 @@ class RoomBroadcastSession extends ChangeNotifier {
       final desc = await pc.getLocalDescription();
       await _prv.sendSignal(roomId, type: 'b_answer', toUid: broadcasterUid,
           payload: {'sdp': (desc ?? answer).toMap(), 'pcId': payload['pcId'] ?? ''});
-      debugPrint('[BROADCAST] viewer answered $broadcasterUid pcId=${payload['pcId']}');
+      dlog('[BROADCAST] viewer answered $broadcasterUid pcId=${payload['pcId']}');
     } catch (e) {
-      debugPrint('[BROADCAST] viewer offer failed: $e');
+      dlog('[BROADCAST] viewer offer failed: $e');
     }
   }
 
@@ -698,7 +699,7 @@ class RoomBroadcastSession extends ChangeNotifier {
           .limit(1)
           .maybeSingle();
       _lastSignalId = ((row?['id'] ?? 0) as num).toInt();
-      debugPrint('[BROADCAST] signal cursor fast-forward to $_lastSignalId');
+      dlog('[BROADCAST] signal cursor fast-forward to $_lastSignalId');
     } catch (_) {}
   }
 

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -35,7 +35,7 @@ class DummySession {
     if (cur != null &&
         cur.id == uid &&
         AuthService.instance.dummySessionActive) {
-      debugPrint('[DUMMY] already active as $uid — skip');
+      dlog('[DUMMY] already active as $uid — skip');
       return;
     }
     final session = _sb.auth.currentSession;
@@ -59,7 +59,7 @@ class DummySession {
     try {
       await _sb.auth.setSession(refreshToken);
     } catch (e) {
-      debugPrint('[DUMMY] setSession failed: $e — renewing');
+      dlog('[DUMMY] setSession failed: $e — renewing');
       try {
         final renewed = await _renewViaEdgeFunction(uid);
         if (renewed == null || renewed.isEmpty) {
@@ -67,7 +67,7 @@ class DummySession {
         }
         await _sb.auth.setSession(renewed);
       } catch (e2) {
-        debugPrint('[DUMMY] renew failed: $e2 — restoring admin');
+        dlog('[DUMMY] renew failed: $e2 — restoring admin');
         final a = _adminAccessToken;
         final r = _adminRefreshToken;
         _adminAccessToken = null;
@@ -85,11 +85,11 @@ class DummySession {
           params: {'p_uid': uid, 'p_refresh_token': newToken},
         );
       } catch (e) {
-        debugPrint('[DUMMY] update token error: $e');
+        dlog('[DUMMY] update token error: $e');
       }
     }
     AuthService.instance.markDummyState(active: true, uid: uid);
-    debugPrint('[DUMMY] becomeDummy OK uid=$uid '
+    dlog('[DUMMY] becomeDummy OK uid=$uid '
         'sessionUid=${_sb.auth.currentUser?.id}');
   }
 
@@ -102,7 +102,7 @@ class DummySession {
         body: {'action': 'renew', 'uid': uid},
       );
       if (res.status >= 300) {
-        debugPrint('[DUMMY] renew fn http ${res.status}');
+        dlog('[DUMMY] renew fn http ${res.status}');
         return null;
       }
       final data = res.data;
@@ -110,7 +110,7 @@ class DummySession {
         return data['refresh_token'] as String?;
       }
     } catch (e) {
-      debugPrint('[DUMMY] renew fn error: $e');
+      dlog('[DUMMY] renew fn error: $e');
     }
     return null;
   }
@@ -151,7 +151,7 @@ class DummySession {
           await _sb.rpc('is_dummy_account', params: {'p_uid': uid}) as bool? ??
           false;
     } catch (e) {
-      debugPrint('[DUMMY] restore check error: $e');
+      dlog('[DUMMY] restore check error: $e');
       return;
     }
     if (!isDummy) return;
@@ -162,7 +162,7 @@ class DummySession {
     _adminRefreshToken = refresh;
     _adminAccessToken = access;
     AuthService.instance.markDummyState(active: true, uid: uid);
-    debugPrint('[DUMMY] session restored: $uid');
+    dlog('[DUMMY] session restored: $uid');
   }
 
   /// Ada token admin tersimpan di SharedPreferences? Dipakai recovery.
@@ -199,7 +199,7 @@ class DummySession {
       });
       await persistAdminTokensIfAdmin();
     } catch (e) {
-      debugPrint('[DUMMY] installTokenPersistence error: $e');
+      dlog('[DUMMY] installTokenPersistence error: $e');
     }
   }
 

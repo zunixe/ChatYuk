@@ -89,12 +89,12 @@ class AuthService {
 
     if (idToken == null) throw Exception('Google idToken null');
 
-    debugPrint('[GOOGLE] idToken len=${idToken.length} accessToken len=${accessToken?.length ?? 0} webClientId=$webClientId');
+    dlog('[GOOGLE] idToken len=${idToken.length} accessToken len=${accessToken?.length ?? 0} webClientId=$webClientId');
     try {
       final parts = idToken.split('.');
       if (parts.length == 3) {
         final payload = String.fromCharCodes(base64Url.decode(base64Url.normalize(parts[1])));
-        debugPrint('[GOOGLE] idToken payload aud check: ${payload.substring(0, payload.length > 500 ? 500 : payload.length)}');
+        dlog('[GOOGLE] idToken payload aud check: ${payload.substring(0, payload.length > 500 ? 500 : payload.length)}');
       }
     } catch (_) {}
     AuthResponse response;
@@ -105,10 +105,10 @@ class AuthService {
         accessToken: accessToken,
       );
     } catch (e, st) {
-      debugPrint('[GOOGLE] signInWithIdToken FAILED: $e');
-      debugPrint('[GOOGLE] stack: $st');
+      dlog('[GOOGLE] signInWithIdToken FAILED: $e');
+      dlog('[GOOGLE] stack: $st');
       if (e is AuthApiException) {
-        debugPrint('[GOOGLE] AuthApiException statusCode=${e.statusCode} code=${e.code} message=${e.message}');
+        dlog('[GOOGLE] AuthApiException statusCode=${e.statusCode} code=${e.code} message=${e.message}');
       }
       rethrow;
     }
@@ -119,7 +119,7 @@ class AuthService {
       try {
         await _sb.from('profiles').update({'email': googleEmail}).eq('id', id);
       } catch (e) {
-        debugPrint('[AUTH] signInWithGoogle email update error: $e');
+        dlog('[AUTH] signInWithGoogle email update error: $e');
       }
     }
 
@@ -137,7 +137,7 @@ class AuthService {
       final map = Map<String, dynamic>.from(res as Map);
       return map['exists'] == true ? map : null;
     } catch (e) {
-      debugPrint('[AUTH] checkEmailExists error: $e');
+      dlog('[AUTH] checkEmailExists error: $e');
       return null;
     }
   }
@@ -167,16 +167,16 @@ class AuthService {
         'email': _sb.auth.currentUser?.email,
       });
 
-      debugPrint('[AUTH] linkGoogleProfile: linked $oldProfileId -> $newId');
+      dlog('[AUTH] linkGoogleProfile: linked $oldProfileId -> $newId');
     } catch (e) {
-      debugPrint('[AUTH] linkGoogleProfile error: $e');
+      dlog('[AUTH] linkGoogleProfile error: $e');
     }
   }
 
   Future<void> signInAnonymously() async {
     if (_sb.auth.currentUser != null) return;
     final res = await _sb.auth.signInAnonymously();
-    debugPrint('[AUTH] signInAnonymously -> ${res.user?.id}');
+    dlog('[AUTH] signInAnonymously -> ${res.user?.id}');
   }
 
   /// Bersihkan akun anonymous stale (tidak aktif > 7 hari) di server.
@@ -189,7 +189,7 @@ class AuthService {
         params: {'min_age_days': minAgeDays},
       );
     } catch (e) {
-      debugPrint('[AUTH] cleanupStaleAnonymous error (abaikan): $e');
+      dlog('[AUTH] cleanupStaleAnonymous error (abaikan): $e');
     }
   }
 
@@ -203,7 +203,7 @@ class AuthService {
         params: {'min_age_minutes': minAgeMinutes},
       );
     } catch (e) {
-      debugPrint('[AUTH] cleanupStalePresence error (abaikan): $e');
+      dlog('[AUTH] cleanupStalePresence error (abaikan): $e');
     }
   }
 
@@ -218,7 +218,7 @@ class AuthService {
           .maybeSingle();
       return res?['screenshot_enabled'] == true;
     } catch (e) {
-      debugPrint('[AUTH] fetchScreenshotEnabled error: $e');
+      dlog('[AUTH] fetchScreenshotEnabled error: $e');
       return true;
     }
   }
@@ -253,7 +253,7 @@ class AuthService {
           .maybeSingle();
       return res?['call_all_enabled'] == true;
     } catch (e) {
-      debugPrint('[AUTH] fetchCallAllEnabled error: $e');
+      dlog('[AUTH] fetchCallAllEnabled error: $e');
       return false;
     }
   }
@@ -278,7 +278,7 @@ class AuthService {
           .maybeSingle();
       return res?['watermark_enabled'] == true;
     } catch (e) {
-      debugPrint('[AUTH] fetchWatermarkEnabled error: $e');
+      dlog('[AUTH] fetchWatermarkEnabled error: $e');
       return false;
     }
   }
@@ -306,7 +306,7 @@ class AuthService {
         'adminUid': res?['invisible_admin_uid'] as String?,
       };
     } catch (e) {
-      debugPrint('[AUTH] fetchInvisibleSetting error: $e');
+      dlog('[AUTH] fetchInvisibleSetting error: $e');
       return {'enabled': false, 'adminUid': null};
     }
   }
@@ -335,7 +335,7 @@ class AuthService {
           .maybeSingle();
       return res?['require_registration'] == true;
     } catch (e) {
-      debugPrint('[AUTH] fetchRequireRegistration error: $e');
+      dlog('[AUTH] fetchRequireRegistration error: $e');
       return false;
     }
   }
@@ -359,7 +359,7 @@ class AuthService {
       }
       return [];
     } catch (e) {
-      debugPrint('[AUTH] fetchExcludedDevices error: $e');
+      dlog('[AUTH] fetchExcludedDevices error: $e');
       return [];
     }
   }
@@ -373,7 +373,7 @@ class AuthService {
       });
       return res is List;
     } catch (e) {
-      debugPrint('[AUTH] updateExcludedDevices error: $e');
+      dlog('[AUTH] updateExcludedDevices error: $e');
       return false;
     }
   }
@@ -388,7 +388,7 @@ class AuthService {
           .maybeSingle();
       return res?['reengage_enabled'] != false;
     } catch (e) {
-      debugPrint('[AUTH] fetchReengageEnabled error: $e');
+      dlog('[AUTH] fetchReengageEnabled error: $e');
       return true;
     }
   }
@@ -447,7 +447,7 @@ class AuthService {
     final email = user?.email ?? '';
     if (email.isEmpty ||
         (user!.emailConfirmedAt == null && user.phoneConfirmedAt == null)) {
-      debugPrint('[AUTH] markRegistered skip: email belum terkonfirmasi');
+      dlog('[AUTH] markRegistered skip: email belum terkonfirmasi');
       return;
     }
     try {
@@ -456,7 +456,7 @@ class AuthService {
         'email': email,
       }).eq('id', id);
     } catch (e) {
-      debugPrint('[AUTH] markRegistered error: $e');
+      dlog('[AUTH] markRegistered error: $e');
     }
   }
 
@@ -474,7 +474,7 @@ class AuthService {
       );
       return res == true;
     } catch (e) {
-      debugPrint('[AUTH] checkEmailRegistered error, fallback=$fallback: $e');
+      dlog('[AUTH] checkEmailRegistered error, fallback=$fallback: $e');
       return fallback;
     }
   }
@@ -522,7 +522,7 @@ class AuthService {
       );
       return true;
     } catch (e) {
-      debugPrint('[AUTH] verifyEmailOtp error: $e');
+      dlog('[AUTH] verifyEmailOtp error: $e');
       return false;
     }
   }
@@ -536,7 +536,7 @@ class AuthService {
       );
       return res is Map && res['ok'] == true;
     } catch (e) {
-      debugPrint('[AUTH] bindReferrer error: $e');
+      dlog('[AUTH] bindReferrer error: $e');
       return false;
     }
   }
@@ -651,12 +651,12 @@ class AuthService {
     // anonymous baru supaya user baru tetap bisa daftar.
     var user = _sb.auth.currentUser;
     if (user == null) {
-      debugPrint('[AUTH] registerProfile: no session, signInAnonymously first');
+      dlog('[AUTH] registerProfile: no session, signInAnonymously first');
       try {
         final res = await _sb.auth.signInAnonymously();
         user = res.user;
       } catch (e) {
-        debugPrint('[AUTH] registerProfile: signInAnonymously error: $e');
+        dlog('[AUTH] registerProfile: signInAnonymously error: $e');
         throw Exception('registerProfile: no authenticated user');
       }
     }
@@ -778,7 +778,7 @@ class AuthService {
           }
           controller.add(model);
         } catch (e) {
-          debugPrint('[AuthService] onMyProfileUpdates ignored: $e');
+          dlog('[AuthService] onMyProfileUpdates ignored: $e');
         }
       },
     );
@@ -821,7 +821,7 @@ class AuthService {
     try {
       await _sb.from('profiles').update({'ip_address': ip}).eq('id', id);
     } catch (e) {
-      debugPrint('[AUTH] updateIpAddress error: $e');
+      dlog('[AUTH] updateIpAddress error: $e');
     }
   }
 
@@ -904,7 +904,7 @@ class AuthService {
           })
           .eq('id', id);
     } catch (e) {
-      debugPrint('[AUTH] goOffline error: $e');
+      dlog('[AUTH] goOffline error: $e');
     }
   }
 
@@ -922,7 +922,7 @@ class AuthService {
           })
           .eq('id', id);
     } catch (e) {
-      debugPrint('[AUTH] goInvisible error: $e');
+      dlog('[AUTH] goInvisible error: $e');
     }
   }
 
@@ -938,7 +938,7 @@ class AuthService {
           })
           .eq('id', id);
     } catch (e) {
-      debugPrint('[AUTH] goIdle error: $e');
+      dlog('[AUTH] goIdle error: $e');
     }
   }
 
@@ -954,7 +954,7 @@ class AuthService {
           })
           .eq('id', id);
     } catch (e) {
-      debugPrint('[AUTH] goOnline error: $e');
+      dlog('[AUTH] goOnline error: $e');
     }
   }
 
@@ -970,7 +970,7 @@ class AuthService {
           .update({'last_seen': DateTime.now().toUtc().toIso8601String()})
           .eq('id', id);
     } catch (e) {
-      debugPrint('[AUTH] updateLastSeen error: $e');
+      dlog('[AUTH] updateLastSeen error: $e');
     }
   }
 
@@ -1126,7 +1126,7 @@ class AuthService {
       await _sb.realtime.removeAllChannels();
       await _sb.realtime.disconnect();
     } catch (e) {
-      debugPrint('[AuthService] realtime teardown error: $e');
+      dlog('[AuthService] realtime teardown error: $e');
     }
     await _sb.auth.signOut();
   }

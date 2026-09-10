@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/contact_service.dart';
+import '../utils.dart';
 
 class ContactScreen extends StatefulWidget {
   const ContactScreen({super.key});
@@ -43,7 +44,7 @@ class _ContactScreenState extends State<ContactScreen> {
       _messageCtrl.clear();
       messenger.showSnackBar(SnackBar(content: Text(s.contactSent)));
     } catch (e) {
-      debugPrint('[CONTACT] send error: $e');
+      dlog('[CONTACT] send error: $e');
       messenger.showSnackBar(SnackBar(content: Text(s.contactFailed)));
     }
   }

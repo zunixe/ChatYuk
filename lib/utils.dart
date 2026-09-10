@@ -1,4 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+
+/// Log debug — di-strip total dari build release (kDebugMode=false →
+/// compiler tree-shake pemanggilan). debugPrint di 150+ call site
+/// sebelumnya tetap menyusun string + menulis log di produksi.
+// TEMP-DIAGNOSIS: selalu print untuk melacak hang startup (revert setelah selesai).
+void dlog(String message, {String? tag}) {
+  debugPrint(tag == null ? message : '[$tag] $message');
+}
 
 DateTime parseDate(dynamic v) {
   if (v == null) return DateTime.now();

@@ -149,9 +149,10 @@ class _LoginScreenState extends State<LoginScreen> {
         _snack('${s2.errGeneric}${e.message}');
       }
     } on Exception catch (e) {
+      dlog(e.toString(), tag: 'LOGIN');
       if (!mounted) return;
       final s2 = context.read<LocaleProvider>().s;
-      _snack('${s2.errGeneric}$e');
+      _snack(s2.errGeneric);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -275,9 +276,9 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } catch (e, st) {
-      debugPrint('[GOOGLE] login signInWithGoogle error: $e');
-      debugPrint('[GOOGLE] stack: $st');
-      _snack('${s.errGoogleSignIn}$e');
+      dlog('[GOOGLE] login signInWithGoogle error: $e');
+      dlog('[GOOGLE] stack: $st');
+      _snack(s.errGoogleSignIn);
     }
     if (mounted) setState(() => _googleLoading = false);
   }

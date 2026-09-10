@@ -13,7 +13,8 @@ import '../services/device_info_service.dart';
 import '../main.dart';
 import 'login_screen.dart';
 import '../providers/theme_provider.dart';
-import '../widgets/search_dropdown.dart';
+import '../widgets/profile_form_card.dart';
+import '../widgets/auth_header.dart';
 
 enum RegisterMode { full, profileOnly }
 
@@ -269,7 +270,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               }
             }
           } else {
-            _snack('${s.errGeneric}$e');
+            _snack(s.errGeneric);
           }
         } else if (msg.contains('already') ||
             msg.contains('taken') ||
@@ -284,9 +285,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             _snack(s.errEmailAlreadyUsed);
           }
         } else if (profileOnly) {
-          _popupError('${s.errGeneric}$e');
+          _popupError(s.errGeneric);
         } else {
-          _snack('${s.errGeneric}$e');
+          _snack(s.errGeneric);
         }
       }
     } finally {
@@ -434,217 +435,119 @@ class _RegisterScreenState extends State<RegisterScreen> {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final profileOnly = widget.mode == RegisterMode.profileOnly;
+    // Mode popup: padding nol — pembungkus _ProfileGate sudah memberi
+    // jarak horizontal 24 + angkatan keyboard, supaya lebar kartu persis
+    // sama dengan entry screen (layar − 48).
     final form = SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        padding: profileOnly
+            ? EdgeInsets.zero
+            : EdgeInsets.symmetric(horizontal: 24, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Kartu form — satu grup utuh, komposisi sama dengan login.
-            // Mode popup: kartu kecil mengambang di atas halaman.
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.bgCard,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.divider, width: 1.5),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Mode popup: judul di dalam kartu pengganti AppBar.
-                  if (profileOnly) ...[
-                    Text(
-                      s.msgCompleteProfile,
-                      style: AppText.title,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  // Email & Password — hanya tampil di mode full
-                  if (!profileOnly) ...[
-                    TextField(
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      style: TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: s.labelEmail,
-                        hintText: s.hintEmail,
-                        prefixIcon: Icon(Icons.email_outlined),
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    TextField(
-                      controller: _passwordCtrl,
-                      obscureText: _obscurePass,
-                      style: TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: s.labelPassword,
-                        hintText: s.hintPassword,
-                        prefixIcon: Icon(Icons.lock_outlined),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePass
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscurePass = !_obscurePass),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    // Konfirmasi Password
-                    TextField(
-                      controller: _confirmCtrl,
-                      obscureText: _obscureConfirm,
-                      style: TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: s.labelConfirmPassword,
-                        prefixIcon: Icon(Icons.lock_outlined),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureConfirm
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscureConfirm = !_obscureConfirm,
+            // Mode popup: judul di LUAR kartu supaya kartu identik
+            // dengan entry screen.
+            if (profileOnly) AuthTitle(s.msgCompleteProfile),
+            if (profileOnly) const SizedBox(height: 12),
+            // Kartu form — widget yang SAMA dengan entry screen.
+            ProfileFormCard(
+              s: s,
+              header: profileOnly
+                  ? null
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          controller: _emailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          style: TextStyle(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            labelText: s.labelEmail,
+                            hintText: s.hintEmail,
+                            prefixIcon: Icon(
+                              Icons.email_outlined,
+                              size: 20,
+                              color: AppTheme.textSecondary,
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    Divider(),
-                    SizedBox(height: 8),
-                  ],
-
-                  // Nickname
-                  TextField(
-                    controller: _nicknameCtrl,
-                    focusNode: _nicknameFocus,
-                    onChanged: _onNicknameChanged,
-                    style: TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: s.labelUsername,
-                      hintText: s.hintNickname,
-                      prefixIcon: const Icon(Icons.person_outline),
-                      errorText: null,
-                      suffixIcon: _nicknameError != null
-                          ? const Icon(Icons.cancel, color: AppTheme.danger)
-                          : _nicknameCtrl.text.length >= 3
-                          ? const Icon(Icons.check_circle, color: Colors.green)
-                          : null,
-                      enabledBorder: _nicknameError != null
-                          ? const OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: AppTheme.danger,
-                                width: 1.5,
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _passwordCtrl,
+                          obscureText: _obscurePass,
+                          style: TextStyle(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            labelText: s.labelPassword,
+                            hintText: s.hintPassword,
+                            prefixIcon: Icon(
+                              Icons.lock_outlined,
+                              size: 20,
+                              color: AppTheme.textSecondary,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePass
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
                               ),
-                            )
-                          : null,
-                      focusedBorder: _nicknameError != null
-                          ? const OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: AppTheme.danger,
-                                width: 2,
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                  if (_nicknameError != null)
-                    Container(
-                      margin: const EdgeInsets.only(top: 6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.danger.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppTheme.danger.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline,
-                            color: AppTheme.danger,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _nicknameError!,
-                              style: AppText.bodySmall.copyWith(
-                                color: AppTheme.danger,
+                              onPressed: () => setState(
+                                () => _obscurePass = !_obscurePass,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-
-                  // Gender
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _genderCard(
-                          'female',
-                          '👩',
-                          AppTheme.female,
-                          s.labelGenderFemale,
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _genderCard(
-                          'male',
-                          '👨',
-                          AppTheme.male,
-                          s.labelGenderMale,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Umur & Negara
-                  Row(
-                    children: [
-                      Expanded(child: _ageDropdown(s)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _countryDropdown(s)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Kota
-                  _cityDropdown(s),
-                  const SizedBox(height: 20),
-
-                  // Tombol Daftar (mode popup: LENGKAPI — baru bisa chat
-                  // setelah ini disubmit).
-                  ElevatedButton(
-                    onPressed: _loading ? null : _register,
-                    child: _loading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
+                        const SizedBox(height: 12),
+                        // Konfirmasi Password
+                        TextField(
+                          controller: _confirmCtrl,
+                          obscureText: _obscureConfirm,
+                          style: TextStyle(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            labelText: s.labelConfirmPassword,
+                            prefixIcon: Icon(
+                              Icons.lock_outlined,
+                              size: 20,
+                              color: AppTheme.textSecondary,
                             ),
-                          )
-                        : Text(
-                            profileOnly ? s.btnComplete : s.btnRegister,
-                            style: AppText.button,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureConfirm
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscureConfirm = !_obscureConfirm,
+                              ),
+                            ),
                           ),
-                  ),
-                ],
-              ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+              nicknameCtrl: _nicknameCtrl,
+              nicknameFocus: _nicknameFocus,
+              nicknameError: _nicknameError,
+              onNicknameChanged: _onNicknameChanged,
+              onNicknameSubmitted: _register,
+              gender: _gender,
+              onGenderChanged: (v) => setState(() => _gender = v),
+              age: _age,
+              onAgeChanged: (v) => setState(() => _age = v),
+              country: _negara,
+              onCountryChanged: (v) {
+                final cities = getCitiesForCountry(v);
+                setState(() {
+                  _negara = v;
+                  _kota = cities.isNotEmpty ? cities.first : '';
+                });
+              },
+              city: _kota,
+              onCityChanged: (v) => setState(() => _kota = v),
+              loading: _loading,
+              submitLabel: profileOnly ? s.btnComplete : s.btnRegister,
+              onSubmit: _register,
             ),
             const SizedBox(height: 8),
 
@@ -674,96 +577,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (profileOnly) {
       return Material(color: Colors.transparent, child: form);
     }
+    // Mode full: komposisi sama dengan entry screen (bg + header + kartu).
     return Scaffold(
-      appBar: AppBar(title: Text(s.titleRegister)),
-      body: form,
-    );
-  }
-
-  Widget _genderCard(String value, String emoji, Color color, String label) {
-    final selected = _gender == value;
-    return GestureDetector(
-      onTap: () => setState(() => _gender = value),
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? color : AppTheme.divider,
-            width: selected ? 2 : 1.5,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(emoji, style: TextStyle(fontSize: AppGlyph.sm)),
-            SizedBox(width: 6),
-            Text(
-              label,
-              style: AppText.bodySmall.copyWith(
-                color: selected ? color : AppTheme.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
+      resizeToAvoidBottomInset: true,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.2,
+              child: Image.asset('assets/people_chat.jpg', fit: BoxFit.cover),
             ),
-          ],
-        ),
+          ),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 12),
+                AuthHeader(s: s),
+                const SizedBox(height: 12),
+                Expanded(child: form),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _ageDropdown(s) {
-    final ages = [for (int i = 18; i <= 80; i++) i];
-    // Widget SAMA dengan negara → tinggi field dijamin identik.
-    return SearchDropdown<int>(
-      value: ages.contains(_age) ? _age : ages.first,
-      label: s.labelAge,
-      icon: null,
-      items: ages,
-      labels: [for (final a in ages) '$a'],
-      textStyle: AppText.body,
-      onChanged: (v) => setState(() => _age = v),
-    );
-  }
-
-  Widget _countryDropdown(s) {
-    final countries = kotaByNegara.keys.toList();
-    return SearchDropdown(
-      // Key dipertahankan semantiknya (geo-detect update) — SearchDropdown
-      // membaca widget.value tiap build, jadi tidak butuh key rebuild.
-      value: countries.contains(_negara) ? _negara : countries.first,
-      label: s.labelCountry,
-      icon: null,
-      items: countries,
-      labels: countries,
-      textStyle: AppText.body,
-      searchHint: s.searchCountry,
-      emptyText: s.searchNoResult,
-      onChanged: (v) {
-        final cities = getCitiesForCountry(v);
-        setState(() {
-          _negara = v;
-          _kota = cities.isNotEmpty ? cities.first : '';
-        });
-      },
-    );
-  }
-
-  Widget _cityDropdown(s) {
-    final cities = getCitiesForCountry(_negara);
-    if (cities.isEmpty) return const SizedBox.shrink();
-    final validKota = cities.contains(_kota) ? _kota : cities.first;
-    // Widget SAMA dengan umur & negara → tinggi field dijamin identik.
-    return SearchDropdown<String>(
-      value: validKota,
-      label: s.labelCity,
-      icon: Icons.location_city_outlined,
-      items: cities,
-      labels: cities,
-      textStyle: AppText.body,
-      searchHint: s.searchCity,
-      emptyText: s.searchNoResult,
-      onChanged: (v) => setState(() => _kota = v),
-    );
-  }
 }

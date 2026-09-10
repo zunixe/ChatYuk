@@ -49,28 +49,37 @@ class ChatIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        child: Container(
-          width: 30,
-          height: 30,
-          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
-          ),
-          child: AnimatedRotation(
-            // Rotasi saja (+ → ✕), TANPA crossfade ikon: crossfade
-            // menumpuk dua glif 180ms sehingga terlihat seperti ikon
-            // rusak/glitch di tengah transisi.
-            turns: open ? 0.125 : 0,
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            child: Icon(
-              icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
-              color: AppTheme.primary,
-              size: 20,
+      // InkWell tanpa borderRadius custom + Material transparan: hit
+      // test meliputi seluruh area 44x44 (target sentuh Android ≥48dp),
+      // bukan cuma bulatan 30dp — ikon kecil tetap mudah ditap.
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Center(
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color:
+                    AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
+              ),
+              child: AnimatedRotation(
+                // Rotasi saja (+ → ✕), TANPA crossfade ikon: crossfade
+                // menumpuk dua glif 180ms sehingga terlihat seperti ikon
+                // rusak/glitch di tengah transisi.
+                turns: open ? 0.125 : 0,
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                child: Icon(
+                  icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
+                  color: AppTheme.primary,
+                  size: 20,
+                ),
+              ),
             ),
           ),
         ),

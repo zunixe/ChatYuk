@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -89,7 +90,7 @@ Future<String?> _processAvatarWebp(Uint8List bytes) async {
     );
     if (webp.isNotEmpty) return base64Encode(webp);
   } catch (e) {
-    debugPrint('[ONLINE] webp encode failed, fallback jpeg: $e');
+    dlog('[ONLINE] webp encode failed, fallback jpeg: $e');
   }
   return _processAvatarImage(bytes);
 }
@@ -166,7 +167,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     final srcType = src.isEmpty ? 'EMPTY' : src.startsWith('avatars/') ? 'PATH' : 'B64';
     // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
     if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) {
-      debugPrint('[AVATAR] $_uid8 KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}');
+      dlog('[AVATAR] $_uid8 KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       return;
     }
     _avatarLastSrcByUid[widget.uid] = src;
@@ -184,7 +185,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
           widget.uid,
           () => MemoryImage(_avatarBytesByUid[widget.uid]!),
         );
-        debugPrint('[AVATAR] $_uid8 FROM-DISK');
+        dlog('[AVATAR] $_uid8 FROM-DISK');
       }
       // Tidak ada di disk → biarkan inisial; batch network akan mengisi.
       return;
@@ -192,7 +193,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     // Instance MemoryImage stabil per-uid → pakai apa adanya.
     final stable = _avatarImageByUid[widget.uid];
     if (stable != null && _provider != stable) {
-      debugPrint('[AVATAR] $_uid8 SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}');
+      dlog('[AVATAR] $_uid8 SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       _provider = stable;
       return;
     }
@@ -466,7 +467,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       // (kompresi cukup 1x di akhir proses) — sama dengan profile_screen.
       picked = await picker.pickImage(source: source);
     } catch (e) {
-      debugPrint('[ONLINE] pickImage error: $e');
+      dlog('[ONLINE] pickImage error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s.errPhotoPermission)),
@@ -502,7 +503,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         ],
       );
     } catch (e) {
-      debugPrint('[ONLINE] crop error: $e');
+      dlog('[ONLINE] crop error: $e');
       return;
     }
     if (cropped == null || !mounted) return;
@@ -547,7 +548,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       if (mounted) {
         setState(() => _uploadingAvatar = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${s.errPhotoUpload}$e')),
+          SnackBar(content: Text(s.errPhotoUpload)),
         );
       }
     }
@@ -959,7 +960,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${s.errGeneric}$e')));
+        ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
       }
     }
   }
@@ -2199,7 +2200,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                             end: Alignment.bottomRight,
                             colors: [
                               Color(0xFF9C27B0),
-                              Color(0xFF2196F3)
+                              AppTheme.primary
                             ],
                           ),
                     border: seen

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Service untuk social graph: follow, friend request, subscribe.
@@ -88,7 +88,7 @@ class SocialService {
       );
       return _list(res);
     } catch (e) {
-      debugPrint('[SocialService] socialList error: $e');
+      dlog('[SocialService] socialList error: $e');
       return [];
     }
   }
@@ -98,7 +98,7 @@ class SocialService {
       final res = await _sb.rpc('friend_request_inbox');
       return _list(res);
     } catch (e) {
-      debugPrint('[SocialService] inbox error: $e');
+      dlog('[SocialService] inbox error: $e');
       return [];
     }
   }
@@ -108,7 +108,7 @@ class SocialService {
       final res = await _sb.rpc('friend_request_outbox');
       return _list(res);
     } catch (e) {
-      debugPrint('[SocialService] outbox error: $e');
+      dlog('[SocialService] outbox error: $e');
       return [];
     }
   }
@@ -118,7 +118,7 @@ class SocialService {
       final res = await _sb.rpc('my_subscriptions');
       return _list(res);
     } catch (e) {
-      debugPrint('[SocialService] mySubscriptions error: $e');
+      dlog('[SocialService] mySubscriptions error: $e');
       return [];
     }
   }
@@ -130,7 +130,7 @@ class SocialService {
     try {
       await _sb.rpc('clear_anon_social');
     } catch (e) {
-      debugPrint('[SocialService] clearAnonSocial error: $e');
+      dlog('[SocialService] clearAnonSocial error: $e');
     }
   }
 

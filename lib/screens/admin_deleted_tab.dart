@@ -20,7 +20,8 @@ class AdminDeletedTab extends StatefulWidget {
   State<AdminDeletedTab> createState() => _AdminDeletedTabState();
 }
 
-class _AdminDeletedTabState extends State<AdminDeletedTab> {
+class _AdminDeletedTabState extends State<AdminDeletedTab>
+    with WidgetsBindingObserver {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   String _query = '';
@@ -29,15 +30,38 @@ class _AdminDeletedTabState extends State<AdminDeletedTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.microtask(() => context.read<AdminProvider>().fetchDeleted());
+    _startRefreshTimer();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted) return;
       context.read<AdminProvider>().fetchDeleted();
     });
-    _scrollCtrl.addListener(_onScroll);
+  }
+
+  // App di-background → stop polling (hemat battery & beban DB);
+  // resume → refresh sekarang lalu polling jalan lagi.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    } else if (state == AppLifecycleState.resumed) {
+      if (mounted && _refreshTimer == null) {
+        context.read<AdminProvider>().fetchDeleted();
+        _startRefreshTimer();
+      }
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _searchCtrl.dispose();
     _scrollCtrl.dispose();

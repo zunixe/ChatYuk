@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/active_call_model.dart';
@@ -55,7 +56,7 @@ class AdminProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(_kSeenDevicesKey, _seenDeviceIds.toList());
     } catch (e) {
-      debugPrint('[ADMIN] arm seed devices error: $e');
+      dlog('[ADMIN] arm seed devices error: $e');
     }
 
     _seenDevicesLoaded = true;
@@ -98,7 +99,7 @@ class AdminProvider extends ChangeNotifier {
       _pointsEnabled = _stats?['points_enabled'] == true;
     } catch (e) {
       _error = e.toString();
-      debugPrint('[ADMIN] fetchStats error: $e');
+      dlog('[ADMIN] fetchStats error: $e');
     }
     _loading = false;
     if (!_disposed) notifyListeners();
@@ -113,7 +114,7 @@ class AdminProvider extends ChangeNotifier {
           : await _service.getStats();
       _pointsEnabled = _stats?['points_enabled'] == true;
     } catch (e) {
-      debugPrint('[ADMIN] refreshStats error: $e');
+      dlog('[ADMIN] refreshStats error: $e');
     }
     if (!_disposed) notifyListeners();
   }
@@ -137,7 +138,7 @@ class AdminProvider extends ChangeNotifier {
       _detailCacheAt = DateTime.now();
       return d;
     } catch (e) {
-      debugPrint('[ADMIN] fetchStatsDetail error: $e');
+      dlog('[ADMIN] fetchStatsDetail error: $e');
       return {};
     }
   }
@@ -176,7 +177,7 @@ class AdminProvider extends ChangeNotifier {
       _regDaily = await _service.fetchRegistrationsDaily(year, month);
       _regDailyCache[cacheKey] = _regDaily;
     } catch (e) {
-      debugPrint('[ADMIN] fetchRegistrationsDaily error: $e');
+      dlog('[ADMIN] fetchRegistrationsDaily error: $e');
       _regDaily = {};
     }
     _regLoading = false;
@@ -189,7 +190,7 @@ class AdminProvider extends ChangeNotifier {
       await fetchStats();
       return result;
     } catch (e) {
-      debugPrint('[ADMIN] massBonus error: $e');
+      dlog('[ADMIN] massBonus error: $e');
       return null;
     }
   }
@@ -200,7 +201,7 @@ class AdminProvider extends ChangeNotifier {
       await fetchStats();
       return count;
     } catch (e) {
-      debugPrint('[ADMIN] resetAllPoints error: $e');
+      dlog('[ADMIN] resetAllPoints error: $e');
       return null;
     }
   }
@@ -212,7 +213,7 @@ class AdminProvider extends ChangeNotifier {
       if (!_disposed) notifyListeners();
       return result;
     } catch (e) {
-      debugPrint('[ADMIN] togglePointsSystem error: $e');
+      dlog('[ADMIN] togglePointsSystem error: $e');
       return false;
     }
   }
@@ -221,7 +222,7 @@ class AdminProvider extends ChangeNotifier {
     try {
       await _service.forceLogout(targetUid);
     } catch (e) {
-      debugPrint('[ADMIN] forceLogout error: $e');
+      dlog('[ADMIN] forceLogout error: $e');
       rethrow;
     }
   }
@@ -277,7 +278,7 @@ Future<void> fetchDevices() async {
       await _detectNewDevices(_devices);
     } catch (e) {
       _devicesError = e.toString();
-      debugPrint('[ADMIN] fetchDevices error: $e');
+      dlog('[ADMIN] fetchDevices error: $e');
     }
     _devicesLoading = false;
     if (!_disposed) notifyListeners();
@@ -327,7 +328,7 @@ Future<void> fetchDevices() async {
       _devicesHasMore = _devices.length < _devicesTotal;
       _devicesError = null;
     } catch (e) {
-      debugPrint('[ADMIN] refreshDevicesSilent error: $e');
+      dlog('[ADMIN] refreshDevicesSilent error: $e');
       if (_devices.isEmpty) _devicesError = e.toString();
     }
     if (!_disposed) notifyListeners();
@@ -345,7 +346,7 @@ Future<void> fetchDevices() async {
       if (more.isNotEmpty) _devices.addAll(more);
       _devicesHasMore = _devices.length < _devicesTotal;
     } catch (e) {
-      debugPrint('[ADMIN] fetchMoreDevices error: $e');
+      dlog('[ADMIN] fetchMoreDevices error: $e');
     }
     _devicesFetchingMore = false;
     if (!_disposed) notifyListeners();
@@ -385,7 +386,7 @@ Future<void> fetchDevices() async {
       _deletedHasMore = _deleted.length < _deletedTotal;
     } catch (e) {
       _deletedError = e.toString();
-      debugPrint('[ADMIN] fetchDeleted error: $e');
+      dlog('[ADMIN] fetchDeleted error: $e');
     }
     _deletedLoading = false;
     if (!_disposed) notifyListeners();
@@ -403,7 +404,7 @@ Future<void> fetchDevices() async {
       if (more.isNotEmpty) _deleted.addAll(more);
       _deletedHasMore = _deleted.length < _deletedTotal;
     } catch (e) {
-      debugPrint('[ADMIN] fetchMoreDeleted error: $e');
+      dlog('[ADMIN] fetchMoreDeleted error: $e');
     }
     _deletedFetchingMore = false;
     if (!_disposed) notifyListeners();
@@ -437,7 +438,7 @@ Future<void> fetchDevices() async {
       _storageStats = await _service.getStorageStats();
       _storageStatsAt = DateTime.now();
     } catch (e) {
-      debugPrint('[ADMIN] fetchStorageStats error: $e');
+      dlog('[ADMIN] fetchStorageStats error: $e');
     }
     _storageStatsLoading = false;
     if (!_disposed) notifyListeners();
@@ -458,7 +459,7 @@ Future<void> fetchDevices() async {
       _registrations =
           List<Map<String, dynamic>>.from(res['items'] ?? const []);
     } catch (e) {
-      debugPrint('[ADMIN] fetchRegistrations error: $e');
+      dlog('[ADMIN] fetchRegistrations error: $e');
     }
     _registrationsLoading = false;
     if (!_disposed) notifyListeners();
@@ -474,7 +475,7 @@ Future<void> fetchDevices() async {
       _cfUsage = await _service.getCfUsage();
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[ADMIN] fetchCfUsage error: $e');
+      dlog('[ADMIN] fetchCfUsage error: $e');
     }
   }
 
@@ -492,7 +493,7 @@ Future<void> fetchDevices() async {
           .toList();
     } catch (e) {
       _chatsError = e.toString();
-      debugPrint('[ADMIN] fetchChats error: $e');
+      dlog('[ADMIN] fetchChats error: $e');
     }
     _chatsLoading = false;
     if (!_disposed) notifyListeners();
@@ -515,7 +516,7 @@ Future<void> fetchDevices() async {
           .map((e) => '$e')
           .toList();
     } catch (e) {
-      debugPrint('[ADMIN] fetchMoreChats error: $e');
+      dlog('[ADMIN] fetchMoreChats error: $e');
     }
     _chatsFetchingMore = false;
     if (!_disposed) notifyListeners();
@@ -532,7 +533,7 @@ Future<void> fetchDevices() async {
           .map((e) => '$e')
           .toList();
     } catch (e) {
-      debugPrint('[ADMIN] refreshChats error: $e');
+      dlog('[ADMIN] refreshChats error: $e');
     }
     if (!_disposed) notifyListeners();
   }
@@ -567,7 +568,7 @@ Future<void> fetchDevices() async {
       _activeCalls = await _service.getActiveCalls();
       _detectNewCalls(_activeCalls);
     } catch (e) {
-      debugPrint('[ADMIN] fetchActiveCalls error: $e');
+      dlog('[ADMIN] fetchActiveCalls error: $e');
     }
     _activeCallsLoading = false;
     if (!_disposed) notifyListeners();
@@ -638,7 +639,7 @@ Future<void> fetchDevices() async {
       _contactHasMore = _contactMessages.length < _contactTotal;
     } catch (e) {
       _contactError = e.toString();
-      debugPrint('[ADMIN] fetchContactMessages error: $e');
+      dlog('[ADMIN] fetchContactMessages error: $e');
     }
     _contactLoading = false;
     if (!_disposed) notifyListeners();
@@ -658,7 +659,7 @@ Future<void> fetchDevices() async {
       _contactMessages = [..._contactMessages, ...more];
       _contactHasMore = _contactMessages.length < _contactTotal;
     } catch (e) {
-      debugPrint('[ADMIN] fetchMoreContactMessages error: $e');
+      dlog('[ADMIN] fetchMoreContactMessages error: $e');
     }
     _contactFetchingMore = false;
     if (!_disposed) notifyListeners();
@@ -673,7 +674,7 @@ Future<void> fetchDevices() async {
         if (!_disposed) notifyListeners();
       }
     } catch (e) {
-      debugPrint('[ADMIN] setContactRead error: $e');
+      dlog('[ADMIN] setContactRead error: $e');
     }
   }
 
@@ -684,7 +685,7 @@ Future<void> fetchDevices() async {
       if (_contactTotal > 0) _contactTotal--;
       if (!_disposed) notifyListeners();
     } catch (e) {
-      debugPrint('[ADMIN] deleteContactMessage error: $e');
+      dlog('[ADMIN] deleteContactMessage error: $e');
     }
   }
 
@@ -705,7 +706,7 @@ Future<void> fetchDevices() async {
       _chatMessagesHasMore = _chatMessages.length >= messagePageSize;
       return true;
     } catch (e) {
-      debugPrint('[ADMIN] fetchChatMessages error: $e');
+      dlog('[ADMIN] fetchChatMessages error: $e');
       return false;
     } finally {
       if (!_disposed) notifyListeners();
@@ -725,7 +726,7 @@ Future<void> fetchDevices() async {
       _chatMessages = [..._chatMessages, ...older];
       _chatMessagesHasMore = older.length >= messagePageSize;
     } catch (e) {
-      debugPrint('[ADMIN] fetchMoreChatMessages error: $e');
+      dlog('[ADMIN] fetchMoreChatMessages error: $e');
     }
     _chatMessagesFetchingMore = false;
     if (!_disposed) notifyListeners();
@@ -750,7 +751,7 @@ Future<void> fetchDevices() async {
       }
       _chatMessages = merged;
     } catch (e) {
-      debugPrint('[ADMIN] refreshChatMessages error: $e');
+      dlog('[ADMIN] refreshChatMessages error: $e');
     }
     if (!_disposed) notifyListeners();
   }
@@ -760,7 +761,7 @@ Future<void> fetchDevices() async {
     try {
       return await _service.getMessageImage(messageId);
     } catch (e) {
-      debugPrint('[ADMIN] fetchMessageImage error: $e');
+      dlog('[ADMIN] fetchMessageImage error: $e');
       return '';
     }
   }
@@ -780,7 +781,7 @@ Future<void> fetchDevices() async {
       }
       return res['ok'] == true;
     } catch (e) {
-      debugPrint('[ADMIN] deleteChat error: $e');
+      dlog('[ADMIN] deleteChat error: $e');
       return false;
     }
   }

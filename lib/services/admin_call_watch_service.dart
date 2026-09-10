@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:intl/intl.dart';
@@ -144,7 +145,7 @@ class WatchSession extends ChangeNotifier {
         if (_stopped || p == null) return;
         p.connected =
             state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
-        debugPrint('[ADMIN-WATCH] ${p.name} state=$state');
+        dlog('[ADMIN-WATCH] ${p.name} state=$state');
         notifyListeners();
       };
       await pc.setRemoteDescription(
@@ -180,7 +181,7 @@ class WatchSession extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint('[ADMIN-WATCH] handle offer failed: $e');
+      dlog('[ADMIN-WATCH] handle offer failed: $e');
       p.connecting = false;
       notifyListeners();
     }
@@ -283,10 +284,10 @@ class WatchSession extends ChangeNotifier {
       _recorder = rec;
       _recording = true;
       notifyListeners();
-      debugPrint('[ADMIN-WATCH] recording -> $path');
+      dlog('[ADMIN-WATCH] recording -> $path');
       return path;
     } catch (e) {
-      debugPrint('[ADMIN-WATCH] startRecording failed: $e');
+      dlog('[ADMIN-WATCH] startRecording failed: $e');
       _recording = false;
       notifyListeners();
       rethrow;
@@ -305,7 +306,7 @@ class WatchSession extends ChangeNotifier {
     try {
       await rec?.stop();
     } catch (e) {
-      debugPrint('[ADMIN-WATCH] stopRecording error: $e');
+      dlog('[ADMIN-WATCH] stopRecording error: $e');
     }
     return null;
   }

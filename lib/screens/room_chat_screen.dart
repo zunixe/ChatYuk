@@ -101,6 +101,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   // ── Room gift (live) ──
   final _giftFly = GiftFlyController();
+  // Insertion-order terjaga — cap FIFO (skip terlama) tanpa clear().
   Set<String> _seenGiftMsgIds = {};
 
   // ── Private room v2 ──
@@ -182,10 +183,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   Future<void> _initPrivate() async {
-    debugPrint('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
+    dlog('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
     try {
       _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
-      debugPrint('[BDBG] myRole=$_myRole isPrivate=${widget.room.isPrivate}');
+      dlog('[BDBG] myRole=$_myRole isPrivate=${widget.room.isPrivate}');
       if (canModerate) {
         try {
           final req = await PrivateRoomService.instance
@@ -200,19 +201,22 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       try {
         final granted = await PrivateRoomService.instance.myBroadcastGranted(widget.room.id);
         _isGrantedBroadcast = granted || _liveUid == _auth.uid;
-        debugPrint('[BDBG] init granted=$_isGrantedBroadcast live=$_liveUid');
+        dlog('[BDBG] init granted=$_isGrantedBroadcast live=$_liveUid');
       } catch (e) {
-        debugPrint('[BDBG] init myBroadcastGranted error: $e');
+        dlog('[BDBG] init myBroadcastGranted error: $e');
       }
       _listenRoomLive();
+      // Fallback poll JARANG (30s): realtime channel (_listenRoomLive)
+      // adalah jalur utama update live_uid/grant — poll 5s seumur room
+      // buang-buang RPC & battery.
       _livePoll?.cancel();
-      _livePoll = Timer.periodic(const Duration(seconds: 5), (_) {
+      _livePoll = Timer.periodic(const Duration(seconds: 30), (_) {
         _refreshLiveUid();
         _refreshGrant();
         _ensureViewerSession();
       });
     } catch (e) {
-      debugPrint('[BDBG] initPrivate ERROR: $e');
+      dlog('[BDBG] initPrivate ERROR: $e');
     }
     _roleChecked = true;
     if (!mounted) return;
@@ -234,7 +238,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: widget.room.id),
         callback: (payload) {
           final live = payload.newRecord['live_uid']?.toString();
-          debugPrint('[BDBG] realtime rooms update live=$live current=$_liveUid');
+          dlog('[BDBG] realtime rooms update live=$live current=$_liveUid');
           if (live != _liveUid) {
             _liveUid = (live != null && live.isNotEmpty) ? live : null;
             setState(() {});
@@ -254,10 +258,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     try {
       final granted = await PrivateRoomService.instance.myBroadcastGranted(widget.room.id);
       final g = granted || _liveUid == _auth.uid;
-      debugPrint('[BDBG] refreshGrant granted=$granted live=$_liveUid uid=${_auth.uid} g=$g');
+      dlog('[BDBG] refreshGrant granted=$granted live=$_liveUid uid=${_auth.uid} g=$g');
       if (mounted && g != _isGrantedBroadcast) setState(() => _isGrantedBroadcast = g);
     } catch (e) {
-      debugPrint('[BDBG] refreshGrant error: $e');
+      dlog('[BDBG] refreshGrant error: $e');
     }
   }
 
@@ -279,15 +283,23 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       final id = m.id;
       if (_seenGiftMsgIds.contains(id)) continue;
       _seenGiftMsgIds.add(id);
-      if (_seenGiftMsgIds.length > 500) _seenGiftMsgIds.clear();
       final gift = giftById(m.text);
       if (gift == null) continue;
       // Snapshot lama tidak diputar ulang: hanya gift yang masuk live
-      // (timestamp < 5 detik lalu) yang dianimasikan.
+      // (timestamp < 5 detik lalu) yang dianimasikan. Guard fresh ini
+      // yang mencegah re-play — cap seen-set tidak perlu clear() (clear
+      // bikin gift lama yang masih di list dianggap baru lagi).
       final fresh =
           DateTime.now().difference(m.timestamp) < const Duration(seconds: 5);
       if (!fresh) continue;
       _giftFly.push(gift, m.senderName, 1);
+    }
+    // Cap seen-set TANPA clear: buang yang paling lama (FIFO) — id gift
+    // lama tidak bisa re-play karena guard fresh di atas sudah memfilter.
+    if (_seenGiftMsgIds.length > 500) {
+      _seenGiftMsgIds = _seenGiftMsgIds
+          .skip(_seenGiftMsgIds.length - 300)
+          .toSet();
     }
   }
 
@@ -352,7 +364,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   Future<void> _refreshLiveUid() async {
     final row = await RoomService().fetchRoomById(widget.room.id);
     final live = row?['live_uid']?.toString();
-    debugPrint('[BDBG] refreshLiveUid fetched=$live current=$_liveUid');
+    dlog('[BDBG] refreshLiveUid fetched=$live current=$_liveUid');
     if (!mounted) return;
     if (live == _liveUid) return;
     setState(() {
@@ -755,7 +767,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: AppTheme.danger),
+        SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric), backgroundColor: AppTheme.danger),
       );
     }
   }
@@ -768,7 +780,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: AppTheme.danger),
+        SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric), backgroundColor: AppTheme.danger),
       );
     }
   }
@@ -936,10 +948,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       try { await f.delete(); } catch (_) {}
       _scrollToBottom();
     } catch (e) {
-      debugPrint('[RoomVoice] send error: $e');
+      dlog('[RoomVoice] send error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${context.read<LocaleProvider>().s.errSendFailed}$e')),
+          SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)),
         );
       }
     }
@@ -2232,7 +2244,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   if (mounted) {
                     final s = context.read<LocaleProvider>().s;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${s.errGeneric}$e')),
+                      SnackBar(content: Text(s.errGeneric)),
                     );
                   }
                 }
@@ -2556,7 +2568,7 @@ class _MessageBubble extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(gift?.emoji ?? '🎁',
-                    style: const TextStyle(fontSize: 26)),
+                    style: TextStyle(fontSize: AppGlyph.lg)),
                 const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2948,7 +2960,9 @@ class _ChatInputState extends State<_ChatInput> {
   }
 
   void _onChanged() {
-    if (mounted) setState(() {});
+    // NO-OP: kebutuhan rebuild dikendalikan ValueListenableBuilder pada
+    // tombol send/mic (dulu setState tiap keystroke — rebuild seluruh
+    // composer, boros CPU & bikin jank saat mengetik cepat).
   }
 
   @override
@@ -3146,7 +3160,11 @@ class _ChatInputState extends State<_ChatInput> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                AnimatedSwitcher(
+                // Rebuild granular: hanya area tombol mic/send yang rebuild
+                // saat teks berubah — seluruh composer tidak ikut.
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: widget.controller,
+                  builder: (context, value, _) => AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
                   switchInCurve: Curves.easeOut,
                   switchOutCurve: Curves.easeIn,
@@ -3180,7 +3198,7 @@ class _ChatInputState extends State<_ChatInput> {
                               setState(() => _voicePickUp = v),
                           size: 40,
                         )
-                      : (widget.controller.text.trim().isEmpty && _decodedPhoto == null
+                      : (value.text.trim().isEmpty && _decodedPhoto == null
                       ? MicRecordButton(
                           isRecording: false,
                           isLocked: _isVoiceLocked,
@@ -3216,6 +3234,7 @@ class _ChatInputState extends State<_ChatInput> {
                                 ),
                               ),
                             )),
+                ),
                 ),
               ],
             ),

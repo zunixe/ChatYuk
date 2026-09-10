@@ -33,6 +33,7 @@ import 'widgets/anon_prompt_dialog.dart';
 import 'widgets/call_banner.dart';
 import 'widgets/skeleton_card.dart';
 import 'screens/register_screen.dart';
+import 'utils.dart';
 
 class ChatYukApp extends StatefulWidget {
   const ChatYukApp({super.key});
@@ -163,7 +164,7 @@ class _AuthGateState extends State<_AuthGate> {
     _autoRetryTimer = Timer(const Duration(seconds: 8), () {
       if (!mounted) return;
       _autoRetryCount++;
-      debugPrint('[AUTHGATE] auto retry #$_autoRetryCount');
+      dlog('[AUTHGATE] auto retry #$_autoRetryCount');
       context.read<AuthProvider>().retry();
     });
   }
@@ -336,15 +337,16 @@ class _ProfileGate extends StatelessWidget {
             child: Center(
               child: SingleChildScrollView(
                 // Angkat popup saat keyboard naik (pengganti resize Scaffold).
+                // Horizontal 24 = sama dengan entry screen supaya lebar kartu
+                // identik (layar − 48).
                 padding: EdgeInsets.fromLTRB(
+                  24,
                   16,
-                  16,
-                  16,
+                  24,
                   16 + MediaQuery.viewInsetsOf(context).bottom,
                 ),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: 360,
                       maxHeight: screenH * 0.85,
                     ),
                     // Bayangan luar supaya kartu terlihat mengambang.
@@ -434,6 +436,12 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     final auth = context.read<AuthProvider>();
     auth.goOnline();
     auth.resetIdleTimer();
+    // Follow/unfollow → invalidate cache followee di TimelineProvider
+    // (R4: TTL cache supaya switch tab tidak mem-fetch follows berulang,
+    // tapi tetap akurat saat graf follow berubah).
+    context.read<SocialProvider>().onFollowGraphChanged = () {
+      context.read<TimelineProvider>().invalidateFollowedIds();
+    };
     // Hanya user terdaftar yang menerima panggilan masuk (anon: tidak).
     CallProvider.instance.ensureListening(
       registered: auth.profile?.isRegistered ?? false,
@@ -442,6 +450,21 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     if (uid != null) {
       context.read<ChatProvider>().loadBlockedUids(uid);
     }
+    // Logout paksa (sesi kedaluwarsa) tidak lewat tombol logout → pasang
+    // hook: tutup stream chat & channel milik user lama.
+    auth.onSignedOut = () {
+      try {
+        context.read<ChatProvider>().reset();
+      } catch (_) {}
+    };
+    // Prewarm timeline di background (3s setelah frame pertama — lewat
+    // warm-up utama auth/rooms/online): saat user tap tab Timeline feed
+    // sudah terisi, tidak ada spinner RPC list_posts pertama.
+    Timer(const Duration(seconds: 3), () {
+      if (mounted) context.read<TimelineProvider>().prewarm();
+      // Prewarm juga daftar grup (tab Grup) — klik tab instan.
+      if (mounted) context.read<RoomProvider>().loadMyGroups(refresh: true);
+    });
   }
 
   @override
@@ -647,15 +670,15 @@ class _BottomNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _navItem(Icons.group_rounded, s.navOnline, 0,
+              _navItem(context, Icons.group_rounded, s.navOnline, 0,
                   badge: onlineCount,
                   badgeColor: AppTheme.onlineDark,
                   badgePill: true),
-              _navItem(Icons.chat_bubble, s.navChats, 1,
+              _navItem(context, Icons.chat_bubble, s.navChats, 1,
                   badge: totalUnread, badgePill: true),
               const SizedBox(width: 48),
-              _navItem(Icons.dynamic_feed_rounded, s.navTimeline, 2),
-              _navItem(Icons.person, s.navProfile, 3),
+              _navItem(context, Icons.dynamic_feed_rounded, s.navTimeline, 2),
+              _navItem(context, Icons.person, s.navProfile, 3),
             ],
           ),
         );
@@ -663,7 +686,80 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _navItem(IconData icon, String label, int index,
+  /// Pil indikator tab terpilih (gaya NavigationBar M3). Ukuran 68x30
+  /// gepeng proporsional (radius = tinggi/2 = 15). Bulge sin() bikin
+  /// pil sedikit mengembang di tengah animasi; ikon pop 0.85→1.
+  /// Dua tahap: opacity full dalam 25% pertama (~125ms) supaya tap
+  /// terasa respon instan; lebar easeOutExpo — ngacir di awal lalu
+  /// melambat lembut di akhir (500ms). Collapse 250ms emphasized.
+  /// Aksesibilitas: disableAnimations → pil langsung settle (tanpa
+  /// tween, tanpa bulge, tanpa pop).
+  Widget _navPill({
+    required BuildContext context,
+    required bool selected,
+    required Widget child,
+  }) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return SizedBox(
+        width: 68,
+        height: 30,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (selected)
+              Container(
+                width: 68,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              ),
+            child,
+          ],
+        ),
+      );
+    }
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(
+          begin: selected ? 0 : 1, end: selected ? 1 : 0),
+      duration: Duration(milliseconds: selected ? 500 : 250),
+      curve:
+          selected ? Curves.linear : const Cubic(0.2, 0.0, 0.0, 1.0),
+      builder: (context, t, child) {
+        final w = t >= 1 ? 1.0 : 1 - math.pow(2, -10 * t).toDouble();
+        final o = (t / 0.25).clamp(0.0, 1.0);
+        final bulge = 1 + 0.08 * math.sin(w * math.pi);
+        return SizedBox(
+          width: 68,
+          height: 30,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Opacity(
+                opacity: selected ? o : t,
+                child: Container(
+                  width: 68 * w * bulge,
+                  height: 30 * (0.6 + 0.4 * w),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+              ),
+              Transform.scale(
+                scale: 0.85 + 0.15 * (t * 3).clamp(0.0, 1.0),
+                child: child!,
+              ),
+            ],
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+
+  Widget _navItem(BuildContext context, IconData icon, String label, int index,
       {int badge = 0,
       Color badgeColor = AppTheme.danger,
       bool badgePill = false}) {
@@ -684,51 +780,11 @@ class _BottomNav extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Gaya NavigationBar M3 (seperti ScanOrder): pil muncul fade +
-            // melebar dari tengah di belakang ikon, kurva emphasized M3
-            // Cubic(0.2, 0, 0, 1) — bukan crossfade warna. Ukuran 68x30
-            // gepeng proporsional (radius = tinggi/2 = 15).
-            // Bulge sin() bikin pil sedikit mengembang di tengah animasi
-            // (efek melebar smooth), ikon ikut pop 0.85→1.
-            // Dua tahap: opacity full dalam 25% pertama (~125ms) supaya
-            // tap terasa respon instan; lebar pakai easeOutExpo — ngacir
-            // di awal lalu melambat lembut di akhir (500ms). Collapse
-            // tetap 250ms emphasized biar responsif.
-            TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: selected ? 0 : 1, end: selected ? 1 : 0),
-              duration: Duration(milliseconds: selected ? 500 : 250),
-              curve: selected
-                  ? Curves.linear
-                  : const Cubic(0.2, 0.0, 0.0, 1.0),
-              builder: (context, t, child) {
-                final w = t >= 1 ? 1.0 : 1 - math.pow(2, -10 * t).toDouble();
-                final o = (t / 0.25).clamp(0.0, 1.0);
-                final bulge = 1 + 0.08 * math.sin(w * math.pi);
-                return SizedBox(
-                width: 68,
-                height: 30,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Opacity(
-                      opacity: selected ? o : t,
-                      child: Container(
-                        width: 68 * w * bulge,
-                        height: 30 * (0.6 + 0.4 * w),
-                        decoration: BoxDecoration(
-                          color:
-                              AppTheme.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                    ),
-                    Transform.scale(
-                      scale: 0.85 + 0.15 * (t * 3).clamp(0.0, 1.0),
-                      child: child!,
-                    ),
-                  ],
-                ),
-              );
-              },
+            // melebar dari tengah di belakang ikon. Aksesibilitas: user
+            // menonaktifkan animasi sistem → pil langsung settle.
+            _navPill(
+              context: context,
+              selected: selected,
               child: _BadgedIcon(
                   icon: icon,
                   count: badge,

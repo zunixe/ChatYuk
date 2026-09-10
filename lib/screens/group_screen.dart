@@ -9,6 +9,7 @@ import '../providers/points_provider.dart';
 import '../providers/room_provider.dart';
 import '../services/private_room_service.dart';
 import '../widgets/anon_prompt_dialog.dart';
+import '../widgets/empty_state_view.dart';
 import '../widgets/room_icon.dart';
 import 'room_chat_screen.dart';
 
@@ -38,13 +39,10 @@ class _GroupList extends StatefulWidget {
 }
 
 class _GroupListState extends State<_GroupList> {
-  List<RoomModel> _rooms = [];
-  bool _loading = true;
-
   /// Muat-ulang dari luar (dialog buat grup) — key statis di GroupScreen.
   static void reloadCurrent(BuildContext context) {
     final st = context.findAncestorStateOfType<_GroupListState>();
-    st?._load();
+    st?._load(refresh: true);
   }
 
   @override
@@ -52,35 +50,29 @@ class _GroupListState extends State<_GroupList> {
     super.initState();
     _load();
   }
-  /// List grup MILIKKU dari RPC list_my_groups (member-only,
-  /// tanpa filter negara). Grup expired disembunyikan kecuali milik
-  /// sendiri (owner bisa perpanjang).
-  Future<void> _load() async {
-    try {
-      final myUid = PrivateRoomService.instance.uid ?? '';
-      final rows = await PrivateRoomService.instance.listMyRooms();
-      final rooms = <RoomModel>[];
-      for (final r in rows) {
-        final m = RoomModel.fromMap('${r['id'] ?? ''}', r);
-        final expired =
-            m.expiresAt != null && m.expiresAt!.isBefore(DateTime.now());
-        if (expired && m.ownerId != myUid) continue;
-        rooms.add(m);
-      }
-      if (!mounted) return;
-      setState(() {
-        _rooms = rooms;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
+
+  /// List grup MILIKKU dari RoomProvider (cache memori/TTL/disk — klik tab
+  /// instan, spinner hanya saat cache benar-benar kosong). Grup expired
+  /// disembunyikan kecuali milik sendiri (owner bisa perpanjang).
+  Future<void> _load({bool refresh = false}) async {
+    await context.read<RoomProvider>().loadMyGroups(refresh: refresh);
+  }
+
+  List<RoomModel> _visibleGroups(RoomProvider rp) {
+    final myUid = PrivateRoomService.instance.uid ?? '';
+    final now = DateTime.now();
+    return rp.myGroups.where((m) {
+      final expired = m.expiresAt != null && m.expiresAt!.isBefore(now);
+      return !(expired && m.ownerId != myUid);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    if (_loading) {
+    final rp = context.watch<RoomProvider>();
+    final rooms = _visibleGroups(rp);
+    if (rp.myGroupsLoading && rooms.isEmpty) {
       return const Center(
         child: SizedBox(
           width: 24,
@@ -94,34 +86,17 @@ class _GroupListState extends State<_GroupList> {
     }
     return Stack(
       children: [
-        if (_rooms.isEmpty)
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('🔒', style: TextStyle(fontSize: AppGlyph.xl)),
-                SizedBox(height: 12),
-                Text(
-                  s.noGroups,
-                  style: AppText.bodyStrong.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  s.noGroupsHint,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
+        if (rooms.isEmpty)
+          EmptyStateView(
+            icon: Icons.lock_rounded,
+            title: s.noGroups,
+            hint: s.noGroupsHint,
           )
         else
           ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-            itemCount: _rooms.length,
-            itemBuilder: (_, i) => _GroupCard(room: _rooms[i]),
+            itemCount: rooms.length,
+            itemBuilder: (_, i) => _GroupCard(room: rooms[i]),
           ),
         Positioned(
           right: 16,

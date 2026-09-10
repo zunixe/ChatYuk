@@ -34,7 +34,9 @@ class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
   void initState() {
     super.initState();
     Future.microtask(_load);
-    _poll = Timer.periodic(const Duration(seconds: 10), (_) => _load());
+    // Fallback poll JARANG (60s): realtime private rooms (RoomProvider)
+    // adalah jalur utama — poll 10s cuma buang RPC selama screen terbuka.
+    _poll = Timer.periodic(const Duration(seconds: 60), (_) => _load());
   }
 
   @override
@@ -290,7 +292,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric)),
         );
       }
     } finally {

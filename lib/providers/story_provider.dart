@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import '../utils.dart';
 
 import '../models/story_model.dart';
 import '../services/story_service.dart';
@@ -59,7 +60,7 @@ class StoryProvider extends ChangeNotifier {
       _tray = await _service.fetchTray();
       _error = null;
     } catch (e) {
-      debugPrint('[StoryProvider] refresh error: $e');
+      dlog('[StoryProvider] refresh error: $e');
       _error = e.toString();
     }
     _loading = false;

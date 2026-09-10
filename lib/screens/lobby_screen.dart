@@ -8,6 +8,7 @@ import '../models/room_model.dart';
 import '../providers/room_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
+import '../widgets/empty_state_view.dart';
 import '../providers/points_provider.dart';
 import 'room_chat_screen.dart';
 import 'private_rooms_screen.dart';
@@ -192,18 +193,10 @@ class _GlobalRoomsTab extends StatelessWidget {
       );
     }
     if (rooms.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('🏠', style: TextStyle(fontSize: AppGlyph.xl)),
-            SizedBox(height: 12),
-            Text(
-              s.noRooms,
-              style: AppText.bodyStrong.copyWith(color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
+      return EmptyStateView(
+        icon: Icons.home_rounded,
+        title: s.noRooms,
+        hint: s.noRoomsHint,
       );
     }
     return ListView.builder(

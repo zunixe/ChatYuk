@@ -15,6 +15,7 @@ import '../widgets/profile_avatar.dart';
 import 'private_chat_screen.dart';
 import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/empty_state_view.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
   final bool embedded;
@@ -451,27 +452,15 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 // gunakan di sini untuk rendering list.
                 final filtered = _lastFiltered;
                 if (filtered.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('💬', style: TextStyle(fontSize: AppGlyph.xl)),
-                        SizedBox(height: 12),
-                        Text(
-                          effectiveQuery.isEmpty ? s.noPrivateChats : s.searchNoResult,
-                          style: AppText.bodyStrong.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          effectiveQuery.isEmpty ? s.noPrivateChatsHint : '',
-                          style: AppText.bodySmall.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
+                  final searching = effectiveQuery.isNotEmpty;
+                  return EmptyStateView(
+                    icon: searching
+                        ? Icons.search_off_rounded
+                        : Icons.chat_bubble_outline_rounded,
+                    title: searching
+                        ? s.searchNoResult
+                        : s.noPrivateChats,
+                    hint: searching ? '' : s.noPrivateChatsHint,
                   );
                 }
                 // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus
