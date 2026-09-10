@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../config/theme.dart';
-import '../providers/locale_provider.dart';
 
 /// Empty state bersama seluruh app — komposisi lingkaran tint + ikon
 /// Material (BUKAN emoji, konsisten dengan timeline). Judul + hint +
@@ -24,7 +22,6 @@ class EmptyStateView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
     return Center(
       child: Padding(
         padding: EdgeInsets.all(24),

@@ -17,6 +17,7 @@ import '../services/device_info_service.dart';
 import '../services/location_service.dart';
 import '../services/message_cache.dart';
 import '../services/realtime_hub.dart';
+import '../services/rt_resilient.dart';
 import '../services/points_service.dart';
 import '../services/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
@@ -282,6 +283,15 @@ class AuthProvider extends ChangeNotifier {
         // Lite dulu (tanpa avatar) → langsung notify, UI tidak nunggu foto
         _profile = await _auth.getProfile(withAvatar: false);
         dlog('[AUTH] getProfile lite -> ${_profile?.uid}');
+        // ── Sinkronisasi flag dummy vs sesi nyata (anti "setengah admin") ──
+        // Recovery backToAdmin yang gagal bisa meninggalkan flag dummy true
+        // padahal sesi sekarang = akun admin asli. Email admin ≠ dummy →
+        // flag basi, bersihkan di sini (satu titik, jalan tiap login/init).
+        if (_auth.dummySessionActive &&
+            _profile?.email == AdminGate.adminEmail) {
+          dlog('[AUTH] dummy flag stale (sesi=admin) — dibersihkan');
+          _auth.markDummyState(active: false);
+        }
         if (_profile != null) {
           safeUnawaited(_saveCachedProfile(_profile!));
           if (!_disposed) notifyListeners();
@@ -676,30 +686,34 @@ class AuthProvider extends ChangeNotifier {
   /// semua device (mis. wajib registrasi, screenshot, watermark, invisible).
   /// Realtime setting global via .stream() — pola yang sama (dan terbukti
   /// jalan) dengan toggle Sistem Poin di PointsProvider.watchEnabled().
+  /// Resilient: error channel me-restart subscription otomatis (dulu:
+  /// mati permanen → toggle admin tidak berefek sampai restart).
   void _listenAppSettings() {
     if (_appSettingsSub != null) return;
-    _appSettingsSub = _auth
-        .watchGlobalSettings()
-        .listen((row) {
-          if (_disposed) return;
-          if (row == null) return;
-          dlog('[SETTINGS] row call_all_enabled='
-              '${row['call_all_enabled']} '
-              'require_registration=${row['require_registration']}');
-          var changed = false;
-          final nextCall = row['call_all_enabled'] == true;
-          if (nextCall != _callAllEnabled) {
-            _callAllEnabled = nextCall;
-            changed = true;
-          }
-          final nextReq = row['require_registration'] == true;
-          if (nextReq != _requireRegistration) {
-            _requireRegistration = nextReq;
-            changed = true;
-          }
-          if (changed && !_disposed) notifyListeners();
-        }, onError: (e) => dlog('[SETTINGS] stream error: $e'),
-           onDone: () => dlog('[SETTINGS] stream DONE'));
+    _appSettingsSub = listenResilient<Map<String, dynamic>?>(
+      () => _auth.watchGlobalSettings(),
+      (row) {
+        if (_disposed) return;
+        if (row == null) return;
+        dlog('[SETTINGS] row call_all_enabled='
+            '${row['call_all_enabled']} '
+            'require_registration=${row['require_registration']}');
+        var changed = false;
+        final nextCall = row['call_all_enabled'] == true;
+        if (nextCall != _callAllEnabled) {
+          _callAllEnabled = nextCall;
+          changed = true;
+        }
+        final nextReq = row['require_registration'] == true;
+        if (nextReq != _requireRegistration) {
+          _requireRegistration = nextReq;
+          changed = true;
+        }
+        if (changed && !_disposed) notifyListeners();
+      },
+      isDisposed: () => _disposed,
+      onError: (e) => dlog('[SETTINGS] stream error: $e'),
+    );
   }
 
   /// Polling cadangan bila websocket realtime mati — 5 menit (realtime
@@ -1082,7 +1096,11 @@ class AuthProvider extends ChangeNotifier {
     final impl = AdminGate.backToAdminImpl;
     if (impl == null) return false;
     final ok = await impl();
-    if (ok) _auth.markDummyState(active: false);
+    // Flag dummy dibersihkan APA PUN hasilnya: sukses = sesi admin; gagal =
+    // sesi mati total — keduanya bukan sesi dummy, banner tidak boleh
+    // nempel (dulu: gagal → flag tetap true → banner tampil di akun admin
+    // setelah login manual = "setengah admin setengah engga").
+    _auth.markDummyState(active: false);
     await reloadProfile();
     return ok;
   }

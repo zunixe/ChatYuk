@@ -8,6 +8,7 @@ import '../services/chat_service.dart';
 import '../services/message_cache.dart';
 import '../services/private_room_service.dart';
 import '../services/realtime_hub.dart';
+import '../services/rt_resilient.dart';
 
 class RoomProvider extends ChangeNotifier {
   bool _disposed = false;
@@ -135,13 +136,17 @@ class RoomProvider extends ChangeNotifier {
 
   void _subscribeCounts() {
     _countsSub?.cancel();
-    _countsSub = _chat.getRoomOnlineCounts(country: _country).listen(
+    // Resilient: channelError/network blip me-restart subscription
+    // otomatis (dulu: mati permanen → badge online freeze sampai restart).
+    _countsSub = listenResilient<Map<String, int>>(
+      () => _chat.getRoomOnlineCounts(country: _country),
       (counts) {
         if (_countsEquals(counts, _counts)) return;
         _counts = counts;
         _applyCounts();
         if (!_disposed) notifyListeners();
       },
+      isDisposed: () => _disposed,
       onError: (e) {
         dlog('[RoomProvider] counts stream error: $e');
       },
@@ -201,20 +206,22 @@ class RoomProvider extends ChangeNotifier {
   /// Saat ada room dibuat/dihapus di device manapun, list langsung sinkron.
   void _subscribePrivateRooms() {
     _privateSub?.cancel();
-    _privateSub = _service
-        .watchPrivateRooms(_country)
-        .listen(
-          (rooms) {
-            _privateRooms = rooms;
-            _applyCounts();
-            _hasLoaded = true;
-            if (!_disposed) notifyListeners();
-            _scheduleDiskSave();
-          },
-          onError: (e) {
-            dlog('[RoomProvider] private rooms stream error: $e');
-          },
-        );
+    // Resilient: lihat _subscribeCounts (penyebab "room list freeze
+    // sampai restart" saat channelError).
+    _privateSub = listenResilient<List<RoomModel>>(
+      () => _service.watchPrivateRooms(_country),
+      (rooms) {
+        _privateRooms = rooms;
+        _applyCounts();
+        _hasLoaded = true;
+        if (!_disposed) notifyListeners();
+        _scheduleDiskSave();
+      },
+      isDisposed: () => _disposed,
+      onError: (e) {
+        dlog('[RoomProvider] private rooms stream error: $e');
+      },
+    );
   }
 
   /// Ganti negara & muat room-nya.

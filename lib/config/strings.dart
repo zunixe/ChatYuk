@@ -393,9 +393,23 @@ class S {
       : 'Letters, numbers, or underscore only';
   String get labelYears => isId ? 'tahun' : 'years';
   String get btnLogout => isId ? 'Keluar' : 'Logout';
+  String get btnOk => isId ? 'OK' : 'OK';
   String get confirmLogoutBody => isId
       ? 'Yakin ingin keluar dari akun ini?'
       : 'Are you sure you want to log out?';
+  String get btnDeleteAccount => isId ? 'Hapus Akun' : 'Delete Account';
+  String get confirmDeleteAccountBody => isId
+      ? 'Akun, pesan, story, dan semua datamu akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.'
+      : 'Your account, messages, stories, and all your data will be permanently deleted. This cannot be undone.';
+  String get labelDeleteAccountConfirm =>
+      isId ? 'Ketik HAPUS untuk konfirmasi' : 'Type DELETE to confirm';
+  String get errDeleteAccount =>
+      isId ? 'Gagal menghapus akun. Coba lagi.' : 'Failed to delete account. Try again.';
+  String get errDeleteAccountForbidden => isId
+      ? 'Akun admin tidak bisa dihapus dari app.'
+      : 'Admin accounts cannot be deleted from the app.';
+  String get msgDeleteAccountSuccess =>
+      isId ? 'Akun berhasil dihapus' : 'Account deleted';
   String get genderLabelMale => isId ? '👨 Laki-laki' : '👨 Male';
   String get genderLabelFemale => isId ? '👩 Perempuan' : '👩 Female';
   String get genderLabelOther => isId ? '🧑 Lainnya' : '🧑 Other';

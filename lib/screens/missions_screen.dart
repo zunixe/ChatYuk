@@ -310,7 +310,6 @@ class _Header extends StatelessWidget {
                         style: AppText.bodyStrong.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
-                          height: 1,
                         ),
                       ),
                     ],

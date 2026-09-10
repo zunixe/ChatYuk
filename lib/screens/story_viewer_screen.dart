@@ -124,6 +124,34 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
         },
       ),
     );
+    // Retry sekali untuk slide yang gagal (network blip) — tanpa ini
+    // slide gagal tampil HITAM permanen selama viewer dibuka.
+    Future.delayed(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      final missing =
+          _slides.where((sl) => _localImg[sl.imagePath] == null).toList();
+      if (missing.isEmpty) return;
+      await Future.wait(missing.map((sl) async {
+        final b = await _bytes(sl.imagePath);
+        if (b != null && b.isNotEmpty) {
+          _localImg[sl.imagePath] = b;
+          if (mounted) setState(() {});
+        }
+      }));
+    });
+  }
+
+  /// Muat ulang foto slide aktif bila masih kosong (dipanggil saat
+  /// pindah slide) — jaring pengaman kedua selain retry _preload.
+  void _reloadCurrentIfMissing() async {
+    if (_slides.isEmpty || _slide < 0 || _slide >= _slides.length) return;
+    final path = _slides[_slide].imagePath;
+    if (_localImg[path] != null) return;
+    final b = await _bytes(path);
+    if (b != null && b.isNotEmpty && mounted) {
+      _localImg[path] = b;
+      setState(() {});
+    }
   }
 
   Future<Uint8List?> _bytes(String path) async {
@@ -170,6 +198,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
       setState(() => _slide++);
       _markSeen();
       _startTimer();
+      _reloadCurrentIfMissing();
     } else {
       _nextPerson();
     }
@@ -179,6 +208,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     if (_slide > 0) {
       setState(() => _slide--);
       _startTimer();
+      _reloadCurrentIfMissing();
     } else {
       _prevPerson();
     }
@@ -505,6 +535,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
                             Shadow(color: Color(0xCC000000), blurRadius: 6),
                           ]),
                     ),
+                  // Visibilitas story milik sendiri — jawab "story ini
+                  // tayang untuk siapa" (Semua orang / Pengikut / Teman).
+                  if (_own && !_loading && _slides.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    _VisibilityBadge(visibility: _slides[_slide].visibility),
+                  ],
                 ],
               ),
             ),
@@ -752,6 +788,45 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
 /// Tombol header viewer yang rapat — IconButton Material 3 selalu
 /// menambah tap-target/padding internal (48px) walau padding: zero →
 /// ikon tidak pernah menempel tepi. Pakai GestureDetector murni 32px.
+/// Badge visibilitas story milik sendiri — ikon + label pendek di
+/// header viewer (Semua orang / Pengikut / Teman), gaya menyatu dgn
+/// header (teks putih + shadow, tanpa kotak supaya tidak berat).
+class _VisibilityBadge extends StatelessWidget {
+  final String visibility;
+  const _VisibilityBadge({required this.visibility});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final isEveryone = visibility == 'everyone';
+    final isFriends = visibility == 'friends';
+    final icon = isEveryone
+        ? Icons.public
+        : (isFriends ? Icons.favorite_rounded : Icons.group_rounded);
+    final label = isEveryone
+        ? s.storyVisibilityEveryone
+        : (isFriends ? s.storyVisibilityFriends : s.storyVisibilityFollowers);
+    const shadows = [
+      Shadow(color: Color(0xCC000000), blurRadius: 6),
+      Shadow(color: Color(0x80000000), blurRadius: 2, offset: Offset(1, 1)),
+    ];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: Colors.white70, shadows: shadows),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: AppText.caption.copyWith(
+            color: Colors.white70,
+            shadows: shadows,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _HeaderBtn extends StatelessWidget {
   final IconData icon;
   final double iconSize;

@@ -102,6 +102,31 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   Future<void> Function() _msgsHandleReload = () async {};
   bool _loadingOlder = false;
 
+  // ── AUTO-LOAD image deferred ──
+  // "harusnya muncul semua image yang dikirim user" — image pesan lama
+  // (di luar window 50) di-fetch OTOMATIS saat emit masuk, tanpa tap.
+  // Guard: in-flight (jangan dobel) + cooldown 10s per id (emit berikut
+  // tidak spam retry kalau fetch gagal; tap manual tetap bisa kapan pun).
+  final Set<String> _imgInFlight = {};
+  final Map<String, DateTime> _imgLastAttempt = {};
+  void _autoLoadMissingImages(List<MessageModel> msgs) {
+    final now = DateTime.now();
+    for (final m in msgs) {
+      if (m.type != 'image' || m.imageData.isNotEmpty) continue;
+      if (m.isDeleted) continue;
+      if (_imgInFlight.contains(m.id)) continue;
+      final last = _imgLastAttempt[m.id];
+      if (last != null && now.difference(last) < const Duration(seconds: 10)) {
+        continue;
+      }
+      _imgInFlight.add(m.id);
+      _imgLastAttempt[m.id] = now;
+      _msgsHandleFetchImage(m.id).whenComplete(() {
+        _imgInFlight.remove(m.id);
+      });
+    }
+  }
+
   DateTime? _otherLastRead;
   DateTime? _lastIncomingSeen;
   StreamSubscription<List<PrivateChatInfo>>? _chatInfoSub;
@@ -2062,6 +2087,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                             // tanpa ikon/teks "mulai percakapan".
                             return const SizedBox.shrink();
                           }
+                          // Auto-load image deferred (di luar window 50) —
+                          // fire-and-forget, hasil masuk via stream emit.
+                          _autoLoadMissingImages(all);
                           // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
                           // pola WhatsApp — item list berisi pesan + separator tanggal.
                           final items = <ChatItem>[];

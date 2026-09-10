@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/timeline_service.dart';
+import '../services/rt_resilient.dart';
 import '../services/message_cache.dart';
 import '../services/realtime_hub.dart';
 
@@ -161,7 +162,14 @@ class TimelineProvider extends ChangeNotifier {
 
   void _listenRealtime() {
     _rtSub?.cancel();
-    _rtSub = _service.watchNewPosts().listen(_onNewPost);
+    // Resilient: error channel me-restart subscription otomatis (post
+    // baru berhenti masuk = feed terasa "mati" sampai restart).
+    _rtSub = listenResilient(
+      () => _service.watchNewPosts(),
+      _onNewPost,
+      isDisposed: () => _disposed,
+      onError: (e) => dlog('[TimelineProvider] realtime error: $e'),
+    );
     // Unified fan-out: juga dengar Broadcast timeline-all (Presence) untuk 1→N ringan
     RealtimeHub.instance.timelineBroadcast.listen((msg) {
       final payload = msg['payload'] as Map<String, dynamic>?;

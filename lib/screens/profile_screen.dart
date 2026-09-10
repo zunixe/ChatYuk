@@ -94,6 +94,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _uploading = false;
   bool _loggingOut = false;
+  bool _deletingAccount = false;
 
   final AuthService _authService = AuthService();
   List<UserPhoto> _photos = [];
@@ -1959,6 +1960,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                       ),
+                      // Hapus akun (kepatuhan Google Play) — semua tipe akun.
+                      Divider(height: 1, indent: 52),
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 4,
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: _deletingAccount
+                              ? null
+                              : _confirmDeleteAccount,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.danger.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: _deletingAccount
+                                    ? Padding(
+                                        padding: EdgeInsets.all(9),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppTheme.danger,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.delete_forever_outlined,
+                                        color: AppTheme.danger,
+                                        size: 20,
+                                      ),
+                              ),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      s.btnDeleteAccount,
+                                      style: AppText.bodyStrong.copyWith(
+                                        fontWeight: FontWeight.w500,
+                                        color: AppTheme.danger,
+                                      ),
+                                    ),
+                                    Text(
+                                      s.confirmDeleteAccountBody,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppText.bodySmall.copyWith(
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: 12),
@@ -2260,6 +2327,142 @@ class _ProfileScreenState extends State<ProfileScreen> {
       SnackBar(content: Text(ok ? s.msgProfileSaved : s.errGeneric)),
     );
     if (ok) await context.read<AuthProvider>().reloadProfile();
+  }
+
+  /// Hapus akun (Google Play account deletion requirement).
+  /// Konfirmasi berlapis: dialog ringkasan → dialog ketik HAPUS/DELETE.
+  Future<void> _confirmDeleteAccount() async {
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final chat = context.read<ChatProvider>();
+
+    // Admin dilarang self-delete di sisi server — tidak tampilkan menu.
+    if (auth.isRealAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.errDeleteAccountForbidden)),
+      );
+      return;
+    }
+
+    final step1 = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            Icon(Icons.delete_forever, color: AppTheme.danger, size: 24),
+            SizedBox(width: 10),
+            Expanded(child: Text(s.btnDeleteAccount, style: AppText.title)),
+          ],
+        ),
+        content: Text(
+          s.confirmDeleteAccountBody,
+          style: AppText.body.copyWith(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              s.btnCancel,
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: Text(
+              s.btnDeleteAccount,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (step1 != true || !mounted) return;
+
+    // Step 2: ketik HAPUS (id) / DELETE (en) — cegah sentuhan salah.
+    final confirmWord = s.isId ? 'HAPUS' : 'DELETE';
+    final ctrl = TextEditingController();
+    final step2 = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(s.btnDeleteAccount, style: AppText.title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              s.labelDeleteAccountConfirm,
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              style: AppText.body.copyWith(color: AppTheme.textPrimary),
+              decoration: InputDecoration(hintText: confirmWord),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              s.btnCancel,
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          ListenableBuilder(
+            listenable: ctrl,
+            builder: (ctx, _) => FilledButton(
+              onPressed: ctrl.text.trim().toUpperCase() == confirmWord
+                  ? () => Navigator.of(ctx).pop(true)
+                  : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                disabledBackgroundColor: AppTheme.danger.withValues(alpha: 0.4),
+              ),
+              child: Text(
+                s.btnDeleteAccount,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (step2 != true || !mounted) return;
+
+    setState(() => _deletingAccount = true);
+    try {
+      if (auth.isAnonymous) {
+        await context.read<SocialProvider>().clearAnonSocial();
+      }
+      await _authService.deleteMyAccount();
+      await auth.signOut();
+      chat.reset();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.msgDeleteAccountSuccess)),
+        );
+      }
+    } catch (e) {
+      dlog('[PROFILE] delete account error: $e', tag: 'PROFILE');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errDeleteAccount)));
+      }
+    } finally {
+      if (mounted) setState(() => _deletingAccount = false);
+    }
   }
 
   Future<void> _confirmLogout() async {

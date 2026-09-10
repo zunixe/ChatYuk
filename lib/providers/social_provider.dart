@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/social_service.dart';
+import '../services/rt_resilient.dart';
 import '../services/message_cache.dart';
 
 /// State sosial user aktif: following set, friend request inbox count,
@@ -141,12 +142,20 @@ class SocialProvider extends ChangeNotifier {
     // setelah logout, removeAllChannels men-teardown channel lama, jadi
     // login berikutnya harus membuat channel baru dengan uid yang baru.
     _listenRealtime();
-    _frSub = _service.watchFriendRequestCount(uid).listen((count) {
-      if (_friendRequestCount != count) {
-        _friendRequestCount = count;
-        if (!_disposed) notifyListeners();
-      }
-    });
+    // Resilient: error channel me-restart subscription otomatis (dulu:
+    // counter friend request freeze sampai restart).
+    _frSub?.cancel();
+    _frSub = listenResilient<int>(
+      () => _service.watchFriendRequestCount(uid),
+      (count) {
+        if (_friendRequestCount != count) {
+          _friendRequestCount = count;
+          if (!_disposed) notifyListeners();
+        }
+      },
+      isDisposed: () => _disposed,
+      onError: (e) => dlog('[SocialProvider] fr-count stream error: $e'),
+    );
     // Muat set awal (following/friends/subscribed) untuk uid sendiri.
     _refreshSelfSetsNow();
   }

@@ -5,14 +5,20 @@ Aplikasi chat gratis, bebas iklan, dan aman untuk semua.
 ## Fitur
 
 - 🔴 **Online Users** — lihat pengguna yang sedang online, filter berdasarkan negara & gender
-- 💬 **Private Chat** — chat 1-on-1 dengan status realtime, foto, fitur sekali-lihat (view once), reply, dan hadiah/koin
-- 🏠 **Chat Rooms** — room per negara dengan berbagai kategori (General, Curhat, Teknologi, Gaming, dll)
+- 💬 **Private Chat** — chat 1-on-1 dengan status realtime, foto, voice message, fitur sekali-lihat (view once), reply, dan hadiah/koin
+- 🏠 **Chat Rooms** — room per negara dengan berbagai kategori (General, Curhat, Teknologi, Gaming, dll) + room private berbayar koin (perpanjang 7 hari)
+- 👥 **Group Chat** — grup pribadi dengan info grup, media, dan anggota
+- 📞 **Voice & Video Call 1:1** — panggilan suara & video via WebRTC, lengkap dengan notifikasi panggilan masuk & missed call
+- 📸 **Stories** — kamera capture, composer, dan story viewer
+- 📝 **Timeline** — posting & interaksi status
+- 🗺️ **Nearby** — pengguna sekitar berbasis lokasi (flutter_map/OSM)
+- 🏆 **Leaderboard & Missions** — gamifikasi koin lewat bonus & quest
 - 👤 **Profil** — avatar, galeri foto, ganti username, status, dan edit profil
 - 🌐 **Bilingual** — Indonesia & English (switch bahasa di profil)
 - 🔐 **Auth multi-metode** — Anonymous, Email, dan Google Sign-In
-- 🔔 **Push Notification** — via Firebase Cloud Messaging
+- 🔔 **Push Notification** — via Firebase Cloud Messaging, bisa diatur per kategori
 - 📵 **Anti-screenshot** — kontrol admin untuk mengaktifkan/menonaktifkan screenshot
-- 💰 **Koin & Gift** (flavor apkpure) — topup Midtrans, kirim hadiah, KYC, dan withdraw
+- 🪙 **Koin & Gift** — kirim koin & hadiah sebagai digital goods (fitur finansial topup/KYC/withdraw sudah dihapus dari app)
 
 ## Tech Stack
 
