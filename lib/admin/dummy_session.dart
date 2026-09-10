@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_config.dart';
+import '../core/admin_gate.dart';
 import '../services/auth_service.dart';
 
 /// Sesi dummy: admin berpindah akun tanpa login manual.
@@ -42,6 +43,11 @@ class DummySession {
     _adminAccessToken = session?.accessToken;
     _adminRefreshToken = session?.refreshToken;
     await _saveAdminTokens(_adminAccessToken, _adminRefreshToken);
+    // Tandai dummy SEBELUM swap — event signedIn/tokenRefreshed dari
+    // setSession di bawah tiba async dan bisa menyalip mark di akhir;
+    // tanpa ini token DUMMY tersimpan sebagai "token admin" (prefs
+    // keracunan → backToAdmin gagal permanen sampai login manual).
+    AuthService.instance.markDummyState(active: true, uid: uid);
     // SELALU renew dulu — refresh token GoTrue sifatnya sekali-pakai
     // (dirotasi tiap pemakaian, dan auto-refresh client app dummy di HP
     // lain bisa sudah memutar token tersimpan). Pakai token tersimpan
@@ -72,7 +78,8 @@ class DummySession {
         final r = _adminRefreshToken;
         _adminAccessToken = null;
         _adminRefreshToken = null;
-        _restoreAdmin(a, r);
+        AuthService.instance.markDummyState(active: false);
+        await _restoreAdmin(a, r);
         await clearStored();
         rethrow;
       }
@@ -117,6 +124,8 @@ class DummySession {
 
   /// Kembali ke akun admin. Sesi dummy TIDAK di-logout & statusnya tetap.
   /// Return false jika token admin kedaluwarsa (perlu login manual).
+  /// Sukses DIVERIFIKASI (email pendaratan harus admin) — token basi atau
+  /// tertukar token dummy tidak lagi dilaporkan sukses palsu.
   static Future<bool> backToAdmin() async {
     var adminAccess = _adminAccessToken;
     var adminRefresh = _adminRefreshToken;
@@ -128,13 +137,21 @@ class DummySession {
       adminRefresh = prefs.getString(_kAdminRefreshToken);
     }
     if (adminRefresh == null || adminAccess == null) {
+      dlog('[DUMMY] backToAdmin: no admin tokens (memory+prefs empty)');
       return false;
     }
     try {
       await _sb.auth.setSession(adminRefresh, accessToken: adminAccess);
       await clearStored();
+      final landed = _sb.auth.currentUser?.email;
+      dlog('[DUMMY] backToAdmin setSession ok, landed=$landed');
+      if (!AdminGate.isRealAdmin(landed)) {
+        dlog('[DUMMY] backToAdmin landed on non-admin — tokens poisoned?');
+        return false;
+      }
       return true;
-    } catch (_) {
+    } catch (e) {
+      dlog('[DUMMY] backToAdmin setSession failed: $e');
       return false;
     }
   }
@@ -179,6 +196,9 @@ class DummySession {
     if (AuthService.instance.dummySessionActive) return;
     final s = _sb.auth.currentSession;
     if (s == null) return;
+    // Jaga memory tetap sinkron dengan prefs (menutup selisih keduanya).
+    _adminAccessToken = s.accessToken;
+    _adminRefreshToken = s.refreshToken;
     await _saveAdminTokens(s.accessToken, s.refreshToken);
   }
 
@@ -218,11 +238,13 @@ class DummySession {
   }
 
   /// Pulihkan sesi admin tanpa menyentuh state dummy lainnya.
-  static void _restoreAdmin(String? access, String? refresh) {
+  static Future<void> _restoreAdmin(String? access, String? refresh) async {
     if (refresh != null && access != null) {
       try {
-        _sb.auth.setSession(refresh, accessToken: access);
-      } catch (_) {}
+        await _sb.auth.setSession(refresh, accessToken: access);
+      } catch (e) {
+        dlog('[DUMMY] _restoreAdmin failed: $e');
+      }
     }
   }
 }
