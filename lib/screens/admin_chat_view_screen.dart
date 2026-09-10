@@ -9,7 +9,6 @@ import '../config/theme.dart';
 import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
-import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_call_watch_service.dart';
 import '../services/photo_cache.dart';
@@ -44,7 +43,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   String? _error;
   String? _leftUid;
   String get _chatKey => cacheKeyFor(widget.chatId);
-  bool _markedRead = false;
+  // last_read_at kedua peserta (uid → waktu) — dasar hitung centang-2
+  // sama seperti chat asli (bukan isMe).
+  Map<String, DateTime> _lastRead = {};
   late Timer _pollTimer;
   RealtimeChannel? _channel;
   final _photoLoading = <String>{};
@@ -210,7 +211,6 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       _leftUid = _computeLeftUid(senders);
       _error = null;
     });
-    _markDummyRead();
     _loadPhotos();
   }
 
@@ -229,19 +229,31 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     return senders.isNotEmpty ? senders.first : null;
   }
 
-  /// Tandai chat sudah dibaca atas nama dummy/pemilik akun (bukan lawan
-  /// bicara) — badge unread di tab admin dummy hilang setelah monitor dibuka.
-  /// Sekali per sesi buka screen; poll 5 detik tidak menandai ulang.
-  void _markDummyRead() {
-    if (_markedRead) return;
-    final left = _leftUid;
-    if (left == null) return;
+  /// Samakan last-read dari server (dasar centang-2 per pesan).
+  /// Dipanggil tiap fetch + poll 5 detik supaya live mengikuti.
+  Future<void> _refreshRead() async {
+    try {
+      final raw = await context
+          .read<AdminProvider>()
+          .fetchChatLastRead(widget.chatId);
+      if (!mounted) return;
+      final map = <String, DateTime>{};
+      raw.forEach((k, v) {
+        final t = DateTime.tryParse(v);
+        if (t != null) map[k] = t;
+      });
+      setState(() => _lastRead = map);
+    } catch (_) {}
+  }
+
+  /// Lawan bicara pengirim di chat 1:1 (uid satunya). Null bila tak jelas
+  /// (bukan format uid1_uid2) → pesan fallback centang-1.
+  String? _recipientOf(String senderId) {
     final parts = widget.chatId.split('_');
-    if (parts.length != 2) return;
-    final dummyUid = parts[0] == left ? parts[1] : parts[0];
-    if (dummyUid == left) return;
-    _markedRead = true;
-    context.read<ChatProvider>().markAsReadAdmin(widget.chatId, dummyUid);
+    if (parts.length != 2) return null;
+    if (senderId == parts[0]) return parts[1];
+    if (senderId == parts[1]) return parts[0];
+    return null;
   }
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
@@ -259,6 +271,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         return;
       }
       _applyMessages();
+      unawaited(_refreshRead());
       _loading = false;
     } catch (e) {
       if (!mounted) return;
@@ -274,6 +287,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     await admin.refreshChatMessages(widget.chatId);
     if (!mounted) return;
     _applyMessages();
+    unawaited(_refreshRead());
   }
 
   List<MessageModel> _mapMessages(List<Map<String, dynamic>> raw) {
@@ -500,6 +514,16 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                               return DateChip(label: item.dateLabel!);
                             final msg = item.msg!;
                             final isMe = msg.senderId != _leftUid;
+                            // Samakan chat asli: centang-2 hanya bila
+                            // PENERIMA sudah baca (timestamp < last-read
+                            // penerima). Tak diketahui → centang-1.
+                            final recipient = _recipientOf(msg.senderId);
+                            final readAt = recipient != null
+                                ? _lastRead[recipient]
+                                : null;
+                            final isRead =
+                                readAt != null &&
+                                msg.timestamp.isBefore(readAt);
                             final isImageDeferred =
                                 msg.type == 'image' && msg.imageData.isEmpty;
                             return MessageBubble(
@@ -508,7 +532,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                               msg: msg,
                               chatKey: _chatKey,
                               isMe: isMe,
-                              isRead: isMe,
+                              isRead: isRead,
                               isAdminView: true,
                               isImageDeferred: isImageDeferred,
                               onRetryImage: isImageDeferred

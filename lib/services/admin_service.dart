@@ -101,6 +101,22 @@ class AdminService {
     return list.cast<Map<String, dynamic>>();
   }
 
+  /// last_read_at chat (uid → timestamp mentah) untuk samakan centang-2
+  /// monitor dengan chat asli. {} bila gagal.
+  Future<Map<String, String>> getChatLastRead(String chatId) async {
+    try {
+      final res = await _sb.rpc(
+        'admin_get_chat_last_read',
+        params: {'p_chat_id': chatId},
+      );
+      final map = res as Map<String, dynamic>?;
+      if (map == null) return {};
+      return map.map((k, v) => MapEntry(k.toString(), v.toString()));
+    } catch (_) {
+      return {};
+    }
+  }
+
   /// Fetch image_data satu foto (untuk retry / view-once admin).
   Future<String> getMessageImage(int messageId) async {
     final res = await _sb.rpc(
