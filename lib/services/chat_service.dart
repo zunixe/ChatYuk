@@ -1286,7 +1286,11 @@ class ChatService {
   RealtimeChannel _typingChannel(String chatId) {
     return _typingChannels.putIfAbsent(chatId, () {
       final ch = _sb.channel('typing-$chatId');
-      ch.subscribe();
+      // Diagnosis typing: status subscribe terlihat di logcat (release
+      // build tetap mencetak debugPrint).
+      ch.subscribe((status, error) {
+        debugPrint('[TYPING] subscribe $chatId -> $status err=$error');
+      });
       return ch;
     });
   }
@@ -1296,11 +1300,18 @@ class ChatService {
   Stream<String> getTypingStream(String chatId) {
     final controller = StreamController<String>.broadcast();
     final channel = _typingChannel(chatId);
+    debugPrint('[TYPING] onBroadcast registered for $chatId');
     channel.onBroadcast(
       event: 'typing',
       callback: (payload) {
+        debugPrint('[TYPING] event received: $payload');
         final senderId = payload['sender_id'] as String?;
-        if (senderId == null || senderId == _sb.auth.currentUser?.id) return;
+        final myId = _sb.auth.currentUser?.id;
+        debugPrint('[TYPING] senderId=$senderId myId=$myId');
+        if (senderId == null || senderId == myId) {
+          debugPrint('[TYPING] skipped (own sender or null)');
+          return;
+        }
         if (!controller.isClosed) {
           controller.add((payload['kind'] as String?) ?? 'typing');
         }
