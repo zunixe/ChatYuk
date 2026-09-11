@@ -526,10 +526,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   void _subscribeTyping() {
     _typingSub?.cancel();
+    debugPrint('[TYPING] screen subscribing for ${widget.chatId}');
     _typingSub = context
         .read<ChatProvider>()
         .getTypingStream(widget.chatId)
         .listen((kind) {
+          debugPrint('[TYPING] stream got kind=$kind -> bubble on');
           if (!mounted) return;
           setState(() {
             if (kind == 'recording') {
