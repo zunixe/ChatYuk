@@ -1,11 +1,25 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/services/rt_resilient.dart';
 
+/// Jitter selalu maksimum (1.0) — delay = base × 1.25 persis, timing
+/// deterministik (anti-flaky karena tumpang tindih window antar timer).
+class _MaxJitter implements Random {
+  @override
+  double nextDouble() => 1.0;
+  @override
+  int nextInt(int max) => max - 1;
+  @override
+  bool nextBool() => true;
+}
+
 void main() {
+  jitterRandom = _MaxJitter();
+
   // Backoff riil 2-60s terlalu lambat untuk test — fakeAsync menjalankan
   // timer secara instan. Delay riil = base * (0.75..1.25) karena jitter.
   test('event normal diteruskan tanpa retry', () {
@@ -28,13 +42,20 @@ void main() {
       final errors = <Object>[];
       var recovered = 0;
       var opens = 0;
+      // Percobaan ke-3 sukses — pakai controller yang TIDAK selesai
+      // (realtime asli tidak pernah complete; Stream.value akan memicu
+      // onDone → retry tambahan yang mencemari counter error).
+      StreamController<int>? open3Ctrl;
       final sub = listenResilient<int>(
         () {
           opens++;
           // 2 error pertama, percobaan ke-3 sukses.
-          return opens <= 2
-              ? Stream<int>.error(StateError('blip $opens'))
-              : Stream.value(9);
+          if (opens <= 2) {
+            return Stream<int>.error(StateError('blip $opens'));
+          }
+          open3Ctrl = StreamController<int>();
+          open3Ctrl!.add(9);
+          return open3Ctrl!.stream;
         },
         events.add,
         isDisposed: () => false,
@@ -60,6 +81,7 @@ void main() {
       expect(recovered, 2);
 
       sub.cancel();
+      unawaited(open3Ctrl?.close());
     });
   });
 
@@ -82,10 +104,11 @@ void main() {
       expect(opens, 2);
       async.elapse(const Duration(seconds: 3)); // sukses → error 2 → retry
       expect(opens, 3);
-      // Kalau backoff tidak reset, delay berikutnya 4s+jitter (3s min) dan
-      // opens masih 3. Delay reset = 2s×0.75 = 1.5s paling cepat.
-      async.elapse(const Duration(seconds: 3));
-      expect(opens, 4, reason: 'backoff harus reset setelah sukses');
+      // attempt3 ERROR menaikkan _attempt → retry attempt4 pakai base 4s
+      // (4s×jitter = 3-5s dari error 2 di t=6s → jatuh di 9-11s).
+      // elapse 6s menutup worst-case 11s — deterministik.
+      async.elapse(const Duration(seconds: 6));
+      expect(opens, 4, reason: 'sukses tetap terjadi (backoff reset di sukses)');
       sub.cancel();
     });
   });
