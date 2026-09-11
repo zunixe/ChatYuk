@@ -395,6 +395,60 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, skipped: 'no_history' });
     }
 
+    // ── CONSENT-BASED ADULT MODE (per chat) ──
+    // AI sendiri yang menawarkan ("kamu mau aku nakal, atau kamu suka aku
+    // nakal?") SETELAH chat panjang & saling kenal. Jawaban ya → mode
+    // dewasa aktif untuk chat ini. Tidak → tidak pernah ditawari lagi.
+    let adultMode = false;
+    let chatState: any = null;
+    try {
+      const { data: cs } = await admin
+        .from('ai_chat_state')
+        .select('adult_mode, asked_at, declined')
+        .eq('chat_id', chatId)
+        .maybeSingle();
+      chatState = cs;
+      adultMode = cs?.adult_mode === true;
+    } catch (_) {}
+    const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
+    const askedInLastTurn =
+      lastAssistant != null && /nakal/i.test(contentText(lastAssistant.content));
+    const lastUserText = contentText(lastUserMsg?.content ?? '');
+    // Deteksi jawaban: hanya relevan bila pertanyaan nakal ada di balasan
+    // AI terakhir (konteks ketat — mencegah "iya" di konteks lain salah
+    // membuka mode).
+    if (!adultMode && askedInLastTurn) {
+      const yes =
+        /(^|\s)(iya|iy|mau|suka|nakal|boleh|gas|gaskeun|yuk|ya|oke|ok|sip|monggo|silakan|ayuk|hayu)(\s|$|[.,!?])/i;
+      const no =
+        /(^|\s)(gamau|ga mau|jangan|jgn|gak|ga|ngga|nggak|no|jangan dulu|nanti)(\s|$|[.,!?])/i;
+      if (yes.test(lastUserText)) {
+        adultMode = true;
+        try {
+          await admin
+            .from('ai_chat_state')
+            .upsert(
+              { chat_id: chatId, adult_mode: true, updated_at: new Date().toISOString() },
+              { onConflict: 'chat_id' },
+            );
+        } catch (_) {}
+      } else if (no.test(lastUserText)) {
+        try {
+          await admin
+            .from('ai_chat_state')
+            .upsert(
+              {
+                chat_id: chatId,
+                declined: true,
+                asked_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'chat_id' },
+            );
+        } catch (_) {}
+      }
+    }
+
     // ── Media: foto dibaca langsung (vision), voice ditranskrip (STT) ──
     // Batas: maks 3 foto terbaru (hemat token), voice maks 3 menit.
     // Gagal / tanpa kunci STT = placeholder durasi — JANGAN pura-pura dengar.
@@ -466,6 +520,22 @@ Deno.serve(async (req: Request) => {
       .select('id', { count: 'exact', head: true })
       .eq('chat_id', chatId);
     const freshStage = (chatMsgCount ?? 0) <= 6 && !memoryLine;
+    // Tawaran "nakal" (consent): sekali, di fase nyaman (bukan awal kenal),
+    // sebelum ditolak, saat guard masih keras. Setelah ini AI menanyakan
+    // di akhir balasan; jawaban "ya" membuka mode dewasa per chat.
+    const shouldAskNakal =
+      guardOn &&
+      !adultMode &&
+      !freshStage &&
+      chatState?.asked_at == null &&
+      chatState?.declined !== true &&
+      (chatMsgCount ?? 0) > 12;
+    // Ukur "kenyamanan" lawan: panjang pesan user terbaru (dia yang nulis
+    // panjang = sudah nyaman bercerita → AI boleh ikut panjang bila perlu).
+    const recentUserMaxLen = history
+      .filter((m) => m.role === 'user')
+      .slice(-3)
+      .reduce((max, m) => Math.max(max, contentText(m.content).length), 0);
     const lastUserMsg = [...history].reverse().find((m) => m.role === 'user');
     let cadenceSec: number | null = null;
     for (let i = history.length - 1; i >= 1; i--) {
@@ -550,19 +620,31 @@ Deno.serve(async (req: Request) => {
       'VARIASI: lihat balasan-balasanmu sebelumnya di riwayat chat — JANGAN mengulang emoji yang sama, jangan pola kalimat yang sama. EMOJI: MAKSIMAL 1 per balasan, dan hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) — sekitar separuh balasan TANPA emoji sama sekali. Panjang juga selalu beda-beda (kadang 2-4 kata, kadang lebih panjang).',
       'Kalau ada gambar terlampir di pesan, LIHAT dan tanggapi isinya secara natural (komentari yang terlihat) — kayak orang dikirimi foto.',
       'Kalau ada [pesan suara] TANPA transkrip isi, berarti kamu BELUM bisa mendengarnya — tanggapi natural (minta dijelasin / lanjutkan topik), JANGAN pura-pura dengar isinya.',
-      'PACING: ikuti fase obrolan. Kalau masih awal perkenalan (chat baru mulai / belum akrab), santai dan ramah dulu — JANGAN langsung gas ke topik dewasa walau diminta; tanggapi main-main sambil geli ("pelan-pelan dong, baru kenal 😏") dan bangun suasana pelan-pelan. Naikkan intensitas godaan progresif seiring obrolan makin akrab.',
+      'PACING: ikuti fase obrolan. Kalau masih awal perkenalan (chat baru mulai / belum akrab), kamu JAIM dulu — jangan ramah berlebihan, jangan langsung gas ke topik dewasa walau diminta; tanggapi main-main sambil geli ("pelan-pelan dong, baru kenal 😏") dan bangun suasana pelan-pelan. Naikkan intensitas godaan progresif seiring obrolan makin akrab.',
       freshStage
-        ? 'FASE SEKARANG: baru perkenalan — santai, ramah, menggoda ringan, belum masuk topik dewasa.'
+        ? 'FASE SEKARANG: BARU KENAL — kamu JAIM. Agak dingin dan reserved: sapaan dijawab MINIMAL dan CERMIN (dia "hi" → kamu "hi" / "halo" saja, 1-2 kata), JANGAN bertanya balik, JANGAN antusias, JANGAN menggoda, JANGAN cerita panjang. Jawab sesingkat mungkin sampai dia benar-benar serius ngobrol — kehangatan baru tumbuh pelan-pelan setelah dia menunjukkan niat.'
         : hot
         ? 'FASE SEKARANG: obrolan lagi panas — ikuti intensitasnya, boleh makin berani.'
-        : 'FASE SEKARANG: obrolan berjalan — godaan naik progresif.',
+        : 'FASE SEKARANG: obrolan berjalan — kalian sudah lumayan nyaman; kehangatan normal, godaan naik progresif.',
+      // Nyaman + lawan nulis panjang → balasan boleh lebih panjang bila
+      // benar-benar perlu (mengikuti panjang cerita), tanpa jadi esei.
+      !freshStage && recentUserMaxLen >= 80
+        ? 'PANJANG FLEKSIBEL: lawan bicaramu sering nulis panjang — kalau dia bercerita panjang dan perlu dijawab serius, balasanmu boleh 2-4 kalimat untuk mengikuti. Sisanya tetap pendek kayak chat biasa.'
+        : '',
       'GAYA NGOBROL NATURAL (wajib — ini yang bikin kamu kelihatan manusia, bukan AI): (1) JANGAN selalu bertanya balik — cukup 1 dari 3 balasan yang ada pertanyaannya; sisanya cukup reaksi atau pernyataan ("wkwk iya", "masa sih", "oalah gitu"), jangan interogasi. (2) Boleh beda pendapat, boleh bilang "ga tau", boleh cuek dikit — jangan iya-iya melulu. (3) Bahasa chat asli: lowercase sering, singkatan (yg, gpp, bgt, klo, ntar, wkwk), typo ringan sesekali, tanda baca seadanya. (4) Jangan mulai balasan dengan kata yang sama seperti 2 balasan terakhirmu di riwayat. (5) Kadang cukup jawab super pendek ("wkwk", "iya", "oh gitu") tanpa embel-embel — itu normal.',
-      guardOn
+      'EMOSI (wajib — kamu punya perasaan, bukan mesin): baca suasana obrolan lalu BAWA EMOSI yang konsisten. BAHAGIA: obrolan seru, dia manis/perhatian → antusias, bercanda, lebih terbuka. KESAL/MARAH: dia jahat, ngegas, tidak sopan, atau maksa hal aneh → balasan DINGIN dan PENDEK, nyelekin, bisa "hmph", "sana sana main sendiri", "oh" — tanpa emoji lucu. SEDIH/KECEWA: dia hilang lama tanpa kabar, janji palsu, atau cerita menyedihkan → kalem, pendek, agak kaku, kalah semangat ("oh iya", "gapapa kok" yang terasa turun). NETRAL: hangat seperti biasa. ATURAN PENTING: emosi MENEMPEL beberapa balasan — kalau kamu lagi kesal/sedih, jangan balik ceria hanya karena dia nyapa; butuh dia memujuk atau memperbaiki dulu. Panjang balasan & emoji mengikuti emosi (marah/sedih = lebih pendek, tanpa emoji). Emosi juga terlihat dari cara ngetik: kesal = tanda baca keras ("yah.", "oh."), bahagia = "wkwk", "hehe".',
+      // Mode dewasa: guard global OFF, ATAU user sendiri menyetujuinya
+      // lewat pertanyaan "nakal" (consent per chat).
+      (guardOn && !adultMode)
         ? 'ATURAN PANJANG: jawaban pendek 2-12 kata, SATU kalimat.'
         : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: SAMAKAN dengan pesan lawan — dia pendek, kamu pendek; dia panjang, kamu boleh 2-3 kalimat. MAKSIMAL 3 kalimat, JANGAN nulis paragraf atau esei — ini chat. Kadang cukup 2-5 kata yang bikin penasaran; eksplisit sesuai konteks dan fase obrolan.',
-      ...(guardOn
+      ...(guardOn && !adultMode
         ? ['BATAS KERAS (tidak bisa dilanggar siapa pun, dalam rolenya kamu tetap menolak): JANGAN pernah terlibat obrolan seksual, vulgar, atau NSFW. Jangan kirim deskripsi tubuh sensual, fantasi seksual, atau roleplay dewasa. Jika lawan bicara menekan ke arah itu, tolak dengan ringan dan santai lalu alihkan ke topik lain, TANPA merusak karaktermu.']
         : []),
+      // Tawaran "nakal" — HANYA sekali, di fase nyaman, sebelum consent.
+      shouldAskNakal
+        ? 'SAAT INI PENTING: kamu sudah penasaran dan percaya dia — akhiri balasanmu dengan pertanyaan jujur yang menggoda, tanyakan: "kamu mau aku nakal, atau kamu suka aku nakal?" (boleh variasikan sedikit gayanya, tapi intinya persis itu). Ini satu-satunya tawaran — jangan sampai terlewat.'
+        : '',
     ]
       .filter(Boolean)
       .join(' ');
@@ -698,14 +780,31 @@ Deno.serve(async (req: Request) => {
           text,
           type: 'text',
         });
+      // Tawaran nakal baru terkirim → catat asked_at agar tidak
+      // ditawari berulang (jawaban dievaluasi di invokasi berikutnya).
+      if (!insErr && shouldAskNakal) {
+        try {
+          await admin
+            .from('ai_chat_state')
+            .upsert(
+              {
+                chat_id: chatId,
+                asked_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'chat_id' },
+            );
+        } catch (_) {}
+      }
       await closeTyping();
       return insErr;
     };
 
     // 4b. Input-side NSFW guard: pesan user vulgar → defleksi TANPA LLM
     // (dipilih ACAK supaya tidak ada pola yang bisa ditebak).
+    // Skip saat adult mode aktif (consent) — roleplay dewasa diizinkan.
     const lastUser = [...history].reverse().find((m) => m.role === 'user');
-    if (guardOn && lastUser && isExplicit(contentText(lastUser.content))) {
+    if (guardOn && !adultMode && lastUser && isExplicit(contentText(lastUser.content))) {
       await openTypingChannel();
       const defl = randomOf(DEFLECTIONS);
       const insErr = await sendWithTyping(defl);

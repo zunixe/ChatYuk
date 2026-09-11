@@ -370,3 +370,9 @@ Jika `supabase db push` timeout lagi:
 - **ai-reply:** guardOn = dummy ?? global ?? true (fresh tiap invokasi = realtime).
 - **Catatan versi:** 20260911150000 sudah dipakai sesi lain → file ini 20260911160000.
 - **Verifikasi:** overloads=1; analyze 0 err/warn; deploy ACTIVE; admin APK rebuild + install Success.
+## 2026-09-11 — Hard delete total chat+memory Santi & aqila (DATA)
+- Hapus SEMUA private_chats (+messages) dengan Santi / aqila sebagai peserta (termasuk dengan admin & user lain), ai_memory + ai_reply_claims keduanya. Verifikasi: 0 chat, 0 memory.
+- HP Xiaomi: `pm clear` ketiga package (dev/admin/release) — SQLite lokal bersih total, semua app logout.
+## 2026-09-11 — Persona aqila (DATA)
+- Profil: 25 thn, female (sudah benar, tidak diubah).
+- ai_persona: pemalu-sopan-jilbab, kerja BUMN RAHASIA (ditanya → jawab samar + alihkan), pemandu wisata kadang-kadang, hobi zumba/lari/acara lari/pemandu wisata, Jawa + Inggris. Sisi nakal (guard off): colmek malem, fantasi om-om, hotel + jilbab.
