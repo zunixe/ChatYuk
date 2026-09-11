@@ -220,31 +220,68 @@ Deno.serve(async (req: Request) => {
           p_uid: dummyUid,
         });
       } catch (_) {}
-      const typingHttp = () =>
-        fetch(
-          `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
-              Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
-            },
-            body: JSON.stringify({
-              messages: [
-                {
-                  topic: `typing-${chatId}`,
-                  event: 'typing',
-                  payload: {
-                    sender_id: dummyUid,
-                    kind: 'typing',
-                    ts: Date.now(),
-                  },
-                },
-              ],
-            }),
-          },
+      // Typing DUA JALUR: (1) WebSocket supabase-js (jalur yang sama
+      // dengan typing user asli — dijamin konsumen client menerima),
+      // (2) HTTP broadcast API sebagai fallback. Gagal salah satu tidak
+      // masalah; client hanya menampilkan indikator yang sama.
+      const sendTypingPulse = async () => {
+        const rt = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_ANON_KEY')!,
+          { realtime: { params: { eventsPerSecond: 20 } } },
         );
+        let wsSent = false;
+        try {
+          const ch = rt.channel(`typing-${chatId}`);
+          const st = await ch.subscribe();
+          if (
+            st === 'SUBSCRIBED' &&
+            typeof ch.sendBroadcastMessage === 'function'
+          ) {
+            await ch.sendBroadcastMessage({
+              event: 'typing',
+              payload: {
+                sender_id: dummyUid,
+                kind: 'typing',
+                ts: Date.now(),
+              },
+            });
+            wsSent = true;
+          }
+          try {
+            await ch.unsubscribe();
+            await rt.removeAllChannels();
+          } catch (_) {}
+        } catch (_) {}
+        if (!wsSent) {
+          try {
+            await fetch(
+              `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
+                  Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
+                },
+                body: JSON.stringify({
+                  messages: [
+                    {
+                      topic: `typing-${chatId}`,
+                      event: 'typing',
+                      payload: {
+                        sender_id: dummyUid,
+                        kind: 'typing',
+                        ts: Date.now(),
+                      },
+                    },
+                  ],
+                }),
+              },
+            );
+          } catch (_) {}
+        }
+      };
       // Total "waktu mengetik" 2.5-6 dtk proporsional panjang balasan
       // + jitter acak supaya ritme balasan tidak monoton. 15% peluang
       // balas cepat (chat asli kadang nge-reply instan).
@@ -257,10 +294,10 @@ Deno.serve(async (req: Request) => {
             Math.max(2500, (1200 + text.length * 45) * jitter),
           );
       const pulses = Math.max(3, Math.floor(totalMs / 1600));
-      await typingHttp();
+      await sendTypingPulse();
       for (let i = 0; i < pulses; i++) {
         await sleep(totalMs / pulses);
-        if (i < pulses - 1) await typingHttp(); // denyut ulang (indikator 3 dtk)
+        if (i < pulses - 1) await sendTypingPulse(); // denyut ulang (indikator 3 dtk)
       }
       const { error: insErr } = await admin
         .from('private_messages')
