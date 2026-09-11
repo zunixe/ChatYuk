@@ -28,6 +28,10 @@ StreamSubscription<T> listenResilient<T>(
   );
 }
 
+/// Sumber jitter backoff — non-final supaya test bisa mengganti dengan
+/// fixed-random (timing deterministik, anti-flaky).
+Random jitterRandom = Random();
+
 class _ResilientSubscription<T> implements StreamSubscription<T> {
   final Stream<T> Function() _open;
   final void Function(T event) _onData;
@@ -42,7 +46,6 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
   Completer<void>? _cancelCompleter;
 
   static const _delays = [2, 4, 8, 16, 32, 60];
-  static final _rnd = Random();
 
   _ResilientSubscription({
     required Stream<T> Function() open,
@@ -103,8 +106,9 @@ class _ResilientSubscription<T> implements StreamSubscription<T> {
     final base = _delays[_attempt.clamp(0, _delays.length - 1)];
     if (_attempt < _delays.length - 1) _attempt++;
     // Jitter ±25% supaya banyak device tidak retry serentak.
-    final delay =
-        Duration(milliseconds: (base * 1000 * (0.75 + _rnd.nextDouble() * 0.5)).round());
+    final delay = Duration(
+        milliseconds:
+            (base * 1000 * (0.75 + jitterRandom.nextDouble() * 0.5)).round());
     dlog('[RT-RESILIENT] error, retry in ${delay.inSeconds}s: $e');
     _retryTimer?.cancel();
     _retryTimer = Timer(delay, () {
