@@ -265,12 +265,29 @@ Deno.serve(async (req: Request) => {
     const guardOn = !(settings && settings.ai_guard_enabled === false);
 
     // Provider config dari admin panel (tabel ai_provider_config, RLS-deny —
-    // hanya service role & RPC admin yang bisa baca).
-    const { data: provCfg } = await admin
-      .from('ai_provider_config')
-      .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
-      .eq('id', 'global')
-      .maybeSingle();
+    // hanya service role & RPC admin yang bisa baca). Provider yang dipakai
+    // = baris is_active (dipilih di panel AI Bot); fallback baris 'global'
+    // lama bila belum ada yang aktif.
+    let provCfg: any = null;
+    try {
+      const { data: act } = await admin
+        .from('ai_provider_config')
+        .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      provCfg = act;
+    } catch (_) {}
+    if (!provCfg) {
+      try {
+        const { data: glob } = await admin
+          .from('ai_provider_config')
+          .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
+          .eq('id', 'global')
+          .maybeSingle();
+        provCfg = glob;
+      } catch (_) {}
+    }
 
     // Anti-race claim: dua invokasi bersamaan (pg_net retry) hanya satu
     // yang boleh lanjut — claim unik per trigger message (atomik).
@@ -463,16 +480,10 @@ Deno.serve(async (req: Request) => {
         (cadenceSec !== null && cadenceSec < 120));
 
     // ── Jeda manusiawi SEBELUM read-receipt & typing: dia "belum lihat HP".
-    // 3-60 detik, acak sesuai topik: panas → cepat; biasa makin random dan
-    // lama; perkenalan santai; jarang "sibuk". Bukan mesin balas instan.
-    let delaySec = hot ? 3 + Math.random() * 5 : 5 + Math.random() * 25;
-    if (freshStage) delaySec = 8 + Math.random() * 20;
-    if (!hot && !freshStage && Math.random() < 0.2) {
-      delaySec += 10 + Math.random() * 25; // lagi biasa: kadang lama random
-    } else if (Math.random() < 0.08) {
-      delaySec += 15 + Math.random() * 30; // jarang: "sibuk"
-    }
-    delaySec = Math.min(delaySec, 60);
+    // Seimbang — tidak terlalu cepat (berasa mesin), tidak terlalu lama:
+    // panas 2-4s, biasa 3-6s, perkenalan 4-7s.
+    let delaySec = hot ? 2 + Math.random() * 2 : 3 + Math.random() * 3;
+    if (freshStage) delaySec = 4 + Math.random() * 3;
     await sleep(delaySec * 1000);
 
     // ── Profil lawan bicara (publik) — dia "sudah lihat profil" dia.

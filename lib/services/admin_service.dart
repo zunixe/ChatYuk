@@ -345,7 +345,6 @@ class AdminService {
   }
 
   /// Ubah setting AI global — hanya key yang diisi yang berubah.
-  /// apiBase/apiKey/defaultModel/stt* = provider config (kosong = tidak diubah).
   Future<Map<String, dynamic>> setAiSettings({
     bool? globalEnabled,
     int? maxReplies,
@@ -354,8 +353,6 @@ class AdminService {
     String? apiBase,
     String? apiKey,
     String? defaultModel,
-    String? sttBase,
-    String? sttKey,
   }) async {
     final params = <String, dynamic>{
       if (globalEnabled != null) 'p_global_enabled': globalEnabled,
@@ -366,11 +363,49 @@ class AdminService {
       if (apiKey != null && apiKey.isNotEmpty) 'p_api_key': apiKey,
       if (defaultModel != null && defaultModel.isNotEmpty)
         'p_default_model': defaultModel,
-      if (sttBase != null && sttBase.isNotEmpty) 'p_stt_base': sttBase,
-      if (sttKey != null && sttKey.isNotEmpty) 'p_stt_key': sttKey,
     };
     final res = await _sb.rpc('admin_ai_settings', params: params);
     return (res as Map<String, dynamic>?) ?? const {};
+  }
+
+  /// Daftar provider AI (id, label, base, key, model, is_active).
+  Future<List<Map<String, dynamic>>> getAiProviders() async {
+    final res = await _sb.rpc('admin_ai_provider_list');
+    if (res is List) {
+      return res
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    }
+    return const [];
+  }
+
+  /// Simpan provider (id kosong = tambah baru, slug otomatis).
+  /// Return row tersimpan.
+  Future<Map<String, dynamic>> saveAiProvider({
+    String? id,
+    String? label,
+    String? apiBase,
+    String? apiKey,
+    String? defaultModel,
+  }) async {
+    final res = await _sb.rpc('admin_ai_provider_save', params: {
+      if (id != null) 'p_id': id,
+      if (label != null) 'p_label': label,
+      if (apiBase != null) 'p_api_base': apiBase,
+      if (apiKey != null) 'p_api_key': apiKey,
+      if (defaultModel != null) 'p_default_model': defaultModel,
+    });
+    return (res as Map<String, dynamic>?) ?? const {};
+  }
+
+  /// Hapus provider (yang aktif tidak bisa — aktifkan lain dulu).
+  Future<void> deleteAiProvider(String id) async {
+    await _sb.rpc('admin_ai_provider_delete', params: {'p_id': id});
+  }
+
+  /// Aktifkan provider (yang dipakai edge function).
+  Future<void> activateAiProvider(String id) async {
+    await _sb.rpc('admin_ai_provider_activate', params: {'p_id': id});
   }
 
   /// Hapus akun dummy + history chat-nya. Return {'ok': bool, 'chats_deleted': int}.
