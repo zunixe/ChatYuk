@@ -358,3 +358,9 @@ Jika `supabase db push` timeout lagi:
 - **Bug:** edit profil/AI dummy dari SESI DUMMY (habis swap "masuk dummy") → RPC guard email gagal → `Unauthorized` P0001. List yang tampil basi (state tab dari sesi admin sebelumnya) sehingga membingungkan.
 - **Fix client:** helper `_isAdminSession()` (AdminGate.isRealAdmin + currentUser email) dicek SEBELUM semua RPC tulis (edit profil, sheet AI save, auto-jadwal) + pesan jelas `dummyNeedAdmin` (ID/EN) — server tetap sumber kebenaran. Error load list Unauthorized juga dipetakan ke pesan yang sama.
 - **Admin APK:** rebuild + install Success. Cara pakai: kembali ke akun admin dulu (aliran "kembali ke admin"), baru edit/save.
+## 2026-09-11 — ai-reply v34: delay flat 3-8 detik (DEPLOY)
+- **Keluhan:** typing terasa lama (jeda 3-60s + latensi glm/B.AI menumpuk).
+- **Fix:** jeda manusiawi disederhanakan jadi flat acak 3-8 detik untuk semua situasi (hapus ekor busy/cap 60s). Sisa latensi = AI berpikir + simulasi ketik.
+- **Verifikasi:** deploy ACTIVE v34.
+- ai-reply v36: jeda manusiawi flat 3-10 detik (user request).
+- ai-reply v37: jeda seimbang (panas 2-4s, biasa 3-6s, perkenalan 4-7s).

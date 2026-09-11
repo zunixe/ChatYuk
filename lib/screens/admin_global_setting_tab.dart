@@ -452,11 +452,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
   int _maxReplies = 20;
   int _minInterval = 2;
   bool _guardEnabled = true;
-  String _defaultModel = '';
-  String _apiBase = '';
-  String _apiKey = '';
-  String _sttBase = '';
-  String _sttKey = '';
+  String _activeLabel = '';
 
   @override
   void initState() {
@@ -467,17 +463,24 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
   Future<void> _load() async {
     try {
       final st = await _svc.getAiSettings();
+      List<Map<String, dynamic>> providers = const [];
+      try {
+        providers = await _svc.getAiProviders();
+      } catch (_) {}
       if (!mounted) return;
+      String activeLabel = '';
+      for (final p in providers) {
+        if (p['is_active'] == true) {
+          activeLabel = '${p['label'] ?? p['id'] ?? ''}';
+          break;
+        }
+      }
       setState(() {
         _globalEnabled = st['ai_global_enabled'] != false;
         _maxReplies = (st['ai_max_replies_per_hour'] as num?)?.toInt() ?? 20;
         _minInterval = (st['ai_min_interval_sec'] as num?)?.toInt() ?? 2;
         _guardEnabled = st['ai_guard_enabled'] != false;
-        _defaultModel = (st['ai_default_model'] as String?) ?? '';
-        _apiBase = (st['ai_api_base'] as String?) ?? '';
-        _apiKey = (st['ai_api_key'] as String?) ?? '';
-        _sttBase = (st['ai_stt_base'] as String?) ?? '';
-        _sttKey = (st['ai_stt_key'] as String?) ?? '';
+        _activeLabel = activeLabel;
         _loading = false;
       });
     } catch (_) {
@@ -494,28 +497,12 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
     }
   }
 
-  String _providerName(String base) {
-    final b = base.trim().toLowerCase();
-    if (b.contains('openrouter')) return 'OpenRouter';
-    if (b.contains('b.ai')) return 'B.AI';
-    if (b.contains('deepinfra')) return 'DeepInfra';
-    if (b.contains('venice')) return 'Venice';
-    if (b.contains('groq')) return 'Groq';
-    if (b.isEmpty) return 'Default';
-    return Uri.tryParse(base)?.host ?? base;
-  }
-
-  Future<void> _openLimitsSheet() async {
+  Future<void> _openAiBotSheet() async {
     final maxCtrl = TextEditingController(text: '$_maxReplies');
     final minCtrl = TextEditingController(text: '$_minInterval');
-    final modelCtrl = TextEditingController(text: _defaultModel);
-    final baseCtrl = TextEditingController(text: _apiBase);
-    final keyCtrl = TextEditingController(text: _apiKey);
-    final sttBaseCtrl = TextEditingController(text: _sttBase);
-    final sttKeyCtrl = TextEditingController(text: _sttKey);
     bool guardTmp = _guardEnabled;
     final s = context.read<LocaleProvider>().s;
-    final saved = await showModalBottomSheet<bool>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.bgCard,
@@ -528,148 +515,111 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
             left: 20,
             right: 20,
             top: 16,
-            // + padding.bottom = navbar Android (gesture/3-button) supaya
-            // tombol Save tidak tertutup menu sistem.
             bottom:
                 20 +
                 MediaQuery.viewInsetsOf(ctx).bottom +
                 MediaQuery.of(ctx).padding.bottom,
           ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-            Text(
-              s.aiGlobalTitle,
-              style: AppText.title,
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              'Provider: ${_providerName(_apiBase)}',
-              style: AppText.caption.copyWith(
-                color: AppTheme.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: maxCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: AppText.body,
-              decoration: InputDecoration(labelText: s.aiGlobalMaxReplies),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: minCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: AppText.body,
-              decoration: InputDecoration(labelText: s.aiGlobalMinInterval),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: modelCtrl,
-              style: AppText.body,
-              decoration: InputDecoration(
-                labelText: s.aiGlobalModel,
-                helperText: s.aiGlobalProviderHint,
-                helperMaxLines: 2,
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: baseCtrl,
-              style: AppText.body,
-              decoration: InputDecoration(labelText: s.aiGlobalBaseUrl),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: keyCtrl,
-              style: AppText.body,
-              decoration: InputDecoration(labelText: s.aiGlobalApiKey),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: sttBaseCtrl,
-              style: AppText.body,
-              decoration: InputDecoration(
-                labelText: s.aiGlobalSttBase,
-                helperText: s.aiGlobalSttHint,
-                helperMaxLines: 2,
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: sttKeyCtrl,
-              style: AppText.body,
-              decoration: InputDecoration(labelText: s.aiGlobalSttKey),
-            ),
-            const SizedBox(height: 4),
-            Row(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s.aiGlobalGuardTitle, style: AppText.body),
-                      Text(
-                        s.aiGlobalGuardDesc,
-                        style: AppText.caption.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
+                Text(
+                  s.aiGlobalTitle,
+                  style: AppText.title,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: maxCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: AppText.body,
+                  decoration: InputDecoration(
+                    labelText: s.aiGlobalMaxReplies,
                   ),
                 ),
-                Switch(
-                  value: guardTmp,
-                  onChanged: (v) => setSheetState(() => guardTmp = v),
-                  activeThumbColor: AppTheme.primary,
+                const SizedBox(height: 10),
+                TextField(
+                  controller: minCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: AppText.body,
+                  decoration: InputDecoration(
+                    labelText: s.aiGlobalMinInterval,
+                  ),
                 ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.aiGlobalGuardTitle, style: AppText.body),
+                          Text(
+                            s.aiGlobalGuardDesc,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: guardTmp,
+                      onChanged: (v) => setSheetState(() => guardTmp = v),
+                      activeThumbColor: AppTheme.primary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: () async {
+                    final max =
+                        int.tryParse(maxCtrl.text.trim()) ?? _maxReplies;
+                    final min =
+                        int.tryParse(minCtrl.text.trim()) ?? _minInterval;
+                    try {
+                      await _svc.setAiSettings(
+                        maxReplies: max,
+                        minInterval: min,
+                        guardEnabled: guardTmp,
+                      );
+                      if (!mounted) return;
+                      setState(() {
+                        _maxReplies = max;
+                        _minInterval = min;
+                        _guardEnabled = guardTmp;
+                      });
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx)
+                          ..clearSnackBars()
+                          ..showSnackBar(
+                            SnackBar(content: Text(s.aiGlobalSaved)),
+                          );
+                      }
+                    } catch (_) {}
+                  },
+                  child: Text(s.btnSave),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  s.aiProviderListTitle,
+                  style: AppText.bodyStrong,
+                ),
+                const _ProviderListSection(),
+                const SizedBox(height: 8),
               ],
             ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(s.btnSave),
-            ),
-          ],
           ),
         ),
       ),
-      ),
     );
-    if (saved != true) return;
-    final max = int.tryParse(maxCtrl.text.trim()) ?? _maxReplies;
-    final min = int.tryParse(minCtrl.text.trim()) ?? _minInterval;
-    try {
-      await _svc.setAiSettings(
-        maxReplies: max,
-        minInterval: min,
-        guardEnabled: guardTmp,
-        apiBase: baseCtrl.text.trim(),
-        apiKey: keyCtrl.text.trim(),
-        defaultModel: modelCtrl.text.trim(),
-        sttBase: sttBaseCtrl.text.trim(),
-        sttKey: sttKeyCtrl.text.trim(),
-      );
-      if (!mounted) return;
-      setState(() {
-        _maxReplies = max;
-        _minInterval = min;
-        _guardEnabled = guardTmp;
-        _defaultModel = modelCtrl.text.trim();
-        _apiBase = baseCtrl.text.trim();
-        _apiKey = keyCtrl.text.trim();
-        _sttBase = sttBaseCtrl.text.trim();
-        _sttKey = sttKeyCtrl.text.trim();
-      });
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(SnackBar(content: Text(s.aiGlobalSaved)));
-    } catch (_) {}
+    maxCtrl.dispose();
+    minCtrl.dispose();
+    // Refresh label provider aktif setelah sheet ditutup.
+    _load();
   }
 
   @override
@@ -716,7 +666,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      '${s.aiGlobalMaxReplies}: $_maxReplies · ${s.aiGlobalMinInterval}: $_minInterval · ${s.aiGlobalGuardTitle}: ${_guardEnabled ? 'ON' : 'OFF'} · ${_providerName(_apiBase)}',
+                      '${s.aiGlobalMaxReplies}: $_maxReplies · ${s.aiGlobalMinInterval}: $_minInterval · ${s.aiGlobalGuardTitle}: ${_guardEnabled ? 'ON' : 'OFF'}${_activeLabel.isNotEmpty ? ' · $_activeLabel' : ''}',
                       style: AppText.caption.copyWith(
                         color: AppTheme.textSecondary,
                       ),
@@ -729,7 +679,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
             icon: const Icon(Icons.tune, size: 20),
             color: AppTheme.primary,
             tooltip: s.aiGlobalTitle,
-            onPressed: _loading ? null : _openLimitsSheet,
+            onPressed: _loading ? null : _openAiBotSheet,
           ),
           _loading
               ? const SizedBox(
@@ -1049,6 +999,450 @@ class _ExcludedDevicesSheetState extends State<_ExcludedDevicesSheet> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Daftar provider AI: tap = expand (model, base URL, API key),
+/// radio = provider yang dipakai edge function. Bisa tambah baru.
+class _ProviderListSection extends StatefulWidget {
+  const _ProviderListSection();
+
+  @override
+  State<_ProviderListSection> createState() => _ProviderListSectionState();
+}
+
+class _ProviderListSectionState extends State<_ProviderListSection> {
+  final AdminService _svc = AdminService(SupabaseConfig.client);
+  bool _loading = true;
+  bool _failed = false;
+  List<Map<String, dynamic>> _items = const [];
+  String? _expandedId;
+  bool _adding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    try {
+      final items = await _svc.getAiProviders();
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _failed = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    if (_failed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                s.aiProviderLoadFail,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: _reload,
+              child: Text(s.btnRetry),
+            ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final p in _items)
+          _ProviderCard(
+            key: ValueKey('prov-${p['id']}'),
+            data: p,
+            expanded: _expandedId == '${p['id']}',
+            onToggleExpand: () {
+              setState(() {
+                _expandedId =
+                    _expandedId == '${p['id']}' ? null : '${p['id']}';
+              });
+            },
+            onChanged: _reload,
+          ),
+        if (_adding)
+          _ProviderCard(
+            key: const ValueKey('prov-new'),
+            data: const {},
+            expanded: true,
+            isNew: true,
+            onToggleExpand: () => setState(() => _adding = false),
+            onChanged: () {
+              setState(() => _adding = false);
+              _reload();
+            },
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _adding
+                ? null
+                : () => setState(() {
+                      _adding = true;
+                      _expandedId = null;
+                    }),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: Text(s.aiProviderAdd),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Satu kartu provider: radio + label + model; expand = edit 4 field.
+class _ProviderCard extends StatefulWidget {
+  final Map<String, dynamic> data;
+  final bool expanded;
+  final bool isNew;
+  final VoidCallback onToggleExpand;
+  final VoidCallback onChanged;
+
+  const _ProviderCard({
+    super.key,
+    required this.data,
+    required this.expanded,
+    this.isNew = false,
+    required this.onToggleExpand,
+    required this.onChanged,
+  });
+
+  @override
+  State<_ProviderCard> createState() => _ProviderCardState();
+}
+
+class _ProviderCardState extends State<_ProviderCard> {
+  final AdminService _svc = AdminService(SupabaseConfig.client);
+  late final TextEditingController _labelCtrl;
+  late final TextEditingController _modelCtrl;
+  late final TextEditingController _baseCtrl;
+  late final TextEditingController _keyCtrl;
+  bool _busy = false;
+  bool _activating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _labelCtrl = TextEditingController(text: '${widget.data['label'] ?? ''}');
+    _modelCtrl = TextEditingController(
+        text: '${widget.data['default_model'] ?? ''}');
+    _baseCtrl = TextEditingController(text: '${widget.data['api_base'] ?? ''}');
+    _keyCtrl = TextEditingController(text: '${widget.data['api_key'] ?? ''}');
+  }
+
+  @override
+  void dispose() {
+    _labelCtrl.dispose();
+    _modelCtrl.dispose();
+    _baseCtrl.dispose();
+    _keyCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final s = context.read<LocaleProvider>().s;
+    setState(() => _busy = true);
+    try {
+      await _svc.saveAiProvider(
+        id: widget.isNew ? null : '${widget.data['id']}',
+        label: _labelCtrl.text.trim().isEmpty
+            ? null
+            : _labelCtrl.text.trim(),
+        apiBase: _baseCtrl.text.trim().isEmpty ? null : _baseCtrl.text.trim(),
+        apiKey: _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim(),
+        defaultModel:
+            _modelCtrl.text.trim().isEmpty ? null : _modelCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.aiProviderSaved)));
+      widget.onChanged();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.errGeneric)));
+    }
+  }
+
+  Future<void> _activate() async {
+    final s = context.read<LocaleProvider>().s;
+    setState(() => _activating = true);
+    try {
+      await _svc.activateAiProvider('${widget.data['id']}');
+      if (!mounted) return;
+      setState(() => _activating = false);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.aiProviderActivated)));
+      widget.onChanged();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _activating = false);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.errGeneric)));
+    }
+  }
+
+  Future<void> _delete() async {
+    final s = context.read<LocaleProvider>().s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(s.aiProviderDeleteConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              s.btnDelete,
+              style: const TextStyle(color: AppTheme.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _svc.deleteAiProvider('${widget.data['id']}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.aiProviderDeleted)));
+      widget.onChanged();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.aiProviderDeleteActive)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final active = widget.data['is_active'] == true && !widget.isNew;
+    final model = '${widget.data['default_model'] ?? ''}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.bgScreen,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: active
+              ? AppTheme.primary
+              : AppTheme.textSecondary.withValues(alpha: 0.25),
+          width: active ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: widget.onToggleExpand,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  widget.isNew
+                      ? const Icon(
+                          Icons.add_circle_outline_rounded,
+                          color: AppTheme.primary,
+                          size: 22,
+                        )
+                      : _activating
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: Padding(
+                                padding: EdgeInsets.all(3),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : Radio<bool>(
+                              value: true,
+                              groupValue: active ? true : null,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              onChanged: (_) {
+                                if (!active) _activate();
+                              },
+                            ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.isNew
+                              ? s.aiProviderAdd
+                              : '${widget.data['label'] ?? widget.data['id'] ?? ''}',
+                          style: AppText.bodyStrong,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (!widget.isNew && model.isNotEmpty)
+                          Text(
+                            model,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (active)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            AppTheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        s.aiProviderActive,
+                        style: AppText.label.copyWith(
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                  Icon(
+                    widget.expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: AppTheme.textSecondary,
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (widget.expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _labelCtrl,
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      labelText: s.aiProviderLabel,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _modelCtrl,
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      labelText: s.aiGlobalModel,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _baseCtrl,
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      labelText: s.aiGlobalBaseUrl,
+                      helperText: s.aiGlobalProviderHint,
+                      helperMaxLines: 2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _keyCtrl,
+                    obscureText: true,
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      labelText: s.aiGlobalApiKey,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      if (!widget.isNew)
+                        TextButton.icon(
+                          onPressed: _busy ? null : _delete,
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: AppTheme.danger,
+                          ),
+                          label: Text(
+                            s.btnDelete,
+                            style: const TextStyle(color: AppTheme.danger),
+                          ),
+                        ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: _busy ? null : _save,
+                        child: Text(
+                          widget.isNew ? s.aiProviderAdd : s.aiProviderSave,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

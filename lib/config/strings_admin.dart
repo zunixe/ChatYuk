@@ -600,13 +600,38 @@ extension SAdminX on S {
       ? 'Kosongkan = pakai default server. Base URL tanpa /chat/completions.'
       : 'Empty = use server default. Base URL without /chat/completions.';
 
-  String get aiGlobalSttBase => isId ? 'STT Base URL' : 'STT Base URL';
+  String get aiProviderListTitle =>
+      isId ? 'Provider AI' : 'AI providers';
 
-  String get aiGlobalSttKey => isId ? 'STT Key' : 'STT Key';
+  String get aiProviderActive =>
+      isId ? 'Dipakai' : 'In use';
 
-  String get aiGlobalSttHint => isId
-      ? 'Untuk dengar voice (Whisper). Kosong = default Groq, tapi tetap butuh key.'
-      : 'To hear voice notes (Whisper). Empty = Groq default, but a key is still required.';
+  String get aiProviderAdd => isId ? 'Tambah provider' : 'Add provider';
+
+  String get aiProviderLabel => isId ? 'Nama provider' : 'Provider name';
+
+  String get aiProviderSave => isId ? 'Simpan provider' : 'Save provider';
+
+  String get aiProviderSaved =>
+      isId ? 'Provider disimpan' : 'Provider saved';
+
+  String get aiProviderActivated =>
+      isId ? 'Provider diaktifkan' : 'Provider activated';
+
+  String get aiProviderDeleted =>
+      isId ? 'Provider dihapus' : 'Provider deleted';
+
+  String get aiProviderDeleteConfirm => isId
+      ? 'Hapus provider ini?'
+      : 'Delete this provider?';
+
+  String get aiProviderDeleteActive => isId
+      ? 'Aktifkan provider lain dulu sebelum menghapus yang ini'
+      : 'Activate another provider before deleting this one';
+
+  String get aiProviderLoadFail => isId
+      ? 'Gagal memuat provider'
+      : 'Failed to load providers';
 
   String get dummyListFail =>
       isId ? 'Gagal memuat akun dummy' : 'Failed to load dummy accounts';
