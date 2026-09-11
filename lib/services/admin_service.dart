@@ -318,12 +318,15 @@ class AdminService {
     bool enabled,
     Map<String, dynamic> persona, {
     bool? scheduleAuto,
+    bool? guardEnabled,
   }) async {
     await _sb.rpc('admin_set_dummy_ai', params: {
       'p_uid': uid,
       'p_enabled': enabled,
       'p_persona': persona,
       if (scheduleAuto != null) 'p_schedule_auto': scheduleAuto,
+      // null = ikuti global — kirim key-nya selalu supaya bisa reset.
+      'p_guard_enabled': guardEnabled,
     });
   }
 

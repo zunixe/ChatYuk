@@ -590,6 +590,10 @@ extension SAdminX on S {
       ? 'Blokir obrolan vulgar — matikan untuk mode nakal'
       : 'Block vulgar chat — turn off for naughty mode';
 
+  String get dummyAiGuardHint => isId
+      ? 'Global = ikut pengaturan AI Bot; ON/OFF = khusus dummy ini'
+      : 'Global = follow AI Bot settings; ON/OFF = this dummy only';
+
   String get aiGlobalModel => isId ? 'Model default' : 'Default model';
 
   String get aiGlobalBaseUrl => isId ? 'Base URL' : 'Base URL';
