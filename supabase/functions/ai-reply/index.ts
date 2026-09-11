@@ -244,8 +244,10 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, skipped: 'no_history' });
     }
 
-    // Helper kirim: tandai dibaca dulu (centang-2 di sisi lawan), lalu
-    // typing denyut, terakhir insert pesan.
+    // Kirim pesan dgn typing manusiawi: channel dibuka + denyut pertama
+    // HANYA setelah teks balasan siap (BUKAN saat LLM berpikir),
+    // lalu tahan: hitung durasi dari panjang teks, typing selama estimasi
+    // waktu ketik manusia, baru insert pesan.
     const sendWithTyping = async (text: string) => {
       // Read receipt: dummy "membaca" pesan masuk sebelum membalas —
       // RPC ini menerima service_role (guard admin_mark_chat_read).
@@ -255,10 +257,10 @@ Deno.serve(async (req: Request) => {
           p_uid: dummyUid,
         });
       } catch (_) {}
-      // Typing: SATU channel WebSocket dibuka sekali untuk seluruh durasi
-      // mengetik (subscribe + ack:true — tanpa ini, kirim lalu langsung
-      // unsubscribe membuat pesan hilang sebelum WS flush). HTTP API hanya
-      // fallback bila WS gagal subscribe.
+      // SATU channel WebSocket dibuka sekali untuk seluruh durasi mengetik
+      // (subscribe + ack:true — tanpa ini, kirim lalu langsung unsubscribe
+      // membuat pesan hilang sebelum WS flush). HTTP API hanya fallback
+      // bila WS gagal subscribe.
       const rt = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -301,33 +303,31 @@ Deno.serve(async (req: Request) => {
           );
         } catch (_) {}
       };
-      // Timeline mengetik gaya manusia — POLA ACAK per balasan:
-      // - fast  (15%): balas instan, satu burst pendek
-      // - steady(35%): denyut cukup rata sampai pesan terkirim
-      // - ragu  (50%): typing → JEDA (indikator hilang = mikir) → typing
-      //   lagi, kadang jeda kedua. Jeda sengaja > 3 dtk kadang-kadang
-      //   supaya indikator benar-benar menghilang lalu muncul lagi.
+      await pulse(); // denyut pertama LANGSUNG saat teks siap
+
+      // Durasi DITURUNKAN DARI PANJANG TEKS (simulasi kecepatan ketik):
+      // typeMs = 700ms buka chat + len / cps, cps acak 8-14 char/dtk.
+      // Teks pendek terasa instan, teks panjang diketik lebih lama.
+      // Kadang diseling jeda mikir (indikator hilang sesaat).
+      const cps = 8 + Math.random() * 6; // kecepatan ketik per balasan
+      let typeMs = 700 + (text.length / cps) * 1000;
+      typeMs = Math.min(5500, Math.max(1200, typeMs));
       const steps: Array<{ type: 'type' | 'pause'; ms: number }> = [];
-      const fast = text.length < 15 && Math.random() < 0.15;
-      const style = Math.random();
-      if (fast) {
-        steps.push({ type: 'type', ms: 900 + Math.random() * 800 });
-      } else if (style < 0.35) {
-        const n = 3 + Math.floor(Math.random() * 2);
-        for (let i = 0; i < n; i++) {
-          steps.push({
-            type: 'type',
-            ms: 1000 + Math.random() * 1300,
-          });
-        }
-      } else {
-        steps.push({ type: 'type', ms: 1200 + Math.random() * 1000 });
-        steps.push({ type: 'pause', ms: 1400 + Math.random() * 1800 });
-        steps.push({ type: 'type', ms: 1000 + Math.random() * 1200 });
-        if (Math.random() < 0.4) {
-          steps.push({ type: 'pause', ms: 1200 + Math.random() * 1500 });
-          steps.push({ type: 'type', ms: 800 + Math.random() * 900 });
-        }
+      let remaining = typeMs;
+      // Segmen pertama selalu mengetik (indikator sudah hidup dari fase LLM)
+      const first = Math.min(remaining, 1100 + Math.random() * 700);
+      steps.push({ type: 'type', ms: first });
+      remaining -= first;
+      // Teks agak panjang: 45% ada jeda mikir di tengah
+      if (remaining > 1400 && text.length > 35 && Math.random() < 0.45) {
+        const pause = Math.min(remaining * 0.35, 900 + Math.random() * 900);
+        steps.push({ type: 'pause', ms: pause });
+        remaining -= pause;
+      }
+      while (remaining > 400) {
+        const seg = Math.min(remaining, 1100 + Math.random() * 700);
+        steps.push({ type: 'type', ms: seg });
+        remaining -= seg;
       }
       for (const st of steps) {
         if (st.type === 'type') {
