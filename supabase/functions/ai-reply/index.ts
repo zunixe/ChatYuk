@@ -245,7 +245,7 @@ Deno.serve(async (req: Request) => {
     // 1. Fresh checks: dummy still AI + global still on
     const { data: dummy } = await admin
       .from('dummy_accounts')
-      .select('ai_enabled, ai_persona, ai_model, nickname')
+      .select('ai_enabled, ai_persona, ai_model, nickname, ai_schedule_date, ai_schedule_auto')
       .eq('uid', dummyUid)
       .maybeSingle();
     if (!dummy || dummy.ai_enabled !== true) {
@@ -706,6 +706,110 @@ Deno.serve(async (req: Request) => {
     // Buka channel + denyut instan + denyut berulang 2.5s — user melihat
     // "mengetik..." selama LLM memproses, bukan hening lalu pesan mendadak.
     await openTypingChannel();
+
+    // ── JADWAL HARIAN AI ──
+    // AI menentukan sendiri jam onlinenya SETIAP HARI (menggerakkan
+    // cronjob ai_presence_tick). Regenerasi sekali sehari per dummy, di
+    // pesan pertama yang memicu AI. Mode manual (ai_schedule_auto=false)
+    // tidak disentuh — presence ikut chip manual seperti akun biasa.
+    try {
+      const nowMs = Date.now();
+      const todayWib = new Date(nowMs + 7 * 3600 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      const schedAuto = (dummy as any).ai_schedule_auto !== false;
+      const schedDate = (dummy as any).ai_schedule_date ?? null;
+      if (schedAuto && schedDate !== todayWib) {
+        // Kebiasaan jam aktif 7 hari terakhir (WIB) sebagai bahan.
+        let histHours: number[] = [];
+        try {
+          const { data: recent } = await admin
+            .from('private_messages')
+            .select('created_at')
+            .eq('sender_id', dummyUid)
+            .gt(
+              'created_at',
+              new Date(nowMs - 7 * 864e5).toISOString(),
+            )
+            .limit(500);
+          const set = new Set<number>();
+          for (const r of (recent as any[]) || []) {
+            const h = new Date(
+              new Date(r.created_at).getTime() + 7 * 3600 * 1000,
+            ).getUTCHours();
+            if (h >= 0 && h <= 23) set.add(h);
+          }
+          histHours = [...set].sort((a, b) => a - b);
+        } catch (_) {}
+        const weekday = new Date(nowMs + 7 * 3600 * 1000).toLocaleDateString(
+          'id-ID',
+          { weekday: 'long', timeZone: 'Asia/Jakarta' },
+        );
+        const nick = (dummy as any).nickname || 'teman';
+        let hours: number[] = [];
+        try {
+          const apiKey = Deno.env.get('AI_API_KEY');
+          const apiBase =
+            Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
+          const model =
+            (dummy as any).ai_model ||
+            Deno.env.get('AI_MODEL') ||
+            'glm-5.3-flash';
+          if (apiKey) {
+            const pr = await fetch(`${apiBase}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model,
+                max_tokens: 80,
+                temperature: 0.3,
+                messages: [
+                  {
+                    role: 'system',
+                    content:
+                      `Kamu ${nick}. Tentukan jam kamu ONLINE hari ini (${weekday}). ` +
+                      `Kebiasaan jam aktifmu (WIB): ${histHours.join(',') || 'belum ada data'}. ` +
+                      `Balas HANYA JSON array angka jam 0-23, 8-16 jam, contoh [9,10,11,14,15,20,21]. Tanpa teks lain.`,
+                  },
+                ],
+              }),
+            });
+            if (pr.ok) {
+              const pj: any = await pr.json();
+              const raw: string =
+                pj?.choices?.[0]?.message?.content ?? '';
+              const m = raw.match(/\[[\d,\s]+\]/);
+              if (m) {
+                hours = [
+                  ...new Set(
+                    (JSON.parse(m[0]) as any[])
+                      .map((e) => Number(e))
+                      .filter(
+                        (e) => Number.isInteger(e) && e >= 0 && e <= 23,
+                      ),
+                  ),
+                ].sort((a, b) => a - b);
+              }
+            }
+          }
+        } catch (_) {}
+        if (hours.length < 6) {
+          hours =
+            histHours.length >= 6
+              ? histHours
+              : [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+        }
+        await admin
+          .from('dummy_accounts')
+          .update({ ai_active_hours: hours, ai_schedule_date: todayWib })
+          .eq('uid', dummyUid);
+      }
+    } catch (_) {
+      // Regenerasi jadwal tidak boleh menggagalkan balasan.
+    }
 
     // Cek ganda SEBELUM panggil LLM: selama jeda manusiawi tadi, mungkin
     // balasan lain sudah terkirim (invokasi lain / admin pegang dummy) —

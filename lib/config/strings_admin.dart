@@ -538,6 +538,10 @@ extension SAdminX on S {
   String get dummyAiSaveFail =>
       isId ? 'Gagal menyimpan AI' : 'Failed to save AI settings';
 
+  String get dummyNeedAdmin => isId
+      ? 'Bukan sesi admin — kembali ke akun admin dulu baru simpan'
+      : 'Not an admin session — switch back to the admin account first';
+
   String get dummyAiScheduleTitle => isId
       ? 'Jadwal kehadiran AI'
       : 'AI presence schedule';
@@ -553,6 +557,14 @@ extension SAdminX on S {
   String get dummyAiScheduleEmpty => isId
       ? 'Belum diatur — presence dikontrol manual'
       : 'Not set — presence controlled manually';
+
+  String get dummyAiScheduleAutoLabel => isId
+      ? 'Jadwal otomatis harian (AI)'
+      : 'Daily auto schedule (AI)';
+
+  String get dummyAiScheduleAutoDesc => isId
+      ? 'AI menentukan sendiri jam onlinenya tiap hari. Matikan untuk kontrol manual penuh.'
+      : 'AI decides its own online hours daily. Turn off for full manual control.';
 
   String get aiGlobalTitle => 'AI Bot';
 

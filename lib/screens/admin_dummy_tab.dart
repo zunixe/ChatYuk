@@ -5,11 +5,18 @@ import '../config/supabase_config.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
+import '../core/admin_gate.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_service.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
+
+/// Sesi HP harus akun admin asli (bukan sesi dummy hasil swap "masuk dummy")
+/// — kalau tidak, semua RPC admin melempar 'Unauthorized' (P0001).
+/// Cek di client supaya pesannya jelas; server tetap sumber kebenaran.
+bool _isAdminSession() =>
+    AdminGate.isRealAdmin(SupabaseConfig.client.auth.currentUser?.email);
 
 /// Tab Dummy di Admin Panel — buat/daftarkan akun dummy (anonymous, tanpa
 /// email/password) dengan gender/umur/negara/kota, chat sebagai akun itu
@@ -64,8 +71,10 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     } catch (e) {
       dlog('[DUMMY] list error: $e');
       if (!mounted) return;
+      final s = context.read<LocaleProvider>().s;
       setState(() {
-        _error = e.toString();
+        _error =
+            '$e'.contains('Unauthorized') ? s.dummyNeedAdmin : e.toString();
         _loading = false;
       });
     }
@@ -125,6 +134,10 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       _toast(s, s.errNicknameInvalid);
       return;
     }
+    if (!_isAdminSession()) {
+      _toast(s, s.dummyNeedAdmin);
+      return;
+    }
     setState(() => _busy = true);
     try {
       // Pre-check duplikat — error spesifik sebelum kirim ke server
@@ -164,7 +177,13 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       await _load();
     } catch (e) {
       dlog('[DUMMY] register error: $e');
-      _toast(s, _editingUid != null ? s.dummyUpdateFail : s.dummyRegisterFail);
+      // Tampilkan pesan server apa adanya biar penyebab gagalnya jelas
+      // (mis. "Unauthorized" / "Umur tidak valid") — bukan toast generik.
+      final msg = '$e'.replaceFirst('Exception: ', '');
+      _toast(
+        s,
+        '${_editingUid != null ? s.dummyUpdateFail : s.dummyRegisterFail}: $msg',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -811,6 +830,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     return parts.join(', ');
   }
   late bool _enabled;
+  late bool _schedAuto;
   late List<int> _hours;
   bool _schedBusy = false;
   late final TextEditingController _personalityCtrl;
@@ -824,6 +844,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     final persona =
         (widget.item['ai_persona'] as Map<dynamic, dynamic>?) ?? const {};
     _enabled = widget.item['ai_enabled'] == true;
+    _schedAuto = (widget.item['ai_schedule_auto'] as bool?) ?? true;
     _hours = _parseHours(widget.item['ai_active_hours']);
     _personalityCtrl = TextEditingController(text: '${persona['personality'] ?? ''}');
     _toneCtrl = TextEditingController(text: '${persona['tone'] ?? ''}');
@@ -840,6 +861,12 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
 
   Future<void> _save() async {
     final s = context.read<LocaleProvider>().s;
+    if (!_isAdminSession()) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.dummyNeedAdmin)));
+      return;
+    }
     setState(() => _busy = true);
     try {
       final svc = AdminService(SupabaseConfig.client);
@@ -853,6 +880,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
           if (_extraCtrl.text.trim().isNotEmpty)
             'extra_prompt': _extraCtrl.text.trim(),
         },
+        scheduleAuto: _schedAuto,
       );
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -863,9 +891,10 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
       dlog('[DUMMY] save AI error: $e');
       if (!mounted) return;
       setState(() => _busy = false);
+      final msg = '$e'.replaceFirst('Exception: ', '');
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(SnackBar(content: Text(s.dummyAiSaveFail)));
+        ..showSnackBar(SnackBar(content: Text('${s.dummyAiSaveFail}: $msg')));
     }
   }
 
@@ -873,7 +902,10 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final nickname = widget.item['nickname'] as String? ?? '';
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    // + padding.bottom = navbar Android (gesture/3-button) supaya tombol
+    // Simpan tidak tertutup menu sistem.
+    final bottom = MediaQuery.viewInsetsOf(context).bottom +
+        MediaQuery.of(context).padding.bottom;
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
       child: SingleChildScrollView(
@@ -908,6 +940,24 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
             // AI tidak membalas sama sekali. Jadwal dari kebiasaan chat.
             Text(s.dummyAiScheduleTitle, style: AppText.bodyStrong),
             const SizedBox(height: 4),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _schedAuto,
+              onChanged: (v) => setState(() => _schedAuto = v),
+              title: Text(
+                s.dummyAiScheduleAutoLabel,
+                style: AppText.bodySmall,
+              ),
+              activeThumbColor: AppTheme.primary,
+            ),
+            Text(
+              s.dummyAiScheduleAutoDesc,
+              style: AppText.caption.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 6),
             Text(
               _hours.isEmpty
                   ? s.dummyAiScheduleEmpty
@@ -928,6 +978,14 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
               onPressed: _schedBusy
                   ? null
                   : () async {
+                      if (!_isAdminSession()) {
+                        ScaffoldMessenger.of(context)
+                          ..clearSnackBars()
+                          ..showSnackBar(
+                            SnackBar(content: Text(s.dummyNeedAdmin)),
+                          );
+                        return;
+                      }
                       setState(() => _schedBusy = true);
                       try {
                         final svc =
