@@ -397,6 +397,11 @@ verify_jwt = true
 [functions.r]
 verify_jwt = false
 
+# ai-reply dipanggil pg_net trigger (tanpa JWT user) — verifikasi identitas
+# dilakukan di dalam function (service_role client + claim RPC).
+[functions.ai-reply]
+verify_jwt = false
+
 # send-push dipanggil oleh DB trigger (net.http_post) tanpa JWT user.
 # Tanpa ini semua push dari trigger gagal 401 diam-diam.
 [functions.send-push]
