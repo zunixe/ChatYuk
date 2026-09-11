@@ -254,3 +254,10 @@ Jika `supabase db push` timeout lagi:
 - **Bug fix saat uji:** trigger v1 `select p.id from unnest(...) p` salah (42703) → `select x from unnest(...) as x`. Terverifikasi E2E: user → dummy balas nyambung in-character; dummy outgoing tidak memicu.
 - **Client admin:** `AdminService.setDummyAi/getAiSettings/setAiSettings`; chip AI di kartu dummy (tab Dummy) + sheet persona; section AI Bot di tab Global Setting.
 - **Apply:** via Management API (curl + file UTF-8). Tercatat di `schema_migrations`.
+
+## 2026-09-11 - 20260911030000_ai_reply_claims.sql + 20260911040000_ai_memory.sql (APPLY)
+
+- **ai_reply_claims:** dedupe anti-race - dua invokasi ai-reply bersamaan sama-sama lolos cek "ada balasan setelah trigger?" -> dobel balasan. Claim table PK=trigger_msg_id (atomik); RPC ai_reply_claim(p_msg_id, p_dummy) service_role-only, baris >1 jam auto-prune. E2E: invokasi kedua -> skipped: already_claimed.
+- **ai_memory:** memori jangka panjang AI per pasangan (dummy_uid, user_id, fact) PK - fakta tahan-lama (nama/kerja/hobi/sifat) diekstrak LLM dari percakapan tiap balasan, diinjeksi ke system prompt sesi berikutnya. Cap 30 fakta/pasangan, filter NSFW, akses service_role only.
+- **Fix pendukung di ai-reply:** (1) llmCall() dgn retry backoff utk 429 B.AI (balasan+ekstraksi back-to-back sering kena concurrency limit); (2) typing WS channel ack:true dibuka SEKALI sepanjang durasi mengetik - subscribe->kirim->unsubscribe instan membuat pesan hilang sebelum flush; (3) ritme typing manusiawi 3 gaya acak: fast 15% / steady 35% / ragu 50% (type -> jeda >3 dtk -> type lagi, indikator sengaja hilang-muncul = kaya mikir).
+- **Verifikasi E2E:** pesan dgn fakta -> balasan nyambung + 3-6 fakta tersimpan di ai_memory + invokasi dobel ditolak claim. Tercatat di schema_migrations.
