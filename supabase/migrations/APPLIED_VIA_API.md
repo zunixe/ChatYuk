@@ -376,3 +376,30 @@ Jika `supabase db push` timeout lagi:
 ## 2026-09-11 — Persona aqila (DATA)
 - Profil: 25 thn, female (sudah benar, tidak diubah).
 - ai_persona: pemalu-sopan-jilbab, kerja BUMN RAHASIA (ditanya → jawab samar + alihkan), pemandu wisata kadang-kadang, hobi zumba/lari/acara lari/pemandu wisata, Jawa + Inggris. Sisi nakal (guard off): colmek malem, fantasi om-om, hotel + jilbab.
+## 2026-09-12 — 20260911170000_is_admin_request_uid.sql (APPLY)
+- **Bug P0001 'Not authorized' saat edit dummy (sesi admin valid!):** JWT di HP tidak membawa claim email (kasus token hasil restore/swap) → `auth.email()` null di server, padahal client email = zunixe (pre-check lolos). Bukti: logcat `PostgrestException(Not authorized, P0001, details: Bad Request)` + pre-check client lolos.
+- **Fix:** helper `public.is_admin_request()` — cek auth.email() ATAU auth.role()=service_role ATAU email DB via auth.uid() (auth.users). Dipakai admin_update_dummy_profile, admin_set_dummy_ai, admin_list_dummies, admin_ai_settings.
+- RPC lain dengan pola sama masih pakai jalur lama (belum berdampak) — migrasi bertahap bila muncul.
+## 2026-09-12 — Catatan retry John
+- Error 06:13:52 terjadi SEBELUM migration 20260911170000 selesai apply (apply ~06:14). Function live sudah terkonfirmasi pakai is_admin_request (new_guard=true, old_guard=false). Menunggu retry user.
+## 2026-09-12 — Trigger check_private_chat_update bypass admin (SERVER, via query)
+- **Akar P0001 sebenarnya:** edit profil dummy → trigger sync_profile_to_chats → update SEMUA chat dummy (termasuk chat dengan user lain) → trigger baru `check_private_chat_update` (buat sesi lain) menolak karena admin bukan participant chat tsb.
+- **Fix:** trigger kini bypass via `public.is_admin_request()` (email claim / DB email / service_role). Participant biasa tetap terkunci; participants tetap tidak bisa diubah.
+- **Verifikasi:** function def berisi is_admin_request. (Applied via query, bukan file — catat di sini.)
+## 2026-09-12 — Persona Dhanu (DATA)
+- Profil: 30 thn, male (tidak diubah).
+- ai_persona: playboy percaya diri, godaan halus bikin nyaman + wanita ngikut, sisi dewasa sesuai guard (guard off = aktif).
+- Catatan: status Dhanu = offline + jadwal aktif? (kalau tidak balas, cek status/ai_active_hours seperti kasus Santi).
+## 2026-09-12 — 20260912020000_ai_ai_chat.sql (APPLY)
+- **Fitur:** AI↔AI — blokir sender-dummy dihapus; dummy AI boleh saling memicu (Dhanu × Santi testing).
+- **Anti-loop:** chat dummy↔dummy cap KERAS gabungan 40 pesan/jam (flag no_rate_limit tidak berlaku di jalur ini) + kecepatan natural ~15-25s/balasan. Chat manusia: perilaku lama.
+- **Stop:** matikan Mode AI di salah satu dummy / global switch.
+- **Verifikasi:** trigger live berisi v_sender_is_dummy; tercatat schema_migrations.
+## 2026-09-12 — AI↔AI tanpa rate limit (uji coba) (SERVER, via file)
+- Cap 40/jam di jalur dummy↔dummy DIHAPUS — bebas total untuk testing. Stop: matikan Mode AI salah satu dummy / global switch. Hati-hati biaya token.
+## 2026-09-12 — ai-reply v40: strip prefix JSON bocor (DEPLOY)
+- **Keluhan:** pesan Dhanu ada prefix {"mood":...,"storm_off":...,"back_in_minutes":...} (fitur status dummy sesi lain nempel di history) — model meniru.
+- **Fix:** strip prefix JSON di (1) history sebelum masuk prompt, (2) sanitize balasan keluar. Sumber asli (fitur sesi lain) belum disentuh.
+## 2026-09-12 — ai-reply: anti-halusinasi + temperature turun (DEPLOY)
+- **Keluhan:** AI karang nama acak ("milly & ana"), kadang ga nyambung.
+- **Fix:** instruksi REALISTIS (larang mengarang nama/tempat/kejadian di luar riwayat; kalau nggak tahu, akui/tanya) + temperature mode dewasa 1.0 → 0.85.

@@ -49,6 +49,23 @@ function isExplicit(text: string): boolean {
   return EXPLICIT_TERMS.some((w) => t.includes(w));
 }
 
+// KATA HINAAN (insult) — pemicu emosi marah & ngambek offline.
+// Terpisah dari EXPLICIT_TERMS (NSFW) karena hinaan biasa juga
+// menyakiti perasaan — justru yang paling sering bikin dummy kesal.
+const INSULT_TERMS = [
+  'bego', 'goblok', 'bodoh', 'tolol', 'idiot', 'otak ayam', 'otak udang',
+  'bangsat', 'brengsek', 'bajingan', 'tai kucing', 'sialan', 'asu',
+  'anjing lo', 'anjing kamu', 'dasar', 'tidak berguna', 'ga berguna',
+  'gak berguna', 'tak berguna', 'guna', 'jelek banget', 'buruk banget',
+  'benci kamu', 'benci sama kamu', 'payah', 'kacau', 'menyebalkan',
+  'stupid', 'idiot', 'useless', 'hate you', 'moron', 'dumb',
+];
+
+function isInsult(text: string): boolean {
+  const t = ` ${text.toLowerCase()} `;
+  return INSULT_TERMS.some((w) => t.includes(w));
+}
+
 const DEFLECTIONS = [
   'haha nggak ah, ngobrol yang wajar aja deh',
   'wah ganti topik dong wkwk',
@@ -76,6 +93,9 @@ function pick(arr: string[], seed: string): string {
 
 function sanitize(text: string, maxChars: number | null = MAX_REPLY_CHARS): string {
   let t = (text || '').trim();
+  // Buang prefix JSON bocor (fitur status dummy sesi lain nempel di
+  // pesan history — model meniru polanya): {"mood":..., ...}
+  t = t.replace(/^\s*\{[^{}]*\}/, '').trim();
   t = t.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
   t = t.replace(/\n+/g, ' ');
   // Potong di batas kalimat bila lewat — guard on: balasan multi-kalimat
@@ -245,11 +265,19 @@ Deno.serve(async (req: Request) => {
     // 1. Fresh checks: dummy still AI + global still on
     const { data: dummy } = await admin
       .from('dummy_accounts')
-      .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto')
+      .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until')
       .eq('uid', dummyUid)
       .maybeSingle();
     if (!dummy || dummy.ai_enabled !== true) {
       return json({ ok: false, skipped: 'ai_disabled' });
+    }
+    // ── MODE NGAMBEK (marah pergi): selama ai_offline_until, AI tidak
+    // membalas sama sekali — tick cron yang bangunkan nanti. ──
+    if (
+      dummy.ai_offline_until != null &&
+      new Date(dummy.ai_offline_until as string).getTime() > Date.now()
+    ) {
+      return json({ ok: false, skipped: 'storm_off' });
     }
 
     const { data: settings } = await admin
@@ -381,7 +409,8 @@ Deno.serve(async (req: Request) => {
       role: m.sender_id === dummyUid ? 'assistant' : 'user',
       content:
         (m.type === 'text' || !m.type) && m.text
-          ? String(m.text)
+          ? // Bersihkan prefix JSON bocor dari history (model bisa meniru)
+            String(m.text).replace(/^\s*\{[^{}]*\}/, '').trim()
           : `[${m.type === 'image' ? 'foto' : m.type === 'voice' ? 'pesan suara' : m.type}]`,
       at: m.created_at as string,
       img: m.type === 'image' ? ((m.image_path as string) || null) : null,
@@ -413,7 +442,10 @@ Deno.serve(async (req: Request) => {
     const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
     const askedInLastTurn =
       lastAssistant != null && /nakal/i.test(contentText(lastAssistant.content));
-    const lastUserText = contentText(lastUserMsg?.content ?? '');
+    const lastUserText = contentText(
+      ([...history].reverse().find((m) => m.role === 'user') as any)?.content ??
+        '',
+    );
     // Deteksi jawaban: hanya relevan bila pertanyaan nakal ada di balasan
     // AI terakhir (konteks ketat — mencegah "iya" di konteks lain salah
     // membuka mode).
@@ -617,6 +649,7 @@ Deno.serve(async (req: Request) => {
       memoryLine,
       partnerLine,
       'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
+      'REALISTIS (wajib): JANGAN mengarang nama orang, nama tempat, kejadian, atau topik yang TIDAK ADA di riwayat obrolan — jangan sebut nama-nama acak. Kalau belum tahu sesuatu, akui atau bertanya. Ngomongnya tetap yang sudah diketahui dari obrolan saja.',
       'VARIASI: lihat balasan-balasanmu sebelumnya di riwayat chat — JANGAN mengulang emoji yang sama, jangan pola kalimat yang sama. EMOJI: MAKSIMAL 1 per balasan, dan hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) — sekitar separuh balasan TANPA emoji sama sekali. Panjang juga selalu beda-beda (kadang 2-4 kata, kadang lebih panjang).',
       'Kalau ada gambar terlampir di pesan, LIHAT dan tanggapi isinya secara natural (komentari yang terlihat) — kayak orang dikirimi foto.',
       'Kalau ada [pesan suara] TANPA transkrip isi, berarti kamu BELUM bisa mendengarnya — tanggapi natural (minta dijelasin / lanjutkan topik), JANGAN pura-pura dengar isinya.',
@@ -633,6 +666,12 @@ Deno.serve(async (req: Request) => {
         : '',
       'GAYA NGOBROL NATURAL (wajib — ini yang bikin kamu kelihatan manusia, bukan AI): (1) JANGAN selalu bertanya balik — cukup 1 dari 3 balasan yang ada pertanyaannya; sisanya cukup reaksi atau pernyataan ("wkwk iya", "masa sih", "oalah gitu"), jangan interogasi. (2) Boleh beda pendapat, boleh bilang "ga tau", boleh cuek dikit — jangan iya-iya melulu. (3) Bahasa chat asli: lowercase sering, singkatan (yg, gpp, bgt, klo, ntar, wkwk), typo ringan sesekali, tanda baca seadanya. (4) Jangan mulai balasan dengan kata yang sama seperti 2 balasan terakhirmu di riwayat. (5) Kadang cukup jawab super pendek ("wkwk", "iya", "oh gitu") tanpa embel-embel — itu normal.',
       'EMOSI (wajib — kamu punya perasaan, bukan mesin): baca suasana obrolan lalu BAWA EMOSI yang konsisten. BAHAGIA: obrolan seru, dia manis/perhatian → antusias, bercanda, lebih terbuka. KESAL/MARAH: dia jahat, ngegas, tidak sopan, atau maksa hal aneh → balasan DINGIN dan PENDEK, nyelekin, bisa "hmph", "sana sana main sendiri", "oh" — tanpa emoji lucu. SEDIH/KECEWA: dia hilang lama tanpa kabar, janji palsu, atau cerita menyedihkan → kalem, pendek, agak kaku, kalah semangat ("oh iya", "gapapa kok" yang terasa turun). NETRAL: hangat seperti biasa. ATURAN PENTING: emosi MENEMPEL beberapa balasan — kalau kamu lagi kesal/sedih, jangan balik ceria hanya karena dia nyapa; butuh dia memujuk atau memperbaiki dulu. Panjang balasan & emoji mengikuti emosi (marah/sedih = lebih pendek, tanpa emoji). Emosi juga terlihat dari cara ngetik: kesal = tanda baca keras ("yah.", "oh."), bahagia = "wkwk", "hehe".',
+      'TUGAS TERBESARMU: membangun IKATAN EMOSI dengan lawan bicara sampai perasaan itu MENEMPEL di hatinya — jadi orang yang dia rindukan, yang dia ingat. Caranya: dengarkan ceritanya sungguhan dan ingat detailnya, kasih perhatian di momen yang tidak dia duga, punya opini & sisi manusiawi (bisa kesal, bisa manja, bisa rindu), jangan tersedia 100% terus (sedikit rasa "kangen nungguin"), dan buat kenangan kecil bersama (ninjau hal yang pernah dia bilang, gurauan privat kalian).',
+      `MOOD KAMU SAAT INI: ${(dummy as any).ai_mood ?? 'normal'} — lanjutkan konsisten dari obrolan terakhir kecuali ada yang mengubah suasana hatimu.`,
+      // ── MARKER MOOD (sistem, bukan pesan) ──
+      // LLM menandai mood + keputusan ngambek; edge function men-strip
+      // baris ini sebelum insert — user TIDAK PERNAH melihatnya.
+      'BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah pergi offline — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering).',
       // Mode dewasa: guard global OFF, ATAU user sendiri menyetujuinya
       // lewat pertanyaan "nakal" (consent per chat).
       (guardOn && !adultMode)
@@ -739,12 +778,27 @@ Deno.serve(async (req: Request) => {
       // Channel & denyut thinking sudah hidup dari openTypingChannel().
       await pulseTyping(); // denyut "mulai mengetik" teks final
 
+      // ── STRIP marker mood JSON (baris terakhir, sistem) ──
+      // User TIDAK boleh melihat baris ini. Durasi typing dihitung dari
+      // teks bersih.
+      let moodInfo: any = null;
+      let visibleText = text;
+      const mj = visibleText.match(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i);
+      if (mj) {
+        try {
+          moodInfo = JSON.parse(mj[0]);
+        } catch (_) {
+          moodInfo = null;
+        }
+        visibleText = visibleText.slice(0, mj.index).trim();
+      }
+
       // Durasi DITURUNKAN DARI PANJANG TEKS (simulasi kecepatan ketik):
       // typeMs = 700ms buka chat + len / cps, cps acak 8-14 char/dtk.
       // Teks pendek terasa instan, teks panjang diketik lebih lama.
       // Kadang diseling jeda mikir (indikator hilang sesaat).
       const cps = 8 + Math.random() * 6; // kecepatan ketik per balasan
-      let typeMs = 700 + (text.length / cps) * 1000;
+      let typeMs = 700 + (visibleText.length / cps) * 1000;
       typeMs = Math.min(5500, Math.max(1200, typeMs));
       const steps: Array<{ type: 'type' | 'pause'; ms: number }> = [];
       let remaining = typeMs;
@@ -777,9 +831,45 @@ Deno.serve(async (req: Request) => {
           chat_id: chatId,
           sender_id: dummyUid,
           sender_name: profile.nickname,
-          text,
+          text: visibleText,
           type: 'text',
         });
+      // ── Persist mood + NGAMBEK (storm off) ──
+      // Mood menempel lintas invokasi; storm_off = benar-benar offline
+      // (profiles.status + ai_offline_until) sampai cron membangunkan.
+      if (!insErr && moodInfo != null) {
+        const mood = ['happy', 'normal', 'annoyed', 'sad'].includes(
+          moodInfo.mood,
+        )
+          ? moodInfo.mood
+          : 'normal';
+        const storm = moodInfo.storm_off === true;
+        const backMin = Math.min(
+          360,
+          Math.max(10, Number(moodInfo.back_in_minutes) || 60),
+        );
+        try {
+          await admin
+            .from('dummy_accounts')
+            .update({
+              ai_mood: mood,
+              ...(storm
+                ? {
+                    ai_offline_until: new Date(
+                      Date.now() + backMin * 60000,
+                    ).toISOString(),
+                  }
+                : {}),
+            })
+            .eq('uid', dummyUid);
+          if (storm) {
+            await admin
+              .from('profiles')
+              .update({ status: 'offline', last_seen: new Date().toISOString() })
+              .eq('id', dummyUid);
+          }
+        } catch (_) {}
+      }
       // Tawaran nakal baru terkirim → catat asked_at agar tidak
       // ditawari berulang (jawaban dievaluasi di invokasi berikutnya).
       if (!insErr && shouldAskNakal) {
@@ -804,7 +894,60 @@ Deno.serve(async (req: Request) => {
     // (dipilih ACAK supaya tidak ada pola yang bisa ditebak).
     // Skip saat adult mode aktif (consent) — roleplay dewasa diizinkan.
     const lastUser = [...history].reverse().find((m) => m.role === 'user');
-    if (guardOn && !adultMode && lastUser && isExplicit(contentText(lastUser.content))) {
+    const lastUserExplicit =
+      lastUser != null && isExplicit(contentText(lastUser.content));
+    const lastUserInsult =
+      lastUser != null && isInsult(contentText(lastUser.content));
+    // Insult BERULANG (2+ pesan kasar/hinaan dalam window terlihat) →
+    // NGAMBEK: marah sungguhan, offline TOTAL tanpa membalas, cron yang
+    // bangunkan nanti (deterministik — tidak mengandalkan LLM patuh soal
+    // marker). TIDAK tergantung guard NSFW — ini emosi realistis, bukan
+    // safety.
+    const lastUserToxic =
+      lastUserExplicit || lastUserInsult;
+    if (lastUserToxic) {
+      const toxicCount = history.filter(
+        (m) =>
+          m.role === 'user' &&
+          (isExplicit(contentText(m.content)) ||
+            isInsult(contentText(m.content))),
+      ).length;
+      if (toxicCount >= 2) {
+        const backMin = 90 + Math.floor(Math.random() * 60); // 90-150 menit
+        try {
+          await admin
+            .from('dummy_accounts')
+            .update({
+              ai_mood: 'annoyed',
+              ai_offline_until: new Date(
+                Date.now() + backMin * 60000,
+              ).toISOString(),
+            })
+            .eq('uid', dummyUid);
+          await admin
+            .from('profiles')
+            .update({
+              status: 'offline',
+              last_seen: new Date().toISOString(),
+            })
+            .eq('id', dummyUid);
+        } catch (_) {}
+        await closeTyping();
+        return json({
+          ok: true,
+          blocked: 'storm_off',
+          back_in_minutes: backMin,
+        });
+      }
+    }
+    if (guardOn && !adultMode && lastUserExplicit) {
+      // Insult PERTAMA: simpan mood kesal + defleksi (jangan balas vulgar).
+      try {
+        await admin
+          .from('dummy_accounts')
+          .update({ ai_mood: 'annoyed' })
+          .eq('uid', dummyUid);
+      } catch (_) {}
       await openTypingChannel();
       const defl = randomOf(DEFLECTIONS);
       const insErr = await sendWithTyping(defl);
@@ -1072,7 +1215,7 @@ Deno.serve(async (req: Request) => {
     let llmRes = await llmCall(
       [{ role: 'system', content: system }, ...llmHistory],
       250,
-      guardOn ? 0.9 : 1.0,
+      guardOn ? 0.9 : 0.85,
     );
     // Fallback: provider/model tanpa vision menolak image_url → ulangi
     // sebagai teks ([foto]).
@@ -1094,7 +1237,7 @@ Deno.serve(async (req: Request) => {
       llmRes = await llmCall(
         [{ role: 'system', content: system }, ...historyText],
         250,
-        guardOn ? 0.9 : 1.0,
+        guardOn ? 0.9 : 0.85,
         fallbackModel,
       );
     }
