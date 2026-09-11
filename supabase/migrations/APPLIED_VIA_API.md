@@ -238,3 +238,10 @@ Jika `supabase db push` timeout lagi:
 - **Client:** `AdminService.getChatLastRead` + `AdminProvider.fetchChatLastRead`; view hitung `isRead` per pesan vs last-read PENERIMA (cermin logika chat asli, kedua sisi), fallback centang-1; `_markDummyRead` + panggilannya DIHAPUS (monitoring read-only — intip tidak boleh membalikkan receipt orang).
 - **Apply:** via Management API (catatan: `ConvertTo-Json` PS 5.1 merusak string SQL multi-baris jadi objek — bangun body JSON manual). Tercatat di `schema_migrations`.
 - **Verifikasi:** `select proname from pg_proc where proname='admin_get_chat_last_read'` → 1 row; `select admin_get_chat_last_read('nonexistent')` → `{}`.
+
+## 2026-09-11 — 20260911010000_admin_message_image_path_fallback.sql (APPLY)
+
+- **Masalah:** Monitor chat admin — foto "ketuk untuk memuat" tidak pernah tampil walau di-tap (kasus chat AntoSusanto, pesan 1382/1383). Akar: foto chat BARU menyimpan PATH di kolom `image_path` dengan `image_data` kosong (hemat DB), tapi RPC `admin_get_message_image` hanya mengembalikan `image_data` → monitor selalu dapat string kosong. File-nya sendiri ADA di storage.
+- **Isi:** `admin_get_message_image` fallback → `coalesce(nullif(image_data,''), image_path)`. Client TIDAK perlu berubah — `_loadOnePhoto` sudah mendukung respons berupa path (`isPath` → download bucket). Server-only fix.
+- **Apply:** via Management API. ⚠️ Pelajaran: body SQL dengan karakter non-ASCII (`→`, `—`) rusak lewat `Invoke-RestMethod -Body` string PS 5.1 (JSON parse error) — WAJIB tulis JSON ke file UTF-8 lalu `curl.exe --data-binary @file`.
+- **Verifikasi:** `pg_get_functiondef` mengandung `nullif(m.image_data, ''), m.image_path` → FALLBACK-OK. Tercatat di `schema_migrations`. Catatan: RPC admin TIDAK bisa di-smoke-test via query API (tanpa konteks auth.email → Unauthorized itu normal).
