@@ -316,12 +316,14 @@ class AdminService {
   Future<void> setDummyAi(
     String uid,
     bool enabled,
-    Map<String, dynamic> persona,
-  ) async {
+    Map<String, dynamic> persona, {
+    bool? scheduleAuto,
+  }) async {
     await _sb.rpc('admin_set_dummy_ai', params: {
       'p_uid': uid,
       'p_enabled': enabled,
       'p_persona': persona,
+      if (scheduleAuto != null) 'p_schedule_auto': scheduleAuto,
     });
   }
 

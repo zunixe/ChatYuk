@@ -344,3 +344,17 @@ Jika `supabase db push` timeout lagi:
 - **Delay baru:** panas 3-8s; biasa 5-30s + 20% peluang +10-35s (makin random lama); perkenalan 8-28s; jarang "sibuk" +15-45s; hard cap 60s. Berlaku SEBELUM read-receipt & typing.
 - **Penjelasan typing-tanpa-pesan:** kedip hilang-muncul = SENGAJA (ritme ragu/mikir); diam total setelah typing = kegagalan beneran (LLM error/empty — tercatat FAIL di logs, bukan disengaja).
 - **Verifikasi:** deploy ACTIVE v33.
+## 2026-09-11 — 20260911100000_dummy_list_profile_fields.sql (APPLY) + toast error detail
+- **Bug:** list dummy + prefill sheet edit pakai default (male/25/Indonesia/Jakarta) karena `admin_list_dummies` tidak mengirim gender/age/city/country → gender salah tampil & save berpotensi menimpa gender asli.
+- **Fix:** RPC kirim 4 field profil; kartu + prefill otomatis benar (client sudah baca key tersebut).
+- **Diagnosis save gagal:** toast gagal kini menampilkan pesan server apa adanya ("...: Unauthorized/Umur tidak valid/...") — user laporkan teksnya bila masih gagal.
+- **Admin APK:** rebuild + install Success.
+## 2026-09-11 — 20260911140000_drop_dummy_ai_overload.sql (APPLY) + sheet AI fix
+- **Bug Simpan:** 2 overload `admin_set_dummy_ai` (3-param & 4-param) → PostgREST 300 Multiple Choices → tombol Simpan sheet Mode AI selalu gagal. Drop versi 3-param, sisakan 4-param (superset).
+- **Sheet ketutup navbar:** padding sheet + `MediaQuery.padding.bottom` (tombol Simpan tidak kependem menu Android).
+- **Diagnosis:** toast gagal sheet AI kini tampilkan pesan server apa adanya.
+- **Verifikasi:** overloads=1; tercatat schema_migrations; admin APK rebuild + install Success.
+## 2026-09-11 — Guard sesi admin di tab Dummy (client, tanpa migration)
+- **Bug:** edit profil/AI dummy dari SESI DUMMY (habis swap "masuk dummy") → RPC guard email gagal → `Unauthorized` P0001. List yang tampil basi (state tab dari sesi admin sebelumnya) sehingga membingungkan.
+- **Fix client:** helper `_isAdminSession()` (AdminGate.isRealAdmin + currentUser email) dicek SEBELUM semua RPC tulis (edit profil, sheet AI save, auto-jadwal) + pesan jelas `dummyNeedAdmin` (ID/EN) — server tetap sumber kebenaran. Error load list Unauthorized juga dipetakan ke pesan yang sama.
+- **Admin APK:** rebuild + install Success. Cara pakai: kembali ke akun admin dulu (aliran "kembali ke admin"), baru edit/save.
