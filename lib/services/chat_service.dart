@@ -1303,17 +1303,26 @@ class ChatService {
     debugPrint('[TYPING] onBroadcast registered for $chatId');
     channel.onBroadcast(
       event: 'typing',
-      callback: (payload) {
-        debugPrint('[TYPING] event received: $payload');
-        final senderId = payload['sender_id'] as String?;
+      callback: (raw) {
+        // Struktur callback bisa NESTED ({event, payload:{...}, type}) atau
+        // FLAT ({sender_id, kind, ts}) tergantung versi realtime_client —
+        // handle keduanya. Dulu: selalu baca top-level → sender_id null →
+        // indikator typing TIDAK PERNAH tampil (AI & manusia).
+        final Map<String, dynamic> data;
+        if (raw['payload'] is Map) {
+          data = Map<String, dynamic>.from(raw['payload'] as Map);
+        } else {
+          data = Map<String, dynamic>.from(raw);
+        }
+        final senderId = data['sender_id'] as String?;
         final myId = _sb.auth.currentUser?.id;
-        debugPrint('[TYPING] senderId=$senderId myId=$myId');
+        debugPrint('[TYPING] parsed senderId=$senderId myId=$myId');
         if (senderId == null || senderId == myId) {
           debugPrint('[TYPING] skipped (own sender or null)');
           return;
         }
         if (!controller.isClosed) {
-          controller.add((payload['kind'] as String?) ?? 'typing');
+          controller.add((data['kind'] as String?) ?? 'typing');
         }
       },
     );
