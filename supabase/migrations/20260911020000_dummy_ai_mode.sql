@@ -190,16 +190,23 @@ begin
     return new;
   end if;
 
-  perform net.http_post(
-    url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/ai-reply',
-    headers := jsonb_build_object('Content-Type', 'application/json'),
-    body := jsonb_build_object(
-      'chat_id', new.chat_id,
-      'trigger_msg_id', new.id,
-      'sender_id', new.sender_id,
-      'dummy_uid', v_other
-    )
-  );
+  -- EXCEPTION-SAFE: kegagalan enqueue (pg_net down, dsb) TIDAK BOLEH
+  -- menggagalkan insert pesan user — fitur AI tidak boleh mengganggu
+  -- jalur chat utama.
+  begin
+    perform net.http_post(
+      url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/ai-reply',
+      headers := jsonb_build_object('Content-Type', 'application/json'),
+      body := jsonb_build_object(
+        'chat_id', new.chat_id,
+        'trigger_msg_id', new.id,
+        'sender_id', new.sender_id,
+        'dummy_uid', v_other
+      )
+    );
+  exception when others then
+    null;
+  end;
 
   return new;
 end;
