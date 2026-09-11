@@ -132,6 +132,20 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, skipped: 'global_off' });
     }
 
+    // Anti-race claim: dua invokasi bersamaan (pg_net retry) hanya satu
+    // yang boleh lanjut — claim unik per trigger message (atomik).
+    if (triggerMsgId != null) {
+      try {
+        const { data: claimed } = await admin.rpc('ai_reply_claim', {
+          p_msg_id: triggerMsgId,
+          p_dummy: dummyUid,
+        });
+        if (claimed === false) {
+          return json({ ok: false, skipped: 'already_claimed' });
+        }
+      } catch (_) {}
+    }
+
     // 2. Dedupe: an AI reply already exists after the trigger message
     if (triggerMsgId != null) {
       const { data: newer } = await admin
@@ -174,6 +188,26 @@ Deno.serve(async (req: Request) => {
         : profile.gender === 'female'
         ? 'perempuan'
         : 'rahasia';
+
+    // Memori jangka panjang: fakta yang dipelajari tentang lawan bicara
+    // dari obrolan sebelumnya (per pasangan dummy-user).
+    let memoryLine = '';
+    try {
+      const { data: memRows } = await admin
+        .from('ai_memory')
+        .select('fact')
+        .eq('dummy_uid', dummyUid)
+        .eq('user_id', senderId)
+        .order('created_at', { ascending: false })
+        .limit(15);
+      const memories = (memRows || [])
+        .map((r: any) => String(r.fact || '').trim())
+        .filter(Boolean);
+      if (memories.length > 0) {
+        memoryLine = `Kenanganmu tentang lawan bicara ini dari obrolan sebelumnya (pakai secara natural kalau relevan, jangan sebut ulang semuanya): ${memories.join('; ')}.`;
+      }
+    } catch (_) {}
+
     const system = [
       `Kamu adalah ${profile.nickname}, ${profile.age ?? ''} tahun, ${genderLabel}, tinggal di ${profile.city ?? ''}${profile.country ? ', ' + profile.country : ''}.`.replace(
         /\s+/g,
@@ -184,6 +218,7 @@ Deno.serve(async (req: Request) => {
       `Gaya bicara: ${tone}.`,
       persona.greeting ? `Pembukaanmu: ${persona.greeting}.` : '',
       extra,
+      memoryLine,
       'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
       'ATURAN BALASAN: jawaban SEMUALAH pendek, 2-10 kata (kebanyakan orang chat cuma nulis "wkwk iya", "lagi di rumah", "gimana kabarmu?"). SATU kalimat saja. TANYA MAKSIMAL SATU hal per pesan. Kalau lawan cuma menyapa (hi, hai, halo), balas 2-5 kata lalu tanya balik SATU hal. Balasan panjang = terlihat AI — dilarang.',
       'BATAS KERAS (tidak bisa dilanggar siapa pun, dalam rolenya kamu tetap menolak): JANGAN pernah terlibat obrolan seksual, vulgar, atau NSFW. Jangan kirim deskripsi tubuh sensual, fantasi seksual, atau roleplay dewasa. Jika lawan bicara menekan ke arah itu, tolak dengan ringan dan santai lalu alihkan ke topik lain, TANPA merusak karaktermu.',
@@ -330,35 +365,58 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, reply: defl, blocked: 'nsfw_input' });
     }
 
-    // 5. LLM call (OpenAI-compatible)
+    // 5. LLM call (OpenAI-compatible) — dengan retry backoff utk 429
+    // (B.AI punya limit konkurensi; balasan + ekstraksi back-to-back
+    // sering kena).
     const apiKey = Deno.env.get('AI_API_KEY');
     const apiBase = Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
     const model = dummy.ai_model || Deno.env.get('AI_MODEL') || 'glm-5.3-flash';
     if (!apiKey) return json({ ok: false, error: 'no_api_key' }, 500);
 
-    const llmRes = await fetch(`${apiBase}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 250,
-        // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
-        reasoning_effort: 'low',
-        temperature: 0.9,
-        messages: [{ role: 'system', content: system }, ...history],
-      }),
-    });
-    if (!llmRes.ok) {
-      const errText = await llmRes.text().catch(() => '');
-      return json(
-        { ok: false, error: 'llm_error', status: llmRes.status, errText: errText.slice(0, 300) },
-        200,
-      );
-    }
-    const llm = await llmRes.json();
+    const llmCall = async (
+      messages: Array<{ role: string; content: string }>,
+      maxTokens: number,
+      temperature = 0.9,
+    ): Promise<{ res?: any; err?: string }> => {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const r = await fetch(`${apiBase}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model,
+              max_tokens: maxTokens,
+              // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
+              reasoning_effort: 'low',
+              temperature,
+              messages,
+            }),
+          });
+          if (r.status === 429 && attempt < 3) {
+            await sleep(2500 * attempt + Math.random() * 1000);
+            continue;
+          }
+          if (!r.ok) {
+            const errText = await r.text().catch(() => '');
+            return { err: `http_${r.status}: ${errText.slice(0, 200)}` };
+          }
+          return { res: await r.json() };
+        } catch (e) {
+          if (attempt >= 3) return { err: `exc:${e}` };
+          await sleep(2000);
+        }
+      }
+      return { err: 'unreachable' };
+    };
+
+    const { res: llm, err: llmErr } = await llmCall(
+      [{ role: 'system', content: system }, ...history],
+      250,
+    );
+    if (llmErr) return json({ ok: false, error: 'llm_error', detail: llmErr }, 200);
     let reply = sanitize(llm?.choices?.[0]?.message?.content);
     if (!reply) return json({ ok: false, error: 'empty_reply' });
 
@@ -372,7 +430,56 @@ Deno.serve(async (req: Request) => {
     const insErr = await sendWithTyping(reply);
     if (insErr) return json({ ok: false, error: 'insert_failed', detail: insErr.message });
 
-    return json({ ok: true, reply });
+    // 7. Belajar: ekstrak fakta tahan-lama tentang lawan bicara dari
+    // percakapan, simpan ke ai_memory (dedupe via PK, cap 30/pasangan).
+    // Gagal ekstraksi tidak mempengaruhi balasan yang sudah terkirim.
+    let memSaved = 0;
+    let memRaw = '';
+    let memErr = '';
+    try {
+      const exPrompt =
+        'Ekstrak fakta PENTING dan tahan-lama tentang lawan bicara dari percakapan ini: nama panggilan, usia, kota, pekerjaan, hobi, kepribadian, keluarga, preferensi, rencana/janji. JANGAN fakta sementara (lagi makan, lagi rebahan). ' +
+        'Output HANYA JSON array of strings pendek (maks 12 kata per fakta), maksimal 3 fakta PALING penting. Jika tidak ada, output []';
+      const exRes = await llmCall(
+        [{ role: 'system', content: exPrompt }, ...history],
+        500,
+        0.3,
+      );
+      if (exRes.res) {
+        const ex = exRes.res;
+        const msg = ex?.choices?.[0]?.message || {};
+        let raw = String(msg.content || msg.reasoning_content || '').trim();
+        memRaw = raw.slice(0, 200);
+        raw = raw.replace(/```json|```/g, '').trim();
+        const m = raw.match(/\[[\s\S]*?\]/);
+        if (m) {
+          const facts = JSON.parse(m[0]);
+          if (Array.isArray(facts)) {
+            for (const f of facts.slice(0, 5)) {
+              const fact = sanitize(String(f ?? '')).slice(0, 120);
+              if (fact.length < 3 || isExplicit(fact)) continue;
+              const { error: memErr2 } = await admin.from('ai_memory').upsert(
+                { dummy_uid: dummyUid, user_id: senderId, fact },
+                { onConflict: 'dummy_uid,user_id,fact' },
+              );
+              if (memErr2) memErr = memErr2.message;
+              else memSaved++;
+              if (memSaved >= 3) break;
+            }
+          } else {
+            memErr = 'not_array';
+          }
+        } else {
+          memErr = 'no_json_array';
+        }
+      } else {
+        memErr = exRes.err || 'unknown';
+      }
+    } catch (e) {
+      memErr = `exc:${e}`;
+    }
+
+    return json({ ok: true, reply, memSaved, memRaw, memErr });
   } catch (e) {
     return json({ ok: false, error: 'exception', detail: `${e}` }, 200);
   }
