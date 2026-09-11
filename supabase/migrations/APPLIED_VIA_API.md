@@ -332,3 +332,15 @@ Jika `supabase db push` timeout lagi:
 - **Config:** `ai_provider_config.stt_api_base/stt_api_key` (RLS-deny) + RPC 9-param + 2 field panel (STT Base URL/Key).
 - **Apply/deploy:** migration tercatat (20260911090000); deploy ACTIVE v28; admin APK rebuild + install Success.
 - **TODO user:** isi STT Key di panel AI Bot (Groq gratis, console.groq.com) agar voice bisa didengar. Foto jalan langsung (pakai key LLM).
+## 2026-09-11 — ai-reply v31: routing Zen (muse-spark) + fallback model (DEPLOY)
+- **Routing eksplisit per model** via `routeFor()`: OpenRouter (`:free`/`nvidia/`) / OpenCode Zen (`muse-spark-*`,`mimo-*-free`,`ling-*-free`,`nemotron-*-free`,`deepseek-v4-flash-free`,`big-pickle` — secret AI_API_KEY_ZEN + header client opencode) / panel-or-B.AI (sisanya).
+- **Fallback model** (`AI_FALLBACK_MODEL`, default glm-5.3-flash B.AI): bila model utama error, balasan coba sekali via fallback — dummy tidak diam.
+- **Santi** → `muse-spark-1.3-contributor-free`. Secret AI_API_KEY_ZEN diset.
+- **Fakta:** Zen muse-spark free 500 konsisten di semua tes langsung (paid 401 saldo $0; mimo/nemotron free Zen 200 OK) — sampai Zen pulih/ada billing, balasan Santi praktis datang via fallback glm. Verifikasi: deploy ACTIVE v31; santi.ai_model terkonfirmasi.
+## 2026-09-11 — ai-reply v32: penanda model_used (DEPLOY)
+- Setiap balasan/gagal log `console.log([ai-reply] OK|FAIL model=<id> chat=<id>)` + field `model_used` di respons JSON — kelihatan di Dashboard → Edge Functions → ai-reply → Logs. Cara bedakan balasan muse-spark vs fallback glm.
+## 2026-09-11 — ai-reply v33: delay 3-60s sesuai topik (DEPLOY)
+- **Keluhan:** typing kadang tanpa pesan + balas terasa instan.
+- **Delay baru:** panas 3-8s; biasa 5-30s + 20% peluang +10-35s (makin random lama); perkenalan 8-28s; jarang "sibuk" +15-45s; hard cap 60s. Berlaku SEBELUM read-receipt & typing.
+- **Penjelasan typing-tanpa-pesan:** kedip hilang-muncul = SENGAJA (ritme ragu/mikir); diam total setelah typing = kegagalan beneran (LLM error/empty — tercatat FAIL di logs, bukan disengaja).
+- **Verifikasi:** deploy ACTIVE v33.
