@@ -364,3 +364,9 @@ Jika `supabase db push` timeout lagi:
 - **Verifikasi:** deploy ACTIVE v34.
 - ai-reply v36: jeda manusiawi flat 3-10 detik (user request).
 - ai-reply v37: jeda seimbang (panas 2-4s, biasa 3-6s, perkenalan 4-7s).
+## 2026-09-11 — 20260911160000_dummy_guard_override.sql (APPLY) + guard per-dummy (DEPLOY)
+- **Fitur:** toggle Guard NSFW PER-DUMMY di sheet Mode AI (Segmented Global/ON/OFF) + global tetap ada — pola seperti notifikasi. NULL = ikuti global.
+- **DB:** kolom `dummy_accounts.ai_guard_enabled` (nullable); `admin_set_dummy_ai` drop 4-param → 5-param (+p_guard_enabled, null = reset ke global); `admin_list_dummies` rewrite penuh + ai_guard_enabled (+ pertahankan gender/schedule).
+- **ai-reply:** guardOn = dummy ?? global ?? true (fresh tiap invokasi = realtime).
+- **Catatan versi:** 20260911150000 sudah dipakai sesi lain → file ini 20260911160000.
+- **Verifikasi:** overloads=1; analyze 0 err/warn; deploy ACTIVE; admin APK rebuild + install Success.
