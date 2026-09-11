@@ -2009,8 +2009,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ),
                                     Text(
                                       s.confirmDeleteAccountBody,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
+                                      // Tanpa maxLines — deskripsi panjang
+                                      // harus kebaca semua (Google Play
+                                      // account deletion requirement).
                                       style: AppText.bodySmall.copyWith(
                                         color: AppTheme.textSecondary,
                                       ),
