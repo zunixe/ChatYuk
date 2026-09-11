@@ -312,6 +312,40 @@ class AdminService {
     );
   }
 
+  /// Toggle AI mode dummy + persona ({} = otomatis dari profil dummy).
+  Future<void> setDummyAi(
+    String uid,
+    bool enabled,
+    Map<String, dynamic> persona,
+  ) async {
+    await _sb.rpc('admin_set_dummy_ai', params: {
+      'p_uid': uid,
+      'p_enabled': enabled,
+      'p_persona': persona,
+    });
+  }
+
+  /// Baca setting AI global (panggilan tanpa argumen = get).
+  Future<Map<String, dynamic>> getAiSettings() async {
+    final res = await _sb.rpc('admin_ai_settings');
+    return (res as Map<String, dynamic>?) ?? const {};
+  }
+
+  /// Ubah setting AI global — hanya key yang diisi yang berubah.
+  Future<Map<String, dynamic>> setAiSettings({
+    bool? globalEnabled,
+    int? maxReplies,
+    int? minInterval,
+  }) async {
+    final params = <String, dynamic>{
+      if (globalEnabled != null) 'p_global_enabled': globalEnabled,
+      if (maxReplies != null) 'p_max_replies': maxReplies,
+      if (minInterval != null) 'p_min_interval': minInterval,
+    };
+    final res = await _sb.rpc('admin_ai_settings', params: params);
+    return (res as Map<String, dynamic>?) ?? const {};
+  }
+
   /// Hapus akun dummy + history chat-nya. Return {'ok': bool, 'chats_deleted': int}.
   Future<Map<String, dynamic>> deleteDummy(String uid) async {
     final res = await _sb.rpc('admin_delete_dummy', params: {'p_uid': uid});

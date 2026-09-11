@@ -624,6 +624,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                       _statusChip(item, s.statusOnline, 'online', status, s),
                       _statusChip(item, s.statusIdle, 'idle', status, s),
                       _statusChip(item, s.statusOffline, 'offline', status, s),
+                      _aiChip(item, s),
                     ],
                   ),
                 ),
@@ -660,6 +661,52 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         ),
       ),
     );
+  }
+
+  /// Chip AI dummy: aktif = terang + ikon robot; tap = buka sheet persona.
+  Widget _aiChip(Map<String, dynamic> item, S s) {
+    final aiOn = item['ai_enabled'] == true;
+    return InkWell(
+      onTap: () => _openAiSheet(item, s),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: aiOn ? AppTheme.accent : AppTheme.accent.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.smart_toy_outlined,
+              size: 13,
+              color: aiOn ? Colors.white : AppTheme.accent,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              s.dummyAiChip,
+              style: AppText.label.copyWith(
+                color: aiOn ? Colors.white : AppTheme.accent,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAiSheet(Map<String, dynamic> item, S s) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _DummyAiSheet(item: item),
+    );
+    if (saved == true) await _load();
   }
 
   Widget _statusChip(
@@ -709,6 +756,155 @@ class _SectionCard extends StatelessWidget {
         border: Border.all(color: AppTheme.divider),
       ),
       child: child,
+    );
+  }
+}
+
+/// Sheet Mode AI dummy: switch aktif + persona opsional (kepribadian,
+/// gaya bicara, prompt tambahan). Nama/umur/kota/hobi otomatis dari
+/// profil dummy — tidak diisi manual.
+class _DummyAiSheet extends StatefulWidget {
+  final Map<String, dynamic> item;
+  const _DummyAiSheet({required this.item});
+
+  @override
+  State<_DummyAiSheet> createState() => _DummyAiSheetState();
+}
+
+class _DummyAiSheetState extends State<_DummyAiSheet> {
+  late bool _enabled;
+  late final TextEditingController _personalityCtrl;
+  late final TextEditingController _toneCtrl;
+  late final TextEditingController _extraCtrl;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final persona =
+        (widget.item['ai_persona'] as Map<dynamic, dynamic>?) ?? const {};
+    _enabled = widget.item['ai_enabled'] == true;
+    _personalityCtrl = TextEditingController(text: '${persona['personality'] ?? ''}');
+    _toneCtrl = TextEditingController(text: '${persona['tone'] ?? ''}');
+    _extraCtrl = TextEditingController(text: '${persona['extra_prompt'] ?? ''}');
+  }
+
+  @override
+  void dispose() {
+    _personalityCtrl.dispose();
+    _toneCtrl.dispose();
+    _extraCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final s = context.read<LocaleProvider>().s;
+    setState(() => _busy = true);
+    try {
+      final svc = AdminService(SupabaseConfig.client);
+      await svc.setDummyAi(
+        widget.item['uid'] as String,
+        _enabled,
+        {
+          if (_personalityCtrl.text.trim().isNotEmpty)
+            'personality': _personalityCtrl.text.trim(),
+          if (_toneCtrl.text.trim().isNotEmpty) 'tone': _toneCtrl.text.trim(),
+          if (_extraCtrl.text.trim().isNotEmpty)
+            'extra_prompt': _extraCtrl.text.trim(),
+        },
+      );
+      if (!mounted) return;
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.dummyAiSaved)));
+    } catch (e) {
+      dlog('[DUMMY] save AI error: $e');
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.dummyAiSaveFail)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final nickname = widget.item['nickname'] as String? ?? '';
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${s.dummyAiTitle} — $nickname',
+              style: AppText.title,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              s.dummyAiDesc,
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _enabled,
+              onChanged: (v) => setState(() => _enabled = v),
+              title: Text(s.dummyAiEnabledLabel, style: AppText.bodyStrong),
+              activeThumbColor: AppTheme.primary,
+            ),
+            TextField(
+              controller: _personalityCtrl,
+              style: AppText.body,
+              decoration: InputDecoration(
+                labelText: s.dummyAiPersonality,
+                hintText: s.dummyAiPersonalityAuto,
+                hintStyle: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _toneCtrl,
+              style: AppText.body,
+              decoration: InputDecoration(
+                labelText: s.dummyAiTone,
+                hintText: s.dummyAiToneAuto,
+                hintStyle: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _extraCtrl,
+              style: AppText.body,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: s.dummyAiExtra,
+                hintText: s.dummyAiExtraHint,
+                hintStyle: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _busy ? null : _save,
+              child: Text(s.btnSave),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

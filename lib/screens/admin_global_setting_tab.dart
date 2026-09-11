@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings_admin.dart';
+import '../config/supabase_config.dart';
 import '../providers/admin_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/admin_service.dart';
 
 /// Admin panel — tab "Global Setting".
 /// Berisi semua toggle pengaturan global aplikasi (screenshot, watermark,
@@ -43,6 +46,8 @@ class AdminGlobalSettingTab extends StatelessWidget {
         const _RequireRegistrationToggle(),
         const SizedBox(height: 10),
         _ReengageToggle(),
+        const SizedBox(height: 10),
+        const _AiGlobalTile(),
         const SizedBox(height: 10),
         const _ExcludedDevicesTile(),
       ],
@@ -431,6 +436,196 @@ class _ReengageToggle extends StatelessWidget {
 /// Exclude perangkat (install_id): perangkat yang di-exclude tidak dihitung
 /// di ringkasan (users/aktif/anon) & disembunyikan dari tab Perangkat.
 /// Fitur admin-only — dikelola dari Pengaturan Global.
+/// AI Bot global: master switch semua balasan AI dummy + rate limit
+/// (maks balasan per chat per jam & jeda minimal antar balasan).
+class _AiGlobalTile extends StatefulWidget {
+  const _AiGlobalTile();
+
+  @override
+  State<_AiGlobalTile> createState() => _AiGlobalTileState();
+}
+
+class _AiGlobalTileState extends State<_AiGlobalTile> {
+  final AdminService _svc = AdminService(SupabaseConfig.client);
+  bool _loading = true;
+  bool _globalEnabled = true;
+  int _maxReplies = 20;
+  int _minInterval = 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final st = await _svc.getAiSettings();
+      if (!mounted) return;
+      setState(() {
+        _globalEnabled = st['ai_global_enabled'] != false;
+        _maxReplies = (st['ai_max_replies_per_hour'] as num?)?.toInt() ?? 20;
+        _minInterval = (st['ai_min_interval_sec'] as num?)?.toInt() ?? 2;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggle(bool v) async {
+    setState(() => _globalEnabled = v);
+    try {
+      await _svc.setAiSettings(globalEnabled: v);
+    } catch (_) {
+      if (mounted) setState(() => _globalEnabled = !v);
+    }
+  }
+
+  Future<void> _openLimitsSheet() async {
+    final maxCtrl = TextEditingController(text: '$_maxReplies');
+    final minCtrl = TextEditingController(text: '$_minInterval');
+    final s = context.read<LocaleProvider>().s;
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 16,
+          bottom: 20 + MediaQuery.viewInsetsOf(ctx).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              s.aiGlobalTitle,
+              style: AppText.title,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: maxCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: AppText.body,
+              decoration: InputDecoration(labelText: s.aiGlobalMaxReplies),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: minCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: AppText.body,
+              decoration: InputDecoration(labelText: s.aiGlobalMinInterval),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(s.btnSave),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true) return;
+    final max = int.tryParse(maxCtrl.text.trim()) ?? _maxReplies;
+    final min = int.tryParse(minCtrl.text.trim()) ?? _minInterval;
+    try {
+      await _svc.setAiSettings(maxReplies: max, minInterval: min);
+      if (!mounted) return;
+      setState(() {
+        _maxReplies = max;
+        _minInterval = min;
+      });
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(s.aiGlobalSaved)));
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.smart_toy_outlined,
+              color: AppTheme.accent,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.aiGlobalTitle,
+                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  s.aiGlobalDesc,
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                  maxLines: 2,
+                ),
+                if (!_loading)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      '${s.aiGlobalMaxReplies}: $_maxReplies · ${s.aiGlobalMinInterval}: $_minInterval',
+                      style: AppText.caption.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.tune, size: 20),
+            color: AppTheme.primary,
+            tooltip: s.aiGlobalTitle,
+            onPressed: _loading ? null : _openLimitsSheet,
+          ),
+          _loading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Switch(
+                  value: _globalEnabled,
+                  onChanged: _toggle,
+                  activeThumbColor: AppTheme.primary,
+                ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ExcludedDevicesTile extends StatelessWidget {
   const _ExcludedDevicesTile();
 
