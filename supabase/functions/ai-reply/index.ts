@@ -245,7 +245,7 @@ Deno.serve(async (req: Request) => {
     // 1. Fresh checks: dummy still AI + global still on
     const { data: dummy } = await admin
       .from('dummy_accounts')
-      .select('ai_enabled, ai_persona, ai_model, nickname, ai_schedule_date, ai_schedule_auto')
+      .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto')
       .eq('uid', dummyUid)
       .maybeSingle();
     if (!dummy || dummy.ai_enabled !== true) {
@@ -260,9 +260,11 @@ Deno.serve(async (req: Request) => {
     if (settings && settings.ai_global_enabled === false) {
       return json({ ok: false, skipped: 'global_off' });
     }
-    // Guard NSFW bisa dimatikan dari admin (AI Bot > Guard NSFW) — realtime,
-    // dibaca fresh tiap invokasi, tanpa redeploy.
-    const guardOn = !(settings && settings.ai_guard_enabled === false);
+    // Guard NSFW: per-dummy override (null = ikuti global) → global → ON.
+    // Dibaca fresh tiap invokasi — toggle (global maupun per-dummy) realtime.
+    const guardOn =
+      dummy.ai_guard_enabled ??
+      !(settings && settings.ai_guard_enabled === false);
 
     // Provider config dari admin panel (tabel ai_provider_config, RLS-deny —
     // hanya service role & RPC admin yang bisa baca). Provider yang dipakai

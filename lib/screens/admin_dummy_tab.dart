@@ -830,6 +830,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     return parts.join(', ');
   }
   late bool _enabled;
+  int _guardSel = 0; // 0 = ikuti global, 1 = ON, 2 = OFF
   late bool _schedAuto;
   late List<int> _hours;
   bool _schedBusy = false;
@@ -844,6 +845,8 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     final persona =
         (widget.item['ai_persona'] as Map<dynamic, dynamic>?) ?? const {};
     _enabled = widget.item['ai_enabled'] == true;
+    final g = widget.item['ai_guard_enabled'];
+    _guardSel = g == true ? 1 : g == false ? 2 : 0;
     _schedAuto = (widget.item['ai_schedule_auto'] as bool?) ?? true;
     _hours = _parseHours(widget.item['ai_active_hours']);
     _personalityCtrl = TextEditingController(text: '${persona['personality'] ?? ''}');
@@ -870,6 +873,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     setState(() => _busy = true);
     try {
       final svc = AdminService(SupabaseConfig.client);
+      final guardValue = _guardSel == 0 ? null : _guardSel == 1;
       await svc.setDummyAi(
         widget.item['uid'] as String,
         _enabled,
@@ -880,8 +884,9 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
           if (_extraCtrl.text.trim().isNotEmpty)
             'extra_prompt': _extraCtrl.text.trim(),
         },
-        scheduleAuto: _schedAuto,
+        guardEnabled: guardValue,
       );
+      widget.item['ai_guard_enabled'] = guardValue;
       if (!mounted) return;
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context)
@@ -933,6 +938,25 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
               onChanged: (v) => setState(() => _enabled = v),
               title: Text(s.dummyAiEnabledLabel, style: AppText.bodyStrong),
               activeThumbColor: AppTheme.primary,
+            ),
+            const SizedBox(height: 6),
+            Text(s.aiGlobalGuardTitle, style: AppText.bodyStrong),
+            const SizedBox(height: 4),
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 0, label: Text('Global')),
+                ButtonSegment(value: 1, label: Text('ON')),
+                ButtonSegment(value: 2, label: Text('OFF')),
+              ],
+              selected: {_guardSel},
+              onSelectionChanged: (v) => setState(() => _guardSel = v.first),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              s.dummyAiGuardHint,
+              style: AppText.caption.copyWith(
+                color: AppTheme.textSecondary,
+              ),
             ),
             const SizedBox(height: 6),
             // ── Jadwal kehadiran AI ──
