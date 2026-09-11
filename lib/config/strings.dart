@@ -394,6 +394,9 @@ class S {
   String get labelYears => isId ? 'tahun' : 'years';
   String get btnLogout => isId ? 'Keluar' : 'Logout';
   String get btnOk => isId ? 'OK' : 'OK';
+  String get offlineBanner => isId
+      ? 'Tidak ada koneksi internet'
+      : 'No internet connection';
   String get confirmLogoutBody => isId
       ? 'Yakin ingin keluar dari akun ini?'
       : 'Are you sure you want to log out?';

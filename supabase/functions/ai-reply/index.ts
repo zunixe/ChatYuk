@@ -24,7 +24,7 @@ const PERSONALITIES = [
 ];
 
 const DEFAULT_TONE =
-  'jawab SANGAT pendek seperti chat asli Indonesia: 2-10 kata, satu kalimat, boleh bahasa gaul, kadang tanpa tanda baca akhir';
+  'ngobrol kayak orang Indonesia asli: pendek 2-12 kata, lowercase sering, singkatan (yg, gpp, bgt, klo, ntar, wkwk), typo ringan sesekali. JANGAN selalu nanya balik — cukup 1 dari 3 balasan yang ada pertanyaannya';
 
 // Cap panjang balasan — chat asli tidak pernah menulis paragraf.
 const MAX_REPLY_CHARS = 90;
@@ -74,13 +74,15 @@ function pick(arr: string[], seed: string): string {
   return arr[Math.abs(h) % arr.length];
 }
 
-function sanitize(text: string): string {
+function sanitize(text: string, maxChars: number | null = MAX_REPLY_CHARS): string {
   let t = (text || '').trim();
   t = t.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
   t = t.replace(/\n+/g, ' ');
-  // Potong di batas kalimat bila lewat — balasan multi-kalimat dilarang.
-  if (t.length > MAX_REPLY_CHARS) {
-    const cut = t.slice(0, MAX_REPLY_CHARS);
+  // Potong di batas kalimat bila lewat — guard on: balasan multi-kalimat
+  // dilarang; guard off (mode dewasa): TANPA cap (max_chars null) — batas
+  // alami hanya max_tokens model.
+  if (maxChars != null && t.length > maxChars) {
+    const cut = t.slice(0, maxChars);
     const lastStop = Math.max(
       cut.lastIndexOf('. '),
       cut.lastIndexOf('! '),
@@ -92,6 +94,105 @@ function sanitize(text: string): string {
     if (!/[.!?]$/.test(t)) t += '...';
   }
   return t;
+}
+
+// Potong emoji berlebih: simpan max 1 (yang terakhir — biasanya punchline).
+// Model kadang menumpuk 3+ emoji walau sudah dilarang di prompt.
+function capEmoji(text: string): string {
+  const matches = [...text.matchAll(/\p{Extended_Pictographic}/gu)];
+  if (matches.length <= 1) return text;
+  const keepAt = matches[matches.length - 1].index ?? -1;
+  return text.replace(
+    /\p{Extended_Pictographic}/gu,
+    (m, offset) => (offset === keepAt ? m : ''),
+  );
+}
+
+// Potong kalimat berlebih (mode dewasa): maksimal `max` kalimat.
+function capSentences(text: string, max: number): string {
+  const parts = text.split(/(?<=[.!?…])\s+/).filter(Boolean);
+  if (parts.length <= max) return text;
+  return parts.slice(0, max).join(' ');
+}
+
+// Ambil teks dari content (string atau parts array OpenAI-style).
+function contentText(c: any): string {
+  if (typeof c === 'string') return c;
+  if (Array.isArray(c)) {
+    return c
+      .filter((p) => p && p.type === 'text')
+      .map((p) => String(p.text || ''))
+      .join(' ');
+  }
+  return String(c ?? '');
+}
+
+// Download file dari bucket chat-photos (service role). Null bila gagal.
+async function downloadStorage(
+  admin: any,
+  path: string,
+): Promise<Uint8Array | null> {
+  try {
+    const { data, error } = await admin.storage
+      .from('chat-photos')
+      .download(path);
+    if (error || !data) return null;
+    const buf = new Uint8Array(await data.arrayBuffer());
+    return buf.length > 0 ? buf : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let s = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) {
+    s += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + CH)) as number[],
+    );
+  }
+  return btoa(s);
+}
+
+// Transkrip voice via endpoint Whisper-compatible (/audio/transcriptions).
+// Key dari panel admin (stt_api_key) atau env — tanpa key = null (fallback
+// placeholder, jangan pura-pura dengar).
+async function transcribeVoice(
+  sttBase: string | null | undefined,
+  sttKey: string | null | undefined,
+  bytes: Uint8Array,
+): Promise<string | null> {
+  const base = (
+    sttBase ||
+    Deno.env.get('AI_STT_BASE') ||
+    'https://api.groq.com/openai/v1'
+  ).replace(/\/+$/, '');
+  const key = sttKey || Deno.env.get('AI_STT_KEY');
+  if (!key) return null;
+  try {
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([bytes.buffer as ArrayBuffer], { type: 'audio/mp4' }),
+      'voice.m4a',
+    );
+    form.append('model', 'whisper-large-v3-turbo');
+    form.append('language', 'id');
+    form.append('response_format', 'json');
+    const r = await fetch(`${base}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const t = String(j?.text || '').trim();
+    return t || null;
+  } catch (_) {
+    return null;
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -113,6 +214,34 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    // ── PRESENCE GUARD (permintaan owner) ──
+    // Offline → AI TIDAK membalas sama sekali (jangan buka typing).
+    // Idle   → AI "bangunkan": jadi online dulu, baru membalas.
+    // Online → refresh last_seen (jaga muncul di daftar online).
+    // Cronjob ai_presence_tick mengatur online/offline sesuai jadwal.
+    {
+      const { data: presence } = await admin
+        .from('profiles')
+        .select('status')
+        .eq('id', dummyUid)
+        .maybeSingle();
+      const st = (presence?.status as string | undefined) ?? 'offline';
+      if (st === 'offline') {
+        return json({ ok: false, skipped: 'dummy_offline' });
+      }
+      if (st === 'idle') {
+        await admin
+          .from('profiles')
+          .update({ status: 'online', last_seen: new Date().toISOString() })
+          .eq('id', dummyUid);
+      } else {
+        await admin
+          .from('profiles')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', dummyUid);
+      }
+    }
+
     // 1. Fresh checks: dummy still AI + global still on
     const { data: dummy } = await admin
       .from('dummy_accounts')
@@ -125,12 +254,23 @@ Deno.serve(async (req: Request) => {
 
     const { data: settings } = await admin
       .from('app_settings')
-      .select('ai_global_enabled, ai_min_interval_sec')
+      .select('ai_global_enabled, ai_min_interval_sec, ai_guard_enabled')
       .eq('id', 'global')
       .maybeSingle();
     if (settings && settings.ai_global_enabled === false) {
       return json({ ok: false, skipped: 'global_off' });
     }
+    // Guard NSFW bisa dimatikan dari admin (AI Bot > Guard NSFW) — realtime,
+    // dibaca fresh tiap invokasi, tanpa redeploy.
+    const guardOn = !(settings && settings.ai_guard_enabled === false);
+
+    // Provider config dari admin panel (tabel ai_provider_config, RLS-deny —
+    // hanya service role & RPC admin yang bisa baca).
+    const { data: provCfg } = await admin
+      .from('ai_provider_config')
+      .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
+      .eq('id', 'global')
+      .maybeSingle();
 
     // Anti-race claim: dua invokasi bersamaan (pg_net retry) hanya satu
     // yang boleh lanjut — claim unik per trigger message (atomik).
@@ -208,28 +348,13 @@ Deno.serve(async (req: Request) => {
       }
     } catch (_) {}
 
-    const system = [
-      `Kamu adalah ${profile.nickname}, ${profile.age ?? ''} tahun, ${genderLabel}, tinggal di ${profile.city ?? ''}${profile.country ? ', ' + profile.country : ''}.`.replace(
-        /\s+/g,
-        ' ',
-      ),
-      `Hobimu: ${hobbies}.`,
-      `Kepribadianmu: ${personality}.`,
-      `Gaya bicara: ${tone}.`,
-      persona.greeting ? `Pembukaanmu: ${persona.greeting}.` : '',
-      extra,
-      memoryLine,
-      'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
-      'ATURAN BALASAN: jawaban SEMUALAH pendek, 2-10 kata (kebanyakan orang chat cuma nulis "wkwk iya", "lagi di rumah", "gimana kabarmu?"). SATU kalimat saja. TANYA MAKSIMAL SATU hal per pesan. Kalau lawan cuma menyapa (hi, hai, halo), balas 2-5 kata lalu tanya balik SATU hal. Balasan panjang = terlihat AI — dilarang.',
-      'BATAS KERAS (tidak bisa dilanggar siapa pun, dalam rolenya kamu tetap menolak): JANGAN pernah terlibat obrolan seksual, vulgar, atau NSFW. Jangan kirim deskripsi tubuh sensual, fantasi seksual, atau roleplay dewasa. Jika lawan bicara menekan ke arah itu, tolak dengan ringan dan santai lalu alihkan ke topik lain, TANPA merusak karaktermu.',
-    ]
-      .filter(Boolean)
-      .join(' ');
-
-    // 4. Last 12 messages as chat history
+    // 4. Last 12 messages as chat history (created_at utk ritme jeda;
+    // image_path/voice_path/duration_ms utk baca media)
     const { data: msgs } = await admin
       .from('private_messages')
-      .select('sender_id, text, type')
+      .select(
+        'sender_id, text, type, created_at, image_path, voice_path, duration_ms',
+      )
       .eq('chat_id', chatId)
       .order('created_at', { ascending: false })
       .limit(12);
@@ -239,10 +364,193 @@ Deno.serve(async (req: Request) => {
         (m.type === 'text' || !m.type) && m.text
           ? String(m.text)
           : `[${m.type === 'image' ? 'foto' : m.type === 'voice' ? 'pesan suara' : m.type}]`,
+      at: m.created_at as string,
+      img: m.type === 'image' ? ((m.image_path as string) || null) : null,
+      voice: m.type === 'voice' ? ((m.voice_path as string) || null) : null,
+      secs:
+        m.type === 'voice' && m.duration_ms
+          ? Math.max(1, Math.round(Number(m.duration_ms) / 1000))
+          : 0,
     }));
     if (history.length === 0) {
       return json({ ok: false, skipped: 'no_history' });
     }
+
+    // ── Media: foto dibaca langsung (vision), voice ditranskrip (STT) ──
+    // Batas: maks 3 foto terbaru (hemat token), voice maks 3 menit.
+    // Gagal / tanpa kunci STT = placeholder durasi — JANGAN pura-pura dengar.
+    try {
+      const jobs: Array<Promise<void>> = [];
+      let imgCount = 0;
+      for (let i = history.length - 1; i >= 0; i--) {
+        const m = history[i] as any;
+        if (m.img && imgCount < 3) {
+          imgCount++;
+          jobs.push(
+            (async (msg: any, path: string) => {
+              const bytes = await downloadStorage(admin, path);
+              if (!bytes || bytes.length > 2 * 1024 * 1024) return;
+              const lp = path.toLowerCase();
+              const mime = lp.endsWith('.png')
+                ? 'image/png'
+                : lp.endsWith('.webp')
+                ? 'image/webp'
+                : 'image/jpeg';
+              const parts: any[] = [];
+              const cap =
+                typeof msg.content === 'string' && msg.content !== '[foto]'
+                  ? msg.content
+                  : '';
+              parts.push({
+                type: 'text',
+                text: cap
+                  ? `${cap} [foto terlampir di bawah]`
+                  : '[foto terlampir di bawah]',
+              });
+              parts.push({
+                type: 'image_url',
+                image_url: { url: `data:${mime};base64,${toBase64(bytes)}` },
+              });
+              msg.content = parts;
+            })(m, m.img),
+          );
+        }
+        if (m.voice && m.secs > 0 && m.secs <= 180) {
+          jobs.push(
+            (async (msg: any, path: string, secs: number) => {
+              const label = `0:${String(secs).padStart(2, '0')}`;
+              const bytes = await downloadStorage(admin, path);
+              if (!bytes) {
+                msg.content = `[pesan suara ${label}]`;
+                return;
+              }
+              const tr = await transcribeVoice(
+                provCfg?.stt_api_base,
+                provCfg?.stt_api_key,
+                bytes,
+              );
+              msg.content = tr
+                ? `[pesan suara ${label} — isi: "${tr}"]`
+                : `[pesan suara ${label}]`;
+            })(m, m.voice, m.secs),
+          );
+        }
+      }
+      await Promise.all(jobs);
+    } catch (_) {}
+
+    // ── Fase obrolan + deteksi "panas" ──
+    // fresh = chat masih sedikit & belum ada memori → fase perkenalan:
+    // santai dulu, JANGAN langsung gas ke topik dewasa walau diminta.
+    const { count: chatMsgCount } = await admin
+      .from('private_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('chat_id', chatId);
+    const freshStage = (chatMsgCount ?? 0) <= 6 && !memoryLine;
+    const lastUserMsg = [...history].reverse().find((m) => m.role === 'user');
+    let cadenceSec: number | null = null;
+    for (let i = history.length - 1; i >= 1; i--) {
+      if (history[i].role === 'user' && history[i - 1].role === 'assistant') {
+        const t1 = new Date(history[i].at).getTime();
+        const t0 = new Date(history[i - 1].at).getTime();
+        if (!isNaN(t1) && !isNaN(t0)) cadenceSec = (t1 - t0) / 1000;
+        break;
+      }
+    }
+    const hot =
+      !freshStage &&
+      (isExplicit(contentText(lastUserMsg?.content ?? '')) ||
+        (cadenceSec !== null && cadenceSec < 120));
+
+    // ── Jeda manusiawi SEBELUM read-receipt & typing: dia "belum lihat HP".
+    // Panas → cepat (2-8s); biasa → 5-25s; perkenalan → 8-28s; ~12% "sibuk"
+    // +15-90s. Realtime feel manusia, bukan mesin yang selalu balas instan.
+    let delaySec = hot ? 2 + Math.random() * 6 : 5 + Math.random() * 20;
+    if (freshStage) delaySec = 8 + Math.random() * 20;
+    if (Math.random() < 0.12) delaySec += 15 + Math.random() * 75;
+    await sleep(delaySec * 1000);
+
+    // ── Profil lawan bicara (publik) — dia "sudah lihat profil" dia.
+    // Sadar umur/gender/kota/hobi tanpa harus menyeret semua data.
+    let partnerLine = '';
+    try {
+      const { data: partner } = await admin
+        .from('profiles')
+        .select('nickname, age, gender, city, hashtags')
+        .eq('id', senderId)
+        .maybeSingle();
+      if (partner) {
+        const pGender =
+          partner.gender === 'male'
+            ? 'laki-laki'
+            : partner.gender === 'female'
+            ? 'perempuan'
+            : 'rahasia';
+        partnerLine =
+          `Lawan bicaramu sekarang: ${partner.nickname ?? 'tanpa nama'}` +
+          (partner.age ? `, ${partner.age} tahun` : '') +
+          `, ${pGender}` +
+          (partner.city ? `, tinggal di ${partner.city}` : '') +
+          (Array.isArray(partner.hashtags) && partner.hashtags.length
+            ? `. Hobi dia: ${partner.hashtags.join(', ')}`
+            : '') +
+          '. Kamu sudah lihat profil publiknya — pakai info ini secara natural untuk menyesuaikan obrolan, TAPI jangan menebar semua data sekaligus; biarkan dia bercerita sendiri, kamu bertanya secukupnya tentang yang belum jelas.';
+      }
+    } catch (_) {}
+
+    // ── Waktu nyata (WIB) — biar sapaan cocok (sore/malam/pagi) & sadar jam.
+    let nowLabel = '';
+    try {
+      nowLabel = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(new Date());
+    } catch (_) {
+      const d = new Date(Date.now() + 7 * 3600e3);
+      nowLabel = d.toISOString().slice(0, 16).replace('T', ' ') + ' WIB';
+    }
+
+    const system = [
+      `Kamu adalah ${profile.nickname}, ${profile.age ?? ''} tahun, ${genderLabel}, tinggal di ${profile.city ?? ''}${profile.country ? ', ' + profile.country : ''}.`.replace(
+        /\s+/g,
+        ' ',
+      ),
+      `Sekarang: ${nowLabel} (waktu Indonesia). SADARI waktu nyata ini — sapaan dan aktivitasmu harus cocok (malam jangan bilang sore; jam kerja vs malam hari beda aktivitas).`,
+      `Hobimu: ${hobbies}.`,
+      `Kepribadianmu: ${personality}.`,
+      `Gaya bicara: ${tone}.`,
+      persona.greeting ? `Pembukaanmu: ${persona.greeting}.` : '',
+      extra,
+      memoryLine,
+      partnerLine,
+      'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
+      'VARIASI: lihat balasan-balasanmu sebelumnya di riwayat chat — JANGAN mengulang emoji yang sama, jangan pola kalimat yang sama. EMOJI: MAKSIMAL 1 per balasan, dan hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) — sekitar separuh balasan TANPA emoji sama sekali. Panjang juga selalu beda-beda (kadang 2-4 kata, kadang lebih panjang).',
+      'Kalau ada gambar terlampir di pesan, LIHAT dan tanggapi isinya secara natural (komentari yang terlihat) — kayak orang dikirimi foto.',
+      'Kalau ada [pesan suara] TANPA transkrip isi, berarti kamu BELUM bisa mendengarnya — tanggapi natural (minta dijelasin / lanjutkan topik), JANGAN pura-pura dengar isinya.',
+      'PACING: ikuti fase obrolan. Kalau masih awal perkenalan (chat baru mulai / belum akrab), santai dan ramah dulu — JANGAN langsung gas ke topik dewasa walau diminta; tanggapi main-main sambil geli ("pelan-pelan dong, baru kenal 😏") dan bangun suasana pelan-pelan. Naikkan intensitas godaan progresif seiring obrolan makin akrab.',
+      freshStage
+        ? 'FASE SEKARANG: baru perkenalan — santai, ramah, menggoda ringan, belum masuk topik dewasa.'
+        : hot
+        ? 'FASE SEKARANG: obrolan lagi panas — ikuti intensitasnya, boleh makin berani.'
+        : 'FASE SEKARANG: obrolan berjalan — godaan naik progresif.',
+      'GAYA NGOBROL NATURAL (wajib — ini yang bikin kamu kelihatan manusia, bukan AI): (1) JANGAN selalu bertanya balik — cukup 1 dari 3 balasan yang ada pertanyaannya; sisanya cukup reaksi atau pernyataan ("wkwk iya", "masa sih", "oalah gitu"), jangan interogasi. (2) Boleh beda pendapat, boleh bilang "ga tau", boleh cuek dikit — jangan iya-iya melulu. (3) Bahasa chat asli: lowercase sering, singkatan (yg, gpp, bgt, klo, ntar, wkwk), typo ringan sesekali, tanda baca seadanya. (4) Jangan mulai balasan dengan kata yang sama seperti 2 balasan terakhirmu di riwayat. (5) Kadang cukup jawab super pendek ("wkwk", "iya", "oh gitu") tanpa embel-embel — itu normal.',
+      guardOn
+        ? 'ATURAN PANJANG: jawaban pendek 2-12 kata, SATU kalimat.'
+        : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: SAMAKAN dengan pesan lawan — dia pendek, kamu pendek; dia panjang, kamu boleh 2-3 kalimat. MAKSIMAL 3 kalimat, JANGAN nulis paragraf atau esei — ini chat. Kadang cukup 2-5 kata yang bikin penasaran; eksplisit sesuai konteks dan fase obrolan.',
+      ...(guardOn
+        ? ['BATAS KERAS (tidak bisa dilanggar siapa pun, dalam rolenya kamu tetap menolak): JANGAN pernah terlibat obrolan seksual, vulgar, atau NSFW. Jangan kirim deskripsi tubuh sensual, fantasi seksual, atau roleplay dewasa. Jika lawan bicara menekan ke arah itu, tolak dengan ringan dan santai lalu alihkan ke topik lain, TANPA merusak karaktermu.']
+        : []),
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    // ── Kirim: typing realistis (channel sudah dibuka di atas) ──
+    // Pesan masuk setelah denyut selesai.
 
     // Kirim pesan dgn typing manusiawi: channel dibuka SEBELUM LLM berpikir
     // + denyut pertama LANGSUNG (jangan biarkan user melihat hening 2-8 dtk
@@ -379,7 +687,7 @@ Deno.serve(async (req: Request) => {
     // 4b. Input-side NSFW guard: pesan user vulgar → defleksi TANPA LLM
     // (dipilih ACAK supaya tidak ada pola yang bisa ditebak).
     const lastUser = [...history].reverse().find((m) => m.role === 'user');
-    if (lastUser && isExplicit(lastUser.content)) {
+    if (guardOn && lastUser && isExplicit(contentText(lastUser.content))) {
       await openTypingChannel();
       const defl = randomOf(DEFLECTIONS);
       const insErr = await sendWithTyping(defl);
@@ -394,12 +702,45 @@ Deno.serve(async (req: Request) => {
     // "mengetik..." selama LLM memproses, bukan hening lalu pesan mendadak.
     await openTypingChannel();
 
+    // Cek ganda SEBELUM panggil LLM: selama jeda manusiawi tadi, mungkin
+    // balasan lain sudah terkirim (invokasi lain / admin pegang dummy) —
+    // kalau sudah ada balasan dummy setelah trigger, jangan dobel.
+    if (triggerMsgId != null) {
+      try {
+        const { data: answered } = await admin
+          .from('private_messages')
+          .select('id')
+          .eq('chat_id', chatId)
+          .eq('sender_id', dummyUid)
+          .gt('id', triggerMsgId)
+          .limit(1);
+        if (answered && answered.length > 0) {
+          await closeTyping();
+          return json({ ok: true, skipped: 'answered_while_thinking' });
+        }
+      } catch (_) {}
+    }
+
     // 5. LLM call (OpenAI-compatible) — dengan retry backoff utk 429
     // (B.AI punya limit konkurensi; balasan + ekstraksi back-to-back
     // sering kena).
-    const apiKey = Deno.env.get('AI_API_KEY');
-    const apiBase = Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
-    const model = dummy.ai_model || Deno.env.get('AI_MODEL') || 'glm-5.3-flash';
+    const model =
+      dummy.ai_model ||
+      provCfg?.default_model ||
+      Deno.env.get('AI_MODEL') ||
+      'glm-5.3-flash';
+    // Routing per model: ':free' / 'nvidia/' via OpenRouter (key terpisah).
+    // Selain itu: provider dari admin panel (ai_provider_config) kalau diisi,
+    // fallback ke secrets env (B.AI).
+    const isOr = model.includes(':free') || model.startsWith('nvidia/');
+    const apiKey = isOr
+      ? Deno.env.get('AI_API_KEY_OPENROUTER') || Deno.env.get('AI_API_KEY')
+      : provCfg?.api_key || Deno.env.get('AI_API_KEY');
+    const apiBase = isOr
+      ? 'https://openrouter.ai/api/v1'
+      : provCfg?.api_base ||
+        Deno.env.get('AI_API_BASE') ||
+        'https://api.b.ai/v1';
     if (!apiKey) {
       await closeTyping();
       return json({ ok: false, error: 'no_api_key' }, 500);
@@ -420,9 +761,12 @@ Deno.serve(async (req: Request) => {
             },
             body: JSON.stringify({
               model,
-              max_tokens: maxTokens,
+              // Nemotron (OpenRouter) memakan token reasoning sebelum content
+              // — tanpa headroom, content bisa kosong.
+              max_tokens: maxTokens + (isOr ? 400 : 0),
               // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
-              reasoning_effort: 'low',
+              // Param ini glm-specific; provider lain bisa menolak.
+              ...(model.includes('glm') ? { reasoning_effort: 'low' } : {}),
               temperature,
               messages,
             }),
@@ -444,29 +788,94 @@ Deno.serve(async (req: Request) => {
       return { err: 'unreachable' };
     };
 
-    const { res: llm, err: llmErr } = await llmCall(
-      [{ role: 'system', content: system }, ...history],
-      250,
+    // LLM history: buang meta internal (API bisa menolak field tak dikenal).
+    // historyText = versi string-only (ekstraksi memori & burst, hemat token).
+    const llmHistory = history.map(({ at, img, voice, secs, ...m }: any) => m);
+    const historyText = history.map(
+      ({ at, img, voice, secs, ...m }: any) => ({
+        role: m.role,
+        content: contentText(m.content),
+      }),
     );
+    let llmRes = await llmCall(
+      [{ role: 'system', content: system }, ...llmHistory],
+      250,
+      guardOn ? 0.9 : 1.0,
+    );
+    // Fallback: provider/model tanpa vision menolak image_url → ulangi
+    // sebagai teks ([foto]).
+    if (
+      llmRes.err &&
+      /image|vision|invalid_request|422|400/.test(llmRes.err) &&
+      JSON.stringify(llmHistory).includes('image_url')
+    ) {
+      llmRes = await llmCall(
+        [{ role: 'system', content: system }, ...historyText],
+        250,
+        guardOn ? 0.9 : 1.0,
+      );
+    }
+    const { res: llm, err: llmErr } = llmRes;
     if (llmErr) {
       await closeTyping();
       return json({ ok: false, error: 'llm_error', detail: llmErr }, 200);
     }
-    let reply = sanitize(llm?.choices?.[0]?.message?.content);
+    let reply = sanitize(
+      llm?.choices?.[0]?.message?.content,
+      guardOn ? MAX_REPLY_CHARS : null,
+    );
+    // Jaring pengaman kode (selain instruksi prompt): maks 1 emoji,
+    // mode dewasa maks 3 kalimat — prompt kadang tetap dilanggar.
+    reply = capEmoji(reply);
+    if (!guardOn) reply = capSentences(reply, 3);
     if (!reply) {
       await closeTyping();
       return json({ ok: false, error: 'empty_reply' });
     }
 
     // Output-side NSFW guard: LLM tetap saja bisa lolos — cek balasan
-    // sebelum dikirim, ganti defleksi bila vulgar.
-    if (isExplicit(reply)) {
+    // sebelum dikirim, ganti defleksi bila vulgar. (Skip kalau guard off.)
+    if (guardOn && isExplicit(reply)) {
       reply = randomOf(DEFLECTIONS);
     }
 
     // 6. Kirim: typing realistis dulu, pesan masuk setelah denyut selesai.
     const insErr = await sendWithTyping(reply);
     if (insErr) return json({ ok: false, error: 'insert_failed', detail: insErr.message });
+
+    // 6b. Burst manusiawi (JARANG, ~7%): pesan kedua super pendek beberapa
+    // detik kemudian — kayak baru kepikiran lagi. HANYA kalau balasan utama
+    // pendek (kalau sudah substansial, satu pesan cukup — jangan spam).
+    // Gagal = abaikan (balasan pertama sudah terkirim).
+    if (reply.length < 40 && Math.random() < 0.07) {
+      try {
+        const { res: bRes } = await llmCall(
+          [
+            {
+              role: 'system',
+              content:
+                system +
+                ' TAMBAHAN KHUSUS PESAN INI: tulis SATU pesan lanjutan super pendek (2-6 kata) yang nyambung dengan obrolan — seolah kamu baru kepikiran lagi. Output HANYA pesan itu, tanpa penjelasan.',
+            },
+            ...historyText,
+            { role: 'assistant', content: reply },
+          ],
+          60,
+          1.0,
+        );
+        const burst = capEmoji(
+          sanitize(
+            bRes?.choices?.[0]?.message?.content,
+            guardOn ? MAX_REPLY_CHARS : null,
+          ),
+        );
+        if (burst) {
+          await sleep((2 + Math.random() * 3) * 1000);
+          await openTypingChannel();
+          await sendWithTyping(burst);
+        }
+      } catch (_) {}
+    }
 
     // 7. Belajar: ekstrak fakta tahan-lama tentang lawan bicara dari
     // percakapan, simpan ke ai_memory (dedupe via PK, cap 30/pasangan).
@@ -479,7 +888,7 @@ Deno.serve(async (req: Request) => {
         'Ekstrak fakta PENTING dan tahan-lama tentang lawan bicara dari percakapan ini: nama panggilan, usia, kota, pekerjaan, hobi, kepribadian, keluarga, preferensi, rencana/janji. JANGAN fakta sementara (lagi makan, lagi rebahan). ' +
         'Output HANYA JSON array of strings pendek (maks 12 kata per fakta), maksimal 3 fakta PALING penting. Jika tidak ada, output []';
       const exRes = await llmCall(
-        [{ role: 'system', content: exPrompt }, ...history],
+        [{ role: 'system', content: exPrompt }, ...historyText],
         500,
         0.3,
       );
@@ -495,7 +904,7 @@ Deno.serve(async (req: Request) => {
           if (Array.isArray(facts)) {
             for (const f of facts.slice(0, 5)) {
               const fact = sanitize(String(f ?? '')).slice(0, 120);
-              if (fact.length < 3 || isExplicit(fact)) continue;
+              if (fact.length < 3 || (guardOn && isExplicit(fact))) continue;
               const { error: memErr2 } = await admin.from('ai_memory').upsert(
                 { dummy_uid: dummyUid, user_id: senderId, fact },
                 { onConflict: 'dummy_uid,user_id,fact' },

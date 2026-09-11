@@ -60,44 +60,55 @@ lib/
 
 ## Build Release
 
-Build WAJIB memakai flavor + obfuscation. Build tanpa `--flavor` akan gagal (dua flavor terdaftar).
+Build WAJIB memakai flavor + obfuscation. Build tanpa `--flavor` akan gagal
+(two flavor dimensions: store × env). Fitur finansial (topup/KYC/withdraw)
+SUDAH DIHAPUS TOTAL — flavor hanya membedakan appId & google-services.
 
-### Flavor apkpure (default, fitur penuh — topup, KYC, withdraw; appId `com.chatyuk.chatyuk`)
+### Flavor apkpureProd (default — APKPure & install HP; appId `com.chatyuk.chatyuk`)
 
 ```bash
 flutter clean
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-  flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+  flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
-# Output: build/app/outputs/flutter-apk/app-apkpure-release.apk
+# Output: build/app/outputs/flutter-apk/app-apkpureprod-release.apk
 ```
 
-### Flavor play (Google Play — topup & cash-out disembunyikan; appId `com.chatyuk.chatyuk.play`)
+### Flavor playProd (Google Play — appId sama `com.chatyuk.chatyuk`, google-services.json khusus `android/app/src/play/`)
 
 ```bash
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-  flutter build appbundle --release --flavor play --dart-define=APP_FLAVOR=play \
+  flutter build appbundle --release --flavor playProd --dart-define=APP_FLAVOR=play \
   --obfuscate --split-debug-info=build/app/symbols
-# Output: build/app/outputs/bundle/playRelease/app-play-release.aab
+# Output: build/app/outputs/flutter-apk/app-playprod-release.aab
+```
+
+### Flavor adminProd (internal — JANGAN upload store; appId `com.chatyuk.chatyuk.admin`)
+
+```bash
+KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+  flutter build apk --release --flavor adminProd -t lib/main_admin.dart \
+  --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols
+# Output: build/app/outputs/flutter-apk/app-adminprod-release.apk
 ```
 
 Catatan:
-- **JANGAN build flavor `play` tanpa instruksi eksplisit** — default selalu `apkpure`.
+- **JANGAN build flavor `play`/AAB untuk Play tanpa instruksi eksplisit** — default `apkpureProd`.
+- Sebelum push rilis, jalankan gerbang anti-admin: `./scripts/check_release_apk.sh <apk>` → harus "OK bersih".
 - Debug symbols di `build/app/symbols` jangan dihapus (dipakai `flutter symbolize`).
-- Debug symbols disimpan di `build/app/symbols` (jangan dihapus) — dipakai `flutter symbolize` untuk baca stack trace saat crash.
 - Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass `chatyuk2024secure`).
 
 ## Push ke HP (install manual)
 
-MIUI/Xiaomi menolak `adb install` — install manual dari File Manager:
+MIUI/Xiaomi menolak `adb install` — install manual dari File Manager
+(atau `adb install -r` bila popup "Izinkan" di-approve user):
 
 ```bash
 export PATH="$PATH:$HOME/Library/Android/sdk/platform-tools"
-APK="build/app/outputs/flutter-apk/app-apkpure-release.apk"
+APK="build/app/outputs/flutter-apk/app-apkpureprod-release.apk"
 
-flutter clean
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
-  flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure \
+  flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
   --obfuscate --split-debug-info=build/app/symbols
 
 cp "$APK" "$HOME/Downloads/chatyuk.apk"
