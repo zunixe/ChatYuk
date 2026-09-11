@@ -1059,6 +1059,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                   : const Icon(Icons.schedule_rounded, size: 18),
               label: Text(s.dummyAiScheduleAuto),
             ),
+            const SizedBox(height: 10),
             TextField(
               controller: _personalityCtrl,
               style: AppText.body,
