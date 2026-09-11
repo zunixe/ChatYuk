@@ -2045,9 +2045,14 @@ class ChatService {
     // initial sync
     syncFromPresence();
     // also periodic fallback if presence empty (cold start before track)
+    // + TRUTH-CHECK berkala: socket realtime bisa mati diam-diam (blip
+    // jaringan) sehingga event join/update tidak pernah sampai — dulu
+    // tick hanya jalan saat cache kosong → user baru online tidak muncul
+    // sampai restart app. Sekarang sync tetap jalan tiap 30s (RPC 1 RTT,
+    // murah; provider anti-kedip mencegah flicker).
     final fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       dlog('[ONLINE-EMIT] fallback 30s tick cachedEmpty=${cached.isEmpty}');
-      if (cached.isEmpty) syncFromPresence();
+      syncFromPresence();
     });
     controller.onCancel = () {
       debounce?.cancel();

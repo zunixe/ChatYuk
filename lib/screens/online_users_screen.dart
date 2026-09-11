@@ -344,10 +344,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Balik dari background → sinkron ulang tray (tangkap delete/update
-    // story yang terjadi saat channel realtime mati).
+    // story yang terjadi saat channel realtime mati) + buka-ulang
+    // subscription online (socket bisa mati saat background — tanpa ini
+    // user yang baru online tidak terlihat sampai restart app).
     if (state == AppLifecycleState.resumed && mounted) {
       try {
         context.read<StoryProvider>().refresh(silent: true);
+      } catch (_) {}
+      try {
+        context.read<OnlineUsersProvider>().resubscribeOnline();
       } catch (_) {}
     }
   }

@@ -193,12 +193,31 @@ class OnlineUsersProvider extends ChangeNotifier {
     }
   }
 
+  /// Buka-ulang subscription online (dipanggil saat app resume) —
+  /// socket realtime bisa mati diam-diam saat background; controller
+  /// baru = initial sync + timer segar, user yang baru online langsung
+  /// terlihat tanpa harus keluar-masuk app.
+  void resubscribeOnline() {
+    if (_disposed) return;
+    _sub?.cancel();
+    _sub = listenResilient<List<UserModel>>(
+      () => _service.getOnlineUsers(),
+      _onUsers,
+      isDisposed: () => _disposed,
+      onError: (e) {
+        dlog('[OnlineUsersProvider] stream error: $e');
+        _loaded = true;
+        _error = e.toString();
+        if (!_disposed) notifyListeners();
+      },
+    );
+  }
+
   OnlineUsersProvider() {
     unawaited(warmup());
     // Resilient: error channel me-restart subscription otomatis (dulu:
     // list online freeze sampai restart).
-    _sub = listenResilient<List<UserModel>>(
-      () => _service.getOnlineUsers(),
+    _sub = listenResilient<List<UserModel>>(      () => _service.getOnlineUsers(),
       _onUsers,
       isDisposed: () => _disposed,
       onError: (e) {
