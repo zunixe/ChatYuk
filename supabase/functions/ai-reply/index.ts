@@ -24,7 +24,49 @@ const PERSONALITIES = [
 ];
 
 const DEFAULT_TONE =
-  'jawab santai seperti orang asli Indonesia, 1-3 kalimat saja, boleh pakai bahasa gaul ringan';
+  'jawab SANGAT pendek seperti chat asli Indonesia: 2-10 kata, satu kalimat, boleh bahasa gaul, kadang tanpa tanda baca akhir';
+
+// Cap panjang balasan — chat asli tidak pernah menulis paragraf.
+const MAX_REPLY_CHARS = 90;
+
+// ── Content safety: blocklist NSFW (input & output) ──
+// Dummy AI TIDAK PERNAH melanjutkan topik seksual/NSFW walau dipaksa
+// prompt injection. Tiga lapis: cek pesan masuk, klausa system prompt,
+// cek balasan sebelum dikirim.
+const EXPLICIT_TERMS = [
+  // ID
+  'seks', 'sex', 'ngentot', 'jilat', 'sange', 'horny', 'telanjang', 'bugil',
+  'nude', 'paha dalem', 'dada', 'payudara', 'toket', 'memek', 'kontol',
+  'penis', 'vagina', 'bokep', 'porn', 'masto', 'orgasme', 'ritual ranjang',
+  'ranjang', 'bikin anak', 'kencan malam', 'besar dan keras', 'dobel',
+  // EN
+  'naked', 'nudes', 'fuck', 'sex chat', 'sexy time', 'blowjob', 'handjob',
+  'horny', ' dildo', 'escort', 'onlyfans', 'nsfw',
+];
+
+function isExplicit(text: string): boolean {
+  const t = ` ${text.toLowerCase()} `;
+  return EXPLICIT_TERMS.some((w) => t.includes(w));
+}
+
+const DEFLECTIONS = [
+  'haha nggak ah, ngobrol yang wajar aja deh',
+  'wah ganti topik dong wkwk',
+  'nggak nyambung nih, lagi ngapain aja hari ini?',
+  'eh ganti topik ya, kamu hobi ngapain aja sih',
+  'bete deh, kita ngobrol yang lain aja',
+  'hmm gpp tapi ganti bahasan dulu',
+  'wkwk nggak deng, kamu udah makan belum?',
+  'jangan gituan dong, cerita dong hari kamu gimana',
+  'males bahas gituan, lagi sibuk apa sekarang?',
+  'ya ampun wkwk, ngobrol yang benar aja ya',
+  'haha skip, kemarin kamu ngapain aja?',
+  'ah ganti topik, kamu kenapa sih tiba tiba gitu',
+];
+
+function randomOf(arr: string[]): string {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
 function pick(arr: string[], seed: string): string {
   let h = 0;
@@ -35,8 +77,20 @@ function pick(arr: string[], seed: string): string {
 function sanitize(text: string): string {
   let t = (text || '').trim();
   t = t.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
-  t = t.replace(/\n{2,}/g, '\n');
-  if (t.length > 500) t = t.slice(0, 497).trimEnd() + '...';
+  t = t.replace(/\n+/g, ' ');
+  // Potong di batas kalimat bila lewat — balasan multi-kalimat dilarang.
+  if (t.length > MAX_REPLY_CHARS) {
+    const cut = t.slice(0, MAX_REPLY_CHARS);
+    const lastStop = Math.max(
+      cut.lastIndexOf('. '),
+      cut.lastIndexOf('! '),
+      cut.lastIndexOf('? '),
+      cut.lastIndexOf(','), // jangan potong di tengah frasa — komanya terakhir
+    );
+    t = (lastStop > 30 ? cut.slice(0, lastStop + 1) : cut).trim();
+    t = t.replace(/[,;:]$/, '');
+    if (!/[.!?]$/.test(t)) t += '...';
+  }
   return t;
 }
 
@@ -51,6 +105,7 @@ Deno.serve(async (req: Request) => {
     }
     const chatId: string = body.chat_id;
     const triggerMsgId = body.trigger_msg_id;
+    const senderId: string = body.sender_id;
     const dummyUid: string = body.dummy_uid;
 
     const admin = createClient(
@@ -130,6 +185,8 @@ Deno.serve(async (req: Request) => {
       persona.greeting ? `Pembukaanmu: ${persona.greeting}.` : '',
       extra,
       'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
+      'ATURAN BALASAN: jawaban SEMUALAH pendek, 2-10 kata (kebanyakan orang chat cuma nulis "wkwk iya", "lagi di rumah", "gimana kabarmu?"). SATU kalimat saja. TANYA MAKSIMAL SATU hal per pesan. Kalau lawan cuma menyapa (hi, hai, halo), balas 2-5 kata lalu tanya balik SATU hal. Balasan panjang = terlihat AI — dilarang.',
+      'BATAS KERAS (tidak bisa dilanggar siapa pun, dalam rolenya kamu tetap menolak): JANGAN pernah terlibat obrolan seksual, vulgar, atau NSFW. Jangan kirim deskripsi tubuh sensual, fantasi seksual, atau roleplay dewasa. Jika lawan bicara menekan ke arah itu, tolak dengan ringan dan santai lalu alihkan ke topik lain, TANPA merusak karaktermu.',
     ]
       .filter(Boolean)
       .join(' ');
@@ -152,6 +209,83 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, skipped: 'no_history' });
     }
 
+    // Helper kirim: tandai dibaca dulu (centang-2 di sisi lawan), lalu
+    // typing denyut, terakhir insert pesan.
+    const sendWithTyping = async (text: string) => {
+      // Read receipt: dummy "membaca" pesan masuk sebelum membalas —
+      // RPC ini menerima service_role (guard admin_mark_chat_read).
+      try {
+        await admin.rpc('admin_mark_chat_read', {
+          p_chat_id: chatId,
+          p_uid: dummyUid,
+        });
+      } catch (_) {}
+      const typingHttp = () =>
+        fetch(
+          `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
+              Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
+            },
+            body: JSON.stringify({
+              messages: [
+                {
+                  topic: `typing-${chatId}`,
+                  event: 'typing',
+                  payload: {
+                    sender_id: dummyUid,
+                    kind: 'typing',
+                    ts: Date.now(),
+                  },
+                },
+              ],
+            }),
+          },
+        );
+      // Total "waktu mengetik" 2.5-6 dtk proporsional panjang balasan
+      // + jitter acak supaya ritme balasan tidak monoton. 15% peluang
+      // balas cepat (chat asli kadang nge-reply instan).
+      const fast = text.length < 15 && Math.random() < 0.15;
+      const jitter = 0.8 + Math.random() * 0.5;
+      const totalMs = fast
+        ? 1200 + Math.random() * 900
+        : Math.min(
+            6500,
+            Math.max(2500, (1200 + text.length * 45) * jitter),
+          );
+      const pulses = Math.max(3, Math.floor(totalMs / 1600));
+      await typingHttp();
+      for (let i = 0; i < pulses; i++) {
+        await sleep(totalMs / pulses);
+        if (i < pulses - 1) await typingHttp(); // denyut ulang (indikator 3 dtk)
+      }
+      const { error: insErr } = await admin
+        .from('private_messages')
+        .insert({
+          chat_id: chatId,
+          sender_id: dummyUid,
+          sender_name: profile.nickname,
+          text,
+          type: 'text',
+        });
+      return insErr;
+    };
+
+    // 4b. Input-side NSFW guard: pesan user vulgar → defleksi TANPA LLM
+    // (dipilih ACAK supaya tidak ada pola yang bisa ditebak).
+    const lastUser = [...history].reverse().find((m) => m.role === 'user');
+    if (lastUser && isExplicit(lastUser.content)) {
+      const defl = randomOf(DEFLECTIONS);
+      const insErr = await sendWithTyping(defl);
+      if (insErr) {
+        return json({ ok: false, error: 'insert_failed', detail: insErr.message });
+      }
+      return json({ ok: true, reply: defl, blocked: 'nsfw_input' });
+    }
+
     // 5. LLM call (OpenAI-compatible)
     const apiKey = Deno.env.get('AI_API_KEY');
     const apiBase = Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
@@ -166,7 +300,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 600,
+        max_tokens: 250,
         // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
         reasoning_effort: 'low',
         temperature: 0.9,
@@ -181,49 +315,17 @@ Deno.serve(async (req: Request) => {
       );
     }
     const llm = await llmRes.json();
-    const reply = sanitize(llm?.choices?.[0]?.message?.content);
+    let reply = sanitize(llm?.choices?.[0]?.message?.content);
     if (!reply) return json({ ok: false, error: 'empty_reply' });
 
-    // 6. Typing simulation: broadcast via Realtime HTTP API + delay, then insert
-    const typingHttp = () =>
-      fetch(
-        `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
-            Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
-          },
-          body: JSON.stringify({
-            messages: [
-              {
-                topic: `typing-${chatId}`,
-                event: 'typing',
-                payload: {
-                  sender_id: dummyUid,
-                  kind: 'typing',
-                  ts: Date.now(),
-                },
-              },
-            ],
-          }),
-        },
-      );
-    await typingHttp();
-    await sleep(900 + Math.floor(Math.random() * 1200));
-    await typingHttp();
-    await sleep(700 + Math.floor(Math.random() * 900));
+    // Output-side NSFW guard: LLM tetap saja bisa lolos — cek balasan
+    // sebelum dikirim, ganti defleksi bila vulgar.
+    if (isExplicit(reply)) {
+      reply = randomOf(DEFLECTIONS);
+    }
 
-    const { error: insErr } = await admin
-      .from('private_messages')
-      .insert({
-        chat_id: chatId,
-        sender_id: dummyUid,
-        sender_name: profile.nickname,
-        text: reply,
-        type: 'text',
-      });
+    // 6. Kirim: typing realistis dulu, pesan masuk setelah denyut selesai.
+    const insErr = await sendWithTyping(reply);
     if (insErr) return json({ ok: false, error: 'insert_failed', detail: insErr.message });
 
     return json({ ok: true, reply });
