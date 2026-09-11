@@ -940,6 +940,10 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                           _schedBusy = false;
                           _hours = hours;
                         });
+                        // Sinkron ke map item (shared reference dgn list
+                        // induk) supaya buka-ulang sheet langsung tampil
+                        // jadwal baru tanpa reload + spinner.
+                        widget.item['ai_active_hours'] = hours;
                         ScaffoldMessenger.of(context)
                           ..clearSnackBars()
                           ..showSnackBar(

@@ -463,11 +463,16 @@ Deno.serve(async (req: Request) => {
         (cadenceSec !== null && cadenceSec < 120));
 
     // ── Jeda manusiawi SEBELUM read-receipt & typing: dia "belum lihat HP".
-    // Panas → cepat (2-8s); biasa → 5-25s; perkenalan → 8-28s; ~12% "sibuk"
-    // +15-90s. Realtime feel manusia, bukan mesin yang selalu balas instan.
-    let delaySec = hot ? 2 + Math.random() * 6 : 5 + Math.random() * 20;
+    // 3-60 detik, acak sesuai topik: panas → cepat; biasa makin random dan
+    // lama; perkenalan santai; jarang "sibuk". Bukan mesin balas instan.
+    let delaySec = hot ? 3 + Math.random() * 5 : 5 + Math.random() * 25;
     if (freshStage) delaySec = 8 + Math.random() * 20;
-    if (Math.random() < 0.12) delaySec += 15 + Math.random() * 75;
+    if (!hot && !freshStage && Math.random() < 0.2) {
+      delaySec += 10 + Math.random() * 25; // lagi biasa: kadang lama random
+    } else if (Math.random() < 0.08) {
+      delaySec += 15 + Math.random() * 30; // jarang: "sibuk"
+    }
+    delaySec = Math.min(delaySec, 60);
     await sleep(delaySec * 1000);
 
     // ── Profil lawan bicara (publik) — dia "sudah lihat profil" dia.
@@ -729,44 +734,95 @@ Deno.serve(async (req: Request) => {
       provCfg?.default_model ||
       Deno.env.get('AI_MODEL') ||
       'glm-5.3-flash';
-    // Routing per model: ':free' / 'nvidia/' via OpenRouter (key terpisah).
-    // Selain itu: provider dari admin panel (ai_provider_config) kalau diisi,
-    // fallback ke secrets env (B.AI).
-    const isOr = model.includes(':free') || model.startsWith('nvidia/');
-    const apiKey = isOr
-      ? Deno.env.get('AI_API_KEY_OPENROUTER') || Deno.env.get('AI_API_KEY')
-      : provCfg?.api_key || Deno.env.get('AI_API_KEY');
-    const apiBase = isOr
-      ? 'https://openrouter.ai/api/v1'
-      : provCfg?.api_base ||
-        Deno.env.get('AI_API_BASE') ||
-        'https://api.b.ai/v1';
+    // Routing per model (eksplisit, tidak tergantung base):
+    // - ':free' / 'nvidia/' → OpenRouter (secret AI_API_KEY_OPENROUTER)
+    // - model free Zen (muse-spark-*, mimo-*, ling-*, nemotron-* tanpa slash,
+    //   deepseek-v4-flash-free, big-pickle) → OpenCode Zen
+    //   (secret AI_API_KEY_ZEN + header client opencode — free tier Zen
+    //   hanya jalan dengan header ini).
+    // - selain itu → panel ai_provider_config → env B.AI.
+    const routeFor = (
+      m: string,
+    ): { base: string; key?: string; headers: Record<string, string> } => {
+      const or = m.includes(':free') || m.startsWith('nvidia/');
+      if (or) {
+        return {
+          base: 'https://openrouter.ai/api/v1',
+          key:
+            Deno.env.get('AI_API_KEY_OPENROUTER') || Deno.env.get('AI_API_KEY'),
+          headers: {},
+        };
+      }
+      const zen =
+        m === 'big-pickle' ||
+        m === 'deepseek-v4-flash-free' ||
+        (/^(muse-spark|mimo|ling|nemotron)-/.test(m) && m.endsWith('-free'));
+      if (zen) {
+        const hex = (n: number) =>
+          [...crypto.getRandomValues(new Uint8Array(n))]
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
+        return {
+          base: 'https://opencode.ai/zen/v1',
+          key: Deno.env.get('AI_API_KEY_ZEN') || Deno.env.get('AI_API_KEY'),
+          headers: {
+            'x-opencode-session': `ses_${hex(32)}`,
+            'x-opencode-request': `msg_${hex(8)}`,
+            'x-opencode-client': 'tui',
+            'User-Agent': 'opencode/1.18.25',
+          },
+        };
+      }
+      return {
+        base:
+          provCfg?.api_base ||
+          Deno.env.get('AI_API_BASE') ||
+          'https://api.b.ai/v1',
+        key: provCfg?.api_key || Deno.env.get('AI_API_KEY'),
+        headers: {},
+      };
+    };
+    const route = routeFor(model);
+    const apiKey = route.key;
+    const apiBase = route.base;
     if (!apiKey) {
       await closeTyping();
       return json({ ok: false, error: 'no_api_key' }, 500);
     }
+    // Model cadangan bila model utama error (mis. Zen free down 500) —
+    // dummy tidak boleh diam. Default glm B.AI (sudah terbukti jalan).
+    const fallbackModel =
+      Deno.env.get('AI_FALLBACK_MODEL') || 'glm-5.3-flash';
+    // Penanda model yg menjawab (observability: respons + function logs).
+    let modelUsed = model;
 
     const llmCall = async (
       messages: Array<{ role: string; content: string }>,
       maxTokens: number,
       temperature = 0.9,
+      modelOverride?: string,
     ): Promise<{ res?: any; err?: string }> => {
+      const m = modelOverride || model;
+      const rt = modelOverride ? routeFor(modelOverride) : route;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          const r = await fetch(`${apiBase}/chat/completions`, {
+          const r = await fetch(`${rt.base}/chat/completions`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${apiKey}`,
+              Authorization: `Bearer ${rt.key}`,
+              ...rt.headers,
             },
             body: JSON.stringify({
-              model,
+              model: m,
               // Nemotron (OpenRouter) memakan token reasoning sebelum content
               // — tanpa headroom, content bisa kosong.
-              max_tokens: maxTokens + (isOr ? 400 : 0),
+              max_tokens:
+                maxTokens +
+                (m.includes(':free') || m.startsWith('nvidia/') ? 400 : 0),
               // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
               // Param ini glm-specific; provider lain bisa menolak.
-              ...(model.includes('glm') ? { reasoning_effort: 'low' } : {}),
+              ...(m.includes('glm') ? { reasoning_effort: 'low' } : {}),
               temperature,
               messages,
             }),
@@ -815,10 +871,22 @@ Deno.serve(async (req: Request) => {
         guardOn ? 0.9 : 1.0,
       );
     }
+    // Fallback MODEL: bila model utama error (mis. Zen free down 500),
+    // coba sekali ke model cadangan supaya dummy tidak diam.
+    if (llmRes.err && model !== fallbackModel) {
+      modelUsed = fallbackModel;
+      llmRes = await llmCall(
+        [{ role: 'system', content: system }, ...historyText],
+        250,
+        guardOn ? 0.9 : 1.0,
+        fallbackModel,
+      );
+    }
     const { res: llm, err: llmErr } = llmRes;
     if (llmErr) {
       await closeTyping();
-      return json({ ok: false, error: 'llm_error', detail: llmErr }, 200);
+      console.log(`[ai-reply] FAIL model=${modelUsed} chat=${chatId} err=${llmErr}`);
+      return json({ ok: false, error: 'llm_error', detail: llmErr, model_used: modelUsed }, 200);
     }
     let reply = sanitize(
       llm?.choices?.[0]?.message?.content,
@@ -926,7 +994,8 @@ Deno.serve(async (req: Request) => {
       memErr = `exc:${e}`;
     }
 
-    return json({ ok: true, reply, memSaved, memRaw, memErr });
+    console.log(`[ai-reply] OK model=${modelUsed} chat=${chatId}`);
+    return json({ ok: true, reply, memSaved, memRaw, memErr, model_used: modelUsed });
   } catch (e) {
     return json({ ok: false, error: 'exception', detail: `${e}` }, 200);
   }
