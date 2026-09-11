@@ -220,84 +220,87 @@ Deno.serve(async (req: Request) => {
           p_uid: dummyUid,
         });
       } catch (_) {}
-      // Typing DUA JALUR: (1) WebSocket supabase-js (jalur yang sama
-      // dengan typing user asli — dijamin konsumen client menerima),
-      // (2) HTTP broadcast API sebagai fallback. Gagal salah satu tidak
-      // masalah; client hanya menampilkan indikator yang sama.
-      const sendTypingPulse = async () => {
-        const rt = createClient(
-          Deno.env.get('SUPABASE_URL')!,
-          Deno.env.get('SUPABASE_ANON_KEY')!,
-          { realtime: { params: { eventsPerSecond: 20 } } },
-        );
-        let wsSent = false;
-        try {
-          const ch = rt.channel(`typing-${chatId}`);
-          const st = await ch.subscribe();
-          if (
-            st === 'SUBSCRIBED' &&
-            typeof ch.sendBroadcastMessage === 'function'
-          ) {
-            await ch.sendBroadcastMessage({
-              event: 'typing',
-              payload: {
-                sender_id: dummyUid,
-                kind: 'typing',
-                ts: Date.now(),
-              },
-            });
-            wsSent = true;
-          }
+      // Typing: SATU channel WebSocket dibuka sekali untuk seluruh durasi
+      // mengetik (subscribe + ack:true — tanpa ini, kirim lalu langsung
+      // unsubscribe membuat pesan hilang sebelum WS flush). HTTP API hanya
+      // fallback bila WS gagal subscribe.
+      const rt = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { realtime: { params: { eventsPerSecond: 20 } } },
+      );
+      const ch = rt.channel(`typing-${chatId}`, {
+        config: { broadcast: { ack: true, self: false } },
+      });
+      let wsOk = false;
+      try {
+        const st = await ch.subscribe();
+        wsOk = st === 'SUBSCRIBED' && typeof ch.sendBroadcastMessage === 'function';
+      } catch (_) {}
+      const pulse = async () => {
+        const payload = {
+          sender_id: dummyUid,
+          kind: 'typing',
+          ts: Date.now(),
+        };
+        if (wsOk) {
           try {
-            await ch.unsubscribe();
-            await rt.removeAllChannels();
-          } catch (_) {}
-        } catch (_) {}
-        if (!wsSent) {
-          try {
-            await fetch(
-              `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
-                  Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
-                },
-                body: JSON.stringify({
-                  messages: [
-                    {
-                      topic: `typing-${chatId}`,
-                      event: 'typing',
-                      payload: {
-                        sender_id: dummyUid,
-                        kind: 'typing',
-                        ts: Date.now(),
-                      },
-                    },
-                  ],
-                }),
-              },
-            );
+            await ch.sendBroadcastMessage({ event: 'typing', payload });
+            return;
           } catch (_) {}
         }
-      };
-      // Total "waktu mengetik" 2.5-6 dtk proporsional panjang balasan
-      // + jitter acak supaya ritme balasan tidak monoton. 15% peluang
-      // balas cepat (chat asli kadang nge-reply instan).
-      const fast = text.length < 15 && Math.random() < 0.15;
-      const jitter = 0.8 + Math.random() * 0.5;
-      const totalMs = fast
-        ? 1200 + Math.random() * 900
-        : Math.min(
-            6500,
-            Math.max(2500, (1200 + text.length * 45) * jitter),
+        try {
+          await fetch(
+            `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
+                Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
+              },
+              body: JSON.stringify({
+                messages: [{ topic: `typing-${chatId}`, event: 'typing', payload }],
+              }),
+            },
           );
-      const pulses = Math.max(3, Math.floor(totalMs / 1600));
-      await sendTypingPulse();
-      for (let i = 0; i < pulses; i++) {
-        await sleep(totalMs / pulses);
-        if (i < pulses - 1) await sendTypingPulse(); // denyut ulang (indikator 3 dtk)
+        } catch (_) {}
+      };
+      // Timeline mengetik gaya manusia — POLA ACAK per balasan:
+      // - fast  (15%): balas instan, satu burst pendek
+      // - steady(35%): denyut cukup rata sampai pesan terkirim
+      // - ragu  (50%): typing → JEDA (indikator hilang = mikir) → typing
+      //   lagi, kadang jeda kedua. Jeda sengaja > 3 dtk kadang-kadang
+      //   supaya indikator benar-benar menghilang lalu muncul lagi.
+      const steps: Array<{ type: 'type' | 'pause'; ms: number }> = [];
+      const fast = text.length < 15 && Math.random() < 0.15;
+      const style = Math.random();
+      if (fast) {
+        steps.push({ type: 'type', ms: 900 + Math.random() * 800 });
+      } else if (style < 0.35) {
+        const n = 3 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < n; i++) {
+          steps.push({
+            type: 'type',
+            ms: 1000 + Math.random() * 1300,
+          });
+        }
+      } else {
+        steps.push({ type: 'type', ms: 1200 + Math.random() * 1000 });
+        steps.push({ type: 'pause', ms: 1400 + Math.random() * 1800 });
+        steps.push({ type: 'type', ms: 1000 + Math.random() * 1200 });
+        if (Math.random() < 0.4) {
+          steps.push({ type: 'pause', ms: 1200 + Math.random() * 1500 });
+          steps.push({ type: 'type', ms: 800 + Math.random() * 900 });
+        }
+      }
+      for (const st of steps) {
+        if (st.type === 'type') {
+          await pulse();
+          await sleep(st.ms);
+        } else {
+          await sleep(st.ms); // tanpa pulse → indikator hilang (kaya mikir)
+        }
       }
       const { error: insErr } = await admin
         .from('private_messages')
@@ -308,6 +311,10 @@ Deno.serve(async (req: Request) => {
           text,
           type: 'text',
         });
+      try {
+        await ch.unsubscribe();
+        await rt.removeAllChannels();
+      } catch (_) {}
       return insErr;
     };
 
