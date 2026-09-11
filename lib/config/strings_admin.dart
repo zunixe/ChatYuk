@@ -538,6 +538,22 @@ extension SAdminX on S {
   String get dummyAiSaveFail =>
       isId ? 'Gagal menyimpan AI' : 'Failed to save AI settings';
 
+  String get dummyAiScheduleTitle => isId
+      ? 'Jadwal kehadiran AI'
+      : 'AI presence schedule';
+
+  String get dummyAiScheduleDesc => isId
+      ? 'AI online/idle/offline mengikuti jam aktif. Offline = AI tidak membalas sama sekali.'
+      : 'AI goes online/idle/offline following active hours. Offline = AI never replies.';
+
+  String get dummyAiScheduleAuto => isId
+      ? 'Jadwal otomatis dari kebiasaan'
+      : 'Auto schedule from habits';
+
+  String get dummyAiScheduleEmpty => isId
+      ? 'Belum diatur — presence dikontrol manual'
+      : 'Not set — presence controlled manually';
+
   String get aiGlobalTitle => 'AI Bot';
 
   String get aiGlobalDesc => isId
@@ -555,6 +571,30 @@ extension SAdminX on S {
   String get aiGlobalSaved => isId
       ? 'Pengaturan AI global disimpan'
       : 'Global AI settings saved';
+
+  String get aiGlobalGuardTitle => isId ? 'Guard NSFW' : 'NSFW guard';
+
+  String get aiGlobalGuardDesc => isId
+      ? 'Blokir obrolan vulgar — matikan untuk mode nakal'
+      : 'Block vulgar chat — turn off for naughty mode';
+
+  String get aiGlobalModel => isId ? 'Model default' : 'Default model';
+
+  String get aiGlobalBaseUrl => isId ? 'Base URL' : 'Base URL';
+
+  String get aiGlobalApiKey => isId ? 'API Key' : 'API Key';
+
+  String get aiGlobalProviderHint => isId
+      ? 'Kosongkan = pakai default server. Base URL tanpa /chat/completions.'
+      : 'Empty = use server default. Base URL without /chat/completions.';
+
+  String get aiGlobalSttBase => isId ? 'STT Base URL' : 'STT Base URL';
+
+  String get aiGlobalSttKey => isId ? 'STT Key' : 'STT Key';
+
+  String get aiGlobalSttHint => isId
+      ? 'Untuk dengar voice (Whisper). Kosong = default Groq, tapi tetap butuh key.'
+      : 'To hear voice notes (Whisper). Empty = Groq default, but a key is still required.';
 
   String get dummyListFail =>
       isId ? 'Gagal memuat akun dummy' : 'Failed to load dummy accounts';

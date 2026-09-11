@@ -331,16 +331,41 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? const {};
   }
 
+  /// Generate jadwal kehadiran AI otomatis dari kebiasaan jam aktif dummy
+  /// (riwayat chat 14 hari). Return {'hours': [8,9,...]} jam WIB.
+  Future<List<int>> autoScheduleAi(String uid) async {
+    final res = await _sb.rpc('admin_ai_autoschedule', params: {'p_uid': uid});
+    final hours = (res as Map<String, dynamic>?)?['hours'];
+    if (hours is List) {
+      return hours.map((e) => (e as num).toInt()).toList()..sort();
+    }
+    return const [];
+  }
+
   /// Ubah setting AI global — hanya key yang diisi yang berubah.
+  /// apiBase/apiKey/defaultModel/stt* = provider config (kosong = tidak diubah).
   Future<Map<String, dynamic>> setAiSettings({
     bool? globalEnabled,
     int? maxReplies,
     int? minInterval,
+    bool? guardEnabled,
+    String? apiBase,
+    String? apiKey,
+    String? defaultModel,
+    String? sttBase,
+    String? sttKey,
   }) async {
     final params = <String, dynamic>{
       if (globalEnabled != null) 'p_global_enabled': globalEnabled,
       if (maxReplies != null) 'p_max_replies': maxReplies,
       if (minInterval != null) 'p_min_interval': minInterval,
+      if (guardEnabled != null) 'p_guard_enabled': guardEnabled,
+      if (apiBase != null && apiBase.isNotEmpty) 'p_api_base': apiBase,
+      if (apiKey != null && apiKey.isNotEmpty) 'p_api_key': apiKey,
+      if (defaultModel != null && defaultModel.isNotEmpty)
+        'p_default_model': defaultModel,
+      if (sttBase != null && sttBase.isNotEmpty) 'p_stt_base': sttBase,
+      if (sttKey != null && sttKey.isNotEmpty) 'p_stt_key': sttKey,
     };
     final res = await _sb.rpc('admin_ai_settings', params: params);
     return (res as Map<String, dynamic>?) ?? const {};

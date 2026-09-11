@@ -2,7 +2,7 @@
 
 ## Persyaratan
 - [ ] Akun developer Google Play dengan akses ke app `com.chatyuk.chatyuk`
-- [ ] APK rilis terbaru (`app-apkpure-release.apk`)
+- [ ] APK rilis terbaru (`app-apkpureprod-release.apk`)
 - [ ] Data Safety form sudah diisi sesuai panduan
 
 ## Langkah Submit
@@ -14,7 +14,7 @@
    - Pastikan URL mengandung `developers/8359197228304141922/app/4974318379582736850`
 
 3. **Ke Tab Rilis → Rilis baru**
-   - Upload APK: `build/app/outputs/flutter-apk/app-apkpure-release.apk`
+   - Upload APK: `build/app/outputs/flutter-apk/app-apkpureprod-release.apk`
    - Pilih track: **Pengujian terbuka** (alpha)
    - Tambahkan catatan rilis
 
@@ -30,7 +30,7 @@
 ```bash
 # Jalankan verifikasi sebelum submit
 dart verify_data_collection.dart
-flutter clean && flutter build apk --release --flavor apkpure --dart-define=APP_FLAVOR=apkpure
+flutter clean && flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
 ```
 
 ## Catatan Penting

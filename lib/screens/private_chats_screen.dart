@@ -351,7 +351,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                   liveNameMap[otherUid] ?? c.participantNames[otherUid] ?? '';
               return otherName.toLowerCase().contains(effectiveQuery);
             }).toList();
-      // Urutkan: pinned paling atas, baru online, baru lastMessageAt
+      // Urutkan: pinned paling atas (terbaru pinned dulu), baru chat
+      // TERBARU (lastMessageAt desc) — status online tidak menggeser
+      // urutan, chat paling aktif selalu di paling atas.
       filtered.sort((a, b) {
         final aPinned = a.isPinnedFor(auth.uid ?? '');
         final bPinned = b.isPinnedFor(auth.uid ?? '');
@@ -363,14 +365,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
           final c = bT.compareTo(aT);
           if (c != 0) return c;
         }
-        final aUid =
-            a.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-        final bUid =
-            b.participants.firstWhere((p) => p != auth.uid, orElse: () => '');
-        int rank(String v) => v == 'online' ? 0 : v == 'idle' ? 1 : 2;
-        final ra = rank(statusMap[aUid] ?? 'offline');
-        final rb = rank(statusMap[bUid] ?? 'offline');
-        if (ra != rb) return ra.compareTo(rb);
         return b.lastMessageAt.compareTo(a.lastMessageAt);
       });
       _lastFiltered = filtered;

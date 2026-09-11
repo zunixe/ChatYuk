@@ -14,6 +14,7 @@ import 'providers/points_provider.dart';
 import 'providers/social_provider.dart';
 import 'core/admin_gate.dart';
 import 'providers/locale_provider.dart';
+import 'providers/connectivity_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/nav_provider.dart';
 import 'providers/theme_provider.dart';
@@ -30,6 +31,7 @@ import 'screens/timeline_screen.dart';
 import 'screens/chats_screen.dart';
 import 'screens/post_composer_screen.dart';
 import 'widgets/anon_prompt_dialog.dart';
+import 'widgets/offline_banner.dart';
 import 'widgets/call_banner.dart';
 import 'widgets/skeleton_card.dart';
 import 'screens/register_screen.dart';
@@ -80,6 +82,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ChangeNotifierProvider(create: (_) => NavProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
         ChangeNotifierProvider(create: (_) => localeProvider),
+        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider.value(value: CallProvider.instance),
       ],
       child: Consumer2<LocaleProvider, ThemeProvider>(
@@ -108,20 +111,22 @@ class _ChatYukAppState extends State<ChatYukApp> {
                   context.read<AuthProvider>().notifyActivity();
                 } catch (_) {}
               },
-              child: Stack(
-                children: [
-                  MediaQuery.withClampedTextScaling(
-                    minScaleFactor: 0.9,
-                    maxScaleFactor: 1.3,
-                    child: child ?? const SizedBox.shrink(),
-                  ),
-                  const Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: CallBanner(),
-                  ),
-                ],
+              child: OfflineBanner(
+                child: Stack(
+                  children: [
+                    MediaQuery.withClampedTextScaling(
+                      minScaleFactor: 0.9,
+                      maxScaleFactor: 1.3,
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                    const Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: CallBanner(),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

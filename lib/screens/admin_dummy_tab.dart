@@ -595,31 +595,20 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                       ],
                     ),
                   ),
-                  SizedBox(width: 6),
                 ],
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _statusColor(status).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    switch (status) {
-                      'online' => s.statusOnline,
-                      'idle' => s.statusIdle,
-                      _ => s.statusOffline,
-                    },
-                    style: AppText.label.copyWith(color: _statusColor(status)),
-                  ),
-                ),
               ],
             ),
             SizedBox(height: 8),
+            // Baris aksi rapi: chip status + AI nempel sejajar (wrap),
+            // tombol ikon kanan berukuran seragam 40x44.
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
                   child: Wrap(
                     spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       _statusChip(item, s.statusOnline, 'online', status, s),
                       _statusChip(item, s.statusIdle, 'idle', status, s),
@@ -630,6 +619,12 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                 ),
                 IconButton(
                   tooltip: s.dummyEdit,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 40,
+                    height: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
                   onPressed: () => _startEdit(item),
                   icon: Icon(
                     Icons.edit_outlined,
@@ -639,6 +634,12 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                 ),
                 IconButton(
                   tooltip: s.dummyChatAs,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 40,
+                    height: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
                   onPressed: () => _chatAs(item, s),
                   icon: const Icon(
                     Icons.chat_bubble_outline,
@@ -648,6 +649,12 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                 ),
                 IconButton(
                   tooltip: s.dummyDelete,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 40,
+                    height: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
                   onPressed: () => _delete(item, s),
                   icon: const Icon(
                     Icons.delete_outline,
@@ -772,7 +779,40 @@ class _DummyAiSheet extends StatefulWidget {
 }
 
 class _DummyAiSheetState extends State<_DummyAiSheet> {
+  /// Parse jam aktif dari RPC (List num) — aman untuk format basi.
+  static List<int> _parseHours(dynamic v) {
+    if (v is! List) return const [];
+    final out = <int>[];
+    for (final e in v) {
+      final n = e is num ? e.toInt() : int.tryParse('$e');
+      if (n != null && n >= 0 && n <= 23 && !out.contains(n)) out.add(n);
+    }
+    out.sort();
+    return out;
+  }
+
+  /// Ringkasan jam aktif: "08–23" bila kontinu, "08,12,20–22" bila tidak.
+  static String _hoursSummary(List<int> hours) {
+    if (hours.isEmpty) return '';
+    final parts = <String>[];
+    var start = hours.first;
+    var prev = start;
+    String fmt(int h) => h.toString().padLeft(2, '0');
+    for (var i = 1; i <= hours.length; i++) {
+      final cur = i < hours.length ? hours[i] : -99;
+      if (cur == prev + 1) {
+        prev = cur;
+        continue;
+      }
+      parts.add(start == prev ? fmt(start) : '${fmt(start)}–${fmt(prev)}');
+      start = cur;
+      prev = cur;
+    }
+    return parts.join(', ');
+  }
   late bool _enabled;
+  late List<int> _hours;
+  bool _schedBusy = false;
   late final TextEditingController _personalityCtrl;
   late final TextEditingController _toneCtrl;
   late final TextEditingController _extraCtrl;
@@ -784,6 +824,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     final persona =
         (widget.item['ai_persona'] as Map<dynamic, dynamic>?) ?? const {};
     _enabled = widget.item['ai_enabled'] == true;
+    _hours = _parseHours(widget.item['ai_active_hours']);
     _personalityCtrl = TextEditingController(text: '${persona['personality'] ?? ''}');
     _toneCtrl = TextEditingController(text: '${persona['tone'] ?? ''}');
     _extraCtrl = TextEditingController(text: '${persona['extra_prompt'] ?? ''}');
@@ -860,6 +901,77 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
               onChanged: (v) => setState(() => _enabled = v),
               title: Text(s.dummyAiEnabledLabel, style: AppText.bodyStrong),
               activeThumbColor: AppTheme.primary,
+            ),
+            const SizedBox(height: 6),
+            // ── Jadwal kehadiran AI ──
+            // Cronjob online/idle/offline mengikuti jam aktif; offline =
+            // AI tidak membalas sama sekali. Jadwal dari kebiasaan chat.
+            Text(s.dummyAiScheduleTitle, style: AppText.bodyStrong),
+            const SizedBox(height: 4),
+            Text(
+              _hours.isEmpty
+                  ? s.dummyAiScheduleEmpty
+                  : '${_hoursSummary(_hours)} WIB',
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              s.dummyAiScheduleDesc,
+              style: AppText.caption.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _schedBusy
+                  ? null
+                  : () async {
+                      setState(() => _schedBusy = true);
+                      try {
+                        final svc =
+                            AdminService(SupabaseConfig.client);
+                        final hours = await svc.autoScheduleAi(
+                          widget.item['uid'] as String,
+                        );
+                        if (!mounted) return;
+                        setState(() {
+                          _schedBusy = false;
+                          _hours = hours;
+                        });
+                        ScaffoldMessenger.of(context)
+                          ..clearSnackBars()
+                          ..showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                hours.isEmpty
+                                    ? s.dummyAiSaveFail
+                                    : '${s.dummyAiSaved} (${_hoursSummary(hours)} WIB)',
+                              ),
+                            ),
+                          );
+                      } catch (e) {
+                        dlog('[DUMMY] autoschedule error: $e');
+                        if (!mounted) return;
+                        setState(() => _schedBusy = false);
+                        ScaffoldMessenger.of(context)
+                          ..clearSnackBars()
+                          ..showSnackBar(
+                            SnackBar(
+                              content: Text(s.dummyAiSaveFail),
+                            ),
+                          );
+                      }
+                    },
+              icon: _schedBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.schedule_rounded, size: 18),
+              label: Text(s.dummyAiScheduleAuto),
             ),
             TextField(
               controller: _personalityCtrl,

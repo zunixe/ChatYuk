@@ -261,3 +261,74 @@ Jika `supabase db push` timeout lagi:
 - **ai_memory:** memori jangka panjang AI per pasangan (dummy_uid, user_id, fact) PK - fakta tahan-lama (nama/kerja/hobi/sifat) diekstrak LLM dari percakapan tiap balasan, diinjeksi ke system prompt sesi berikutnya. Cap 30 fakta/pasangan, filter NSFW, akses service_role only.
 - **Fix pendukung di ai-reply:** (1) llmCall() dgn retry backoff utk 429 B.AI (balasan+ekstraksi back-to-back sering kena concurrency limit); (2) typing WS channel ack:true dibuka SEKALI sepanjang durasi mengetik - subscribe->kirim->unsubscribe instan membuat pesan hilang sebelum flush; (3) ritme typing manusiawi 3 gaya acak: fast 15% / steady 35% / ragu 50% (type -> jeda >3 dtk -> type lagi, indikator sengaja hilang-muncul = kaya mikir).
 - **Verifikasi E2E:** pesan dgn fakta -> balasan nyambung + 3-6 fakta tersimpan di ai_memory + invokasi dobel ditolak claim. Tercatat di schema_migrations.
+
+## 2026-09-11 — ai-reply v18: routing per-model (Nemotron via OpenRouter) + persona Santi (APPLY)
+
+- **Isi code** `supabase/functions/ai-reply/index.ts`: routing per model — `:free` / `nvidia/` → `https://openrouter.ai/api/v1` + secret `AI_API_KEY_OPENROUTER`; selain itu tetap B.AI (`AI_API_BASE`/`AI_API_KEY`). `reasoning_effort:'low'` kini hanya utk model glm; `max_tokens +400` headroom utk model OpenRouter (token reasoning — tanpa ini content kosong).
+- **Secrets:** tambah `AI_API_KEY_OPENROUTER` (OpenRouter free tier).
+- **Deploy:** CLI `supabase functions deploy` HANG >600s → sukses via Management API `POST /v1/projects/fohcucyyejdryryoxitm/functions/deploy?slug=ai-reply` — curl multipart: `-F 'metadata={"entrypoint_path":"index.ts","name":"ai-reply","verify_jwt":false};type=application/json' -F 'file=@supabase/functions/ai-reply/index.ts;filename=index.ts'`, token Keychain "Supabase CLI" (`go-keyring-base64:` prefix → base64 decode). Result: **ACTIVE v18**, verify_jwt=false.
+- **Data Santi** (`92823111-fa75-4e47-ad6a-e80a1dd868ff`): `ai_model='nvidia/nemotron-3-ultra-550b-a55b:free'` + `ai_persona` wanita nakal (personality/tone/extra_prompt; hobbies dipertahankan). `ai_enabled` sudah true dari sesi sebelumnya.
+- **Guard NSFW 3-lapis di ai-reply TIDAK diubah** — persona nakal jalan di dalam guard (flirt/godaan lolos, explicit tetap didefleksi).
+- **Verifikasi:** secrets list ✅; functions API ACTIVE v18 ✅; select dummy_accounts → model+persona baru ✅. E2E chat via app belum dites (user test manual).
+## 2026-09-11 — 20260911050000_ai_guard_toggle.sql (APPLY) + ai-reply v19
+
+- **Fitur:** Toggle **Guard NSFW** di admin (AI Bot > sheet pengaturan) — ON (default, perilaku lama: input guard + BATAS KERAS system prompt + output defleksi + filter memori) / OFF (dummy AI bebas lanjut topik dewasa). **Realtime**: `ai-reply` baca `app_settings.ai_guard_enabled` fresh tiap invokasi — toggle efektif tanpa redeploy.
+- **Isi:** kolom `app_settings.ai_guard_enabled` (default true); `admin_ai_settings` di-drop + recreate 4-param (tambah `p_guard_enabled`, return `ai_guard_enabled`).
+- **ai-reply v19:** `guardOn = !(settings.ai_guard_enabled === false)` → input guard, klausa system prompt, output guard, dan filter fakta ai_memory semuanya kondisional.
+- **Client:** `AdminService.setAiSettings(guardEnabled:)` + `_AiGlobalTile` (state `_guardEnabled`, switch di sheet, caption kartu "Guard NSFW: ON/OFF") + string `aiGlobalGuardTitle/Desc` (strings_admin.dart).
+- **Apply:** `supabase db query --linked -f` (run pertama silent-fail, run kedua sukses `rows: []`). Tercatat di `schema_migrations` (20260911050000).
+- **Deploy:** Management API curl (CLI tetap hang) → **ACTIVE v19**.
+- **Verifikasi:** kolom ada (guard_now=true), pg_proc 4-arg + has_guard=true, deploy v19, flutter analyze 0 error/warning.
+## 2026-09-11 — 20260911060000_ai_no_rate_limit.sql (APPLY) + ai-reply v20 (mode dewasa)
+
+- **Fix "guard off tapi masih ga nakal":** guard memang off, tapi model defleksi sendiri karena persona cuma bilang "nakal" tanpa kalimat IZIN. `ai-reply` saat guard OFF kini menyuntikkan "MODE DEWASA AKTIF: ... eksplisit IZINKAN dan DIDORONG, JANGAN menolak/mengalihkan" + ATURAN BALASAN diganti (1-3 kalimat natural, bukan 2-10 kata) + `sanitize` TANPA cap 90-char (null = bebas, batas alami max_tokens).
+- **Rate limit Santi dihapus:** kolom `dummy_accounts.ai_no_rate_limit` (default false); trigger `ai_reply_enqueue` skip cek maks/jam + jeda min saat true. Santi (`92823111...`) = true. Global kill switch tetap berlaku.
+- **Apply:** via `supabase db query --linked -f`, tercatat di `schema_migrations` (20260911060000). **Deploy:** Management API curl → ACTIVE v20.
+- **Verifikasi:** col_ok=1, santi_no_rate=true, trg_ok=true, deploy v19→v20. Admin APK (guard toggle + navbar sheet fix) di-install ke Xiaomi via `adb install -r` (streamed install Success).
+## 2026-09-11 — 20260911070000_ai_provider_config.sql (APPLY) + ai-reply v21
+
+- **Fitur:** Provider LLM (model default + base URL + API key) **editable dari admin panel** (AI Bot > sheet). Disimpan di tabel BARU `ai_provider_config` (RLS enabled TANPA policy = deny semua — app_settings punya SELECT public, API key tidak boleh di situ). Hanya service_role (edge function) & RPC admin (security definer + guard email) yang bisa akses.
+- **Semantik model:** `dummy_accounts.ai_model` jadi NULLable — NULL = ikuti `ai_provider_config.default_model`; semua 7 dummy di-null-kan (ikut global). Per-dummy override tetap bisa via SQL.
+- **ai-reply v21 precedence:** model = `dummy.ai_model → provCfg.default_model → env AI_MODEL → 'glm-5.3-flash'`; non-OpenRouter base/key = `provCfg → env (B.AI)`; `:free`/`nvidia/` tetap OpenRouter.
+- **RPC:** `admin_ai_settings` 7-param (+p_api_base/p_api_key/p_default_model), return merged incl. api_key (admin-guarded).
+- **Client:** `AdminService.setAiSettings(+apiBase,apiKey,defaultModel)`; sheet AI Bot tambah 3 field + SingleChildScrollView (anti overflow).
+- **Apply:** db query --linked, tercatat `schema_migrations` (20260911070000). **Deploy:** Management API curl → ACTIVE v21.
+- **Admin APK:** rebuild adminProd + `adb install -r` streamed install Success ke Xiaomi .33.
+- **Catatan lain:** persona extra_prompt Santi DIEDIT MANUAL oleh user via DB (versi eksplisit sendiri) — tidak ditimpa AI.
+## 2026-09-11 — ai-reply v22: humanisasi balasan (delay + variasi + pacing) (DEPLOY)
+
+- **Delay manusiawi**: jeda acak SEBELUM read-receipt & typing (dia "belum lihat HP"): panas 2-8s / biasa 5-25s / perkenalan 8-28s / ~12% "sibuk" +15-90s. Deteksi heat: isExplicit(pesan terakhir) ATAU cadence balasan user <120s.
+- **Pacing perkenalan**: freshStage (total pesan chat ≤6 & tanpa ai_memory) → sistem prompt "santai dulu, JANGAN langsung gas walau diminta; tanggapi geli, bangun suasana progresif" + baris FASE SEKARANG dinamis (perkenalan/panas/berjalan).
+- **Variasi**: instruksi JANGAN ulang emoji yang sama, ~separuh balasan tanpa emoji, panjang variatif; mode dewasa ATURAN diubah jadi panjang VARIATIF; temperature 1.0 saat guard off.
+- **Refactor**: history fetch (dgn created_at) pindah ke atas sebelum system prompt; `llmHistory` tanpa meta `at` untuk LLM; hapus duplikasi blok history lama.
+- **Data:** hard delete chat + 98→(baru) pesan & ai_memory Santi↔Admin (chat_id pattern kedua uid) — hilang juga dari monitor chat admin. User mau ulang tes dari awal.
+- **Verifikasi:** deploy ACTIVE v22; chats_left=0, mem_left=0.
+## 2026-09-11 — ai-reply v23: waktu nyata WIB + aturan emoji (DEPLOY)
+- **Waktu nyata**: system prompt dapat "Sekarang: <hari, tgl, jam WIB>" (Intl Asia/Jakarta, fallback manual UTC+7) + instruksi sadar waktu (malam jangan bilang sore; aktivitas cocok jam).
+- **Emoji**: hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) + variasi anti-repetisi (sekitar separuh balasan tanpa emoji).
+- **Verifikasi:** deploy ACTIVE v23. (Pasangan Santi↔Admin tadi juga di-hard-delete ulang + pm clear device admin — user tes dari awal.)
+- ai-reply v24: profil lawan bicara (nickname/umur/gender/kota/hobi) diinject ke system prompt — dipakai natural, tidak dilempar sekaligus; memory tetap untuk fakta yang dipelajari.
+## 2026-09-11 — Seed ai_provider_config (B.AI aktif) + nama provider di panel (DEPLOY)
+- **Seed:** `ai_provider_config` diisi nilai yang sedang dipakai server (api_base=https://api.b.ai/v1, api_key B.AI (prefix sk-6c39dbw, terverifikasi hidup via chat completion 200), default_model=glm-5.3-flash) — sheet AI Bot kini menampilkan nilai aktif, bukan kosong.
+- **UI:** subtitle "Provider: <nama>" di sheet + append di caption kartu (derivasi dari base URL: B.AI/OpenRouter/DeepInfra/Venice/Groq/host).
+- **Admin APK:** rebuild + install Success ke Xiaomi.
+## 2026-09-11 — 20260911080000_sync_all_profile_snapshots.sql (APPLY)
+- **Bug:** edit profil dummy di admin (umur dsb) tidak muncul di private chat — ditemukan dummy "laptop": profil umur 18 tapi snapshot chat masih 24 (baris lama lolos trigger). Trigger `trg_sync_profile_to_chats` sendiri terverifikasi jalan (tes live age 27->28 tersebar ke semua chat).
+- **Fix:** rewrite penuh kolom snapshot (names/genders/ages/locations) dari `profiles` untuk SEMUA chat — idempoten. Edit ke depan tersinkron otomatis via trigger (nickname/gender/age/country) + device refetch live di list chat.
+- **Verifikasi:** still_stale=0. Tercatat di schema_migrations (20260911080000).
+## 2026-09-11 — ai-reply v26: batasi balasan ganda (DEPLOY)
+- **Keluhan:** AI kadang balas 2-3x. Penyebab: burst 15% terlalu sering + race saat jeda panjang (2 invokasi lolos dedupe awal).
+- **Fix:** (1) burst turun ke ~7% DAN hanya jika balasan utama pendek (<40 char) — balasan substansial = satu pesan cukup; (2) cek ganda tepat sebelum LLM call: kalau sudah ada balasan dummy setelah trigger (terkirim saat kita "berpikir"), skip — cegah dobel antar-invokasi.
+- **Verifikasi:** deploy ACTIVE v26.
+## 2026-09-11 — ai-reply v27: cap emoji + cap panjang mode dewasa (DEPLOY)
+- **Keluhan:** kadang emoji menumpuk + mode nakal kadang kepanjangan.
+- **Fix prompt:** VARIASI → "MAKSIMAL 1 emoji per balasan"; naughty ATURAN → SAMAKAN panjang dengan pesan lawan, MAKS 3 kalimat, bukan esei.
+- **Jaring pengaman kode (prompt kadang dilanggar):** `capEmoji()` (simpan 1 terakhir) + `capSentences(max 3)` di jalur balasan mode dewasa — berlaku juga untuk burst.
+- **Verifikasi:** unit test helper via node OK; deploy ACTIVE v27.
+## 2026-09-11 — 20260911090000_ai_stt_fields.sql (APPLY) + ai-reply v28 (baca foto+voice)
+- **Fitur:** dummy AI bisa "melihat" foto (vision inline base64, maks 3 terbaru ≤2MB) + "mendengar" voice (transkrip Whisper-compatible, maks 3 mnt).
+- **Foto:** download bucket chat-photos (service role) → image_url data-URL di pesan; fallback otomatis ke [foto] bila provider tolak vision.
+- **Voice:** POST multipart ke STT (default Groq `.../openai/v1`, model whisper-large-v3-turbo, lang id) → `[pesan suara 0:12 — isi: "..."]`. Tanpa key/gagal = placeholder durasi + instruksi JANGAN pura-pura dengar.
+- **Config:** `ai_provider_config.stt_api_base/stt_api_key` (RLS-deny) + RPC 9-param + 2 field panel (STT Base URL/Key).
+- **Apply/deploy:** migration tercatat (20260911090000); deploy ACTIVE v28; admin APK rebuild + install Success.
+- **TODO user:** isi STT Key di panel AI Bot (Groq gratis, console.groq.com) agar voice bisa didengar. Foto jalan langsung (pakai key LLM).

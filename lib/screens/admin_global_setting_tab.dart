@@ -451,6 +451,12 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
   bool _globalEnabled = true;
   int _maxReplies = 20;
   int _minInterval = 2;
+  bool _guardEnabled = true;
+  String _defaultModel = '';
+  String _apiBase = '';
+  String _apiKey = '';
+  String _sttBase = '';
+  String _sttKey = '';
 
   @override
   void initState() {
@@ -466,6 +472,12 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
         _globalEnabled = st['ai_global_enabled'] != false;
         _maxReplies = (st['ai_max_replies_per_hour'] as num?)?.toInt() ?? 20;
         _minInterval = (st['ai_min_interval_sec'] as num?)?.toInt() ?? 2;
+        _guardEnabled = st['ai_guard_enabled'] != false;
+        _defaultModel = (st['ai_default_model'] as String?) ?? '';
+        _apiBase = (st['ai_api_base'] as String?) ?? '';
+        _apiKey = (st['ai_api_key'] as String?) ?? '';
+        _sttBase = (st['ai_stt_base'] as String?) ?? '';
+        _sttKey = (st['ai_stt_key'] as String?) ?? '';
         _loading = false;
       });
     } catch (_) {
@@ -482,9 +494,26 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
     }
   }
 
+  String _providerName(String base) {
+    final b = base.trim().toLowerCase();
+    if (b.contains('openrouter')) return 'OpenRouter';
+    if (b.contains('b.ai')) return 'B.AI';
+    if (b.contains('deepinfra')) return 'DeepInfra';
+    if (b.contains('venice')) return 'Venice';
+    if (b.contains('groq')) return 'Groq';
+    if (b.isEmpty) return 'Default';
+    return Uri.tryParse(base)?.host ?? base;
+  }
+
   Future<void> _openLimitsSheet() async {
     final maxCtrl = TextEditingController(text: '$_maxReplies');
     final minCtrl = TextEditingController(text: '$_minInterval');
+    final modelCtrl = TextEditingController(text: _defaultModel);
+    final baseCtrl = TextEditingController(text: _apiBase);
+    final keyCtrl = TextEditingController(text: _apiKey);
+    final sttBaseCtrl = TextEditingController(text: _sttBase);
+    final sttKeyCtrl = TextEditingController(text: _sttKey);
+    bool guardTmp = _guardEnabled;
     final s = context.read<LocaleProvider>().s;
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -493,20 +522,34 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 16,
-          bottom: 20 + MediaQuery.viewInsetsOf(ctx).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            // + padding.bottom = navbar Android (gesture/3-button) supaya
+            // tombol Save tidak tertutup menu sistem.
+            bottom:
+                20 +
+                MediaQuery.viewInsetsOf(ctx).bottom +
+                MediaQuery.of(ctx).padding.bottom,
+          ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             Text(
               s.aiGlobalTitle,
               style: AppText.title,
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              'Provider: ${_providerName(_apiBase)}',
+              style: AppText.caption.copyWith(
+                color: AppTheme.textSecondary,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 14),
@@ -525,24 +568,103 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
               style: AppText.body,
               decoration: InputDecoration(labelText: s.aiGlobalMinInterval),
             ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: modelCtrl,
+              style: AppText.body,
+              decoration: InputDecoration(
+                labelText: s.aiGlobalModel,
+                helperText: s.aiGlobalProviderHint,
+                helperMaxLines: 2,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: baseCtrl,
+              style: AppText.body,
+              decoration: InputDecoration(labelText: s.aiGlobalBaseUrl),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: keyCtrl,
+              style: AppText.body,
+              decoration: InputDecoration(labelText: s.aiGlobalApiKey),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: sttBaseCtrl,
+              style: AppText.body,
+              decoration: InputDecoration(
+                labelText: s.aiGlobalSttBase,
+                helperText: s.aiGlobalSttHint,
+                helperMaxLines: 2,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: sttKeyCtrl,
+              style: AppText.body,
+              decoration: InputDecoration(labelText: s.aiGlobalSttKey),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.aiGlobalGuardTitle, style: AppText.body),
+                      Text(
+                        s.aiGlobalGuardDesc,
+                        style: AppText.caption.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: guardTmp,
+                  onChanged: (v) => setSheetState(() => guardTmp = v),
+                  activeThumbColor: AppTheme.primary,
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(s.btnSave),
             ),
           ],
+          ),
         ),
+      ),
       ),
     );
     if (saved != true) return;
     final max = int.tryParse(maxCtrl.text.trim()) ?? _maxReplies;
     final min = int.tryParse(minCtrl.text.trim()) ?? _minInterval;
     try {
-      await _svc.setAiSettings(maxReplies: max, minInterval: min);
+      await _svc.setAiSettings(
+        maxReplies: max,
+        minInterval: min,
+        guardEnabled: guardTmp,
+        apiBase: baseCtrl.text.trim(),
+        apiKey: keyCtrl.text.trim(),
+        defaultModel: modelCtrl.text.trim(),
+        sttBase: sttBaseCtrl.text.trim(),
+        sttKey: sttKeyCtrl.text.trim(),
+      );
       if (!mounted) return;
       setState(() {
         _maxReplies = max;
         _minInterval = min;
+        _guardEnabled = guardTmp;
+        _defaultModel = modelCtrl.text.trim();
+        _apiBase = baseCtrl.text.trim();
+        _apiKey = keyCtrl.text.trim();
+        _sttBase = sttBaseCtrl.text.trim();
+        _sttKey = sttKeyCtrl.text.trim();
       });
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -594,7 +716,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      '${s.aiGlobalMaxReplies}: $_maxReplies · ${s.aiGlobalMinInterval}: $_minInterval',
+                      '${s.aiGlobalMaxReplies}: $_maxReplies · ${s.aiGlobalMinInterval}: $_minInterval · ${s.aiGlobalGuardTitle}: ${_guardEnabled ? 'ON' : 'OFF'} · ${_providerName(_apiBase)}',
                       style: AppText.caption.copyWith(
                         color: AppTheme.textSecondary,
                       ),
