@@ -1918,15 +1918,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        // Baris status/last-seen — hijau saat online,
-                        // "terakhir dilihat …" saat tidak. Hashtag sengaja
-                        // tidak ditampilkan di header (user request).
+                        // Baris status/last-seen — lebih kecil & kurus
+                        // dari subtitle di atasnya (micro 10, tanpa bold).
+                        // Hijau saat online, "terakhir dilihat …" saat tidak.
                             if (!isBlocked && _otherStatus == 'online')
                               Text(
                                 s.statusOnline,
-                                style: AppText.caption.copyWith(
+                                style: AppText.micro.copyWith(
                                   color: const Color(0xFF69F0AE),
-                                  fontWeight: FontWeight.w600,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -1934,7 +1933,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                             else if (!isBlocked && _otherLastSeen != null)
                               Text(
                                 '${s.lastSeenAt} ${formatRelativeTime(_otherLastSeen!, isId: s.isId)}',
-                                style: AppText.caption.copyWith(
+                                style: AppText.micro.copyWith(
                                   color: Colors.white70,
                                 ),
                                 maxLines: 1,
