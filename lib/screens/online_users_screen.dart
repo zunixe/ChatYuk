@@ -1808,7 +1808,8 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
                   const BoxConstraints(minWidth: 36, minHeight: 0),
               labelText: widget.label,
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  // Sama dengan SearchDropdown (gender) → tinggi identik.
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               suffixIconConstraints:
                   const BoxConstraints(minWidth: 36, minHeight: 0),
               suffixIcon: widget.selected.isEmpty
