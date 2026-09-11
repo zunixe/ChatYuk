@@ -502,6 +502,60 @@ extension SAdminX on S {
   String get dummySetStatusFail =>
       isId ? 'Gagal menyetel status' : 'Failed to set status';
 
+  // ── AI mode dummy ──
+  String get dummyAiChip => 'AI';
+
+  String get dummyAiTooltip => isId ? 'Mode AI' : 'AI Mode';
+
+  String get dummyAiTitle => isId ? 'Mode AI Dummy' : 'Dummy AI Mode';
+
+  String get dummyAiDesc => isId
+      ? 'AI membalas chat masuk memakai persona dari profil dummy ini (nama, umur, kota, hashtag = hobi).'
+      : 'AI replies to incoming chats using this dummy\'s profile (name, age, city, hashtags = hobbies).';
+
+  String get dummyAiPersonality => isId ? 'Kepribadian' : 'Personality';
+
+  String get dummyAiPersonalityAuto => isId
+      ? 'Kosong = otomatis (unik per dummy)'
+      : 'Empty = auto (unique per dummy)';
+
+  String get dummyAiTone => isId ? 'Gaya bicara' : 'Speaking style';
+
+  String get dummyAiToneAuto => isId
+      ? 'Kosong = otomatis (santai, 1-3 kalimat)'
+      : 'Empty = auto (casual, 1-3 sentences)';
+
+  String get dummyAiExtra => isId ? 'Prompt tambahan' : 'Extra prompt';
+
+  String get dummyAiExtraHint =>
+      isId ? 'Instruksi khusus untuk AI...' : 'Special instructions for the AI...';
+
+  String get dummyAiEnabledLabel => isId ? 'AI aktif' : 'AI on';
+
+  String get dummyAiSaved =>
+      isId ? 'Pengaturan AI disimpan' : 'AI settings saved';
+
+  String get dummyAiSaveFail =>
+      isId ? 'Gagal menyimpan AI' : 'Failed to save AI settings';
+
+  String get aiGlobalTitle => 'AI Bot';
+
+  String get aiGlobalDesc => isId
+      ? 'Master switch semua balasan AI dummy + batas rate.'
+      : 'Master switch for all dummy AI replies + rate limits.';
+
+  String get aiGlobalMaxReplies => isId
+      ? 'Maks balasan per chat per jam'
+      : 'Max replies per chat per hour';
+
+  String get aiGlobalMinInterval => isId
+      ? 'Jeda minimal antar balasan (detik)'
+      : 'Min interval between replies (seconds)';
+
+  String get aiGlobalSaved => isId
+      ? 'Pengaturan AI global disimpan'
+      : 'Global AI settings saved';
+
   String get dummyListFail =>
       isId ? 'Gagal memuat akun dummy' : 'Failed to load dummy accounts';
 
