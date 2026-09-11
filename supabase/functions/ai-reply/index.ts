@@ -244,66 +244,92 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, skipped: 'no_history' });
     }
 
-    // Kirim pesan dgn typing manusiawi: channel dibuka + denyut pertama
-    // HANYA setelah teks balasan siap (BUKAN saat LLM berpikir),
-    // lalu tahan: hitung durasi dari panjang teks, typing selama estimasi
-    // waktu ketik manusia, baru insert pesan.
-    const sendWithTyping = async (text: string) => {
-      // Read receipt: dummy "membaca" pesan masuk sebelum membalas —
-      // RPC ini menerima service_role (guard admin_mark_chat_read).
+    // Kirim pesan dgn typing manusiawi: channel dibuka SEBELUM LLM berpikir
+    // + denyut pertama LANGSUNG (jangan biarkan user melihat hening 2-8 dtk
+    // lalu pesan muncul mendadak = tidak natural), denyut berulang selama
+    // fase berpikir, setelah teks siap hold sesuai estimasi waktu ketik.
+    // Read receipt: dummy "membaca" pesan masuk sebelum membalas —
+    // RPC ini menerima service_role (guard admin_mark_chat_read).
+    let rt: any = null;
+    let ch: any = null;
+    let wsOk = false;
+    let thinkTimer: ReturnType<typeof setInterval> | null = null;
+
+    const pulseTyping = async () => {
+      const payload = {
+        sender_id: dummyUid,
+        kind: 'typing',
+        ts: Date.now(),
+      };
+      if (wsOk) {
+        try {
+          await ch.sendBroadcastMessage({ event: 'typing', payload });
+          return;
+        } catch (_) {}
+      }
+      try {
+        await fetch(
+          `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
+              Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
+            },
+            body: JSON.stringify({
+              messages: [{ topic: `typing-${chatId}`, event: 'typing', payload }],
+            }),
+          },
+        );
+      } catch (_) {}
+    };
+
+    const openTypingChannel = async () => {
       try {
         await admin.rpc('admin_mark_chat_read', {
           p_chat_id: chatId,
           p_uid: dummyUid,
         });
       } catch (_) {}
-      // SATU channel WebSocket dibuka sekali untuk seluruh durasi mengetik
+      // SATU channel WebSocket dibuka sekali untuk seluruh siklus
       // (subscribe + ack:true — tanpa ini, kirim lalu langsung unsubscribe
       // membuat pesan hilang sebelum WS flush). HTTP API hanya fallback
       // bila WS gagal subscribe.
-      const rt = createClient(
+      rt = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_ANON_KEY')!,
         { realtime: { params: { eventsPerSecond: 20 } } },
       );
-      const ch = rt.channel(`typing-${chatId}`, {
+      ch = rt.channel(`typing-${chatId}`, {
         config: { broadcast: { ack: true, self: false } },
       });
-      let wsOk = false;
       try {
         const st = await ch.subscribe();
         wsOk = st === 'SUBSCRIBED' && typeof ch.sendBroadcastMessage === 'function';
       } catch (_) {}
-      const pulse = async () => {
-        const payload = {
-          sender_id: dummyUid,
-          kind: 'typing',
-          ts: Date.now(),
-        };
-        if (wsOk) {
-          try {
-            await ch.sendBroadcastMessage({ event: 'typing', payload });
-            return;
-          } catch (_) {}
-        }
-        try {
-          await fetch(
-            `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
-                Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
-              },
-              body: JSON.stringify({
-                messages: [{ topic: `typing-${chatId}`, event: 'typing', payload }],
-              }),
-            },
-          );
-        } catch (_) {}
-      };
-      await pulse(); // denyut pertama LANGSUNG saat teks siap
+      await pulseTyping(); // denyut pertama LANGSUNG
+      // Denyut berulang selama fase berpikir — client bubble auto-mati 3s
+      // setelah denyut terakhir; 2.5s menjaga bubble tetap hidup.
+      thinkTimer = setInterval(() => {
+        pulseTyping();
+      }, 2500);
+    };
+
+    const closeTyping = async () => {
+      if (thinkTimer) {
+        clearInterval(thinkTimer);
+        thinkTimer = null;
+      }
+      try {
+        await ch?.unsubscribe();
+        await rt?.removeAllChannels();
+      } catch (_) {}
+    };
+
+    const sendWithTyping = async (text: string) => {
+      // Channel & denyut thinking sudah hidup dari openTypingChannel().
+      await pulseTyping(); // denyut "mulai mengetik" teks final
 
       // Durasi DITURUNKAN DARI PANJANG TEKS (simulasi kecepatan ketik):
       // typeMs = 700ms buka chat + len / cps, cps acak 8-14 char/dtk.
@@ -331,7 +357,7 @@ Deno.serve(async (req: Request) => {
       }
       for (const st of steps) {
         if (st.type === 'type') {
-          await pulse();
+          await pulseTyping();
           await sleep(st.ms);
         } else {
           await sleep(st.ms); // tanpa pulse → indikator hilang (kaya mikir)
@@ -346,10 +372,7 @@ Deno.serve(async (req: Request) => {
           text,
           type: 'text',
         });
-      try {
-        await ch.unsubscribe();
-        await rt.removeAllChannels();
-      } catch (_) {}
+      await closeTyping();
       return insErr;
     };
 
@@ -357,6 +380,7 @@ Deno.serve(async (req: Request) => {
     // (dipilih ACAK supaya tidak ada pola yang bisa ditebak).
     const lastUser = [...history].reverse().find((m) => m.role === 'user');
     if (lastUser && isExplicit(lastUser.content)) {
+      await openTypingChannel();
       const defl = randomOf(DEFLECTIONS);
       const insErr = await sendWithTyping(defl);
       if (insErr) {
@@ -365,13 +389,21 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, reply: defl, blocked: 'nsfw_input' });
     }
 
+    // ── Fase berpikir: typing indikator HIDUP dari sekarang ──
+    // Buka channel + denyut instan + denyut berulang 2.5s — user melihat
+    // "mengetik..." selama LLM memproses, bukan hening lalu pesan mendadak.
+    await openTypingChannel();
+
     // 5. LLM call (OpenAI-compatible) — dengan retry backoff utk 429
     // (B.AI punya limit konkurensi; balasan + ekstraksi back-to-back
     // sering kena).
     const apiKey = Deno.env.get('AI_API_KEY');
     const apiBase = Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
     const model = dummy.ai_model || Deno.env.get('AI_MODEL') || 'glm-5.3-flash';
-    if (!apiKey) return json({ ok: false, error: 'no_api_key' }, 500);
+    if (!apiKey) {
+      await closeTyping();
+      return json({ ok: false, error: 'no_api_key' }, 500);
+    }
 
     const llmCall = async (
       messages: Array<{ role: string; content: string }>,
@@ -416,9 +448,15 @@ Deno.serve(async (req: Request) => {
       [{ role: 'system', content: system }, ...history],
       250,
     );
-    if (llmErr) return json({ ok: false, error: 'llm_error', detail: llmErr }, 200);
+    if (llmErr) {
+      await closeTyping();
+      return json({ ok: false, error: 'llm_error', detail: llmErr }, 200);
+    }
     let reply = sanitize(llm?.choices?.[0]?.message?.content);
-    if (!reply) return json({ ok: false, error: 'empty_reply' });
+    if (!reply) {
+      await closeTyping();
+      return json({ ok: false, error: 'empty_reply' });
+    }
 
     // Output-side NSFW guard: LLM tetap saja bisa lolos — cek balasan
     // sebelum dikirim, ganti defleksi bila vulgar.
