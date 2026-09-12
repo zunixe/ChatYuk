@@ -517,11 +517,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   Timer? _pendingConfirmTimer;
   MessageModel? _editingMessage;
   MessageModel? _replyingTo;
-  StreamSubscription<String>? _typingSub;
+  StreamSubscription<(String, int)>? _typingSub;
   Timer? _typingClearTimer;
   DateTime _lastTypingSent = DateTime(2000);
   bool _showTyping = false;
   bool _showRecording = false;
+  // Id + waktu pesan terakhir dari lawan bicara — dipakai mematikan
+  // bubble typing begitu balasan masuk (otoritatif, anti stuck) dan
+  // mengabaikan pulse basi dari invokasi lama.
+  String? _lastPartnerMsgId;
+  DateTime? _lastPartnerMsgTime;
   String? _pendingPhotoBase64;
 
   void _subscribeTyping() {
@@ -529,8 +534,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     debugPrint('[TYPING] screen subscribing for ${widget.chatId}');
     _typingSub = context
         .read<ChatProvider>()
-        .getTypingStream(widget.chatId)
-        .listen((kind) {
+        .getTypingPulseStream(widget.chatId)
+        .listen((event) {
+          final kind = event.$1;
+          final ts = event.$2;
+          // Pulse basi: dikirim SEBELUM/SESAAT SETELAH balasan terakhir
+          // dibuat (race delivery: pulse terkirim duluan tapi tiba belakangan)
+          // → abaikan. Toleransi +1 detik; typing asli berikutnya (burst /
+          // balasan baru, ≥2 detik kemudian) tetap menyalakan bubble.
+          final lastMsg = _lastPartnerMsgTime;
+          if (lastMsg != null &&
+              ts < lastMsg.millisecondsSinceEpoch + 1000) {
+            debugPrint('[TYPING] skipped stale pulse');
+            return;
+          }
           debugPrint('[TYPING] stream got kind=$kind -> bubble on');
           if (!mounted) return;
           setState(() {
@@ -551,6 +568,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             });
           });
         });
+  }
+
+  /// Matikan bubble typing/recording segera (tanpa menunggu timer 3 detik).
+  /// Dipanggil saat pesan baru dari lawan bicara masuk — pesan = bukti
+  /// otoritatif bahwa fase mengetik selesai (anti bubble nyangkut).
+  void _hideTyping() {
+    _typingClearTimer?.cancel();
+    if (!mounted) return;
+    if (_showTyping || _showRecording) {
+      setState(() {
+        _showTyping = false;
+        _showRecording = false;
+      });
+    }
   }
 
   void _sendTypingSignal() {
@@ -2083,6 +2114,23 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         builder: (_, snap) {
                           final msgs = snap.data ?? [];
                           final all = [...msgs, ..._pending];
+                          // Pesan baru dari lawan bicara = typing selesai.
+                          // Matikan bubble via post-frame (anti setState saat build).
+                          // Ini otoritatif: pulse telat dari invokasi lama yang
+                          // masih jalan tidak bisa menghidupkan bubble lagi
+                          // setelah balasan masuk.
+                          for (var i = all.length - 1; i >= 0; i--) {
+                            final m = all[i];
+                            if (m.senderId != widget.otherUid) continue;
+                            if (m.id != _lastPartnerMsgId) {
+                              _lastPartnerMsgId = m.id;
+                              _lastPartnerMsgTime = m.timestamp;
+                              WidgetsBinding.instance.addPostFrameCallback(
+                                (_) => _hideTyping(),
+                              );
+                            }
+                            break;
+                          }
                           if (all.isEmpty) {
                             // Chat baru/kosong — tampilkan layar kosong saja,
                             // tanpa ikon/teks "mulai percakapan".

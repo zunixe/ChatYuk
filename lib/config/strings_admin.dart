@@ -452,6 +452,8 @@ extension SAdminX on S {
 
   String get dummyCancelEdit => isId ? 'Batal Edit' : 'Cancel Edit';
 
+  String get dummyAdd => isId ? 'Tambah Dummy' : 'Add Dummy';
+
   String get dummyUpdated =>
       isId ? 'Profil dummy diperbarui' : 'Dummy profile updated';
 
@@ -545,6 +547,18 @@ extension SAdminX on S {
   String get dummyAiScheduleTitle => isId
       ? 'Jadwal kehadiran AI'
       : 'AI presence schedule';
+
+  String get dummyAiModelTitle => isId
+      ? 'Model LLM'
+      : 'LLM model';
+
+  String get dummyAiModelDesc => isId
+      ? 'Kosongkan "Ikuti global" untuk pakai default global. Model mimo gratis via Zen; GLM via B.AI.'
+      : 'Leave "Follow global" to use the global default. Free mimo via Zen; GLM via B.AI.';
+
+  String get dummyAiModelCustom => isId
+      ? 'Lainnya (ketik id model…)'
+      : 'Other (type model id…)';
 
   String get dummyAiScheduleDesc => isId
       ? 'AI online/idle/offline mengikuti jam aktif. Offline = AI tidak membalas sama sekali.'
@@ -664,6 +678,9 @@ extension SAdminX on S {
   String get aiProviderLoadFail => isId
       ? 'Gagal memuat provider'
       : 'Failed to load providers';
+
+  String get aiProviderModelPreset =>
+      isId ? 'Pilih preset model' : 'Pick a model preset';
 
   String get dummyListFail =>
       isId ? 'Gagal memuat akun dummy' : 'Failed to load dummy accounts';

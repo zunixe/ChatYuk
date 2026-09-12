@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../utils.dart';
 import 'package:flutter/gestures.dart';
@@ -150,22 +151,42 @@ class MessageTextWithTime extends StatelessWidget {
             ),
           );
         }
-        return Column(
-          crossAxisAlignment: alignRight
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RichText(text: TextSpan(style: textStyle, children: _linkifySpans(text, textStyle))),
-            const SizedBox(height: 3),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(timeStr, style: timeStyle),
-                if (trailing != null) ...[const SizedBox(width: 3), trailing!],
-              ],
-            ),
-          ],
+        // Teks multi-baris: batasi lebar bubble selebar BARIS TERPANJANG
+        // (bukan selebar constraint penuh) — bubble ngepas ke isi, pengirim
+        // maupun penerima. Tanpa ini bubble selalu selebar 80% layar.
+        final fullTp = TextPainter(
+          text: TextSpan(
+            text: text,
+            style: textStyle,
+          ),
+          textDirection: Directionality.of(context),
+        )..layout(maxWidth: available);
+        double longest = 0;
+        for (final lm in fullTp.computeLineMetrics()) {
+          if (lm.width > longest) longest = lm.width;
+        }
+        // Jangan lebih sempit dari baris timestamp (+ centang) sendiri.
+        final timeRowW = timeTp.width + 8 + (trailing != null ? 16.0 : 0);
+        final contentW = math.min(available, math.max(longest, timeRowW));
+        return SizedBox(
+          width: contentW > 0 ? contentW : null,
+          child: Column(
+            crossAxisAlignment: alignRight
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RichText(text: TextSpan(style: textStyle, children: _linkifySpans(text, textStyle))),
+              const SizedBox(height: 3),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(timeStr, style: timeStyle),
+                  if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+                ],
+              ),
+            ],
+          ),
         );
       },
     );

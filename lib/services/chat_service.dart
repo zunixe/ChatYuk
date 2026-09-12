@@ -1028,7 +1028,7 @@ class ChatService {
       await unhideChat(senderId, chatId);
     }
 
-    await _sb.from('private_messages').insert({
+    final inserted = await _sb.from('private_messages').insert({
       'chat_id': chatId,
       'sender_id': senderId,
       'sender_name': senderName,
@@ -1043,7 +1043,12 @@ class ChatService {
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null)
         'replied_to_sender_name': repliedToSenderName,
-    });
+    }).select('id').maybeSingle();
+    // Pemicu AI LANGSUNG (tanpa nunggu antrean pg_net trigger yang lambat —
+    // terbukti delay ~1 menit): panggil edge function fire-and-forget.
+    // Trigger DB tetap jadi backup bila ini gagal; claim cegah balasan dobel.
+    final insertedId = (inserted as Map?)?['id'];
+    _invokeAiReply(chatId, senderId, insertedId);
     // Broadcast untuk skala (tanpa postgres realtime) — fire-and-forget.
     // Channel REUSE per chat (putIfAbsent) — dulu: channel baru per pesan
     // menumpuk di memori + traffic realtime makin berat di chat panjang.
@@ -1060,6 +1065,41 @@ class ChatService {
         'voice_path': type == 'voice' ? imageData : '',
         'duration_ms': durationMs ?? 0,
       });
+    } catch (_) {}
+  }
+
+  /// Panggil edge function ai-reply langsung seusai kirim (fire-and-forget).
+  /// Kalau lawan bicara bukan dummy AI, function langsung skip (murah).
+  /// Kalau dummy AI, balasan mulai ~1-2 detik (bukan nunggu antrean pg_net).
+  Future<void> _invokeAiReply(
+    String chatId,
+    String senderId,
+    dynamic triggerId,
+  ) async {
+    try {
+      final chats = _privateChatsLast[senderId];
+      if (chats == null) return;
+      String? other;
+      for (final c in chats) {
+        if (c.chatId != chatId) continue;
+        for (final p in c.participants) {
+          if (p != senderId) {
+            other = p;
+            break;
+          }
+        }
+        break;
+      }
+      if (other == null) return;
+      await _sb.functions.invoke(
+        'ai-reply',
+        body: {
+          'chat_id': chatId,
+          'trigger_msg_id': triggerId,
+          'sender_id': senderId,
+          'dummy_uid': other,
+        },
+      );
     } catch (_) {}
   }
 
@@ -1317,7 +1357,14 @@ class ChatService {
   /// Stream event typing/recording lawan bicara di satu chat.
   /// Emit kind: 'typing' | 'recording' (dari payload event).
   Stream<String> getTypingStream(String chatId) {
-    final controller = StreamController<String>.broadcast();
+    return getTypingPulseStream(chatId).map((e) => e.$1);
+  }
+
+  /// Stream pulse typing mentah (kind + timestamp server ms).
+  /// Dipakai layar chat untuk mengabaikan pulse basi dari invokasi lama
+  /// yang masih jalan setelah balasannya sudah masuk.
+  Stream<(String, int)> getTypingPulseStream(String chatId) {
+    final controller = StreamController<(String, int)>.broadcast();
     final channel = _typingChannel(chatId);
     debugPrint('[TYPING] onBroadcast registered for $chatId');
     channel.onBroadcast(
@@ -1341,7 +1388,10 @@ class ChatService {
           return;
         }
         if (!controller.isClosed) {
-          controller.add((data['kind'] as String?) ?? 'typing');
+          final ts =
+              (data['ts'] as num?)?.toInt() ??
+              DateTime.now().millisecondsSinceEpoch;
+          controller.add(((data['kind'] as String?) ?? 'typing', ts));
         }
       },
     );
