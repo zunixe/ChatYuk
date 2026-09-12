@@ -548,6 +548,8 @@ Deno.serve(async (req: Request) => {
     // Tawaran "nakal" (consent): sekali, di fase nyaman (bukan awal kenal),
     // sebelum ditolak, saat guard masih keras. Setelah ini AI menanyakan
     // di akhir balasan; jawaban "ya" membuka mode dewasa per chat.
+    // Tawaran "nakal" hanya relevan saat guard AKTIF (guard off = sudah
+    // bebas, tidak perlu consent). Jadi syaratnya guardOn — konsisten.
     const shouldAskNakal =
       guardOn &&
       !adultMode &&

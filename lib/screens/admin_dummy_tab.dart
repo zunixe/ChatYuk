@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/regions.dart';
 import '../config/supabase_config.dart';
@@ -708,6 +709,9 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
   }
   late bool _enabled;
   int _guardSel = 0; // 0 = ikuti global, 1 = ON, 2 = OFF
+  bool _noRate = false;
+  late final TextEditingController _maxRateCtrl;
+  late final TextEditingController _minRateCtrl;
   late bool _schedAuto;
   late List<int> _hours;
   bool _schedBusy = false;
@@ -725,6 +729,13 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     final g = widget.item['ai_guard_enabled'];
     _guardSel = g == true ? 1 : g == false ? 2 : 0;
     _schedAuto = (widget.item['ai_schedule_auto'] as bool?) ?? true;
+    _noRate = (widget.item['ai_no_rate_limit'] as bool?) ?? false;
+    _maxRateCtrl = TextEditingController(
+      text: (widget.item['ai_max_replies'] as num?)?.toString() ?? '',
+    );
+    _minRateCtrl = TextEditingController(
+      text: (widget.item['ai_min_interval'] as num?)?.toString() ?? '',
+    );
     _hours = _parseHours(widget.item['ai_active_hours']);
     _personalityCtrl = TextEditingController(text: '${persona['personality'] ?? ''}');
     _toneCtrl = TextEditingController(text: '${persona['tone'] ?? ''}');
@@ -736,6 +747,8 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     _personalityCtrl.dispose();
     _toneCtrl.dispose();
     _extraCtrl.dispose();
+    _maxRateCtrl.dispose();
+    _minRateCtrl.dispose();
     super.dispose();
   }
 
@@ -762,8 +775,14 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
             'extra_prompt': _extraCtrl.text.trim(),
         },
         guardEnabled: guardValue,
+        noRateLimit: _noRate,
+        maxReplies: int.tryParse(_maxRateCtrl.text.trim()),
+        minInterval: int.tryParse(_minRateCtrl.text.trim()),
       );
       widget.item['ai_guard_enabled'] = guardValue;
+      widget.item['ai_no_rate_limit'] = _noRate;
+      widget.item['ai_max_replies'] = int.tryParse(_maxRateCtrl.text.trim());
+      widget.item['ai_min_interval'] = int.tryParse(_minRateCtrl.text.trim());
       if (!mounted) return;
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context)
@@ -834,6 +853,48 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
               style: AppText.caption.copyWith(
                 color: AppTheme.textSecondary,
               ),
+            ),
+            const SizedBox(height: 6),
+            // ── Rate limit per-dummy ──
+            Text(s.dummyRateTitle, style: AppText.bodyStrong),
+            const SizedBox(height: 4),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _noRate,
+              onChanged: (v) => setState(() => _noRate = v),
+              title: Text(s.dummyRateUnlimited, style: AppText.body),
+              activeThumbColor: AppTheme.primary,
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _maxRateCtrl,
+                    enabled: !_noRate,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      labelText: s.dummyRateMax,
+                      helperText: s.dummyRateGlobalHint,
+                      helperMaxLines: 2,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _minRateCtrl,
+                    enabled: !_noRate,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: AppText.body,
+                    decoration: InputDecoration(labelText: s.dummyRateMin),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             // ── Jadwal kehadiran AI ──

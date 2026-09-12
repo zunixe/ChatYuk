@@ -594,6 +594,21 @@ extension SAdminX on S {
       ? 'Global = ikut pengaturan AI Bot; ON/OFF = khusus dummy ini'
       : 'Global = follow AI Bot settings; ON/OFF = this dummy only';
 
+  String get dummyRateTitle => isId ? 'Rate limit' : 'Rate limit';
+
+  String get dummyRateUnlimited =>
+      isId ? 'Tanpa batas (unlimited)' : 'Unlimited';
+
+  String get dummyRateMax =>
+      isId ? 'Maks balasan per chat per jam' : 'Max replies per chat per hour';
+
+  String get dummyRateMin =>
+      isId ? 'Jeda antar balasan (detik)' : 'Interval between replies (seconds)';
+
+  String get dummyRateGlobalHint => isId
+      ? 'Kosongkan = ikut pengaturan AI Bot (global)'
+      : 'Empty = follow AI Bot settings (global)';
+
   String get aiGlobalModel => isId ? 'Model default' : 'Default model';
 
   String get aiGlobalBaseUrl => isId ? 'Base URL' : 'Base URL';
