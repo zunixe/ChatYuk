@@ -234,32 +234,16 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // ── PRESENCE GUARD (permintaan owner) ──
-    // Offline → AI TIDAK membalas sama sekali (jangan buka typing).
-    // Idle   → AI "bangunkan": jadi online dulu, baru membalas.
-    // Online → refresh last_seen (jaga muncul di daftar online).
-    // Cronjob ai_presence_tick mengatur online/offline sesuai jadwal.
+    // ── PRESENCE: dummy selalu dibangunkan — TIDAK ADA skip offline ──
+    // Apapun statusnya (offline/idle/online), AI membalas; profil dipaksa
+    // online + last_seen fresh supaya konsisten di daftar. (Skip offline
+    // dihapus: jadwal/apa pun yang menulis offline tidak boleh membungkam
+    // dummy — owner komplain berulang "ga ada balasan".)
     {
-      const { data: presence } = await admin
+      await admin
         .from('profiles')
-        .select('status')
-        .eq('id', dummyUid)
-        .maybeSingle();
-      const st = (presence?.status as string | undefined) ?? 'offline';
-      if (st === 'offline') {
-        return json({ ok: false, skipped: 'dummy_offline' });
-      }
-      if (st === 'idle') {
-        await admin
-          .from('profiles')
-          .update({ status: 'online', last_seen: new Date().toISOString() })
-          .eq('id', dummyUid);
-      } else {
-        await admin
-          .from('profiles')
-          .update({ last_seen: new Date().toISOString() })
-          .eq('id', dummyUid);
-      }
+        .update({ status: 'online', last_seen: new Date().toISOString() })
+        .eq('id', dummyUid);
     }
 
     // 1. Fresh checks: dummy still AI + global still on
@@ -551,7 +535,16 @@ Deno.serve(async (req: Request) => {
       .from('private_messages')
       .select('id', { count: 'exact', head: true })
       .eq('chat_id', chatId);
-    const freshStage = (chatMsgCount ?? 0) <= 6 && !memoryLine;
+    // AI↔AI (sender juga dummy): skip perkenalan JAIM — langsung panas
+    // (testing Dhanu × Santi). Chat manusia tetap bertahap.
+    const { data: senderDummyRow } = await admin
+      .from('dummy_accounts')
+      .select('uid')
+      .eq('uid', senderId)
+      .maybeSingle();
+    const senderIsDummy = senderDummyRow != null;
+    const freshStage =
+      !senderIsDummy && (chatMsgCount ?? 0) <= 4 && !memoryLine;
     // Tawaran "nakal" (consent): sekali, di fase nyaman (bukan awal kenal),
     // sebelum ditolak, saat guard masih keras. Setelah ini AI menanyakan
     // di akhir balasan; jawaban "ya" membuka mode dewasa per chat.
@@ -579,9 +572,10 @@ Deno.serve(async (req: Request) => {
       }
     }
     const hot =
-      !freshStage &&
-      (isExplicit(contentText(lastUserMsg?.content ?? '')) ||
-        (cadenceSec !== null && cadenceSec < 120));
+      senderIsDummy ||
+      (!freshStage &&
+        (isExplicit(contentText(lastUserMsg?.content ?? '')) ||
+          (cadenceSec !== null && cadenceSec < 120)));
 
     // ── Jeda manusiawi SEBELUM read-receipt & typing: dia "belum lihat HP".
     // Seimbang — tidak terlalu cepat (berasa mesin), tidak terlalu lama:
@@ -635,7 +629,11 @@ Deno.serve(async (req: Request) => {
       nowLabel = d.toISOString().slice(0, 16).replace('T', ' ') + ' WIB';
     }
 
-    const system = [
+    // Dideklarasikan di sini (sebelum system array) karena dipakai di
+    // dalamnya; NILAINYA diisi blok harian di bawah (sebelum LLM utama).
+    let dailyLine = '';
+
+    const systemParts: string[] = [
       `Kamu adalah ${profile.nickname}, ${profile.age ?? ''} tahun, ${genderLabel}, tinggal di ${profile.city ?? ''}${profile.country ? ', ' + profile.country : ''}.`.replace(
         /\s+/g,
         ' ',
@@ -649,7 +647,7 @@ Deno.serve(async (req: Request) => {
       memoryLine,
       partnerLine,
       'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
-      'REALISTIS (wajib): JANGAN mengarang nama orang, nama tempat, kejadian, atau topik yang TIDAK ADA di riwayat obrolan — jangan sebut nama-nama acak. Kalau belum tahu sesuatu, akui atau bertanya. Ngomongnya tetap yang sudah diketahui dari obrolan saja.',
+      'REALISTIS (wajib): JANGAN mengarang nama orang, nama tempat, kejadian, atau topik yang TIDAK ADA di riwayat obrolan maupun di KEGIATANMU HARI INI (itu dua sumber kebenaranmu). Kalau belum tahu sesuatu, akui atau bertanya. Ngomongnya tetap yang sudah diketahui dari obrolan saja.',
       'VARIASI: lihat balasan-balasanmu sebelumnya di riwayat chat — JANGAN mengulang emoji yang sama, jangan pola kalimat yang sama. EMOJI: MAKSIMAL 1 per balasan, dan hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) — sekitar separuh balasan TANPA emoji sama sekali. Panjang juga selalu beda-beda (kadang 2-4 kata, kadang lebih panjang).',
       'Kalau ada gambar terlampir di pesan, LIHAT dan tanggapi isinya secara natural (komentari yang terlihat) — kayak orang dikirimi foto.',
       'Kalau ada [pesan suara] TANPA transkrip isi, berarti kamu BELUM bisa mendengarnya — tanggapi natural (minta dijelasin / lanjutkan topik), JANGAN pura-pura dengar isinya.',
@@ -658,7 +656,7 @@ Deno.serve(async (req: Request) => {
         ? 'FASE SEKARANG: BARU KENAL — kamu JAIM. Agak dingin dan reserved: sapaan dijawab MINIMAL dan CERMIN (dia "hi" → kamu "hi" / "halo" saja, 1-2 kata), JANGAN bertanya balik, JANGAN antusias, JANGAN menggoda, JANGAN cerita panjang. Jawab sesingkat mungkin sampai dia benar-benar serius ngobrol — kehangatan baru tumbuh pelan-pelan setelah dia menunjukkan niat.'
         : hot
         ? 'FASE SEKARANG: obrolan lagi panas — ikuti intensitasnya, boleh makin berani.'
-        : 'FASE SEKARANG: obrolan berjalan — kalian sudah lumayan nyaman; kehangatan normal, godaan naik progresif.',
+        : 'FASE SEKARANG: obrolan berjalan — kalian sudah lumayan nyaman; naikkan godaan dengan CEPAT, jangan bertahan lama di basa-basi — masuk rayuan panas dalam 1-2 balasan.',
       // Nyaman + lawan nulis panjang → balasan boleh lebih panjang bila
       // benar-benar perlu (mengikuti panjang cerita), tanpa jadi esei.
       !freshStage && recentUserMaxLen >= 80
@@ -684,9 +682,7 @@ Deno.serve(async (req: Request) => {
       shouldAskNakal
         ? 'SAAT INI PENTING: kamu sudah penasaran dan percaya dia — akhiri balasanmu dengan pertanyaan jujur yang menggoda, tanyakan: "kamu mau aku nakal, atau kamu suka aku nakal?" (boleh variasikan sedikit gayanya, tapi intinya persis itu). Ini satu-satunya tawaran — jangan sampai terlewat.'
         : '',
-    ]
-      .filter(Boolean)
-      .join(' ');
+    ];
 
     // ── Kirim: typing realistis (channel sudah dibuka di atas) ──
     // Pesan masuk setelah denyut selesai.
@@ -906,11 +902,15 @@ Deno.serve(async (req: Request) => {
     const lastUserToxic =
       lastUserExplicit || lastUserInsult;
     if (lastUserToxic) {
-      const toxicCount = history.filter(
+      // Hitung di 5 pesan user TERAKHIR saja (bukan seluruh window) —
+      // hinaan lama yang sudah lewat tidak boleh memicu storm selamanya.
+      const recentUser = history
+        .filter((m) => m.role === 'user')
+        .slice(-5);
+      const toxicCount = recentUser.filter(
         (m) =>
-          m.role === 'user' &&
-          (isExplicit(contentText(m.content)) ||
-            isInsult(contentText(m.content))),
+          isExplicit(contentText(m.content)) ||
+          isInsult(contentText(m.content)),
       ).length;
       if (toxicCount >= 2) {
         const backMin = 90 + Math.floor(Math.random() * 60); // 90-150 menit
@@ -962,16 +962,66 @@ Deno.serve(async (req: Request) => {
     // "mengetik..." selama LLM memproses, bukan hening lalu pesan mendadak.
     await openTypingChannel();
 
-    // ── JADWAL HARIAN AI ──
+    // Routing per model (eksplisit, tidak tergantung base):
+    // - ':free' / 'nvidia/' → OpenRouter (secret AI_API_KEY_OPENROUTER)
+    // - model free Zen (muse-spark-*, mimo-*, ling-*, nemotron-* tanpa slash,
+    //   deepseek-v4-flash-free, big-pickle) → OpenCode Zen
+    //   (secret AI_API_KEY_ZEN + header client opencode — free tier Zen
+    //   hanya jalan dengan header ini).
+    // - selain itu → panel ai_provider_config → env B.AI.
+    const routeFor = (
+      m: string,
+    ): { base: string; key?: string; headers: Record<string, string> } => {
+      const or = m.includes(':free') || m.startsWith('nvidia/');
+      if (or) {
+        return {
+          base: 'https://openrouter.ai/api/v1',
+          key:
+            Deno.env.get('AI_API_KEY_OPENROUTER') || Deno.env.get('AI_API_KEY'),
+          headers: {},
+        };
+      }
+      const zen =
+        m === 'big-pickle' ||
+        m === 'deepseek-v4-flash-free' ||
+        (/^(muse-spark|mimo|ling|nemotron)-/.test(m) && m.endsWith('-free'));
+      if (zen) {
+        const hex = (n: number) =>
+          [...crypto.getRandomValues(new Uint8Array(n))]
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
+        return {
+          base: 'https://opencode.ai/zen/v1',
+          key: Deno.env.get('AI_API_KEY_ZEN') || Deno.env.get('AI_API_KEY'),
+          headers: {
+            'x-opencode-session': `ses_${hex(32)}`,
+            'x-opencode-request': `msg_${hex(8)}`,
+            'x-opencode-client': 'tui',
+            'User-Agent': 'opencode/1.18.25',
+          },
+        };
+      }
+      return {
+        base:
+          provCfg?.api_base ||
+          Deno.env.get('AI_API_BASE') ||
+          'https://api.b.ai/v1',
+        key: provCfg?.api_key || Deno.env.get('AI_API_KEY'),
+        headers: {},
+      };
+    };
+    // ── JADWAL HARIAN AI + CERITA KEHIDUPAN HARIAN ──
     // AI menentukan sendiri jam onlinenya SETIAP HARI (menggerakkan
-    // cronjob ai_presence_tick). Regenerasi sekali sehari per dummy, di
-    // pesan pertama yang memicu AI. Mode manual (ai_schedule_auto=false)
-    // tidak disentuh — presence ikut chip manual seperti akun biasa.
+    // cronjob ai_presence_tick) DAN generate cerita kegiatannya hari ini
+    // (kerja + masalah kantor, main sama teman, jalan-jalan ke tempat
+    // nyata sesuai kota) — NYAMBUNG dengan hari-hari sebelumnya. Cerita
+    // ini BERSIFAT GLOBAL per dummy: konsisten ke siapa pun yang chat.
+    // (nowMs/todayWib dipakai juga blok cerita di bawah.)
+    const nowMs = Date.now();
+    const todayWib = new Date(nowMs + 7 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
     try {
-      const nowMs = Date.now();
-      const todayWib = new Date(nowMs + 7 * 3600 * 1000)
-        .toISOString()
-        .slice(0, 10);
       const schedAuto = (dummy as any).ai_schedule_auto !== false;
       const schedDate = (dummy as any).ai_schedule_date ?? null;
       if (schedAuto && schedDate !== todayWib) {
@@ -1003,11 +1053,18 @@ Deno.serve(async (req: Request) => {
         const nick = (dummy as any).nickname || 'teman';
         let hours: number[] = [];
         try {
-          const apiKey = Deno.env.get('AI_API_KEY');
-          const apiBase =
-            Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
+          // Routing sama seperti balasan utama (Zen/free/panel).
+          const hRoute = routeFor(
+            (dummy as any).ai_model ||
+              provCfg?.default_model ||
+              Deno.env.get('AI_MODEL') ||
+              'glm-5.3-flash',
+          );
+          const apiKey = hRoute.key;
+          const apiBase = hRoute.base;
           const model =
             (dummy as any).ai_model ||
+            provCfg?.default_model ||
             Deno.env.get('AI_MODEL') ||
             'glm-5.3-flash';
           if (apiKey) {
@@ -1016,6 +1073,7 @@ Deno.serve(async (req: Request) => {
               headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${apiKey}`,
+                ...hRoute.headers,
               },
               body: JSON.stringify({
                 model,
@@ -1066,6 +1124,236 @@ Deno.serve(async (req: Request) => {
       // Regenerasi jadwal tidak boleh menggagalkan balasan.
     }
 
+    // ── CERITA HARIAN (sekali sehari, GLOBAL per dummy) ──
+    // Kalau baris hari ini belum ada → generate dari LLM (nyambung ke
+    // cerita terakhir), simpan. Berlaku walau mode jadwal manual —
+    // dummy tetap menjalani hidupnya tiap hari.
+    try {
+      const { data: todayRow } = await admin
+        .from('ai_daily_story')
+        .select('story_date')
+        .eq('dummy_uid', dummyUid)
+        .eq('story_date', todayWib)
+        .maybeSingle();
+      if (!todayRow) {
+        const { data: prevRows } = await admin
+          .from('ai_daily_story')
+          .select('story, story_date')
+          .eq('dummy_uid', dummyUid)
+          .lt('story_date', todayWib)
+          .order('story_date', { ascending: false })
+          .limit(1);
+        const prevStory = (prevRows as any[] | null)?.[0] ?? null;
+        const prevText = prevStory
+          ? `Kemarin (${prevStory.story_date}): ${JSON.stringify(prevStory.story)}`
+          : 'Ini hari pertamamu punya rutinitas tercatat — mulai yang wajar.';
+        // Story/jadwal SELALU pakai glm (B.AI) — model chat (Zen/free)
+        // sering menolak system-only JSON call (500) & format tidak stabil.
+        const sModel = 'glm-5.3-flash';
+        const sRoute = routeFor(sModel);
+        const sBase = sRoute.base;
+        const sKey = sRoute.key;
+        const sHeaders = sRoute.headers;
+        const sNick = (dummy as any).nickname || profile.nickname || 'teman';
+        const sCity = profile.city || profile.country || 'kotamu';
+        const sHobbies = hobbies || 'ngobrol santai';
+        const sWeekday = new Date(nowMs + 7 * 3600 * 1000).toLocaleDateString(
+          'id-ID',
+          { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Jakarta' },
+        );
+        let story: any = null;
+        const storyPrompt = (strict: boolean) =>
+          `Kamu ${sNick} (${profile.age ?? ''} tahun, tinggal di ${sCity}, hobi: ${sHobbies}). ` +
+          `Buat CERITA KEGIATANMU hari ini, ${sWeekday}. ${prevText} ` +
+          `Ceritamu harus NYAMBUNG dengan kemarin (pekerjaan yang sama, teman yang sama, masalah yang berlanjut kalau ada). ` +
+          `Isi: apa pekerjaanmu hari ini + masalah/kejadian di tempat kerja, main dengan siapa, jalan-jalan ke mana (sebutkan TEMPAT NYATA yang wajar di ${sCity} — mall, kafe, taman, warung). ` +
+          (strict
+            ? `WAJIB TANPA KECUALI: work HARUS terisi (pekerjaan + kejadian konkret hari ini), activities MINIMAL 2 kegiatan konkret, hangout HARUS terisi (dengan siapa / kalau sendiri tulis "sendiri"), place HARUS tempat SPESIFIK (nama mall/kafe/taman/warung, BUKAN cuma nama kota). JANGAN kosongkan field apa pun kecuali problem.`
+            : '') +
+          `Balas HANYA JSON valid tanpa markdown: {"summary":"1 kalimat ringkasan harimu","work":"pekerjaan + masalah hari ini","problem":"masalah/kejadian paling menonjol (boleh kosong)","activities":["kegiatan 1","kegiatan 2"],"hangout":"dengan siapa / sendiri","place":"tempat utama hari ini"}.`;
+        // Jejak diagnosis sementara: hanya bila cerita GAGAL (fallback).
+        const storyDbg: any = {};
+        const tryStoryGen = async (strict: boolean): Promise<any> => {
+          // Ekstrak objek JSON pertama yang seimbang (tahan terhadap
+          // teks pembuka/penutup & markdown fence dari model).
+          const extractJson = (s: string): any => {
+            let t = s.replace(/```json|```/g, '');
+            const start = t.indexOf('{');
+            if (start < 0) return null;
+            let depth = 0;
+            let inStr = false;
+            let esc = false;
+            for (let i = start; i < t.length; i++) {
+              const c = t[i];
+              if (inStr) {
+                if (esc) esc = false;
+                else if (c === '\\') esc = true;
+                else if (c === '"') inStr = false;
+              } else {
+                if (c === '"') inStr = true;
+                else if (c === '{') depth++;
+                else if (c === '}') {
+                  depth--;
+                  if (depth === 0) {
+                    try {
+                      return JSON.parse(t.slice(start, i + 1));
+                    } catch (_) {
+                      return null;
+                    }
+                  }
+                }
+              }
+            }
+            return null;
+          };
+          try {
+            const sr = await fetch(`${sBase}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${sKey}`,
+                ...sHeaders,
+              },
+              body: JSON.stringify({
+                model: sModel,
+                max_tokens: 600,
+                temperature: 0.8,
+                // glm-5.3-flash selalu reasoning — low supaya budget token
+                // dipakai untuk JSON jawaban, bukan habis di reasoning
+                // (JSON terpotong = parse gagal = cerita tipis).
+                // HANYA untuk glm — provider lain/Zen menolak param ini (500).
+                ...(sModel.includes('glm') ? { reasoning_effort: 'low' } : {}),
+                messages: [
+                  { role: 'system', content: storyPrompt(strict) },
+                  { role: 'user', content: 'Oke, buatkan.' },
+                ],
+              }),
+            });
+            if (!sr.ok) {
+              storyDbg.http = sr.status;
+              return null;
+            }
+            const sj: any = await sr.json();
+            const sraw: string =
+              sj?.choices?.[0]?.message?.content ?? '';
+            storyDbg.rawLen = sraw.length;
+            storyDbg.rawHead = sraw.slice(0, 150);
+            const parsed = extractJson(sraw);
+            storyDbg.parsedOk = parsed != null && typeof parsed.summary === 'string';
+            if (!parsed || typeof parsed.summary !== 'string') return null;
+            return {
+              summary: String(parsed.summary).slice(0, 300),
+              work: String(parsed.work ?? '').slice(0, 300),
+              problem: String(parsed.problem ?? '').slice(0, 300),
+              activities: Array.isArray(parsed.activities)
+                ? parsed.activities.map((a: any) => String(a)).slice(0, 6)
+                : [],
+              hangout: String(parsed.hangout ?? '').slice(0, 200),
+              place: String(parsed.place ?? '').slice(0, 200),
+            };
+          } catch (_) {
+            return null;
+          }
+        };
+        if (sKey) {
+          story = await tryStoryGen(false);
+          // Validasi KETAT: cerita tipis = tidak guna sebagai topik.
+          // Syarat: work terisi, activities >= 2, hangout terisi, place
+          // spesifik (bukan cuma nama kota). Gagal → coba sekali lagi
+          // dengan instruksi tegas.
+          const storyThin = (st: any): boolean => {
+            if (st == null) return true;
+            if ((st.work ?? '').trim() === '') return true;
+            if (!Array.isArray(st.activities) || st.activities.length < 2) {
+              return true;
+            }
+            if ((st.hangout ?? '').trim() === '') return true;
+            const pl = (st.place ?? '').trim();
+            if (pl === '' || pl.toLowerCase() === sCity.toLowerCase()) {
+              return true;
+            }
+            return false;
+          };
+          if (storyThin(story)) {
+            const retry = await tryStoryGen(true);
+            if (retry != null) story = retry;
+          }
+        }
+        if (story == null) {
+          // Fallback deterministik bila LLM gagal — tetap ada cerita hari ini.
+          // _dbg hanya saat fallback (diagnosis; row sukses tetap bersih).
+          story = {
+            summary: `Hari ${sWeekday} yang biasa saja.`,
+            work: '',
+            problem: '',
+            activities: [],
+            hangout: '',
+            place: sCity,
+            _dbg: storyDbg,
+          };
+        }
+        const storyIsThin =
+          (story?.work ?? '').trim() === '' &&
+          (!Array.isArray(story?.activities) || story.activities.length < 2);
+        await admin.from('ai_daily_story').upsert(
+          {
+            dummy_uid: dummyUid,
+            story_date: todayWib,
+            // _dbg hanya saat cerita tipis (diagnosis); row bagus bersih.
+            story: storyIsThin ? { ...story, _dbg: storyDbg } : story,
+          },
+          { onConflict: 'dummy_uid,story_date' },
+        );
+      }
+    } catch (_) {
+      // Cerita harian tidak boleh menggagalkan balasan.
+    }
+
+    // Ambil cerita hari ini + terakhir sebelumnya → dailyLine untuk prompt.
+    // SAMA untuk semua lawan chat (konsistensi global per dummy).
+    try {
+      const { data: srows } = await admin
+        .from('ai_daily_story')
+        .select('story, story_date')
+        .eq('dummy_uid', dummyUid)
+        .lte('story_date', todayWib)
+        .order('story_date', { ascending: false })
+        .limit(2);
+      const list = (srows as any[]) || [];
+      const fmtStory = (r: any): string => {
+        const s0 = r?.story ?? {};
+        const parts = [s0.summary, s0.work, s0.problem]
+          .filter((x) => typeof x === 'string' && x.trim() !== '');
+        if (Array.isArray(s0.activities) && s0.activities.length > 0) {
+          parts.push(`kegiatan: ${s0.activities.slice(0, 4).join('; ')}`);
+        }
+        if (typeof s0.hangout === 'string' && s0.hangout.trim() !== '') {
+          parts.push(`dengan: ${s0.hangout}`);
+        }
+        if (typeof s0.place === 'string' && s0.place.trim() !== '') {
+          parts.push(`di: ${s0.place}`);
+        }
+        return `${r?.story_date ?? ''} — ${parts.join(' | ')}`;
+      };
+      if (list.length > 0) {
+        const nowWib = new Date(nowMs + 7 * 3600 * 1000);
+        const hhmm = `${String(nowWib.getUTCHours()).padStart(2, '0')}.${String(
+          nowWib.getUTCMinutes(),
+        ).padStart(2, '0')}`;
+        dailyLine =
+          `KEGIATANMU HARI INI (${hhmm} WIB, global — SAMA untuk semua orang yang chat denganmu): ${fmtStory(list[0])}.` +
+          (list.length > 1 ? ` KEMARIN: ${fmtStory(list[1])}.` : '') +
+          ' ATURAN PAKAI (wajib): (1) Ungkap HANYA saat ditanya atau saat relevan ("lagi apa", "sibuk apa", "kamu di mana", "kerja apa", "jalan ke mana") — JANGAN dongeng sekaligus di satu balasan; jawab sepotong sesuai yang ditanya, sisanya menyusul kalau dia nanya lagi. (2) Perhatikan JAM sekarang: kegiatan yang belum waktunya (mis. malam padahal masih pagi) BELUM kamu lakukan — jangan ngaku sudah. (3) Kalau ditanya detail yang tidak ada di cerita, improvisasi KECIL yang masuk akal dan konsisten dengan cerita (nama teman/tempat yang sama kalau ditanya lagi). (4) Konsisten: ke semua orang ceritamu SAMA hari ini.';
+      }
+    } catch (_) {
+      dailyLine = '';
+    }
+
+    // Gabung dailyLine ke system SETELAH nilainya final (di atas).
+    // dailyLine dihitung belakangan supaya cerita hari ini sudah pasti ada.
+    if (dailyLine !== '') systemParts.push(dailyLine);
+    const system = systemParts.filter(Boolean).join(' ');
+
     // Cek ganda SEBELUM panggil LLM: selama jeda manusiawi tadi, mungkin
     // balasan lain sudah terkirim (invokasi lain / admin pegang dummy) —
     // kalau sudah ada balasan dummy setelah trigger, jangan dobel.
@@ -1093,54 +1381,6 @@ Deno.serve(async (req: Request) => {
       provCfg?.default_model ||
       Deno.env.get('AI_MODEL') ||
       'glm-5.3-flash';
-    // Routing per model (eksplisit, tidak tergantung base):
-    // - ':free' / 'nvidia/' → OpenRouter (secret AI_API_KEY_OPENROUTER)
-    // - model free Zen (muse-spark-*, mimo-*, ling-*, nemotron-* tanpa slash,
-    //   deepseek-v4-flash-free, big-pickle) → OpenCode Zen
-    //   (secret AI_API_KEY_ZEN + header client opencode — free tier Zen
-    //   hanya jalan dengan header ini).
-    // - selain itu → panel ai_provider_config → env B.AI.
-    const routeFor = (
-      m: string,
-    ): { base: string; key?: string; headers: Record<string, string> } => {
-      const or = m.includes(':free') || m.startsWith('nvidia/');
-      if (or) {
-        return {
-          base: 'https://openrouter.ai/api/v1',
-          key:
-            Deno.env.get('AI_API_KEY_OPENROUTER') || Deno.env.get('AI_API_KEY'),
-          headers: {},
-        };
-      }
-      const zen =
-        m === 'big-pickle' ||
-        m === 'deepseek-v4-flash-free' ||
-        (/^(muse-spark|mimo|ling|nemotron)-/.test(m) && m.endsWith('-free'));
-      if (zen) {
-        const hex = (n: number) =>
-          [...crypto.getRandomValues(new Uint8Array(n))]
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join('');
-        return {
-          base: 'https://opencode.ai/zen/v1',
-          key: Deno.env.get('AI_API_KEY_ZEN') || Deno.env.get('AI_API_KEY'),
-          headers: {
-            'x-opencode-session': `ses_${hex(32)}`,
-            'x-opencode-request': `msg_${hex(8)}`,
-            'x-opencode-client': 'tui',
-            'User-Agent': 'opencode/1.18.25',
-          },
-        };
-      }
-      return {
-        base:
-          provCfg?.api_base ||
-          Deno.env.get('AI_API_BASE') ||
-          'https://api.b.ai/v1',
-        key: provCfg?.api_key || Deno.env.get('AI_API_KEY'),
-        headers: {},
-      };
-    };
     const route = routeFor(model);
     const apiKey = route.key;
     const apiBase = route.base;

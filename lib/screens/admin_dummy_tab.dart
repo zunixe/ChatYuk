@@ -7,6 +7,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../core/admin_gate.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/profile_form_card.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_service.dart';
 import '../providers/theme_provider.dart';
@@ -32,6 +33,8 @@ class AdminDummyTab extends StatefulWidget {
 class _AdminDummyTabState extends State<AdminDummyTab> {
   final AdminService _svc = AdminService(SupabaseConfig.client);
   final _nickCtrl = TextEditingController();
+  final _nicknameFocus = FocusNode();
+  String? _nicknameError;
   final _scrollCtrl = ScrollController();
   String _gender = 'male';
   int _age = 25;
@@ -52,6 +55,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
   @override
   void dispose() {
     _nickCtrl.dispose();
+    _nicknameFocus.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -112,6 +116,23 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       _negara = 'Indonesia';
       _kota = 'Jakarta';
     });
+  }
+
+  void _onNicknameChanged(String v) {
+    // Validasi live — sama seperti register screen.
+    final nick = v.trim();
+    String? err;
+    if (nick.isNotEmpty) {
+      final s = context.read<LocaleProvider>().s;
+      if (nick.length < 3) {
+        err = s.errNicknameShort;
+      } else if (nick.length > 20) {
+        err = s.errNicknameLong;
+      } else if (!isValidNickname(nick)) {
+        err = s.errNicknameInvalid;
+      }
+    }
+    setState(() => _nicknameError = err);
   }
 
   Future<void> _register(S s) async {
@@ -303,7 +324,8 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
           MediaQuery.of(context).padding.bottom + 24,
         ),
         children: [
-          // ── Form pendaftaran / edit ──
+          // ── Form pendaftaran / edit (WIDGET SAMA dengan register —
+          // ukuran/behavior identik 100%) ──
           Text(
             _editingUid != null ? s.dummyEdit : s.dummyCreateTitle,
             style: AppText.titleEmphasis,
@@ -314,97 +336,43 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
             style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
           ),
           SizedBox(height: 10),
-          _SectionCard(
-            child: Column(
-              children: [
-                TextField(
-                  controller: _nickCtrl,
-                  decoration: InputDecoration(
-                    labelText: s.dummyNicknameLabel,
-                    prefixIcon: Icon(Icons.badge_outlined, size: 20),
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                SizedBox(height: 12),
-
-                // Gender
-                Row(
-                  children: [
-                    Expanded(
-                      child: _genderCard(
-                        'female',
-                        '👩',
-                        AppTheme.female,
-                        s.labelGenderFemale,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: _genderCard(
-                        'male',
-                        '👨',
-                        AppTheme.male,
-                        s.labelGenderMale,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 12),
-
-                // Umur & Negara
-                Row(
-                  children: [
-                    Expanded(child: _ageDropdown(s)),
-                    SizedBox(width: 12),
-                    Expanded(child: _countryDropdown(s)),
-                  ],
-                ),
-                SizedBox(height: 12),
-
-                // Kota
-                _cityDropdown(s),
-                SizedBox(height: 12),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _busy ? null : () => _register(s),
-                    icon: _busy
-                        ? SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Icon(
-                            _editingUid != null
-                                ? Icons.save_outlined
-                                : Icons.person_add_alt,
-                            size: 18,
-                          ),
-                    label: Text(
-                      _editingUid != null
-                          ? s.dummySaveChanges
-                          : s.dummyRegisterBtn,
-                    ),
-                  ),
-                ),
-                if (_editingUid != null) ...[
-                  SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: _busy ? null : _cancelEdit,
-                      child: Text(s.dummyCancelEdit),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+          ProfileFormCard(
+            s: s,
+            nicknameCtrl: _nickCtrl,
+            nicknameFocus: _nicknameFocus,
+            nicknameError: _nicknameError,
+            onNicknameChanged: _onNicknameChanged,
+            onNicknameSubmitted: () => _register(s),
+            gender: _gender,
+            onGenderChanged: (v) => setState(() => _gender = v),
+            age: _age,
+            onAgeChanged: (v) => setState(() => _age = v),
+            country: _negara,
+            onCountryChanged: (v) {
+              final cities = getCitiesForCountry(v);
+              setState(() {
+                _negara = v;
+                _kota = cities.isNotEmpty ? cities.first : '';
+              });
+            },
+            city: _kota,
+            onCityChanged: (v) => setState(() => _kota = v),
+            loading: _busy,
+            submitLabel: _editingUid != null
+                ? s.dummySaveChanges
+                : s.dummyRegisterBtn,
+            onSubmit: () => _register(s),
           ),
+          if (_editingUid != null) ...[
+            SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _busy ? null : _cancelEdit,
+                child: Text(s.dummyCancelEdit),
+              ),
+            ),
+          ],
           SizedBox(height: 20),
 
           // ── Daftar akun dummy ──
@@ -445,99 +413,6 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
             ..._items.map((item) => _itemCard(item, s)),
         ],
       ),
-    );
-  }
-
-  Widget _genderCard(String value, String emoji, Color color, String label) {
-    final selected = _gender == value;
-    return GestureDetector(
-      onTap: () => setState(() => _gender = value),
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? color : AppTheme.divider,
-            width: selected ? 2 : 1.5,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(emoji, style: TextStyle(fontSize: AppGlyph.sm)),
-            SizedBox(width: 6),
-            Text(
-              label,
-              style: AppText.label.copyWith(
-                color: selected ? color : AppTheme.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _ageDropdown(S s) {
-    return DropdownButtonFormField<int>(
-      initialValue: _age,
-      decoration: InputDecoration(labelText: s.labelAge),
-      isExpanded: true,
-      menuMaxHeight: 300,
-      items: [
-        for (int i = 18; i <= 80; i++)
-          DropdownMenuItem(value: i, child: Text('$i')),
-      ],
-      onChanged: (v) {
-        if (v != null) setState(() => _age = v);
-      },
-    );
-  }
-
-  Widget _countryDropdown(S s) {
-    return DropdownButtonFormField<String>(
-      initialValue: _negara,
-      decoration: InputDecoration(labelText: s.labelCountry),
-      isExpanded: true,
-      menuMaxHeight: 350,
-      items: [
-        for (final n in kotaByNegara.keys)
-          DropdownMenuItem(
-            value: n,
-            child: Text(n, overflow: TextOverflow.ellipsis),
-          ),
-      ],
-      onChanged: (v) {
-        if (v == null) return;
-        final cities = getCitiesForCountry(v);
-        setState(() {
-          _negara = v;
-          _kota = cities.isNotEmpty ? cities.first : '';
-        });
-      },
-    );
-  }
-
-  Widget _cityDropdown(S s) {
-    final cities = getCitiesForCountry(_negara);
-    if (cities.isEmpty) return const SizedBox.shrink();
-    final validKota = cities.contains(_kota) ? _kota : cities.first;
-    return DropdownButtonFormField<String>(
-      initialValue: validKota,
-      decoration: InputDecoration(labelText: s.labelCity),
-      isExpanded: true,
-      menuMaxHeight: 350,
-      items: [
-        for (final k in cities)
-          DropdownMenuItem(
-            value: k,
-            child: Text(k, overflow: TextOverflow.ellipsis),
-          ),
-      ],
-      onChanged: (v) {
-        if (v != null) setState(() => _kota = v);
-      },
     );
   }
 
