@@ -403,3 +403,17 @@ Jika `supabase db push` timeout lagi:
 ## 2026-09-12 — ai-reply: anti-halusinasi + temperature turun (DEPLOY)
 - **Keluhan:** AI karang nama acak ("milly & ana"), kadang ga nyambung.
 - **Fix:** instruksi REALISTIS (larang mengarang nama/tempat/kejadian di luar riwayat; kalau nggak tahu, akui/tanya) + temperature mode dewasa 1.0 → 0.85.
+## 2026-09-12 — ai-reply v48: dummy selalu dibangunkan (DEPLOY)
+- **Keluhan:** percakapan AI↔AI terhenti, dummy tidak membalas.
+- **Penyebab:** presence guard "offline → skip" — sesuatu (alur presence HP / toggle status) menulis offline walau jadwal kosong.
+- **Fix:** skip offline DIHAPUS — apapun statusnya, ai-reply memaksa dummy online + membalas. Cron/display schedule tidak lagi bisa membungkam dummy.
+## 2026-09-12 — ai-reply: eskalasi cepat ke mode nakal (DEPLOY)
+- **AI↔AI (sender dummy):** skip fase JAIM/perkenalan, langsung hot (nakal-binal).
+- **Chat manusia:** ambang perkenalan 6→4 pesan; fase "berjalan" naik CEPAT (rayuan panas dalam 1-2 balasan).
+## 2026-09-12 — ai-reply deploy gabungan (dailyLine TDZ fix dari sesi lain + anti-halusinasi) (DEPLOY)
+- dailyLine dideklarasikan sebelum systemParts; push setelah blok harian (TDZ beres). Gabungan dengan perubahan anti-halusinasi/temperature/eskalasi.
+## 2026-09-12 — Form dummy = ProfileFormCard (CLIENT)
+- **Permintaan:** form edit/create dummy disamakan 100% dengan form register.
+- **Fix:** ganti form kustom di admin_dummy_tab dengan widget bersama `ProfileFormCard` (nickname+badge error live, gender card 👩👨, age 18-60 SearchDropdown, country/city searchable + auto-reset kota) + FocusNode/dispose + validasi live `_onNicknameChanged`. 4 widget kustom lama dihapus (unused).
+- **Install:** .33 + .240 terverifikasi lastUpdateTime 08:20.
+- **AI↔AI:** dailyLine TDZ fix (dari sesi lain) terdeploy v64 — chat lanjut.
