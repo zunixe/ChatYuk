@@ -96,6 +96,14 @@ class DummySession {
       }
     }
     AuthService.instance.markDummyState(active: true, uid: uid);
+    // HOLD: tandai dummy ini dipegang manusia → AI-nya vakum (tidak
+    // membalas otomatis) sampai kembali ke admin. Fire-and-forget.
+    try {
+      await _sb.rpc(
+        'set_dummy_hold',
+        params: {'p_uid': uid, 'p_held': true},
+      );
+    } catch (_) {}
     dlog('[DUMMY] becomeDummy OK uid=$uid '
         'sessionUid=${_sb.auth.currentUser?.id}');
   }
@@ -131,6 +139,8 @@ class DummySession {
     var adminRefresh = _adminRefreshToken;
     _adminAccessToken = null;
     _adminRefreshToken = null;
+    // Uid dummy yang dilepas (untuk lepas HOLD AI-nya).
+    final heldUid = _sb.auth.currentUser?.id;
     if (adminAccess == null || adminRefresh == null) {
       final prefs = await SharedPreferences.getInstance();
       adminAccess = prefs.getString(_kAdminAccessToken);
@@ -152,6 +162,15 @@ class DummySession {
         AuthService.instance.markDummyState(active: false);
         await clearStored();
         return false;
+      }
+      // Lepas HOLD — AI dummy ini aktif lagi setelah admin kembali.
+      if (heldUid != null) {
+        try {
+          await _sb.rpc(
+            'set_dummy_hold',
+            params: {'p_uid': heldUid, 'p_held': false},
+          );
+        } catch (_) {}
       }
       return true;
     } catch (e) {

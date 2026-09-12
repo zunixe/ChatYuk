@@ -21,11 +21,9 @@ class RoomMediaFactory {
     VoidCallback? onEnded,
     String backend = 'mesh',
   }) {
-    // SFU stub ada di sfu_service.dart — aktifkan saat backend == 'sfu'
+    // Backend mesh satu-satunya yang aktif (stub SFU sudah dihapus).
     // ignore: dead_code
-    if (backend == 'sfu') {
-      // return SfuRoomService(roomId: roomId, isBroadcaster: isBroadcaster, onEnded: onEnded);
-    }
+    if (backend == 'sfu') {}
     return MeshRoomMediaService(roomId: roomId, isBroadcaster: isBroadcaster, onEnded: onEnded);
   }
 }

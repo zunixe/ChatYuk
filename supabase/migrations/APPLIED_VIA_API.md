@@ -423,3 +423,36 @@ Jika `supabase db push` timeout lagi:
 - **Admin APK:** rebuild + install Success ke .33 dan .240.
 ## 2026-09-12 — 20260912040000_dummy_list_unread_restore.sql (APPLY)
 - **Bug:** badge unread di kartu dummy hilang — rewrite admin_list_dummies (guard/proyek lain) menghapus subquery 'unread' (20260815060000). Field dikembalikan di function terkini (dengan is_admin_request + semua field baru).
+## 2026-09-12 — Ikon jadwal AI di kartu dummy (CLIENT)
+- Ikon jam di tiap kartu dummy → dialog: status sekarang + ringkasan jadwal (08–23 WIB / tanpa jadwal) + keterangan cron tiap 5 menit.
+- Admin APK rebuild + install Success ke .33 dan .240.
+## 2026-09-12 — ai-reply: storm/ngambek hanya saat guard ON (DEPLOY)
+- **Akar "Santi ga balas":** sistem NGAMBEK (sesi lain) — pesan kasar Dhanu memicu ai_offline_until → skip total.
+- **Fix:** reset ai_offline_until/mood (Santi+Dhanu) + NGAMBEK & marker mood JSON hanya aktif saat guard ON (mode nakal = tanpa storm). 
+- **Verifikasi:** invoke manual msg 2120 → (lihat hasil di bawah).
+## 2026-09-12 — ai-reply: debounce sesi dummy manual (DEPLOY)
+- **Permintaan:** saat admin pegang sesi dummy (chat manual sebagai dummy), AI jangan balas tiap pesan — tunggu hening ~25 detik, lalu ambil alih SEKALI untuk seluruh batch.
+- **Implementasi:** sender dummy → invokasi menunggu (loop 12s, maks 3 menit); hening = tidak ada pesan lebih baru ≥25s; hanya invokasi dgn trigger TERBARU yang lanjut membalas (yang lama mundur). AI↔AI murni (tanpa sentuhan admin) tetap jalan seperti biasa.
+## 2026-09-12 — 20260912050000_chat_ai_pause.sql (APPLY) + ai-reply v71: typing ping + vacuum 5 menit (DEPLOY)
+- **Fitur:** (1) saat ADMIN (sesi manusia) kirim pesan ke chat AI → AI VAKUM 5 menit (chat_ai_pause.vacuum_until), lalu ambil alih sekali; (2) client kirim `ping_typing` tiap aktivitas mengetik (throttle 2.5s) → ai-reply MENUNGGU selama lawan masih mengetik (typing_at fresh <8s) — tidak ikut membalas di tengah pengetikan. Cap tunggu total 330s (edge wall limit).
+- **Debounce sesi dummy:** + cek typing ping.
+- **Admin APK:** rebuild + install Success (.33 & .240).
+## 2026-09-12 — 20260912060000_dummy_hold.sql (APPLY) + HOLD sesi dummy (DEPLOY)
+- **Fitur:** saat admin "masuk dummy" → dummy itu HOLD (ai_hold_active=true) → AI-nya VAKUM: tidak pernah membalas otomatis di chat manapun (vacuum 5 menit di-refresh tiap percobaan, chat_ai_pause). Kembali ke admin → hold lepas → AI lanjut normal. Alur AI↔AI tetap jalan saat tidak ada yang dipegang.
+- **DB:** kolom ai_hold_active + RPC set_dummy_hold (admin guard).
+- **ai-reply:** skip + set vacuum saat dummy.hold_active.
+- **App:** dummy_session.becomeDummy → hold ON; backToAdmin → hold OFF (lepas uid yang dilepas).
+- **Admin APK:** rebuild + install Success (.33 & .240).
+## 2026-09-12 — ai-reply: warm-up proper untuk orang baru (DEPLOY)
+- **Keluhan:** Santi langsung akrab ke orang baru (ga warming up).
+- **Fix:** freshStage threshold 4 → 10 pesan; fase BARU KENAL diganti WARM-UP proper (ramah-reserved, tanpa gombal/godain/dewasa, jangan seolah kenal lama); fase tengah kembali progresif pelan. Eskalasi cepat TETAP hanya untuk AI↔AI (senderIsDummy).
+## 2026-09-12 — 20260912080000_dummy_hours_editor.sql (APPLY) + editor jadwal 24 jam (CLIENT)
+- **Fitur:** editor jadwal kehadiran — grid 24 chip jam (00–23) di sheet Mode AI; tap toggle online; kosong semua = manual (cron skip). Tombol Auto (dari kebiasaan) tetap ada. Simpan via admin_set_dummy_ai 9-param (+p_active_hours, selalu dikirim).
+- **Cron ai_presence_tick** menerapkan jam → status online/offline tiap 5 menit (ai-reply selalu membalas — vakum hanya via hold).
+- **Admin APK:** rebuild + install Success (.33 & .240).
+## 2026-09-12 — ai-reply: hapus vakum otomatis tiap pesan manusia (DEPLOY)
+- **Bug:** setiap pesan manusia memicu vacuum 5 menit → Santi terlihat mati ke SimpleMe. vacuum_until kini HANYA dibaca (bisa diset manual via SQL); tidak lagi diset otomatis. Typing-ping wait tetap (maks 60s).
+## 2026-09-12 — Rotasi AI_API_KEY_OPENROUTER (SECRETS)
+- **Penyebab Santi diam:** key sk-or-v1-4977... habis kuota free 50/hari (Remaining 0, reset 23:00 WIB).
+- **Fix:** secret diganti ke key 9Router (ada sisa kuota, test 200 OK cost $0). Tanpa deploy (secret dibaca realtime).
+- **Opsi permanen:** top up $10 di key utama → 1000 req/hari; atau rotasi 2 key otomatis di function.

@@ -417,6 +417,52 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     );
   }
 
+  /// Dialog info jadwal AI dummy (dari cron ai_presence_tick).
+  void _showScheduleInfo(Map<String, dynamic> item, S s) {
+    final nickname = item['nickname'] as String? ?? '';
+    final status = item['status'] as String? ?? 'offline';
+    final hours = _DummyAiSheetState._parseHours(item['ai_active_hours']);
+    final summary = _DummyAiSheetState._hoursSummary(hours);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${s.dummyAiScheduleTitle} — $nickname'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('${s.dummyScheduleStatusNow}: ', style: AppText.body),
+                Text(status, style: AppText.bodyStrong),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              hours.isEmpty
+                  ? s.dummyScheduleAlwaysOn
+                  : '${s.dummyAiScheduleTitle}: $summary WIB',
+              style: AppText.body,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              s.dummyAiScheduleDesc,
+              style: AppText.caption.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.btnOk),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _itemCard(Map<String, dynamic> item, S s) {
     final nickname = item['nickname'] as String? ?? '';
     final status = item['status'] as String? ?? 'offline';
@@ -493,6 +539,17 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                     ),
                   ),
                 ],
+                const Spacer(),
+                // Info jadwal AI (kapan online/offline dari cron) — klik.
+                IconButton(
+                  icon: Icon(
+                    Icons.schedule_rounded,
+                    size: 18,
+                    color: AppTheme.textSecondary,
+                  ),
+                  tooltip: s.dummyAiScheduleTitle,
+                  onPressed: () => _showScheduleInfo(item, s),
+                ),
               ],
             ),
             SizedBox(height: 8),
@@ -778,6 +835,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
         noRateLimit: _noRate,
         maxReplies: int.tryParse(_maxRateCtrl.text.trim()),
         minInterval: int.tryParse(_minRateCtrl.text.trim()),
+        activeHours: _hours.toList()..sort(),
       );
       widget.item['ai_guard_enabled'] = guardValue;
       widget.item['ai_no_rate_limit'] = _noRate;
@@ -930,7 +988,58 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
             ),
             const SizedBox(height: 2),
             Text(
-              s.dummyAiScheduleDesc,
+              _hours.isEmpty
+                  ? s.dummyAiScheduleEmpty
+                  : '${_hoursSummary(_hours)} WIB',
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // ── Editor grid 24 jam: pilih jam online ──
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (int h = 0; h < 24; h++)
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _hours.contains(h)
+                          ? _hours.remove(h)
+                          : _hours.add(h);
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _hours.contains(h)
+                            ? AppTheme.primary.withValues(alpha: 0.15)
+                            : AppTheme.bgInput,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _hours.contains(h)
+                              ? AppTheme.primary
+                              : AppTheme.divider,
+                          width: _hours.contains(h) ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Text(
+                        h.toString().padLeft(2, '0'),
+                        style: AppText.label.copyWith(
+                          color: _hours.contains(h)
+                              ? AppTheme.primary
+                              : AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              s.dummyHoursHint,
               style: AppText.caption.copyWith(
                 color: AppTheme.textSecondary,
               ),

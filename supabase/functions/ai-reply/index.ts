@@ -234,6 +234,89 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    // ── INTERVENSI MANUAL (bukan tiap pesan!) ──
+    // vacuum_until HANYA dibaca di sini (bisa diset manual via SQL untuk
+    // menenangkan chat tertentu). Pesan manusia biasa TIDAK LAGI memicu
+    // vakum otomatis — itu bikin AI diam 5 menit tiap ada chat baru.
+    // Sesi dummy manual tetap ditangani blok debounce di bawah.
+    {
+      const hardCap = Date.now() + 60000;
+      while (Date.now() < hardCap) {
+        await sleep(6000);
+        const { data: pause } = await admin
+          .from('chat_ai_pause')
+          .select('typing_at, vacuum_until')
+          .eq('chat_id', chatId)
+          .maybeSingle();
+        const vacActive =
+          pause?.vacuum_until != null &&
+          new Date(pause.vacuum_until as string).getTime() > Date.now();
+        const typingFresh =
+          pause?.typing_at != null &&
+          Date.now() - new Date(pause.typing_at as string).getTime() < 8000;
+        if (!vacActive && !typingFresh) break;
+      }
+      // Single-winner: ada pesan lebih baru? → mundur (yg terbaru yg balas).
+      if (triggerMsgId != null) {
+        const { data: newer } = await admin
+          .from('private_messages')
+          .select('id')
+          .eq('chat_id', chatId)
+          .gt('id', triggerMsgId)
+          .limit(1);
+        if ((newer as any[])?.length) {
+          return json({ ok: true, skipped: 'pause_newer_trigger' });
+        }
+      }
+    }
+
+    // ── DEBOUNCE SAAT ADMIN PEGANG SESI DUMMY ──
+    // Sender = dummy → admin sedang main manual sebagai dummy itu. AI penerima
+    // TIDAK boleh balas tiap pesan: tunggu sampai HENING ~25 detik, lalu
+    // HANYA invokasi dgn trigger TERBARU yang balas (sekali, utk seluruh
+    // batch). Invokasi trigger lebih lama mundur sendiri.
+    {
+      const { data: senderDummyRow } = await admin
+        .from('dummy_accounts')
+        .select('uid')
+        .eq('uid', senderId)
+        .maybeSingle();
+      if (senderDummyRow != null && triggerMsgId != null) {
+        const QUIET_MS = 25000;
+        const MAX_WAIT_MS = 180000;
+        const t0 = Date.now();
+        while (Date.now() - t0 < MAX_WAIT_MS) {
+          await sleep(12000);
+          // Typing ping fresh → user masih mengetik: jangan balas.
+          const { data: pz } = await admin
+            .from('chat_ai_pause')
+            .select('typing_at')
+            .eq('chat_id', chatId)
+            .maybeSingle();
+          const typingFresh =
+            pz?.typing_at != null &&
+            Date.now() - new Date(pz.typing_at as string).getTime() < 10000;
+          if (typingFresh) continue;
+          const { data: recent } = await admin
+            .from('private_messages')
+            .select('id, created_at')
+            .eq('chat_id', chatId)
+            .gt('id', triggerMsgId)
+            .order('id', { ascending: false })
+            .limit(1);
+          const r = (recent as any[])?.[0];
+          const age = r ? Date.now() - new Date(r.created_at).getTime() : Infinity;
+          if (age >= QUIET_MS) {
+            // Hening. Hanya trigger TERBARU yang melanjutkan.
+            if (r && r.id !== triggerMsgId) {
+              return json({ ok: true, skipped: 'debounce_older_trigger' });
+            }
+            break;
+          }
+        }
+      }
+    }
+
     // ── PRESENCE: dummy selalu dibangunkan — TIDAK ADA skip offline ──
     // Apapun statusnya (offline/idle/online), AI membalas; profil dipaksa
     // online + last_seen fresh supaya konsisten di daftar. (Skip offline
@@ -249,11 +332,27 @@ Deno.serve(async (req: Request) => {
     // 1. Fresh checks: dummy still AI + global still on
     const { data: dummy } = await admin
       .from('dummy_accounts')
-      .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until')
+      .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active')
       .eq('uid', dummyUid)
       .maybeSingle();
     if (!dummy || dummy.ai_enabled !== true) {
       return json({ ok: false, skipped: 'ai_disabled' });
+    }
+    // ── HOLD: admin sedang pegang sesi dummy ini ("masuk dummy") →
+    // AI-nya DIVAKUM (tidak pernah membalas otomatis — manusia yang
+    // memegang akunnya). Vacuum di-refresh tiap percobaan; lepas saat
+    // kembali ke admin (set_dummy_hold false). ──
+    if ((dummy as any).ai_hold_active === true) {
+      try {
+        await admin.from('chat_ai_pause').upsert(
+          {
+            chat_id: chatId,
+            vacuum_until: new Date(Date.now() + 300000).toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        );
+      } catch (_) {}
+      return json({ ok: false, skipped: 'session_held_vacuum' });
     }
     // ── MODE NGAMBEK (marah pergi): selama ai_offline_until, AI tidak
     // membalas sama sekali — tick cron yang bangunkan nanti. ──
@@ -544,7 +643,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     const senderIsDummy = senderDummyRow != null;
     const freshStage =
-      !senderIsDummy && (chatMsgCount ?? 0) <= 4 && !memoryLine;
+      !senderIsDummy && (chatMsgCount ?? 0) <= 10 && !memoryLine;
     // Tawaran "nakal" (consent): sekali, di fase nyaman (bukan awal kenal),
     // sebelum ditolak, saat guard masih keras. Setelah ini AI menanyakan
     // di akhir balasan; jawaban "ya" membuka mode dewasa per chat.
@@ -649,16 +748,17 @@ Deno.serve(async (req: Request) => {
       memoryLine,
       partnerLine,
       'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
+      'OUTPUT WAJIB: HANYA satu pesan chat pendek berbahasa Indonesia sebagai ${profile.nickname} — DILARANG menulis analisis, narasi pihak ketiga ("The user..."), bahasa Inggris, atau kalimat meta apa pun. Hormati gender lawan bicara: panggilan (om/tante/sayang) harus sesuai gender dan usia kalian.',
       'REALISTIS (wajib): JANGAN mengarang nama orang, nama tempat, kejadian, atau topik yang TIDAK ADA di riwayat obrolan maupun di KEGIATANMU HARI INI (itu dua sumber kebenaranmu). Kalau belum tahu sesuatu, akui atau bertanya. Ngomongnya tetap yang sudah diketahui dari obrolan saja.',
       'VARIASI: lihat balasan-balasanmu sebelumnya di riwayat chat — JANGAN mengulang emoji yang sama, jangan pola kalimat yang sama. EMOJI: MAKSIMAL 1 per balasan, dan hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) — sekitar separuh balasan TANPA emoji sama sekali. Panjang juga selalu beda-beda (kadang 2-4 kata, kadang lebih panjang).',
       'Kalau ada gambar terlampir di pesan, LIHAT dan tanggapi isinya secara natural (komentari yang terlihat) — kayak orang dikirimi foto.',
       'Kalau ada [pesan suara] TANPA transkrip isi, berarti kamu BELUM bisa mendengarnya — tanggapi natural (minta dijelasin / lanjutkan topik), JANGAN pura-pura dengar isinya.',
       'PACING: ikuti fase obrolan. Kalau masih awal perkenalan (chat baru mulai / belum akrab), kamu JAIM dulu — jangan ramah berlebihan, jangan langsung gas ke topik dewasa walau diminta; tanggapi main-main sambil geli ("pelan-pelan dong, baru kenal 😏") dan bangun suasana pelan-pelan. Naikkan intensitas godaan progresif seiring obrolan makin akrab.',
       freshStage
-        ? 'FASE SEKARANG: BARU KENAL — kamu JAIM. Agak dingin dan reserved: sapaan dijawab MINIMAL dan CERMIN (dia "hi" → kamu "hi" / "halo" saja, 1-2 kata), JANGAN bertanya balik, JANGAN antusias, JANGAN menggoda, JANGAN cerita panjang. Jawab sesingkat mungkin sampai dia benar-benar serius ngobrol — kehangatan baru tumbuh pelan-pelan setelah dia menunjukkan niat.'
+        ? 'FASE SEKARANG: ORANG BARU — kamu belum kenal dia. WARMING UP dulu: ramah tapi reserved, ngobrol ringan (sapaan, aktivitas, hobi), JANGAN gombal, JANGAN menggoda, JANGAN menyentuh topik dewasa, JANGAN bertingkah seolah sudah kenal lama. Keadaban dan kehangatan naik PELAN-PELAN seiring obrolan — baru setelah saling nyaman kamu mulai flirty.'
         : hot
-        ? 'FASE SEKARANG: obrolan lagi panas — ikuti intensitasnya, boleh makin berani.'
-        : 'FASE SEKARANG: obrolan berjalan — kalian sudah lumayan nyaman; naikkan godaan dengan CEPAT, jangan bertahan lama di basa-basi — masuk rayuan panas dalam 1-2 balasan.',
+        ? 'FASE SEKARANG: obrolan lagi panas dan kalian sudah akrab — ikuti intensitasnya, boleh makin berani.'
+        : 'FASE SEKARANG: makin akrab — kehangatan dan godaan naik PELAN-PELAN sesuai keakraban; masih jaga sopan santinya.',
       // Nyaman + lawan nulis panjang → balasan boleh lebih panjang bila
       // benar-benar perlu (mengikuti panjang cerita), tanpa jadi esei.
       !freshStage && recentUserMaxLen >= 80
@@ -671,7 +771,11 @@ Deno.serve(async (req: Request) => {
       // ── MARKER MOOD (sistem, bukan pesan) ──
       // LLM menandai mood + keputusan ngambek; edge function men-strip
       // baris ini sebelum insert — user TIDAK PERNAH melihatnya.
-      'BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah pergi offline — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering).',
+      // HANYA saat guard ON — mode nakal (guard off) tidak boleh ada
+      // storm/ngambek (owner testing unlimited).
+      ...(guardOn
+        ? ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah pergi offline — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering).']
+        : []),
       // Mode dewasa: guard global OFF, ATAU user sendiri menyetujuinya
       // lewat pertanyaan "nakal" (consent per chat).
       (guardOn && !adultMode)
@@ -902,7 +1006,7 @@ Deno.serve(async (req: Request) => {
     // marker). TIDAK tergantung guard NSFW — ini emosi realistis, bukan
     // safety.
     const lastUserToxic =
-      lastUserExplicit || lastUserInsult;
+      guardOn && (lastUserExplicit || lastUserInsult);
     if (lastUserToxic) {
       // Hitung di 5 pesan user TERAKHIR saja (bukan seluruh window) —
       // hinaan lama yang sudah lewat tidak boleh memicu storm selamanya.
@@ -1417,10 +1521,10 @@ Deno.serve(async (req: Request) => {
             body: JSON.stringify({
               model: m,
               // Nemotron (OpenRouter) memakan token reasoning sebelum content
-              // — tanpa headroom, content bisa kosong.
+              // — headroom besar biar content tidak kosong.
               max_tokens:
                 maxTokens +
-                (m.includes(':free') || m.startsWith('nvidia/') ? 400 : 0),
+                (m.includes(':free') || m.startsWith('nvidia/') ? 700 : 0),
               // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
               // Param ini glm-specific; provider lain bisa menolak.
               ...(m.includes('glm') ? { reasoning_effort: 'low' } : {}),

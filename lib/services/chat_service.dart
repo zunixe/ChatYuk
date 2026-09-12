@@ -72,6 +72,25 @@ class ChatService {
   static final Map<String, String> _avatarCache = {};
   static const _avatarCacheMax = 100;
 
+  // Country user sendiri (sekali per sesi) — untuk shard merge online (K6).
+  String? _ownCountryCache;
+  Future<String?> _fetchOwnCountry() async {
+    if (_ownCountryCache != null) return _ownCountryCache;
+    try {
+      final me = _sb.auth.currentUser?.id;
+      if (me == null) return null;
+      final row = await _sb
+          .from('profiles')
+          .select('country')
+          .eq('id', me)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 2));
+      final c = (row?['country'] as String?)?.trim();
+      if (c != null && c.isNotEmpty) _ownCountryCache = c;
+    } catch (_) {}
+    return _ownCountryCache;
+  }
+
   static void clearAvatarCacheForPath(String path) {
     _avatarCache.remove(path);
   }
@@ -1347,6 +1366,10 @@ class ChatService {
           },
         )
         .catchError((_) => ChannelResponse.error);
+    // Ping DB untuk ai-reply: AI menunggu selama user masih mengetik.
+    _sb
+        .rpc('ping_typing', params: {'p_chat_id': chatId})
+        .catchError((_) {});
   }
 
   void _refreshChatStreams(String myUid) {
@@ -1869,16 +1892,38 @@ class ChatService {
             }
           } catch (_) {}
         }
-        // Coba RPC ringan dulu (1 RTT, server-side, tanpa IN 500)
+        // Coba RPC ringan dulu (1 RTT, server-side, tanpa IN 500).
+        // K6 skala: global limit 200 + merge shard country sendiri
+        // (index per-country) — user sekota selalu terlihat walau
+        // >200 online global bersamaan; user baru online (last_seen
+        // terbaru) selalu masuk top list.
         List<dynamic> rpcRows = [];
         bool usedRpc = false;
         try {
           dlog('[ONLINE-EMIT] calling RPC get_online_users');
-          final data = await _sb.rpc('get_online_users', params: {'p_limit': 100}).timeout(const Duration(seconds: 2));
+          final data = await _sb.rpc('get_online_users', params: {'p_limit': 200}).timeout(const Duration(seconds: 2));
           dlog('[ONLINE-EMIT] RPC done rows=${data is List ? data.length : 0}');
           if (data is List && data.isNotEmpty) {
             rpcRows = data;
             usedRpc = true;
+          }
+        } catch (_) {}
+        // Merge shard country sendiri (ringan, index per-country) — menutup
+        // celah user yang tidak masuk top-200 global.
+        try {
+          final ownCountry = await _fetchOwnCountry();
+          if (ownCountry != null && ownCountry.isNotEmpty) {
+            final local = await _sb.rpc('get_online_users', params: {
+              'p_country': ownCountry,
+              'p_limit': 100,
+            }).timeout(const Duration(seconds: 2));
+            if (local is List && local.isNotEmpty) {
+              final ids = rpcRows.map((r) => '${r['id'] ?? ''}').toSet();
+              for (final r in local) {
+                if (!ids.contains('${r['id'] ?? ''}')) rpcRows.add(r);
+              }
+              if (rpcRows.isNotEmpty) usedRpc = true;
+            }
           }
         } catch (_) {}
         List<dynamic> rows;

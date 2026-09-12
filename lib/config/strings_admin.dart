@@ -609,6 +609,19 @@ extension SAdminX on S {
       ? 'Kosongkan = ikut pengaturan AI Bot (global)'
       : 'Empty = follow AI Bot settings (global)';
 
+  String get dummyScheduleStatusNow =>
+      isId ? 'Status sekarang' : 'Current status';
+
+  String get dummyScheduleAlwaysOn => isId
+      ? 'Tanpa jadwal otomatis — status dikontrol manual/tombol'
+      : 'No auto schedule — status is controlled manually/buttons';
+
+  String get dummyHoursTitle => isId ? 'Jam online' : 'Online hours';
+
+  String get dummyHoursHint => isId
+      ? 'Pilih jam online — kosong semua = tanpa jadwal otomatis. Cron menyeting status tiap 5 menit.'
+      : 'Pick online hours — empty = no auto schedule. Cron sets status every 5 minutes.';
+
   String get aiGlobalModel => isId ? 'Model default' : 'Default model';
 
   String get aiGlobalBaseUrl => isId ? 'Base URL' : 'Base URL';
