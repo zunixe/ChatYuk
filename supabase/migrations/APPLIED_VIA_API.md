@@ -417,3 +417,9 @@ Jika `supabase db push` timeout lagi:
 - **Fix:** ganti form kustom di admin_dummy_tab dengan widget bersama `ProfileFormCard` (nickname+badge error live, gender card 👩👨, age 18-60 SearchDropdown, country/city searchable + auto-reset kota) + FocusNode/dispose + validasi live `_onNicknameChanged`. 4 widget kustom lama dihapus (unused).
 - **Install:** .33 + .240 terverifikasi lastUpdateTime 08:20.
 - **AI↔AI:** dailyLine TDZ fix (dari sesi lain) terdeploy v64 — chat lanjut.
+## 2026-09-12 — 20260912030000_dummy_rate_limit.sql (APPLY) + UI rate limit per-dummy
+- **Fitur:** rate limit PER-DUMMY di sheet Mode AI — switch "Tanpa batas (unlimited)" + 2 field (Maks/jam, Jeda detik); kosong = ikut global (AI Bot). Pola guard: NULL = global.
+- **DB:** kolom dummy_accounts.ai_max_replies/ai_min_interval (nullable); trigger hormati override per-dummy (AI↔AI tetap tanpa limit); admin_set_dummy_ai 8-param; admin_list_dummies +3 field.
+- **Admin APK:** rebuild + install Success ke .33 dan .240.
+## 2026-09-12 — 20260912040000_dummy_list_unread_restore.sql (APPLY)
+- **Bug:** badge unread di kartu dummy hilang — rewrite admin_list_dummies (guard/proyek lain) menghapus subquery 'unread' (20260815060000). Field dikembalikan di function terkini (dengan is_admin_request + semua field baru).
