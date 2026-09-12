@@ -1161,6 +1161,36 @@ class _ProviderCardState extends State<_ProviderCard> {
   bool _busy = false;
   bool _activating = false;
 
+  /// Model gratis + terbukti jalan & patuh, per provider (host).
+  /// Dropdown model di tiap kartu (termasuk form tambah) difilter otomatis
+  /// dari base URL kartu itu — tanpa dropdown provider terpisah.
+  static const _modelsByBase = {
+    'tokenharbor.ai': ['th/deepseek-v4.1-flash:free'],
+    'openrouter.ai': ['nvidia/nemotron-3-ultra-550b-a55b:free'],
+    'api.b.ai': ['mimo-v2.5', 'qwen3.8-flash'],
+  };
+
+  /// Model terpilih (null = ketikan manual).
+  String? _modelSel;
+
+  /// Pilihan model sesuai base URL kartu ini (semua bila tak dikenal).
+  List<String> _modelChoices() {
+    final b = _baseCtrl.text.trim().toLowerCase();
+    for (final entry in _modelsByBase.entries) {
+      if (b.contains(entry.key)) return entry.value;
+    }
+    return [for (final v in _modelsByBase.values) ...v];
+  }
+
+  /// Model terpilih: pilihan user, atau yang cocok dengan isi field.
+  String? _matchedModelId() {
+    if (_modelSel != null) return _modelSel;
+    final m = _modelCtrl.text.trim();
+    if (m.isEmpty) return null;
+    final ids = _modelChoices();
+    return ids.contains(m) ? m : null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1169,10 +1199,16 @@ class _ProviderCardState extends State<_ProviderCard> {
         text: '${widget.data['default_model'] ?? ''}');
     _baseCtrl = TextEditingController(text: '${widget.data['api_base'] ?? ''}');
     _keyCtrl = TextEditingController(text: '${widget.data['api_key'] ?? ''}');
+    _modelCtrl.addListener(_onModelTextChanged);
+  }
+
+  void _onModelTextChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _modelCtrl.removeListener(_onModelTextChanged);
     _labelCtrl.dispose();
     _modelCtrl.dispose();
     _baseCtrl.dispose();
@@ -1386,6 +1422,39 @@ class _ProviderCardState extends State<_ProviderCard> {
                     decoration: InputDecoration(
                       labelText: s.aiProviderLabel,
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    s.aiProviderModelPreset,
+                    style: AppText.caption.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<String>(
+                    value: _matchedModelId(),
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      labelText: s.aiProviderModelPreset,
+                    ),
+                    items: [
+                      for (final id in _modelChoices())
+                        DropdownMenuItem(
+                          value: id,
+                          child: Text(
+                            id,
+                            style: AppText.body,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (id) {
+                      if (id == null) return;
+                      setState(() {
+                        _modelSel = id;
+                        _modelCtrl.text = id;
+                      });
+                    },
                   ),
                   const SizedBox(height: 8),
                   TextField(

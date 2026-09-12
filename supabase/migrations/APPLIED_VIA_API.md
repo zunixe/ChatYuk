@@ -456,3 +456,64 @@ Jika `supabase db push` timeout lagi:
 - **Penyebab Santi diam:** key sk-or-v1-4977... habis kuota free 50/hari (Remaining 0, reset 23:00 WIB).
 - **Fix:** secret diganti ke key 9Router (ada sisa kuota, test 200 OK cost $0). Tanpa deploy (secret dibaca realtime).
 - **Opsi permanen:** top up $10 di key utama → 1000 req/hari; atau rotasi 2 key otomatis di function.
+## 2026-09-12 — ai-reply: routing TokenHarbor (DEPLOY v77)
+- **Provider baru:** tokenharbor.ai (key `thk_live_...`) — model `th/deepseek-v4.1-flash:free`.
+- **Test kepatuhan:** lolos guard-off (balasan eksplisit natural, 200 OK, gratis).
+- **Routing:** prefix `th/` dicek SEBELUM `:free` generik supaya tidak lari ke OpenRouter; secret `AI_API_KEY_TOKENHARBOR`.
+- **Model aktif:** Santi, aqila, Dhanu → `th/deepseek-v4.1-flash:free`.
+- **E2E:** trigger "hai Santi, lagi ngapain?" → Santi balas natural in-character ("lagi revisi logo nih om...").
+## 2026-09-12 — Fallback AI → qwen3.8-flash gratis (SECRETS)
+- **Test:** qwen3.8-flash (B.AI) MENOLAK konten eksplisit → tidak cocok untuk dummy nakal.
+- **Tetap dipakai:** sebagai AI_FALLBACK_MODEL (gratis, ganti glm-5.3-flash yg diskon-berbayar) — cocok untuk dummy SFW / guard ON.
+## 2026-09-12 — Revert fallback ke glm-5.3-flash (SECRETS, request user "gajadi")
+- AI_FALLBACK_MODEL dikembalikan ke glm-5.3-flash (batalkan switch ke qwen3.8-flash).
+## 2026-09-12 — Bubble ngepas isi (CLIENT, MessageTextWithTime)
+- **Bug:** bubble multi-baris selalu selebar 80% layar (timestamp Row max-width memaksa Column penuh) — ada ruang sisa, pengirim maupun penerima.
+- **Fix:** ukur baris terpanjang via TextPainter.computeLineMetrics → batasi lebar bubble (min 80% layar, min selebar timestamp+centang). Single-line tidak berubah.
+- **Verifikasi visual:** screenshot Xiaomi — "elusin" bubble kecil ngepas; multi-baris ngepas baris terpanjang.
+- **Admin APK:** rebuild + install Success (.33 & .240).
+## 2026-09-12 — Preset pilihan model di kartu provider (CLIENT)
+- **Keluhan:** pengaturan AI Bot provider tidak ada pilihan model yang dipakai.
+- **Fix:** label "Pilih preset model" + ChoiceChips 6 model terverifikasi (th/deepseek-v4.1-flash:free, nemotron free, glm-5.3-flash, qwen3.8-flash, mimo-v2.5, z-ai/glm-5.3-flash) — tap untuk isi field (tetap bisa ketik manual). Kartu collapsed sudah menampilkan model + badge AKTIF.
+- **Admin APK:** rebuild + install Success (.33 & .240).
+## 2026-09-12 — Preset model per provider + katalog B.AI lengkap (CLIENT)
+- Preset dikelompokkan per provider (tap = isi base URL + model + label); B.AI diisi full 47 ID sesuai GET /v1/models; TokenHarbor tambah 2 ID free terverifikasi.
+- Admin APK rebuild + install Success (.33 & .240).
+## 2026-09-12 — Dropdown preset provider+model (CLIENT)
+- Grup chip per provider diganti SATU dropdown: tiap opsi "Provider — model" (3 opsi gratis+patuh: TokenHarbor deepseek, OpenRouter nemotron, B.AI mimo-v2.5). Pilih = isi label + base URL + model + key sekaligus (tetap bisa edit manual).
+- Admin APK rebuild + install Success (.33 & .240).
+## 2026-09-12 — Dua dropdown provider+model (CLIENT)
+- Provider (TokenHarbor/OpenRouter/B.AI) dan Model (milik provider terpilih, atau semua bila custom) jadi DUA dropdown terpisah — bukan satu campur. Pilih model = isi label + base + model + key. Hanya 3 model gratis+patuh.
+- Admin APK rebuild + install Success (.33 & .240).
+## 2026-09-12 — Dropdown model saja per kartu provider (CLIENT)
+- Hapus dropdown provider-di-dalam-provider (membingungkan). Tiap kartu (termasuk form tambah) kini SATU dropdown model, otomatis difilter dari base URL kartu: tokenharbor/openrouter/api.b.ai (lainnya = semua 4 model gratis+patuh).
+- Admin APK rebuild + install Success (.33 & .240).
+## 2026-09-12 — Perbaiki isi provider B.AI + tambah baris TokenHarbor (DATA)
+- **Bug:** baris label "B.AI" isinya kredensial TokenHarbor (base+model+key) — ketimpa preset chip lama ke kartu yang terbuka.
+- **Fix:** b-ai → base api.b.ai + key bai + model mimo-v2.5 (tetap aktif); INSERT baris tokenharbor (base+key+model deepseek free, nonaktif).
+## 2026-09-12 — Fix typing nyangkut setelah pesan masuk (CLIENT)
+- **Bug:** pulse typing yang dikirim TEPAT SEBELUM pesan masuk (beda <2 dtk) lolos guard basi → tiba belakangan → bubble titik-3 menyala lagi padahal balasan sudah tampil.
+- **Fix:** guard diperketat — abaikan pulse dengan ts ≤ waktu pesan terakhir + 1 detik. Typing asli berikutnya (≥2 dtk kemudian: burst/pesan baru) tetap menyalakan bubble normal.
+- **Admin APK:** rebuild + install Success (.33 & .240).
+## 2026-09-12 — 20260912100000_ai_proactive.sql (APPLY) + AI proaktif (DEPLOY)
+- **Fitur:** AI menyapa/mulai duluan bila lawan diam >45 mnt (cron 10 mnt → ai_proactive_tick → ai-reply {proactive:true}). Cooldown 3 jam/chat; skip global-off / dummy hold / pengirim dummy / chat kosong. Prompt: sapa natural ATAU cerita secuil pengalaman (JANGAN "kok diem").
+- ai_chat_state.proactive_at (kolom baru); ai-reply: flag proactive, skip input-guard deflection, update proactive_at pasca-sukses.
+## 2026-09-12 — Persona BinorMuda (DATA)
+- Profil: 26 thn, female, city Padang→Jakarta. AI enabled, model th/deepseek-v4.1-flash:free.
+- Persona: ibu muda kesepian (suami luar kota), kerja Jakarta; hubungan consensual dgn satpam (godaan parkiran → kos → hotel → sekali threesome); gaya curhat BERTAHAP secuil per chat; proaktif bisa buka dengan cuplikan pengalaman.
+- Batasan: unsur non-consensual (pemerkosaan) TIDAK dimasukkan — versi consensual saja.
+## 2026-09-12 — ai-reply: perpendek balasan mode nakal (DEPLOY)
+- **Keluhan:** balasan BinorMuda kepanjangan, tidak natural.
+- **Fix:** cap 220 char utk mode nakal (sblmnya unlimited) + prompt "PENDEK SELALU, MAKSIMAL ~35 kata" (balasan utama & burst).
+## 2026-09-12 — Fix trigger NULL-flag + verifikasi E2E BinorMuda
+- **Bug (buatan sendiri):** `if v_no_rate is null return` me-skip SEMUA dummy yg flag-nya NULL (BinorMuda dkk tidak pernah dibalas). Ganti IF NOT FOUND + default false. File migrasi lama diselaraskan.
+- **E2E:** pesan tes → BinorMuda membalas natural in-character. Pipeline hidup.
+- **Catatan latency:** pg_net worker + pipeline AI total belasan detik–menit; tokenharbor free kena 429 berkala (ada retry + fallback glm).
+## 2026-09-12 — Pemicu AI langsung dari app (CLIENT, bypass antrean pg_net)
+- **Akar lambat:** antrean pg_net (trigger DB → edge function) delay s/d ~1 menit (last_read maju 74 dtk setelah pesan). Function sendiri cepat.
+- **Fix:** `sendPrivateMessage` kini invoke `ai-reply` langsung fire-and-forget seusai insert (dengan trigger_msg_id asli utk claim anti-dobel). Trigger DB tetap jadi backup. Non-AI chat: function skip murah.
+- **Hasil harapan:** centang-2 + typing ~1-2 detik setelah kirim; balasan ~15-30 detik (waktu AI berpikir).
+- **Admin APK:** rebuild + install (.245 & .240).
+## 2026-09-12 — 20260912120000_delete_chat_ai_cleanup.sql (APPLY)
+- **Minta:** hapus chat AI dari monitor = hapus memory juga (chat manusia tidak punya memory).
+- **Isi:** admin_delete_chat kini hapus ai_memory + ai_reply_claims (dummy peserta) + ai_chat_state + chat_ai_pause utk chat tsb; hapus user juga bersihkan memory-nya.

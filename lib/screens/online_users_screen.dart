@@ -23,6 +23,7 @@ import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
 import '../services/media_disk_cache.dart';
 import '../services/storage_photo_service.dart';
+import '../core/admin_gate.dart';
 import '../models/story_model.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
@@ -1112,8 +1113,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         // 56 (isi judul ±38 / field cari 40) — dulu 72, ruang kosong
         // 16px antara judul dan tray story terpangkas.
         toolbarHeight: 56,
-        // Admin Panel di KIRI ATAS — hanya untuk zunixe (bukan sesi dummy).
-        // Build user: panelBuilder null → tidak pernah tampil.
+        // Tombol search di KIRI ATAS (leading). Ikon Admin Panel pindah
+        // ke actions kanan (hanya tampil untuk admin sungguhan).
         leading: IconButton(
           tooltip: s.searchHint,
           icon: Icon(
@@ -1233,11 +1234,43 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         // rapat (tanpa padding). IconButton tidak dipakai: minimumSize M3
         // selalu memaksa 48px walau constraints 32 diberikan.
         actions: [
+          Builder(builder: (_) {
+            debugPrint(
+              '[ADMINICON] panelBuilder=${AdminGate.panelBuilder != null} '
+              'isRealAdmin=${auth.isRealAdmin} '
+              'dummySession=${auth.dummySessionActive} '
+              'email=${auth.userEmail}',
+            );
+            return const SizedBox.shrink();
+          }),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Jalan pintas Admin Panel — hanya untuk admin sungguhan
+                // (bukan sesi dummy). User biasa tidak melihat ikon ini.
+                if (AdminGate.panelBuilder != null &&
+                    auth.isRealAdmin &&
+                    !auth.dummySessionActive)
+                  Tooltip(
+                    message: 'Admin Panel',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        final builder = AdminGate.panelBuilder;
+                        if (builder == null) return;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: builder),
+                        );
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 3),
+                        child: Icon(Icons.admin_panel_settings_outlined),
+                      ),
+                    ),
+                  ),
                 Tooltip(
                   message: s.storyAddTooltip,
                   child: GestureDetector(

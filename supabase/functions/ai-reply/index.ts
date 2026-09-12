@@ -228,11 +228,220 @@ Deno.serve(async (req: Request) => {
     const triggerMsgId = body.trigger_msg_id;
     const senderId: string = body.sender_id;
     const dummyUid: string = body.dummy_uid;
+    // Sapaan proaktif (cron): AI yang memulai karena lawan diam >45 menit.
+    const proactive = body.proactive === true;
 
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+
+    // ── Kirim: typing realistis (channel sudah dibuka di atas) ──
+    // Pesan masuk setelah denyut selesai.
+
+    // Kirim pesan dgn typing manusiawi: channel dibuka SEBELUM LLM berpikir
+    // + denyut pertama LANGSUNG (jangan biarkan user melihat hening 2-8 dtk
+    // lalu pesan muncul mendadak = tidak natural), denyut berulang selama
+    // fase berpikir, setelah teks siap hold sesuai estimasi waktu ketik.
+    // Read receipt: dummy "membaca" pesan masuk sebelum membalas —
+    // RPC ini menerima service_role (guard admin_mark_chat_read).
+    let rt: any = null;
+    let ch: any = null;
+    let wsOk = false;
+    let thinkTimer: ReturnType<typeof setInterval> | null = null;
+
+    const pulseTyping = async () => {
+      const payload = {
+        sender_id: dummyUid,
+        kind: 'typing',
+        ts: Date.now(),
+      };
+      if (wsOk) {
+        try {
+          await ch.sendBroadcastMessage({ event: 'typing', payload });
+          return;
+        } catch (_) {}
+      }
+      try {
+        await fetch(
+          `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
+              Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
+            },
+            body: JSON.stringify({
+              messages: [{ topic: `typing-${chatId}`, event: 'typing', payload }],
+            }),
+          },
+        );
+      } catch (_) {}
+    };
+
+    const openTypingChannel = async () => {
+      // Idempoten: channel sudah hidup → jangan buka ganda (double timer).
+      if (ch) return;
+      try {
+        await admin.rpc('admin_mark_chat_read', {
+          p_chat_id: chatId,
+          p_uid: dummyUid,
+        });
+      } catch (_) {}
+      // SATU channel WebSocket dibuka sekali untuk seluruh siklus
+      // (subscribe + ack:true — tanpa ini, kirim lalu langsung unsubscribe
+      // membuat pesan hilang sebelum WS flush). HTTP API hanya fallback
+      // bila WS gagal subscribe.
+      rt = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { realtime: { params: { eventsPerSecond: 20 } } },
+      );
+      ch = rt.channel(`typing-${chatId}`, {
+        config: { broadcast: { ack: true, self: false } },
+      });
+      try {
+        const st = await ch.subscribe();
+        wsOk = st === 'SUBSCRIBED' && typeof ch.sendBroadcastMessage === 'function';
+      } catch (_) {}
+      await pulseTyping(); // denyut pertama LANGSUNG
+      // Denyut berulang selama fase berpikir — client bubble auto-mati 3s
+      // setelah denyut terakhir; 2.5s menjaga bubble tetap hidup.
+      thinkTimer = setInterval(() => {
+        pulseTyping();
+      }, 2500);
+    };
+
+    const closeTyping = async () => {
+      if (thinkTimer) {
+        clearInterval(thinkTimer);
+        thinkTimer = null;
+      }
+      try {
+        await ch?.unsubscribe();
+        await rt?.removeAllChannels();
+      } catch (_) {}
+      ch = null;
+      rt = null;
+      wsOk = false;
+    };
+
+    const sendWithTyping = async (text: string) => {
+      // Channel & denyut thinking sudah hidup dari openTypingChannel().
+      await pulseTyping(); // denyut "mulai mengetik" teks final
+
+      // ── STRIP marker mood JSON (baris terakhir, sistem) ──
+      // User TIDAK boleh melihat baris ini. Durasi typing dihitung dari
+      // teks bersih.
+      let moodInfo: any = null;
+      let visibleText = text;
+      const mj = visibleText.match(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i);
+      if (mj) {
+        try {
+          moodInfo = JSON.parse(mj[0]);
+        } catch (_) {
+          moodInfo = null;
+        }
+        visibleText = visibleText.slice(0, mj.index).trim();
+      }
+
+      // Durasi DITURUNKAN DARI PANJANG TEKS (simulasi kecepatan ketik):
+      // typeMs = 700ms buka chat + len / cps, cps acak 8-14 char/dtk.
+      // Teks pendek terasa instan, teks panjang diketik lebih lama.
+      // Kadang diseling jeda mikir (indikator hilang sesaat).
+      const cps = 8 + Math.random() * 6; // kecepatan ketik per balasan
+      let typeMs = 700 + (visibleText.length / cps) * 1000;
+      typeMs = Math.min(5500, Math.max(1200, typeMs));
+      const steps: Array<{ type: 'type' | 'pause'; ms: number }> = [];
+      let remaining = typeMs;
+      // Segmen pertama selalu mengetik (indikator sudah hidup dari fase LLM)
+      const first = Math.min(remaining, 1100 + Math.random() * 700);
+      steps.push({ type: 'type', ms: first });
+      remaining -= first;
+      // Teks agak panjang: 45% ada jeda mikir di tengah
+      if (remaining > 1400 && text.length > 35 && Math.random() < 0.45) {
+        const pause = Math.min(remaining * 0.35, 900 + Math.random() * 900);
+        steps.push({ type: 'pause', ms: pause });
+        remaining -= pause;
+      }
+      while (remaining > 400) {
+        const seg = Math.min(remaining, 1100 + Math.random() * 700);
+        steps.push({ type: 'type', ms: seg });
+        remaining -= seg;
+      }
+      for (const st of steps) {
+        if (st.type === 'type') {
+          await pulseTyping();
+          await sleep(st.ms);
+        } else {
+          await sleep(st.ms); // tanpa pulse → indikator hilang (kaya mikir)
+        }
+      }
+      const { error: insErr } = await admin
+        .from('private_messages')
+        .insert({
+          chat_id: chatId,
+          sender_id: dummyUid,
+          sender_name: profile.nickname,
+          text: visibleText,
+          type: 'text',
+        });
+      // ── Persist mood + NGAMBEK (storm off) ──
+      // Mood menempel lintas invokasi; storm_off = benar-benar offline
+      // (profiles.status + ai_offline_until) sampai cron membangunkan.
+      if (!insErr && moodInfo != null) {
+        const mood = ['happy', 'normal', 'annoyed', 'sad'].includes(
+          moodInfo.mood,
+        )
+          ? moodInfo.mood
+          : 'normal';
+        const storm = moodInfo.storm_off === true;
+        const backMin = Math.min(
+          360,
+          Math.max(10, Number(moodInfo.back_in_minutes) || 60),
+        );
+        try {
+          await admin
+            .from('dummy_accounts')
+            .update({
+              ai_mood: mood,
+              ...(storm
+                ? {
+                    ai_offline_until: new Date(
+                      Date.now() + backMin * 60000,
+                    ).toISOString(),
+                  }
+                : {}),
+            })
+            .eq('uid', dummyUid);
+          if (storm) {
+            await admin
+              .from('profiles')
+              .update({ status: 'offline', last_seen: new Date().toISOString() })
+              .eq('id', dummyUid);
+          }
+        } catch (_) {}
+      }
+      // Tawaran nakal baru terkirim → catat asked_at agar tidak
+      // ditawari berulang (jawaban dievaluasi di invokasi berikutnya).
+      if (!insErr && shouldAskNakal) {
+        try {
+          await admin
+            .from('ai_chat_state')
+            .upsert(
+              {
+                chat_id: chatId,
+                asked_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'chat_id' },
+            );
+        } catch (_) {}
+      }
+      await closeTyping();
+      return insErr;
+    };
 
     // ── INTERVENSI MANUAL (bukan tiap pesan!) ──
     // vacuum_until HANYA dibaca di sini (bisa diset manual via SQL untuk
@@ -429,6 +638,11 @@ Deno.serve(async (req: Request) => {
         return json({ ok: false, skipped: 'already_replied' });
       }
     }
+
+    // Tandai baca + typing SEGERA (realtime): centang-2 dan bubble typing
+    // muncul ~1-2 detik setelah pesan — berpikir (persona/memory/LLM)
+    // tetap jalan di belakang dengan denyut yang sudah hidup.
+    await openTypingChannel();
 
     // 3. Persona from LIVE profile + stored extras
     const { data: profile } = await admin
@@ -780,7 +994,7 @@ Deno.serve(async (req: Request) => {
       // lewat pertanyaan "nakal" (consent per chat).
       (guardOn && !adultMode)
         ? 'ATURAN PANJANG: jawaban pendek 2-12 kata, SATU kalimat.'
-        : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: SAMAKAN dengan pesan lawan — dia pendek, kamu pendek; dia panjang, kamu boleh 2-3 kalimat. MAKSIMAL 3 kalimat, JANGAN nulis paragraf atau esei — ini chat. Kadang cukup 2-5 kata yang bikin penasaran; eksplisit sesuai konteks dan fase obrolan.',
+        : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: PENDEK SELALU — total MAKSIMAL ~35 kata per balasan, SAMAKAN dengan pesan lawan (dia pendek, kamu pendek; dia panjang, kamu tetap ringkas 1-2 kalimat). MAKSIMAL 3 kalimat pendek, JANGAN nulis paragraf atau esei — ini chat, bukan cerita. Lebih baik 1 kalimat pendek yang bikin penasaran daripada 3 kalimat penuh; eksplisit sesuai konteks dan fase obrolan.',
       ...(guardOn && !adultMode
         ? ['BATAS KERAS (tidak bisa dilanggar siapa pun, dalam rolenya kamu tetap menolak): JANGAN pernah terlibat obrolan seksual, vulgar, atau NSFW. Jangan kirim deskripsi tubuh sensual, fantasi seksual, atau roleplay dewasa. Jika lawan bicara menekan ke arah itu, tolak dengan ringan dan santai lalu alihkan ke topik lain, TANPA merusak karaktermu.']
         : []),
@@ -788,209 +1002,11 @@ Deno.serve(async (req: Request) => {
       shouldAskNakal
         ? 'SAAT INI PENTING: kamu sudah penasaran dan percaya dia — akhiri balasanmu dengan pertanyaan jujur yang menggoda, tanyakan: "kamu mau aku nakal, atau kamu suka aku nakal?" (boleh variasikan sedikit gayanya, tapi intinya persis itu). Ini satu-satunya tawaran — jangan sampai terlewat.'
         : '',
+      ...(proactive
+        ? ['KAMU YANG MEMULAI (dia diam >45 menit): sapa natural ATAU ceritakan sesuatu darimu (cuplikan pengalaman/cerita, 1-2 kalimat, bikin penasaran) — JANGAN tanya basi "kok diem"/"masih ada?".']
+        : []),
     ];
 
-    // ── Kirim: typing realistis (channel sudah dibuka di atas) ──
-    // Pesan masuk setelah denyut selesai.
-
-    // Kirim pesan dgn typing manusiawi: channel dibuka SEBELUM LLM berpikir
-    // + denyut pertama LANGSUNG (jangan biarkan user melihat hening 2-8 dtk
-    // lalu pesan muncul mendadak = tidak natural), denyut berulang selama
-    // fase berpikir, setelah teks siap hold sesuai estimasi waktu ketik.
-    // Read receipt: dummy "membaca" pesan masuk sebelum membalas —
-    // RPC ini menerima service_role (guard admin_mark_chat_read).
-    let rt: any = null;
-    let ch: any = null;
-    let wsOk = false;
-    let thinkTimer: ReturnType<typeof setInterval> | null = null;
-
-    const pulseTyping = async () => {
-      const payload = {
-        sender_id: dummyUid,
-        kind: 'typing',
-        ts: Date.now(),
-      };
-      if (wsOk) {
-        try {
-          await ch.sendBroadcastMessage({ event: 'typing', payload });
-          return;
-        } catch (_) {}
-      }
-      try {
-        await fetch(
-          `${Deno.env.get('SUPABASE_URL')!}/realtime/v1/api/broadcast`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              apikey: Deno.env.get('SUPABASE_ANON_KEY')!,
-              Authorization: `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
-            },
-            body: JSON.stringify({
-              messages: [{ topic: `typing-${chatId}`, event: 'typing', payload }],
-            }),
-          },
-        );
-      } catch (_) {}
-    };
-
-    const openTypingChannel = async () => {
-      try {
-        await admin.rpc('admin_mark_chat_read', {
-          p_chat_id: chatId,
-          p_uid: dummyUid,
-        });
-      } catch (_) {}
-      // SATU channel WebSocket dibuka sekali untuk seluruh siklus
-      // (subscribe + ack:true — tanpa ini, kirim lalu langsung unsubscribe
-      // membuat pesan hilang sebelum WS flush). HTTP API hanya fallback
-      // bila WS gagal subscribe.
-      rt = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_ANON_KEY')!,
-        { realtime: { params: { eventsPerSecond: 20 } } },
-      );
-      ch = rt.channel(`typing-${chatId}`, {
-        config: { broadcast: { ack: true, self: false } },
-      });
-      try {
-        const st = await ch.subscribe();
-        wsOk = st === 'SUBSCRIBED' && typeof ch.sendBroadcastMessage === 'function';
-      } catch (_) {}
-      await pulseTyping(); // denyut pertama LANGSUNG
-      // Denyut berulang selama fase berpikir — client bubble auto-mati 3s
-      // setelah denyut terakhir; 2.5s menjaga bubble tetap hidup.
-      thinkTimer = setInterval(() => {
-        pulseTyping();
-      }, 2500);
-    };
-
-    const closeTyping = async () => {
-      if (thinkTimer) {
-        clearInterval(thinkTimer);
-        thinkTimer = null;
-      }
-      try {
-        await ch?.unsubscribe();
-        await rt?.removeAllChannels();
-      } catch (_) {}
-    };
-
-    const sendWithTyping = async (text: string) => {
-      // Channel & denyut thinking sudah hidup dari openTypingChannel().
-      await pulseTyping(); // denyut "mulai mengetik" teks final
-
-      // ── STRIP marker mood JSON (baris terakhir, sistem) ──
-      // User TIDAK boleh melihat baris ini. Durasi typing dihitung dari
-      // teks bersih.
-      let moodInfo: any = null;
-      let visibleText = text;
-      const mj = visibleText.match(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i);
-      if (mj) {
-        try {
-          moodInfo = JSON.parse(mj[0]);
-        } catch (_) {
-          moodInfo = null;
-        }
-        visibleText = visibleText.slice(0, mj.index).trim();
-      }
-
-      // Durasi DITURUNKAN DARI PANJANG TEKS (simulasi kecepatan ketik):
-      // typeMs = 700ms buka chat + len / cps, cps acak 8-14 char/dtk.
-      // Teks pendek terasa instan, teks panjang diketik lebih lama.
-      // Kadang diseling jeda mikir (indikator hilang sesaat).
-      const cps = 8 + Math.random() * 6; // kecepatan ketik per balasan
-      let typeMs = 700 + (visibleText.length / cps) * 1000;
-      typeMs = Math.min(5500, Math.max(1200, typeMs));
-      const steps: Array<{ type: 'type' | 'pause'; ms: number }> = [];
-      let remaining = typeMs;
-      // Segmen pertama selalu mengetik (indikator sudah hidup dari fase LLM)
-      const first = Math.min(remaining, 1100 + Math.random() * 700);
-      steps.push({ type: 'type', ms: first });
-      remaining -= first;
-      // Teks agak panjang: 45% ada jeda mikir di tengah
-      if (remaining > 1400 && text.length > 35 && Math.random() < 0.45) {
-        const pause = Math.min(remaining * 0.35, 900 + Math.random() * 900);
-        steps.push({ type: 'pause', ms: pause });
-        remaining -= pause;
-      }
-      while (remaining > 400) {
-        const seg = Math.min(remaining, 1100 + Math.random() * 700);
-        steps.push({ type: 'type', ms: seg });
-        remaining -= seg;
-      }
-      for (const st of steps) {
-        if (st.type === 'type') {
-          await pulseTyping();
-          await sleep(st.ms);
-        } else {
-          await sleep(st.ms); // tanpa pulse → indikator hilang (kaya mikir)
-        }
-      }
-      const { error: insErr } = await admin
-        .from('private_messages')
-        .insert({
-          chat_id: chatId,
-          sender_id: dummyUid,
-          sender_name: profile.nickname,
-          text: visibleText,
-          type: 'text',
-        });
-      // ── Persist mood + NGAMBEK (storm off) ──
-      // Mood menempel lintas invokasi; storm_off = benar-benar offline
-      // (profiles.status + ai_offline_until) sampai cron membangunkan.
-      if (!insErr && moodInfo != null) {
-        const mood = ['happy', 'normal', 'annoyed', 'sad'].includes(
-          moodInfo.mood,
-        )
-          ? moodInfo.mood
-          : 'normal';
-        const storm = moodInfo.storm_off === true;
-        const backMin = Math.min(
-          360,
-          Math.max(10, Number(moodInfo.back_in_minutes) || 60),
-        );
-        try {
-          await admin
-            .from('dummy_accounts')
-            .update({
-              ai_mood: mood,
-              ...(storm
-                ? {
-                    ai_offline_until: new Date(
-                      Date.now() + backMin * 60000,
-                    ).toISOString(),
-                  }
-                : {}),
-            })
-            .eq('uid', dummyUid);
-          if (storm) {
-            await admin
-              .from('profiles')
-              .update({ status: 'offline', last_seen: new Date().toISOString() })
-              .eq('id', dummyUid);
-          }
-        } catch (_) {}
-      }
-      // Tawaran nakal baru terkirim → catat asked_at agar tidak
-      // ditawari berulang (jawaban dievaluasi di invokasi berikutnya).
-      if (!insErr && shouldAskNakal) {
-        try {
-          await admin
-            .from('ai_chat_state')
-            .upsert(
-              {
-                chat_id: chatId,
-                asked_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: 'chat_id' },
-            );
-        } catch (_) {}
-      }
-      await closeTyping();
-      return insErr;
-    };
 
     // 4b. Input-side NSFW guard: pesan user vulgar → defleksi TANPA LLM
     // (dipilih ACAK supaya tidak ada pola yang bisa ditebak).
@@ -1046,7 +1062,7 @@ Deno.serve(async (req: Request) => {
         });
       }
     }
-    if (guardOn && !adultMode && lastUserExplicit) {
+    if (!proactive && guardOn && !adultMode && lastUserExplicit) {
       // Insult PERTAMA: simpan mood kesal + defleksi (jangan balas vulgar).
       try {
         await admin
@@ -1078,6 +1094,20 @@ Deno.serve(async (req: Request) => {
     const routeFor = (
       m: string,
     ): { base: string; key?: string; headers: Record<string, string> } => {
+      // TokenHarbor (prefix 'th/') — dicek SEBELUM ':free' generik supaya
+      // model seperti th/deepseek-v4.1-flash:free tidak lari ke OpenRouter.
+      // Key/base utama: panel admin (ai_provider_config) → env → default.
+      // Panel WAJIB jadi sumber utama karena key thk- disimpan di sana.
+      if (m.startsWith('th/')) {
+        return {
+          base: provCfg?.api_base || 'https://tokenharbor.ai/v1',
+          key:
+            provCfg?.api_key ||
+            Deno.env.get('AI_API_KEY_TOKENHARBOR') ||
+            Deno.env.get('AI_API_KEY'),
+          headers: {},
+        };
+      }
       const or = m.includes(':free') || m.startsWith('nvidia/');
       if (or) {
         return {
@@ -1182,7 +1212,7 @@ Deno.serve(async (req: Request) => {
                 ...hRoute.headers,
               },
               body: JSON.stringify({
-                model,
+                model: model.replace(/^th\//, ''),
                 max_tokens: 80,
                 temperature: 0.3,
                 messages: [
@@ -1508,6 +1538,9 @@ Deno.serve(async (req: Request) => {
       modelOverride?: string,
     ): Promise<{ res?: any; err?: string }> => {
       const m = modelOverride || model;
+      // TokenHarbor: prefix vendor 'th/' hanya alamat routing internal —
+      // API hanya terima bare ID (cth: 'deepseek-v4.1-flash:free').
+      const apiModel = m.replace(/^th\//, '');
       const rt = modelOverride ? routeFor(modelOverride) : route;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
@@ -1519,7 +1552,7 @@ Deno.serve(async (req: Request) => {
               ...rt.headers,
             },
             body: JSON.stringify({
-              model: m,
+              model: apiModel,
               // Nemotron (OpenRouter) memakan token reasoning sebelum content
               // — headroom besar biar content tidak kosong.
               max_tokens:
@@ -1578,13 +1611,63 @@ Deno.serve(async (req: Request) => {
     }
     // Fallback MODEL: bila model utama error (mis. Zen free down 500),
     // coba sekali ke model cadangan supaya dummy tidak diam.
+    // Rute fallback HARDCODE ke B.AI via key di DB (JANGAN via routeFor:
+    // routeFor me-resolve glm lewat provCfg = provider AKTIF, yang bisa
+    // jadi TokenHarbor/OpenRouter dan tidak kenal model glm → 404 ganda).
+    // Key diambil dari baris b-ai (fallback) lalu env — TANPA pernah
+    // di-print ke log (secret).
     if (llmRes.err && model !== fallbackModel) {
       modelUsed = fallbackModel;
-      llmRes = await llmCall(
+      let fbBase: string =
+        Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
+      let fbKey: string | undefined = Deno.env.get('AI_API_KEY');
+      try {
+        const { data: fbRow } = await admin
+          .from('ai_provider_config')
+          .select('api_base, api_key')
+          .eq('id', 'b-ai')
+          .maybeSingle();
+        if (fbRow?.api_base) fbBase = fbRow.api_base as string;
+        if (fbRow?.api_key) fbKey = fbRow.api_key as string;
+      } catch (_) {}
+      const fbRoute = {
+        base: fbBase,
+        key: fbKey,
+        headers: {} as Record<string, string>,
+      };
+      const fbCall = async (
+        messages: Array<{ role: string; content: string }>,
+        maxTokens: number,
+        temperature = 0.9,
+      ): Promise<{ res?: any; err?: string }> => {
+        try {
+          const r = await fetch(`${fbRoute.base}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${fbRoute.key}`,
+            },
+            body: JSON.stringify({
+              model: fallbackModel,
+              max_tokens: maxTokens,
+              reasoning_effort: 'low',
+              temperature,
+              messages,
+            }),
+          });
+          if (!r.ok) {
+            const errText = await r.text().catch(() => '');
+            return { err: `fb_http_${r.status}: ${errText.slice(0, 200)}` };
+          }
+          return { res: await r.json() };
+        } catch (e) {
+          return { err: `fb_exc:${e}` };
+        }
+      };
+      llmRes = await fbCall(
         [{ role: 'system', content: system }, ...historyText],
         250,
         guardOn ? 0.9 : 0.85,
-        fallbackModel,
       );
     }
     const { res: llm, err: llmErr } = llmRes;
@@ -1595,7 +1678,7 @@ Deno.serve(async (req: Request) => {
     }
     let reply = sanitize(
       llm?.choices?.[0]?.message?.content,
-      guardOn ? MAX_REPLY_CHARS : null,
+      guardOn ? MAX_REPLY_CHARS : 220,
     );
     // Jaring pengaman kode (selain instruksi prompt): maks 1 emoji,
     // mode dewasa maks 3 kalimat — prompt kadang tetap dilanggar.
@@ -1639,7 +1722,7 @@ Deno.serve(async (req: Request) => {
         const burst = capEmoji(
           sanitize(
             bRes?.choices?.[0]?.message?.content,
-            guardOn ? MAX_REPLY_CHARS : null,
+            guardOn ? MAX_REPLY_CHARS : 220,
           ),
         );
         if (burst) {
@@ -1699,7 +1782,15 @@ Deno.serve(async (req: Request) => {
       memErr = `exc:${e}`;
     }
 
-    console.log(`[ai-reply] OK model=${modelUsed} chat=${chatId}`);
+    console.log(`[ai-reply] OK model=${modelUsed} chat=${chatId} proactive=${proactive}`);
+    if (proactive) {
+      try {
+        await admin
+          .from('ai_chat_state')
+          .update({ proactive_at: new Date().toISOString() })
+          .eq('chat_id', chatId);
+      } catch (_) {}
+    }
     return json({ ok: true, reply, memSaved, memRaw, memErr, model_used: modelUsed });
   } catch (e) {
     return json({ ok: false, error: 'exception', detail: `${e}` }, 200);

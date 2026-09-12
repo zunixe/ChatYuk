@@ -132,6 +132,9 @@ class ChatProvider extends ChangeNotifier {
   Stream<String> getTypingStream(String chatId) =>
       _service.getTypingStream(chatId);
 
+  Stream<(String, int)> getTypingPulseStream(String chatId) =>
+      _service.getTypingPulseStream(chatId);
+
   void sendTyping(String chatId, {String kind = 'typing'}) =>
       _service.sendTyping(chatId, kind: kind);
 

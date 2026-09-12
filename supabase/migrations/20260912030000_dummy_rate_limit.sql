@@ -37,12 +37,13 @@ begin
     return new;
   end if;
 
-  -- Recipient must be an AI-enabled dummy (ambil rate config sekalian)
+  -- Recipient must be an AI-enabled dummy (ambil rate config sekalian).
+  -- PENTING: pakai IF NOT FOUND (bukan cek null!) — kolom flag boleh null.
   select d.ai_no_rate_limit, d.ai_max_replies, d.ai_min_interval
     into v_no_rate, v_max, v_min
   from public.dummy_accounts d
   where d.uid = v_other and d.ai_enabled = true;
-  if v_no_rate is null then
+  if not found then
     return new;
   end if;
 

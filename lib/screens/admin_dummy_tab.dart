@@ -92,20 +92,18 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _startEdit(Map<String, dynamic> item) {
+  /// Isi form dari item untuk mode edit. Tanpa setState/scroll —
+  /// dipanggil tepat sebelum bottom sheet dibuka (sheet membaca nilai
+  /// fresh saat build).
+  void _fillForm(Map<String, dynamic> item) {
     _nickCtrl.text = item['nickname'] as String? ?? '';
+    _nicknameError = null;
     _gender = item['gender'] as String? ?? 'male';
     _age = (item['age'] as num?)?.toInt() ?? 25;
     _negara = item['country'] as String? ?? 'Indonesia';
     _kota = item['city'] as String? ?? 'Jakarta';
-    setState(() => _editingUid = item['uid'] as String);
-    if (_scrollCtrl.hasClients) {
-      _scrollCtrl.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
+    _busy = false;
+    _editingUid = item['uid'] as String;
   }
 
   void _cancelEdit() {
@@ -119,7 +117,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     });
   }
 
-  void _onNicknameChanged(String v) {
+  void _onNicknameChanged(String v, StateSetter setSheet) {
     // Validasi live — sama seperti register screen.
     final nick = v.trim();
     String? err;
@@ -133,10 +131,17 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         err = s.errNicknameInvalid;
       }
     }
-    setState(() => _nicknameError = err);
+    setSheet(() => _nicknameError = err);
   }
 
-  Future<void> _register(S s) async {
+  /// Simpan form dummy (dipakai dari bottom sheet — setSheet me-rebuild
+  /// isi sheet, bukan tab). sheetCtx = context sheet untuk pop.
+  /// _formSheetOpen guard: user bisa swipe-dismiss sheet di tengah RPC.
+  Future<void> _register(
+    S s,
+    StateSetter setSheet,
+    BuildContext sheetCtx,
+  ) async {
     final nick = _nickCtrl.text.trim();
     if (nick.isEmpty) {
       _toast(s, s.dummyInvalidInput);
@@ -160,7 +165,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       _toast(s, s.dummyNeedAdmin);
       return;
     }
-    setState(() => _busy = true);
+    if (_formSheetOpen) setSheet(() => _busy = true);
     try {
       // Pre-check duplikat — error spesifik sebelum kirim ke server
       // (server tetap validasi sebagai sumber kebenaran, case-insensitive).
@@ -170,7 +175,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       );
       if (!available) {
         if (!mounted) return;
-        setState(() => _busy = false);
+        if (_formSheetOpen) setSheet(() => _busy = false);
         _toast(s, s.errNicknameTaken);
         return;
       }
@@ -197,6 +202,12 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       _nickCtrl.clear();
       _editingUid = null;
       await _load();
+      // Sukses dari sheet → tutup sheet (flag dimatikan dulu supaya
+      // finally tidak memanggil setSheet setelah pop).
+      if (_formSheetOpen && sheetCtx.mounted) {
+        _formSheetOpen = false;
+        Navigator.of(sheetCtx).pop();
+      }
     } catch (e, st) {
       // print (bukan dlog) — muncul di logcat release untuk diagnosis.
       // ignore: avoid_print
@@ -209,8 +220,113 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         '${_editingUid != null ? s.dummyUpdateFail : s.dummyRegisterFail}: $msg',
       );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      // Guard flag: sheet bisa di-dismiss user di tengah RPC —
+      // setSheet setelah dispose melempar.
+      if (mounted && _formSheetOpen) setSheet(() => _busy = false);
     }
+  }
+
+  /// Penanda sheet form dummy sedang terbuka. Dipakai _register untuk
+  /// memutuskan pop + setSheet yang aman.
+  bool _formSheetOpen = false;
+
+  /// Buka bottom sheet form dummy. Mode tambah (item null) atau edit.
+  Future<void> _openDummySheet({Map<String, dynamic>? item, required S s}) {
+    if (item != null) {
+      _fillForm(item);
+    } else {
+      _cancelEdit();
+    }
+    _nicknameError = null;
+    _busy = false;
+    _formSheetOpen = true;
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: StatefulBuilder(
+              builder: (_, setSheet) => _buildDummyForm(s, setSheet, sheetCtx),
+            ),
+          ),
+        ),
+      ),
+    ).then((_) {
+      _formSheetOpen = false;
+      if (mounted) setState(() => _busy = false);
+    });
+  }
+
+  /// Isi bottom sheet: judul + tombol X + form profil dummy.
+  /// Widget SAMA (ProfileFormCard) seperti form inline lama — ukuran/
+  /// behavior identik, hanya wadahnya pindah ke sheet.
+  Widget _buildDummyForm(S s, StateSetter setSheet, BuildContext sheetCtx) {
+    final isEdit = _editingUid != null;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                isEdit ? '${s.dummyEdit} Dummy' : s.dummyCreateTitle,
+                style: AppText.titleEmphasis,
+              ),
+            ),
+            IconButton(
+              tooltip: MaterialLocalizations.of(sheetCtx).closeButtonTooltip,
+              onPressed: () {
+                _cancelEdit();
+                Navigator.of(sheetCtx).pop();
+              },
+              icon: const Icon(Icons.close),
+              color: AppTheme.textSecondary,
+            ),
+          ],
+        ),
+        SizedBox(height: 4),
+        Text(
+          s.dummyRegisterHint,
+          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        ),
+        SizedBox(height: 10),
+        ProfileFormCard(
+          s: s,
+          nicknameCtrl: _nickCtrl,
+          nicknameFocus: _nicknameFocus,
+          nicknameError: _nicknameError,
+          onNicknameChanged: (v) => _onNicknameChanged(v, setSheet),
+          onNicknameSubmitted: () => _register(s, setSheet, sheetCtx),
+          gender: _gender,
+          onGenderChanged: (v) => setSheet(() => _gender = v),
+          age: _age,
+          onAgeChanged: (v) => setSheet(() => _age = v),
+          country: _negara,
+          onCountryChanged: (v) {
+            final cities = getCitiesForCountry(v);
+            setSheet(() {
+              _negara = v;
+              _kota = cities.isNotEmpty ? cities.first : '';
+            });
+          },
+          city: _kota,
+          onCityChanged: (v) => setSheet(() => _kota = v),
+          loading: _busy,
+          submitLabel: isEdit ? s.dummySaveChanges : s.dummyRegisterBtn,
+          onSubmit: () => _register(s, setSheet, sheetCtx),
+        ),
+      ],
+    );
   }
 
   Future<void> _setStatus(Map<String, dynamic> item, String status, S s) async {
@@ -325,58 +441,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
           MediaQuery.of(context).padding.bottom + 24,
         ),
         children: [
-          // ── Form pendaftaran / edit (WIDGET SAMA dengan register —
-          // ukuran/behavior identik 100%) ──
-          Text(
-            _editingUid != null ? s.dummyEdit : s.dummyCreateTitle,
-            style: AppText.titleEmphasis,
-          ),
-          SizedBox(height: 4),
-          Text(
-            s.dummyRegisterHint,
-            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-          ),
-          SizedBox(height: 10),
-          ProfileFormCard(
-            s: s,
-            nicknameCtrl: _nickCtrl,
-            nicknameFocus: _nicknameFocus,
-            nicknameError: _nicknameError,
-            onNicknameChanged: _onNicknameChanged,
-            onNicknameSubmitted: () => _register(s),
-            gender: _gender,
-            onGenderChanged: (v) => setState(() => _gender = v),
-            age: _age,
-            onAgeChanged: (v) => setState(() => _age = v),
-            country: _negara,
-            onCountryChanged: (v) {
-              final cities = getCitiesForCountry(v);
-              setState(() {
-                _negara = v;
-                _kota = cities.isNotEmpty ? cities.first : '';
-              });
-            },
-            city: _kota,
-            onCityChanged: (v) => setState(() => _kota = v),
-            loading: _busy,
-            submitLabel: _editingUid != null
-                ? s.dummySaveChanges
-                : s.dummyRegisterBtn,
-            onSubmit: () => _register(s),
-          ),
-          if (_editingUid != null) ...[
-            SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: _busy ? null : _cancelEdit,
-                child: Text(s.dummyCancelEdit),
-              ),
-            ),
-          ],
-          SizedBox(height: 20),
-
-          // ── Daftar akun dummy ──
+          // ── Daftar akun dummy (form tambah/edit pindah ke bottom sheet) ──
           Row(
             children: [
               Text(s.dummyListTitle, style: AppText.titleEmphasis),
@@ -384,6 +449,19 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
               Text(
                 '${_items.length}',
                 style: AppText.label.copyWith(color: AppTheme.textSecondary),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () => _openDummySheet(s: s),
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(s.dummyAdd),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  textStyle: AppText.label,
+                ),
               ),
             ],
           ),
@@ -579,7 +657,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                   ),
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
-                  onPressed: () => _startEdit(item),
+                  onPressed: () => _openDummySheet(item: item, s: s),
                   icon: Icon(
                     Icons.edit_outlined,
                     size: 20,
@@ -745,6 +823,16 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     return out;
   }
 
+  /// Preset model LLM per dummy. Nilai = id model persis seperti yang
+  /// dipakai edge function ai-reply (routing: mimo-*-free → Zen gratis).
+  /// null = "Ikuti global" (default_model di ai_provider_config).
+  static const List<(String, String?)> kAiModelOptions = [
+    ('Ikuti global', null),
+    ('Mimo 2.5 (gratis, Zen)', 'mimo-v2.5-free'),
+    ('GLM 5.3 Flash (B.AI)', 'glm-5.3-flash'),
+    ('Nemotron 3 Ultra free (OpenRouter)', 'nvidia/nemotron-3-ultra-550b-a55b:free'),
+  ];
+
   /// Ringkasan jam aktif: "08–23" bila kontinu, "08,12,20–22" bila tidak.
   static String _hoursSummary(List<int> hours) {
     if (hours.isEmpty) return '';
@@ -769,6 +857,9 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
   bool _noRate = false;
   late final TextEditingController _maxRateCtrl;
   late final TextEditingController _minRateCtrl;
+  // Model LLM per-dummy: 0 = ikuti global, 1..N = preset di kAiModelOptions.
+  int _modelSel = 0;
+  late final TextEditingController _modelCustomCtrl;
   late bool _schedAuto;
   late List<int> _hours;
   bool _schedBusy = false;
@@ -797,6 +888,20 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     _personalityCtrl = TextEditingController(text: '${persona['personality'] ?? ''}');
     _toneCtrl = TextEditingController(text: '${persona['tone'] ?? ''}');
     _extraCtrl = TextEditingController(text: '${persona['extra_prompt'] ?? ''}');
+    // Model: cocokkan ai_model sekarang ke preset; kalau tidak cocok
+    // (custom id), masukkan ke kolom custom.
+    _modelCustomCtrl = TextEditingController();
+    final curModel = (widget.item['ai_model'] as String?)?.trim();
+    _modelSel = 0;
+    if (curModel != null && curModel.isNotEmpty) {
+      for (var i = 1; i < kAiModelOptions.length; i++) {
+        if (kAiModelOptions[i].$2 == curModel) {
+          _modelSel = i;
+          break;
+        }
+      }
+      if (_modelSel == 0) _modelCustomCtrl.text = curModel;
+    }
   }
 
   @override
@@ -806,6 +911,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     _extraCtrl.dispose();
     _maxRateCtrl.dispose();
     _minRateCtrl.dispose();
+    _modelCustomCtrl.dispose();
     super.dispose();
   }
 
@@ -836,6 +942,15 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
         maxReplies: int.tryParse(_maxRateCtrl.text.trim()),
         minInterval: int.tryParse(_minRateCtrl.text.trim()),
         activeHours: _hours.toList()..sort(),
+        // Model: 0 = ikuti global (reset override). Custom id diketik manual.
+        // _modelSel -1 = custom; custom kosong = fallback ikuti global.
+        model: _modelSel == 0 && _modelCustomCtrl.text.trim().isEmpty
+            ? 'NULL'
+            : _modelSel == -1 || _modelSel >= kAiModelOptions.length
+                ? (_modelCustomCtrl.text.trim().isEmpty
+                    ? 'NULL'
+                    : _modelCustomCtrl.text.trim())
+                : kAiModelOptions[_modelSel].$2 ?? 'NULL',
       );
       widget.item['ai_guard_enabled'] = guardValue;
       widget.item['ai_no_rate_limit'] = _noRate;
@@ -912,6 +1027,56 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                 color: AppTheme.textSecondary,
               ),
             ),
+            const SizedBox(height: 6),
+            // ── Model LLM per-dummy ──
+            Text(s.dummyAiModelTitle, style: AppText.bodyStrong),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 0,
+              children: [
+                for (var i = 0; i < kAiModelOptions.length; i++)
+                  ChoiceChip(
+                    label: Text(
+                      i == 0
+                          ? 'Global'
+                          : kAiModelOptions[i].$1.split(' (').first,
+                      style: AppText.bodySmall,
+                    ),
+                    selected: _modelSel == i && _modelCustomCtrl.text.isEmpty,
+                    onSelected: (_) => setState(() {
+                      _modelSel = i;
+                      _modelCustomCtrl.clear();
+                    }),
+                  ),
+                ChoiceChip(
+                  label: Text(s.dummyAiModelCustom, style: AppText.bodySmall),
+                  selected: _modelCustomCtrl.text.isNotEmpty,
+                  onSelected: (_) => setState(() => _modelSel = -1),
+                ),
+              ],
+            ),
+            if (_modelSel == -1 || _modelCustomCtrl.text.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              TextField(
+                controller: _modelCustomCtrl,
+                style: AppText.body,
+                decoration: InputDecoration(
+                  labelText: s.dummyAiModelCustom,
+                  helperText: 'cth: mimo-v2.5-free',
+                  helperMaxLines: 2,
+                ),
+                onChanged: (_) => setState(() => _modelSel = -1),
+              ),
+            ] else ...[
+              const SizedBox(height: 2),
+              Text(
+                s.dummyAiModelDesc,
+                style: AppText.caption.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
             const SizedBox(height: 6),
             // ── Rate limit per-dummy ──
             Text(s.dummyRateTitle, style: AppText.bodyStrong),
