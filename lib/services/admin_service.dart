@@ -322,6 +322,7 @@ class AdminService {
     bool? noRateLimit,
     int? maxReplies,
     int? minInterval,
+    List<int>? activeHours,
   }) async {
     await _sb.rpc('admin_set_dummy_ai', params: {
       'p_uid': uid,
@@ -334,6 +335,8 @@ class AdminService {
       'p_max_replies': maxReplies,
       'p_min_interval': minInterval,
       if (noRateLimit != null) 'p_no_rate_limit': noRateLimit,
+      // Jadwal jam online: selalu dikirim (list dari editor grid).
+      'p_active_hours': activeHours ?? const <int>[],
     });
   }
 

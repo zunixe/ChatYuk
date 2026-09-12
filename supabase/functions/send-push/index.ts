@@ -66,6 +66,7 @@ function parsePem(pem) {
 }
 
 import { checkAppSecret, unauthorized } from '../_shared/auth.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 Deno.serve(async (req) => {
   try {
@@ -148,6 +149,22 @@ Deno.serve(async (req) => {
           body: JSON.stringify(message),
         });
         const resBody = await res.text();
+        // Auto-clean token mati: FCM 404 NotRegistered / 410 = token tidak
+        // terdaftar lagi (app di-install ulang, dsb). Bersihkan supaya
+        // tidak dipukul berulang (boros kuota + notif tidak pernah sampai).
+        if (token && !res.ok && /NotRegistered|UNREGISTERED/.test(resBody)) {
+          try {
+            const admin = createClient(
+              Deno.env.get('SUPABASE_URL')!,
+              Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+            );
+            await admin
+              .from('profiles')
+              .update({ fcm_token: null })
+              .eq('fcm_token', token);
+            await admin.from('user_devices').delete().eq('fcm_token', token);
+          } catch (_) {}
+        }
         if (res.ok) {
           return new Response(resBody, {
             status: 200,
