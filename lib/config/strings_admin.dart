@@ -584,18 +584,6 @@ extension SAdminX on S {
       ? 'Jadwal kehadiran AI'
       : 'AI presence schedule';
 
-  String get dummyAiModelTitle => isId
-      ? 'Model LLM'
-      : 'LLM model';
-
-  String get dummyAiModelDesc => isId
-      ? 'Kosongkan "Ikuti global" untuk pakai default global. Model mimo gratis via Zen; GLM via B.AI.'
-      : 'Leave "Follow global" to use the global default. Free mimo via Zen; GLM via B.AI.';
-
-  String get dummyAiModelCustom => isId
-      ? 'Lainnya (ketik id model…)'
-      : 'Other (type model id…)';
-
   String get dummyAiScheduleDesc => isId
       ? 'AI online/idle/offline mengikuti jam aktif. Offline = AI tidak membalas sama sekali.'
       : 'AI goes online/idle/offline following active hours. Offline = AI never replies.';
@@ -662,6 +650,10 @@ extension SAdminX on S {
   String get dummyRateGlobalHint => isId
       ? 'Kosongkan = ikut pengaturan AI Bot (global)'
       : 'Empty = follow AI Bot settings (global)';
+
+  String dummyRateGlobalHintVals(int m, int j) => isId
+      ? 'Kosongkan = ikut AI Bot ($m/jam, jeda $j dtk)'
+      : 'Empty = follow AI Bot ($m/hr, $j s gap)';
 
   String get dummyScheduleStatusNow =>
       isId ? 'Status sekarang' : 'Current status';

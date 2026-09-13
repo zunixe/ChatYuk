@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/widgets/chat_ui_shared.dart';
 import 'package:chatyuk/widgets/empty_state_view.dart';
 
 import 'test_helper.dart';
 
-/// Smoke test widget bersama: render tanpa throw, tap jalan.
 void main() {
+  final s = S(isId: true);
+
   setUpAll(() async {
     await initSupabaseForTest();
   });
@@ -23,21 +25,21 @@ void main() {
 
   group('EmptyStateView', () {
     testWidgets('tampilkan ikon + judul + hint', (tester) async {
-      await tester.pumpWidget(wrap(const EmptyStateView(
+      await tester.pumpWidget(wrap(EmptyStateView(
         icon: Icons.chat_bubble_outline,
-        title: 'Belum ada chat',
-        hint: 'Mulai dari tab online',
+        title: s.noPrivateChats,
+        hint: s.emptyTimeline,
       )));
-      expect(find.text('Belum ada chat'), findsOneWidget);
-      expect(find.text('Mulai dari tab online'), findsOneWidget);
+      expect(find.text(s.noPrivateChats), findsOneWidget);
+      expect(find.text(s.emptyTimeline), findsOneWidget);
       expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
     });
 
     testWidgets('tanpa actionLabel = tanpa tombol', (tester) async {
-      await tester.pumpWidget(wrap(const EmptyStateView(
+      await tester.pumpWidget(wrap(EmptyStateView(
         icon: Icons.chat_bubble_outline,
-        title: 'T',
-        hint: 'H',
+        title: s.loading,
+        hint: s.loading,
       )));
       expect(find.byType(FilledButton), findsNothing);
     });
@@ -46,12 +48,12 @@ void main() {
       var tapped = false;
       await tester.pumpWidget(wrap(EmptyStateView(
         icon: Icons.chat_bubble_outline,
-        title: 'T',
-        hint: 'H',
-        actionLabel: 'Buat',
+        title: s.loading,
+        hint: s.loading,
+        actionLabel: s.btnRetry,
         onAction: () => tapped = true,
       )));
-      await tester.tap(find.text('Buat'));
+      await tester.tap(find.text(s.btnRetry));
       expect(tapped, isTrue);
     });
   });
@@ -62,7 +64,7 @@ void main() {
       await tester.pumpWidget(wrap(ChatIconButton(
         open: false,
         onTap: () => tapped = true,
-        tooltip: 'lampirkan',
+        tooltip: s.btnSave,
       )));
       expect(find.byIcon(Icons.add_rounded), findsOneWidget);
       await tester.tap(find.byType(ChatIconButton));
@@ -73,9 +75,8 @@ void main() {
       await tester.pumpWidget(wrap(ChatIconButton(
         open: true,
         onTap: () {},
-        tooltip: 'tutup',
+        tooltip: s.btnClose,
       )));
-      // Tunggu animasi rotasi selesai agar ikon final ter-render.
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);
       expect(find.byIcon(Icons.add_rounded), findsNothing);
@@ -86,7 +87,7 @@ void main() {
         icon: Icons.photo_camera_outlined,
         open: false,
         onTap: () {},
-        tooltip: 'foto',
+        tooltip: s.btnSave,
       )));
       expect(find.byIcon(Icons.photo_camera_outlined), findsOneWidget);
     });

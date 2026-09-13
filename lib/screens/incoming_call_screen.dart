@@ -103,6 +103,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     // CallProvider (aktif), dan unregister di sini akan mematikan penanda busy.
     if (!_accepted) CallProvider.instance.unregisterCall(widget.callId);
     _statusSub?.cancel();
+    // Bersihkan channel status sharing bila tak ada sesi yang memakai
+    // (decline/missed tanpa CallSession) — aman bila sesi aktif.
+    _service.releaseCallStatus(widget.callId);
     _ringtonePlayer.stop();
     _ringtonePlayer.dispose();
     super.dispose();

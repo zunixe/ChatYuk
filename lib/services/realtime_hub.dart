@@ -92,6 +92,17 @@ class RealtimeHub {
 
   Stream<Map<String, dynamic>> get timelineBroadcast => _timelineCtrl.stream;
 
+  /// Keluar dari channel timeline (panggil saat provider terkait dispose).
+  Future<void> leaveTimeline() async {
+    final ch = _timelineChannel;
+    _timelineChannel = null;
+    if (ch != null) {
+      try {
+        await _sb.removeChannel(ch);
+      } catch (_) {}
+    }
+  }
+
   Future<void> broadcastTimeline(String event, Map<String, dynamic> payload) async {
     final ch = ensureTimeline();
     await ch.sendBroadcastMessage(event: event, payload: payload);
@@ -130,4 +141,23 @@ class RealtimeHub {
   }
 
   Stream<Map<String, dynamic>> get roomPresence => _roomCtrl.stream;
+
+  /// Lepas semua channel room sekaligus (panggil saat logout/cleanup).
+  Future<void> untrackAllRooms() async {
+    final keys = _roomChannels.keys.toList();
+    for (final k in keys) {
+      final ch = _roomChannels.remove(k);
+      if (ch != null) {
+        try {
+          await ch.untrack();
+          await _sb.removeChannel(ch);
+        } catch (_) {}
+      }
+    }
+  }
+
+  /// Status channel presence online (untuk heartbeat hemat — re-track
+  /// hanya bila benar-benar putus, bukan tiap 120 dtk).
+  bool get isOnlineTracking =>
+      _onlineChannel != null && _trackedUid != null;
 }

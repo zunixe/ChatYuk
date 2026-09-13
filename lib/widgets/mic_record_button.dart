@@ -78,6 +78,7 @@ class _MicRecordButtonState extends State<MicRecordButton>
       // Recording berakhir (kirim/batal) — reset lock + kembali mengecil.
       _didLock = false;
       _leaving = false;
+      _railOn = false;
       _dragDx = 0;
       _dragDy = 0;
       _wasDragged = false;
@@ -205,6 +206,11 @@ class _MicRecordButtonState extends State<MicRecordButton>
 
   bool _wasPickUp = false;
   bool _wasDragged = false;
+  // Rel kunci pakai hysteresis (nongol di -12, hilang di -4) — tanpa ini
+  // scrub naik-turun di sekitar ambang bikin rel kedip (Opacity per-frame
+  // juga memicu saveLayer tiap frame → jank di Adreno). Rel selalu
+  // opacity penuh saat tampil, tanpa animasi per-frame.
+  bool _railOn = false;
   // Aksi selesai (kirim/batal) — bulatan DIHILANGKAN total sampai parent
   // selesai menutup rekaman. Mencegah blink "kunci hijau" 1-2 frame.
   bool _leaving = false;
@@ -326,9 +332,17 @@ class _MicRecordButtonState extends State<MicRecordButton>
       setState(() {
         _dragDx = 0;
         _dragDy = dy.clamp(-_dockHeight, 0.0);
+        // Hysteresis rel: nongol di -12, hilang di -4 (zona -12..-4
+        // mempertahankan status → scrub di ambang tidak kedip).
+        if (!_railOn && dy <= -12) {
+          _railOn = true;
+        } else if (_railOn && dy >= -4) {
+          _railOn = false;
+        }
       });
       if (dy <= _lockThreshold && widget.onLock != null) {
         _didLock = true;
+        _railOn = false;
         HapticFeedback.mediumImpact();
         widget.onLock!();
         // Bulat beku PERSIS di titik dock — tanpa lompatan/jitter.
@@ -345,6 +359,7 @@ class _MicRecordButtonState extends State<MicRecordButton>
       setState(() {
         _dragDx = dx.clamp(_maxDrag, 0.0);
         _dragDy = 0;
+        _railOn = false;
       });
     }
   }
@@ -354,6 +369,7 @@ class _MicRecordButtonState extends State<MicRecordButton>
     if (origin == null) return;
     _pointerOrigin = null;
     _fingerDown = false;
+    _railOn = false;
     final cancelDrag = _isCancelZone;
     final wasLockGesture = _didLock;
     setState(() {
@@ -400,6 +416,7 @@ class _MicRecordButtonState extends State<MicRecordButton>
     if (origin == null) return;
     _pointerOrigin = null;
     _fingerDown = false;
+    _railOn = false;
     final cancelDrag = _isCancelZone;
     final wasLockGesture = _didLock;
     _wasDragged = false;
@@ -488,20 +505,20 @@ class _MicRecordButtonState extends State<MicRecordButton>
                     // muncul saat mic ditahan & mulai digeser ke atas.
                     // Panah di ujung atas + bulatan gembok yang mengisi
                     // progres; SEMBUNYI saat digeser ke kiri (mode batal).
-                    if (!_lockedNow && _dragDy < -4 && !_isCancelZone && _dragDx > -10)
+                    // Opacity penuh (tanpa fade per-frame) + hysteresis di
+                    // _railOn → tidak kedip saat scrub naik-turun.
+                    if (!_lockedNow && _railOn && !_isCancelZone && _dragDx > -10)
                       Positioned(
                         bottom: widget.size + 4,
                         child: IgnorePointer(
-                          child: Opacity(
-                            opacity: ((-_dragDy) / 18).clamp(0.0, 1.0),
-                            child: Container(
-                              width: widget.size,
-                              height: _dockHeight + 26,
-                              decoration: BoxDecoration(
-                                color: AppTheme.bgCard,
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: AppTheme.divider),
-                              ),
+                          child: Container(
+                            width: widget.size,
+                            height: _dockHeight + 26,
+                            decoration: BoxDecoration(
+                              color: AppTheme.bgCard,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: AppTheme.divider),
+                            ),
                               child: Column(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
@@ -539,11 +556,14 @@ class _MicRecordButtonState extends State<MicRecordButton>
                             ),
                           ),
                         ),
-                      ),
+                    // Lingkaran dijangkar BAWAH (bukan tengah): saat membesar
+                    // (s/d 1.8x) lubernya ke ATAS saja, tidak pernah tumpah
+                    // ke bawah tombol → tidak ada glitch merah di bawah
+                    // composer saat slide-up mengunci.
                     OverflowBox(
                       maxWidth: double.infinity,
                       maxHeight: double.infinity,
-                      alignment: Alignment.center,
+                      alignment: Alignment.bottomCenter,
                       child: Transform.translate(
                         offset: Offset(_dragDx, circleDy),
                         child: Container(

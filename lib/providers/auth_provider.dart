@@ -390,6 +390,11 @@ class AuthProvider extends ChangeNotifier {
     _profile = await _auth.getProfile();
     _listenProfile();
     _restartPresenceTimers();
+    // Daftarkan device agar anon dari HP ter-exclude ikut tersaring di
+    // ringkasan admin (hanya bila profil sudah ada — cegah FK violation).
+    if (_profile != null) {
+      safeUnawaited(DeviceInfoService.instance.syncToServer());
+    }
     if (!_disposed) notifyListeners();
   }
 

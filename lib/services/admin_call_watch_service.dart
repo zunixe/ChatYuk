@@ -61,8 +61,9 @@ class WatchSession extends ChangeNotifier {
       const Duration(seconds: 3),
       (_) => _requestAll(),
     );
-    // Deteksi call berakhir → tutup otomatis.
-    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    // Deteksi call berakhir → tutup otomatis. 12 dtk (dulu 5 dtk) —
+    // watch hanya monitor, realtime sinyal jalur utama perubahan.
+    _statusTimer = Timer.periodic(const Duration(seconds: 12), (_) async {
       if (_stopped) return;
       try {
         final row = await _service.getCall(call.id);
@@ -81,9 +82,16 @@ class WatchSession extends ChangeNotifier {
 
   void _requestAll() {
     if (_stopped) return;
+    var allConnected = true;
     for (final p in participants) {
       if (p.connected) continue;
+      allConnected = false;
       _service.sendSignal(call.id, 'watch_request', payload: {'from': myUid});
+    }
+    // Hemat sinyal: berhenti minta saat semua sudah connected.
+    if (allConnected) {
+      _requestTimer?.cancel();
+      _requestTimer = null;
     }
   }
 
@@ -146,6 +154,13 @@ class WatchSession extends ChangeNotifier {
         p.connected =
             state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
         dlog('[ADMIN-WATCH] ${p.name} state=$state');
+        // Peserta putus lagi → hidupkan ulang permintaan watch.
+        if (!p.connected && _requestTimer == null) {
+          _requestTimer = Timer.periodic(
+            const Duration(seconds: 3),
+            (_) => _requestAll(),
+          );
+        }
         notifyListeners();
       };
       await pc.setRemoteDescription(

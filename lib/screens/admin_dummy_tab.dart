@@ -49,15 +49,22 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _items = [];
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Polling berkala → badge unread per dummy muncul tanpa pull manual
+    // (pola sama seperti AdminChatListScreen 15 dtk).
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) _load(silent: true);
+    });
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _nickCtrl.dispose();
     _nicknameFocus.dispose();
     _scrollCtrl.dispose();
@@ -65,11 +72,13 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final items = await _svc.listDummies();
       if (!mounted) return;
@@ -80,6 +89,9 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     } catch (e) {
       dlog('[DUMMY] list error: $e');
       if (!mounted) return;
+      // Refresh senyap (timer): jangan timpa list/badge yang sudah tampil
+      // dengan error transien — cukup lewati sampai tick berikutnya.
+      if (silent) return;
       final s = context.read<LocaleProvider>().s;
       setState(() {
         _error =
@@ -436,6 +448,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
   Color _statusColor(String status) => switch (status) {
     'online' => Color(0xFF2E7D32),
     'idle' => Color(0xFFF9A825),
+    'invisible' => Color(0xFF7E57C2),
     _ => AppTheme.textSecondary,
   };
 
@@ -704,7 +717,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
               ],
             ),
             SizedBox(height: 8),
-            // Baris aksi: dropdown status + chip AI (kiri), 3 tombol ikon
+            // Baris aksi: dropdown status + chip AI (kiri), 4 tombol ikon
             // kanan mepet tanpa celah (InkWell padding 6 — bukan IconButton
             // yang memaksa min touch-target 48).
             Row(
@@ -715,6 +728,20 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                 ),
                 const SizedBox(width: 6),
                 _aiChip(item, s),
+                _dummyIconBtn(
+                  tooltip: s.statusInvisible,
+                  icon: status == 'invisible'
+                      ? Icons.visibility_off
+                      : Icons.visibility_off_outlined,
+                  color: status == 'invisible'
+                      ? _statusColor('invisible')
+                      : AppTheme.textSecondary,
+                  onTap: () => _setStatus(
+                    item,
+                    status == 'invisible' ? 'online' : 'invisible',
+                    s,
+                  ),
+                ),
                 _dummyIconBtn(
                   tooltip: s.dummyEdit,
                   icon: Icons.edit_outlined,
@@ -741,11 +768,18 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     );
   }
 
-  /// Dropdown status dummy (online/idle/offline) — nilai aktif langsung
-  /// terlihat; ganti nilai = set status via RPC yang sama seperti chip dulu.
+  /// Dropdown status dummy (online/idle/offline/invisible) — nilai aktif
+  /// langsung terlihat; ganti nilai = set status via RPC yang sama seperti
+  /// chip dulu. Invisible = user lain lihat offline & tidak muncul di
+  /// daftar online (cron AI tidak menimpa).
   Widget _statusDropdown(Map<String, dynamic> item, String current, S s) {
-    const values = ['online', 'idle', 'offline'];
-    final labels = [s.statusOnline, s.statusIdle, s.statusOffline];
+    const values = ['online', 'idle', 'offline', 'invisible'];
+    final labels = [
+      s.statusOnline,
+      s.statusIdle,
+      s.statusOffline,
+      s.statusInvisible,
+    ];
     final safeValue = values.contains(current) ? current : 'offline';
     return DropdownButtonFormField<String>(
       value: safeValue,
@@ -796,31 +830,37 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     );
   }
 
-  /// Chip AI dummy: aktif = terang + ikon robot; tap = buka sheet persona.
+  /// Chip AI dummy: ON = aksen solid + ikon terisi putih, OFF = abu
+  /// netral + ikon outline — beda tegas sekilas (bukan samar).
+  /// Tap = buka sheet persona.
   Widget _aiChip(Map<String, dynamic> item, S s) {
     final aiOn = item['ai_enabled'] == true;
+    final offColor = AppTheme.textSecondary;
     return InkWell(
       onTap: () => _openAiSheet(item, s),
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: aiOn ? AppTheme.accent : AppTheme.accent.withValues(alpha: 0.08),
+          color: aiOn ? AppTheme.accent : offColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
+          border: aiOn
+              ? null
+              : Border.all(color: offColor.withValues(alpha: 0.35)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.smart_toy_outlined,
+              aiOn ? Icons.smart_toy : Icons.smart_toy_outlined,
               size: 13,
-              color: aiOn ? Colors.white : AppTheme.accent,
+              color: aiOn ? Colors.white : offColor,
             ),
             const SizedBox(width: 4),
             Text(
               s.dummyAiChip,
               style: AppText.label.copyWith(
-                color: aiOn ? Colors.white : AppTheme.accent,
+                color: aiOn ? Colors.white : offColor,
               ),
             ),
           ],
@@ -920,16 +960,6 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     return out;
   }
 
-  /// Preset model LLM per dummy. Nilai = id model persis seperti yang
-  /// dipakai edge function ai-reply (routing: mimo-*-free → Zen gratis).
-  /// null = "Ikuti global" (default_model di ai_provider_config).
-  static const List<(String, String?)> kAiModelOptions = [
-    ('Ikuti global', null),
-    ('Mimo 2.5 (gratis, Zen)', 'mimo-v2.5-free'),
-    ('GLM 5.3 Flash (B.AI)', 'glm-5.3-flash'),
-    ('Nemotron 3 Ultra free (OpenRouter)', 'nvidia/nemotron-3-ultra-550b-a55b:free'),
-  ];
-
   /// Ringkasan jam aktif: "08–23" bila kontinu, "08,12,20–22" bila tidak.
   static String _hoursSummary(List<int> hours) {
     if (hours.isEmpty) return '';
@@ -954,9 +984,9 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
   bool _noRate = false;
   late final TextEditingController _maxRateCtrl;
   late final TextEditingController _minRateCtrl;
-  // Model LLM per-dummy: 0 = ikuti global, 1..N = preset di kAiModelOptions.
-  int _modelSel = 0;
-  late final TextEditingController _modelCustomCtrl;
+  // Default global (AI Bot) untuk hint: null = belum dimuat/gagal.
+  int? _globalMax;
+  int? _globalMin;
   late bool _schedAuto;
   late List<int> _hours;
   bool _schedBusy = false;
@@ -989,20 +1019,34 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     _personalityCtrl = TextEditingController(text: '${persona['personality'] ?? ''}');
     _toneCtrl = TextEditingController(text: '${persona['tone'] ?? ''}');
     _extraCtrl = TextEditingController(text: '${persona['extra_prompt'] ?? ''}');
-    // Model: cocokkan ai_model sekarang ke preset; kalau tidak cocok
-    // (custom id), masukkan ke kolom custom.
-    _modelCustomCtrl = TextEditingController();
-    final curModel = (widget.item['ai_model'] as String?)?.trim();
-    _modelSel = 0;
-    if (curModel != null && curModel.isNotEmpty) {
-      for (var i = 1; i < kAiModelOptions.length; i++) {
-        if (kAiModelOptions[i].$2 == curModel) {
-          _modelSel = i;
-          break;
-        }
-      }
-      if (_modelSel == 0) _modelCustomCtrl.text = curModel;
+    // Model LLM selalu ikut global — tidak ada override per-dummy.
+    // Default global (AI Bot) untuk hint rate-limit.
+    unawaited(_loadGlobalRate());
+  }
+
+  /// Muat batas global AI Bot (sekali) supaya hint kolom rate-limit bisa
+  /// menampilkan angka default yang berlaku saat kolom dikosongkan.
+  Future<void> _loadGlobalRate() async {
+    try {
+      final res = await AdminService(SupabaseConfig.client).getAiSettings();
+      if (!mounted) return;
+      setState(() {
+        _globalMax = (res['ai_max_replies_per_hour'] as num?)?.toInt();
+        _globalMin = (res['ai_min_interval_sec'] as num?)?.toInt();
+      });
+    } catch (_) {
+      // Gagal = hint tetap generik (tanpa angka).
     }
+  }
+
+  /// Hint kolom rate-limit: tampilkan angka global yang berlaku bila
+  /// dikosongkan; fallback ke hint generik selama global belum dimuat.
+  String _rateHint() {
+    final m = _globalMax;
+    final j = _globalMin;
+    final s = context.read<LocaleProvider>().s;
+    if (m != null && j != null) return s.dummyRateGlobalHintVals(m, j);
+    return s.dummyRateGlobalHint;
   }
 
   @override
@@ -1012,7 +1056,6 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     _extraCtrl.dispose();
     _maxRateCtrl.dispose();
     _minRateCtrl.dispose();
-    _modelCustomCtrl.dispose();
     super.dispose();
   }
 
@@ -1028,17 +1071,6 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
         if (_extraCtrl.text.trim().isNotEmpty)
           'extra_prompt': _extraCtrl.text.trim(),
       };
-
-  /// Nilai model dari chip/custom (logika sama dengan tombol simpan).
-  String _modelValue() {
-    if (_modelSel == 0 && _modelCustomCtrl.text.trim().isEmpty) return 'NULL';
-    if (_modelSel == -1 || _modelSel >= kAiModelOptions.length) {
-      return _modelCustomCtrl.text.trim().isEmpty
-          ? 'NULL'
-          : _modelCustomCtrl.text.trim();
-    }
-    return kAiModelOptions[_modelSel].$2 ?? 'NULL';
-  }
 
   /// Terapkan SEMUA setting saat ini ke server. Dipakai toggle instan
   /// (diam-diam, tanpa tutup sheet) maupun tombol Simpan (dengan hasil).
@@ -1071,7 +1103,6 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
         maxReplies: int.tryParse(_maxRateCtrl.text.trim()),
         minInterval: int.tryParse(_minRateCtrl.text.trim()),
         activeHours: _hours.toList()..sort(),
-        model: _modelValue(),
       );
       widget.item['ai_enabled'] = _enabled;
       widget.item['ai_guard_enabled'] = guardValue;
@@ -1080,8 +1111,6 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
       widget.item['ai_min_interval'] = int.tryParse(_minRateCtrl.text.trim());
       widget.item['ai_active_hours'] = _hours.toList()..sort();
       widget.item['ai_schedule_auto'] = _schedAuto;
-      final mv = _modelValue();
-      widget.item['ai_model'] = mv == 'NULL' ? null : mv;
       if (!mounted) return;
       if (showResult) {
         Navigator.pop(context, true);
@@ -1291,70 +1320,6 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                     ),
                   ),
                   const Divider(height: 20),
-                  // ── Model LLM per-dummy ──
-                  _subBlock(
-                    label: s.dummyAiModelTitle,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 0,
-                          children: [
-                            for (var i = 0; i < kAiModelOptions.length; i++)
-                              ChoiceChip(
-                                label: Text(
-                                  i == 0
-                                      ? 'Global'
-                                      : kAiModelOptions[i].$1.split(' (').first,
-                                  style: AppText.bodySmall,
-                                ),
-                                selected: _modelSel == i &&
-                                    _modelCustomCtrl.text.isEmpty,
-                                onSelected: (_) {
-                                  setState(() {
-                                    _modelSel = i;
-                                    _modelCustomCtrl.clear();
-                                  });
-                                  unawaited(_applyAi());
-                                },
-                              ),
-                            ChoiceChip(
-                              label: Text(s.dummyAiModelCustom,
-                                  style: AppText.bodySmall),
-                              selected: _modelCustomCtrl.text.isNotEmpty,
-                              onSelected: (_) =>
-                                  setState(() => _modelSel = -1),
-                            ),
-                          ],
-                        ),
-                        if (_modelSel == -1 ||
-                            _modelCustomCtrl.text.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _modelCustomCtrl,
-                            style: AppText.body,
-                            decoration: InputDecoration(
-                              labelText: s.dummyAiModelCustom,
-                              helperText: 'cth: mimo-v2.5-free',
-                              helperMaxLines: 2,
-                            ),
-                            onChanged: (_) => setState(() => _modelSel = -1),
-                            onSubmitted: (_) => unawaited(_applyAi()),
-                          ),
-                        ] else ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            s.dummyAiModelDesc,
-                            style: AppText.caption.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 20),
                   // ── Rate limit per-dummy ──
                   _subBlock(
                     label: s.dummyRateTitle,
@@ -1386,7 +1351,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                                 style: AppText.body,
                                 decoration: InputDecoration(
                                   labelText: s.dummyRateMax,
-                                  helperText: s.dummyRateGlobalHint,
+                                  helperText: _rateHint(),
                                   helperMaxLines: 2,
                                 ),
                                 onSubmitted: (_) => unawaited(_applyAi()),
@@ -1403,7 +1368,10 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                                 ],
                                 style: AppText.body,
                                 decoration: InputDecoration(
-                                    labelText: s.dummyRateMin),
+                                  labelText: s.dummyRateMin,
+                                  helperText: _rateHint(),
+                                  helperMaxLines: 2,
+                                ),
                                 onSubmitted: (_) => unawaited(_applyAi()),
                               ),
                             ),

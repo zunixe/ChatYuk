@@ -106,6 +106,45 @@ void main() {
     expect(loaded, isEmpty);
   });
 
+  test('loadMessages before: paging riwayat lebih lama', () async {
+    final base = DateTime(2026, 8, 26, 10);
+    final msgs = List.generate(
+      30,
+      (i) => _msg('p$i', base.add(Duration(seconds: i))),
+    );
+    await MessageStore.instance.saveMessages('chat-paging', msgs);
+    // Window terbaru 10 = p20..p29 (ascending).
+    final latest = await MessageStore.instance.loadMessages('chat-paging', limit: 10);
+    expect(latest.map((m) => m.id).toList(),
+        List.generate(10, (i) => 'p${i + 20}'));
+    // before = p20 → 10 pesan sebelumnya = p10..p19.
+    final older = await MessageStore.instance.loadMessages(
+      'chat-paging',
+      limit: 10,
+      before: latest.first.timestamp,
+    );
+    expect(older.map((m) => m.id).toList(),
+        List.generate(10, (i) => 'p${i + 10}'));
+  });
+
+  test('saveMessages incremental: upsert window penuh tanpa kehilangan data', () async {
+    final base = DateTime(2026, 8, 26);
+    await MessageStore.instance.saveMessages('chat-inc', [
+      _msg('a1', base),
+      _msg('a2', base, text: 'awal'),
+    ]);
+    // Simpan ulang window penuh — a2 berubah, a1 tetap → keduanya utuh.
+    await MessageStore.instance.saveMessages('chat-inc', [
+      _msg('a1', base),
+      _msg('a2', base, text: 'ubah'),
+      _msg('a3', base),
+    ]);
+    final loaded = await MessageStore.instance.loadMessages('chat-inc');
+    expect(loaded.map((m) => m.id).toList(), ['a1', 'a2', 'a3']);
+    // Baris yang berubah tersimpan dengan isi baru.
+    expect(loaded[1].text, 'ubah');
+  });
+
   test('kv: roundtrip objek + replace + remove', () async {
     await MessageStore.instance.saveKv('timeline_all', '{"posts":[1,2]}');
     expect(await MessageStore.instance.loadKv('timeline_all'),

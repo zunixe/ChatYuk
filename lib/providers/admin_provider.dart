@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/active_call_model.dart';
 import '../services/admin_service.dart';
+import '../services/message_cache.dart';
+import '../services/photo_cache.dart';
 import '../services/storage_photo_service.dart';
 
 class AdminProvider extends ChangeNotifier {
@@ -149,6 +151,19 @@ class AdminProvider extends ChangeNotifier {
   void invalidateStatsDetail() {
     _detailCache = null;
     _detailCacheAt = null;
+  }
+
+  // ── UID tersembunyi (dummy + device-ter-exclude) untuk filter peta ──
+  Set<String> _hiddenUids = {};
+  Set<String> get hiddenUids => _hiddenUids;
+  bool isHiddenUid(String id) => id.isNotEmpty && _hiddenUids.contains(id);
+
+  Future<void> fetchHiddenUids() async {
+    try {
+      _hiddenUids = await _service.fetchHiddenUids();
+    } catch (e) {
+      dlog('[ADMIN] fetchHiddenUids error: $e');
+    }
   }
 
   // ── Bar chart registrasi email per hari ──
@@ -776,7 +791,10 @@ Future<void> fetchDevices() async {
     }
   }
 
-  /// Hapus chat + (opsional) user. Return true jika sukses.
+  /// Hapus chat (hard delete server) + (opsional) user.
+  /// Cache lokal HP admin untuk chat itu ikut dihapus supaya monitor tidak
+  /// menampilkan pesan hantu dari disk. HP peserta dibersihkan lewat
+  /// realtime DELETE di ChatService._removeLocalChat. Return true jika sukses.
   Future<bool> deleteChat(String chatId, List<String> deleteUserIds) async {
     try {
       final res = await _service.deleteChat(chatId, deleteUserIds);
@@ -788,6 +806,15 @@ Future<void> fetchDevices() async {
         if (StoragePhotoService.instance.isPath(p)) {
           await StoragePhotoService.instance.delete(p);
         }
+      }
+      if (res['ok'] == true) {
+        final cacheKey = 'private_$chatId';
+        try {
+          await MessageCache.instance.saveMessages(cacheKey, []);
+        } catch (_) {}
+        try {
+          await PhotoCache.instance.clearChat(cacheKey);
+        } catch (_) {}
       }
       return res['ok'] == true;
     } catch (e) {

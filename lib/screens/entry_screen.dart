@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
 import '../config/regions.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
@@ -203,54 +204,50 @@ class _EntryScreenState extends State<EntryScreen> {
     _entered = true;
     setState(() => _loading = true);
     dlog('[ENTRY] _enter start nick=$nick');
-    Object? lastError;
-    for (var attempt = 1; attempt <= 3; attempt++) {
-      try {
-        await context.read<AuthProvider>().registerProfile(
-          nickname: nick,
-          gender: _gender,
-          age: _age,
-          country: _negara,
-          city: _kota,
-          ipAddress: _ipAddress,
-        );
-        lastError = null;
-        break;
-      } catch (e) {
-        final msg = e.toString().toLowerCase();
-        // Nickname taken → coba ambil alih (akun stale >7 hari) tanpa delay
-        if (msg.contains('duplicate') || msg.contains('taken') || msg.contains('nickname')) {
+    final auth = context.read<AuthProvider>();
+    try {
+      await auth.registerProfile(
+        nickname: nick,
+        gender: _gender,
+        age: _age,
+        country: _negara,
+        city: _kota,
+        ipAddress: _ipAddress,
+      );
+    } catch (e) {
+      // Retry lapis ganda dihapus — andalkan retry internal provider
+      // (registerProfile sudah refresh session anon stale lalu retry sekali).
+      final msg = e.toString().toLowerCase();
+      // Nickname taken → coba ambil alih (akun stale >7 hari), sekali saja.
+      if (msg.contains('duplicate') ||
+          msg.contains('taken') ||
+          msg.contains('nickname')) {
+        var claimed = false;
+        try {
+          claimed = await auth.claimNickname(nick);
+        } catch (_) {}
+        if (claimed) {
           try {
-            final claimed = await context.read<AuthProvider>().claimNickname(nick);
-            if (claimed) {
-              await context.read<AuthProvider>().registerProfile(
-                nickname: nick, gender: _gender, age: _age, country: _negara, city: _kota, ipAddress: _ipAddress);
-              lastError = null; break;
-            }
-          } catch (_) {}
-        }
-        lastError = e;
-        dlog('[ENTRY] registerProfile attempt $attempt ERROR: $e');
-        if (attempt < 3) await Future.delayed(Duration(milliseconds: attempt == 1 ? 500 : 800));
-      }
-    }
-    if (lastError != null) {
-      _entered = false; // allow retry on error
-      if (mounted) {
-        setState(() => _loading = false);
-        final msg = lastError.toString().toLowerCase();
-        if (msg.contains('duplicate') ||
-            msg.contains('nickname') ||
-            msg.contains('taken')) {
-          setState(() => _nicknameError = s.errNicknameTaken);
-          _nicknameFocus.requestFocus();
+            await auth.registerProfile(
+              nickname: nick,
+              gender: _gender,
+              age: _age,
+              country: _negara,
+              city: _kota,
+              ipAddress: _ipAddress,
+            );
+          } catch (e2) {
+            _failRegistration(s, e2, forceTaken: true);
+            return;
+          }
         } else {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
+          _failRegistration(s, e, forceTaken: true);
+          return;
         }
+      } else {
+        _failRegistration(s, e);
+        return;
       }
-      return;
     }
     dlog('[ENTRY] registerProfile returned OK');
     // Catat identitas perangkat + install ID untuk pelacakan admin.
@@ -259,6 +256,28 @@ class _EntryScreenState extends State<EntryScreen> {
     );
     if (mounted) setState(() => _loading = false);
     dlog('[ENTRY] _enter done, loading=false');
+  }
+
+  void _failRegistration(
+    S s,
+    Object error, {
+    bool forceTaken = false,
+  }) {
+    _entered = false; // allow retry on error
+    if (!mounted) return;
+    setState(() => _loading = false);
+    final msg = error.toString().toLowerCase();
+    if (forceTaken ||
+        msg.contains('duplicate') ||
+        msg.contains('nickname') ||
+        msg.contains('taken')) {
+      setState(() => _nicknameError = s.errNicknameTaken);
+      _nicknameFocus.requestFocus();
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
+    }
   }
 
   @override

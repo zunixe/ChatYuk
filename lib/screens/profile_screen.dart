@@ -320,7 +320,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (ok != true || !mounted) return;
     try {
       await _authService.deletePhoto(photo.id);
-      await _loadPhotos();
+      // Hapus item saja dari list lokal (tanpa reload penuh getPhotos yang
+      // me-download ulang semua foto). Grid max 6 item — murah.
+      if (mounted) {
+        setState(() => _photos.removeWhere((p) => p.id == photo.id));
+      }
     } catch (_) {}
   }
 

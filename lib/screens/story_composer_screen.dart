@@ -337,7 +337,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
       fontSize: StoryText.size(_sizeIndex) * _textScale,
       fontWeight: FontWeight.w800,
       color: _textColor,
-      height: 1.2,
+      height: StoryText.lineHeight,
       shadows: [
         Shadow(
           color: Colors.black.withValues(alpha: 0.6),

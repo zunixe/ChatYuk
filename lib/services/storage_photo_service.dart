@@ -23,7 +23,11 @@ class StoragePhotoService {
           value.startsWith('posts/') ||
           value.startsWith('timeline/') ||
           value.startsWith('voice/')) &&
-      (value.contains('.jpg') || value.contains('.m4a') || value.contains('.mp3'));
+      (value.contains('.jpg') ||
+          value.contains('.jpeg') ||
+          value.contains('.png') ||
+          value.contains('.m4a') ||
+          value.contains('.mp3'));
 
   /// Path untuk foto baru di chat. Tidak bergantung messageId (yang baru
   /// diketahui setelah insert) — cukup chatId + timestamp unik.

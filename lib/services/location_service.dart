@@ -90,6 +90,31 @@ class LocationService {
   Future<(double, double)?> tryDevicePositionForRegister() =>
       _tryDevicePosition();
 
+  /// Ambil last-known position CEPAT (tanpa chain GPS yang bisa blokir
+  /// puluhan detik). Return (lat, lon) bila izin ada & posisi masih segar
+  /// (≤ 10 menit). Dipakai layar "Orang Sekitar" supaya radar langsung
+  /// tampil memakai posisi terakhir, sementara GPS akurat jalan di
+  /// belakang.
+  Future<(double, double)?> lastKnownPosition() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      final perm = await Geolocator.checkPermission();
+      if (perm != LocationPermission.always &&
+          perm != LocationPermission.whileInUse) {
+        return null;
+      }
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null &&
+          DateTime.now().difference(last.timestamp).inMinutes <= 10) {
+        return (last.latitude, last.longitude);
+      }
+      return null;
+    } catch (e) {
+      dlog('[location] lastKnownPosition error: $e');
+      return null;
+    }
+  }
+
   /// Minta izin lokasi secara eksplisit (dipanggil dari tombol "aktifkan
   /// lokasi presisi", BUKAN otomatis). Return true jika diberikan.
   Future<bool> requestPermission() async {

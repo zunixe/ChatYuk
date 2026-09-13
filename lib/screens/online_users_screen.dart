@@ -125,7 +125,6 @@ Uint8List? _decodeAvatarB64Iso(String b64) {
 
 class _AsyncAvatarState extends State<_AsyncAvatar> {
   MemoryImage? _provider;
-  Timer? _poll;
   String? _asyncResolvingFor;
 
   /// UID pendek untuk log — aman untuk uid kosong/pendek.
@@ -139,28 +138,10 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
   void initState() {
     super.initState();
     _resolve();
-    // Poll bounded (~2s): tulis disk / bytes async yang mendarat setelah
-    // frame pertama TANPA rebuild parent (prewarm race, decode isolate)
-    // langsung tampil tanpa nunggu emission stream berikutnya.
-    var ticks = 0;
-    _poll = Timer.periodic(const Duration(milliseconds: 300), (t) {
-      if (!mounted || _provider != null || ticks++ >= 7) {
-        t.cancel();
-        return;
-      }
-      if (widget.avatarB64.isEmpty) return;
-      _resolve();
-      if (_provider != null && mounted) {
-        setState(() {});
-        t.cancel();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _poll?.cancel();
-    super.dispose();
+    // Tanpa Timer.periodic(300ms) per kartu: decode isolate & tulis disk
+    // async yang mendarat setelah frame pertama di-resolve via didUpdateWidget
+    // (provider notifyListeners → parent rebuild) ATAU callback .then pada
+    // compute() di bawah. Hemat 1 timer per kartu dalam list panjang.
   }
 
   void _resolve() {

@@ -3140,14 +3140,15 @@ class _ChatInputState extends State<_ChatInput> {
                                 ),
                               ),
                               ChatIconButton(
+                                icon: widget.showAttachRow
+                                    ? Icons.close
+                                    : Icons.add_circle_outline,
                                 open: widget.showAttachRow,
                                 onTap: widget.onToggleAttach,
                                 tooltip: s.menuSendPhoto,
                               ),
-                              const SizedBox(width: 2),
                               // Tombol gift HANYA bila sistem koin aktif —
-                              // tidak ada slot cadangan: + dan kamera tetap
-                              // rapat seperti desain asli.
+                              // +, gift, kamera mepet tanpa jeda.
                               if (widget.onOpenGiftPanel != null) ...[
                                 ChatIconButton(
                                   open: false,
@@ -3155,7 +3156,6 @@ class _ChatInputState extends State<_ChatInput> {
                                   tooltip: s.giftTitle,
                                   icon: Icons.card_giftcard_outlined,
                                 ),
-                                const SizedBox(width: 2),
                               ],
                               ChatIconButton(
                                 open: false,

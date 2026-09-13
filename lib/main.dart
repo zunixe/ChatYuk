@@ -66,6 +66,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (!shouldShow) return;
   // Isolate tidak punya BuildContext — baca bahasa dari prefs langsung.
   final bgPrefs = await SharedPreferences.getInstance();
+  // Anti-bocor multi-akun (admin ⇄ dummy satu HP): push yang bukan untuk
+  // sesi aktif dibuang. Server mengirim toUid = penerima; isolate tidak
+  // punya sesi Supabase jadi bandingkan dengan uid tersimpan.
+  final bgToUid = '${data['toUid'] ?? ''}';
+  if (bgToUid.isNotEmpty) {
+    final bgMyUid = bgPrefs.getString('current_uid') ?? '';
+    if (bgMyUid.isNotEmpty && bgToUid != bgMyUid) {
+      dlog('[NOTIF_BG] drop: toUid=$bgToUid != sesi $bgMyUid');
+      return;
+    }
+  }
   final s = S(isId: (bgPrefs.getString('app_lang') ?? 'id') == 'id');
   // Chat yang dibisukan → tidak ada notifikasi (background).
   final bgChatId = '${data['chatId'] ?? ''}';
@@ -265,6 +276,16 @@ Future<void> _ensureAndroidChannels(
 Future<void> _showLocalNotification(RemoteMessage message) async {
   final data = message.data;
   final currentUid = Supabase.instance.client.auth.currentUser?.id;
+  // Anti-bocor multi-akun (admin ⇄ dummy satu HP): push yang bukan untuk
+  // sesi aktif dibuang — token FCM lama bisa masih hidup di server.
+  final toUid = '${data['toUid'] ?? ''}';
+  if (toUid.isNotEmpty &&
+      currentUid != null &&
+      currentUid.isNotEmpty &&
+      toUid != currentUid) {
+    dlog('[NOTIF_FG] drop: toUid=$toUid != sesi $currentUid');
+    return;
+  }
   // Jangan tampilkan notifikasi untuk diri sendiri (online, message, call, timeline, room)
   if (currentUid != null && currentUid.isNotEmpty) {
     final senderUid = (data['uid'] ?? data['otherUid'] ?? data['callerUid'] ?? data['authorId'] ?? data['sender_id'] ?? data['senderId'] ?? '') as String;
@@ -834,6 +855,30 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
       }
     }),
   ]);
+  // Swap dummy ⇄ admin: hapus notifikasi akun lama yang masih tampil.
+  AdminGate.onDummySwap = () async {
+    try {
+      await localNotifications.cancelAll();
+    } catch (_) {}
+  };
+  // Simpan uid sesi aktif untuk filter anti-bocor background isolate.
+  try {
+    final uid0 = Supabase.instance.client.auth.currentUser?.id ?? '';
+    final prefs0 = await SharedPreferences.getInstance();
+    if (uid0.isNotEmpty) {
+      await prefs0.setString('current_uid', uid0);
+    }
+    Supabase.instance.client.auth.onAuthStateChange.listen((d) {
+      SharedPreferences.getInstance().then((p) {
+        final uid = d.session?.user.id ?? '';
+        if (uid.isNotEmpty) {
+          p.setString('current_uid', uid);
+        } else {
+          p.remove('current_uid');
+        }
+      });
+    });
+  } catch (_) {}
   // Fire-and-forget yang tidak block TTI
   unawaited(AdminGate.postInit?.call());
   unawaited(MessageCache.instance.clearLegacyV1Only());

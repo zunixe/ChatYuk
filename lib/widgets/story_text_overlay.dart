@@ -39,7 +39,7 @@ class StoryTextOverlay extends StatelessWidget {
       fontSize: StoryText.size(sizeIndex) * scale.clamp(0.5, 3.0),
       fontWeight: FontWeight.w800,
       color: color,
-      height: 1.2,
+      height: StoryText.lineHeight,
       shadows: [
         Shadow(
           color: Colors.black.withValues(alpha: 0.6),

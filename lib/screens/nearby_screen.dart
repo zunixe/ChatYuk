@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -45,23 +46,34 @@ class _NearbyScreenState extends State<NearbyScreen> {
   Future<void> _init() async {
     final auth = context.read<AuthProvider>();
     _shareOn = auth.profile?.shareLocation ?? false;
-    // Pastikan lokasi terbaru sebelum query (GPS bila diizinkan, else IP).
-    final src = await _loc.updateMyLocation();
-    // Auto-enable share lokasi SEKALI — HANYA jika user mengizinkan GPS
-    // (sumber 'gps'). Kalau cuma fallback IP, jangan auto-enable.
-    // Tanpa ini hampir semua user default false → radar selalu kosong
-    // padahal banyak yang online. Toggle manual tetap dihormati.
-    if (src == 'gps') {
-      final prefs = await SharedPreferences.getInstance();
-      if (!(prefs.getBool('nearby_auto_share') ?? false)) {
-        await prefs.setBool('nearby_auto_share', true);
-        if (!_shareOn) {
-          await _loc.setShareLocation(true);
-          _shareOn = true;
+    // Pakai lastKnown dulu (instan) supaya radar tidak blank — GPS akurat
+    // jalan di belakang dan menyegarkan lokasi begitu selesai.
+    final lastKnown = await _loc.lastKnownPosition();
+    if (lastKnown != null) {
+      // lastKnown sudah cukup buat query awal; background tetap refresh.
+      unawaited(_loc.updateMyLocation().then((src) {
+        if (src == 'gps' && mounted) {
+          _autoEnableShare();
         }
-      }
+      }));
+    } else {
+      final src = await _loc.updateMyLocation();
+      if (src == 'gps') await _autoEnableShare();
     }
     await _refresh();
+  }
+
+  /// Auto-enable share lokasi SEKALI — HANYA jika user mengizinkan GPS
+  /// (sumber 'gps'). Kalau cuma fallback IP, jangan auto-enable.
+  Future<void> _autoEnableShare() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('nearby_auto_share') ?? false) return;
+    await prefs.setBool('nearby_auto_share', true);
+    if (!_shareOn) {
+      await _loc.setShareLocation(true);
+      _shareOn = true;
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _refresh() async {
@@ -72,10 +84,11 @@ class _NearbyScreenState extends State<NearbyScreen> {
     });
     try {
       final list = await _loc.nearbyUsers(_radiusKm);
-      // Radar minimal 2,2 detik — biar terasa "mencari", bukan flash.
+      // Radar minimal 600ms (dulu 2,2s) — cukup terasa "mencari" tanpa
+      // delay buatan panjang yang membuat fitur terkesan lambat.
       final elapsed = DateTime.now().difference(started);
-      if (elapsed < const Duration(milliseconds: 2200)) {
-        await Future.delayed(const Duration(milliseconds: 2200) - elapsed);
+      if (elapsed < const Duration(milliseconds: 600)) {
+        await Future.delayed(const Duration(milliseconds: 600) - elapsed);
       }
       if (!mounted) return;
       setState(() {
@@ -85,8 +98,8 @@ class _NearbyScreenState extends State<NearbyScreen> {
     } catch (e) {
       if (!mounted) return;
       final elapsed = DateTime.now().difference(started);
-      if (elapsed < const Duration(milliseconds: 2200)) {
-        await Future.delayed(const Duration(milliseconds: 2200) - elapsed);
+      if (elapsed < const Duration(milliseconds: 600)) {
+        await Future.delayed(const Duration(milliseconds: 600) - elapsed);
       }
       if (!mounted) return;
       final msg = e.toString().toLowerCase();

@@ -47,6 +47,11 @@ class AdminGate {
   /// Bersihkan token admin tersimpan saat logout total.
   static Future<void> Function()? onSignOut;
 
+  /// Dipanggil setiap swap sesi dummy ⇄ admin berhasil — dipakai untuk
+  /// menghapus notifikasi yang masih tampil milik akun lama (anti bocor).
+  /// Diisi bootstrap (main.dart); null pada build yang tidak membutuhkannya.
+  static Future<void> Function()? onDummySwap;
+
   /// True hanya pada build admin.
   static bool get enabled => panelBuilder != null;
 

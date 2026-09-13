@@ -49,11 +49,11 @@ class ChatIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      // InkWell tanpa borderRadius custom + Material transparan: hit
-      // test meliputi seluruh area 44x44 (target sentuh Android ≥48dp),
-      // bukan cuma bulatan 30dp — ikon kecil tetap mudah ditap.
+      // InkWell + Material transparan: hit test meliputi area 32x44 —
+      // lingkaran 30dp hampir nempel (jeda ~2px), ikon tetap mudah
+      // ditap. Dipakai private + room chat (desain rapat yang sama).
       child: SizedBox(
-        width: 44,
+        width: 32,
         height: 44,
         child: InkWell(
           onTap: onTap,

@@ -13,6 +13,9 @@ class PointsService {
   }
 
   Stream<bool> watchEnabled() {
+    // Catatan: Supabase `.stream()` (2.16.x) tidak mendukung pemilihan kolom
+    // sempit — `_getPostgrestData()` selalu `.select()` (semua kolom). Realtime
+    // tetap membawa row penuh app_settings.
     return _sb.from('app_settings').stream(primaryKey: ['id']).map((rows) {
       final matching = rows.where((r) => r['id'] == 'global').toList();
       return matching.isEmpty ? true : matching.first['points_enabled'] == true;
@@ -44,15 +47,23 @@ class PointsService {
 
   /// Riwayat ledger (terbaru dulu). Field:
   /// id, bucket, type, amount, ref_id, metadata, created_at.
-  Future<List<Map<String, dynamic>>> pointHistory({int limit = 200}) async {
-    final res = await _sb.rpc(
-      'get_ledger_history',
-      params: {'row_limit': limit},
-    );
-    if (res is List) {
-      return res.map((r) => Map<String, dynamic>.from(r as Map)).toList();
-    }
-    return [];
+  ///
+  /// Query langsung ke `coin_ledger` (RLS `coin_ledger_select_own`) dengan
+  /// `.range()` supaya bisa paging — hasil identik dengan RPC get_ledger_history
+  /// (yang sama-sama `order by created_at desc`, tapi tanpa paging).
+  Future<List<Map<String, dynamic>>> pointHistory({
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final id = uid;
+    if (id == null) return [];
+    final res = await _sb
+        .from('coin_ledger')
+        .select('id,bucket,type,amount,ref_id,metadata,created_at')
+        .eq('user_id', id)
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
+    return res.map((r) => Map<String, dynamic>.from(r as Map)).toList();
   }
 
   Future<Map<String, dynamic>> dailyLoginBonus() async {
@@ -138,14 +149,21 @@ class PointsService {
   }
 
   /// Leaderboard. scope: 'weekly' | 'alltime'. Return {scope, entries[], me}.
+  ///
+  /// `offset` > 0 membutuhkan migration `points_leaderboard(text,int,int)`
+  /// (supabase/migrations/20260913000000_leaderboard_history_pagination.sql);
+  /// saat offset 0 param tidak dikirim — kompatibel dengan fungsi server lama.
   Future<Map<String, dynamic>> leaderboard(
     String scope, {
     int limit = 50,
+    int offset = 0,
   }) async {
-    final res = await _sb.rpc(
-      'points_leaderboard',
-      params: {'scope': scope, 'row_limit': limit},
-    );
+    final params = <String, dynamic>{
+      'scope': scope,
+      'row_limit': limit,
+      if (offset > 0) 'row_offset': offset,
+    };
+    final res = await _sb.rpc('points_leaderboard', params: params);
     if (res is Map) return Map<String, dynamic>.from(res);
     return {'scope': scope, 'entries': [], 'me': null};
   }

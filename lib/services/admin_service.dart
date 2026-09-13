@@ -221,6 +221,20 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
   }
 
+  /// UID dummy + device-ter-exclude — untuk filter client-side (peta realtime).
+  Future<Set<String>> fetchHiddenUids() async {
+    final res = await _sb.rpc('admin_hidden_uids');
+    final m = res as Map<String, dynamic>?;
+    if (m == null) return const {};
+    final out = <String>{};
+    for (final k in const ['dummy', 'excluded']) {
+      for (final v in (m[k] as List? ?? const [])) {
+        out.add('$v');
+      }
+    }
+    return out;
+  }
+
   /// Pemakaian Cloudflare Realtime TURN (kuota 1 TB/bulan free tier).
   /// Return {configured: bool, day_bytes, week_bytes, month_bytes,
   /// quota_bytes} atau {configured:false} bila secrets belum diset.
@@ -304,7 +318,7 @@ class AdminService {
     return list.cast<Map<String, dynamic>>();
   }
 
-  /// Set status dummy: 'online' | 'idle' | 'offline'.
+  /// Set status dummy: 'online' | 'idle' | 'offline' | 'invisible'.
   Future<void> setDummyStatus(String uid, String status) async {
     await _sb.rpc(
       'admin_set_dummy_status',

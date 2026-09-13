@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../utils.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -65,6 +66,291 @@ void _putDecodedCache(int key, DecodedImage img) {
   decodedImageCache[key] = img;
 }
 
+// Segmen hasil belah teks: teks biasa atau blok kode (pagar ```).
+class _MsgSegment {
+  final bool isCode;
+  final String lang;
+  final String content;
+  const _MsgSegment(this.isCode, this.lang, this.content);
+}
+
+// Belah teks per pagar ``` — pagar tak tertutup tetap dianggap kode.
+List<_MsgSegment> _splitCodeSegments(String t) {
+  final parts = t.split('```');
+  if (parts.length < 2) return [ _MsgSegment(false, '', t) ];
+  final segs = <_MsgSegment>[];
+  for (var i = 0; i < parts.length; i++) {
+    final p = parts[i];
+    if (i.isEven) {
+      if (p.isNotEmpty) segs.add(_MsgSegment(false, '', p));
+    } else {
+      var lang = '';
+      var code = p;
+      final nl = p.indexOf('\n');
+      if (nl >= 0) {
+        final first = p.substring(0, nl).trim();
+        if (first.isNotEmpty &&
+            !first.contains(' ') &&
+            first.length <= 12) {
+          lang = first;
+          code = p.substring(nl + 1);
+        }
+      } else if (!p.contains(' ') && p.length <= 12) {
+        lang = p.trim();
+        code = '';
+      }
+      segs.add(_MsgSegment(true, lang, code.trimRight()));
+    }
+  }
+  return segs;
+}
+
+// Highlight ringan tanpa dependency: comment warna beda (abu-hijau
+// italic), keyword biru, string oranye, angka hijau muda. Tokenizer
+// sadar-string supaya '#' di dalam string Python tidak dianggap comment.
+const _codeBase = Color(0xFFE8E8E8);
+const _codeComment = Color(0xFF8A9A8B);
+const _codeKeyword = Color(0xFF7EC8FF);
+const _codeString = Color(0xFFFFC57E);
+const _codeNumber = Color(0xFFB5CEA8);
+
+// Keyword umum (python + c-like) — cukup untuk highlight, bukan parser.
+const _codeKeywords = {
+  'def', 'class', 'return', 'if', 'elif', 'else', 'for', 'while', 'break',
+  'continue', 'pass', 'raise', 'try', 'except', 'finally', 'with', 'as',
+  'import', 'from', 'lambda', 'and', 'or', 'not', 'in', 'is', 'None',
+  'True', 'False', 'self', 'async', 'await', 'yield', 'assert', 'del',
+  'global', 'nonlocal', 'function', 'var', 'let', 'const', 'new', 'switch',
+  'case', 'default', 'do', 'struct', 'enum', 'typedef', 'namespace',
+  'using', 'public', 'private', 'protected', 'static', 'final', 'void',
+  'int', 'float', 'double', 'char', 'bool', 'long', 'short', 'virtual',
+  'override', 'extends', 'implements', 'interface', 'package', 'throws',
+  'print',
+};
+
+bool _isWordChar(String ch) =>
+    RegExp(r'[A-Za-z0-9_]').hasMatch(ch);
+
+List<TextSpan> _highlightCodeSpans(String code, String lang) {
+  final l = lang.toLowerCase();
+  final hashComment =
+      l.isEmpty || l == 'python' || l == 'py' || l == 'rb' || l == 'sh' ||
+      l == 'bash' || l == 'yaml' || l == 'yml' || l == 'toml';
+  final dashComment = l == 'sql';
+  final spans = <TextSpan>[];
+  final buf = StringBuffer();
+  void flush() {
+    if (buf.isEmpty) return;
+    spans.add(TextSpan(text: buf.toString()));
+    buf.clear();
+  }
+
+  var i = 0;
+  final n = code.length;
+  while (i < n) {
+    final ch = code[i];
+    final two = i + 1 < n ? code.substring(i, i + 2) : '';
+    // Comment blok /* */ (c-like).
+    if (!hashComment && !dashComment && two == '/*') {
+      final end = code.indexOf('*/', i + 2);
+      final stop = end < 0 ? n : end + 2;
+      flush();
+      spans.add(
+        TextSpan(
+          text: code.substring(i, stop),
+          style: const TextStyle(color: _codeComment, fontStyle: FontStyle.italic),
+        ),
+      );
+      i = stop;
+      continue;
+    }
+    // Comment satu baris: // (c-like), # (python dkk), -- (sql).
+    final isLineComment =
+        (!hashComment && !dashComment && two == '//') ||
+        (hashComment && ch == '#') ||
+        (dashComment && two == '--');
+    if (isLineComment) {
+      var end = code.indexOf('\n', i);
+      if (end < 0) end = n;
+      flush();
+      spans.add(
+        TextSpan(
+          text: code.substring(i, end),
+          style: const TextStyle(color: _codeComment, fontStyle: FontStyle.italic),
+        ),
+      );
+      i = end;
+      continue;
+    }
+    // Comment html <!-- -->.
+    if ((l == 'html' || l == 'xml') && code.startsWith('<!--', i)) {
+      final end = code.indexOf('-->', i + 4);
+      final stop = end < 0 ? n : end + 3;
+      flush();
+      spans.add(
+        TextSpan(
+          text: code.substring(i, stop),
+          style: const TextStyle(color: _codeComment, fontStyle: FontStyle.italic),
+        ),
+      );
+      i = stop;
+      continue;
+    }
+    // String '...' "..." `...` + triple-quote python.
+    if (ch == "'" || ch == '"' || ch == '`') {
+      final triple =
+          (ch == "'" || ch == '"') && code.startsWith(ch * 3, i);
+      final quote = triple ? ch * 3 : ch;
+      var j = i + quote.length;
+      var closed = false;
+      while (j < n) {
+        if (!triple && code[j] == '\n') break;
+        if (code[j] == '\\' && j + 1 < n) {
+          j += 2;
+          continue;
+        }
+        if (code.startsWith(quote, j)) {
+          j += quote.length;
+          closed = true;
+          break;
+        }
+        j++;
+      }
+      flush();
+      spans.add(
+        TextSpan(
+          text: code.substring(i, closed ? j : j),
+          style: const TextStyle(color: _codeString),
+        ),
+      );
+      i = j;
+      continue;
+    }
+    // Angka.
+    if (RegExp(r'[0-9]').hasMatch(ch) &&
+        (i == 0 || !_isWordChar(code[i - 1]))) {
+      var j = i;
+      while (j < n && RegExp(r'[0-9a-fA-FxXoObB._]').hasMatch(code[j])) {
+        j++;
+      }
+      flush();
+      spans.add(
+        TextSpan(
+          text: code.substring(i, j),
+          style: const TextStyle(color: _codeNumber),
+        ),
+      );
+      i = j;
+      continue;
+    }
+    // Kata: keyword atau teks biasa.
+    if (RegExp(r'[A-Za-z_]').hasMatch(ch)) {
+      var j = i;
+      while (j < n && _isWordChar(code[j])) {
+        j++;
+      }
+      final word = code.substring(i, j);
+      flush();
+      if (_codeKeywords.contains(word)) {
+        spans.add(
+          TextSpan(
+            text: word,
+            style: const TextStyle(color: _codeKeyword),
+          ),
+        );
+      } else {
+        spans.add(TextSpan(text: word));
+      }
+      i = j;
+      continue;
+    }
+    buf.write(ch);
+    i++;
+  }
+  flush();
+  return spans;
+}
+
+// Blok kode di bubble chat: header (label bahasa + tombol copy kanan
+// atas) + isi monospace highlight yang bisa diseleksi. Isi scroll
+// horizontal (geser kanan) supaya baris panjang tidak wrap memenuhi
+// bubble ke bawah — indentasi kode tetap rapi seperti aslinya.
+class CodeBlock extends StatelessWidget {
+  final String code;
+  final String language;
+  const CodeBlock({super.key, required this.code, required this.language});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
+    final normalized = code.replaceAll('\t', '  ');
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2430),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 10, top: 6),
+                  child: Text(
+                    language.isEmpty ? 'code' : language,
+                    style: AppText.caption.copyWith(
+                      color: const Color(0x99FFFFFF),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 30,
+                height: 30,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(
+                    Icons.copy,
+                    size: 16,
+                    color: Color(0xB3FFFFFF),
+                  ),
+                  tooltip: s.codeCopy,
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: code));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context)
+                      ..clearSnackBars()
+                      ..showSnackBar(
+                        SnackBar(content: Text(s.codeCopied)),
+                      );
+                  },
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 1, color: Color(0x1FFFFFFF)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SelectableText.rich(
+                TextSpan(
+                  style: AppText.code.copyWith(color: _codeBase),
+                  children: _highlightCodeSpans(normalized, language),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // Teks + waktu: 1 baris → inline [teks  waktu]; 2+ baris → waktu di baris
 // baru rata kanan/kiri, sejajar dengan waktu pesan 1 baris di atasnya.
 class MessageTextWithTime extends StatelessWidget {
@@ -110,6 +396,42 @@ class MessageTextWithTime extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Pesan berisi pagar kode ``` → render segmen teks + CodeBlock, waktu
+    // di baris bawah seperti bubble multi-baris.
+    if (text.contains('```')) {
+      final segs = _splitCodeSegments(text);
+      if (segs.any((e) => e.isCode)) {
+        return Column(
+          crossAxisAlignment: alignRight
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final seg in segs)
+              if (seg.isCode)
+                CodeBlock(code: seg.content, language: seg.lang)
+              else if (seg.content.trim().isNotEmpty)
+                RichText(
+                  text: TextSpan(
+                    style: textStyle,
+                    children: _linkifySpans(seg.content, textStyle),
+                  ),
+                ),
+            const SizedBox(height: 3),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(timeStr, style: timeStyle),
+                if (trailing != null) ...[
+                  const SizedBox(width: 3),
+                  trailing!,
+                ],
+              ],
+            ),
+          ],
+        );
+      }
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth.isFinite
@@ -748,6 +1070,11 @@ class MessageImage extends StatefulWidget {
 
 class _MessageImageState extends State<MessageImage> {
   DecodedImage? _decoded;
+  // Zoom inline di dalam bubble — gambar tetap kecil di chat, tapi bisa
+  // di-pinch 2 jari / ketuk 2x per kotak (mis. baca teks diagram).
+  final TransformationController _trans = TransformationController();
+  double _scale = 1.0;
+  Offset _doubleTapPos = Offset.zero;
 
   @override
   void initState() {
@@ -758,11 +1085,41 @@ class _MessageImageState extends State<MessageImage> {
   }
 
   @override
+  void dispose() {
+    _trans.dispose();
+    super.dispose();
+  }
+
+  void _resetZoom() {
+    if (_scale <= 1.01) return;
+    _trans.value = Matrix4.identity();
+    _scale = 1.0;
+  }
+
+  void _toggleZoom() {
+    if (!mounted) return;
+    if (_scale > 1.01) {
+      _trans.value = Matrix4.identity();
+      setState(() => _scale = 1.0);
+    } else {
+      const s = 2.5;
+      _trans.value = Matrix4.diagonal3Values(s, s, 1)
+        ..setTranslationRaw(
+          -_doubleTapPos.dx * (s - 1),
+          -_doubleTapPos.dy * (s - 1),
+          0,
+        );
+      setState(() => _scale = s);
+    }
+  }
+
+  @override
   void didUpdateWidget(MessageImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     // imageData berubah (fetch awal kosong → photo download selesai) → re-decode
     if (widget.imageData != oldWidget.imageData &&
         widget.imageData.isNotEmpty) {
+      _resetZoom();
       final key = widget.imageData.hashCode;
       _decoded = decodedImageCache[key];
       if (_decoded == null) _decode(key);
@@ -795,14 +1152,19 @@ class _MessageImageState extends State<MessageImage> {
     final s = context.read<LocaleProvider>().s;
     final decoded = _decoded;
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
-      return Container(
-        width: 200,
-        height: 200,
-        color: AppTheme.bgInput,
-        alignment: Alignment.center,
-        child: Text(
-          s.msgPhotoExpired,
-          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+      // Gagal muat (mis. download path diagram tersendat) — tap untuk coba
+      // lagi, bukan placeholder mati.
+      return GestureDetector(
+        onTap: () => _decode(widget.imageData.hashCode),
+        child: Container(
+          width: 200,
+          height: 200,
+          color: AppTheme.bgInput,
+          alignment: Alignment.center,
+          child: Text(
+            s.msgPhotoExpired,
+            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+          ),
         ),
       );
     }
@@ -815,22 +1177,41 @@ class _MessageImageState extends State<MessageImage> {
     }
     return GestureDetector(
       onTap: () => _openFullscreen(),
+      onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
+      onDoubleTap: _toggleZoom,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: Image.memory(
-          decoded.bytes,
-          width: width,
-          height: height,
-          fit: BoxFit.contain,
-          gaplessPlayback: true,
-          errorBuilder: (_, _, _) => Container(
-            width: 200,
-            height: 200,
-            color: AppTheme.bgInput,
-            alignment: Alignment.center,
-            child: Text(
-              s.msgPhotoExpired,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        child: InteractiveViewer(
+          transformationController: _trans,
+          clipBehavior: Clip.hardEdge,
+          boundaryMargin: const EdgeInsets.all(double.infinity),
+          minScale: 1.0,
+          maxScale: 6.0,
+          // Pan satu jari hanya saat sudah zoom — kalau skala 1.0, drag
+          // tetap untuk scroll chat (pola sama seperti post_photo_viewer).
+          panEnabled: _scale > 1.01,
+          scaleEnabled: true,
+          onInteractionUpdate: (_) {
+            _scale = _trans.value.getMaxScaleOnAxis();
+          },
+          onInteractionEnd: (_) => setState(
+            () => _scale = _trans.value.getMaxScaleOnAxis(),
+          ),
+          child: Image.memory(
+            decoded.bytes,
+            width: width,
+            height: height,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => Container(
+              width: 200,
+              height: 200,
+              color: AppTheme.bgInput,
+              alignment: Alignment.center,
+              child: Text(
+                s.msgPhotoExpired,
+                style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+              ),
             ),
           ),
         ),
@@ -1492,11 +1873,20 @@ class PhotoViewerScreen extends StatefulWidget {
 
 class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   Uint8List? _fullBytes;
+  final TransformationController _trans = TransformationController();
+  double _scale = 1.0;
+  Offset _doubleTapPos = Offset.zero;
 
   @override
   void initState() {
     super.initState();
     _loadFull();
+  }
+
+  @override
+  void dispose() {
+    _trans.dispose();
+    super.dispose();
   }
 
   Future<void> _loadFull() async {
@@ -1511,18 +1901,71 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
     } catch (_) {}
   }
 
+  void _applyScale(double next, {Offset? focal}) {
+    final clamped = next.clamp(1.0, 6.0);
+    if ((clamped - _scale).abs() < 0.001) return;
+    if (clamped <= 1.01) {
+      _trans.value = Matrix4.identity();
+    } else if (focal != null) {
+      _trans.value = Matrix4.diagonal3Values(clamped, clamped, 1)
+        ..setTranslationRaw(
+          -focal.dx * (clamped - 1),
+          -focal.dy * (clamped - 1),
+          0,
+        );
+    } else {
+      final size = MediaQuery.sizeOf(context);
+      final cx = size.width / 2;
+      final cy = size.height / 2;
+      _trans.value = Matrix4.diagonal3Values(clamped, clamped, 1)
+        ..setTranslationRaw(-cx * (clamped - 1), -cy * (clamped - 1), 0);
+    }
+    setState(() => _scale = clamped);
+  }
+
+  void _handleDoubleTap() {
+    if (_scale > 1.01) {
+      _applyScale(1.0);
+    } else {
+      _applyScale(3.0, focal: _doubleTapPos);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final s = context.read<LocaleProvider>().s;
     final bytes = _fullBytes ?? widget.bytes;
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(
           children: [
-            Center(
-              child: InteractiveViewer(
-                maxScale: 5,
-                child: Image.memory(bytes, fit: BoxFit.contain),
+            Positioned.fill(
+              child: GestureDetector(
+                onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
+                onDoubleTap: _handleDoubleTap,
+                child: InteractiveViewer(
+                  transformationController: _trans,
+                  clipBehavior: Clip.none,
+                  boundaryMargin: const EdgeInsets.all(double.infinity),
+                  minScale: 1.0,
+                  maxScale: 6.0,
+                  panEnabled: true,
+                  scaleEnabled: true,
+                  onInteractionUpdate: (_) {
+                    _scale = _trans.value.getMaxScaleOnAxis();
+                  },
+                  onInteractionEnd: (_) => setState(
+                    () => _scale = _trans.value.getMaxScaleOnAxis(),
+                  ),
+                  child: Center(
+                    child: Image.memory(
+                      bytes,
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                    ),
+                  ),
+                ),
               ),
             ),
             if (_fullBytes == null && widget.fullLoader != null)
@@ -1547,7 +1990,87 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white, size: 28),
                 onPressed: () => Navigator.of(context).pop(),
-                tooltip: 'Tutup',
+                tooltip: s.btnClose,
+              ),
+            ),
+            if (_scale <= 1.01)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 20,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      s.viewerZoomHint,
+                      style: AppText.caption.copyWith(color: Colors.white70),
+                    ),
+                  ),
+                ),
+              ),
+            Positioned(
+              right: 12,
+              bottom: 20,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.zoom_in,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      onPressed: () => _applyScale(_scale * 1.4),
+                      tooltip: s.btnZoomIn,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.zoom_out,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      onPressed: () => _applyScale(_scale / 1.4),
+                      tooltip: s.btnZoomOut,
+                    ),
+                  ),
+                  if (_scale > 1.01) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.restart_alt,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () => _applyScale(1.0),
+                        tooltip: s.btnZoomReset,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             if (widget.countdown != null)

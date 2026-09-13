@@ -79,9 +79,11 @@ class RoomBroadcastSession extends ChangeNotifier {
 
     _signalSub = _prv.onSignal(roomId).listen(_onSignal);
     await _fastForwardSignals();
-    // Polling cadangan tiap 2 detik (pola call 1:1) — realtime insert
-    // bisa terlewat, tanpa polling handshake bisa mati diam-diam.
-    _syncTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    // Polling cadangan (pola call 1:1) — realtime insert bisa terlewat,
+    // tanpa polling handshake bisa mati diam-diam. 6 dtk & hanya saat
+    // remoteReady false (dulu 1 dtk selalu) — realtime stream jalur utama.
+    _syncTimer = Timer.periodic(const Duration(seconds: 6), (_) {
+      if (_closed || remoteReady) return;
       unawaited(_syncMissedSignals());
     });
 
@@ -176,15 +178,21 @@ class RoomBroadcastSession extends ChangeNotifier {
       // "menyambungkan" sampai broadcaster baru re-offer; stop HANYA jika
       // kosong bertahan 2 siklus (20 detik) — dulu langsung stop (±2 menit
       // sebelum cronembersihkan) sehingga viewer melihat freeze lama.
-      int _emptyStreak = 0;
-      _watchdog = Timer.periodic(const Duration(seconds: 10), (_) async {
+      // Rejoin TANPA teardown: selama video belum masuk / koneksi mati,
+      // kirim b_join baru tiap 10 detik → broadcaster re-offer (guard busy
+      // mencegah spam) → viewer terima offer terbaru (pcId) → handshake
+      // ulang → onTrack → video hidup. Digabung dengan watchdog di bawah
+      // (satu timer 10 dtk, dulu 2 timer 5+10 dtk + 2 RPC per siklus).
+      int emptyStreak = 0;
+      _rejoinTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
         if (_closed) return;
         try {
           final cnt = await _prv.broadcastCount(roomId);
           if (cnt == 0) {
-            _emptyStreak++;
+            emptyStreak++;
             if (remoteReady) {
-              // Video beku (broadcaster crash) — lepas stream & reset.
+              // Video beku (broadcaster crash) — lepas stream & reset agar
+              // rejoin berikutnya bisa jalan.
               remoteReady = false;
               for (final r in remoteRenderers.values) {
                 r.srcObject = null;
@@ -192,27 +200,18 @@ class RoomBroadcastSession extends ChangeNotifier {
               hasRemoteVideo = false;
               notifyListeners();
             }
-            if (_emptyStreak >= 2) stop();
+            if (emptyStreak >= 2) stop();
           } else {
-            _emptyStreak = 0;
+            emptyStreak = 0;
+            if (!remoteReady) {
+              dlog('[BROADCAST] viewer re-ping (no video yet)');
+              await requestStream();
+            }
           }
         } catch (_) {}
       });
-      // Rejoin TANPA teardown: selama video belum masuk / koneksi mati,
-      // kirim b_join baru tiap 5 detik → broadcaster re-offer (guard busy
-      // mencegah spam) → viewer terima offer terbaru (pcId) → handshake
-      // ulang → onTrack → video hidup. Session tidak dibongkar — tidak ada
-      // fase blank di antara restart, screen stay di stage "menyambungkan".
-      _rejoinTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-        if (_closed || remoteReady) return;
-        try {
-          final cnt = await _prv.broadcastCount(roomId);
-          if (cnt > 0) {
-            dlog('[BROADCAST] viewer re-ping (no video yet)');
-            await requestStream();
-          }
-        } catch (_) {}
-      });
+      // Watchdog lama digabung ke _rejoinTimer di atas (hemat 1 timer + 1 RPC
+      // per 10 dtk). Field _watchdog dipertahankan null agar stop() aman.
     }
     notifyListeners();
   }

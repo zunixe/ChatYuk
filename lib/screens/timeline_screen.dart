@@ -33,6 +33,7 @@ class _TimelineScreenState extends State<TimelineScreen>
   // Hasil debounce _search — filter list pakai ini, bukan _search mentah.
   String _appliedSearch = '';
   Timer? _searchDebounce;
+  Timer? _scrollDebounce;
   bool _isSearching = false;
 
   @override
@@ -46,6 +47,7 @@ class _TimelineScreenState extends State<TimelineScreen>
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _scrollDebounce?.cancel();
     _tab.removeListener(_onTabChanged);
     _tab.dispose();
     _scroll.removeListener(_onScroll);
@@ -85,10 +87,18 @@ class _TimelineScreenState extends State<TimelineScreen>
   }
 
   void _onScroll() {
-    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 200) {
+    if (_scroll.position.pixels <
+        _scroll.position.maxScrollExtent - 200) {
+      return;
+    }
+    // Debounce 300ms: scroll listener menyala tiap piksel — jangan memicu
+    // _load berulang (dan _fetchScope dedupe) saat user menahan di ujung feed.
+    if (_scrollDebounce?.isActive ?? false) return;
+    _scrollDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
       final tp = context.read<TimelineProvider>();
       if (!tp.loading && tp.hasMore) _load(refresh: false);
-    }
+    });
   }
 
   String get _scope =>

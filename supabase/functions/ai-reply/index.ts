@@ -5,6 +5,7 @@
 // ai_persona overrides, calls an OpenAI-compatible LLM, then inserts the
 // reply as the dummy (existing triggers handle chat sync + push).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { checkAppSecret, unauthorized } from '../_shared/auth.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -51,9 +52,8 @@ function hasWord(text: string, term: string): boolean {
   const esc = term
     .toLowerCase()
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^a-z])${esc}([^a-z]|$)`).test(
-    text.toLowerCase(),
-  );
+  // \p{L} = huruf Unicode apa pun (aksen dsb ikut jadi pembatas kata).
+  return new RegExp(`(^|[^\\p{L}])${esc}([^\\p{L}]|$)`, 'iu').test(text);
 }
 
 function isExplicit(text: string): boolean {
@@ -155,12 +155,21 @@ function sanitize(
   t = t.replace(/^\s*\{[^{}]*\}/, '').trim();
   t = t.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
   if (keepLines) {
-    // CS: PERTAHANKAN baris supaya poin/angka bernomor rapi (tidak
-    // numpuk satu baris). Normalisasi: tiap baris di-trim, spasi dalam
-    // baris dirapatkan, maksimal 1 baris kosong antar paragraf.
+    // CS/expert: PERTAHANKAN baris supaya poin/angka bernomor rapi (tidak
+    // numpuk satu baris). Normalisasi: spasi dalam baris dirapatkan,
+    // TAPI indentasi awal baris DIPERTAHANKAN (tab → 2 spasi) supaya blok
+    // kode tetap rapi seperti codingan beneran, bukan rata kiri semua.
+    // Maksimal 1 baris kosong antar paragraf.
     t = t
       .split(/\r?\n/)
-      .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+      .map((line) => {
+        const m = line.match(/^([ \t]*)([\s\S]*)$/);
+        const indent = (m?.[1] ?? '')
+          .replace(/\t/g, '  ')
+          .slice(0, 24);
+        const rest = (m?.[2] ?? '').replace(/[ \t]+/g, ' ').trim();
+        return rest ? indent + rest : '';
+      })
       .join('\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
@@ -395,18 +404,21 @@ async function fetchBytes(
 }
 
 // ── BROWSING info terkini (skor/berita/cuaca/harga) ──
-// Lookup fakta terbaru via sonar (web search, tier gen.pollinations +
-// POLLINATIONS_KEY). Dipanggil HANYA bila needsFreshInfo cocok — tiap
-// lookup makan pollen, jadi jangan boros. Gagal/timeout/TIDAK_TAHU →
+// Lookup fakta terbaru via Google News RSS (keyless, hl=id/gl=ID).
+// Dipanggil HANYA bila needsFreshInfo cocok. Gagal/timeout/kosong →
 // string kosong (balasan jalan normal tanpa info tambahan).
-const GEN_TEXT = 'https://gen.pollinations.ai/v1/chat/completions';
+// (Riwayat: Pollinations 'sonar' DIHAPUS upstream; Brave butuh kartu
+// kredit — keduanya dibuang. RSS tanpa signup, tanpa kuota.)
 
 // Intent butuh FAKTA TERBARU. Presisi diutamakan: minta foto/selfie
 // dikecualikan (minta gambar ≠ berita) supaya tidak buang lookup sia-sia.
 function needsFreshInfo(t: string): boolean {
   if (!t || t.length < 3) return false;
   if (/foto|gambar|pap\b|selfie|wajahmu|muka/i.test(t)) return false;
-  return /skor|hasil (pertandingan|laga|match)|berapa[- ]berapa|juara|klasemen|berita|kabar terbaru|terkini|breaking|viral|cuaca|harga (emas|bitcoin|btc|eth|dollar|usd|rupiah|bensin|bbm|beras|cabai)|kurs|gempa|transfer pemain|jadwal (main|tanding|pertandingan|konser|bioskop|film)|kapan (main|tanding|rilis|tayang)|episode (terbaru|terakhir)|siapa (menang|juara|presiden)|hasil (pemilu|pilkada)|menang.*(tadi|kemarin|semalam|tadi malam)|kalah.*(tadi|kemarin|semalam|tadi malam)/i
+  // Berita/olahraga/sembako (lama) + topik TEKNIS (baru): dokumentasi,
+  // changelog, versi, CVE, benchmark, spesifikasi — supaya diskusi expert
+  // berdasar data terkini, bukan cuma memori training.
+  return /skor|hasil (pertandingan|laga|match)|berapa[- ]berapa|juara|klasemen|berita|kabar terbaru|terkini|breaking|viral|cuaca|harga (emas|bitcoin|btc|eth|dollar|usd|rupiah|bensin|bbm|beras|cabai)|kurs|gempa|transfer pemain|jadwal (main|tanding|pertandingan|konser|bioskop|film)|kapan (main|tanding|rilis|tayang)|episode (terbaru|terakhir)|siapa (menang|juara|presiden)|hasil (pemilu|pilkada)|menang.*(tadi|kemarin|semalam|tadi malam)|kalah.*(tadi|kemarin|semalam|tadi malam)|dokumentasi|docs\b|changelog|release notes|versi (terbaru|baru|terkini)|rilis (terbaru|baru)|update terbaru|CVE|vulnerab|keamanan siber|benchmark|spesifikasi|spec\b|datasheet|whitepaper|arxiv|RFC|API reference|migration guide|best practice|perbandingan (teknologi|framework|chip|prosesor|gpu)|roadmap (teknologi|produk)|transistor|nanometer|\b\d+\s?nm\b|arsitektur (chip|prosesor|cpu|gpu|arm|x86|risc)/i
     .test(t);
 }
 
@@ -421,20 +433,64 @@ function browseTopicKey(t: string): string {
     .slice(0, 120);
 }
 
+// Ringkas RSS Google News jadi fakta + media + tanggal (maks 500 char).
+// Pure — cermin di _shared/ai-helpers.ts + deno tests.
+function summarizeNewsRss(xml: string): string {
+  const parts: string[] = [];
+  const items = String(xml || '').match(/<item>[\s\S]*?<\/item>/g) || [];
+  for (const it of items.slice(0, 3)) {
+    const mT = it.match(/<title>([\s\S]*?)<\/title>/);
+    const mP = it.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+    const raw = (mT ? mT[1] : '').trim().replace(/<!\[CDATA\[|\]\]>/g, '');
+    if (!raw) continue;
+    // Judul RSS = "Headline - NamaMedia".
+    const idx = raw.lastIndexOf(' - ');
+    const head = idx > 0 ? raw.slice(0, idx).trim() : raw;
+    const media = idx > 0 ? raw.slice(idx + 3).trim() : '';
+    // "Sat, 12 Sep 2026 ..." → "12 Sep".
+    const dm = (mP ? mP[1] : '').match(/\d{1,2} \w{3}/);
+    parts.push(
+      dm && media ? `${head} (${media}, ${dm[0]})`
+      : media ? `${head} (${media})`
+      : head,
+    );
+  }
+  return parts.join(' | ').slice(0, 500);
+}
+
 const FRESH_PREFIX =
   'INFO TERKINI (kamu tahu dari timeline/temanmu — JANGAN sebut browsing/internet/AI, jawab natural kayak orang yang update): ';
+  'INFO TERKINI (kamu tahu dari timeline/temanmu — JANGAN sebut browsing/internet/AI, jawab natural kayak orang yang update): ';
+
+// Pertanyaan faktual/teknis untuk EXPERT (always_reply): pola tanya +
+// kosakata software/hardware. Dipakai force-browse — expert tidak boleh
+// jawab dari karangan saat user minta fakta.
+function needsExpertAnswer(t: string): boolean {
+  if (!t || t.length < 3) return false;
+  if (/foto|gambar|pap\b|selfie|wajahmu|muka/i.test(t)) return false;
+  const s = t.trim();
+  if (/[?？]\s*$/.test(s)) return true;
+  return /^(apa|apakah|bagaimana|gimana|kenapa|mengapa|kapan|dimana|berapa|siapa|jelaskan|tolong|bantu|cara|tips|tutorial|rekomendasi|bandingkan|bedanya|bagus mana|pilih mana|betul(kan|kah)?|benar(kan|kah)?|analisa|analisis)/i.test(s) ||
+    /(saham|kripto|crypto|bitcoin|\bbtc\b|\beth\b|ethereum|solana|doge|usdt|idx|ihsg|emiten|dividen|yield|\bpe\b|\bpbv\b|market cap|kapitalisasi|bullish|bearish|breakout|support|resistance|cut loss|take profit|\btp\b|\bsl\b|portofolio|diversifikasi|reksadana|obligasi|sukuk|deposito|forex|emas|antam|cuan|rugi|profit|bandarmologi|screener|teknikal|fundamental|broker|sekuritas|lot\b|ara\b|arb\b|halt|suspen|right issue|stock split|buyback|\bipo\b)/i.test(s) ||
+    (/\b[A-Z]{4,5}\b/.test(s) && /saham|kripto|beli|jual|analisa|analisis|gimana|bagus|naik|turun|hold|tahan|lepas|borong/i.test(s)) ||
+    /(fix|error|eror|gagal|tidak bisa|nggak bisa|g bisa|rusak|lemot|lambat|restart|install|setting|konfigurasi|setup|update|upgrade|downgrade|kode|script|query|database|server|deploy|library|framework|bug|crash|hang|booting|bootloop|driver|bios|uefi|partisi|format|flashing|root|ram\b|ssd|hdd|vga|gpu|cpu|prosesor|chipset|motherboard|mobo|psu|thermal|pasta prosesor|overclock|undervolt|suhu|panas|baterai|charger|laptop|komputer|\bpc\b|\bhp\b|android|iphone|windows|linux|ubuntu|router|wifi|lan\b|\bdns\b|vpn|proxy|mbps|gbps|ping\b|latency|domain|hosting|vps|cloud|docker|\bgit\b|python|javascript|typescript|php\b|java\b|golang|kotlin|swift\b|c\+\+|\bsql\b|excel|printer|merk\b|merek|tipe|seri|garansi|servis|sparepart|spesifikasi|benchmark|perbandingan|review produk|harga|pasaran|beli|second|bekas|baru)/i.test(s);
+}
 
 async function lookupFreshInfo(
   admin: any,
   userText: string,
   todayWib: string,
+  force = false,
 ): Promise<string> {
   try {
-    if (!needsFreshInfo(userText)) return '';
-    const key = (Deno.env.get('POLLINATIONS_KEY') || '').trim();
-    if (!key) return '';
-    // Cache 1 jam per topik: pertanyaan berita yang sama tidak lookup
-    // ulang (hemat pollen). Stale → dianggap miss, ditimpa di bawah.
+    // Expert (force): pertanyaan faktual/teknis SELALU lookup — jangan
+    // jawab dari memori training. Bukan pertanyaan → hemat pollen.
+    if (force) {
+      if (!needsExpertAnswer(userText)) return '';
+    } else if (!needsFreshInfo(userText)) {
+      return '';
+    }
+    // Tanpa key/kuota (RSS publik) — langsung lookup + cache 1 jam.
     const tkey = browseTopicKey(userText);
     try {
       const { data: hit } = await admin
@@ -454,40 +510,20 @@ async function lookupFreshInfo(
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 25000);
     try {
-      const r = await fetch(GEN_TEXT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model: 'sonar',
-          temperature: 0.2,
-          max_tokens: 200,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'Kamu periset cepat. Jawab HANYA fakta singkat 1-3 kalimat bahasa Indonesia + tanggal kejadiannya. WAJIB: prioritaskan kejadian 7 hari terakhir; kata seperti tadi malam/kemarin/terbaru HANYA boleh dijawab dari kejadian 30 hari terakhir — kalau tidak ada yang cocok, jawab persis: TIDAK_TAHU (JANGAN ambil dari bulan/tahun lain).',
-            },
-            {
-              role: 'user',
-              content:
-                `Hari ini ${todayWib} WIB. Cari info terbaru tentang: ${userText.slice(0, 300)}`,
-            },
-          ],
-        }),
-        signal: ctrl.signal,
-      });
+      const r = await fetch(
+        `https://news.google.com/rss/search?q=${
+          encodeURIComponent(userText.slice(0, 200))
+        }&hl=id&gl=ID&ceid=ID:id`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: ctrl.signal },
+      );
       if (!r.ok) {
         console.log(`[ai-reply] browse HTTP ${r.status} q=${userText.slice(0, 60)}`);
         return '';
       }
-      const j: any = await r.json();
-      const c: string = j?.choices?.[0]?.message?.content ?? '';
-      const clean = c.replace(/\[\d+\]/g, '').trim();
-      if (!clean || /TIDAK_TAHU/.test(clean)) return '';
-      // Simpan ke cache + buang entri >6 jam (pengaman ukuran tabel).
+      const clean = summarizeNewsRss(await r.text());
+      if (!clean) return '';
+      // Simpan ke cache + buang entri basi SESekali (probabilistik 5% —
+      // jangan full-scan tiap miss di hot path; cron DB juga boleh).
       try {
         await admin.from('ai_browse_cache').upsert(
           {
@@ -497,10 +533,12 @@ async function lookupFreshInfo(
           },
           { onConflict: 'topic_key' },
         );
-        await admin.from('ai_browse_cache').delete().lt(
-          'created_at',
-          new Date(Date.now() - 6 * 3600_000).toISOString(),
-        );
+        if (Math.random() < 0.05) {
+          await admin.from('ai_browse_cache').delete().lt(
+            'created_at',
+            new Date(Date.now() - 6 * 3600_000).toISOString(),
+          );
+        }
       } catch (e) {
         console.log(`[ai-reply] browse-cache write GAGAL q=${userText.slice(0, 40)}: ${e}`);
       }
@@ -512,6 +550,139 @@ async function lookupFreshInfo(
     console.log(`[ai-reply] browse EXC q=${userText.slice(0, 60)}: ${e}`);
     return '';
   }
+}
+
+// ── TOOL-CALLING DATA PASAR (free, tanpa API key) ──
+// Dipakai dummy analis (persona market_data:true, mis. Kang Modal):
+// harga real di-fetch DULU lalu di-inject ke prompt — AI tidak menebak
+// harga dari training data. Gagal/timeout → string kosong (persona wajib
+// jujur bilang datanya tidak tersedia).
+// Sumber: Yahoo Finance (saham IDX .JK + AS, forex, emas, IHSG ^JKSE,
+// delay ±15 mnt) + Indodax (kripto IDR). Maks 3 simbol/pesan, timeout 9 dtk.
+const CRYPTO_IDR: Record<string, string> = {
+  BTC: 'btc_idr', BITCOIN: 'btc_idr',
+  ETH: 'eth_idr', ETHEREUM: 'eth_idr',
+  SOL: 'sol_idr', SOLANA: 'sol_idr',
+  XRP: 'xrp_idr', RIPPLE: 'xrp_idr',
+  DOGE: 'doge_idr', DOGECOIN: 'doge_idr',
+  BNB: 'bnb_idr', BINANCE: 'bnb_idr',
+  ADA: 'ada_idr', CARDANO: 'ada_idr',
+  TRX: 'trx_idr', TRON: 'trx_idr',
+};
+const US_TICKERS = new Set([
+  'AAPL', 'NVDA', 'MSFT', 'TSLA', 'GOOGL', 'GOOG', 'AMZN', 'META', 'AMD',
+  'NFLX', 'INTC', 'BABA', 'PLTR', 'COIN', 'MSTR', 'CRM', 'ORCL', 'AVGO',
+  'TSM', 'JPM', 'V', 'MA', 'DIS', 'PYPL', 'SQ', 'SHOP', 'SPOT', 'UBER',
+]);
+
+async function yahooQuote(sym: string): Promise<string> {
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 9000);
+    let out = '';
+    try {
+      const r = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: ctrl.signal },
+      );
+      if (!r.ok) return '';
+      const j: any = await r.json();
+      const res = j?.chart?.result?.[0];
+      const m = res?.meta;
+      if (!m || m.regularMarketPrice == null) return '';
+      const idr = m.currency === 'IDR' || sym.endsWith('.JK');
+      const fmt = (n: number) =>
+        idr
+          ? 'Rp' + Math.round(n).toLocaleString('id-ID')
+          : '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+      const chg = Number(m.regularMarketChangePercent ?? NaN);
+      const chgTxt = Number.isFinite(chg)
+        ? ` (${chg >= 0 ? '+' : ''}${chg.toFixed(2)}% hari ini)`
+        : '';
+      const closes: number[] = res?.indicators?.quote?.[0]?.close?.filter(
+        (x: any) => typeof x === 'number',
+      ) ?? [];
+      const trend = closes.length >= 2
+        ? `, 5 hari: ${closes.slice(-5).map((c: number) => idr ? Math.round(c).toLocaleString('id-ID') : c.toFixed(2)).join('→')}`
+        : '';
+      out = `${sym} ${fmt(m.regularMarketPrice)}${chgTxt}${trend}`;
+    } finally {
+      clearTimeout(to);
+    }
+    return out;
+  } catch {
+    return '';
+  }
+}
+
+async function indodaxQuote(pair: string, label: string): Promise<string> {
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 9000);
+    let out = '';
+    try {
+      const r = await fetch(`https://indodax.com/api/ticker/${pair}`, {
+        signal: ctrl.signal,
+      });
+      if (!r.ok) return '';
+      const j: any = await r.json();
+      const last = Number(j?.ticker?.last ?? NaN);
+      if (!Number.isFinite(last)) return '';
+      out = `${label} Rp${Math.round(last).toLocaleString('id-ID')} (Indodax)`;
+    } finally {
+      clearTimeout(to);
+    }
+    return out;
+  } catch {
+    return '';
+  }
+}
+
+// Deteksi simbol pasar dari pesan user. Return daftar tugas fetch
+// (maks 3). Bukan pesan pasar → array kosong (tidak fetch apa pun).
+function detectMarketSymbols(t: string): Array<() => Promise<string>> {
+  const tasks: Array<() => Promise<string>> = [];
+  const seen = new Set<string>();
+  const push = (key: string, fn: () => Promise<string>) => {
+    if (seen.has(key) || tasks.length >= 3) return;
+    seen.add(key);
+    tasks.push(fn);
+  };
+  const up = ` ${t.toUpperCase()} `;
+  if (/IHSG|INDEX|INDEKS/.test(up)) push('^JKSE', () => yahooQuote('^JKSE'));
+  if (/DOLLAR|USD|KURS|RUPIAH MELEMAH|RUPIAH MENGUAT/.test(up)) {
+    push('USDIDR=X', () => yahooQuote('USDIDR=X'));
+  }
+  if (/\bEMAS\b|GOLD|ANTAM|LOGAM MULIA/.test(up)) push('GC=F', () => yahooQuote('GC=F'));
+  // Kripto: word-boundary (SOL≠solusi, ADA≠ada, TRX≠...) — bukan substring.
+  for (const [alias, pair] of Object.entries(CRYPTO_IDR)) {
+    if (new RegExp(`\\b${alias}\\b`).test(up)) {
+      push(pair, () => indodaxQuote(pair, alias));
+    }
+  }
+  const caps = up.match(/\b[A-Z]{2,5}\b/g) ?? [];
+  // Tebakan IDX (BBCA→BBCA.JK) HANYA dalam konteks investasi — kata kapital
+  // biasa (YANG, DONG, JUGA) tidak ikut di-fetch.
+  const investCtx = /SAHAM|KRIPTO|CRYPTO|BELI|JUAL|ANALISA|ANALISIS|BAGUS|NAIK|TURUN|HOLD|TAHAN|LEPAS|BORONG|CUAN|RUGI|PROFIT|DIVIDEN|INVEST/.test(up);
+  for (const c of caps) {
+    if (US_TICKERS.has(c)) push(c, () => yahooQuote(c));
+    else if (investCtx && /^[A-Z]{4}$/.test(c)) {
+      push(c + '.JK', () => yahooQuote(c + '.JK'));
+    }
+  }
+  return tasks;
+}
+
+async function lookupMarketData(
+  userText: string,
+  todayWib: string,
+): Promise<string> {
+  const tasks = detectMarketSymbols(userText);
+  if (tasks.length === 0) return '';
+  const results = await Promise.all(tasks.map((fn) => fn()));
+  const lines = results.filter((s) => s !== '');
+  if (lines.length === 0) return '';
+  return `DATA PASAR (${todayWib} WIB — sumber Yahoo Finance/Indodax, delay ±15 menit, BUKAN tick real-time): ${lines.join(' · ')}`;
 }
 
 type ImagePlan = {
@@ -532,6 +703,8 @@ function planImage(
   sexyAllowed: boolean,
 ): ImagePlan | null {
   const age = Number(dummyProfile?.age) || 25;
+  // SENGAJA: wajah selalu digambar ≥21 tahun (safety — jangan render minor)
+  // walau umur profil di bawah itu; teks foto tidak menyebut umur.
   const adultAge = Math.max(21, Math.min(35, age));
   const gender = dummyProfile?.gender === 'male' ? 'man' : 'woman';
   const face = faceDescriptor(persona, dummyProfile?.__uid || '');
@@ -614,10 +787,44 @@ async function generateAndSendImage(
       console.log(`[ai-reply] image GAGAL chat=${chatId} uid=${dummyUid}`);
       return false;
     }
-    const path = `chat/${chatId}/${Date.now()}_${outSeed}.jpg`;
+    const ok = await uploadAndInsertImage(
+      admin,
+      chatId,
+      dummyUid,
+      senderName,
+      buf,
+      caption,
+      'jpg',
+    );
+    console.log(
+      `[ai-reply] image OK model=${used} chat=${chatId} uid=${dummyUid}`,
+    );
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+// Upload bytes mentah sebagai pesan gambar (dipakai foto AI maupun
+// render diagram mermaid). Return true bila insert berhasil.
+async function uploadAndInsertImage(
+  admin: any,
+  chatId: string,
+  dummyUid: string,
+  senderName: string,
+  buf: Uint8Array,
+  caption: string,
+  ext = 'jpg',
+): Promise<boolean> {
+  try {
+    const outSeed = Math.floor(Math.random() * 999999);
+    const path = `chat/${chatId}/${Date.now()}_${outSeed}.${ext}`;
     const { error: upErr } = await admin.storage
       .from('chat-photos')
-      .upload(path, buf, { contentType: 'image/jpeg', upsert: false });
+      .upload(path, buf, {
+        contentType: ext === 'png' ? 'image/png' : 'image/jpeg',
+        upsert: false,
+      });
     if (upErr) return false;
     const { error: insErr } = await admin.from('private_messages').insert({
       chat_id: chatId,
@@ -627,12 +834,133 @@ async function generateAndSendImage(
       type: 'image',
       image_path: path,
     });
-    console.log(
-      `[ai-reply] image OK model=${used} chat=${chatId} uid=${dummyUid}`,
-    );
     return !insErr;
   } catch (_) {
     return false;
+  }
+}
+
+// ── DIAGRAM → GAMBAR (persona expert: diagrams:true) ──
+// LLM menulis blok ```mermaid … ``` dan/atau ```plantuml … ``` di balasan;
+// server me-render via Kroki (gratis, tanpa key) lalu mengirim PNG sebagai
+// pesan gambar susulan. Teks + kode sumber TETAP terkirim (bisa di-copy
+// dari CodeBlock). Gagal render = abaikan diam-diam (teks sudah terkirim).
+function extractDiagram(text: string, lang: string): string | null {
+  const m = String(text || '').match(
+    new RegExp('```' + lang + '\\s*\\n([\\s\\S]*?)```', 'i'),
+  );
+  if (!m) return null;
+  const code = m[1].trim().slice(0, 2000);
+  return code.length >= 10 ? code : null;
+}
+
+function mermaidUrl(code: string): string {
+  const bytes = new TextEncoder().encode(code);
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return `https://mermaid.ink/img/${encodeURIComponent(btoa(s))}`;
+}
+
+// Kroki: POST source polos → PNG (tanpa encode ribet). Satu endpoint
+// untuk mermaid + plantuml.
+async function renderViaKroki(
+  type: 'mermaid' | 'plantuml',
+  code: string,
+): Promise<Uint8Array | null> {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const r = await fetch(`https://kroki.io/${type}/png`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', Accept: 'image/png' },
+      body: code,
+      signal: ctrl.signal,
+    });
+    if (!r.ok) return null;
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if (!ct.includes('png')) return null;
+    const buf = new Uint8Array(await r.arrayBuffer());
+    // Diagram vektor kecil (5-10 KB) itu normal — threshold longgar.
+    return buf.length > 1000 ? buf : null;
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+// Kroki dulu; fallback mermaid.ink khusus mermaid (aslinya JPEG → ext 'jpg').
+async function renderDiagram(
+  type: 'mermaid' | 'plantuml',
+  code: string,
+): Promise<{ buf: Uint8Array; ext: string } | null> {
+  const kroki = await renderViaKroki(type, code);
+  if (kroki) return { buf: kroki, ext: 'png' };
+  if (type === 'mermaid') {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 30000);
+    try {
+      const r = await fetch(mermaidUrl(code), { signal: ctrl.signal });
+      if (r.ok) {
+        const buf = new Uint8Array(await r.arrayBuffer());
+        if (buf.length > 1000) return { buf, ext: 'jpg' };
+      }
+    } catch (_) {
+      // abaikan — return null di bawah
+    } finally {
+      clearTimeout(to);
+    }
+  }
+  return null;
+}
+
+// ── CHART → GAMBAR (persona expert: charts:true) ──
+// LLM menulis blok ```chartjs { …config Chart.js v2… } ``` di balasan;
+// server me-render via QuickChart (gratis, tanpa key) lalu mengirim PNG
+// sebagai pesan gambar susulan. Teks analisis + JSON TETAP terkirim (bisa
+// di-copy dari CodeBlock). Gagal render = abaikan diam-diam (teks sudah
+// terkirim). Pola sama seperti diagram di atas.
+const CHART_TYPES = ['pie', 'doughnut', 'bar', 'line', 'radar', 'polarArea'];
+
+function extractChartJs(text: string): string | null {
+  const m = String(text || '').match(/```chartjs\s*\n([\s\S]*?)```/i);
+  if (!m) return null;
+  const raw = m[1].trim().slice(0, 4000);
+  if (raw.length < 20) return null;
+  try {
+    const cfg = JSON.parse(raw);
+    if (!cfg || typeof cfg !== 'object') return null;
+    if (!CHART_TYPES.includes(String(cfg.type || '').trim())) return null;
+    const data = (cfg as any).data;
+    if (!data || typeof data !== 'object') return null;
+    const sets = (data as any).datasets;
+    if (!Array.isArray(sets) || sets.length < 1) return null;
+    return JSON.stringify(cfg).slice(0, 4000);
+  } catch (_) {
+    return null;
+  }
+}
+
+function chartUrl(configJson: string): string {
+  return `https://quickchart.io/chart?c=${encodeURIComponent(configJson)}&w=800&h=500&format=png&backgroundColor=white`;
+}
+
+// QuickChart: GET config → PNG (tanpa key). Satu-satunya dependensi luar
+// untuk chart; gagal / bukan gambar = null (jangan ganggu chat).
+async function renderChart(configJson: string): Promise<Uint8Array | null> {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const r = await fetch(chartUrl(configJson), { signal: ctrl.signal });
+    if (!r.ok) return null;
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if (!ct.includes('png') && !ct.includes('image')) return null;
+    const buf = new Uint8Array(await r.arrayBuffer());
+    return buf.length > 1000 ? buf : null;
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(to);
   }
 }
 
@@ -770,11 +1098,62 @@ Deno.serve(async (req: Request) => {
     const dummyUid: string = body.dummy_uid;
     // Sapaan proaktif (cron): AI yang memulai karena lawan diam >45 menit.
     const proactive = body.proactive === true;
+    // sender_id wajib selalu; trigger_msg_id wajib untuk non-proaktif —
+    // tanpanya claim + dedupe + pause_newer di-skip (lubang anti-duplikat).
+    if (!senderId || (!proactive && triggerMsgId == null)) {
+      return json({ ok: false, error: 'bad_request' }, 400);
+    }
 
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+
+    // ── AUTH (#1): secret internal ATAU JWT milik pengirim sendiri ──
+    // Jalur DB (trigger/proactive/recovery via ai_reply_post) membawa
+    // x-app-secret — full trust. Jalur client (invoke langsung dari app)
+    // TIDAK boleh membawa secret (bisa diekstrak dari APK): JWT user
+    // divalidasi via GoTrue dan sender WAJIB = sub token, proactive
+    // ditolak. Penyalahgunaan tetap mungkin, tapi TIDAK lebih dari sekadar
+    // kirim pesan chat biasa (yang juga memicu AI) — permukaan serangan
+    // tidak bertambah.
+    if (!checkAppSecret(req)) {
+      let authedSub: string | null = null;
+      const jwt = (req.headers.get('Authorization') || '').replace(
+        /^Bearer\s+/i,
+        '',
+      );
+      if (jwt !== '') {
+        try {
+          const { data } = await admin.auth.getUser(jwt);
+          authedSub = data?.user?.id ?? null;
+        } catch (e) {
+          console.log(`[ai-reply] auth-jwt GAGAL: ${e}`);
+        }
+      }
+      if (authedSub == null || authedSub !== senderId || proactive === true) {
+        return unauthorized();
+      }
+    }
+
+    // ── MEMBERSHIP: sender & dummy wajib peserta chat ──
+    // Tanpa ini jalur JWT bisa menyuntik balasan dummy ke chat mana pun
+    // (cukup tahu chat_id + dummy_uid) — di luar chat yang ia ikuti.
+    try {
+      const { data: chRow } = await admin
+        .from('private_chats')
+        .select('participants')
+        .eq('chat_id', chatId)
+        .maybeSingle();
+      const parts = (chRow as any)?.participants as unknown;
+      const arr = Array.isArray(parts) ? parts.map(String) : [];
+      if (!arr.includes(String(senderId)) || !arr.includes(String(dummyUid))) {
+        return json({ ok: false, error: 'not_participant' }, 403);
+      }
+    } catch (e) {
+      console.log(`[ai-reply] membership-check GAGAL chat=${chatId}: ${e}`);
+      return json({ ok: false, error: 'membership_check_failed' }, 503);
+    }
 
     // ── Kirim: typing realistis (channel sudah dibuka di atas) ──
     // Pesan masuk setelah denyut selesai.
@@ -1088,11 +1467,63 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── CAP AI↔AI: gabungan 40 pesan/jam per chat — tanpa ini dua dummy
+    // no-limit ping-pong tanpa henti 24/7. Cermin trigger ai_reply_enqueue
+    // (wajib di sini juga karena jalur invoke-langsung mem-bypass trigger).
+    // PENGECUALIAN: kedua dummy eksplisit no_rate_limit (unlimited by
+    // design, mis. Expert × Expert) → cap dilewati. Penerima always_reply
+    // (expert) juga selalu lolos cap. Tanpa ubah presence.
+    if (senderDummyRow != null && !proactive) {
+      try {
+        const cfgR: any = (
+          await safe(
+            admin
+              .from('dummy_accounts')
+              .select('ai_no_rate_limit, ai_always_reply')
+              .eq('uid', dummyUid)
+              .maybeSingle(),
+          )
+        )?.data;
+        const cfgS: any = (
+          await safe(
+            admin
+              .from('dummy_accounts')
+              .select('ai_no_rate_limit')
+              .eq('uid', senderId)
+              .maybeSingle(),
+          )
+        )?.data;
+        const bothUnlimited =
+          cfgR?.ai_no_rate_limit === true &&
+          cfgS?.ai_no_rate_limit === true;
+        if (!bothUnlimited && cfgR?.ai_always_reply !== true) {
+          const { count: aiAi1h } = await admin
+            .from('private_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('chat_id', chatId)
+            .in('sender_id', [senderId, dummyUid])
+            .gt(
+              'created_at',
+              new Date(Date.now() - 3600000).toISOString(),
+            );
+          if ((aiAi1h ?? 0) >= 40) {
+            return json({ ok: false, skipped: 'ai_ai_cap' });
+          }
+        }
+      } catch (e) {
+        console.log(`[ai-reply] ai-ai-cap GAGAL chat=${chatId}: ${e}`);
+      }
+    }
+
     // ── RATE LIMIT per-chat (Maks/jam + Jeda detik) ──
+    // KONTRAK vs trigger ai_reply_enqueue: trigger = GATE + presence;
+    // blok ini = cek FINAL (wajib karena invoke-langsung mem-bypass
+    // trigger) — aturannya SAMA (per-dummy → global → 20/2).
     // SEBELUM presence-wake: kuota habis → dummy tampil idle (bukan online
     // tapi bungkam). Hanya downgrade online→idle; offline tidak dibangunkan,
     // always_online tidak disentuh. Jeda singkat (min_interval) hanya pacing
-    // diam-diam tanpa ubah status. AI↔AI, no_rate_limit & proaktif: bebas.
+    // diam-diam tanpa ubah status. AI↔AI, no_rate_limit, always_reply &
+    // proaktif: bebas.
     if (senderDummyRow == null && !proactive) {
       try {
         let rateCfg: any = (
@@ -1100,7 +1531,7 @@ Deno.serve(async (req: Request) => {
             admin
               .from('dummy_accounts')
               .select(
-                'ai_no_rate_limit, ai_max_replies, ai_min_interval, ai_always_online',
+                'ai_no_rate_limit, ai_max_replies, ai_min_interval, ai_always_online, ai_always_reply',
               )
               .eq('uid', dummyUid)
               .maybeSingle(),
@@ -1111,13 +1542,17 @@ Deno.serve(async (req: Request) => {
             await safe(
               admin
                 .from('dummy_accounts')
-                .select('ai_no_rate_limit, ai_max_replies, ai_min_interval')
+                .select('ai_no_rate_limit, ai_max_replies, ai_min_interval, ai_always_reply')
                 .eq('uid', dummyUid)
                 .maybeSingle(),
             )
           )?.data;
         }
-        if (rateCfg && rateCfg.ai_no_rate_limit !== true) {
+        if (
+          rateCfg &&
+          rateCfg.ai_no_rate_limit !== true &&
+          rateCfg.ai_always_reply !== true
+        ) {
           const gSet: any = (
             await safe(
               admin
@@ -1185,32 +1620,6 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── PRESENCE: dummy selalu membalas — TIDAK ADA skip offline ──
-    // Apapun statusnya AI membalas (skip offline dihapus: jadwal/apa pun
-    // yang menulis offline tidak boleh membungkam dummy — owner komplain
-    // berulang "ga ada balasan"). Tapi status DIHORMATI: offline →
-    // dibangunkan online; online/idle dipertahankan + last_seen segar
-    // (tick cron yang mengatur siklus online→idle→off seperti orang biasa;
-    // balas sambil idle = wajar, kayak balas cepat dari notifikasi).
-    {
-      const { data: pres } = await admin
-        .from('profiles')
-        .select('status')
-        .eq('id', dummyUid)
-        .maybeSingle();
-      if (!pres || pres.status === 'offline') {
-        await admin
-          .from('profiles')
-          .update({ status: 'online', last_seen: new Date().toISOString() })
-          .eq('id', dummyUid);
-      } else {
-        await admin
-          .from('profiles')
-          .update({ last_seen: new Date().toISOString() })
-          .eq('id', dummyUid);
-      }
-    }
-
     // ── BATCH 1 (independen): dummy + settings global + provider config ──
     // Ketiganya tidak saling bergantung → Promise.all sekaligus. Persona
     // (di bawah) butuh `dummy`; guardOn butuh `settings`; routing butuh
@@ -1219,7 +1628,7 @@ Deno.serve(async (req: Request) => {
       safe(
         admin
           .from('dummy_accounts')
-          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active, ai_no_sleep')
+          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active, ai_no_sleep, ai_always_reply')
           .eq('uid', dummyUid)
           .maybeSingle(),
       ),
@@ -1261,7 +1670,10 @@ Deno.serve(async (req: Request) => {
     }
     // ── MODE NGAMBEK per-chat (marah ke orang ini): selama storm_until
     // chat ini, AI tidak membalas chat ini — chat lain tetap normal.
-    // Flag global ai_offline_until lama tetap dihormati sebagai fallback. ──
+    // Flag global ai_offline_until lama tetap dihormati sebagai fallback.
+    // PENGECUALIAN: dummy always_reply (expert) tidak pernah ngambek —
+    // pesan harus selalu dibalas. ──
+    const alwaysReply = (dummy as any).ai_always_reply === true;
     let chatStormed = false;
     try {
       const st: any = (
@@ -1280,9 +1692,10 @@ Deno.serve(async (req: Request) => {
       console.log(`[ai-reply] storm-check GAGAL chat=${chatId}: ${e}`);
     }
     if (
-      chatStormed ||
-      (dummy.ai_offline_until != null &&
-        new Date(dummy.ai_offline_until as string).getTime() > Date.now())
+      !alwaysReply &&
+      (chatStormed ||
+        (dummy.ai_offline_until != null &&
+          new Date(dummy.ai_offline_until as string).getTime() > Date.now()))
     ) {
       return json({ ok: false, skipped: 'storm_off' });
     }
@@ -1299,16 +1712,18 @@ Deno.serve(async (req: Request) => {
       !(settings && settings.ai_guard_enabled === false);
 
     // ── TIDUR & JUMATAN: dummy tidak membalas (kill-switch ai_no_sleep) ──
+    // PENGECUALIAN: dummy always_reply (expert) tidak pernah tidur —
+    // pesan harus selalu dibalas.
     // Pesan TIDAK hilang: cron proaktif (>45 mnt hening) membangunkan pagi/
     // siang harinya, ditambah konteks "baru bangun"/"baru jumatan" di bawah.
     // Cek di sini (SEBELUM claim + read-receipt + typing) supaya user tidak
     // melihat centang-2/bubble lalu hening.
     const noSleep = (dummy as any).ai_no_sleep === true;
     const earlyGender = (genderRes as any)?.data?.gender;
-    if (!noSleep && asleepAt(dummyUid, Date.now())) {
+    if (!alwaysReply && !noSleep && asleepAt(dummyUid, Date.now())) {
       return json({ ok: false, skipped: 'sleeping' });
     }
-    if (!noSleep && fridayPrayerAt(earlyGender, Date.now())) {
+    if (!alwaysReply && !noSleep && fridayPrayerAt(earlyGender, Date.now())) {
       return json({ ok: false, skipped: 'friday_prayer' });
     }
 
@@ -1339,6 +1754,31 @@ Deno.serve(async (req: Request) => {
         .limit(1);
       if (newer && newer.length > 0) {
         return json({ ok: false, skipped: 'already_replied' });
+      }
+    }
+
+    // ── PRESENCE: bangunkan dummy HANYA saat benar-benar akan membalas.
+    // Dipindah ke sini (dulu di atas sebelum cek ai_enabled) karena tiap
+    // pesan masuk memaksa dummy offline → online walau AI-nya MATI / hold /
+    // ngambek / tidur — balasannya di-skip tapi status online-nya nempel
+    // selamanya (heartbeat ikut menyegarkan, tick tidak menyentuh karena
+    // ai_enabled=false). Offline → online; online/idle → last_seen segar.
+    {
+      const { data: pres } = await admin
+        .from('profiles')
+        .select('status')
+        .eq('id', dummyUid)
+        .maybeSingle();
+      if (!pres || pres.status === 'offline') {
+        await admin
+          .from('profiles')
+          .update({ status: 'online', last_seen: new Date().toISOString() })
+          .eq('id', dummyUid);
+      } else {
+        await admin
+          .from('profiles')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', dummyUid);
       }
     }
 
@@ -1435,6 +1875,12 @@ Deno.serve(async (req: Request) => {
     // Long answers (customer service, mis. Admin Chatyuk): jawaban boleh
     // panjang & terstruktur (langkah bernomor), bebas dari cap 90 char.
     const longAnswers = (persona as any)?.long_answers === true;
+    // diagrams (expert teknis): boleh blok kode fenced + diagram mermaid
+    // yang di-render jadi gambar (di luar larangan markdown CS biasa).
+    const diagrams = (persona as any)?.diagrams === true;
+    // charts (expert analis): boleh blok ```chartjs (config Chart.js v2)
+    // yang di-render jadi gambar pie/bar/line via QuickChart.
+    const charts = (persona as any)?.charts === true;
 
     const genderLabel =
       profile.gender === 'male'
@@ -1607,9 +2053,11 @@ Deno.serve(async (req: Request) => {
     // di akhir balasan; jawaban "ya" membuka mode dewasa per chat.
     // Tawaran "nakal" hanya relevan saat guard AKTIF (guard off = sudah
     // bebas, tidak perlu consent). Jadi syaratnya guardOn — konsisten.
+    // AI↔AI (kedua pihak dummy, mis. Expert × Expert) tidak pernah ditawari.
     const shouldAskNakal =
       guardOn &&
       !adultMode &&
+      !senderIsDummy &&
       !freshStage &&
       chatState?.asked_at == null &&
       chatState?.declined !== true &&
@@ -1744,6 +2192,14 @@ Deno.serve(async (req: Request) => {
       'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
       'OUTPUT WAJIB: HANYA satu pesan chat pendek berbahasa Indonesia sebagai ${profile.nickname} — DILARANG menulis analisis, narasi pihak ketiga ("The user..."), bahasa Inggris, atau kalimat meta apa pun. Hormati gender lawan bicara: panggilan (om/tante/sayang) harus sesuai gender dan usia kalian.',
       'REALISTIS (wajib): JANGAN mengarang nama orang, nama tempat, kejadian, atau topik yang TIDAK ADA di riwayat obrolan maupun di KEGIATANMU HARI INI (itu dua sumber kebenaranmu). Kalau belum tahu sesuatu, akui atau bertanya. Ngomongnya tetap yang sudah diketahui dari obrolan saja.',
+      // Expert (always_reply): jawaban teknis/faktual WAJIB berdasar data.
+      // INFO TERKINI di atas = hasil browsing barusan (ada tanggalnya) —
+      // pakai itu sebagai jawaban. Kalau tidak ada INFO TERKINI dan kamu
+      // tidak sangat yakin, JUJUR bilang belum tahu + sarankan cek sumber
+      // resmi — JANGAN nebak angka/spesifikasi/versi/harga/langkah.
+      ...(alwaysReply
+        ? ['ANTI-HALU (wajib — kamu expert, pantang ngarang): fakta, angka, spesifikasi, versi, harga, dan langkah teknis HANYA dari INFO TERKINI di atas atau pengetahuan yang kamu SANGAT yakini. Kalau INFO TERKINI ada, jawab berdasar itu dan sebut tanggalnya. Kalau tidak yakin, katakan jujur belum tahu dan arahkan ke sumber resmi — JANGAN mengarang. Bedakan "yang aku tahu pasti" vs "kayaknya".']
+        : []),
       'VARIASI: lihat balasan-balasanmu sebelumnya di riwayat chat — JANGAN mengulang emoji yang sama, jangan pola kalimat yang sama. EMOJI: MAKSIMAL 1 per balasan, dan hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) — sekitar separuh balasan TANPA emoji sama sekali. Panjang juga selalu beda-beda (kadang 2-4 kata, kadang lebih panjang).',
       emojiBanLine,
       wakeUpLine,
@@ -1776,6 +2232,14 @@ Deno.serve(async (req: Request) => {
       // Mode dewasa: guard global OFF, ATAU user sendiri menyetujuinya
       // lewat pertanyaan "nakal" (consent per chat).
       // longAnswers (customer service): jawaban boleh panjang & terstruktur.
+      // Expert (diagrams): pengecualian — blok kode fenced + mermaid/plantuml BOLEH.
+      ...(diagrams
+        ? ['ATURAN DIAGRAM (kemampuan nyata — kamu BISA menggambar diagram): kalau lawan bicara minta diagram/arsitektur/gambaran alur ("gambarkan arsitekturnya", "buatkan diagram alurnya"), SELALU sertakan SATU blok kode diagram yang VALID dan LENGKAP — pilih yang paling cocok: ```plantuml (diawali @startuml, diakhiri @enduml) untuk ARSITEKTUR/komponen/deployment/infrastruktur, atau ```mermaid untuk alur & struktur: flowchart TD/LR, sequenceDiagram untuk interaksi antar komponen, classDiagram untuk struktur kode, stateDiagram-v2 untuk state, erDiagram untuk database. Diagram otomatis di-render jadi gambar & dikirim setelah teksmu, jadi tetap tulis penjelasan teks seperti biasa. Blok kode bahasa lain (python/sql/dll) tetap boleh.']
+        : []),
+      // Expert analis (charts): visualisasi data — pie/doughnut/bar/line.
+      ...(charts
+        ? ['ATURAN CHART (kemampuan nyata — kamu BISA membuat chart): kalau lawan bicara minta analisis data + visualisasi ("buatkan pie chart", "gambarkan bar chart-nya", "analisa data ini"), tulis analisis teks seperti biasa + SATU blok ```chartjs berisi SATU objek JSON Chart.js v2 yang VALID & LENGKAP. Tipe yang boleh: pie, doughnut, bar, line. Contoh: {"type":"pie","data":{"labels":["A","B"],"datasets":[{"data":[30,70]}}}. Aturan: data DIAGREGAT dari chat (maks 12 label, angka dibulatkan), JSON COMPACT (jangan pretty-print, hemat baris), cukup type + data (+ options sederhana bila perlu). Chart otomatis di-render jadi gambar & dikirim setelah teksmu.']
+        : []),
       longAnswers
         ? 'ATURAN PANJANG CS: jawaban boleh panjang & DETAIL sampai tuntas. FORMAT WAJIB rapi & mudah dibaca: setiap langkah/point ditulis di BARIS TERSENDIRI dengan penomoran (1. 2. 3.) atau strip (-) — JANGAN menumpuk banyak poin dalam satu paragraf panjang. Pakai baris kosong antar bagian bila perlu. DILARANG markdown (**, ##, kode block) — cukup teks biasa + angka strip. Contoh baik: "Baik kak, berikut langkahnya:\\n1. Buka Pengaturan\\n2. Pilih Akun\\n3. Ketuk Lupa Password"'
         : (guardOn && !adultMode)
@@ -2316,12 +2780,24 @@ Deno.serve(async (req: Request) => {
     // dailyLine dihitung belakangan supaya cerita hari ini sudah pasti ada.
     if (dailyLine !== '') systemParts.push(dailyLine);
     // BROWSING: bila pesan user butuh fakta terbaru (skor/berita/cuaca/
-    // harga), lookup cepat via sonar lalu suntik hasilnya. Gagal → diam.
+    // harga), lookup cepat via sonar lalu suntik hasilnya. Expert
+    // (alwaysReply): SELALU lookup saat ditanya faktual/teknis. Gagal → diam.
     try {
-      const freshLine = await lookupFreshInfo(admin, lastUserText, todayWib);
+      const freshLine = await lookupFreshInfo(admin, lastUserText, todayWib, alwaysReply);
       if (freshLine !== '') systemParts.push(freshLine);
     } catch (e) {
       console.log(`[ai-reply] browse-wrap GAGAL chat=${chatId}: ${e}`);
+    }
+    // TOOL-CALLING PASAR (Kang Modal & analis sejenis — persona
+    // market_data:true): fetch harga real (Yahoo/Indodax) lalu inject.
+    // Gagal → tidak inject (persona wajib jujur bilang data tak tersedia).
+    try {
+      if ((persona as any)?.market_data === true) {
+        const marketLine = await lookupMarketData(lastUserText, todayWib);
+        if (marketLine !== '') systemParts.push(marketLine);
+      }
+    } catch (e) {
+      console.log(`[ai-reply] market-wrap GAGAL chat=${chatId}: ${e}`);
     }
     const system = systemParts.filter(Boolean).join(' ');
 
@@ -2536,7 +3012,9 @@ Deno.serve(async (req: Request) => {
     }
     let replyVisible = sanitize(
       stripMoodMarker(rawLlm),
-      longAnswers ? 2000 : guardOn ? MAX_REPLY_CHARS : 220,
+      // longAnswers (CS + expert): ruang untuk blok kode (max_tokens 1000
+      // ≈ 4000 char, jadi 3000 char tidak jebol budget token).
+      longAnswers ? 3000 : guardOn ? MAX_REPLY_CHARS : 220,
       longAnswers, // CS: pertahankan baris → poin/angka bernomor rapi
     );
     // Jaring pengaman kode (selain instruksi prompt): maks 1 emoji,
@@ -2546,7 +3024,7 @@ Deno.serve(async (req: Request) => {
     // Enforcement anti-repeat: buang emoji yang sama dengan 2 balasan
     // sebelumnya (model sering mengunci 1 emoji, mis. 😈 beruntun).
     replyVisible = stripBannedEmojis(replyVisible, bannedEmojis);
-    if (longAnswers) replyVisible = capLines(replyVisible, 24);
+    if (longAnswers) replyVisible = capLines(replyVisible, diagrams || charts ? 48 : 24);
     else if (!guardOn) replyVisible = capSentences(replyVisible, 3);
     if (!replyVisible) {
       await closeTyping();
@@ -2573,13 +3051,16 @@ Deno.serve(async (req: Request) => {
     // 6a. KIRIM GAMBAR bila diminta: marker "image" dari LLM ATAU fallback
     // heuristik (user jelas minta foto tapi LLM lupa menandai). Guard ON +
     // belum dewasa = hanya SFW; sexy ditolak di level planImage.
+    // Persona no_images (mis. expert teknis) = tidak pernah kirim gambar.
     // Gagal generate = abaikan (teks sudah terkirim, jangan ganggu chat).
     let imageSent = false;
     try {
       const sexyAllowed = !guardOn || adultMode;
       const marked = markedPre;
       const lastUserTxt = lastUserText || '';
-      const needImage = marked != null || userWantsImage(lastUserTxt);
+      const imagesOff = (persona as any)?.no_images === true;
+      const needImage =
+        !imagesOff && (marked != null || userWantsImage(lastUserTxt));
       if (needImage) {
         (profile as any).__uid = dummyUid;
         const plan = planImage(
@@ -2613,6 +3094,82 @@ Deno.serve(async (req: Request) => {
       }
     } catch (e) {
       console.log(`[ai-reply] image-block GAGAL chat=${chatId}: ${e}`);
+    }
+
+    // 6a2. DIAGRAM → GAMBAR (persona expert: diagrams:true).
+    // Terpisah dari no_images (itu khusus foto selfie). Kode diagram tetap
+    // ada di teks (bisa di-copy); gambar PNG menyusul sebagai pesan kedua.
+    // Gagal render = abaikan (teks sudah terkirim, jangan ganggu chat).
+    try {
+      if (diagrams) {
+        const jobs: Array<{ type: 'mermaid' | 'plantuml'; code: string }> =
+          [];
+        const mm = extractDiagram(replyVisible, 'mermaid');
+        if (mm) jobs.push({ type: 'mermaid', code: mm });
+        const pu = extractDiagram(replyVisible, 'plantuml');
+        if (pu) jobs.push({ type: 'plantuml', code: pu });
+        for (const job of jobs) {
+          const out = await renderDiagram(job.type, job.code);
+          if (out) {
+            await openTypingChannel();
+            await pulseTyping();
+            await sleep(1200 + Math.random() * 1200);
+            const dok = await uploadAndInsertImage(
+              admin,
+              chatId,
+              dummyUid,
+              profile.nickname,
+              out.buf,
+              'nih diagramnya',
+              out.ext,
+            );
+            imageSent = imageSent || dok;
+            await closeTyping();
+            console.log(
+              `[ai-reply] diagram OK type=${job.type} chat=${chatId} uid=${dummyUid}`,
+            );
+          } else {
+            console.log(
+              `[ai-reply] diagram-render GAGAL type=${job.type} chat=${chatId}`,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.log(`[ai-reply] diagram-block GAGAL chat=${chatId}: ${e}`);
+    }
+
+    // 6a3. CHART → GAMBAR (persona expert: charts:true).
+    // Pola sama dengan 6a2: JSON chart tetap ada di teks (bisa di-copy);
+    // gambar PNG menyusul sebagai pesan kedua. Gagal render = abaikan.
+    try {
+      if (charts) {
+        const cfg = extractChartJs(replyVisible);
+        if (cfg) {
+          const buf = await renderChart(cfg);
+          if (buf) {
+            await openTypingChannel();
+            await pulseTyping();
+            await sleep(1200 + Math.random() * 1200);
+            imageSent =
+              (await uploadAndInsertImage(
+                admin,
+                chatId,
+                dummyUid,
+                profile.nickname,
+                buf,
+                'nih chartnya',
+                'png',
+              )) || imageSent;
+            await closeTyping();
+            console.log(`[ai-reply] chart OK chat=${chatId} uid=${dummyUid}`);
+          } else {
+            console.log(`[ai-reply] chart-render GAGAL chat=${chatId}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.log(`[ai-reply] chart-block GAGAL chat=${chatId}: ${e}`);
     }
 
     // 6b + 7. Pekerjaan PASCA-RESPONS: burst manusiawi (~7%) + ekstraksi
@@ -2692,6 +3249,28 @@ Deno.serve(async (req: Request) => {
                   );
                   if (!memErr2) memSaved++;
                   if (memSaved >= 3) break;
+                }
+                // Prune: cap 30 fakta/pasangan — buang terlama bila lebih.
+                try {
+                  const { data: allMem } = await admin
+                    .from('ai_memory')
+                    .select('fact, created_at')
+                    .eq('dummy_uid', dummyUid)
+                    .eq('user_id', senderId)
+                    .order('created_at', { ascending: false });
+                  const rows = ((allMem as any[]) ?? []).slice(30).map((r) =>
+                    String(r.fact ?? '')
+                  ).filter(Boolean);
+                  if (rows.length > 0) {
+                    await admin
+                      .from('ai_memory')
+                      .delete()
+                      .eq('dummy_uid', dummyUid)
+                      .eq('user_id', senderId)
+                      .in('fact', rows);
+                  }
+                } catch (e) {
+                  console.log(`[ai-reply] memprune GAGAL chat=${chatId}: ${e}`);
                 }
               }
             }

@@ -2,11 +2,16 @@ import { assertEquals } from 'https://deno.land/std/assert/mod.ts';
 import {
   asleepAt,
   browseTopicKey,
-  faceDescriptor,
+  chartUrl,
+  extractChartJs,
+  summarizeNewsRss,  faceDescriptor,
   fridayPrayerAt,
   hashInt,
+  hasWord,
   isExplicit,
-  isImageRequest,
+  userWantsImage,
+  extractMermaid,
+  isInsult,
   needsFreshInfo,
   sanitize,
   sleepHours,
@@ -150,17 +155,94 @@ Deno.test('isExplicit: empty → false', () => {
   assertEquals(isExplicit(''), false);
 });
 
-// ── isImageRequest ──
-Deno.test('isImageRequest: "kirim foto dong" → true', () => {
-  assertEquals(isImageRequest('kirim foto dong'), true);
+// ── userWantsImage (cermin index.ts) ──
+Deno.test('userWantsImage: "kirim foto dong" → true', () => {
+  assertEquals(userWantsImage('kirim foto dong'), true);
 });
 
-Deno.test('isImageRequest: "lagi apa" → false', () => {
-  assertEquals(isImageRequest('lagi apa'), false);
+Deno.test('userWantsImage: "lagi apa" → false', () => {
+  assertEquals(userWantsImage('lagi apa'), false);
 });
 
-Deno.test('isImageRequest: "selfie dong" → true', () => {
-  assertEquals(isImageRequest('selfie dong'), true);
+Deno.test('userWantsImage: "selfie dong" → true', () => {
+  assertEquals(userWantsImage('selfie dong'), true);
+});
+
+Deno.test('userWantsImage: "mau liat wajahmu" → true', () => {
+  assertEquals(userWantsImage('mau liat wajahmu'), true);
+});
+
+// ── extractMermaid (cermin index.ts) ──
+Deno.test('extractMermaid: ambil blok pertama', () => {
+  const t = 'ini arsitekturnya\n```mermaid\nflowchart TD\n A-->B\n```\nok';
+  assertEquals(extractMermaid(t), 'flowchart TD\n A-->B');
+});
+
+Deno.test('extractMermaid: tanpa blok → null', () => {
+  assertEquals(extractMermaid('cuma teks biasa'), null);
+});
+
+Deno.test('extractMermaid: blok tak tertutup → null', () => {
+  assertEquals(extractMermaid('```mermaid\nflowchart TD\n A-->B'), null);
+});
+
+// ── extractChartJs + chartUrl (cermin index.ts) ──
+Deno.test('extractChartJs: pie valid → JSON canonical', () => {
+  const t =
+    'ini analisanya\n```chartjs\n{"type":"pie","data":{"labels":["A","B"],"datasets":[{"data":[30,70]}]}}\n```\nok';
+  assertEquals(
+    extractChartJs(t),
+    '{"type":"pie","data":{"labels":["A","B"],"datasets":[{"data":[30,70]}]}}',
+  );
+});
+
+Deno.test('extractChartJs: tanpa blok → null', () => {
+  assertEquals(extractChartJs('cuma teks biasa'), null);
+});
+
+Deno.test('extractChartJs: JSON rusak → null', () => {
+  assertEquals(extractChartJs('```chartjs\n{type:pie,\n```'), null);
+});
+
+Deno.test('extractChartJs: type di luar whitelist → null', () => {
+  assertEquals(
+    extractChartJs('```chartjs\n{"type":"scatter","data":{"datasets":[{}]}}\n```'),
+    null,
+  );
+});
+
+Deno.test('extractChartJs: tanpa datasets → null', () => {
+  assertEquals(
+    extractChartJs('```chartjs\n{"type":"bar","data":{"labels":["A"]}}\n```'),
+    null,
+  );
+});
+
+Deno.test('chartUrl: memuat config ter-encode + format png', () => {
+  const u = chartUrl('{"type":"bar","data":{"datasets":[{}]}}');
+  assertEquals(u.startsWith('https://quickchart.io/chart?c='), true);
+  assertEquals(u.includes('format=png'), true);
+  assertEquals(u.includes('%22type%22'), true);
+});
+
+// ── summarizeNewsRss (cermin index.ts) ──
+Deno.test('summarizeNewsRss: 3 item + media + tanggal', () => {
+  const xml =
+    '<rss><channel>' +
+    '<item><title>Skor Madrid Menang - Kompas.com</title><pubDate>Sat, 12 Sep 2026 02:32:38 GMT</pubDate></item>' +
+    '<item><title>Klasemen Pekan Ini - Bola.net</title><pubDate>Sun, 13 Sep 2026 00:00:00 GMT</pubDate></item>' +
+    '<item><title>Jadwal Minggu - Detik</title><pubDate></pubDate></item>' +
+    '<item><title>Lama - Arsip</title><pubDate>Wed, 01 Jan 2025 00:00:00 GMT</pubDate></item>' +
+    '</channel></rss>';
+  assertEquals(
+    summarizeNewsRss(xml),
+    'Skor Madrid Menang (Kompas.com, 12 Sep) | Klasemen Pekan Ini (Bola.net, 13 Sep) | Jadwal Minggu (Detik)',
+  );
+});
+
+Deno.test('summarizeNewsRss: kosong/rusak → string kosong', () => {
+  assertEquals(summarizeNewsRss(''), '');
+  assertEquals(summarizeNewsRss('<rss></rss>'), '');
 });
 
 // ── needsFreshInfo ──
@@ -194,8 +276,65 @@ Deno.test('browseTopicKey: caps at 120 chars', () => {
   assertEquals(browseTopicKey(long).length, 120);
 });
 
-// ── sanitize ──
+// ── sanitize (cermin index.ts) ──
 Deno.test('sanitize: trims + caps length', () => {
   const s = sanitize('  halo  ');
   assertEquals(s, 'halo');
+});
+
+Deno.test('sanitize: keepLines pertahankan indentasi kode', () => {
+  const s = sanitize('def f():\n    return 1\n      dalam', 3000, true);
+  assertEquals(s, 'def f():\n    return 1\n      dalam');
+});
+
+Deno.test('sanitize: non-keepLines gabung baris + potong di koma', () => {
+  const s = sanitize('halo dunia, apa kabar semuanya baik saja kan', 20);
+  assertEquals(s.startsWith('halo dunia'), true);
+});
+
+// ── hasWord (word-boundary, bukan substring) ──
+Deno.test('hasWord: "kasur" tidak kena "asu"', () => {
+  assertEquals(hasWord('masih kucing2an di kasur', 'asu'), false);
+});
+
+Deno.test('hasWord: "masuk akal" tidak kena "asu"', () => {
+  assertEquals(hasWord('masuk akal', 'asu'), false);
+});
+
+Deno.test('hasWord: "menggunakan" tidak kena "guna"', () => {
+  assertEquals(hasWord('menggunakan ini', 'guna'), false);
+});
+
+Deno.test('hasWord: "mendadak" tidak kena "dada"', () => {
+  assertEquals(hasWord('mendadak hujan', 'dada'), false);
+});
+
+Deno.test('hasWord: "asu!" kena "asu"', () => {
+  assertEquals(hasWord('asu!', 'asu'), true);
+});
+
+Deno.test('hasWord: "tak berguna" kena frasa penuh', () => {
+  assertEquals(hasWord('tak berguna', 'tak berguna'), true);
+});
+
+// ── isInsult ──
+Deno.test('isInsult: "kamu bego ya" → true', () => {
+  assertEquals(isInsult('kamu bego ya'), true);
+});
+
+Deno.test('isInsult: "masuk akal juga" → false', () => {
+  assertEquals(isInsult('masuk akal juga'), false);
+});
+
+// ── needsFreshInfo: intent teknis ──
+Deno.test('needsFreshInfo: "changelog python 3.13" → true', () => {
+  assertEquals(needsFreshInfo('changelog python 3.13'), true);
+});
+
+Deno.test('needsFreshInfo: "spesifikasi RTX 5090" → true', () => {
+  assertEquals(needsFreshInfo('spesifikasi RTX 5090'), true);
+});
+
+Deno.test('needsFreshInfo: "benchmark M4 vs Ryzen" → true', () => {
+  assertEquals(needsFreshInfo('benchmark M4 vs Ryzen'), true);
 });

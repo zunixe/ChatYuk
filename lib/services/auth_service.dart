@@ -242,6 +242,21 @@ class AuthService {
         .map((rows) => rows.isEmpty ? null : rows.first);
   }
 
+  /// Satu query ambil SEMUA setting global (pengganti 7× fetch terpisah
+  /// saat boot — hemat 6 RPC per user). Return raw row (null bila gagal).
+  Future<Map<String, dynamic>?> fetchGlobalSettings() async {
+    try {
+      return await _sb
+          .from('app_settings')
+          .select('*')
+          .eq('id', 'global')
+          .maybeSingle();
+    } catch (e) {
+      dlog('[AUTH] fetchGlobalSettings error: $e');
+      return null;
+    }
+  }
+
   /// Setting admin: tombol call tampil ke SEMUA user (termasuk anon/guest).
   /// Default false = hanya user terdaftar yang melihat tombol call.
   Future<bool> fetchCallAllEnabled() async {
@@ -907,9 +922,10 @@ class AuthService {
     final id = uid;
     if (id == null) return;
     final t = token ?? '';
-    try {
-      await _sb.from('profiles').update({'fcm_token': t}).eq('id', id);
-    } catch (_) {}
+    // Satu jalur penulis: RPC update_device_fcm_token sudah menulis ke
+    // user_devices DAN profiles.fcm_token (kompatibilitas klien lama).
+    // Tulis profiles langsung di sini dihapus — duplikat penulis membuat
+    // race saat dua pemanggil (main.dart lazy + AuthProvider) jalan serentak.
     try {
       final installId = await DeviceInfoService.instance.installId();
       await _sb.rpc('update_device_fcm_token',

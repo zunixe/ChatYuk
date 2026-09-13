@@ -1,10 +1,12 @@
 import '../utils.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_config.dart';
 import '../core/admin_gate.dart';
 import '../services/auth_service.dart';
+import '../services/device_info_service.dart';
 
 /// Sesi dummy: admin berpindah akun tanpa login manual.
 /// HANYA di-import oleh build admin (via admin_wiring.dart) — seluruh
@@ -43,6 +45,11 @@ class DummySession {
     _adminAccessToken = session?.accessToken;
     _adminRefreshToken = session?.refreshToken;
     await _saveAdminTokens(_adminAccessToken, _adminRefreshToken);
+    // Hygiene FCM: token perangkat ini milik ADMIN — kosongkan di server +
+    // hapus token lokal SEBELUM swap, supaya push untuk admin tidak bocor
+    // ke sesi dummy (dan sebaliknya saat kembali). Tanpa ini kedua profil
+    // memegang token yang sama → notifikasi akun lama tetap muncul di HP.
+    await _clearCurrentFcmToken();
     // Tandai dummy SEBELUM swap — event signedIn/tokenRefreshed dari
     // setSession di bawah tiba async dan bisa menyalip mark di akhir;
     // tanpa ini token DUMMY tersimpan sebagai "token admin" (prefs
@@ -104,8 +111,74 @@ class DummySession {
         params: {'p_uid': uid, 'p_held': true},
       );
     } catch (_) {}
+    // Ikat token FCM segar ke profil dummy yang baru aktif — tanpa ini
+    // push call/chat ke dummy ditolak (NotRegistered) karena token lama
+    // sudah dihapus di atas.
+    await _bindFreshFcmToken();
+    await _persistCurrentUid();
+    // Hapus notifikasi akun lama yang masih tampil di bilah status.
+    try {
+      await AdminGate.onDummySwap?.call();
+    } catch (_) {}
     dlog('[DUMMY] becomeDummy OK uid=$uid '
         'sessionUid=${_sb.auth.currentUser?.id}');
+  }
+
+  /// Kosongkan token FCM milik sesi SEKARANG di server (profiles +
+  /// user_devices baris install_id ini) lalu hapus token lokal. Best-effort:
+  /// tidak boleh menggagalkan swap — semua error ditelan.
+  /// Dipanggil SEBELUM swap sesi, saat sesi lama masih aktif.
+  static Future<void> _clearCurrentFcmToken() async {
+    try {
+      final installId = await DeviceInfoService.instance.installId();
+      try {
+        await _sb.rpc(
+          'update_device_fcm_token',
+          params: {'p_install_id': installId, 'p_token': ''},
+        );
+      } catch (_) {}
+      try {
+        final uid = _sb.auth.currentUser?.id;
+        if (uid != null && uid.isNotEmpty) {
+          await _sb.from('profiles').update({'fcm_token': ''}).eq('id', uid);
+        }
+      } catch (_) {}
+    } catch (_) {}
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (_) {}
+  }
+
+  /// Minta token FCM segar lalu ikat ke sesi SEKARANG (sesudah swap).
+  /// Best-effort — kegagalan hanya berarti push tertunda sampai
+  /// AuthProvider.updateFcmToken berikutnya.
+  static Future<void> _bindFreshFcmToken() async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || token.isEmpty) return;
+      final installId = await DeviceInfoService.instance.installId();
+      try {
+        await _sb.rpc(
+          'update_device_fcm_token',
+          params: {'p_install_id': installId, 'p_token': token},
+        );
+      } catch (_) {}
+      await _persistCurrentUid();
+    } catch (_) {}
+  }
+
+  /// Simpan uid sesi aktif untuk filter notifikasi background isolate
+  /// (isolate tidak punya sesi Supabase — baca dari prefs).
+  static Future<void> _persistCurrentUid() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final uid = _sb.auth.currentUser?.id ?? '';
+      if (uid.isNotEmpty) {
+        await prefs.setString('current_uid', uid);
+      } else {
+        await prefs.remove('current_uid');
+      }
+    } catch (_) {}
   }
 
   /// Regenerasi refresh_token ASLI via edge function `dummy-manage`
@@ -150,6 +223,10 @@ class DummySession {
       dlog('[DUMMY] backToAdmin: no admin tokens (memory+prefs empty)');
       return false;
     }
+    // Hygiene FCM: kosongkan token milik DUMMY di server + hapus token
+    // lokal selagi sesi dummy masih aktif — tanpa ini push untuk dummy
+    // (mis. agoy) tetap sampai ke HP ini setelah kembali ke admin.
+    await _clearCurrentFcmToken();
     try {
       await _sb.auth.setSession(adminRefresh, accessToken: adminAccess);
       await clearStored();
@@ -172,6 +249,14 @@ class DummySession {
           );
         } catch (_) {}
       }
+      // Ikat token FCM segar ke sesi admin — push dummy lama sudah mati
+      // bersama token yang dihapus di atas.
+      await _bindFreshFcmToken();
+      await _persistCurrentUid();
+      // Hapus notifikasi dummy yang masih tampil di bilah status.
+      try {
+        await AdminGate.onDummySwap?.call();
+      } catch (_) {}
       return true;
     } catch (e) {
       dlog('[DUMMY] backToAdmin setSession failed: $e');

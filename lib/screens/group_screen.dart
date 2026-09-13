@@ -39,10 +39,11 @@ class _GroupList extends StatefulWidget {
 }
 
 class _GroupListState extends State<_GroupList> {
-  /// Muat-ulang dari luar (dialog buat grup) — key statis di GroupScreen.
+  /// Muat-ulang dari luar (dialog buat grup) — langsung ke provider supaya
+  /// jalan dari konteks mana pun (FAB tab Grup maupun menu ⋮ chat list yang
+  /// tidak punya _GroupListState sebagai ancestor).
   static void reloadCurrent(BuildContext context) {
-    final st = context.findAncestorStateOfType<_GroupListState>();
-    st?._load(refresh: true);
+    context.read<RoomProvider>().loadMyGroups(refresh: true);
   }
 
   @override

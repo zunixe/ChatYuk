@@ -36,13 +36,18 @@ class AdminPanelScreen extends StatefulWidget {
 }
 
 class _AdminPanelScreenState extends State<AdminPanelScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final _bonusCtrl = TextEditingController(text: '100');
   final _logoutCtrl = TextEditingController();
   Timer? _statsTimer;
   Timer? _notifyTimer;
   StreamSubscription<String>? _notifSub;
   DateTime? _lastUpdated;
+  late final TabController _tabCtrl;
+  // Tab yang pernah dikunjungi — halaman hanya di-build saat pertama kali
+  // dibuka (lazy). Tab data-berat (Chat Monitor, Perangkat, Terhapus, dst)
+  // tidak mem-fetch apa pun sebelum tab-nya benar-benar dibuka.
+  final Set<int> _visitedTabs = {0};
 
   // Pengaturan nominal poin (diambil dari server, diedit admin).
   final Map<String, TextEditingController> _pointCtrls = {};
@@ -90,6 +95,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _tabCtrl = TabController(length: 8, vsync: this);
+    _tabCtrl.addListener(_onTabChanged);
     final admin = context.read<AdminProvider>();
     Future.microtask(() => admin.fetchStats());
     _loadPointSettings();
@@ -100,12 +107,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       admin.armNotifications().then((_) => _startNotifyPolling()),
     );
     _notifSub = admin.notifications.listen((msg) => _showAdminNotification(msg));
-    // Polling ringan → angka statistik selalu segar tanpa loading flash.
-    // Server meng-cache admin_stats 5 menit, jadi tiap poll = O(1) di DB.
+    // Polling dijarangkan ke 60 detik (dulu 30s) — server meng-cache
+    // admin_stats 5 menit, jadi poll = O(1) di DB. Realtime call & device
+    // sudah instan lewat subscription, statistik tidak perlu sedemikian
+    // agresif.
     _statsTimer = Timer.periodic(
-      const Duration(seconds: 30),
+      const Duration(seconds: 60),
       (_) => _pollStats(),
     );
+  }
+
+  /// Tandai tab yang pernah dibuka supaya hanya tab aktif yang di-build.
+  void _onTabChanged() {
+    if (!_tabCtrl.indexIsChanging) return;
+    if (mounted) setState(() => _visitedTabs.add(_tabCtrl.index));
   }
 
   /// App di-background → stop semua polling (hemat baterai & beban DB);
@@ -121,7 +136,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       if (mounted && _statsTimer == null) {
         unawaited(_pollStats());
         _statsTimer = Timer.periodic(
-          const Duration(seconds: 30),
+          const Duration(seconds: 60),
           (_) => _pollStats(),
         );
         if (_notifyTimer == null) _startNotifyPolling(immediate: true);
@@ -216,6 +231,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _tabCtrl.removeListener(_onTabChanged);
+    _tabCtrl.dispose();
     _statsTimer?.cancel();
     _notifyTimer?.cancel();
     _notifSub?.cancel();
@@ -244,148 +261,179 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final s = context.watch<LocaleProvider>().s;
     final stats = admin.stats;
 
-    return DefaultTabController(
-      length: 5,
-      child: Scaffold(
-        backgroundColor: AppTheme.bgScreen,
-        appBar: AppBar(
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.admin_panel_settings,
-                size: 20,
-                color: AppTheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(s.adminPanel),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(
-                Icons.refresh_rounded,
-                size: 20,
-                color: AppTheme.primary,
-              ),
-              onPressed: () async {
-                await admin.fetchStats();
-                if (mounted) setState(() => _lastUpdated = DateTime.now());
-              },
-            ),
-          ],
-          bottom: TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            indicatorColor: Colors.white,
-            indicatorWeight: 3,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 14),
-            labelStyle: AppText.bodySmall.copyWith(
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-            unselectedLabelStyle: AppText.bodySmall.copyWith(
-              fontWeight: FontWeight.w600,
-              color: Colors.white70,
-            ),
-            indicatorSize: TabBarIndicatorSize.tab,
-            tabs: [
-              Tab(text: s.adminGlobalSettingTab),
-              Tab(text: s.adminOverview),
-              Tab(text: s.adminPointTab),
-              Tab(text: s.adminChatMonitor),
-              Tab(text: s.adminDummyTab),
-              Tab(text: s.adminContactTab),
-              Tab(text: s.adminDeviceTab),
-              Tab(text: s.adminDeletedTab),
-            ],
-          ),
-        ),
-        body: TabBarView(
+    return Scaffold(
+      backgroundColor: AppTheme.bgScreen,
+      appBar: AppBar(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const AdminGlobalSettingTab(),
-            admin.loading
-                ? const Center(child: CircularProgressIndicator())
-                : admin.error != null
-                ? _errorView(admin, s)
-                : RefreshIndicator(
-                    onRefresh: () async {
-                      // force = server hitung ulang sekarang (lewati cache 5 mnt).
-                      await admin.fetchStats(force: true);
-                      if (mounted)
-                        setState(() => _lastUpdated = DateTime.now());
-                    },
-                    child: ListView(
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        12,
-                        16,
-                        MediaQuery.of(context).padding.bottom + 24,
-                      ),
-                      children: [
-                        _lastUpdatedHeader(s),
-                        const SizedBox(height: 8),
-                        _statsGrid(stats, s),
-                        const SizedBox(height: 12),
-                        _StorageUsageCard(),
-                        const SizedBox(height: 12),
-                        const _RegistrationsChartCard(),
-                        const SizedBox(height: 12),
-                        _UserMapCard(),
-                        const SizedBox(height: 12),
-                        _reportedUsers(stats, s),
-                        const SizedBox(height: 12),
-                        _forceLogout(s),
-                        const SizedBox(height: 12),
-                        _dangerZone(admin, s),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-            admin.loading
-                ? const Center(child: CircularProgressIndicator())
-                : admin.error != null
-                ? _errorView(admin, s)
-                : RefreshIndicator(
-                    onRefresh: () async {
-                      await admin.fetchStats(); // cache server 5 mnt — cukup
-                      if (mounted)
-                        setState(() => _lastUpdated = DateTime.now());
-                    },
-                    child: ListView(
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        12,
-                        16,
-                        MediaQuery.of(context).padding.bottom + 24,
-                      ),
-                      children: [
-                        _lastUpdatedHeader(s),
-                        const SizedBox(height: 8),
-                        _pointStats(stats, s),
-                        const SizedBox(height: 12),
-                        _controls(admin, s),
-                        const SizedBox(height: 12),
-                        _pointSettingsCard(s),
-                        const SizedBox(height: 12),
-                        _topEarners(stats, s),
-                        const SizedBox(height: 12),
-                        _massBonus(admin, s),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-            const AdminChatListScreen(),
-            const AdminDummyTab(),
-            const AdminContactTab(),
-            const AdminDevicesTab(),
-            const AdminDeletedTab(),
+            const Icon(
+              Icons.admin_panel_settings,
+              size: 20,
+              color: AppTheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(s.adminPanel),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.refresh_rounded,
+              size: 20,
+              color: AppTheme.primary,
+            ),
+            onPressed: () async {
+              await admin.fetchStats();
+              if (mounted) setState(() => _lastUpdated = DateTime.now());
+            },
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabCtrl,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
+          indicatorWeight: 3,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+          labelStyle: AppText.bodySmall.copyWith(
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+          unselectedLabelStyle: AppText.bodySmall.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+          ),
+          indicatorSize: TabBarIndicatorSize.tab,
+          tabs: [
+            Tab(text: s.adminGlobalSettingTab),
+            Tab(text: s.adminOverview),
+            Tab(text: s.adminPointTab),
+            Tab(text: s.adminChatMonitor),
+            Tab(text: s.adminDummyTab),
+            Tab(text: s.adminContactTab),
+            Tab(text: s.adminDeviceTab),
+            Tab(text: s.adminDeletedTab),
           ],
         ),
       ),
+      body: TabBarView(
+        controller: _tabCtrl,
+        children: [
+          // Lazy tab: halaman data-berat hanya dibangun (dan di-fetch)
+          // saat tab-nya pertama dibuka. Placeholder menjaga indeks stabil.
+          if (_visitedTabs.contains(0))
+            const AdminGlobalSettingTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(1))
+            _buildOverviewTab(admin, s, stats)
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(2))
+            _buildPointTab(admin, s, stats)
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(3))
+            const AdminChatListScreen()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(4))
+            const AdminDummyTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(5))
+            const AdminContactTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(6))
+            const AdminDevicesTab()
+          else
+            const SizedBox.shrink(),
+          if (_visitedTabs.contains(7))
+            const AdminDeletedTab()
+          else
+            const SizedBox.shrink(),
+        ],
+      ),
     );
+  }
+
+  Widget _buildOverviewTab(AdminProvider admin, S s, Map<String, dynamic>? stats) {
+    return admin.loading
+        ? const Center(child: CircularProgressIndicator())
+        : admin.error != null
+        ? _errorView(admin, s)
+        : RefreshIndicator(
+            onRefresh: () async {
+              // force = server hitung ulang sekarang (lewati cache 5 mnt).
+              await admin.fetchStats(force: true);
+              if (mounted) setState(() => _lastUpdated = DateTime.now());
+            },
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                12,
+                16,
+                MediaQuery.of(context).padding.bottom + 24,
+              ),
+              children: [
+                _lastUpdatedHeader(s),
+                const SizedBox(height: 8),
+                _statsGrid(stats, s),
+                const SizedBox(height: 12),
+                _StorageUsageCard(),
+                const SizedBox(height: 12),
+                const _RegistrationsChartCard(),
+                const SizedBox(height: 12),
+                _UserMapCard(),
+                const SizedBox(height: 12),
+                _reportedUsers(stats, s),
+                const SizedBox(height: 12),
+                _forceLogout(s),
+                const SizedBox(height: 12),
+                _dangerZone(admin, s),
+                const SizedBox(height: 24),
+              ],
+            ),
+          );
+  }
+
+  Widget _buildPointTab(AdminProvider admin, S s, Map<String, dynamic>? stats) {
+    return admin.loading
+        ? const Center(child: CircularProgressIndicator())
+        : admin.error != null
+        ? _errorView(admin, s)
+        : RefreshIndicator(
+            onRefresh: () async {
+              await admin.fetchStats(); // cache server 5 mnt — cukup
+              if (mounted) setState(() => _lastUpdated = DateTime.now());
+            },
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                12,
+                16,
+                MediaQuery.of(context).padding.bottom + 24,
+              ),
+              children: [
+                _lastUpdatedHeader(s),
+                const SizedBox(height: 8),
+                _pointStats(stats, s),
+                const SizedBox(height: 12),
+                _controls(admin, s),
+                const SizedBox(height: 12),
+                _pointSettingsCard(s),
+                const SizedBox(height: 12),
+                _topEarners(stats, s),
+                const SizedBox(height: 12),
+                _massBonus(admin, s),
+                const SizedBox(height: 24),
+              ],
+            ),
+          );
   }
 
   Widget _errorView(AdminProvider admin, S s) {
@@ -1520,6 +1568,17 @@ class _UserMapCardState extends State<_UserMapCard> {
       return;
     }
     final id = '${rec['id'] ?? ''}';
+    // Dummy + user device-ter-exclude jangan masuk peta via realtime
+    // (jalur load sudah bersih dari server — users_all terfilter).
+    if (id.isNotEmpty && mounted) {
+      try {
+        if (context.read<AdminProvider>().isHiddenUid(id)) {
+          _users.removeWhere((u) => '${u['id'] ?? ''}' == id);
+          _notify();
+          return;
+        }
+      } catch (_) {}
+    }
     Map<String, dynamic>? existing;
     for (final u in _users) {
       if (id.isNotEmpty && '${u['id'] ?? ''}' == id) {
@@ -1582,6 +1641,7 @@ class _UserMapCardState extends State<_UserMapCard> {
     });
     try {
       final admin = context.read<AdminProvider>();
+      await admin.fetchHiddenUids();
       final detail = await admin.fetchStatsDetail();
       final list =
           (detail['users_all'] as List<dynamic>?)
@@ -1589,7 +1649,11 @@ class _UserMapCardState extends State<_UserMapCard> {
           const [];
       if (!mounted) return;
       setState(() {
-        _users = list;
+        // Sabuk pengaman ganda: buang hidden uid yang lolos (data cache lama
+        // tanpa 'id' tetap tampil — '' tidak pernah ada di hidden set).
+        _users = list
+            .where((u) => !admin.isHiddenUid('${u['id'] ?? ''}'))
+            .toList();
         _loading = false;
       });
       await _resolveIps();
