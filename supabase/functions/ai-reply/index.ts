@@ -491,7 +491,9 @@ async function lookupFreshInfo(
           'created_at',
           new Date(Date.now() - 6 * 3600_000).toISOString(),
         );
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] browse-cache write GAGAL q=${userText.slice(0, 40)}: ${e}`);
+      }
       return FRESH_PREFIX + clean.slice(0, 500);
     } finally {
       clearTimeout(to);
@@ -712,7 +714,9 @@ async function loadProvCfg(admin: any): Promise<any> {
       .limit(1)
       .maybeSingle();
     if (act) return act;
-  } catch (_) {}
+  } catch (e) {
+    console.log(`[ai-reply] provCfg-active read GAGAL: ${e}`);
+  }
   try {
     const { data: glob } = await admin
       .from('ai_provider_config')
@@ -735,7 +739,9 @@ async function runPostResponse(p: Promise<unknown>): Promise<void> {
       rt.waitUntil(p);
       return;
     }
-  } catch (_) {}
+  } catch (e) {
+    console.log(`[ai-reply] waitUntil GAGAL: ${e}`);
+  }
   await p;
 }
 
@@ -812,7 +818,9 @@ Deno.serve(async (req: Request) => {
           p_chat_id: chatId,
           p_uid: dummyUid,
         });
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] mark-read GAGAL chat=${chatId}: ${e}`);
+      }
       // SATU channel WebSocket dibuka sekali untuk seluruh siklus
       // (subscribe + ack:true — tanpa ini, kirim lalu langsung unsubscribe
       // membuat pesan hilang sebelum WS flush). HTTP API hanya fallback
@@ -828,7 +836,9 @@ Deno.serve(async (req: Request) => {
       try {
         const st = await ch.subscribe();
         wsOk = st === 'SUBSCRIBED' && typeof ch.sendBroadcastMessage === 'function';
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] typing-sub GAGAL chat=${chatId}: ${e}`);
+      }
       await pulseTyping(); // denyut pertama LANGSUNG
       // Denyut berulang selama fase berpikir — client bubble auto-mati 3s
       // setelah denyut terakhir; 2.5s menjaga bubble tetap hidup.
@@ -845,7 +855,9 @@ Deno.serve(async (req: Request) => {
       try {
         await ch?.unsubscribe();
         await rt?.removeAllChannels();
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] typing-unsub GAGAL: ${e}`);
+      }
       ch = null;
       rt = null;
       wsOk = false;
@@ -966,7 +978,9 @@ Deno.serve(async (req: Request) => {
               },
               { onConflict: 'chat_id' },
             );
-        } catch (_) {}
+        } catch (e) {
+          console.log(`[ai-reply] asked_at GAGAL chat=${chatId}: ${e}`);
+        }
       }
       await closeTyping();
       return insErr;
@@ -1018,7 +1032,9 @@ Deno.serve(async (req: Request) => {
         .eq('uid', senderId)
         .maybeSingle();
       senderDummyRow = sdr;
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[ai-reply] sender-dummy-check GAGAL: ${e}`);
+    }
 
     // ── DEBOUNCE SAAT ADMIN PEGANG SESI DUMMY ──
     // Sender = dummy → admin sedang main manual sebagai dummy itu. AI penerima
@@ -1133,7 +1149,9 @@ Deno.serve(async (req: Request) => {
             updated_at: new Date().toISOString(),
           },
         );
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] vacuum GAGAL chat=${chatId}: ${e}`);
+      }
       return json({ ok: false, skipped: 'session_held_vacuum' });
     }
     // ── MODE NGAMBEK (marah pergi): selama ai_offline_until, AI tidak
@@ -1311,7 +1329,9 @@ Deno.serve(async (req: Request) => {
       if (memories.length > 0) {
         memoryLine = `Kenanganmu tentang lawan bicara ini dari obrolan sebelumnya (pakai secara natural kalau relevan, jangan sebut ulang semuanya): ${memories.join('; ')}.`;
       }
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[ai-reply] memoryLine GAGAL: ${e}`);
+    }
 
     // 4. Last 12 messages as chat history (created_at utk ritme jeda;
     // image_path/voice_path/duration_ms utk baca media). (msgs dari batch2)
@@ -1521,7 +1541,9 @@ Deno.serve(async (req: Request) => {
             : '') +
           '. Kamu sudah lihat profil publiknya — pakai info ini secara natural untuk menyesuaikan obrolan, TAPI jangan menebar semua data sekaligus; biarkan dia bercerita sendiri, kamu bertanya secukupnya tentang yang belum jelas.';
       }
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[ai-reply] partnerLine GAGAL: ${e}`);
+    }
 
     // ── Waktu nyata (WIB) — biar sapaan cocok (sore/malam/pagi) & sadar jam.
     let nowLabel = '';
@@ -1577,7 +1599,9 @@ Deno.serve(async (req: Request) => {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[ai-reply] wakeupLine GAGAL: ${e}`);
+    }
 
     const systemParts: string[] = [
       `Kamu adalah ${profile.nickname}, ${profile.age ?? ''} tahun, ${genderLabel}, tinggal di ${profile.city ?? ''}${profile.country ? ', ' + profile.country : ''}.`.replace(
@@ -1709,7 +1733,9 @@ Deno.serve(async (req: Request) => {
           .from('dummy_accounts')
           .update({ ai_mood: 'annoyed' })
           .eq('uid', dummyUid);
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] insult-mood GAGAL uid=${dummyUid}: ${e}`);
+      }
       await openTypingChannel();
       const defl = randomOf(DEFLECTIONS);
       const insErr = await sendWithTyping(defl);
@@ -2192,7 +2218,9 @@ Deno.serve(async (req: Request) => {
           await closeTyping();
           return json({ ok: true, skipped: 'answered_while_thinking' });
         }
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] answered-check GAGAL chat=${chatId}: ${e}`);
+      }
     }
 
     // 5. LLM call (OpenAI-compatible) — dengan retry backoff utk 429
@@ -2380,7 +2408,9 @@ Deno.serve(async (req: Request) => {
         preStorm = o?.storm_off === true;
         preBack = Math.min(360, Math.max(0, Number(o?.back_in_minutes) || 0));
       }
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[ai-reply] mood-preparse GAGAL: ${e}`);
+    }
     let replyVisible = sanitize(
       stripMoodMarker(rawLlm),
       longAnswers ? 2000 : guardOn ? MAX_REPLY_CHARS : 220,
@@ -2543,7 +2573,9 @@ Deno.serve(async (req: Request) => {
               }
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          console.log(`[ai-reply] memsave GAGAL chat=${chatId}: ${e}`);
+        }
       })(),
     );
 
@@ -2554,7 +2586,9 @@ Deno.serve(async (req: Request) => {
           .from('ai_chat_state')
           .update({ proactive_at: new Date().toISOString() })
           .eq('chat_id', chatId);
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] proactive_at GAGAL chat=${chatId}: ${e}`);
+      }
     }
     return json({ ok: true, reply: replyVisible, memSaved: 0, memRaw: '', memErr: 'post_response', model_used: modelUsed, image_sent: imageSent });
   } catch (e) {

@@ -1348,8 +1348,11 @@ class ChatService {
     final controller = StreamController<List<UserModel>>.broadcast();
     List<UserModel> cached = [];
     Timer? debounce;
+    // Coalesce fallback: kapan sync terakhir jalan (sumber mana pun).
+    DateTime? lastSyncAt;
 
     Future<void> syncFromPresence() async {
+      lastSyncAt = DateTime.now();
       dlog('[ONLINE-EMIT] sync start t=${DateTime.now().millisecondsSinceEpoch % 100000}');
       try {
         final state = RealtimeHub.instance.onlinePresenceState;
@@ -1652,7 +1655,14 @@ class ChatService {
     // tick hanya jalan saat cache kosong → user baru online tidak muncul
     // sampai restart app. Sekarang sync tetap jalan tiap 30s (RPC 1 RTT,
     // murah; provider anti-kedip mencegah flicker).
+    // Coalesce: tick dilewati bila sync baru jalan <45 dtk (dari event
+    // presence/profile) — fallback hanya untuk socket mati (tak ada event
+    // = tak ada sync = tick tetap jalan tiap ~60 dtk).
     final fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (lastSyncAt != null &&
+          DateTime.now().difference(lastSyncAt!).inSeconds < 45) {
+        return; // baru sync — hemat 1 RPC.
+      }
       dlog('[ONLINE-EMIT] fallback 30s tick cachedEmpty=${cached.isEmpty}');
       syncFromPresence();
     });
