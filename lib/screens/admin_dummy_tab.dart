@@ -1252,17 +1252,33 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SegmentedButton<int>(
-                          segments: [
-                            ButtonSegment(value: 0, label: Text(s.aiGuardGlobal)),
-                            ButtonSegment(value: 1, label: Text(s.aiGuardOn)),
-                            ButtonSegment(value: 2, label: Text(s.aiGuardOff)),
-                          ],
-                          selected: {_guardSel},
-                          onSelectionChanged: (v) {
-                            setState(() => _guardSel = v.first);
-                            unawaited(_applyAi());
-                          },
+                        SizedBox(
+                          width: double.infinity,
+                          child: SegmentedButton<int>(
+                            showSelectedIcon: false,
+                            style: const ButtonStyle(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            segments: [
+                              ButtonSegment(
+                                  value: 0,
+                                  label: Text(s.aiGuardGlobal,
+                                      style: AppText.label)),
+                              ButtonSegment(
+                                  value: 1,
+                                  label:
+                                      Text(s.aiGuardOn, style: AppText.label)),
+                              ButtonSegment(
+                                  value: 2,
+                                  label:
+                                      Text(s.aiGuardOff, style: AppText.label)),
+                            ],
+                            selected: {_guardSel},
+                            onSelectionChanged: (v) {
+                              setState(() => _guardSel = v.first);
+                              unawaited(_applyAi());
+                            },
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
