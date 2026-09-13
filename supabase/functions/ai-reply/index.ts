@@ -890,16 +890,30 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── PRESENCE: dummy selalu dibangunkan — TIDAK ADA skip offline ──
-    // Apapun statusnya (offline/idle/online), AI membalas; profil dipaksa
-    // online + last_seen fresh supaya konsisten di daftar. (Skip offline
-    // dihapus: jadwal/apa pun yang menulis offline tidak boleh membungkam
-    // dummy — owner komplain berulang "ga ada balasan".)
+    // ── PRESENCE: dummy selalu membalas — TIDAK ADA skip offline ──
+    // Apapun statusnya AI membalas (skip offline dihapus: jadwal/apa pun
+    // yang menulis offline tidak boleh membungkam dummy — owner komplain
+    // berulang "ga ada balasan"). Tapi status DIHORMATI: offline →
+    // dibangunkan online; online/idle dipertahankan + last_seen segar
+    // (tick cron yang mengatur siklus online→idle→off seperti orang biasa;
+    // balas sambil idle = wajar, kayak balas cepat dari notifikasi).
     {
-      await admin
+      const { data: pres } = await admin
         .from('profiles')
-        .update({ status: 'online', last_seen: new Date().toISOString() })
-        .eq('id', dummyUid);
+        .select('status')
+        .eq('id', dummyUid)
+        .maybeSingle();
+      if (!pres || pres.status === 'offline') {
+        await admin
+          .from('profiles')
+          .update({ status: 'online', last_seen: new Date().toISOString() })
+          .eq('id', dummyUid);
+      } else {
+        await admin
+          .from('profiles')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', dummyUid);
+      }
     }
 
     // ── BATCH 1 (independen): dummy + settings global + provider config ──
