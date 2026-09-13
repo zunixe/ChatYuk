@@ -219,14 +219,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           .where((m) => mySenderIds.contains(m.senderId) && m.type == 'text')
           .map((m) => m.text)
           .toList();
+      var changed = false;
       for (final text in confirmedTexts) {
         final idx = _pending.indexWhere(
           (p) => p.type == 'text' && p.text == text,
         );
         if (idx != -1) {
-          setState(() {
-            _pending.removeAt(idx);
-          });
+          _pending.removeAt(idx);
+          changed = true;
         }
       }
       // Call (Call ended dll) — optimistic: hapus pending-call tertua saat
@@ -237,7 +237,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             m.timestamp.isAfter(_openedAt)) {
           final idx = _pending.indexWhere((p) => p.type == 'call');
           if (idx != -1) {
-            setState(() => _pending.removeAt(idx));
+            _pending.removeAt(idx);
+            changed = true;
             break;
           }
         }
@@ -256,9 +257,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             (p) => (p.type == 'image' || p.type == 'view_once'),
           );
           if (idx != -1) {
-            setState(() {
-              _pending.removeAt(idx);
-            });
+            _pending.removeAt(idx);
+            changed = true;
           }
         }
       }
@@ -271,10 +271,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             _confirmedVoiceIds.add(m.id)) {
           final idx = _pending.indexWhere((p) => p.type == 'voice');
           if (idx != -1) {
-            setState(() => _pending.removeAt(idx));
+            _pending.removeAt(idx);
+            changed = true;
           }
         }
       }
+      if (changed && mounted) setState(() {});
     });
 
     // Subscribe status realtime lawan bicara
@@ -430,6 +432,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       }
     }
     _prevCallPhase = sess?.phase ?? _prevCallPhase;
+    if (sess?.remoteUid != widget.otherUid) return;
     if (mounted) setState(() {});
   }
 
@@ -465,6 +468,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (mounted) setState(() => _callExpanded = false);
   }
 
+  DateTime? _lastSeenFetchedAt;
   void _subscribeStatus() {
     _statusSub?.cancel();
     _statusSub = context
@@ -472,14 +476,25 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         .getUserStatus(widget.otherUid)
         .listen((status) {
           if (!mounted) return;
-          setState(() => _otherStatus = status);
           // Fetch last_seen saat status TIDAK online agar bisa tampilkan
           // "terakhir dilihat" di header; saat online tidak perlu (null).
+          // Throttle 30 dtk — status flapping tidak memicu N+1 query.
           if (status == 'online') {
-            if (_otherLastSeen != null) {
-              setState(() => _otherLastSeen = null);
+            if (_otherStatus != status || _otherLastSeen != null) {
+              setState(() {
+                _otherStatus = status;
+                _otherLastSeen = null;
+              });
             }
           } else {
+            final now = DateTime.now();
+            final lastFetch = _lastSeenFetchedAt;
+            setState(() => _otherStatus = status);
+            if (lastFetch != null &&
+                now.difference(lastFetch).inSeconds < 30) {
+              return;
+            }
+            _lastSeenFetchedAt = now;
             context
                 .read<ChatProvider>()
                 .getUserLastSeen(widget.otherUid)
@@ -915,7 +930,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final chatId = widget.chatId;
     final storagePath = await StoragePhotoService.instance.uploadVoice(chatId: chatId, bytes: bytes);
     if (storagePath == null || storagePath.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${context.read<LocaleProvider>().s.errSendFailed}upload')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errVoiceUploadFailed)));
       return;
     }
     final auth = context.read<AuthProvider>();
@@ -2506,7 +2521,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                             onTap: _toggleAttachRow,
                                             tooltip: s.menuSendPhoto,
                                           ),
-                                          const SizedBox(width: 4),
+                                          const SizedBox(width: 2),
                                           ChatIconButton(
                                             icon: Icons.photo_camera_outlined,
                                             open: false,

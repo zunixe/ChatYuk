@@ -91,6 +91,49 @@ function pick(arr: string[], seed: string): string {
   return arr[Math.abs(h) % arr.length];
 }
 
+// ── Jam tidur random deterministik + Jumat sadar gender (Batch 1) ──
+// Tidur 20–23, bangun 4–6 — hash(uid|tanggal) supaya konsisten seharian
+// di semua chat, ganti tiap hari. Gender: laki-laki jumatan, perempuan
+// tidak. WIB dihitung manual (+7 jam) agar tidak tergantung TZ runtime.
+function hashInt(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+function sleepHours(
+  uid: string,
+  dateWib: string,
+): { sleepHour: number; wakeHour: number } {
+  const h = hashInt(`${uid}|${dateWib}|sleep`);
+  return { sleepHour: 20 + (h % 4), wakeHour: 4 + (Math.floor(h / 4) % 3) };
+}
+function wibParts(
+  ms: number,
+): { date: string; hour: number; minute: number; weekday: number } {
+  const d = new Date(ms + 7 * 3600 * 1000);
+  return {
+    date: d.toISOString().slice(0, 10),
+    hour: d.getUTCHours(),
+    minute: d.getUTCMinutes(),
+    weekday: d.getUTCDay(), // 0=Minggu … 5=Jumat
+  };
+}
+function asleepAt(uid: string, ms: number): boolean {
+  const w = wibParts(ms);
+  const sw = sleepHours(uid, w.date);
+  return w.hour >= sw.sleepHour || w.hour < sw.wakeHour;
+}
+function fridayPrayerAt(
+  gender: string | null | undefined,
+  ms: number,
+): boolean {
+  if (gender !== 'male') return false;
+  const w = wibParts(ms);
+  if (w.weekday !== 5) return false;
+  const mins = w.hour * 60 + w.minute;
+  return mins >= 690 && mins < 780; // 11:30–13:00 WIB
+}
+
 function sanitize(
   text: string,
   maxChars: number | null = MAX_REPLY_CHARS,
@@ -384,7 +427,10 @@ async function lookupFreshInfo(
         }),
         signal: ctrl.signal,
       });
-      if (!r.ok) return '';
+      if (!r.ok) {
+        console.log(`[ai-reply] browse HTTP ${r.status} q=${userText.slice(0, 60)}`);
+        return '';
+      }
       const j: any = await r.json();
       const c: string = j?.choices?.[0]?.message?.content ?? '';
       const clean = c.replace(/\[\d+\]/g, '').trim();
@@ -393,7 +439,8 @@ async function lookupFreshInfo(
     } finally {
       clearTimeout(to);
     }
-  } catch (_) {
+  } catch (e) {
+    console.log(`[ai-reply] browse EXC q=${userText.slice(0, 60)}: ${e}`);
     return '';
   }
 }
@@ -986,11 +1033,11 @@ Deno.serve(async (req: Request) => {
     // Ketiganya tidak saling bergantung → Promise.all sekaligus. Persona
     // (di bawah) butuh `dummy`; guardOn butuh `settings`; routing butuh
     // `provCfg` — ketiganya menunggu batch ini selesai.
-    const [dummyRes, settingsRes, provCfg] = await Promise.all([
+    const [dummyRes, settingsRes, provCfg, genderRes] = await Promise.all([
       safe(
         admin
           .from('dummy_accounts')
-          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active')
+          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active, ai_no_sleep')
           .eq('uid', dummyUid)
           .maybeSingle(),
       ),
@@ -1002,6 +1049,10 @@ Deno.serve(async (req: Request) => {
           .maybeSingle(),
       ),
       loadProvCfg(admin),
+      // Gender awal untuk aturan Jumat (profil lengkap dibaca di batch2).
+      safe(
+        admin.from('profiles').select('gender').eq('id', dummyUid).maybeSingle(),
+      ),
     ]);
     const dummy = (dummyRes as any)?.data;
     const settings = (settingsRes as any)?.data;
@@ -1044,6 +1095,20 @@ Deno.serve(async (req: Request) => {
       dummy.ai_guard_enabled ??
       !(settings && settings.ai_guard_enabled === false);
 
+    // ── TIDUR & JUMATAN: dummy tidak membalas (kill-switch ai_no_sleep) ──
+    // Pesan TIDAK hilang: cron proaktif (>45 mnt hening) membangunkan pagi/
+    // siang harinya, ditambah konteks "baru bangun"/"baru jumatan" di bawah.
+    // Cek di sini (SEBELUM claim + read-receipt + typing) supaya user tidak
+    // melihat centang-2/bubble lalu hening.
+    const noSleep = (dummy as any).ai_no_sleep === true;
+    const earlyGender = (genderRes as any)?.data?.gender;
+    if (!noSleep && asleepAt(dummyUid, Date.now())) {
+      return json({ ok: false, skipped: 'sleeping' });
+    }
+    if (!noSleep && fridayPrayerAt(earlyGender, Date.now())) {
+      return json({ ok: false, skipped: 'friday_prayer' });
+    }
+
     // Anti-race claim: dua invokasi bersamaan (pg_net retry) hanya satu
     // yang boleh lanjut — claim unik per trigger message (atomik).
     if (triggerMsgId != null) {
@@ -1055,7 +1120,9 @@ Deno.serve(async (req: Request) => {
         if (claimed === false) {
           return json({ ok: false, skipped: 'already_claimed' });
         }
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] claim GAGAL msg=${triggerMsgId}: ${e}`);
+      }
     }
 
     // 2. Dedupe: an AI reply already exists after the trigger message
@@ -1422,6 +1489,33 @@ Deno.serve(async (req: Request) => {
       ? `LARANGAN EMOJI SPESIFIK (wajib dipatuhi — 2 balasan terakhirmu memakai ${bannedEmojis.join(' ')}): JANGAN memakai ${bannedEmojis.join(' ')} di balasan ini SAMA SEKALI. Pilih emoji LAIN yang beda, atau lebih baik TANPA emoji sama sekali. Mengulang emoji yang sama dengan balasan sebelumnya = GAGAL.`
       : '';
 
+    // ── Konteks bangun-tidur / selesai jumatan ──
+    // Pesan user yang masuk saat tidur/jumatan dan belum dibalas → awali
+    // natural ("sori baru bangun 🙏" / "eh baru jumatan nih").
+    // earlyGender dari batch1 (profil lengkap batch2 belum tentu ada di sini
+    // untuk semua jalur — pakai yang ringan).
+    let wakeUpLine = '';
+    try {
+      const rev = [...(history as any[])].reverse();
+      const lastUser = rev.find((m) => m.role === 'user');
+      const lastAsst = rev.find((m) => m.role === 'assistant');
+      if (lastUser?.at) {
+        const t = new Date(lastUser.at as string).getTime();
+        const repliedAfter =
+          lastAsst?.at != null &&
+          new Date(lastAsst.at as string).getTime() > t;
+        if (!repliedAfter && (Date.now() - t) / 3600000 >= 1) {
+          if (asleepAt(dummyUid, t)) {
+            wakeUpLine =
+              'Kamu BARU BANGUN tidur dan melihat pesan ini telat BERJAM-JAM — awali balasan dengan permintaan maaf telat yang natural ("eh sori baru bangun 🙏"), JANGAN menjelaskan jam tidurmu, lalu balas isi pesannya.';
+          } else if (fridayPrayerAt(earlyGender, t)) {
+            wakeUpLine =
+              'Kamu BARU SELESAI JUMATAN dan melihat pesan ini telat — awali natural ("eh baru jumatan nih"), lalu balas isi pesannya.';
+          }
+        }
+      }
+    } catch (_) {}
+
     const systemParts: string[] = [
       `Kamu adalah ${profile.nickname}, ${profile.age ?? ''} tahun, ${genderLabel}, tinggal di ${profile.city ?? ''}${profile.country ? ', ' + profile.country : ''}.`.replace(
         /\s+/g,
@@ -1441,6 +1535,7 @@ Deno.serve(async (req: Request) => {
       'REALISTIS (wajib): JANGAN mengarang nama orang, nama tempat, kejadian, atau topik yang TIDAK ADA di riwayat obrolan maupun di KEGIATANMU HARI INI (itu dua sumber kebenaranmu). Kalau belum tahu sesuatu, akui atau bertanya. Ngomongnya tetap yang sudah diketahui dari obrolan saja.',
       'VARIASI: lihat balasan-balasanmu sebelumnya di riwayat chat — JANGAN mengulang emoji yang sama, jangan pola kalimat yang sama. EMOJI: MAKSIMAL 1 per balasan, dan hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) — sekitar separuh balasan TANPA emoji sama sekali. Panjang juga selalu beda-beda (kadang 2-4 kata, kadang lebih panjang).',
       emojiBanLine,
+      wakeUpLine,
       'Kalau ada gambar terlampir di pesan, LIHAT dan tanggapi isinya secara natural (komentari yang terlihat) — kayak orang dikirimi foto.',
       'Kalau ada [pesan suara] TANPA transkrip isi, berarti kamu BELUM bisa mendengarnya — tanggapi natural (minta dijelasin / lanjutkan topik), JANGAN pura-pura dengar isinya.',
       'PACING: ikuti fase obrolan. Kalau masih awal perkenalan (chat baru mulai / belum akrab), kamu JAIM dulu — jangan ramah berlebihan, jangan langsung gas ke topik dewasa walau diminta; tanggapi main-main sambil geli ("pelan-pelan dong, baru kenal 😏") dan bangun suasana pelan-pelan. Naikkan intensitas godaan progresif seiring obrolan makin akrab.',
@@ -1661,7 +1756,9 @@ Deno.serve(async (req: Request) => {
             if (h >= 0 && h <= 23) set.add(h);
           }
           histHours = [...set].sort((a, b) => a - b);
-        } catch (_) {}
+        } catch (e) {
+          console.log(`[ai-reply] sched hist GAGAL uid=${dummyUid}: ${e}`);
+        }
         const weekday = new Date(nowMs + 7 * 3600 * 1000).toLocaleDateString(
           'id-ID',
           { weekday: 'long', timeZone: 'Asia/Jakarta' },
@@ -2290,7 +2387,9 @@ Deno.serve(async (req: Request) => {
           await closeTyping();
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[ai-reply] image-block GAGAL chat=${chatId}: ${e}`);
+    }
 
     // 6b + 7. Pekerjaan PASCA-RESPONS: burst manusiawi (~7%) + ekstraksi
     // memori jangka panjang. Dipindah ke async (EdgeRuntime.waitUntil bila

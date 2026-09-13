@@ -42,10 +42,10 @@ import '../widgets/composer_link_preview.dart';
 import '../widgets/chat_ui_shared.dart';
 import '../widgets/linkify_text.dart';
 import '../widgets/link_preview.dart';
+import '../services/link_preview_service.dart';
 import '../widgets/gift_fly_overlay.dart';
 import '../widgets/room_gift_panel.dart';
 import '../config/gifts.dart';
-import '../services/link_preview_service.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
@@ -110,6 +110,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   String? _highlightId;
   final Map<String, GlobalKey> _msgKeys = {};
   ChatMessageStream? _msgsHandle;
+  StreamSubscription<List<MessageModel>>? _msgsSub;
   List<MessageModel> _lastMsgs = const [];
   // Strip user online persisten: tahan list terakhir saat stream blip
   // kosong; teks "tidak ada yang online" hanya setelah kosong terkonfirmasi.
@@ -147,7 +148,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _msgsStream = msgsHandle.stream;
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
     _pointsProv = context.read<PointsProvider>();
-    _msgsStream.listen(_onMessagesForGift);
+    _msgsSub = _msgsStream.listen(_onMessagesForGift);
     if (isPrivateRoom) {
       unawaited(_initPrivate());
     }
@@ -227,7 +228,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   void _listenRoomLive() {
     try {
-      _roomLiveChannel?.unsubscribe();
+      final old = _roomLiveChannel;
+      _roomLiveChannel = null;
+      if (old != null) unawaited(Supabase.instance.client.removeChannel(old));
     } catch (_) {}
     try {
       final ch = Supabase.instance.client.channel('room-live-${widget.room.id}');
@@ -876,7 +879,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _roomUsersEmptyTimer?.cancel();
     _livePoll?.cancel();
     _giftFly.dispose();
-    try { _roomLiveChannel?.unsubscribe(); } catch (_) {}
+    unawaited(_msgsSub?.cancel());
+    _msgsSub = null;
+    try {
+      final ch = _roomLiveChannel;
+      _roomLiveChannel = null;
+      if (ch != null) unawaited(Supabase.instance.client.removeChannel(ch));
+    } catch (_) {}
     unawaited(_broadcastSession?.stop());
     // DEFER: dispose berjalan saat widget tree terkunci (unmount IndexedStack
     // saat pindah tab) — menulis ValueNotifier sekarang memicu
@@ -930,7 +939,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       if (storagePath == null || storagePath.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${context.read<LocaleProvider>().s.errSendFailed}upload')),
+            SnackBar(content: Text(context.read<LocaleProvider>().s.errVoiceUploadFailed)),
           );
         }
         return;
