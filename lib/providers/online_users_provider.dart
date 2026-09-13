@@ -22,7 +22,7 @@ bool _usersEqual(List<UserModel> a, List<UserModel> b) {
 class OnlineUsersProvider extends ChangeNotifier {
   bool _disposed = false;
 
-  final ChatService _service = ChatService();
+  final ChatService _service;
   List<UserModel> _users = [];
   StreamSubscription? _sub;
   String? _error;
@@ -213,7 +213,8 @@ class OnlineUsersProvider extends ChangeNotifier {
     );
   }
 
-  OnlineUsersProvider() {
+  OnlineUsersProvider({ChatService? service})
+      : _service = service ?? ChatService() {
     unawaited(warmup());
     // Resilient: error channel me-restart subscription otomatis (dulu:
     // list online freeze sampai restart).
