@@ -27,6 +27,7 @@ import 'screens/incoming_call_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/env.dart';
+import 'config/strings.dart';
 import 'config/supabase_config.dart';
 import 'config/theme.dart';
 import 'services/auth_service.dart';
@@ -63,6 +64,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final shouldShow = await NotificationPrefsService.shouldShowForFcmType(type as String?);
   dlog('[NOTIF_BG] type=$type shouldShow=$shouldShow data=$data');
   if (!shouldShow) return;
+  // Isolate tidak punya BuildContext — baca bahasa dari prefs langsung.
+  final bgPrefs = await SharedPreferences.getInstance();
+  final s = S(isId: (bgPrefs.getString('app_lang') ?? 'id') == 'id');
   // Chat yang dibisukan → tidak ada notifikasi (background).
   final bgChatId = '${data['chatId'] ?? ''}';
   if (bgChatId.isNotEmpty &&
@@ -99,8 +103,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       if (db is String && db.trim().isNotEmpty) return db.trim();
       return null;
     }
-    final title = _pick(data, ['otherName', 'callerName'], 'User');
-    final body = _notifBody(message, data) ?? 'Call ended';
+    final title = _pick(data, ['otherName', 'callerName'], s.unknownUser);
+    final body = _notifBody(message, data) ?? s.notifCallEndedBody;
     await plugin.show(
       id: notifIdForKey(key),
       title: title,
@@ -146,30 +150,30 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final isMessage = type == 'message' ||
       (type == null && data.containsKey('chatId'));
   final title = isDataOnly
-      ? data['otherName'] ?? data['fromName'] ?? 'User'
+      ? data['otherName'] ?? data['fromName'] ?? s.unknownUser
       : message.notification?.title ??
-            (type == 'room' ? data['roomName'] ?? 'Room' : 'New message');
+            (type == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
   final body = isDataOnly
       ? (type == 'call'
-            ? 'is calling you'
+            ? s.notifCallingBody
             : type == 'message'
             // Urutan fallback: data['body'] (trigger baru) → data['message']
-            // (payload lama) → 'New message'. Jangan tampilkan string kosong.
+            // (payload lama) → s.notifNewMessage. Jangan tampilkan string kosong.
             ? ((data['body'] as String?)?.isNotEmpty == true
                   ? data['body'] as String
                   : ((data['message'] as String?)?.isNotEmpty == true
                         ? data['message'] as String
-                        : 'New message'))
+                        : s.notifNewMessage))
             : type == 'broadcast'
-            ? 'is live in ${data['roomName'] ?? 'Room'}'
+            ? s.notifBroadcastBody((data['roomName'] as String?) ?? 'Room')
             : type == 'online'
-            ? 'is online'
+            ? s.notifOnlineBody
             : type == 'follow'
-            ? 'started following you'
+            ? s.notifFollowBody
             : type == 'friend_request'
-            ? 'sent you a friend request'
-            : 'subscribed to you')
-      : message.notification?.body ?? (isMessage ? 'New message' : 'You have a new message');
+            ? s.notifFriendRequestBody
+            : s.notifSubscribeBody)
+      : message.notification?.body ?? (isMessage ? s.notifNewMessage : s.notifNewMessageBody);
 
   final androidInit = const lpn.AndroidInitializationSettings(
     '@mipmap/ic_launcher',
@@ -317,7 +321,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       return null;
     }
     final title = _pick(data, ['otherName', 'callerName'], localeProvider.s.unknownUser);
-    final body = _notifBody(message, data) ?? 'Call ended';
+    final body = _notifBody(message, data) ?? localeProvider.s.notifCallEndedBody;
     String? bigPicPath;
     final avatarUrl2 = data['avatarUrl'] as String?;
     if (avatarUrl2 != null && avatarUrl2.startsWith('http')) {
