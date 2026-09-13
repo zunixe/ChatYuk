@@ -3,70 +3,98 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/config/strings.dart';
+import 'package:chatyuk/config/strings_admin.dart';
 
-/// Mengunci aturan bilingual AGENTS.md: string kritis tidak boleh kosong
-/// di kedua bahasa, dan tidak boleh ada teks Indonesia hardcode di UI.
+/// Mengunci aturan bilingual + tipografi AGENTS.md.
 void main() {
   group('strings kritis bilingual', () {
-    // [getterId, getterEn] — diakses langsung supaya compile-checked:
-    // rename getter = test gagal compile = ketahuan seketika.
-    final pairs = <List<String Function(S)>>[
-      [(s) => s.navOnline, (s) => s.navOnline],
-      [(s) => s.navChats, (s) => s.navChats],
-      [(s) => s.navTimeline, (s) => s.navTimeline],
-      [(s) => s.navProfile, (s) => s.navProfile],
-      [(s) => s.btnSave, (s) => s.btnSave],
-      [(s) => s.btnCancel, (s) => s.btnCancel],
-      [(s) => s.btnLogin, (s) => s.btnLogin],
-      [(s) => s.btnRetry, (s) => s.btnRetry],
-      [(s) => s.errGeneric, (s) => s.errGeneric],
-      [(s) => s.loading, (s) => s.loading],
-      [(s) => s.msgServerError, (s) => s.msgServerError],
-      [(s) => s.noPrivateChats, (s) => s.noPrivateChats],
-      [(s) => s.emptyTimeline, (s) => s.emptyTimeline],
-    ];
+    final id = S(isId: true);
+    final en = S(isId: false);
 
     test('tidak ada string kritis yang kosong (id & en)', () {
+      final getters = <String>[
+        id.navOnline,
+        id.navChats,
+        id.navTimeline,
+        id.navProfile,
+        id.btnSave,
+        id.btnCancel,
+        id.btnLogin,
+        id.btnRetry,
+        id.btnClose,
+        id.errGeneric,
+        id.loading,
+        id.msgServerError,
+        id.noPrivateChats,
+        id.emptyTimeline,
+      ];
+      final gettersEn = <String>[
+        en.navOnline,
+        en.navChats,
+        en.navTimeline,
+        en.navProfile,
+        en.btnSave,
+        en.btnCancel,
+        en.btnLogin,
+        en.btnRetry,
+        en.btnClose,
+        en.errGeneric,
+        en.loading,
+        en.msgServerError,
+        en.noPrivateChats,
+        en.emptyTimeline,
+      ];
+      for (final v in [...getters, ...gettersEn]) {
+        expect(v.trim(), isNotEmpty);
+      }
+    });
+
+    test('getter guard admin tersedia dua bahasa', () {
       final id = S(isId: true);
       final en = S(isId: false);
-      for (final entry in pairs) {
-        expect(entry[0](id).trim(), isNotEmpty);
-        expect(entry[1](en).trim(), isNotEmpty);
+      for (final v in [
+        id.aiGuardGlobal,
+        id.aiGuardOn,
+        id.aiGuardOff,
+        en.aiGuardGlobal,
+        en.aiGuardOn,
+        en.aiGuardOff,
+      ]) {
+        expect(v.trim(), isNotEmpty);
       }
     });
 
     test('semua getter String di strings.dart punya isi di kedua cabang', () {
-      // Pindai sumber: pola `String get xxx => isId ? '...' : '...';`
-      // dengan salah satu cabang string kosong = pelanggaran.
-      final src = File('lib/config/strings.dart').readAsStringSync();
-      final re = RegExp(
-          r"String get \w+ => isId \? '((?:[^'\\]|\\.)*)' : '((?:[^'\\]|\\.)*)';");
+      final raw = File('lib/config/strings.dart').readAsStringSync();
+      final src = raw.replaceAll(RegExp(r'\s+'), ' ');
+      final single = RegExp(
+          r"String get \w+ .*?isId \? '((?:[^'\\]|\\.)*)' : '((?:[^'\\]|\\.)*)'");
+      final double = RegExp(
+          r'String get \w+ .*?isId \? "((?:[^"\\]|\\.)*)" : "((?:[^"\\]|\\.)*)"');
       var count = 0;
-      String head(Match m) {
-        final s = m.group(0)!;
-        return s.length > 60 ? '${s.substring(0, 60)}…' : s;
-      }
-
-      for (final m in re.allMatches(src)) {
+      for (final m in [...single.allMatches(src), ...double.allMatches(src)]) {
         count++;
         expect(m.group(1)!.trim(), isNotEmpty,
-            reason: 'cabang id kosong: ${head(m)}');
+            reason: 'cabang id kosong: ${m.group(0)}');
         expect(m.group(2)!.trim(), isNotEmpty,
-            reason: 'cabang en kosong: ${head(m)}');
+            reason: 'cabang en kosong: ${m.group(0)}');
       }
+      final total = RegExp(r'String get \w+').allMatches(raw).length;
       expect(count, greaterThan(100),
           reason: 'pattern scan gagal menangkap getter (cek regex)');
+      expect(count, greaterThanOrEqualTo((total * 0.9).floor()),
+          reason:
+              'terdeteksi $count dari $total getter — cek format getter baru');
     });
   });
 
   group('tanpa hardcode Indonesia di UI', () {
-    // Kata penanda bahasa Indonesia yang hampir pasti bukan proper noun.
     final idMarkers = RegExp(
         r'\b(yang|dengan|untuk|belum|sudah|dari|kamu|kami|kita|pesan|silakan|tulis|kirim|batal|hapus|tutup|lanjut)\b');
 
     List<File> uiFiles() {
       final out = <File>[];
-      for (final dir in ['lib/screens', 'lib/widgets']) {
+      for (final dir in ['lib/screens', 'lib/widgets', 'lib/providers']) {
         final d = Directory(dir);
         if (!d.existsSync()) continue;
         out.addAll(d
@@ -77,28 +105,103 @@ void main() {
       return out;
     }
 
-    test('tidak ada Text(...) hardcode Indonesia', () {
+    bool isGlyphOnly(String lit) {
+      if (lit.trim().isEmpty) return true;
+      if (!lit.contains(RegExp(r'[A-Za-z]'))) return true;
+      return false;
+    }
+
+    test('tidak ada Text/SelectableText/RichText hardcode Indonesia', () {
       final hits = <String>[];
-      final re = RegExp(r"""Text\(\s*'([^']+)'""");
+      final patterns = [
+        RegExp(r"""Text\(\s*'([^']+)'"""),
+        RegExp(r'''Text\(\s*"([^"]+)"'''),
+        RegExp(r"""SelectableText\(\s*'([^']+)'"""),
+        RegExp(r'''SelectableText\(\s*"([^"]+)"'''),
+      ];
       for (final f in uiFiles()) {
         final src = f.readAsStringSync();
-        for (final m in re.allMatches(src)) {
-          final lit = m.group(1)!;
-          // Lewati emoji/glyph murni & interpolasi tunggal.
-          if (lit.runes.every((r) =>
-              r > 0x2500 ||
-              r == 0x20 ||
-              (r >= 0x30 && r <= 0x39) ||
-              r == 0x25)) {
-            continue;
-          }
-          if (idMarkers.hasMatch(lit.toLowerCase())) {
-            hits.add('${f.path}: $lit');
+        for (final re in patterns) {
+          for (final m in re.allMatches(src)) {
+            final lit = m.group(1)!;
+            if (isGlyphOnly(lit)) continue;
+            if (idMarkers.hasMatch(lit.toLowerCase())) {
+              hits.add('${f.path}: $lit');
+            }
           }
         }
       }
       expect(hits, isEmpty,
           reason: 'hardcode Indonesia di UI:\n${hits.join('\n')}');
+    });
+
+    test('tidak ada tooltip hardcode Indonesia', () {
+      final hits = <String>[];
+      final patterns = [
+        RegExp(r"""tooltip:\s*'([^']+)'"""),
+        RegExp(r'''tooltip:\s*"([^"]+)"'''),
+      ];
+      for (final f in uiFiles()) {
+        final src = f.readAsStringSync();
+        for (final re in patterns) {
+          for (final m in re.allMatches(src)) {
+            final lit = m.group(1)!;
+            if (isGlyphOnly(lit)) continue;
+            if (idMarkers.hasMatch(lit.toLowerCase())) {
+              hits.add('${f.path}: $lit');
+            }
+          }
+        }
+      }
+      expect(hits, isEmpty,
+          reason: 'tooltip hardcode Indonesia:\n${hits.join('\n')}');
+    });
+  });
+
+  group('tipografi terkunci (AGENTS.md)', () {
+    List<File> libFiles() => Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .toList();
+
+    test('tidak ada fontSize numerik di luar lib/config', () {
+      final hits = <String>[];
+      final re = RegExp(r'fontSize:\s*[0-9]');
+      for (final f in libFiles()) {
+        if (f.path.contains('lib/config/')) continue;
+        final src = f.readAsStringSync();
+        for (final m in re.allMatches(src)) {
+          hits.add('${f.path}: ${m.group(0)}');
+        }
+      }
+      expect(hits, isEmpty,
+          reason: 'fontSize numerik di luar theme:\n${hits.join('\n')}');
+    });
+
+    test('tidak ada copyWith(fontSize:', () {
+      final hits = <String>[];
+      for (final f in libFiles()) {
+        if (f.readAsStringSync().contains('copyWith(fontSize')) {
+          hits.add(f.path);
+        }
+      }
+      expect(hits, isEmpty,
+          reason: 'copyWith(fontSize: di:\n${hits.join('\n')}');
+    });
+
+    test('tidak ada height: 1.x di luar lib/config', () {
+      final hits = <String>[];
+      final re = RegExp(r'height:\s*1\.');
+      for (final f in libFiles()) {
+        if (f.path.contains('lib/config/')) continue;
+        final src = f.readAsStringSync();
+        for (final m in re.allMatches(src)) {
+          hits.add('${f.path}: ${m.group(0)}');
+        }
+      }
+      expect(hits, isEmpty,
+          reason: 'height manual di luar theme:\n${hits.join('\n')}');
     });
   });
 }
