@@ -2712,6 +2712,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final messenger = ScaffoldMessenger.of(ctx);
     final auth = context.read<AuthProvider>();
     final profile = auth.profile;
+    // Gate anon & dummy: hanya boleh call bila toggle admin
+    // app_settings.call_anon_enabled ON (server RLS juga menegakkan).
+    // User terdaftar (bukan sesi dummy) selalu boleh.
+    final registeredCaller =
+        (profile?.isRegistered ?? false) && !auth.dummySessionActive;
+    if (!registeredCaller && !auth.callAnonEnabled) {
+      showAnonPromptDialog(context);
+      return;
+    }
     try {
       final callId = await CallService.instance.startCall(
         widget.otherUid,

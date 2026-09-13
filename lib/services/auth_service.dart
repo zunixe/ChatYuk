@@ -267,6 +267,31 @@ class AuthService {
     }, onConflict: 'id');
   }
 
+  /// Setting admin: anon & dummy boleh call. Default false = hanya
+  /// user terdaftar (+ admin) yang bisa menelepon (anti spam/griefing).
+  Future<bool> fetchCallAnonEnabled() async {
+    try {
+      final res = await _sb
+          .from('app_settings')
+          .select('call_anon_enabled')
+          .eq('id', 'global')
+          .maybeSingle();
+      return res?['call_anon_enabled'] == true;
+    } catch (e) {
+      dlog('[AUTH] fetchCallAnonEnabled error: $e');
+      return false;
+    }
+  }
+
+  /// Update setting admin global. RLS membatasi hanya email admin (zunixe@gmail.com).
+  Future<void> updateCallAnonEnabled(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'call_anon_enabled': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
+  }
+
   /// Ambil setting admin global: apakah foto view-once di-watermark forensik.
   /// Default false (kirim biasa) jika gagal / belum ada data.
   Future<bool> fetchWatermarkEnabled() async {

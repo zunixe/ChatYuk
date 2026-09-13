@@ -2,6 +2,32 @@
 
 > WAJIB dibaca sebelum `supabase db push`
 
+## METODE YANG JALAN di Mac ini (cheat sheet — jangan pakai yang hang)
+
+- ❌ `supabase db query --linked` → **HANG** (timeout 120s+). JANGAN dipakai.
+- ❌ `supabase db push` → hang (butuh Docker).
+- ❌ `supabase functions deploy <fn>` biasa → hang (0 byte output).
+- ✅ **Query/apply SQL via Management API** (cepat, ~detik):
+  ```bash
+  # 1. Ambil token sekali per sesi (tidak ada di env!)
+  security find-generic-password -s "Supabase CLI" -a "supabase" -w 2>/dev/null | sed 's/^go-keyring-base64://' | base64 -d > /tmp/sbtoken
+  # 2. Terapkan file migration
+  TOK=$(cat /tmp/sbtoken); REF=fohcucyyejdryryoxitm
+  python3 -c "import json; print(json.dumps({'query': open('supabase/migrations/<FILE>.sql').read()}))" > /tmp/mig.json
+  curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+    -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
+    --data-binary @/tmp/mig.json --max-time 60 | head -c 300
+  # 3. Catat versi (wajib) + verifikasi kolom/function
+  curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+    -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
+    --data '{"query":"insert into supabase_migrations.schema_migrations (version) values ('\''<VERSI>'\'') on conflict do nothing;"}' --max-time 30
+  ```
+- ✅ **Deploy edge function**: `supabase functions deploy <fn> --use-api [--no-verify-jwt]` (tanpa Docker/bundling lokal; tunggu ~55 dtk, cek "Deployed Functions").
+- ✅ **Verifikasi deploy**: `supabase functions list | grep <fn>` (cek version + timestamp naik).
+- ✅ **Cek DB read-only**: Management API query di atas (SELECT cepat, tidak hang).
+- ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
+- ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
+
 ## 2026-08-27 — 20260827100000_fix_call_ended_dataonly.sql
 
 - **Status:** SUDAH TERAPPLIED di remote DB `fohcucyyejdryryoxitm` pada 2026-08-27.

@@ -37,6 +37,8 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
   final _nicknameFocus = FocusNode();
   String? _nicknameError;
   final _scrollCtrl = ScrollController();
+  final _searchCtrl = TextEditingController();
+  String _search = '';
   String _gender = 'male';
   int _age = 25;
   String _negara = 'Indonesia';
@@ -58,6 +60,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     _nickCtrl.dispose();
     _nicknameFocus.dispose();
     _scrollCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -83,6 +86,18 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
         _loading = false;
       });
     }
+  }
+
+  /// Daftar dummy terfilter pencarian (by nickname, case-insensitive).
+  /// Query kosong = semua item.
+  List<Map<String, dynamic>> get _filtered {
+    if (_search.isEmpty) return _items;
+    final q = _search.toLowerCase();
+    return _items
+        .where(
+          (m) => (m['nickname'] as String? ?? '').toLowerCase().contains(q),
+        )
+        .toList();
   }
 
   void _toast(S s, String message) {
@@ -447,7 +462,9 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
               Text(s.dummyListTitle, style: AppText.titleEmphasis),
               Spacer(),
               Text(
-                '${_items.length}',
+                _search.isEmpty
+                    ? '${_items.length}'
+                    : '${_filtered.length}/${_items.length}',
                 style: AppText.label.copyWith(color: AppTheme.textSecondary),
               ),
               const SizedBox(width: 8),
@@ -465,6 +482,43 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          // ── Pencarian dummy (filter lokal by nickname) ──
+          TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _search = v.trim()),
+            style: AppText.body.copyWith(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: s.searchHint,
+              hintStyle:
+                  AppText.body.copyWith(color: AppTheme.textSecondary),
+              prefixIcon:
+                  Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+              prefixIconConstraints:
+                  const BoxConstraints(minWidth: 36, minHeight: 0),
+              suffixIcon: _search.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.clear,
+                        size: 18,
+                        color: AppTheme.textSecondary,
+                      ),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() => _search = '');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: AppTheme.bgCard,
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
           const SizedBox(height: 6),
           if (_loading)
             const Padding(
@@ -481,15 +535,18 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                 ),
               ),
             )
-          else if (_items.isEmpty)
+          else if (_filtered.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
-                child: Text(s.dummyEmpty, style: AppText.bodySmall),
+                child: Text(
+                  _items.isEmpty ? s.dummyEmpty : s.dummySearchEmpty,
+                  style: AppText.bodySmall,
+                ),
               ),
             )
           else
-            ..._items.map((item) => _itemCard(item, s)),
+            ..._filtered.map((item) => _itemCard(item, s)),
         ],
       ),
     );
