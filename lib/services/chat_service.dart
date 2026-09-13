@@ -105,7 +105,12 @@ class ChatService {
 
   Future<String> _avatarB64(String path) async {
     final cached = _avatarCache[path];
-    if (cached != null) return cached;
+    if (cached != null) {
+      // LRU sejati: yang baru dibaca pindah ke ujung (tahan dari eviction).
+      _avatarCache.remove(path);
+      _avatarCache[path] = cached;
+      return cached;
+    }
     // DISK FIRST: baca dari cache lokal (instan, tanpa network).
     final disk = await MediaDiskCache.instance.read(path);
     if (disk != null && disk.isNotEmpty) {
@@ -646,7 +651,7 @@ class ChatService {
           .update({'type': 'view_once_expired'})
           .eq('id', messageId);
     } catch (e) {
-      dlog('[ChatService] clearViewOnceImage ignored: $e');
+      dlog('[ChatService] expireViewOnce error: $e');
     }
   }
 
@@ -951,7 +956,7 @@ class ChatService {
     try {
       hiddenSet = await getHiddenChats(myUid);
     } catch (e) {
-      dlog('[ChatService] clearViewOnceImage ignored: $e');
+      dlog('[ChatService] fetchHiddenChats error: $e');
     }
     _privateChatsHidden[myUid] = hiddenSet;
     final list = rows
@@ -1215,7 +1220,7 @@ class ChatService {
           await unhideChat(myUid, chatId);
           // Row private_chats berubah → channel di atas yang apply ke list.
         } catch (e) {
-          dlog('[ChatService] clearViewOnceImage ignored: $e');
+          dlog('[ChatService] autoUnhideOnMessage error: $e');
         }
       },
     );
@@ -1256,7 +1261,7 @@ class ChatService {
 
   /// Stream status realtime satu user (online/idle/offline).
   /// Pakai channel postgres changes pada profiles — ringan, hanya 1 row.
-  /// Status dihitung efektif: last_seen basi (> 15 menit) dianggap offline,
+  /// Status dihitung efektif: last_seen basi (> 30 menit) dianggap offline,
   /// supaya sinkron dengan daftar pengguna online di list chat.
   /// [initialStatus] membuat stream langsung emit status yang sudah diketahui
   /// (misal dari profil yang baru di-fetch) tanpa query DB tambahan.

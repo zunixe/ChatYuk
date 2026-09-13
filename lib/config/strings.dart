@@ -510,6 +510,8 @@ class S {
       isId ? 'membuat postingan baru' : 'created a new post';
   String get notifMissedCallBody =>
       isId ? 'panggilan tak terjawab' : 'missed call';
+  String get notifCallEndedBody =>
+      isId ? 'Panggilan berakhir' : 'Call ended';
   // ── Notifikasi Detail (per-jenis toggle) ──
   String get notifDetailTitle =>
       isId ? 'Pengaturan Notifikasi' : 'Notification Settings';
