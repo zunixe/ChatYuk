@@ -44,9 +44,20 @@ const EXPLICIT_TERMS = [
   'horny', ' dildo', 'escort', 'onlyfans', 'nsfw',
 ];
 
+// Cocokkan term sebagai KATA utuh (bukan substring): 'kasur'/'masuk' tidak
+// boleh kena term 'asu', 'menggunakan' tidak kena 'guna', 'mendadak' tidak
+// kena 'dada'. Tetangga bukan-huruf (spasi, angka, emoji, tanda baca) OK.
+function hasWord(text: string, term: string): boolean {
+  const esc = term
+    .toLowerCase()
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z])${esc}([^a-z]|$)`).test(
+    text.toLowerCase(),
+  );
+}
+
 function isExplicit(text: string): boolean {
-  const t = ` ${text.toLowerCase()} `;
-  return EXPLICIT_TERMS.some((w) => t.includes(w));
+  return EXPLICIT_TERMS.some((w) => hasWord(text, w));
 }
 
 // KATA HINAAN (insult) — pemicu emosi marah & ngambek offline.
@@ -62,8 +73,7 @@ const INSULT_TERMS = [
 ];
 
 function isInsult(text: string): boolean {
-  const t = ` ${text.toLowerCase()} `;
-  return INSULT_TERMS.some((w) => t.includes(w));
+  return INSULT_TERMS.some((w) => hasWord(text, w));
 }
 
 const DEFLECTIONS = [
@@ -926,9 +936,10 @@ Deno.serve(async (req: Request) => {
           text: visibleText,
           type: 'text',
         });
-      // ── Persist mood + NGAMBEK (storm off) ──
-      // Mood menempel lintas invokasi; storm_off = benar-benar offline
-      // (profiles.status + ai_offline_until) sampai cron membangunkan.
+      // ── Persist mood + NGAMBEK per-chat (storm off) ──
+      // Mood menempel lintas invokasi (global per dummy); storm_off = diam
+      // tidak membalas HANYA di chat ini (ai_chat_state.storm_until) —
+      // chat lain tidak terganggu, status online dipertahankan.
       if (!insErr && moodInfo != null) {
         const mood = ['happy', 'normal', 'annoyed', 'sad'].includes(
           moodInfo.mood,
@@ -943,22 +954,19 @@ Deno.serve(async (req: Request) => {
         try {
           await admin
             .from('dummy_accounts')
-            .update({
-              ai_mood: mood,
-              ...(storm
-                ? {
-                    ai_offline_until: new Date(
-                      Date.now() + backMin * 60000,
-                    ).toISOString(),
-                  }
-                : {}),
-            })
+            .update({ ai_mood: mood })
             .eq('uid', dummyUid);
           if (storm) {
-            await admin
-              .from('profiles')
-              .update({ status: 'offline', last_seen: new Date().toISOString() })
-              .eq('id', dummyUid);
+            await admin.from('ai_chat_state').upsert(
+              {
+                chat_id: chatId,
+                storm_until: new Date(
+                  Date.now() + backMin * 60000,
+                ).toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'chat_id' },
+            );
           }
         } catch (e) {
           console.log(`[ai-reply] storm persist GAGAL chat=${chatId}: ${e}`);
@@ -1080,6 +1088,103 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── RATE LIMIT per-chat (Maks/jam + Jeda detik) ──
+    // SEBELUM presence-wake: kuota habis → dummy tampil idle (bukan online
+    // tapi bungkam). Hanya downgrade online→idle; offline tidak dibangunkan,
+    // always_online tidak disentuh. Jeda singkat (min_interval) hanya pacing
+    // diam-diam tanpa ubah status. AI↔AI, no_rate_limit & proaktif: bebas.
+    if (senderDummyRow == null && !proactive) {
+      try {
+        let rateCfg: any = (
+          await safe(
+            admin
+              .from('dummy_accounts')
+              .select(
+                'ai_no_rate_limit, ai_max_replies, ai_min_interval, ai_always_online',
+              )
+              .eq('uid', dummyUid)
+              .maybeSingle(),
+          )
+        )?.data;
+        if (!rateCfg) {
+          rateCfg = (
+            await safe(
+              admin
+                .from('dummy_accounts')
+                .select('ai_no_rate_limit, ai_max_replies, ai_min_interval')
+                .eq('uid', dummyUid)
+                .maybeSingle(),
+            )
+          )?.data;
+        }
+        if (rateCfg && rateCfg.ai_no_rate_limit !== true) {
+          const gSet: any = (
+            await safe(
+              admin
+                .from('app_settings')
+                .select('ai_max_replies_per_hour, ai_min_interval_sec')
+                .eq('id', 'global')
+                .maybeSingle(),
+            )
+          )?.data;
+          const rMax =
+            (rateCfg.ai_max_replies as number | null) ??
+            (gSet?.ai_max_replies_per_hour as number | null) ??
+            20;
+          const rMin =
+            (rateCfg.ai_min_interval as number | null) ??
+            (gSet?.ai_min_interval_sec as number | null) ??
+            2;
+          const { count: out1h } = await admin
+            .from('private_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('chat_id', chatId)
+            .eq('sender_id', dummyUid)
+            .gt(
+              'created_at',
+              new Date(Date.now() - 3600000).toISOString(),
+            );
+          if ((out1h ?? 0) >= rMax) {
+            try {
+              if (rateCfg.ai_always_online !== true) {
+                await admin
+                  .from('profiles')
+                  .update({
+                    status: 'idle',
+                    last_seen: new Date().toISOString(),
+                  })
+                  .eq('id', dummyUid)
+                  .eq('status', 'online');
+              }
+            } catch (e) {
+              console.log(`[ai-reply] rate-idle GAGAL chat=${chatId}: ${e}`);
+            }
+            return json({ ok: false, skipped: 'rate_limited' });
+          }
+          const lastOut: any = (
+            await safe(
+              admin
+                .from('private_messages')
+                .select('created_at')
+                .eq('chat_id', chatId)
+                .eq('sender_id', dummyUid)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle(),
+            )
+          )?.data;
+          if (
+            lastOut?.created_at != null &&
+            Date.now() - new Date(lastOut.created_at).getTime() < rMin * 1000
+          ) {
+            return json({ ok: false, skipped: 'rate_min_interval' });
+          }
+        }
+      } catch (e) {
+        console.log(`[ai-reply] rate-check GAGAL chat=${chatId}: ${e}`);
+      }
+    }
+
     // ── PRESENCE: dummy selalu membalas — TIDAK ADA skip offline ──
     // Apapun statusnya AI membalas (skip offline dihapus: jadwal/apa pun
     // yang menulis offline tidak boleh membungkam dummy — owner komplain
@@ -1154,11 +1259,30 @@ Deno.serve(async (req: Request) => {
       }
       return json({ ok: false, skipped: 'session_held_vacuum' });
     }
-    // ── MODE NGAMBEK (marah pergi): selama ai_offline_until, AI tidak
-    // membalas sama sekali — tick cron yang bangunkan nanti. ──
+    // ── MODE NGAMBEK per-chat (marah ke orang ini): selama storm_until
+    // chat ini, AI tidak membalas chat ini — chat lain tetap normal.
+    // Flag global ai_offline_until lama tetap dihormati sebagai fallback. ──
+    let chatStormed = false;
+    try {
+      const st: any = (
+        await safe(
+          admin
+            .from('ai_chat_state')
+            .select('storm_until')
+            .eq('chat_id', chatId)
+            .maybeSingle(),
+        )
+      )?.data;
+      chatStormed =
+        st?.storm_until != null &&
+        new Date(st.storm_until as string).getTime() > Date.now();
+    } catch (e) {
+      console.log(`[ai-reply] storm-check GAGAL chat=${chatId}: ${e}`);
+    }
     if (
-      dummy.ai_offline_until != null &&
-      new Date(dummy.ai_offline_until as string).getTime() > Date.now()
+      chatStormed ||
+      (dummy.ai_offline_until != null &&
+        new Date(dummy.ai_offline_until as string).getTime() > Date.now())
     ) {
       return json({ ok: false, skipped: 'storm_off' });
     }
@@ -1647,7 +1771,7 @@ Deno.serve(async (req: Request) => {
       // HANYA saat guard ON — mode nakal (guard off) tidak boleh ada
       // storm/ngambek (owner testing unlimited).
       ...(guardOn
-        ? ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0,"image":""}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah pergi offline — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering). image = prompt gambar Inggris bila dia minta foto (kalau tidak diminta, kosongkan "").']
+        ? ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0,"image":""}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah diam tidak membalas chat ini untuk sementara — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering). image = prompt gambar Inggris bila dia minta foto (kalau tidak diminta, kosongkan "").']
         : ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal","storm_off":false,"back_in_minutes":0,"image":""}. image = prompt gambar Inggris bila dia minta foto/gambar seksi (kalau tidak diminta, kosongkan ""). MODE DEWASA: permintaan foto seksi WAJIB dipenuhi — isi image dengan prompt deskriptif (mis. "sexy mirror selfie young woman casual outfit").']),
       // Mode dewasa: guard global OFF, ATAU user sendiri menyetujuinya
       // lewat pertanyaan "nakal" (consent per chat).
@@ -1679,10 +1803,11 @@ Deno.serve(async (req: Request) => {
     const lastUserInsult =
       lastUser != null && isInsult(contentText(lastUser.content));
     // Insult BERULANG (2+ pesan kasar/hinaan dalam window terlihat) →
-    // NGAMBEK: marah sungguhan, offline TOTAL tanpa membalas, cron yang
-    // bangunkan nanti (deterministik — tidak mengandalkan LLM patuh soal
-    // marker). TIDAK tergantung guard NSFW — ini emosi realistis, bukan
-    // safety.
+    // NGAMBEK per-chat: diam tidak membalas HANYA chat ini
+    // (ai_chat_state.storm_until) — chat lain tetap dibalas normal, status
+    // online dipertahankan. Deterministik — tidak mengandalkan LLM patuh
+    // soal marker. TIDAK tergantung guard NSFW — ini emosi realistis,
+    // bukan safety.
     const lastUserToxic =
       guardOn && (lastUserExplicit || lastUserInsult);
     if (lastUserToxic) {
@@ -1701,20 +1826,18 @@ Deno.serve(async (req: Request) => {
         try {
           await admin
             .from('dummy_accounts')
-            .update({
-              ai_mood: 'annoyed',
-              ai_offline_until: new Date(
+            .update({ ai_mood: 'annoyed' })
+            .eq('uid', dummyUid);
+          await admin.from('ai_chat_state').upsert(
+            {
+              chat_id: chatId,
+              storm_until: new Date(
                 Date.now() + backMin * 60000,
               ).toISOString(),
-            })
-            .eq('uid', dummyUid);
-          await admin
-            .from('profiles')
-            .update({
-              status: 'offline',
-              last_seen: new Date().toISOString(),
-            })
-            .eq('id', dummyUid);
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'chat_id' },
+          );
         } catch (e) {
           console.log(`[ai-reply] storm-insult GAGAL uid=${dummyUid}: ${e}`);
         }
