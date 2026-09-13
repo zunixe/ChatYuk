@@ -37,5 +37,21 @@ void main() {
       expect(ChatService.effectiveStatusOf('online', null), 'offline');
       expect(ChatService.effectiveStatusOf('online', 'bukan-tanggal'), 'offline');
     });
+
+    test('idle + last_seen basi → offline', () {
+      expect(ChatService.effectiveStatusOf('idle', _ago(31)), 'offline');
+    });
+
+    test('idle + last_seen null → offline', () {
+      expect(ChatService.effectiveStatusOf('idle', null), 'offline');
+    });
+
+    test('invisible + last_seen baru tetap offline', () {
+      expect(ChatService.effectiveStatusOf('invisible', _ago(0)), 'offline');
+    });
+
+    test('status tidak dikenal + last_seen baru → kembalikan apa adanya', () {
+      expect(ChatService.effectiveStatusOf('busy', _ago(1)), 'busy');
+    });
   });
 }
