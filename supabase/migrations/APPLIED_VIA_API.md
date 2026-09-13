@@ -556,3 +556,91 @@ Jika `supabase db push` timeout lagi:
 - **Filter toxic word-boundary:** `hasWord()` regex — 'kasur'/'masuk' tak lagi kena 'asu', 'menggunakan' tak kena 'guna', 'mendadak' tak kena 'dada', 'pada dasarnya' tak kena 'dasar'.
 - **Live fix:** flag global Sarah di-clear + mood normal; sisa storm (±40 mnt) dipindah ke chat admin saja (`ai_chat_state.storm_until` chat 3bfd28ce...). Agoy langsung bisa dibalas lagi.
 - **Verifikasi:** kolom storm_until ada, trigger berisi idle+global-fallback, esbuild bundle OK, deploy v117 09:23 UTC. Tinggal user tes chat dari Agoy.
+## 2026-09-13 — 20260913130000_notif_touid.sql (APPLY)
+- **Keluhan:** notifikasi dummy (mis. agoy) bocor ke HP setelah kembali ke admin; badge unread dummy tidak muncul; tombol AI kurang beda on/off.
+- **Akar bocor:** token FCM per-perangkat tersimpan di profil admin DAN dummy sekaligus → push dummy tetap sampai ke HP yang sesinya sudah admin.
+- **Fix lapis server (APPLY, terverifikasi pg_get_functiondef mengandung toUid):** notify_private_message + call_push + notify_call_ended + social_push kini kirim 'toUid' = penerima di blok data.
+- **Fix client:** DummySession clear token lama + deleteToken SEBELUM swap, bind token segar SESUDAH swap; AdminGate.onDummySwap cancelAll notif akun lama; main.dart filter toUid foreground + background (via prefs current_uid).
+- **Badge:** AdminDummyTab auto-refresh 15 dtk (seperti monitor chat) sehingga badge unread muncul tanpa pull manual.
+- **Tombol AI:** ON = aksen solid + ikon terisi putih; OFF = abu netral + ikon outline (beda tegas).
+## 2026-09-13 — Expert dummies: SoftwareExpert × HardwareExpert (DATA) + ai-reply v118/v119 (DEPLOY) + CodeBlock app (CLIENT)
+- **Minta:** dua dummy intelektual (software vs hardware) ngobrol tanpa batas, berbasis data + browsing, minim humanis, bisa tukar codingan; app bisa render + copy kode.
+- **Dummy (DATA via API):** `SoftwareExpert` (32, Senior SWE/Data/Software/Business Analyst) + `HardwareExpert` (35, Hardware Architect) — auth.users anon + profiles + dummy_accounts. Flag: ai_enabled, no_rate_limit, always_online, no_sleep, schedule_auto=false, hours 0-23, long_answers=true, guard ikut global (ON). Chat 1:1 dibuat + pesan pancingan (bottleneck inferensi LLM on-device) → loop AI↔AI jalan sendiri (~1 pesan/mnt, 1500-1900 char/balasan, terverifikasi 5 pesan bergantian).
+- **ai-reply (DEPLOY v118→v119):** `needsFreshInfo` + intent teknis (dokumentasi/changelog/CVE/benchmark/spesifikasi/datasheet/RFC/dsb) → sonar lookup恼; `shouldAskNakal` tambah `!senderIsDummy` (AI↔AI tak pernah ditawari nakal); cap longAnswers 2000→3000 char (ruang blok kode).
+- **App (CLIENT):** `AppText.code` (12 monospace) di theme; `codeCopy`/`codeCopied` di strings; `CodeBlock` di private_chat_message (dipakai private + room chat): header label bahasa + tombol copy kanan atas (Clipboard + SnackBar), isi SelectableText; pagar tak tertutup tetap dirender kode. `flutter test test/strings_test.dart` lolos 8/8.
+## 2026-09-13 — Masuk dummy SoftwareExpert gagal (FIX: token + deploy)
+- **Latar:** kedua expert dibuat via SQL langsung (auth.users tanpa identities/session) → `dummy_accounts.refresh_token` kosong; `dummy-manage` live v23 (25 Agus) belum tentu punya aksi `renew` → becomeDummy gagal dua jalur.
+- **Fix:** deploy `dummy-manage` v24 (punya `renew`); lengkapi baris auth (email identity `expert-<id>@dummy.chatyuk.local`, `is_anonymous=false`, bcrypt via pgcrypto) — pelajaran: GoTrue butuh `auth.identities`, `encrypted_password` non-null, dan menolak login selama `is_anonymous=true`.
+- **Token:** password-login manual per expert → refresh_token valid disimpan ke `dummy_accounts` (terverifikasi via refresh grant, sub cocok). Masuk dummy kini jalan lewat token tersimpan maupun renew.
+## 2026-09-13 — ai-reply presence-wake fix (DEPLOY v+1)
+- **Keluhan:** dummy yang AI-nya dimatikan (SoftwareExpert, BinorMuda, HardwareExpert) online sendiri.
+- **Akar:** blok PRESENCE-wake di ai-reply jalan SEBELUM cek `ai_enabled` — tiap pesan masuk memaksa dummy offline→online, balasannya baru di-skip; status online nempel selamanya (heartbeat ikut refresh, tick skip karena ai_enabled=false). Pemicu: invoke langsung client (`_invokeAiReply` tidak filter AI) — trigger DB sendiri sudah guard ai_enabled.
+- **Fix:** blok wake dipindah ke setelah SEMUA skip-check (ai_enabled/hold/storm/global/tidur/jumat/claim/dedupe), tepat sebelum openTypingChannel — hanya dummy yang benar-benar akan membalas yang dibangunkan. Berlaku untuk semua dummy.
+- **Deploy:** `supabase functions deploy ai-reply --use-api` OK. Blok rate→idle di atasnya aman (hanya downgrade yang sudah online, `.eq(status,online)`).
+- **State saat ini:** SoftwareExpert/BinorMuda/HardwareExpert sudah offline + ai off — tidak perlu update manual.
+## 2026-09-13 — 20260913130000_ai_callback_auth.sql + 20260913140000_ai_watchdog_and_helpers.sql (APPLY) + ai-reply v122→v124 (DEPLOY)
+- **#1 auth endpoint:** `ai_internal_config` (RLS deny-all; `callback_secret` + `ai_reply_url`) + helper `ai_reply_post()` (fail-closed, dipakai trigger/proactive/recovery). ai-reply terima `x-app-secret` (APP_SHARED_SECRET) ATAU JWT user sendiri (sender==sub, proactive ditolak) — client tanpa ubah kode. Verifikasi: tanpa secret 401, JWT-salah-sender 401, secret 200.
+- **#5 URL sentral:** trigger tak lagi hardcode URL (satu baris di config).
+- **#2 cap AI↔AI 40/jam gabungan** (trigger + edge) — PENGECUALIAN bila kedua dummy no_rate_limit (Expert×Expert unlimited by design).
+- **Watchdog:** loop Expert mati 09:49 (drop tanpa claim → invisible bagi claim_recovery). `ai_proactive_tick` kini juga tangani chat AI↔AI (hening >10 mnt, cooldown 30 mnt); recovery hanya hapus claim bila HTTP 2xx (`ai_reply_post` returns boolean).
+- **#3 helper sinkron:** `_shared/ai-helpers.ts` = cermin index.ts (EXPLICIT/INSULT/hasWord/tech-intent) + 11 tes baru; `deno test` 43/43.
+- **#4 kontrak:** komentar KONTRAK trigger-vs-function di kedua sisi.
+- **#6 browse cleanup probabilistik 5%; #7 prune ai_memory >30/pasangan; #8 hasWord Unicode \p{L}; #9 komentar umur foto ≥21.**
+- Secret sempat terekspos di log error → dirotasi (CLI + DB). Token masuk-dummy kedua expert disegarkan.
+## 2026-09-13 — Persona expert: SoftwareExpert + HardwareExpert (SQL langsung)
+- **Minta:** expert harus menjelaskan detail, IQ 200, problem solver.
+- **Akar "terbatas":** tanpa flag `long_answers`, balasan dipotong `sanitize` di 90 char (guard ON) — jawaban teknis kepotong ("...production. 1.").
+- **Update:** `ai_persona || {long_answers:true, personality: IQ-200 problem solver, detail terstruktur}` untuk kedua dummy (tone + extra_prompt dipertahankan). Efek: max_tokens 1000, cap 3000 char keepLines, maks 24 baris. Tanpa deploy (persona dibaca fresh tiap invokasi).
+## 2026-09-13 — Blok kode rapi + highlight (client + ai-reply DEPLOY)
+- **Minta:** kode dari SoftwareExpert harus rapi (spasi/indentasi seperti codingan beneran, jangan rata semua), comment beda warna, kode bisa slide kanan biar tidak penuh ke bawah.
+- **Akar rata:** `sanitize(keepLines)` merapatkan SEMUA spasi per baris termasuk indentasi awal → kode tiba flat. Fix: indentasi awal dipertahankan (tab→2 spasi, maks 24).
+- **Client (`CodeBlock`):** isi scroll horizontal (baris panjang geser kanan, tidak wrap), highlight tanpa dependency — comment abu-hijau italic (`#` Python, `//`+`/* */` c-like, `--` SQL), keyword biru, string oranye, angka hijau; tokenizer sadar-string (triple-quote Python) + tab→2 spasi.
+- **Persona expert:** extra_prompt + aturan indentasi rapi (Python 4 spasi/level, maks 100 kolom).
+- **Deploy:** ai-reply OK. APK admin rebuild + streamed install sukses (SHA-1 keystore v2 cocok).
+## 2026-09-13 — Re-verifikasi 9 temuan review + hardening lanjutan (DEPLOY v128)
+- **#3 helper sinkron:** `_shared/ai-helpers.ts` `sanitize` (full mirror incl. keepLines+indent) + `IMAGE_REQUEST_RE`/`userWantsImage` = index.ts; `isImageRequest` dihapus (tidak ada import lain); `deno test` 46/46.
+- **#5 hygiene:** `20260913130000_notif_touid.sql` → `20260913130001_notif_touid.sql` (duplikat timestamp); version baru dicatat `schema_migrations` (isi idempoten, sudah applied).
+- **Live check:** `ai_reply_enqueue` = versi 13140000 (exception both-no_rate, cocok edge); `ai_reply_post` returns boolean; `ai_internal_config` ada `ai_reply_url`+`callback_secret`.
+- **#1 lubang sisa DITUTUP (deploy v128):** (a) cek membership — sender+dummy wajib peserta `private_chats` (403 `not_participant`, fail 503 bila cek gagal); (b) `sender_id` wajib + `trigger_msg_id` wajib untuk non-proaktif (400) — claim/dedupe/pause_newer tak lagi bisa di-skip.
+- **Rotasi secret:** `APP_SHARED_SECRET` (edge) + `callback_secret` (DB) diganti serentak (96-hex baru; file secret di-shred).
+- **Deploy recipe (PENTING — single-file gagal!):** `index.ts` import `../_shared/auth.ts` → deploy API WAJIB sertakan `-F 'file=@supabase/functions/_shared/auth.ts;filename=../_shared/auth.ts'` (tanpa `../` bundler 128 gagal "Module not found").
+- **Verifikasi live v128:** secret salah → 401; secret benar + chat fiktif → 403 `not_participant`; secret benar tanpa trigger → 400. Tanpa efek samping.
+- **TERBUKA (keputusan owner):** Expert×Expert unlimited by design + watchdog 30 mnt → loop 24/7 (~1/mnt × 1500-1900 char). Pagu khusus expert (mis. 100-200/jam) belum dipasang.
+## 2026-09-13 — Diagram arsitektur untuk expert (DEPLOY v131)
+- **Minta:** SoftwareExpert + HardwareExpert bisa MENGGAMBAR arsitektur, bukan cuma menjelaskan.
+- **Cara:** LLM menulis blok ```mermaid di balasan → server render via **mermaid.ink** (gratis, tanpa key, terverifikasi HTTP 200) → PNG dikirim sebagai pesan gambar susulan (caption "nih diagramnya"). Teks + kode sumber tetap terkirim (bisa di-copy via CodeBlock).
+- **Code:** `extractMermaid`/`mermaidUrl`/`renderMermaid` + `uploadAndInsertImage` (refactor dari generateAndSendImage) + blok 6a2 (terpisah dari `no_images` yang khusus foto selfie) + instruksi ATURAN DIAGRAM di system prompt (hanya bila `persona.diagrams`) + `capLines` 24→40 baris untuk persona diagram (kode mermaid tidak terpenggal).
+- **Data:** kedua expert `ai_persona.diagrams=true` + aturan diagram di `extra_prompt` (idempoten, guard `not like '%8) Diagram:%'`).
+- **Helper:** `extractMermaid` mirror di `_shared/ai-helpers.ts` + 3 tes; `deno test` 49/49.
+- **Verifikasi:** deploy v131 ACTIVE; probe secret salah → 401 (gate utuh). Cara tes: chat ke expert "gambarkan arsitektur microservices untuk e-commerce".
+## 2026-09-13 — Fix diagram "Foto sudah expired" (DEPLOY v132 + CLIENT)
+- **Akar:** `StoragePhotoService.isPath()` hanya mengenali `.jpg/.m4a/.mp3` — diagram di-upload `.png` → client mengira path itu base64 → decode gagal → placeholder "⏰ Foto sudah expired".
+- **Fix server (v132 ACTIVE):** diagram pakai ekstensi `.jpg` (mermaid.ink /img/ memang mengembalikan JPEG, terverifikasi JFIF).
+- **Fix client:** `isPath()` kini juga mengenali `.jpeg`/`.png` (satu pintu untuk semua pemanggil: chat, monitor admin, post, stream). Perlu build/install APK baru agar diagram lama ikut tampil.
+
+## 2026-09-13 — 20260913170000_admin_excluded_uids_manual.sql (APPLY)
+
+- **Masalah:** anon `jdjjds` (+ `aqila`) tetap tampil di ringkasan users walau perangkatnya sudah di-exclude. Akar: exclude perangkat memetakan install_id → user_id via `user_devices`, tapi kedua anon itu TIDAK punya baris `user_devices` (0 rows) — `signInAnonymously()` di `auth_provider.dart` tidak memanggil `syncToServer()` (hanya alur Google/entry yang sync) → UID tak dikenal filter → lolos ke semua list.
+- **Isi:** kolom `app_settings.excluded_uids` (jsonb array of uuid, default `[]`); `admin_excluded_uids()` = union device-derived + UID manual (regex-validated, pola alias aman); RPC `admin_get/set_excluded_uids` (guard admin + hanguskan cache); backfill kedua UID anon yatim.
+- **Client:** `signInAnonymously()` kini `syncToServer()` bila profil ada (guard FK, pola sama dengan `_init`) — anon baru dari HP ter-exclude otomatis tersaring ke depannya.
+- **Repo:** `20260905100001_admin_stats_exclude_dummy.sql` (pola BROKEN `select uid from ...` penyebab 42703 2x) ditulis ulang ke pola alias benar, identik `20260905110000` — aman bila ter-apply ulang.
+- **Apply:** via Management API (multi-statement 1 call; `supabase db query --linked` hang di CLI 2.98.2). Tercatat di `schema_migrations`.
+- **Verifikasi live:** `excluded_uids` = 2 UID; keduanya `= any(admin_excluded_uids())` → True; 16 profil ter-exclude (14 device + 2 manual).
+## 2026-09-13 — Chart data untuk SoftwareExpert (DEPLOY v136)
+- **Minta:** SoftwareExpert bisa analisa data dan mengirim pie chart / bar chart / dll sebagai gambar.
+- **Cara:** LLM menulis blok ```chartjs berisi config Chart.js v2 → server render via **QuickChart** (gratis, tanpa key, terverifikasi HTTP 200 PNG) → PNG dikirim sebagai pesan gambar susulan (caption "nih chartnya"). Teks analisis + JSON tetap terkirim (bisa di-copy via CodeBlock). Pola identik diagram (6a2) sebagai blok 6a3.
+- **Code:** `CHART_TYPES` whitelist (pie/doughnut/bar/line/radar/polarArea) + `extractChartJs` (validasi JSON: type + data.datasets non-kosong, cap 4000 char) + `chartUrl`/`renderChart` (800×500 PNG, background putih, timeout 30s, min 1KB) + flag persona `charts` + `ATURAN CHART` di system prompt (JSON COMPACT, maks 12 label, angka diagregat) + capLines longAnswers 40→48 bila diagrams/charts.
+- **Helper:** `extractChartJs`/`chartUrl` mirror di `_shared/ai-helpers.ts` + 6 tes baru; `deno test` 55/55.
+- **Data:** SoftwareExpert `ai_persona.charts=true` + poin 9) Chart di `extra_prompt` (idempoten, guard `not like '%9) Chart:%'`). HardwareExpert TIDAK (tidak diminta).
+- **Deploy:** `supabase functions deploy ai-reply --use-api` (CLI otomatis upload index.ts + ../_shared/auth.ts; index.ts tidak import ai-helpers jadi aman). Verifikasi: v136 ACTIVE.
+- **Cara tes:** chat ke SoftwareExpert "buatkan pie chart dari data ...", mis. "penjualan Q1 30, Q2 45, Q3 25 — buatkan pie chart-nya".
+## 2026-09-13 — Browsing pindah ke Brave Search API (DEPLOY v137)
+- **Akar mati:** browsing via Pollinations `model: 'sonar'` — model SUDAH DIHAPUS upstream (daftar /v1/models tanpa sonar/perplexity) → semua lookup 400 diam-diam → AI tidak pernah dapat info realtime.
+- **Ganti:** `lookupFreshInfo` kini GET `api.search.brave.com/res/v1/web/search` (`count=5&search_lang=id&country=ID&freshness=pw`, header `X-Subscription-Token: BRAVE_API_KEY`, timeout 25s). Helper pure `summarizeBraveResults` (3 hasil teratas + tanggal page_age, cap 500 char). Cache `ai_browse_cache` 1 jam tak berubah. Tanpa key → '' (balasan normal, tak ganggu chat).
+- **Helper:** `summarizeBraveResults` mirror di `_shared/ai-helpers.ts` + 2 tes; `deno test` 57/57.
+- **Deploy:** v137 ACTIVE. TERBUKA: secret `BRAVE_API_KEY` belum di-set (butuh signup gratis brave.com/search/api, 2000 query/bln) — sampai di-set, browsing tetap nonaktif.
+## 2026-09-13 — Browsing keyless via Google News RSS (DEPLOY v138)
+- **Batal:** Brave Search API ternyata butuh kartu kredit untuk plan gratis ("ga gratis") — dibuang sebelum dipakai.
+- **Ganti:** `lookupFreshInfo` kini GET Google News RSS (`hl=id&gl=ID`, tanpa key/kuota) → helper pure `summarizeNewsRss` (3 item teratas: headline + media + tanggal, cap 500 char). Cache 1 jam tak berubah. Terverifikasi manual: query "harga emas hari ini" → 3 berita 12-13 Sep 2026 + media.
+- **Helper:** `summarizeNewsRss` mirror di `_shared/ai-helpers.ts` (gantikan `summarizeBraveResults`) + 2 tes; `deno test` 57/57.
+- **Deploy:** v138 ACTIVE. Tanpa secret baru — browsing aktif segera setelah deploy.

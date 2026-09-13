@@ -14,6 +14,7 @@ import 'providers/points_provider.dart';
 import 'providers/social_provider.dart';
 import 'core/admin_gate.dart';
 import 'providers/locale_provider.dart';
+import 'models/user_model.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/nav_provider.dart';
@@ -146,6 +147,7 @@ class _AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<_AuthGate> {
   StreamSubscription<AuthState>? _authSub;
+  VoidCallback? _authListenCb;
   DateTime? _lastRecoveryNav;
   Timer? _autoRetryTimer;
   int _autoRetryCount = 0;
@@ -157,26 +159,14 @@ class _AuthGateState extends State<_AuthGate> {
   // tampil; disk load jalan di belakang dan merge saat selesai.
   static const _warmTimeout = Duration(seconds: 2);
 
-  // Kalau DNS/network down lama, coba login ulang otomatis tiap 8 detik
-  // (maks 3×) — begitu koneksi pulih, app masuk sendiri tanpa sentuhan user.
-  void _maybeScheduleAutoRetry(AuthProvider auth) {
-    if (auth.error == null) {
-      _autoRetryCount = 0;
-      _autoRetryTimer?.cancel();
-      return;
-    }
-    if (_autoRetryCount >= 3 || (_autoRetryTimer?.isActive ?? false)) return;
-    _autoRetryTimer = Timer(const Duration(seconds: 8), () {
-      if (!mounted) return;
-      _autoRetryCount++;
-      dlog('[AUTHGATE] auto retry #$_autoRetryCount');
-      context.read<AuthProvider>().retry();
-    });
-  }
-
   @override
   void initState() {
     super.initState();
+    // Auto-retry error jaringan lewat LISTENER (bukan build): begitu auth
+    // masuk state error, jadwalkan login ulang tiap 8 dtk (maks 3×). Tidak
+    // ada side-effect (Timer/retry) di build → build murni render.
+    _authListenCb = _onAuthChanged;
+    context.read<AuthProvider>().addListener(_authListenCb!);
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
         // Guard: cegah push ganda jika event ter-trigger berulang
@@ -202,25 +192,48 @@ class _AuthGateState extends State<_AuthGate> {
     });
   }
 
+  void _onAuthChanged() {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    if (auth.error == null) {
+      _autoRetryCount = 0;
+      _autoRetryTimer?.cancel();
+      return;
+    }
+    if (_autoRetryCount >= 3 || (_autoRetryTimer?.isActive ?? false)) return;
+    _autoRetryTimer = Timer(const Duration(seconds: 8), () {
+      if (!mounted) return;
+      _autoRetryCount++;
+      dlog('[AUTHGATE] auto retry #$_autoRetryCount');
+      context.read<AuthProvider>().retry();
+    });
+  }
+
   @override
   void dispose() {
     _autoRetryTimer?.cancel();
     _authSub?.cancel();
+    final cb = _authListenCb;
+    if (cb != null) context.read<AuthProvider>().removeListener(cb);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
+    // select field spesifik — hindari watch penuh AuthProvider yang
+    // me-rebuild seluruh gate pada tiap notifyListeners (presence, poin).
+    final loading = context.select<AuthProvider, bool>((a) => a.loading);
+    final error = context.select<AuthProvider, String?>((a) => a.error);
+    final isAnonymous = context.select<AuthProvider, bool>((a) => a.isAnonymous);
+    final dummySessionActive =
+        context.select<AuthProvider, bool>((a) => a.dummySessionActive);
+    final profile = context.select<AuthProvider, UserModel?>((a) => a.profile);
     final s = context.watch<LocaleProvider>().s;
     // Watch ThemeProvider supaya seluruh tree rebuild saat mode gelap/terang
     // berubah — warna AppTheme diambil ulang di build().
     context.watch<ThemeProvider>();
 
-    // Jadwalkan auto-retry saat layar error tampil.
-    _maybeScheduleAutoRetry(auth);
-
-    if (auth.loading) {
+    if (loading) {
       // SPLASH REPLIKA: bg gelap + logo di tengah — identik dengan
       // launch_background native, jadi transisi system splash → Flutter
       // mulus TANPA layar hitam polos selama warmup (init engine,
@@ -229,7 +242,7 @@ class _AuthGateState extends State<_AuthGate> {
       return const _SplashReplica();
     }
 
-    if (auth.error != null) {
+    if (error != null) {
       // Jalur error jaringan: layar error first-frame → angkat overlay.
       WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
       return Scaffold(
@@ -269,13 +282,14 @@ class _AuthGateState extends State<_AuthGate> {
     // terpisah). Tetap muncul walau logout-login email sama sampai profil
     // diisi. Anon bebas (pakai AnonPromptDialog per fitur). Sesi dummy
     // admin juga bebas — bukan user sungguhan.
-    final needsProfile = !auth.isAnonymous &&
-        !auth.dummySessionActive &&
-        (auth.profile == null ||
-            (auth.profile?.nickname.trim().isEmpty ?? true) ||
-            !(auth.profile?.isRegistered ?? false));
+    final p = profile;
+    final needsProfile = !isAnonymous &&
+        !dummySessionActive &&
+        (p == null ||
+            p.nickname.trim().isEmpty ||
+            !p.isRegistered);
 
-    if (auth.profile == null && auth.isAnonymous) {
+    if (profile == null && isAnonymous) {
       // Jalur anon belum isi form: EntryScreen first-frame → angkat overlay.
       WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
       return EntryScreen();

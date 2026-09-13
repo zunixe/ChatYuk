@@ -2521,7 +2521,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                             onTap: _toggleAttachRow,
                                             tooltip: s.menuSendPhoto,
                                           ),
-                                          const SizedBox(width: 2),
                                           ChatIconButton(
                                             icon: Icons.photo_camera_outlined,
                                             open: false,

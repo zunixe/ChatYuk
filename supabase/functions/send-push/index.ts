@@ -3,7 +3,9 @@
 // Mengirim FCM V1 push notification via Firebase Cloud Messaging.
 // WebCrypto global (crypto.subtle) tersedia di Supabase Edge Runtime.
 
-const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
+import { checkAppSecret, unauthorized } from '../_shared/auth.ts';
+import { getAccessToken } from '../_shared/fcm.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // Satu project Firebase: chatyuk-7c9e4 (milik zunixe). Semua app (user &
 // admin) mendaftar FCM di sini sejak migrasi flavor-gate. Project lama
@@ -11,62 +13,6 @@ const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 const FCM_PROJECTS = [
   { id: 'chatyuk-7c9e4', envKey: 'FIREBASE_SERVICE_ACCOUNT' },
 ];
-
-function base64UrlEncode(data) {
-  const bytes = new TextEncoder().encode(data);
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-async function getAccessToken(saJson: Record<string, unknown>) {
-  const sa = saJson;
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const payload = {
-    iss: sa.client_email,
-    scope: FCM_SCOPE,
-    aud: sa.token_uri,
-    iat: now,
-    exp: now + 3600,
-  };
-  const signed = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(payload))}`;
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    parsePem(sa.private_key),
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(signed));
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const jwt = `${signed}.${sigB64}`;
-
-  const res = await fetch(sa.token_uri, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  });
-  const data = await res.json();
-  return data.access_token;
-}
-
-function parsePem(pem) {
-  const b64 = pem
-    .replace('-----BEGIN PRIVATE KEY-----', '')
-    .replace('-----END PRIVATE KEY-----', '')
-    // Buang semua karakter non-base64 — melindungi dari newline yang
-    // ter-escape (\n literal) saat env var di-copy dari dashboard.
-    .replace(/[^A-Za-z0-9+/=]/g, '');
-  const raw = atob(b64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes;
-}
-
-import { checkAppSecret, unauthorized } from '../_shared/auth.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 Deno.serve(async (req) => {
   try {
@@ -82,8 +28,9 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'no token/topic' }), { status: 400 });
     }
     // Resolve avatar path -> public URL untuk BigPicture (Android) / image (iOS)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     if (data?.avatarUrl && data.avatarUrl.startsWith('avatars/')) {
-      data.avatarUrl = `https://fohcucyyejdryryoxitm.supabase.co/storage/v1/object/public/chat-photos/${data.avatarUrl}`;
+      data.avatarUrl = `${supabaseUrl}/storage/v1/object/public/chat-photos/${data.avatarUrl}`;
     }
 
     // Data-only untuk tipe yang teksnya dirender client (bilingual):
@@ -132,12 +79,17 @@ Deno.serve(async (req) => {
 
     let lastStatus = 500;
     let lastBody = '{"error":"no project attempted"}';
+    // Satu client admin untuk cache token DB + cleanup token mati.
+    const admin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
     for (const proj of FCM_PROJECTS) {
       const saRaw = Deno.env.get(proj.envKey);
       if (!saRaw) continue;
       try {
         const sa = JSON.parse(saRaw);
-        const accessToken = await getAccessToken(sa);
+        const accessToken = await getAccessToken(sa, proj.envKey, admin);
         const endpoint =
           `https://fcm.googleapis.com/v1/projects/${proj.id}/messages:send`;
         const res = await fetch(endpoint, {
@@ -147,6 +99,7 @@ Deno.serve(async (req) => {
             Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify(message),
+          signal: AbortSignal.timeout(5000),
         });
         const resBody = await res.text();
         // Auto-clean token mati: FCM 404 NotRegistered / 410 = token tidak
@@ -154,10 +107,6 @@ Deno.serve(async (req) => {
         // tidak dipukul berulang (boros kuota + notif tidak pernah sampai).
         if (token && !res.ok && /NotRegistered|UNREGISTERED/.test(resBody)) {
           try {
-            const admin = createClient(
-              Deno.env.get('SUPABASE_URL')!,
-              Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-            );
             await admin
               .from('profiles')
               .update({ fcm_token: null })

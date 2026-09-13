@@ -1,23 +1,29 @@
 -- Admin Ringkasan: exclude dummy accounts + perangkat-excluded dari
 -- SEMUA list users (users_all/active/registered/anonymous) dan dari
 -- hitungan registered/anon agar statistik bersih dari akun internal.
+--
+-- REVISI (2026-09-13): versi awal file ini memakai pola BROKEN
+--   select uid from admin_excluded_uids()
+-- yang melempar 42703 (SETOF uuid tidak punya kolom `uid`) dan sempat
+-- merusak admin_stats_detail di live DB 2x. Diganti pola alias yang benar
+-- (ae/du) — identik dengan 20260905110000_admin_detail_merge.sql yang
+-- menjadi sumber kebenaran. JANGAN kembalikan pola lama.
 create or replace function public.admin_stats_detail()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   result jsonb;
   v_excl uuid[];
+  v_dummy uuid[];
 begin
   if coalesce(auth.email(),'') != 'zunixe@gmail.com' and auth.role() != 'service_role' then
     raise exception 'Unauthorized';
   end if;
   -- Perangkat-excluded + dummy accounts → buang dari semua list.
-  select array(
-    select distinct x from (
-      select uid from admin_excluded_uids()
-      union all
-      select uid from dummy_accounts
-    ) t(x)
-  ) into v_excl;
+  -- Alias WAJIB: SETOF uuid tanpa alias kolom → 42703.
+  select coalesce(array_agg(ae), '{}'::uuid[]) into v_excl
+    from public.admin_excluded_uids() ae;
+  select coalesce(array_agg(du), '{}'::uuid[]) into v_dummy
+    from public.admin_dummy_uids() du;
 
   select jsonb_build_object(
     'users_all', coalesce((
@@ -29,7 +35,9 @@ begin
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source
       ) order by last_seen desc nulls last)
-      from profiles where not (id = any(v_excl))), '[]'::jsonb),
+      from profiles
+      where not (id = any(v_excl))
+        and not (id = any(v_dummy))), '[]'::jsonb),
     'users_active', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', id, 'nickname', nickname, 'email', email,
@@ -41,7 +49,8 @@ begin
       ) order by last_seen desc nulls last)
       from profiles
       where last_seen >= current_date at time zone 'Asia/Jakarta'
-        and not (id = any(v_excl))), '[]'::jsonb),
+        and not (id = any(v_excl))
+        and not (id = any(v_dummy))), '[]'::jsonb),
     'users_registered', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', id, 'nickname', nickname, 'email', email,
@@ -52,7 +61,9 @@ begin
         'lat', lat, 'lon', lon, 'loc_source', loc_source
       ) order by last_seen desc nulls last)
       from profiles
-      where is_registered = true and not (id = any(v_excl))), '[]'::jsonb),
+      where is_registered = true
+        and not (id = any(v_excl))
+        and not (id = any(v_dummy))), '[]'::jsonb),
     'users_anonymous', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', id, 'nickname', nickname, 'email', email,
@@ -64,7 +75,8 @@ begin
       ) order by nickname)
       from profiles
       where is_registered = false
-        and not (id = any(v_excl))), '[]'::jsonb),
+        and not (id = any(v_excl))
+        and not (id = any(v_dummy))), '[]'::jsonb),
     'rooms_active', coalesce((
       select jsonb_agg(jsonb_build_object(
         'room_id', t.room_id,

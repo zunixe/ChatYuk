@@ -402,10 +402,13 @@ Catatan:
     mengenal SHA-1 keystore v2 → build "asal" langsung gagal sign-in. Solusi:
     build SELALU pakai prosedur "Build & Push ke HP" di bawah (release +
     `--flavor apkpure` + keystore v2), JANGAN pernah pakai `flutter build apk`
-    tanpa flavor/keystore. Kalau build dari tool lain, verify SHA-1 APK:
+    tanpa flavor/keystore. Kalau build dari tool lain, verify cert APK
+    (AGP kini sign v2-only → `keytool -printcert -jarfile` gagal
+    "Not a signed jar file"; pakai apksigner):
     ```bash
-    keytool -printcert -jarfile app-apkpure-release.apk | grep SHA1
-    # harus: 8C:CC:42:E3:FE:93:37:21:6C:E4:25:0E:2B:FC:CB:22:94:1E:50:A2
+    apksigner verify --print-certs app-apkpure-release.apk | grep 'SHA-256'
+    # harus: 84e9639899edfa69da1ffd01514ec871d2b23f383f781f932f2f76c2be9fa4b2
+    # (= SHA-256 keystore v2; SHA-1: 8C:CC:42:E3:...:50:A2)
     ```
   - **Account picker**: `auth_service.dart` memanggil `googleSignIn.signOut()`
     sebelum `signIn()` — JANGAN dihapus; tanpa itu picker tidak muncul dan

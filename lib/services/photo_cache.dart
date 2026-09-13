@@ -258,6 +258,30 @@ class PhotoCache {
     return thumb;
   }
 
+  /// Hapus file foto SATU chat (dipanggil saat chat di-hard-delete admin).
+  /// Nama file = `${chatKey.hashCode}_$messageId(.enc|_thumb.enc)` — prefix
+  /// hash chatKey unik per chat. Mem-cache keyed by messageId saja (tanpa
+  /// chatKey) jadi tidak bisa di-purge presisi — dibiarkan LRU menguap.
+  Future<void> clearChat(String chatKey) async {
+    try {
+      final folder = await _folder();
+      if (!await folder.exists()) return;
+      final prefix = '${chatKey.hashCode}_';
+      await for (final entity in folder.list()) {
+        if (entity is File) {
+          final name = entity.path.split('/').last;
+          if (name.startsWith(prefix)) {
+            try {
+              await entity.delete();
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      dlog('[PhotoCache] clearChat ignored: $e');
+    }
+  }
+
   /// Hapus semua file foto (dipanggil saat logout).
   Future<void> clearAll() async {
     _memCache.clear();

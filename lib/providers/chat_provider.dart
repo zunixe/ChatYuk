@@ -173,17 +173,17 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Tandai SEMUA chat pribadi dibaca (menu ⋮ chat list). Return jumlah
-  /// chat yang benar-benar berubah (skip yang sudah 0).
+  /// chat yang benar-benar berubah (skip yang sudah 0). RPC paralel per
+  /// batch 10 (dulu serial; paralel tanpa batas = DB storm).
   Future<int> markAllChatsRead(String uid) async {
     final snapshot = _service.lastPrivateChatsSnapshot(uid) ?? const [];
-    var count = 0;
-    for (final c in snapshot) {
-      if ((c.unreadCounts[uid] ?? 0) > 0) {
-        await _service.markAsRead(c.chatId, uid);
-        count++;
-      }
+    final targets =
+        snapshot.where((c) => (c.unreadCounts[uid] ?? 0) > 0).toList();
+    for (var i = 0; i < targets.length; i += 10) {
+      final chunk = targets.skip(i).take(10);
+      await Future.wait(chunk.map((c) => _service.markAsRead(c.chatId, uid)));
     }
-    return count;
+    return targets.length;
   }
 
   /// Tandai dibaca dari monitor admin (RPC SECURITY DEFINER khusus admin —

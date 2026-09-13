@@ -42,6 +42,16 @@ class AppText {
     color: AppTheme.textPrimary,
   );
 
+  // 12 w400 monospace — isi blok kode di bubble chat
+  static TextStyle get code => TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    height: 1.35,
+    fontFamily: 'monospace',
+    fontFamilyFallback: const ['Courier', 'Menlo', 'monospace'],
+    color: AppTheme.textPrimary,
+  );
+
   // 14 w400 — bubble chat, isi dialog, composer, paragraf
   static TextStyle get body => TextStyle(
     fontSize: 14,
@@ -123,6 +133,8 @@ class StoryText {
   static const double lg = 24;
 
   static double size(int i) => i <= 0 ? sm : (i == 1 ? md : lg);
+
+  static const double lineHeight = 1.2;
 
   /// Palette 8 warna teks overlay (sesuai StoryTextOverlay).
   static const List<Color> palette = [

@@ -77,21 +77,38 @@ class MessageStore {
   }
 
   /// Pesan ASC (terlama → terbaru), window [limit] TERBARU.
+  ///
+  /// [before] = kursor paging: kembalikan [limit] pesan TERAKHIR yang
+  /// `ts`-nya LEBIH LAMA dari [before] (buka riwayat chat yang lebih lama).
+  /// Menggunakan idx_chat_ts(chat_key, ts DESC) supaya query tetap cepat.
   Future<List<MessageModel>> loadMessages(
     String chatKey, {
     int limit = 100,
+    DateTime? before,
   }) async {
     final db = _db;
     if (db == null || !db.isOpen) return const [];
     try {
-      final rows = await db.query(
-        _table,
-        columns: ['id', 'json'],
-        where: 'chat_key = ?',
-        whereArgs: [chatKey],
-        orderBy: 'ts DESC, rowid DESC',
-        limit: limit,
-      );
+      final List<Map<String, Object?>> rows;
+      if (before == null) {
+        rows = await db.query(
+          _table,
+          columns: ['id', 'json'],
+          where: 'chat_key = ?',
+          whereArgs: [chatKey],
+          orderBy: 'ts DESC, rowid DESC',
+          limit: limit,
+        );
+      } else {
+        rows = await db.query(
+          _table,
+          columns: ['id', 'json'],
+          where: 'chat_key = ? AND ts < ?',
+          whereArgs: [chatKey, before.millisecondsSinceEpoch],
+          orderBy: 'ts DESC, rowid DESC',
+          limit: limit,
+        );
+      }
       return rows.reversed.map((r) {
         final map = jsonDecode(r['json'] as String) as Map<String, dynamic>;
         return MessageModel.fromMap('${r['id']}', map);
@@ -102,8 +119,14 @@ class MessageStore {
     }
   }
 
-  /// Ganti seluruh isi [chatKey] dengan [messages] (urut ASC) dalam satu
-  /// transaction. Trim ke [_trimPerChat] terbaru.
+  /// Upsert incremental [messages] (urut ASC) untuk [chatKey].
+  ///
+  /// Hanya menulis baris yang ID-nya baru atau JSON-nya berubah (diff hash
+  /// di memori) — tidak lagi DELETE+reinsert seluruh chat tiap ~2s. Baris
+  /// lama yang tersisa di atas [_trimPerChat] dipangkas di akhir transaksi.
+  ///
+  /// JANGAN diandalkan untuk menghapus pesan (delete/edit pesan = baris
+  /// ber-`isDeleted`/`edited` ter-update via JSON). Hapus permanen → [clearChat].
   Future<void> saveMessages(
     String chatKey,
     List<MessageModel> messages,
@@ -115,19 +138,60 @@ class MessageStore {
       list = list.sublist(list.length - _trimPerChat);
     }
     try {
+      final rows = await db.query(
+        _table,
+        columns: ['id', 'json'],
+        where: 'chat_key = ?',
+        whereArgs: [chatKey],
+        orderBy: 'ts DESC, rowid DESC',
+      );
+      final existingJson = {
+        for (final r in rows) '${r['id']}': '${r['json']}',
+      };
       await db.transaction((txn) async {
-        await txn.delete(_table, where: 'chat_key = ?', whereArgs: [chatKey]);
         final batch = txn.batch();
+        final incomingIds = <String>{};
         for (final m in list) {
+          incomingIds.add(m.id);
+          final json = jsonEncode(m.toMap());
+          // Skip kalau isi sama persis — hemat tulis saat burst realtime
+          // (tiap pesan masuk memicu save ulang seluruh window).
+          if (existingJson[m.id] == json) continue;
           batch.insert(
             _table,
             {
               'id': m.id,
               'chat_key': chatKey,
               'ts': m.timestamp.millisecondsSinceEpoch,
-              'json': jsonEncode(m.toMap()),
+              'json': json,
             },
             conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        // Sisa baris di luar window terbaru dibuang biar tabel tidak membesar.
+        // Trim berbasis ID (kontrak "replace-all": window baru menggantikan
+        // yang lama walau timestamp sama): hitung delta di Dart dari hasil
+        // query di atas, hapus per id dengan IN yang di-chunk 400 agar aman
+        // dari batas 999 variabel SQLite. Plus potong ts tua sebagai jaring
+        // pengaman.
+        final staleIds = existingJson.keys
+            .where((id) => !incomingIds.contains(id))
+            .toList();
+        for (var i = 0; i < staleIds.length; i += 400) {
+          final chunk = staleIds.skip(i).take(400).toList();
+          batch.delete(
+            _table,
+            where: 'chat_key = ? AND id IN '
+                '(${List.filled(chunk.length, '?').join(',')})',
+            whereArgs: [chatKey, ...chunk],
+          );
+        }
+        if (list.isNotEmpty) {
+          final cutoff = list.first.timestamp.millisecondsSinceEpoch;
+          batch.delete(
+            _table,
+            where: 'chat_key = ? AND ts < ?',
+            whereArgs: [chatKey, cutoff],
           );
         }
         await batch.commit(noResult: true);

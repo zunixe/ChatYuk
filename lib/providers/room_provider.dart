@@ -301,6 +301,9 @@ class RoomProvider extends ChangeNotifier {
       password: password,
     );
     await reloadPrivate();
+    // Grup milikku langsung tampil — jangan andalkan caller me-reload
+    // (dialog bisa dibuka dari route tanpa _GroupListState).
+    await loadMyGroups(refresh: true);
     return res;
   }
 

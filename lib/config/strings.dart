@@ -633,6 +633,11 @@ class S {
       isId ? 'Tunggu giliran atau angkat tangan' : 'Wait your turn or raise hand';
 
   String get btnClose => isId ? 'Tutup' : 'Close';
+  String get btnZoomIn => isId ? 'Perbesar' : 'Zoom in';
+  String get btnZoomOut => isId ? 'Perkecil' : 'Zoom out';
+  String get btnZoomReset => isId ? 'Atur ulang zoom' : 'Reset zoom';
+  String get viewerZoomHint =>
+      isId ? 'Cubit 2 jari / ketuk 2x untuk zoom' : 'Pinch or double-tap to zoom';
   String get errGeneric => isId ? 'Gagal: ' : 'Failed: ';
   String get errUserNotFound =>
       isId ? 'Pengguna tidak ditemukan' : 'User not found';
@@ -783,6 +788,8 @@ class S {
   String get labelUsdt => isId ? 'USDT Crypto' : 'USDT Crypto';
   String get msgCopied =>
       isId ? ' disalin ke clipboard' : ' copied to clipboard';
+  String get codeCopy => isId ? 'Salin kode' : 'Copy code';
+  String get codeCopied => isId ? 'Kode disalin' : 'Code copied';
   String get btnCopyAddress => isId ? 'Salin Alamat ' : 'Copy Address ';
   String get donateSelectHint => isId
       ? 'Pilih network dan salin alamat wallet'

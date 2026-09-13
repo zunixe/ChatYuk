@@ -911,6 +911,7 @@ class _ExcludedDevicesSheetState extends State<_ExcludedDevicesSheet> {
         admin.invalidateStatsDetail();
         unawaited(admin.refreshStats());
         unawaited(admin.fetchDevices());
+        unawaited(admin.fetchHiddenUids());
       } catch (_) {}
       Navigator.pop(context);
     }

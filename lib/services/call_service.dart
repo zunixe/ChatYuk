@@ -112,29 +112,59 @@ class CallService {
   }
 
   /// Stream perubahan status satu call (mis. callee melihat caller cancel).
+  /// Channel dishare per callId (dulu tiap subscriber bikin channel sendiri —
+  /// CallSession + IncomingCallScreen = 2 channel untuk call yang sama).
+  final Map<String, StreamController<String>> _statusStreams = {};
+  final Set<String> _statusBound = {};
+  final Map<String, RealtimeChannel> _statusChannels = {};
+
   Stream<String> onCallStatus(String callId) {
-    final controller = StreamController<String>.broadcast();
-    final channel = _sb.channel('call-status-$callId');
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.update,
-      schema: 'public',
-      table: 'calls',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'id',
-        value: callId,
-      ),
-      callback: (payload) {
-        if (controller.isClosed) return;
-        dlog(
-          '[CallService] onCallStatus -> ${payload.newRecord['status']}',
-        );
-        controller.add(payload.newRecord['status'] as String? ?? '');
-      },
+    final controller = _statusStreams.putIfAbsent(
+      callId,
+      () => StreamController<String>.broadcast(),
     );
-    channel.subscribe();
-    controller.onCancel = () => _sb.removeChannel(channel);
+    if (_statusBound.add(callId)) {
+      final channel = _sb.channel('call-status-$callId');
+      _statusChannels[callId] = channel;
+      channel.onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'calls',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'id',
+          value: callId,
+        ),
+        callback: (payload) {
+          if (controller.isClosed) return;
+          dlog(
+            '[CallService] onCallStatus -> ${payload.newRecord['status']}',
+          );
+          controller.add(payload.newRecord['status'] as String? ?? '');
+        },
+      );
+      channel.subscribe();
+    }
     return controller.stream;
+  }
+
+  /// Bersihkan stream status sharing saat call selesai. Dilewati bila masih
+  /// ada listener (sesi lain masih memakai) — pemanggil berikutnya yang
+  /// akan membersihkan.
+  void releaseCallStatus(String callId) {
+    final c = _statusStreams[callId];
+    if (c != null && c.hasListener) return;
+    _statusBound.remove(callId);
+    _statusStreams.remove(callId);
+    try {
+      c?.close();
+    } catch (_) {}
+    final ch = _statusChannels.remove(callId);
+    if (ch != null) {
+      try {
+        _sb.removeChannel(ch);
+      } catch (_) {}
+    }
   }
 
   // ── Signaling (postgres — reliable & replayable via catch-up SELECT) ──
@@ -279,6 +309,7 @@ class CallSession extends ChangeNotifier {
   StreamSubscription<String>? _statusSub;
   Timer? _ringTimer;
   Timer? _syncTimer;
+  int _syncTick = 0;
   bool _closed = false;
   bool _offered = false;
   // Sinyal yang datang sebelum peer connection siap (offer bisa sampai
@@ -412,7 +443,9 @@ class CallSession extends ChangeNotifier {
     }
     notifyListeners();
     // Re-sync berkala sebagai jaring pengaman bila realtime signal terlewat.
-    _syncTimer = Timer.periodic(const Duration(seconds: 2), (_) => _syncAll());
+    // 12 dtk (dulu 2 dtk) — realtime onSignal/onCallStatus jalur utama;
+    // _syncAll skip sendiri saat sudah connected & ICE stabil.
+    _syncTimer = Timer.periodic(const Duration(seconds: 12), (_) => _syncAll());
   }
 
   Future<void> _setupMediaAndPeer() async {
@@ -885,6 +918,15 @@ class CallSession extends ChangeNotifier {
   Future<void> _syncAll() async {
     if (_closed) return;
     _touchHeartbeat();
+    // Hemat: saat sudah inCall & ICE connected, sinyal lengkap via realtime —
+    // lewati poll DB berat (getCall + full syncCallSignals) kecuali sesekali.
+    // Counter statis per sesi: sync penuh tiap tick ke-3 (~36 dtk).
+    _syncTick = (_syncTick + 1) % 3;
+    final curStateEarly = _pc?.connectionState;
+    final stableConnected =
+        curStateEarly == RTCPeerConnectionState.RTCPeerConnectionStateConnected &&
+        _phase == CallPhase.inCall;
+    if (stableConnected && _syncTick != 0) return;
     try {
       // Fallback status check — tangkap ended/canceled yang miss dari realtime
       final row = await _service.getCall(callId);
@@ -981,6 +1023,7 @@ class CallSession extends ChangeNotifier {
     _endReason = reason;
     _ringTimer?.cancel();
     _syncTimer?.cancel();
+    _service.releaseCallStatus(callId);
     _phase = CallPhase.ended;
     notifyListeners();
     // Pesan riwayat call di private chat kini dibuat SATU sumber saja di
@@ -1008,6 +1051,9 @@ class CallSession extends ChangeNotifier {
     await _signalSub?.cancel();
     await _statusSub?.cancel();
     _service.disposeSignal(callId);
+    // Bersihkan channel status sharing SETELAH cancel (dulu di _finish saat
+    // listener masih aktif → hasListener guard menolak → bocor permanen).
+    _service.releaseCallStatus(callId);
     try {
       await _pc?.close();
     } catch (_) {}

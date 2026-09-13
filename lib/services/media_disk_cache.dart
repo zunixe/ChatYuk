@@ -75,11 +75,29 @@ class MediaDiskCache {
       final map = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
       map.forEach((k, v) {
         final t = DateTime.tryParse('$v');
-        if (t != null) _index[k] = t;
+        if (t != null) {
+          _index[k] = t;
+          // Bangun peta balik filename → serverPath saat load, supaya LRU
+          // (_enforceQuota) bisa mengurutkan file berdasar akses terakhir
+          // tanpa perlu listing isi index lagi.
+          _fileNameToPath[_fileName(k)] = k;
+        }
       });
     } catch (e) {
       dlog('[MediaDisk] index load error: $e');
     }
+  }
+
+  Timer? _saveDebounce;
+
+  /// Tulis index ter-coalesce (maks 1 tulis per 2 dtk) — dulu tiap
+  /// read/write memicu tulis index.json sinkron dengan flush.
+  void _scheduleSaveIndex() {
+    if (_saveDebounce?.isActive == true) return;
+    _saveDebounce = Timer(const Duration(seconds: 2), () {
+      _saveDebounce = null;
+      unawaited(_saveIndex());
+    });
   }
 
   Future<void> _saveIndex() async {
@@ -116,7 +134,8 @@ class MediaDiskCache {
       final f = File(_pathFor(serverPath));
       if (!f.existsSync()) return null;
       _index[serverPath] = DateTime.now();
-      unawaited(_saveIndex());
+      _fileNameToPath[_fileName(serverPath)] = serverPath;
+      _scheduleSaveIndex();
       return f.readAsBytesSync();
     } catch (e) {
       dlog('[MediaDisk] read error: $e');
@@ -131,6 +150,11 @@ class MediaDiskCache {
     try {
       final f = File(_pathFor(serverPath));
       if (!f.existsSync()) return null;
+      // Update LRU di readSync (dulu cuma read yang update — cache panas
+      // yang dibaca sinkron tidak pernah "disentuh" → LRU salah hapus).
+      _index[serverPath] = DateTime.now();
+      _fileNameToPath[_fileName(serverPath)] = serverPath;
+      _scheduleSaveIndex();
       return f.readAsBytesSync();
     } catch (e) {
       dlog('[MediaDisk] readSync error: $e');
@@ -156,7 +180,8 @@ class MediaDiskCache {
       final f = File(_pathFor(serverPath));
       await f.writeAsBytes(bytes, flush: true);
       _index[serverPath] = DateTime.now();
-      unawaited(_saveIndex());
+      _fileNameToPath[_fileName(serverPath)] = serverPath;
+      _scheduleSaveIndex();
     } catch (e) {
       dlog('[MediaDisk] write error: $e');
     }
@@ -194,7 +219,7 @@ class MediaDiskCache {
       }
       final existing = byName.keys.toSet();
       _index.removeWhere((k, v) => !existing.contains(_fileName(k)));
-      unawaited(_saveIndex());
+      _scheduleSaveIndex();
     } catch (e) {
       dlog('[MediaDisk] quota error: $e');
     }
@@ -228,7 +253,7 @@ class MediaDiskCache {
           _index.removeWhere((k, v) => _fileName(k) == name);
         }
       }
-      unawaited(_saveIndex());
+      _scheduleSaveIndex();
     } catch (e) {
       dlog('[MediaDisk] keepOnly error: $e');
     }

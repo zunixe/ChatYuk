@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/timeline_service.dart';
 import '../services/rt_resilient.dart';
 import '../services/message_cache.dart';
-import '../services/realtime_hub.dart';
 
 /// Cache per-scope: posts + pagination state untuk tab Semua/Mengikuti/Postinganku.
 class _ScopeCache {
@@ -166,17 +165,16 @@ class TimelineProvider extends ChangeNotifier {
     _rtSub?.cancel();
     // Resilient: error channel me-restart subscription otomatis (post
     // baru berhenti masuk = feed terasa "mati" sampai restart).
+    // SATU jalur broadcast: watchNewPosts (Postgres changes) membawa row
+    // penuh (id/created_at/counter) — jalur Broadcast timeline-all dihapus
+    // karena tidak ada producer (sendBroadcastMessage tak pernah dipanggil)
+    // dan payload-nya berbentuk notifikasi, bukan row post.
     _rtSub = listenResilient(
       () => _service.watchNewPosts(),
       _onNewPost,
       isDisposed: () => _disposed,
       onError: (e) => dlog('[TimelineProvider] realtime error: $e'),
     );
-    // Unified fan-out: juga dengar Broadcast timeline-all (Presence) untuk 1→N ringan
-    RealtimeHub.instance.timelineBroadcast.listen((msg) {
-      final payload = msg['payload'] as Map<String, dynamic>?;
-      if (payload != null) _onNewPost({'event': msg['event'] ?? 'insert', 'row': payload});
-    });
   }
 
   void _onNewPost(Map<String, dynamic> msg) {

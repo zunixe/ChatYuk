@@ -295,22 +295,29 @@ class MessageCache {
 
   /// Ambil pesan cache (null jika tidak ada).
   /// Fast path: mem-cache. Slow path: SQLite terenkripsi (satu query).
-  Future<List<MessageModel>> loadMessages(String chatKey) async {
-    // Fast path: sudah pernah dibuka sesi ini â€” langsung pakai mem-cache
-    // tanpa perlu query DB sama sekali.
-    final mem = _memCache[chatKey];
-    if (mem != null) {
-      _memCacheUpdate(chatKey, mem); // refresh urutan LRU
-      return mem;
+  Future<List<MessageModel>> loadMessages(
+    String chatKey, {
+    DateTime? before,
+  }) async {
+    // Paging riwayat lebih lama TIDAK lewat mem-cache (hanya window terbaru).
+    if (before == null) {
+      final mem = _memCache[chatKey];
+      if (mem != null) {
+        _memCacheUpdate(chatKey, mem); // refresh urutan LRU
+        return mem;
+      }
     }
     try {
       final sw = Stopwatch()..start();
       await _ensureDb();
-      final msgs = await MessageStore.instance.loadMessages(chatKey);
+      final msgs = await MessageStore.instance.loadMessages(
+        chatKey,
+        before: before,
+      );
       dlog(
         '[CACHE-TIME] $chatKey sqlite=${sw.elapsedMilliseconds}ms n=${msgs.length}',
       );
-      _memCacheUpdate(chatKey, msgs);
+      if (before == null) _memCacheUpdate(chatKey, msgs);
       return msgs;
     } catch (e) {
       dlog('[MessageCache] loadMessages $chatKey error: $e');
