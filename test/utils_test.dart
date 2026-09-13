@@ -2,6 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/utils/bounded_cache.dart';
 import 'package:chatyuk/utils.dart' as utils;
+import 'package:chatyuk/config/strings.dart';
+import 'package:chatyuk/models/message_model.dart';
+import 'package:chatyuk/widgets/date_chip.dart';
 
 void main() {
   group('BoundedCache', () {
@@ -136,4 +139,48 @@ void main() {
       );
     });
   });
+
+  group('dateChipLabel', () {
+    test('hari ini & kemarin bilingual', () {
+      final id = S(isId: true);
+      final en = S(isId: false);
+      final now = DateTime.now();
+      expect(dateChipLabel(now, id), id.labelToday);
+      expect(dateChipLabel(now, en), en.labelToday);
+      final kemarin = now.subtract(const Duration(days: 1));
+      expect(dateChipLabel(kemarin, id), id.labelYesterday);
+      expect(dateChipLabel(kemarin, en), en.labelYesterday);
+    });
+
+    test('tanggal lama format lengkap, bukan label relatif', () {
+      final id = S(isId: true);
+      final lama = DateTime.now().subtract(const Duration(days: 10));
+      final label = dateChipLabel(lama, id);
+      expect(label, isNot(id.labelToday));
+      expect(label, isNot(id.labelYesterday));
+      expect(label.isNotEmpty, isTrue);
+    });
+  });
+
+  group('ChatItem', () {
+    test('message vs date mutually exclusive', () {
+      final m = ChatItem.message(_dummyMsg());
+      expect(m.msg, isNotNull);
+      expect(m.dateLabel, isNull);
+      const d = ChatItem.date('Hari ini');      expect(d.msg, isNull);
+      expect(d.dateLabel, 'Hari ini');
+    });
+  });
 }
+
+MessageModel _dummyMsg() => MessageModel(
+      id: 'x',
+      senderId: 'u',
+      senderName: 'A',
+      senderGender: 'male',
+      isRegistered: true,
+      text: 't',
+      type: 'text',
+      imageData: '',
+      timestamp: DateTime.now(),
+    );
