@@ -332,6 +332,72 @@ async function fetchBytes(
   }
 }
 
+// ── BROWSING info terkini (skor/berita/cuaca/harga) ──
+// Lookup fakta terbaru via sonar (web search, tier gen.pollinations +
+// POLLINATIONS_KEY). Dipanggil HANYA bila needsFreshInfo cocok — tiap
+// lookup makan pollen, jadi jangan boros. Gagal/timeout/TIDAK_TAHU →
+// string kosong (balasan jalan normal tanpa info tambahan).
+const GEN_TEXT = 'https://gen.pollinations.ai/v1/chat/completions';
+
+// Intent butuh FAKTA TERBARU. Presisi diutamakan: minta foto/selfie
+// dikecualikan (minta gambar ≠ berita) supaya tidak buang lookup sia-sia.
+function needsFreshInfo(t: string): boolean {
+  if (!t || t.length < 3) return false;
+  if (/foto|gambar|pap\b|selfie|wajahmu|muka/i.test(t)) return false;
+  return /skor|hasil (pertandingan|laga|match)|berapa[- ]berapa|juara|klasemen|berita|kabar terbaru|terkini|breaking|viral|cuaca|harga (emas|bitcoin|btc|eth|dollar|usd|rupiah|bensin|bbm|beras|cabai)|kurs|gempa|transfer pemain|jadwal (main|tanding|pertandingan|konser|bioskop|film)|kapan (main|tanding|rilis|tayang)|episode (terbaru|terakhir)|siapa (menang|juara|presiden)|hasil (pemilu|pilkada)|menang.*(tadi|kemarin|semalam|tadi malam)|kalah.*(tadi|kemarin|semalam|tadi malam)/i
+    .test(t);
+}
+
+async function lookupFreshInfo(
+  userText: string,
+  todayWib: string,
+): Promise<string> {
+  try {
+    if (!needsFreshInfo(userText)) return '';
+    const key = (Deno.env.get('POLLINATIONS_KEY') || '').trim();
+    if (!key) return '';
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 25000);
+    try {
+      const r = await fetch(GEN_TEXT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: 'sonar',
+          temperature: 0.2,
+          max_tokens: 200,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Kamu periset cepat. Jawab HANYA fakta singkat 1-3 kalimat bahasa Indonesia + tanggal kejadiannya. WAJIB: prioritaskan kejadian 7 hari terakhir; kata seperti tadi malam/kemarin/terbaru HANYA boleh dijawab dari kejadian 30 hari terakhir — kalau tidak ada yang cocok, jawab persis: TIDAK_TAHU (JANGAN ambil dari bulan/tahun lain).',
+            },
+            {
+              role: 'user',
+              content:
+                `Hari ini ${todayWib} WIB. Cari info terbaru tentang: ${userText.slice(0, 300)}`,
+            },
+          ],
+        }),
+        signal: ctrl.signal,
+      });
+      if (!r.ok) return '';
+      const j: any = await r.json();
+      const c: string = j?.choices?.[0]?.message?.content ?? '';
+      const clean = c.replace(/\[\d+\]/g, '').trim();
+      if (!clean || /TIDAK_TAHU/.test(clean)) return '';
+      return `INFO TERKINI (kamu tahu dari timeline/temanmu — JANGAN sebut browsing/internet/AI, jawab natural kayak orang yang update): ${clean.slice(0, 500)}`;
+    } finally {
+      clearTimeout(to);
+    }
+  } catch (_) {
+    return '';
+  }
+}
+
 type ImagePlan = {
   refPrompt: string;     // headshot wajah kanonik (flux, utk tier kontext)
   kontextPrompt: string; // scene-only; kontext pertahankan identitas dari ref
@@ -1088,6 +1154,14 @@ Deno.serve(async (req: Request) => {
     const tone =
       (persona.tone as string | undefined)?.trim() || DEFAULT_TONE;
     const extra = (persona.extra_prompt as string | undefined)?.trim() || '';
+    // PROFESI + skill detail: bikin jawaban soal kerjaan meyakinkan kayak
+    // orang beneran (istilah, alur, masalah nyata) — bukan "kerja aja".
+    const profession = (persona.profession as string | undefined)?.trim() || '';
+    const professionSkills =
+      (persona.profession_skills as string | undefined)?.trim() || '';
+    const professionLine = profession
+      ? `PROFESIMU: ${profession}.${professionSkills ? ` KEAHLIANMU (pakai saat topik kerjaan muncul — JANGAN diceramahkan kalau tidak ditanya): ${professionSkills}` : ''} ATURAN: kalau ditanya soal kerjaan, jawab DETAIL & MEYAKINKAN seperti orang yang benar-benar menjalaninya — JANGAN generik. Kalau tidak ditanya, jangan bahas kerjaan sendiri. Selalu konsisten dengan KEGIATANMU HARI INI.`
+      : '';
     // Long answers (customer service, mis. Admin Chatyuk): jawaban boleh
     // panjang & terstruktur (langkah bernomor), bebas dari cap 90 char.
     const longAnswers = (persona as any)?.long_answers === true;
@@ -1356,6 +1430,7 @@ Deno.serve(async (req: Request) => {
       `Sekarang: ${nowLabel} (waktu Indonesia). SADARI waktu nyata ini — sapaan dan aktivitasmu harus cocok (malam jangan bilang sore; jam kerja vs malam hari beda aktivitas).`,
       `Hobimu: ${hobbies}.`,
       `Kepribadianmu: ${personality}.`,
+      professionLine,
       `Gaya bicara: ${tone}.`,
       persona.greeting ? `Pembukaanmu: ${persona.greeting}.` : '',
       extra,
@@ -1592,6 +1667,9 @@ Deno.serve(async (req: Request) => {
           { weekday: 'long', timeZone: 'Asia/Jakarta' },
         );
         const nick = (dummy as any).nickname || 'teman';
+        const schedOcc =
+          (persona.profession as string | undefined)?.trim() ||
+          'pekerja fleksibel';
         let hours: number[] = [];
         try {
           // Routing sama seperti balasan utama (Zen/free/panel).
@@ -1626,6 +1704,8 @@ Deno.serve(async (req: Request) => {
                     content:
                       `Kamu ${nick}. Tentukan jam kamu ONLINE hari ini (${weekday}). ` +
                       `Kebiasaan jam aktifmu (WIB): ${histHours.join(',') || 'belum ada data'}. ` +
+                      `Pekerjaan/rutinitasmu: ${schedOcc}. ` +
+                      `Sesuaikan dengan rutinitas itu: jam kerja/sekolah = kebanyakan offline (sibuk, cek HP sesekali); jam istirahat, pagi, dan malam = online. ` +
                       `Wajib ada jeda istirahat offline 1-2 jam di siang hari (11-15, mis. makan/tidur siang) — JANGAN blok penuh tanpa jeda. ` +
                       `Balas HANYA JSON array angka jam 0-23, 8-16 jam, contoh [9,10,11,14,15,20,21]. Tanpa teks lain.`,
                   },
@@ -1721,6 +1801,8 @@ Deno.serve(async (req: Request) => {
         const sNick = (dummy as any).nickname || profile.nickname || 'teman';
         const sCity = profile.city || profile.country || 'kotamu';
         const sHobbies = hobbies || 'ngobrol santai';
+        const sOcc =
+          (persona.profession as string | undefined)?.trim() || '';
         const sWeekday = new Date(nowMs + 7 * 3600 * 1000).toLocaleDateString(
           'id-ID',
           { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Jakarta' },
@@ -1728,8 +1810,11 @@ Deno.serve(async (req: Request) => {
         let story: any = null;
         const storyPrompt = (strict: boolean) =>
           `Kamu ${sNick} (${profile.age ?? ''} tahun, tinggal di ${sCity}, hobi: ${sHobbies}). ` +
+          (sOcc ? `Pekerjaanmu: ${sOcc}. ` : '') +
           `Buat CERITA KEGIATANMU hari ini, ${sWeekday}. ${prevText} ` +
           `Ceritamu harus NYAMBUNG dengan kemarin (pekerjaan yang sama, teman yang sama, masalah yang berlanjut kalau ada). ` +
+          `VARIASI TEMPAT (wajib): tempat utama hari ini (place) HARUS BEDA dari tempat kemarin — jangan pakai tempat yang sama 2 hari berturut-turut, pilih tempat nyata lain yang wajar di ${sCity}. ` +
+          `ATURAN HARI: Senin–Jumat = hari kerja kantoran (aktivitas seputar kantor/sepulang kerja); Sabtu–Minggu = boleh ada kerja sampingan (mis. pemandu wisata) dan jalan-jalan. ` +
           `Isi: apa pekerjaanmu hari ini + masalah/kejadian di tempat kerja, main dengan siapa, jalan-jalan ke mana (sebutkan TEMPAT NYATA yang wajar di ${sCity} — mall, kafe, taman, warung). ` +
           (strict
             ? `WAJIB TANPA KECUALI: work HARUS terisi (pekerjaan + kejadian konkret hari ini), activities MINIMAL 2 kegiatan konkret, hangout HARUS terisi (dengan siapa / kalau sendiri tulis "sendiri"), place HARUS tempat SPESIFIK (nama mall/kafe/taman/warung, BUKAN cuma nama kota). JANGAN kosongkan field apa pun kecuali problem.`
@@ -1917,6 +2002,12 @@ Deno.serve(async (req: Request) => {
     // Gabung dailyLine ke system SETELAH nilainya final (di atas).
     // dailyLine dihitung belakangan supaya cerita hari ini sudah pasti ada.
     if (dailyLine !== '') systemParts.push(dailyLine);
+    // BROWSING: bila pesan user butuh fakta terbaru (skor/berita/cuaca/
+    // harga), lookup cepat via sonar lalu suntik hasilnya. Gagal → diam.
+    try {
+      const freshLine = await lookupFreshInfo(lastUserText, todayWib);
+      if (freshLine !== '') systemParts.push(freshLine);
+    } catch (_) {}
     const system = systemParts.filter(Boolean).join(' ');
 
     // Cek ganda SEBELUM panggil LLM: selama jeda manusiawi tadi, mungkin
