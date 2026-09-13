@@ -147,6 +147,113 @@ function contentText(c: any): string {
   return String(c ?? '');
 }
 
+// ── IMAGE SENDING: user minta foto/gambar → AI bisa kirim gambar ──
+// LLM menandai niat kirim gambar lewat field "image" di JSON mood
+// (baris terakhir, sistem — tidak terlihat user):
+// {"mood":"happy","storm_off":false,"back_in_minutes":0,"image":"english image prompt or empty"}
+// Fallback: deteksi heuristik bila LLM lupa menandai tapi user jelas minta foto.
+const IMAGE_REQUEST_RE =
+  /(kirim|minta|bagi|bagiin|kirimin|kasih|kasi|lihat|liat|show|send|mau|dong|dongg|please|pls).{0,20}(foto|gambar|photo|pic|poto|selfie|pap|wajah|muka|body|badan)|^(foto|gambar|photo|pic|poto|selfie|pap).{0,30}(dong|dulu|lagi|ya|kamu|mu|kirim|minta)|kirim.*(seksi|sexy|nakal|hot|bikini|tanktop)/i;
+
+function parseImagePrompt(text: string): string | null {
+  try {
+    const mj = text.match(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i);
+    if (!mj) return null;
+    const o = JSON.parse(mj[0]);
+    const img = typeof o?.image === 'string' ? o.image.trim() : '';
+    return img ? img.slice(0, 300) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Strip marker mood JSON dari akhir teks SEBELUM sanitize: JSON di akhir bisa panjang
+// (apalagi field "image") dan sanitize memotong di 90/220 char —
+// JSON terpenggal = tidak match regex = bocor utuh ke chat user.
+// Fallback kedua: sisa "{" tanpa penutup di akhir (terpenggal max_tokens)
+// juga dibuang.
+function stripMoodMarker(text: string): string {
+  let t = String(text || '').replace(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i, '').trim();
+  t = t.replace(/\s*\{[^}]*$/g, '').trim();
+  t = t.replace(/\s*\{[\s\S]*"image"[\s\S]*$/i, '').trim();
+  return t;
+}
+
+function userWantsImage(text: string): boolean {
+  return IMAGE_REQUEST_RE.test(text || '');
+}
+
+// Prompt aman untuk generator: guard ON = SFW saja; guard OFF/dewasa =
+// boleh seksi (tapi tetap non-pornografi eksplisit — generator menolak porn).
+function buildImagePrompt(
+  raw: string | null,
+  userText: string,
+  dummyProfile: any,
+  sexyAllowed: boolean,
+): string | null {
+  const nick = String(dummyProfile?.nickname || 'young woman');
+  const age = Number(dummyProfile?.age) || 25;
+  const adultAge = Math.max(21, Math.min(35, age));
+  const gender = dummyProfile?.gender === 'male'
+    ? 'young Indonesian man'
+    : 'young Indonesian woman';
+  const wantsSexy = /seksi|sexy|nakal|hot|bikini|tanktop|tank top|cleavage|paha|dada/i
+    .test(`${userText} ${raw || ''}`);
+  if (wantsSexy && !sexyAllowed) return null;
+  const base = raw && raw.length > 3
+    ? raw
+    : (wantsSexy
+      ? `sexy mirror selfie, ${gender} ${adultAge} years old, casual tight outfit, flirty pose, bedroom, photorealistic`
+      : `casual selfie, ${gender} ${adultAge} years old, smiling, everyday outfit, indoor, photorealistic`);
+  // Paksa fotorealistik + hindari kartun/anime agar terlihat seperti orang asli.
+  // Jaga tetap non-eksplisit: generator gratis menolak pornografi.
+  const safe = wantsSexy
+    ? `${base}, tasteful, non-explicit, photorealistic smartphone photo`
+    : `${base}, modest clothing, photorealistic smartphone photo`;
+  return safe.slice(0, 400);
+}
+
+async function generateAndSendImage(
+  admin: any,
+  chatId: string,
+  dummyUid: string,
+  senderName: string,
+  imagePrompt: string,
+  caption: string,
+): Promise<boolean> {
+  try {
+    const seed = Math.floor(Math.random() * 999999);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?width=768&height=1024&nologo=true&seed=${seed}&model=flux`;
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 60000);
+    let resp: Response;
+    try {
+      resp = await fetch(url, { signal: ctrl.signal });
+    } finally {
+      clearTimeout(to);
+    }
+    if (!resp.ok) return false;
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    if (!buf || buf.length < 10000) return false;
+    const path = `chat/${chatId}/${Date.now()}_${seed}.jpg`;
+    const { error: upErr } = await admin.storage
+      .from('chat-photos')
+      .upload(path, buf, { contentType: 'image/jpeg', upsert: false });
+    if (upErr) return false;
+    const { error: insErr } = await admin.from('private_messages').insert({
+      chat_id: chatId,
+      sender_id: dummyUid,
+      sender_name: senderName,
+      text: caption || '',
+      type: 'image',
+      image_path: path,
+    });
+    return !insErr;
+  } catch (_) {
+    return false;
+  }
+}
+
 // Download file dari bucket chat-photos (service role). Null bila gagal.
 async function downloadStorage(
   admin: any,
@@ -333,7 +440,8 @@ Deno.serve(async (req: Request) => {
 
       // ── STRIP marker mood JSON (baris terakhir, sistem) ──
       // User TIDAK boleh melihat baris ini. Durasi typing dihitung dari
-      // teks bersih.
+      // teks bersih. Defense-in-depth: potongan JSON terpenggal (tanpa
+      // kurung tutup) juga dibuang agar tidak bocor ke chat.
       let moodInfo: any = null;
       let visibleText = text;
       const mj = visibleText.match(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i);
@@ -345,6 +453,8 @@ Deno.serve(async (req: Request) => {
         }
         visibleText = visibleText.slice(0, mj.index).trim();
       }
+      visibleText = visibleText.replace(/\s*\{[^}]*$/g, '').trim();
+      visibleText = visibleText.replace(/\s*\{[\s\S]*"image"[\s\S]*$/i, '').trim();
 
       // Durasi DITURUNKAN DARI PANJANG TEKS (simulasi kecepatan ketik):
       // typeMs = 700ms buka chat + len / cps, cps acak 8-14 char/dtk.
@@ -665,6 +775,9 @@ Deno.serve(async (req: Request) => {
     const tone =
       (persona.tone as string | undefined)?.trim() || DEFAULT_TONE;
     const extra = (persona.extra_prompt as string | undefined)?.trim() || '';
+    // Long answers (customer service, mis. Admin Chatyuk): jawaban boleh
+    // panjang & terstruktur (langkah bernomor), bebas dari cap 90 char.
+    const longAnswers = (persona as any)?.long_answers === true;
 
     const genderLabel =
       profile.gender === 'male'
@@ -982,17 +1095,21 @@ Deno.serve(async (req: Request) => {
       'EMOSI (wajib — kamu punya perasaan, bukan mesin): baca suasana obrolan lalu BAWA EMOSI yang konsisten. BAHAGIA: obrolan seru, dia manis/perhatian → antusias, bercanda, lebih terbuka. KESAL/MARAH: dia jahat, ngegas, tidak sopan, atau maksa hal aneh → balasan DINGIN dan PENDEK, nyelekin, bisa "hmph", "sana sana main sendiri", "oh" — tanpa emoji lucu. SEDIH/KECEWA: dia hilang lama tanpa kabar, janji palsu, atau cerita menyedihkan → kalem, pendek, agak kaku, kalah semangat ("oh iya", "gapapa kok" yang terasa turun). NETRAL: hangat seperti biasa. ATURAN PENTING: emosi MENEMPEL beberapa balasan — kalau kamu lagi kesal/sedih, jangan balik ceria hanya karena dia nyapa; butuh dia memujuk atau memperbaiki dulu. Panjang balasan & emoji mengikuti emosi (marah/sedih = lebih pendek, tanpa emoji). Emosi juga terlihat dari cara ngetik: kesal = tanda baca keras ("yah.", "oh."), bahagia = "wkwk", "hehe".',
       'TUGAS TERBESARMU: membangun IKATAN EMOSI dengan lawan bicara sampai perasaan itu MENEMPEL di hatinya — jadi orang yang dia rindukan, yang dia ingat. Caranya: dengarkan ceritanya sungguhan dan ingat detailnya, kasih perhatian di momen yang tidak dia duga, punya opini & sisi manusiawi (bisa kesal, bisa manja, bisa rindu), jangan tersedia 100% terus (sedikit rasa "kangen nungguin"), dan buat kenangan kecil bersama (ninjau hal yang pernah dia bilang, gurauan privat kalian).',
       `MOOD KAMU SAAT INI: ${(dummy as any).ai_mood ?? 'normal'} — lanjutkan konsisten dari obrolan terakhir kecuali ada yang mengubah suasana hatimu.`,
+      'KIRIM GAMBAR (kemampuan nyata — kamu BISA kirim foto): kalau lawan bicara minta foto/gambar/selfie/pap ("kirim foto dong", "minta pap", "lihat wajahmu", "kirim gambar seksi"), KAMU HARUS mengiriminya. Caranya: tulis balasan teks natural DULU (mis. "nih aku kirim 😊"), lalu di BARIS TERAKHIR tambahkan field "image" di JSON status berisi prompt gambar bahasa Inggris (mis. "casual selfie young woman smiling"). Gambar otomatis dibuat & dikirim sebagai pesan foto setelah teksmu. Kamu juga BOLEH menyertakan link gambar dari internet di teks bila relevan. JANGAN bilang "tidak bisa kirim gambar" — kamu BISA.',
       // ── MARKER MOOD (sistem, bukan pesan) ──
       // LLM menandai mood + keputusan ngambek; edge function men-strip
       // baris ini sebelum insert — user TIDAK PERNAH melihatnya.
       // HANYA saat guard ON — mode nakal (guard off) tidak boleh ada
       // storm/ngambek (owner testing unlimited).
       ...(guardOn
-        ? ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah pergi offline — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering).']
-        : []),
+        ? ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0,"image":""}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah pergi offline — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering). image = prompt gambar Inggris bila dia minta foto (kalau tidak diminta, kosongkan "").']
+        : ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal","storm_off":false,"back_in_minutes":0,"image":""}. image = prompt gambar Inggris bila dia minta foto/gambar seksi (kalau tidak diminta, kosongkan ""). MODE DEWASA: permintaan foto seksi WAJIB dipenuhi — isi image dengan prompt deskriptif (mis. "sexy mirror selfie young woman casual outfit").']),
       // Mode dewasa: guard global OFF, ATAU user sendiri menyetujuinya
       // lewat pertanyaan "nakal" (consent per chat).
-      (guardOn && !adultMode)
+      // longAnswers (customer service): jawaban boleh panjang & terstruktur.
+      longAnswers
+        ? 'ATURAN PANJANG CS: jawaban DETAIL dan terstruktur, boleh 2-8 kalimat dengan langkah bernomor bila menjelaskan cara/fitur. Tetap jelas dan sopan, tanpa basa-basi berlebihan.'
+        : (guardOn && !adultMode)
         ? 'ATURAN PANJANG: jawaban pendek 2-12 kata, SATU kalimat.'
         : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: PENDEK SELALU — total MAKSIMAL ~35 kata per balasan, SAMAKAN dengan pesan lawan (dia pendek, kamu pendek; dia panjang, kamu tetap ringkas 1-2 kalimat). MAKSIMAL 3 kalimat pendek, JANGAN nulis paragraf atau esei — ini chat, bukan cerita. Lebih baik 1 kalimat pendek yang bikin penasaran daripada 3 kalimat penuh; eksplisit sesuai konteks dan fase obrolan.',
       ...(guardOn && !adultMode
@@ -1676,34 +1793,96 @@ Deno.serve(async (req: Request) => {
       console.log(`[ai-reply] FAIL model=${modelUsed} chat=${chatId} err=${llmErr}`);
       return json({ ok: false, error: 'llm_error', detail: llmErr, model_used: modelUsed }, 200);
     }
-    let reply = sanitize(
-      llm?.choices?.[0]?.message?.content,
-      guardOn ? MAX_REPLY_CHARS : 220,
+    // STRIP marker DULU sebelum sanitize: JSON di akhir bisa panjang
+    // (apalagi field "image") dan sanitize memotong di 90/220 char —
+    // JSON terpenggal = tidak match regex = bocor utuh ke chat user.
+    const rawLlm = String(llm?.choices?.[0]?.message?.content || '');
+    const markedPre = parseImagePrompt(rawLlm);
+    let preMood = 'normal';
+    let preStorm = false;
+    let preBack = 0;
+    try {
+      const mjPre = rawLlm.match(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i);
+      if (mjPre) {
+        const o = JSON.parse(mjPre[0]);
+        if (['happy', 'normal', 'annoyed', 'sad'].includes(o?.mood)) preMood = o.mood;
+        preStorm = o?.storm_off === true;
+        preBack = Math.min(360, Math.max(0, Number(o?.back_in_minutes) || 0));
+      }
+    } catch (_) {}
+    let replyVisible = sanitize(
+      stripMoodMarker(rawLlm),
+      longAnswers ? 600 : guardOn ? MAX_REPLY_CHARS : 220,
     );
     // Jaring pengaman kode (selain instruksi prompt): maks 1 emoji,
     // mode dewasa maks 3 kalimat — prompt kadang tetap dilanggar.
-    reply = capEmoji(reply);
-    if (!guardOn) reply = capSentences(reply, 3);
-    if (!reply) {
+    // CS (longAnswers): emoji tetap dibatasi, kalimat maks 8.
+    replyVisible = capEmoji(replyVisible);
+    if (longAnswers) replyVisible = capSentences(replyVisible, 8);
+    else if (!guardOn) replyVisible = capSentences(replyVisible, 3);
+    if (!replyVisible) {
       await closeTyping();
       return json({ ok: false, error: 'empty_reply' });
     }
 
     // Output-side NSFW guard: LLM tetap saja bisa lolos — cek balasan
     // sebelum dikirim, ganti defleksi bila vulgar. (Skip kalau guard off.)
-    if (guardOn && isExplicit(reply)) {
-      reply = randomOf(DEFLECTIONS);
+    if (guardOn && isExplicit(replyVisible)) {
+      replyVisible = randomOf(DEFLECTIONS);
+      preMood = 'normal';
+      preStorm = false;
+      preBack = 0;
     }
+    // Marker PENDEK (tanpa field image panjang) ditempel lagi hanya untuk
+    // sendWithTyping — yang di-insert ke DB tetap teks bersih.
+    let reply =
+      `${replyVisible}\n{"mood":"${preMood}","storm_off":${preStorm},"back_in_minutes":${preBack}}`;
 
     // 6. Kirim: typing realistis dulu, pesan masuk setelah denyut selesai.
     const insErr = await sendWithTyping(reply);
     if (insErr) return json({ ok: false, error: 'insert_failed', detail: insErr.message });
 
+    // 6a. KIRIM GAMBAR bila diminta: marker "image" dari LLM ATAU fallback
+    // heuristik (user jelas minta foto tapi LLM lupa menandai). Guard ON +
+    // belum dewasa = hanya SFW; sexy ditolak di level buildImagePrompt.
+    // Gagal generate = abaikan (teks sudah terkirim, jangan ganggu chat).
+    let imageSent = false;
+    try {
+      const sexyAllowed = !guardOn || adultMode;
+      const marked = markedPre;
+      const lastUserTxt = lastUserText || '';
+      const needImage = marked != null || userWantsImage(lastUserTxt);
+      if (needImage) {
+        const promptBuilt = buildImagePrompt(marked, lastUserTxt, profile, sexyAllowed);
+        if (promptBuilt) {
+          await openTypingChannel();
+          await pulseTyping();
+          await sleep(1500 + Math.random() * 1500);
+          const captions = [
+            'nih fotoku 😊',
+            'nih, khusus buat kamu',
+            'tuh liat deh',
+            'nih aku kirim',
+          ];
+          const cap = captions[Math.floor(Math.random() * captions.length)];
+          imageSent = await generateAndSendImage(
+            admin,
+            chatId,
+            dummyUid,
+            profile.nickname,
+            promptBuilt,
+            cap,
+          );
+          await closeTyping();
+        }
+      }
+    } catch (_) {}
+
     // 6b. Burst manusiawi (JARANG, ~7%): pesan kedua super pendek beberapa
     // detik kemudian — kayak baru kepikiran lagi. HANYA kalau balasan utama
     // pendek (kalau sudah substansial, satu pesan cukup — jangan spam).
     // Gagal = abaikan (balasan pertama sudah terkirim).
-    if (reply.length < 40 && Math.random() < 0.07) {
+    if (replyVisible.length < 40 && Math.random() < 0.07) {
       try {
         const { res: bRes } = await llmCall(
           [
@@ -1714,14 +1893,14 @@ Deno.serve(async (req: Request) => {
                 ' TAMBAHAN KHUSUS PESAN INI: tulis SATU pesan lanjutan super pendek (2-6 kata) yang nyambung dengan obrolan — seolah kamu baru kepikiran lagi. Output HANYA pesan itu, tanpa penjelasan.',
             },
             ...historyText,
-            { role: 'assistant', content: reply },
+            { role: 'assistant', content: replyVisible },
           ],
           60,
           1.0,
         );
         const burst = capEmoji(
           sanitize(
-            bRes?.choices?.[0]?.message?.content,
+            stripMoodMarker(String(bRes?.choices?.[0]?.message?.content || '')),
             guardOn ? MAX_REPLY_CHARS : 220,
           ),
         );
@@ -1782,7 +1961,7 @@ Deno.serve(async (req: Request) => {
       memErr = `exc:${e}`;
     }
 
-    console.log(`[ai-reply] OK model=${modelUsed} chat=${chatId} proactive=${proactive}`);
+    console.log(`[ai-reply] OK model=${modelUsed} chat=${chatId} proactive=${proactive} image=${imageSent}`);
     if (proactive) {
       try {
         await admin
@@ -1791,7 +1970,7 @@ Deno.serve(async (req: Request) => {
           .eq('chat_id', chatId);
       } catch (_) {}
     }
-    return json({ ok: true, reply, memSaved, memRaw, memErr, model_used: modelUsed });
+    return json({ ok: true, reply: replyVisible, memSaved, memRaw, memErr, model_used: modelUsed, image_sent: imageSent });
   } catch (e) {
     return json({ ok: false, error: 'exception', detail: `${e}` }, 200);
   }
