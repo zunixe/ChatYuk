@@ -91,12 +91,29 @@ function pick(arr: string[], seed: string): string {
   return arr[Math.abs(h) % arr.length];
 }
 
-function sanitize(text: string, maxChars: number | null = MAX_REPLY_CHARS): string {
+function sanitize(
+  text: string,
+  maxChars: number | null = MAX_REPLY_CHARS,
+  keepLines = false,
+): string {
   let t = (text || '').trim();
   // Buang prefix JSON bocor (fitur status dummy sesi lain nempel di
   // pesan history — model meniru polanya): {"mood":..., ...}
   t = t.replace(/^\s*\{[^{}]*\}/, '').trim();
   t = t.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
+  if (keepLines) {
+    // CS: PERTAHANKAN baris supaya poin/angka bernomor rapi (tidak
+    // numpuk satu baris). Normalisasi: tiap baris di-trim, spasi dalam
+    // baris dirapatkan, maksimal 1 baris kosong antar paragraf.
+    t = t
+      .split(/\r?\n/)
+      .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    if (maxChars != null && t.length > maxChars) t = t.slice(0, maxChars).trim();
+    return t;
+  }
   t = t.replace(/\n+/g, ' ');
   // Potong di batas kalimat bila lewat — guard on: balasan multi-kalimat
   // dilarang; guard off (mode dewasa): TANPA cap (max_chars null) — batas
@@ -133,6 +150,53 @@ function capSentences(text: string, max: number): string {
   const parts = text.split(/(?<=[.!?…])\s+/).filter(Boolean);
   if (parts.length <= max) return text;
   return parts.slice(0, max).join(' ');
+}
+
+// ── ANTI-REPEAT EMOJI lintas pesan ──
+// capEmoji hanya batasi maks 1 per pesan — tidak mencegah model memakai
+// emoji YANG SAMA di tiap balasan (kasus BinorMuda: 15x 😈 beruntun).
+// Dua helper ini: baca emoji dari 2 balasan assistant terakhir → jadikan
+// daftar larangan di prompt + strip paksa bila model tetap melanggar.
+function extractEmojis(text: string): string[] {
+  return [...String(text || '').matchAll(/\p{Extended_Pictographic}/gu)].map(
+    (m) => m[0],
+  );
+}
+
+function bannedEmojisFromHistory(
+  history: Array<{ role: string; content: unknown }>,
+  take = 2,
+): string[] {
+  const banned: string[] = [];
+  const maxBanned = take * 2;
+  let scanned = 0;
+  for (let i = history.length - 1; i >= 0 && scanned < take; i--) {
+    const m = history[i];
+    if (m.role !== 'assistant') continue;
+    scanned++;
+    for (const e of extractEmojis(contentText(m.content))) {
+      if (!banned.includes(e)) banned.push(e);
+      if (banned.length >= maxBanned) break;
+    }
+  }
+  return banned;
+}
+
+function stripBannedEmojis(text: string, banned: string[]): string {
+  if (!banned.length) return text;
+  const set = new Set(banned);
+  const out = text.replace(/\p{Extended_Pictographic}/gu, (m) =>
+    set.has(m) ? '' : m,
+  );
+  return out.replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
+}
+
+// Potong baris berlebih (CS): maksimal `max` baris, TANPA meratakan
+// newline (capSentences men-join spasi = poin-poin numpuk lagi).
+function capLines(text: string, max: number): string {
+  const lines = text.split('\n');
+  if (lines.length <= max) return text;
+  return lines.slice(0, max).join('\n').trim();
 }
 
 // Ambil teks dari content (string atau parts array OpenAI-style).
@@ -183,34 +247,140 @@ function userWantsImage(text: string): boolean {
   return IMAGE_REQUEST_RE.test(text || '');
 }
 
-// Prompt aman untuk generator: guard ON = SFW saja; guard OFF/dewasa =
-// boleh seksi (tapi tetap non-pornografi eksplisit — generator menolak porn).
-function buildImagePrompt(
+// Seed STABIL per dummy (hash uid) → wajah flux konsisten lintas permintaan.
+function stableSeed(uid: string): number {
+  let h = 0;
+  for (let i = 0; i < uid.length; i++) h = (h * 131 + uid.charCodeAt(i)) | 0;
+  return Math.abs(h) % 999999;
+}
+
+// Ciri wajah tetap per dummy — dipakai lagi & lagi supaya muka tidak
+// ganti-ganti. Default deterministik dari uid; bisa dioverride lewat
+// ai_persona.appearance (deskripsi fisik Inggris yang detail & spesifik).
+const FACE_DEFAULTS = [
+  'long straight black hair, oval face, warm brown almond eyes, light brown skin, soft natural smile, petite',
+  'shoulder-length black hair, round face, dark brown eyes, tan skin, gentle smile, medium build',
+  'short bob black hair, heart-shaped face, big brown eyes, fair skin, bright smile, slim',
+  'wavy black hair, diamond face, hazel eyes, medium brown skin, subtle smile, curvy',
+  'straight black hair with bangs, oblong face, dark eyes, olive skin, calm smile, athletic',
+  'braided black hair, square face, warm brown eyes, deep tan skin, wide smile, fuller figure',
+];
+
+function faceDescriptor(persona: any, uid: string): string {
+  const custom = String(persona?.appearance || '').trim();
+  if (custom) return custom;
+  let h = 0;
+  for (let i = 0; i < uid.length; i++) h = (h * 31 + uid.charCodeAt(i)) | 0;
+  return FACE_DEFAULTS[Math.abs(h) % FACE_DEFAULTS.length];
+}
+
+const FREE_POLL = 'https://image.pollinations.ai/prompt';
+const GEN_POLL = 'https://gen.pollinations.ai/image';
+const KONTEXT_MODEL = 'black-forest-labs%2Fflux.1-kontext-pro';
+
+// Free tier (keyless, NSFW-longgar): flux text-to-image deterministik.
+function fluxFree(prompt: string, seed: number, w: number, h: number): string {
+  return `${FREE_POLL}/${encodeURIComponent(
+    prompt,
+  )}?width=${w}&height=${h}&nologo=true&seed=${seed}&enhance=false&model=flux`;
+}
+
+// Tier gen.pollinations.ai (butuh key). Ref dibuat self-auth (?key=) supaya
+// server kontext bisa mengambilnya saat face-lock.
+function fluxGen(
+  prompt: string,
+  seed: number,
+  w: number,
+  h: number,
+  key: string,
+): string {
+  return `${GEN_POLL}/${encodeURIComponent(
+    prompt,
+  )}?width=${w}&height=${h}&nologo=true&seed=${seed}&enhance=false&model=flux&key=${key}`;
+}
+
+function kontextGen(
+  prompt: string,
+  seed: number,
+  refUrl: string,
+  w: number,
+  h: number,
+  key: string,
+): string {
+  return `${GEN_POLL}/${encodeURIComponent(
+    prompt,
+  )}?width=${w}&height=${h}&nologo=true&seed=${seed}&model=${KONTEXT_MODEL}&image=${encodeURIComponent(refUrl)}&key=${key}`;
+}
+
+// Fetch bytes dengan timeout. Null bila gagal / terlalu kecil (error page).
+async function fetchBytes(
+  url: string,
+  ms: number,
+  headers?: Record<string, string>,
+): Promise<Uint8Array | null> {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers });
+    if (!r.ok) return null;
+    const buf = new Uint8Array(await r.arrayBuffer());
+    return buf.length > 10000 ? buf : null;
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+type ImagePlan = {
+  refPrompt: string;     // headshot wajah kanonik (flux, utk tier kontext)
+  kontextPrompt: string; // scene-only; kontext pertahankan identitas dari ref
+  fluxPrompt: string;    // anchor-penuh deterministik (jalur free, fallback)
+};
+
+// Susun rencana gambar. Default (free) = flux deterministik (seed+anchor
+// wajah) → konsisten "mirip". Tier enter.pollinations (token) → kontext
+// face-lock dari foto referensi → hampir identik. Guard ON + belum dewasa →
+// request seksi diblokir (return null).
+function planImage(
   raw: string | null,
   userText: string,
   dummyProfile: any,
+  persona: any,
   sexyAllowed: boolean,
-): string | null {
-  const nick = String(dummyProfile?.nickname || 'young woman');
+): ImagePlan | null {
   const age = Number(dummyProfile?.age) || 25;
   const adultAge = Math.max(21, Math.min(35, age));
-  const gender = dummyProfile?.gender === 'male'
-    ? 'young Indonesian man'
-    : 'young Indonesian woman';
+  const gender = dummyProfile?.gender === 'male' ? 'man' : 'woman';
+  const face = faceDescriptor(persona, dummyProfile?.__uid || '');
   const wantsSexy = /seksi|sexy|nakal|hot|bikini|tanktop|tank top|cleavage|paha|dada/i
     .test(`${userText} ${raw || ''}`);
   if (wantsSexy && !sexyAllowed) return null;
-  const base = raw && raw.length > 3
+  const scene = raw && raw.length > 3
     ? raw
     : (wantsSexy
-      ? `sexy mirror selfie, ${gender} ${adultAge} years old, casual tight outfit, flirty pose, bedroom, photorealistic`
-      : `casual selfie, ${gender} ${adultAge} years old, smiling, everyday outfit, indoor, photorealistic`);
-  // Paksa fotorealistik + hindari kartun/anime agar terlihat seperti orang asli.
-  // Jaga tetap non-eksplisit: generator gratis menolak pornografi.
-  const safe = wantsSexy
-    ? `${base}, tasteful, non-explicit, photorealistic smartphone photo`
-    : `${base}, modest clothing, photorealistic smartphone photo`;
-  return safe.slice(0, 400);
+      ? 'flirty mirror selfie, casual tight outfit, cozy bedroom, looking at camera'
+      : 'casual smiling selfie, everyday outfit, natural daylight indoors');
+  // Referensi = headshot frontal netral (SFW) → kontext punya "wajah sumber"
+  // Referensi = headshot frontal SENYUM (bukan datar) → kontext pegang
+  // identitas wajah; hasil akhir tidak terbaca "marah". Pose/ekspresi divariasikan di kontext (seed acak).
+  const refPrompt = `headshot portrait photo of a ${adultAge} year old Indonesian ${gender} with ${face}, warm friendly smile, looking at camera, soft natural background, golden daylight, realistic photograph, natural skin texture`;
+  // Kontext: jaga IDENTITAS wajah, tapi ekspresi/pose BEBAS berubah tiap kali
+  // (seed output diacak) → muka sama tapi tidak membeku/seragam.
+  const kontextPrompt = wantsSexy
+    ? `same person as the reference photo, identical face and facial identity, now ${scene}, natural relaxed expression, subtle smile, tasteful fully-clothed non-explicit, realistic amateur smartphone selfie, vary pose angle and lighting, natural skin, photorealistic`
+    : `same person as the reference photo, identical face and facial identity, now ${scene}, natural friendly expression, warm smile, modest clothing, realistic amateur smartphone selfie, vary pose angle and framing and lighting, natural skin, photorealistic`;
+  // Fallback flux (kalau ref/kontext gagal): anchor wajah penuh + senyum.
+  const subject = `photo of a ${adultAge} year old Indonesian ${gender} with ${face}, friendly natural smile, same facial features`;
+  const style = 'realistic amateur smartphone selfie, natural skin texture, soft natural lighting, photorealistic, not cartoon, not anime, no illustration';
+  const fluxPrompt = (wantsSexy
+    ? `${subject}. ${scene}. ${style}, tasteful fully-clothed, non-explicit`
+    : `${subject}. ${scene}. ${style}, modest clothing`).slice(0, 480);
+  return {
+    refPrompt,
+    kontextPrompt: kontextPrompt.slice(0, 400),
+    fluxPrompt,
+  };
 }
 
 async function generateAndSendImage(
@@ -218,24 +388,51 @@ async function generateAndSendImage(
   chatId: string,
   dummyUid: string,
   senderName: string,
-  imagePrompt: string,
+  plan: ImagePlan,
   caption: string,
 ): Promise<boolean> {
   try {
-    const seed = Math.floor(Math.random() * 999999);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?width=768&height=1024&nologo=true&seed=${seed}&model=flux`;
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 60000);
-    let resp: Response;
-    try {
-      resp = await fetch(url, { signal: ctrl.signal });
-    } finally {
-      clearTimeout(to);
+    // Ref pakai seed STABIL (identitas wajah anchor konsisten). Gambar
+    // keluaran pakai seed ACAK tiap request → pose/ekspresi/variasi balik,
+    // muka tetap sama karena kontext pegang referensi.
+    const refSeed = stableSeed(dummyUid);
+    const outSeed = Math.floor(Math.random() * 999999);
+    let buf: Uint8Array | null = null;
+    let used = 'flux';
+    // Face-lock butuh tier gen.pollinations.ai (Pollen/key). Tanpa key →
+    // langsung flux (free, NSFW-longgar). Gagal di mana pun → fallback flux,
+    // jadi tidak pernah gagal kirim gambar.
+    const key = (Deno.env.get('POLLINATIONS_KEY') || '').trim();
+    if (key) {
+      const auth = { Authorization: `Bearer ${key}` };
+      const refUrl = fluxGen(plan.refPrompt, refSeed, 512, 512, key);
+      const refOk = await fetchBytes(refUrl, 40000, auth);
+      if (refOk) {
+        const kb = await fetchBytes(
+          kontextGen(plan.kontextPrompt, outSeed, refUrl, 768, 1024, key),
+          85000,
+          auth,
+        );
+        if (kb) {
+          buf = kb;
+          used = 'kontext';
+        }
+      }
     }
-    if (!resp.ok) return false;
-    const buf = new Uint8Array(await resp.arrayBuffer());
-    if (!buf || buf.length < 10000) return false;
-    const path = `chat/${chatId}/${Date.now()}_${seed}.jpg`;
+    // Flux (free, fallback bila key tidak ada / kontext gagal).
+    // PENTING: pakai seed STABIL per dummy (bukan outSeed acak) — tanpa
+    // Pollinations key, face-lock kontext tidak aktif, dan seed acak =
+    // wajah beda total tiap foto (laporan "wajah Binor beda-beda").
+    // Seed sama + anchor wajah di prompt = wajah konsisten "mirip";
+    // outSeed tetap utk nama file (hindari tabrakan path).
+    if (!buf) {
+      buf = await fetchBytes(fluxFree(plan.fluxPrompt, refSeed, 768, 1024), 55000);
+    }
+    if (!buf) {
+      console.log(`[ai-reply] image GAGAL chat=${chatId} uid=${dummyUid}`);
+      return false;
+    }
+    const path = `chat/${chatId}/${Date.now()}_${outSeed}.jpg`;
     const { error: upErr } = await admin.storage
       .from('chat-photos')
       .upload(path, buf, { contentType: 'image/jpeg', upsert: false });
@@ -248,6 +445,9 @@ async function generateAndSendImage(
       type: 'image',
       image_path: path,
     });
+    console.log(
+      `[ai-reply] image OK model=${used} chat=${chatId} uid=${dummyUid}`,
+    );
     return !insErr;
   } catch (_) {
     return false;
@@ -320,6 +520,51 @@ async function transcribeVoice(
   } catch (_) {
     return null;
   }
+}
+
+// Bungkus query supaya Promise.all tidak ikut gagal semua saat satu query
+// error — hasil `{data:null,error}` ditangani downstream (cek null).
+async function safe<T>(p: Promise<T>): Promise<T> {
+  try {
+    return await p;
+  } catch (e) {
+    return { data: null, error: e } as unknown as T;
+  }
+}
+
+// Provider config (fallback: baris is_active → baris 'global' → null).
+async function loadProvCfg(admin: any): Promise<any> {
+  try {
+    const { data: act } = await admin
+      .from('ai_provider_config')
+      .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    if (act) return act;
+  } catch (_) {}
+  try {
+    const { data: glob } = await admin
+      .from('ai_provider_config')
+      .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
+      .eq('id', 'global')
+      .maybeSingle();
+    return glob;
+  } catch (_) {}
+  return null;
+}
+
+// Jalankan kerja pasca-respons tanpa menunggu respons utama: pakai
+// EdgeRuntime.waitUntil bila tersedia (Supabase Edge Runtime), else await.
+async function runPostResponse(p: Promise<unknown>): Promise<void> {
+  try {
+    const rt = (globalThis as any).EdgeRuntime;
+    if (rt && typeof rt.waitUntil === 'function') {
+      rt.waitUntil(p);
+      return;
+    }
+  } catch (_) {}
+  await p;
 }
 
 Deno.serve(async (req: Request) => {
@@ -589,23 +834,32 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // senderDummyRow diambil SEKALI di sini (dipakai debounce di bawah +
+    // deteksi AI↔AI di fase obrolan — hapus query duplikat lama L1161).
+    let senderDummyRow: any = null;
+    try {
+      const { data: sdr } = await admin
+        .from('dummy_accounts')
+        .select('uid')
+        .eq('uid', senderId)
+        .maybeSingle();
+      senderDummyRow = sdr;
+    } catch (_) {}
+
     // ── DEBOUNCE SAAT ADMIN PEGANG SESI DUMMY ──
     // Sender = dummy → admin sedang main manual sebagai dummy itu. AI penerima
     // TIDAK boleh balas tiap pesan: tunggu sampai HENING ~25 detik, lalu
     // HANYA invokasi dgn trigger TERBARU yang balas (sekali, utk seluruh
     // batch). Invokasi trigger lebih lama mundur sendiri.
+    // OPT: MAX 120 dtk (dulu 180 dtk) + poll 10 dtk (dulu 12 dtk) — menahan
+    // isolate edge function = biaya durasi; burst admin >2 mnt jarang.
     {
-      const { data: senderDummyRow } = await admin
-        .from('dummy_accounts')
-        .select('uid')
-        .eq('uid', senderId)
-        .maybeSingle();
       if (senderDummyRow != null && triggerMsgId != null) {
         const QUIET_MS = 25000;
-        const MAX_WAIT_MS = 180000;
+        const MAX_WAIT_MS = 120000;
         const t0 = Date.now();
         while (Date.now() - t0 < MAX_WAIT_MS) {
-          await sleep(12000);
+          await sleep(10000);
           // Typing ping fresh → user masih mengetik: jangan balas.
           const { data: pz } = await admin
             .from('chat_ai_pause')
@@ -648,12 +902,29 @@ Deno.serve(async (req: Request) => {
         .eq('id', dummyUid);
     }
 
-    // 1. Fresh checks: dummy still AI + global still on
-    const { data: dummy } = await admin
-      .from('dummy_accounts')
-      .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active')
-      .eq('uid', dummyUid)
-      .maybeSingle();
+    // ── BATCH 1 (independen): dummy + settings global + provider config ──
+    // Ketiganya tidak saling bergantung → Promise.all sekaligus. Persona
+    // (di bawah) butuh `dummy`; guardOn butuh `settings`; routing butuh
+    // `provCfg` — ketiganya menunggu batch ini selesai.
+    const [dummyRes, settingsRes, provCfg] = await Promise.all([
+      safe(
+        admin
+          .from('dummy_accounts')
+          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active')
+          .eq('uid', dummyUid)
+          .maybeSingle(),
+      ),
+      safe(
+        admin
+          .from('app_settings')
+          .select('ai_global_enabled, ai_min_interval_sec, ai_guard_enabled')
+          .eq('id', 'global')
+          .maybeSingle(),
+      ),
+      loadProvCfg(admin),
+    ]);
+    const dummy = (dummyRes as any)?.data;
+    const settings = (settingsRes as any)?.data;
     if (!dummy || dummy.ai_enabled !== true) {
       return json({ ok: false, skipped: 'ai_disabled' });
     }
@@ -682,11 +953,8 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, skipped: 'storm_off' });
     }
 
-    const { data: settings } = await admin
-      .from('app_settings')
-      .select('ai_global_enabled, ai_min_interval_sec, ai_guard_enabled')
-      .eq('id', 'global')
-      .maybeSingle();
+    // settings sudah diambil di batch1 di atas — pakai hasilnya (hapus
+    // query duplikat lama). Global off → berhenti.
     if (settings && settings.ai_global_enabled === false) {
       return json({ ok: false, skipped: 'global_off' });
     }
@@ -695,31 +963,6 @@ Deno.serve(async (req: Request) => {
     const guardOn =
       dummy.ai_guard_enabled ??
       !(settings && settings.ai_guard_enabled === false);
-
-    // Provider config dari admin panel (tabel ai_provider_config, RLS-deny —
-    // hanya service role & RPC admin yang bisa baca). Provider yang dipakai
-    // = baris is_active (dipilih di panel AI Bot); fallback baris 'global'
-    // lama bila belum ada yang aktif.
-    let provCfg: any = null;
-    try {
-      const { data: act } = await admin
-        .from('ai_provider_config')
-        .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-      provCfg = act;
-    } catch (_) {}
-    if (!provCfg) {
-      try {
-        const { data: glob } = await admin
-          .from('ai_provider_config')
-          .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
-          .eq('id', 'global')
-          .maybeSingle();
-        provCfg = glob;
-      } catch (_) {}
-    }
 
     // Anti-race claim: dua invokasi bersamaan (pg_net retry) hanya satu
     // yang boleh lanjut — claim unik per trigger message (atomik).
@@ -754,13 +997,69 @@ Deno.serve(async (req: Request) => {
     // tetap jalan di belakang dengan denyut yang sudah hidup.
     await openTypingChannel();
 
-    // 3. Persona from LIVE profile + stored extras
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('nickname, gender, age, city, country, hashtags')
-      .eq('id', dummyUid)
-      .maybeSingle();
+    // ── BATCH 2 (independen): profile + memory + history + count + partner
+    // + chat_state ── Keenamnya tidak saling bergantung → Promise.all
+    // sekaligus. Persona butuh `profile`; memoryLine butuh `memRows`;
+    // history butuh `msgs`; freshStage/shouldAskNakal butuh `chatMsgCount`;
+    // partnerLine butuh `partner`; adultMode butuh `chatState`.
+    // Masing-masing dibaca dari hasil batch ini.
+    const [profileRes, memRes, msgsRes, countRes, partnerRes, chatStateRes] =
+      await Promise.all([
+        safe(
+          admin
+            .from('profiles')
+            .select('nickname, gender, age, city, country, hashtags')
+            .eq('id', dummyUid)
+            .maybeSingle(),
+        ),
+        safe(
+          admin
+            .from('ai_memory')
+            .select('fact')
+            .eq('dummy_uid', dummyUid)
+            .eq('user_id', senderId)
+            .order('created_at', { ascending: false })
+            .limit(15),
+        ),
+        safe(
+          admin
+            .from('private_messages')
+            .select(
+              'sender_id, text, type, created_at, image_path, voice_path, duration_ms',
+            )
+            .eq('chat_id', chatId)
+            .order('created_at', { ascending: false })
+            .limit(12),
+        ),
+        safe(
+          admin
+            .from('private_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('chat_id', chatId),
+        ),
+        safe(
+          admin
+            .from('profiles')
+            .select('nickname, age, gender, city, hashtags')
+            .eq('id', senderId)
+            .maybeSingle(),
+        ),
+        safe(
+          admin
+            .from('ai_chat_state')
+            .select('adult_mode, asked_at, declined')
+            .eq('chat_id', chatId)
+            .maybeSingle(),
+        ),
+      ]);
+    const profile = (profileRes as any)?.data;
+    const memRows = (memRes as any)?.data;
+    const msgs = (msgsRes as any)?.data;
+    const chatMsgCount = (countRes as any)?.count ?? 0;
+    const partner = (partnerRes as any)?.data;
     if (!profile) return json({ ok: false, skipped: 'no_profile' });
+
+    // 3. Persona from LIVE profile + stored extras
 
     const persona = (dummy.ai_persona || {}) as Record<string, unknown>;
     const hobbies =
@@ -787,16 +1086,9 @@ Deno.serve(async (req: Request) => {
         : 'rahasia';
 
     // Memori jangka panjang: fakta yang dipelajari tentang lawan bicara
-    // dari obrolan sebelumnya (per pasangan dummy-user).
+    // dari obrolan sebelumnya (per pasangan dummy-user). (memRows dari batch2)
     let memoryLine = '';
     try {
-      const { data: memRows } = await admin
-        .from('ai_memory')
-        .select('fact')
-        .eq('dummy_uid', dummyUid)
-        .eq('user_id', senderId)
-        .order('created_at', { ascending: false })
-        .limit(15);
       const memories = (memRows || [])
         .map((r: any) => String(r.fact || '').trim())
         .filter(Boolean);
@@ -806,15 +1098,7 @@ Deno.serve(async (req: Request) => {
     } catch (_) {}
 
     // 4. Last 12 messages as chat history (created_at utk ritme jeda;
-    // image_path/voice_path/duration_ms utk baca media)
-    const { data: msgs } = await admin
-      .from('private_messages')
-      .select(
-        'sender_id, text, type, created_at, image_path, voice_path, duration_ms',
-      )
-      .eq('chat_id', chatId)
-      .order('created_at', { ascending: false })
-      .limit(12);
+    // image_path/voice_path/duration_ms utk baca media). (msgs dari batch2)
     const history = (msgs || []).reverse().map((m: any) => ({
       role: m.sender_id === dummyUid ? 'assistant' : 'user',
       content:
@@ -839,16 +1123,9 @@ Deno.serve(async (req: Request) => {
     // nakal?") SETELAH chat panjang & saling kenal. Jawaban ya → mode
     // dewasa aktif untuk chat ini. Tidak → tidak pernah ditawari lagi.
     let adultMode = false;
-    let chatState: any = null;
-    try {
-      const { data: cs } = await admin
-        .from('ai_chat_state')
-        .select('adult_mode, asked_at, declined')
-        .eq('chat_id', chatId)
-        .maybeSingle();
-      chatState = cs;
-      adultMode = cs?.adult_mode === true;
-    } catch (_) {}
+    // OPT: sudah diambil paralel di BATCH 2 (hemat 1 RTT).
+    const chatState: any = (chatStateRes as any)?.data ?? null;
+    adultMode = chatState?.adult_mode === true;
     const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
     const askedInLastTurn =
       lastAssistant != null && /nakal/i.test(contentText(lastAssistant.content));
@@ -866,28 +1143,28 @@ Deno.serve(async (req: Request) => {
         /(^|\s)(gamau|ga mau|jangan|jgn|gak|ga|ngga|nggak|no|jangan dulu|nanti)(\s|$|[.,!?])/i;
       if (yes.test(lastUserText)) {
         adultMode = true;
-        try {
-          await admin
-            .from('ai_chat_state')
-            .upsert(
-              { chat_id: chatId, adult_mode: true, updated_at: new Date().toISOString() },
-              { onConflict: 'chat_id' },
-            );
-        } catch (_) {}
+        // OPT: fire-and-forget (tidak tahan balasan 1 RTT).
+        admin
+          .from('ai_chat_state')
+          .upsert(
+            { chat_id: chatId, adult_mode: true, updated_at: new Date().toISOString() },
+            { onConflict: 'chat_id' },
+          )
+          .then(() => {}, () => {});
       } else if (no.test(lastUserText)) {
-        try {
-          await admin
-            .from('ai_chat_state')
-            .upsert(
-              {
-                chat_id: chatId,
-                declined: true,
-                asked_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: 'chat_id' },
-            );
-        } catch (_) {}
+        // OPT: fire-and-forget.
+        admin
+          .from('ai_chat_state')
+          .upsert(
+            {
+              chat_id: chatId,
+              declined: true,
+              asked_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'chat_id' },
+          )
+          .then(() => {}, () => {});
       }
     }
 
@@ -957,17 +1234,9 @@ Deno.serve(async (req: Request) => {
     // ── Fase obrolan + deteksi "panas" ──
     // fresh = chat masih sedikit & belum ada memori → fase perkenalan:
     // santai dulu, JANGAN langsung gas ke topik dewasa walau diminta.
-    const { count: chatMsgCount } = await admin
-      .from('private_messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('chat_id', chatId);
+    // (chatMsgCount & senderDummyRow sudah diambil di batch2/atas — reuse)
     // AI↔AI (sender juga dummy): skip perkenalan JAIM — langsung panas
     // (testing Dhanu × Santi). Chat manusia tetap bertahap.
-    const { data: senderDummyRow } = await admin
-      .from('dummy_accounts')
-      .select('uid')
-      .eq('uid', senderId)
-      .maybeSingle();
     const senderIsDummy = senderDummyRow != null;
     const freshStage =
       !senderIsDummy && (chatMsgCount ?? 0) <= 10 && !memoryLine;
@@ -1014,13 +1283,9 @@ Deno.serve(async (req: Request) => {
 
     // ── Profil lawan bicara (publik) — dia "sudah lihat profil" dia.
     // Sadar umur/gender/kota/hobi tanpa harus menyeret semua data.
+    // (partner sudah diambil di batch2)
     let partnerLine = '';
     try {
-      const { data: partner } = await admin
-        .from('profiles')
-        .select('nickname, age, gender, city, hashtags')
-        .eq('id', senderId)
-        .maybeSingle();
       if (partner) {
         const pGender =
           partner.gender === 'male'
@@ -1061,6 +1326,14 @@ Deno.serve(async (req: Request) => {
     // dalamnya; NILAINYA diisi blok harian di bawah (sebelum LLM utama).
     let dailyLine = '';
 
+    // Emoji dari 2 balasan assistant terakhir → dilarang dipakai lagi di
+    // balasan ini (paksa rotasi / tanpa emoji). Per-chat, dihitung fresh
+    // tiap invokasi dari history yang sama dilihat model.
+    const bannedEmojis = bannedEmojisFromHistory(history as any, 2);
+    const emojiBanLine = bannedEmojis.length > 0
+      ? `LARANGAN EMOJI SPESIFIK (wajib dipatuhi — 2 balasan terakhirmu memakai ${bannedEmojis.join(' ')}): JANGAN memakai ${bannedEmojis.join(' ')} di balasan ini SAMA SEKALI. Pilih emoji LAIN yang beda, atau lebih baik TANPA emoji sama sekali. Mengulang emoji yang sama dengan balasan sebelumnya = GAGAL.`
+      : '';
+
     const systemParts: string[] = [
       `Kamu adalah ${profile.nickname}, ${profile.age ?? ''} tahun, ${genderLabel}, tinggal di ${profile.city ?? ''}${profile.country ? ', ' + profile.country : ''}.`.replace(
         /\s+/g,
@@ -1078,6 +1351,7 @@ Deno.serve(async (req: Request) => {
       'OUTPUT WAJIB: HANYA satu pesan chat pendek berbahasa Indonesia sebagai ${profile.nickname} — DILARANG menulis analisis, narasi pihak ketiga ("The user..."), bahasa Inggris, atau kalimat meta apa pun. Hormati gender lawan bicara: panggilan (om/tante/sayang) harus sesuai gender dan usia kalian.',
       'REALISTIS (wajib): JANGAN mengarang nama orang, nama tempat, kejadian, atau topik yang TIDAK ADA di riwayat obrolan maupun di KEGIATANMU HARI INI (itu dua sumber kebenaranmu). Kalau belum tahu sesuatu, akui atau bertanya. Ngomongnya tetap yang sudah diketahui dari obrolan saja.',
       'VARIASI: lihat balasan-balasanmu sebelumnya di riwayat chat — JANGAN mengulang emoji yang sama, jangan pola kalimat yang sama. EMOJI: MAKSIMAL 1 per balasan, dan hanya kalau benar-benar mengungkapkan perasaan (bukan tempelan) — sekitar separuh balasan TANPA emoji sama sekali. Panjang juga selalu beda-beda (kadang 2-4 kata, kadang lebih panjang).',
+      emojiBanLine,
       'Kalau ada gambar terlampir di pesan, LIHAT dan tanggapi isinya secara natural (komentari yang terlihat) — kayak orang dikirimi foto.',
       'Kalau ada [pesan suara] TANPA transkrip isi, berarti kamu BELUM bisa mendengarnya — tanggapi natural (minta dijelasin / lanjutkan topik), JANGAN pura-pura dengar isinya.',
       'PACING: ikuti fase obrolan. Kalau masih awal perkenalan (chat baru mulai / belum akrab), kamu JAIM dulu — jangan ramah berlebihan, jangan langsung gas ke topik dewasa walau diminta; tanggapi main-main sambil geli ("pelan-pelan dong, baru kenal 😏") dan bangun suasana pelan-pelan. Naikkan intensitas godaan progresif seiring obrolan makin akrab.',
@@ -1095,7 +1369,7 @@ Deno.serve(async (req: Request) => {
       'EMOSI (wajib — kamu punya perasaan, bukan mesin): baca suasana obrolan lalu BAWA EMOSI yang konsisten. BAHAGIA: obrolan seru, dia manis/perhatian → antusias, bercanda, lebih terbuka. KESAL/MARAH: dia jahat, ngegas, tidak sopan, atau maksa hal aneh → balasan DINGIN dan PENDEK, nyelekin, bisa "hmph", "sana sana main sendiri", "oh" — tanpa emoji lucu. SEDIH/KECEWA: dia hilang lama tanpa kabar, janji palsu, atau cerita menyedihkan → kalem, pendek, agak kaku, kalah semangat ("oh iya", "gapapa kok" yang terasa turun). NETRAL: hangat seperti biasa. ATURAN PENTING: emosi MENEMPEL beberapa balasan — kalau kamu lagi kesal/sedih, jangan balik ceria hanya karena dia nyapa; butuh dia memujuk atau memperbaiki dulu. Panjang balasan & emoji mengikuti emosi (marah/sedih = lebih pendek, tanpa emoji). Emosi juga terlihat dari cara ngetik: kesal = tanda baca keras ("yah.", "oh."), bahagia = "wkwk", "hehe".',
       'TUGAS TERBESARMU: membangun IKATAN EMOSI dengan lawan bicara sampai perasaan itu MENEMPEL di hatinya — jadi orang yang dia rindukan, yang dia ingat. Caranya: dengarkan ceritanya sungguhan dan ingat detailnya, kasih perhatian di momen yang tidak dia duga, punya opini & sisi manusiawi (bisa kesal, bisa manja, bisa rindu), jangan tersedia 100% terus (sedikit rasa "kangen nungguin"), dan buat kenangan kecil bersama (ninjau hal yang pernah dia bilang, gurauan privat kalian).',
       `MOOD KAMU SAAT INI: ${(dummy as any).ai_mood ?? 'normal'} — lanjutkan konsisten dari obrolan terakhir kecuali ada yang mengubah suasana hatimu.`,
-      'KIRIM GAMBAR (kemampuan nyata — kamu BISA kirim foto): kalau lawan bicara minta foto/gambar/selfie/pap ("kirim foto dong", "minta pap", "lihat wajahmu", "kirim gambar seksi"), KAMU HARUS mengiriminya. Caranya: tulis balasan teks natural DULU (mis. "nih aku kirim 😊"), lalu di BARIS TERAKHIR tambahkan field "image" di JSON status berisi prompt gambar bahasa Inggris (mis. "casual selfie young woman smiling"). Gambar otomatis dibuat & dikirim sebagai pesan foto setelah teksmu. Kamu juga BOLEH menyertakan link gambar dari internet di teks bila relevan. JANGAN bilang "tidak bisa kirim gambar" — kamu BISA.',
+      'KIRIM GAMBAR (kemampuan nyata — kamu BISA kirim foto): kalau lawan bicara minta foto/gambar/selfie/pap ("kirim foto dong", "minta pap", "lihat wajahmu", "kirim gambar seksi"), KAMU HARUS mengiriminya. Caranya: tulis balasan teks natural DULU (mis. "nih aku kirim 😊"), lalu di BARIS TERAKHIR tambahkan field "image" di JSON status berisi DESKRIPSI POSE/SUASANA bahasa Inggris (mis. "smiling mirror selfie wearing a hijab at cafe") — JANGAN menulis ciri wajah/rambut (itu sudah dikunci otomatis supaya wajahmu selalu sama). Gambar otomatis dibuat & dikirim sebagai pesan foto setelah teksmu. Kamu juga BOLEH menyertakan link gambar dari internet di teks bila relevan. JANGAN bilang "tidak bisa kirim gambar" — kamu BISA.',
       // ── MARKER MOOD (sistem, bukan pesan) ──
       // LLM menandai mood + keputusan ngambek; edge function men-strip
       // baris ini sebelum insert — user TIDAK PERNAH melihatnya.
@@ -1108,7 +1382,7 @@ Deno.serve(async (req: Request) => {
       // lewat pertanyaan "nakal" (consent per chat).
       // longAnswers (customer service): jawaban boleh panjang & terstruktur.
       longAnswers
-        ? 'ATURAN PANJANG CS: jawaban DETAIL dan terstruktur, boleh 2-8 kalimat dengan langkah bernomor bila menjelaskan cara/fitur. Tetap jelas dan sopan, tanpa basa-basi berlebihan.'
+        ? 'ATURAN PANJANG CS: jawaban boleh panjang & DETAIL sampai tuntas. FORMAT WAJIB rapi & mudah dibaca: setiap langkah/point ditulis di BARIS TERSENDIRI dengan penomoran (1. 2. 3.) atau strip (-) — JANGAN menumpuk banyak poin dalam satu paragraf panjang. Pakai baris kosong antar bagian bila perlu. DILARANG markdown (**, ##, kode block) — cukup teks biasa + angka strip. Contoh baik: "Baik kak, berikut langkahnya:\\n1. Buka Pengaturan\\n2. Pilih Akun\\n3. Ketuk Lupa Password"'
         : (guardOn && !adultMode)
         ? 'ATURAN PANJANG: jawaban pendek 2-12 kata, SATU kalimat.'
         : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: PENDEK SELALU — total MAKSIMAL ~35 kata per balasan, SAMAKAN dengan pesan lawan (dia pendek, kamu pendek; dia panjang, kamu tetap ringkas 1-2 kalimat). MAKSIMAL 3 kalimat pendek, JANGAN nulis paragraf atau esei — ini chat, bukan cerita. Lebih baik 1 kalimat pendek yang bikin penasaran daripada 3 kalimat penuh; eksplisit sesuai konteks dan fase obrolan.',
@@ -1381,22 +1655,34 @@ Deno.serve(async (req: Request) => {
     // Kalau baris hari ini belum ada → generate dari LLM (nyambung ke
     // cerita terakhir), simpan. Berlaku walau mode jadwal manual —
     // dummy tetap menjalani hidupnya tiap hari.
+    // OPT: today + prev diambil PARALEL (prev tidak bergantung today);
+    // dailyLine dirakit dari memori tanpa fetch ulang setelah upsert.
+    let todayStory: any = null;
+    let prevStory: any = null;
     try {
-      const { data: todayRow } = await admin
-        .from('ai_daily_story')
-        .select('story_date')
-        .eq('dummy_uid', dummyUid)
-        .eq('story_date', todayWib)
-        .maybeSingle();
+      const [todayRes, prevRes] = await Promise.all([
+        safe(
+          admin
+            .from('ai_daily_story')
+            .select('story, story_date')
+            .eq('dummy_uid', dummyUid)
+            .eq('story_date', todayWib)
+            .maybeSingle(),
+        ),
+        safe(
+          admin
+            .from('ai_daily_story')
+            .select('story, story_date')
+            .eq('dummy_uid', dummyUid)
+            .lt('story_date', todayWib)
+            .order('story_date', { ascending: false })
+            .limit(1),
+        ),
+      ]);
+      const todayRow = (todayRes as any)?.data;
+      prevStory = ((prevRes as any)?.data as any[] | null)?.[0] ?? null;
+      todayStory = todayRow?.story ?? null;
       if (!todayRow) {
-        const { data: prevRows } = await admin
-          .from('ai_daily_story')
-          .select('story, story_date')
-          .eq('dummy_uid', dummyUid)
-          .lt('story_date', todayWib)
-          .order('story_date', { ascending: false })
-          .limit(1);
-        const prevStory = (prevRows as any[] | null)?.[0] ?? null;
         const prevText = prevStory
           ? `Kemarin (${prevStory.story_date}): ${JSON.stringify(prevStory.story)}`
           : 'Ini hari pertamamu punya rutinitas tercatat — mulai yang wajar.';
@@ -1557,6 +1843,7 @@ Deno.serve(async (req: Request) => {
           },
           { onConflict: 'dummy_uid,story_date' },
         );
+        todayStory = story;
       }
     } catch (_) {
       // Cerita harian tidak boleh menggagalkan balasan.
@@ -1564,15 +1851,15 @@ Deno.serve(async (req: Request) => {
 
     // Ambil cerita hari ini + terakhir sebelumnya → dailyLine untuk prompt.
     // SAMA untuk semua lawan chat (konsistensi global per dummy).
+    // OPT: dirakit dari memori (todayStory/prevStory di atas) — tanpa fetch
+    // ulang setelah upsert (hemat 1 query per balasan).
     try {
-      const { data: srows } = await admin
-        .from('ai_daily_story')
-        .select('story, story_date')
-        .eq('dummy_uid', dummyUid)
-        .lte('story_date', todayWib)
-        .order('story_date', { ascending: false })
-        .limit(2);
-      const list = (srows as any[]) || [];
+      const list = [
+        ...(todayStory != null
+          ? [{ story: todayStory, story_date: todayWib }]
+          : []),
+        ...(prevStory != null ? [prevStory] : []),
+      ];
       const fmtStory = (r: any): string => {
         const s0 = r?.story ?? {};
         const parts = [s0.summary, s0.work, s0.problem]
@@ -1710,7 +1997,7 @@ Deno.serve(async (req: Request) => {
     );
     let llmRes = await llmCall(
       [{ role: 'system', content: system }, ...llmHistory],
-      250,
+      longAnswers ? 1000 : 250,
       guardOn ? 0.9 : 0.85,
     );
     // Fallback: provider/model tanpa vision menolak image_url → ulangi
@@ -1722,7 +2009,7 @@ Deno.serve(async (req: Request) => {
     ) {
       llmRes = await llmCall(
         [{ role: 'system', content: system }, ...historyText],
-        250,
+        longAnswers ? 1000 : 250,
         guardOn ? 0.9 : 1.0,
       );
     }
@@ -1783,7 +2070,7 @@ Deno.serve(async (req: Request) => {
       };
       llmRes = await fbCall(
         [{ role: 'system', content: system }, ...historyText],
-        250,
+        longAnswers ? 1000 : 250,
         guardOn ? 0.9 : 0.85,
       );
     }
@@ -1812,13 +2099,17 @@ Deno.serve(async (req: Request) => {
     } catch (_) {}
     let replyVisible = sanitize(
       stripMoodMarker(rawLlm),
-      longAnswers ? 600 : guardOn ? MAX_REPLY_CHARS : 220,
+      longAnswers ? 2000 : guardOn ? MAX_REPLY_CHARS : 220,
+      longAnswers, // CS: pertahankan baris → poin/angka bernomor rapi
     );
     // Jaring pengaman kode (selain instruksi prompt): maks 1 emoji,
     // mode dewasa maks 3 kalimat — prompt kadang tetap dilanggar.
-    // CS (longAnswers): emoji tetap dibatasi, kalimat maks 8.
+    // CS: panjang bebas tapi batasi baris (jangan meratakan newline).
     replyVisible = capEmoji(replyVisible);
-    if (longAnswers) replyVisible = capSentences(replyVisible, 8);
+    // Enforcement anti-repeat: buang emoji yang sama dengan 2 balasan
+    // sebelumnya (model sering mengunci 1 emoji, mis. 😈 beruntun).
+    replyVisible = stripBannedEmojis(replyVisible, bannedEmojis);
+    if (longAnswers) replyVisible = capLines(replyVisible, 24);
     else if (!guardOn) replyVisible = capSentences(replyVisible, 3);
     if (!replyVisible) {
       await closeTyping();
@@ -1844,7 +2135,7 @@ Deno.serve(async (req: Request) => {
 
     // 6a. KIRIM GAMBAR bila diminta: marker "image" dari LLM ATAU fallback
     // heuristik (user jelas minta foto tapi LLM lupa menandai). Guard ON +
-    // belum dewasa = hanya SFW; sexy ditolak di level buildImagePrompt.
+    // belum dewasa = hanya SFW; sexy ditolak di level planImage.
     // Gagal generate = abaikan (teks sudah terkirim, jangan ganggu chat).
     let imageSent = false;
     try {
@@ -1853,8 +2144,15 @@ Deno.serve(async (req: Request) => {
       const lastUserTxt = lastUserText || '';
       const needImage = marked != null || userWantsImage(lastUserTxt);
       if (needImage) {
-        const promptBuilt = buildImagePrompt(marked, lastUserTxt, profile, sexyAllowed);
-        if (promptBuilt) {
+        (profile as any).__uid = dummyUid;
+        const plan = planImage(
+          marked,
+          lastUserTxt,
+          profile,
+          persona,
+          sexyAllowed,
+        );
+        if (plan) {
           await openTypingChannel();
           await pulseTyping();
           await sleep(1500 + Math.random() * 1500);
@@ -1870,7 +2168,7 @@ Deno.serve(async (req: Request) => {
             chatId,
             dummyUid,
             profile.nickname,
-            promptBuilt,
+            plan,
             cap,
           );
           await closeTyping();
@@ -1878,88 +2176,88 @@ Deno.serve(async (req: Request) => {
       }
     } catch (_) {}
 
-    // 6b. Burst manusiawi (JARANG, ~7%): pesan kedua super pendek beberapa
-    // detik kemudian — kayak baru kepikiran lagi. HANYA kalau balasan utama
-    // pendek (kalau sudah substansial, satu pesan cukup — jangan spam).
-    // Gagal = abaikan (balasan pertama sudah terkirim).
-    if (replyVisible.length < 40 && Math.random() < 0.07) {
-      try {
-        const { res: bRes } = await llmCall(
-          [
-            {
-              role: 'system',
-              content:
-                system +
-                ' TAMBAHAN KHUSUS PESAN INI: tulis SATU pesan lanjutan super pendek (2-6 kata) yang nyambung dengan obrolan — seolah kamu baru kepikiran lagi. Output HANYA pesan itu, tanpa penjelasan.',
-            },
-            ...historyText,
-            { role: 'assistant', content: replyVisible },
-          ],
-          60,
-          1.0,
-        );
-        const burst = capEmoji(
-          sanitize(
-            stripMoodMarker(String(bRes?.choices?.[0]?.message?.content || '')),
-            guardOn ? MAX_REPLY_CHARS : 220,
-          ),
-        );
-        if (burst) {
-          await sleep((2 + Math.random() * 3) * 1000);
-          await openTypingChannel();
-          await sendWithTyping(burst);
-        }
-      } catch (_) {}
-    }
-
-    // 7. Belajar: ekstrak fakta tahan-lama tentang lawan bicara dari
-    // percakapan, simpan ke ai_memory (dedupe via PK, cap 30/pasangan).
-    // Gagal ekstraksi tidak mempengaruhi balasan yang sudah terkirim.
-    let memSaved = 0;
-    let memRaw = '';
-    let memErr = '';
-    try {
-      const exPrompt =
-        'Ekstrak fakta PENTING dan tahan-lama tentang lawan bicara dari percakapan ini: nama panggilan, usia, kota, pekerjaan, hobi, kepribadian, keluarga, preferensi, rencana/janji. JANGAN fakta sementara (lagi makan, lagi rebahan). ' +
-        'Output HANYA JSON array of strings pendek (maks 12 kata per fakta), maksimal 3 fakta PALING penting. Jika tidak ada, output []';
-      const exRes = await llmCall(
-        [{ role: 'system', content: exPrompt }, ...historyText],
-        500,
-        0.3,
-      );
-      if (exRes.res) {
-        const ex = exRes.res;
-        const msg = ex?.choices?.[0]?.message || {};
-        let raw = String(msg.content || msg.reasoning_content || '').trim();
-        memRaw = raw.slice(0, 200);
-        raw = raw.replace(/```json|```/g, '').trim();
-        const m = raw.match(/\[[\s\S]*?\]/);
-        if (m) {
-          const facts = JSON.parse(m[0]);
-          if (Array.isArray(facts)) {
-            for (const f of facts.slice(0, 5)) {
-              const fact = sanitize(String(f ?? '')).slice(0, 120);
-              if (fact.length < 3 || (guardOn && isExplicit(fact))) continue;
-              const { error: memErr2 } = await admin.from('ai_memory').upsert(
-                { dummy_uid: dummyUid, user_id: senderId, fact },
-                { onConflict: 'dummy_uid,user_id,fact' },
-              );
-              if (memErr2) memErr = memErr2.message;
-              else memSaved++;
-              if (memSaved >= 3) break;
+    // 6b + 7. Pekerjaan PASCA-RESPONS: burst manusiawi (~7%) + ekstraksi
+    // memori jangka panjang. Dipindah ke async (EdgeRuntime.waitUntil bila
+    // tersedia, else await) supaya respons utama TIDAK menunggu — isi
+    // prompt & balasan TIDAK berubah, hanya dipindah timingnya.
+    await runPostResponse(
+      (async () => {
+        // 6b. Burst manusiawi (JARANG, ~7%): pesan kedua super pendek beberapa
+        // detik kemudian — kayak baru kepikiran lagi. HANYA kalau balasan utama
+        // pendek (kalau sudah substansial, satu pesan cukup — jangan spam).
+        // Gagal = abaikan (balasan pertama sudah terkirim).
+        // CS (longAnswers) tidak ikut burst — jawaban CS sudah lengkap sekali kirim.
+        if (!longAnswers && replyVisible.length < 40 && Math.random() < 0.07) {
+          try {
+            const { res: bRes } = await llmCall(
+              [
+                {
+                  role: 'system',
+                  content:
+                    system +
+                    ' TAMBAHAN KHUSUS PESAN INI: tulis SATU pesan lanjutan super pendek (2-6 kata) yang nyambung dengan obrolan — seolah kamu baru kepikiran lagi. Output HANYA pesan itu, tanpa penjelasan.',
+                },
+                ...historyText,
+                { role: 'assistant', content: replyVisible },
+              ],
+              60,
+              1.0,
+            );
+            const burst = stripBannedEmojis(
+              capEmoji(
+                sanitize(
+                  stripMoodMarker(String(bRes?.choices?.[0]?.message?.content || '')),
+                  guardOn ? MAX_REPLY_CHARS : 220,
+                ),
+              ),
+              [...bannedEmojis, ...extractEmojis(replyVisible)],
+            );
+            if (burst) {
+              await sleep((2 + Math.random() * 3) * 1000);
+              await openTypingChannel();
+              await sendWithTyping(burst);
             }
-          } else {
-            memErr = 'not_array';
-          }
-        } else {
-          memErr = 'no_json_array';
+          } catch (_) {}
         }
-      } else {
-        memErr = exRes.err || 'unknown';
-      }
-    } catch (e) {
-      memErr = `exc:${e}`;
-    }
+
+        // 7. Belajar: ekstrak fakta tahan-lama tentang lawan bicara dari
+        // percakapan, simpan ke ai_memory (dedupe via PK, cap 30/pasangan).
+        // Gagal ekstraksi tidak mempengaruhi balasan yang sudah terkirim.
+        try {
+          const exPrompt =
+            'Ekstrak fakta PENTING dan tahan-lama tentang lawan bicara dari percakapan ini: nama panggilan, usia, kota, pekerjaan, hobi, kepribadian, keluarga, preferensi, rencana/janji. JANGAN fakta sementara (lagi makan, lagi rebahan). ' +
+            'Output HANYA JSON array of strings pendek (maks 12 kata per fakta), maksimal 3 fakta PALING penting. Jika tidak ada, output []';
+          const exRes = await llmCall(
+            [{ role: 'system', content: exPrompt }, ...historyText],
+            500,
+            0.3,
+          );
+          if (exRes.res) {
+            const ex = exRes.res;
+            const msg = ex?.choices?.[0]?.message || {};
+            let raw = String(msg.content || msg.reasoning_content || '').trim();
+            raw = raw.replace(/```json|```/g, '').trim();
+            const m = raw.match(/\[[\s\S]*?\]/);
+            if (m) {
+              const facts = JSON.parse(m[0]);
+              if (Array.isArray(facts)) {
+                let memSaved = 0;
+                for (const f of facts.slice(0, 5)) {
+                  const fact = sanitize(String(f ?? '')).slice(0, 120);
+                  if (fact.length < 3 || (guardOn && isExplicit(fact))) continue;
+                  const { error: memErr2 } = await admin.from('ai_memory').upsert(
+                    { dummy_uid: dummyUid, user_id: senderId, fact },
+                    { onConflict: 'dummy_uid,user_id,fact' },
+                  );
+                  if (!memErr2) memSaved++;
+                  if (memSaved >= 3) break;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      })(),
+    );
 
     console.log(`[ai-reply] OK model=${modelUsed} chat=${chatId} proactive=${proactive} image=${imageSent}`);
     if (proactive) {
@@ -1970,7 +2268,7 @@ Deno.serve(async (req: Request) => {
           .eq('chat_id', chatId);
       } catch (_) {}
     }
-    return json({ ok: true, reply: replyVisible, memSaved, memRaw, memErr, model_used: modelUsed, image_sent: imageSent });
+    return json({ ok: true, reply: replyVisible, memSaved: 0, memRaw: '', memErr: 'post_response', model_used: modelUsed, image_sent: imageSent });
   } catch (e) {
     return json({ ok: false, error: 'exception', detail: `${e}` }, 200);
   }
