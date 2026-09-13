@@ -386,11 +386,18 @@ class AdminService {
   }
 
   /// Daftar provider AI (id, label, base, key, model, is_active).
+  /// Baris legacy 'global' (wadah setting lama, kosong) DISEMBUNYIKAN bila
+  /// tidak aktif — itu system row yang di-seed ulang server, bukan provider
+  /// sungguhan; menampilkannya hanya membingungkan (dihapus → muncul lagi).
   Future<List<Map<String, dynamic>>> getAiProviders() async {
     final res = await _sb.rpc('admin_ai_provider_list');
     if (res is List) {
       return res
           .map((e) => Map<String, dynamic>.from(e as Map))
+          .where(
+            (p) =>
+                '${p['id']}' != 'global' || p['is_active'] == true,
+          )
           .toList();
     }
     return const [];

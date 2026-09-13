@@ -1323,6 +1323,12 @@ class _ProviderCardState extends State<_ProviderCard> {
 
   Future<void> _delete() async {
     final s = context.read<LocaleProvider>().s;
+    // Tangkap messenger + callback SEBELUM await: card bisa ter-unmount
+    // saat RPC berjalan (rebuild parent) — feedback + refresh list harus
+    // tetap jalan walau card sudah tidak mounted (bug "hapus tapi muncul lagi").
+    final messenger = ScaffoldMessenger.of(context);
+    final notifyChanged = widget.onChanged;
+    debugPrint('[DELPROV] open confirm id=${widget.data['id']}');
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1343,11 +1349,16 @@ class _ProviderCardState extends State<_ProviderCard> {
         ],
       ),
     );
-    if (ok != true || !mounted) return;
+    if (ok != true || !mounted) {
+      debugPrint('[DELPROV] abort ok=$ok mounted=$mounted');
+      return;
+    }
+    debugPrint('[DELPROV] confirmed, starting');
     setState(() => _busy = true);
     try {
       final id = '${widget.data['id']}';
       final isActive = widget.data['is_active'] == true && !widget.isNew;
+      debugPrint('[DELPROV] id=$id isActive=$isActive isNew=${widget.isNew}');
       if (isActive) {
         // Hapus provider AKTIF: pindahkan status aktif ke provider lain
         // dulu (failover) supaya RPC tidak menolak. Kalau ini satu-satunya
@@ -1363,29 +1374,34 @@ class _ProviderCardState extends State<_ProviderCard> {
           }
         }
         if (next == null) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context)
+          debugPrint('[DELPROV] last provider, blocked');
+          messenger
             ..clearSnackBars()
             ..showSnackBar(SnackBar(content: Text(s.aiProviderDeleteLast)));
           return;
         }
+        debugPrint('[DELPROV] failover to ${next['id']}');
         await _svc.activateAiProvider('${next['id']}');
+        debugPrint('[DELPROV] failover ok');
       }
+      debugPrint('[DELPROV] calling delete RPC (mounted=$mounted)');
       await _svc.deleteAiProvider('${widget.data['id']}');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
+      debugPrint('[DELPROV] delete RPC ok (mounted=$mounted)');
+      // Sengaja TANPA cek mounted: messenger + onChanged milik ancestor
+      // yang tetap hidup — user wajib dapat feedback + list refresh
+      // meski card ini sudah ter-unmount.
+      messenger
         ..clearSnackBars()
         ..showSnackBar(SnackBar(content: Text(s.aiProviderDeleted)));
-      widget.onChanged();
+      notifyChanged();
     } catch (e) {
-      if (!mounted) return;
-      final msg = '$e';
-      ScaffoldMessenger.of(context)
+      debugPrint('[DELPROV] ERROR: $e (mounted=$mounted)');
+      messenger
         ..clearSnackBars()
         ..showSnackBar(
           SnackBar(
             content: Text(
-              msg.contains('PROVIDER_LAST_ACTIVE')
+              '$e'.contains('PROVIDER_LAST_ACTIVE')
                   ? s.aiProviderDeleteLast
                   : s.aiProviderDeleteActive,
             ),
