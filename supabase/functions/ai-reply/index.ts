@@ -720,7 +720,9 @@ async function loadProvCfg(admin: any): Promise<any> {
       .eq('id', 'global')
       .maybeSingle();
     return glob;
-  } catch (_) {}
+  } catch (e) {
+    console.log(`[ai-reply] provCfg read GAGAL: ${e}`);
+  }
   return null;
 }
 
@@ -946,7 +948,9 @@ Deno.serve(async (req: Request) => {
               .update({ status: 'offline', last_seen: new Date().toISOString() })
               .eq('id', dummyUid);
           }
-        } catch (_) {}
+        } catch (e) {
+          console.log(`[ai-reply] storm persist GAGAL chat=${chatId}: ${e}`);
+        }
       }
       // Tawaran nakal baru terkirim → catat asked_at agar tidak
       // ditawari berulang (jawaban dievaluasi di invokasi berikutnya).
@@ -1441,7 +1445,9 @@ Deno.serve(async (req: Request) => {
         }
       }
       await Promise.all(jobs);
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[ai-reply] voice-jobs GAGAL chat=${chatId}: ${e}`);
+    }
 
     // ── Fase obrolan + deteksi "panas" ──
     // fresh = chat masih sedikit & belum ada memori → fase perkenalan:
@@ -1685,7 +1691,9 @@ Deno.serve(async (req: Request) => {
               last_seen: new Date().toISOString(),
             })
             .eq('id', dummyUid);
-        } catch (_) {}
+        } catch (e) {
+          console.log(`[ai-reply] storm-insult GAGAL uid=${dummyUid}: ${e}`);
+        }
         await closeTyping();
         return json({
           ok: true,
@@ -1884,7 +1892,9 @@ Deno.serve(async (req: Request) => {
               }
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          console.log(`[ai-reply] sched parse GAGAL uid=${dummyUid}: ${e}`);
+        }
         if (hours.length < 6) {
           hours =
             histHours.length >= 6
@@ -2161,7 +2171,9 @@ Deno.serve(async (req: Request) => {
     try {
       const freshLine = await lookupFreshInfo(admin, lastUserText, todayWib);
       if (freshLine !== '') systemParts.push(freshLine);
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[ai-reply] browse-wrap GAGAL chat=${chatId}: ${e}`);
+    }
     const system = systemParts.filter(Boolean).join(' ');
 
     // Cek ganda SEBELUM panggil LLM: selama jeda manusiawi tadi, mungkin
@@ -2303,7 +2315,9 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
         if (fbRow?.api_base) fbBase = fbRow.api_base as string;
         if (fbRow?.api_key) fbKey = fbRow.api_key as string;
-      } catch (_) {}
+      } catch (e) {
+        console.log(`[ai-reply] fallback-key read GAGAL: ${e}`);
+      }
       const fbRoute = {
         base: fbBase,
         key: fbKey,
@@ -2489,7 +2503,9 @@ Deno.serve(async (req: Request) => {
               await openTypingChannel();
               await sendWithTyping(burst);
             }
-          } catch (_) {}
+          } catch (e) {
+            console.log(`[ai-reply] burst GAGAL chat=${chatId}: ${e}`);
+          }
         }
 
         // 7. Belajar: ekstrak fakta tahan-lama tentang lawan bicara dari
