@@ -25,7 +25,8 @@ class _ScopeCache {
 class TimelineProvider extends ChangeNotifier {
   bool _disposed = false;
 
-  final TimelineService _service = TimelineService(Supabase.instance.client);
+  // Service di-inject untuk test (default produksi) — call site tidak berubah.
+  final TimelineService _service;
 
   final List<Map<String, dynamic>> _posts = [];
   List<Map<String, dynamic>> _postsView = const [];
@@ -77,7 +78,8 @@ class TimelineProvider extends ChangeNotifier {
   /// Feed aktif gagal di-fetch (network/RPC error) — bukan kosong sungguhan.
   bool get fetchFailed => _lastFetchFailed && _scopeError == _scope;
 
-  TimelineProvider() {
+  TimelineProvider({TimelineService? service})
+      : _service = service ?? TimelineService(Supabase.instance.client) {
     _listenRealtime();
     refreshPricing();
     // Disk cache SEMUA scope — cold start tab mana pun tampil instan.

@@ -12,7 +12,9 @@ class ChatProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  final ChatService _service = ChatService();
+  // Service di-inject untuk test (default produksi) — call site tidak berubah.
+  final ChatService _service;
+  ChatProvider({ChatService? service}) : _service = service ?? ChatService();
   List<String> _blockedUids = [];
   Future<List<String>>? _loadingBlockedUids;
 
