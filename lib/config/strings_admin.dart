@@ -550,6 +550,32 @@ extension SAdminX on S {
   String get dummyAiSaveFail =>
       isId ? 'Gagal menyimpan AI' : 'Failed to save AI settings';
 
+  String get dummyAiInstantHint => isId
+      ? 'Bagian 1 & 3 tersimpan otomatis saat diubah — tombol Simpan hanya untuk Kepribadian.'
+      : 'Sections 1 & 3 save automatically — Save is only for Personality.';
+
+  String get dummyAiSectionStatus => isId ? '1 · Status AI' : '1 · AI Status';
+
+  String get dummyAiSectionPersona =>
+      isId ? '2 · Kepribadian (opsional)' : '2 · Personality (optional)';
+
+  String get dummyAiSectionAdvanced =>
+      isId ? '3 · Lanjutan (jarang diubah)' : '3 · Advanced (rarely changed)';
+
+  String get dummyAiBadgeRequired => isId ? 'WAJIB' : 'REQUIRED';
+
+  String get dummyAiBadgeOptional => isId ? 'OPSIONAL' : 'OPTIONAL';
+
+  String get dummyAiBadgeAuto => isId ? 'OTO' : 'AUTO';
+
+  String get dummyAiStatusDesc => isId
+      ? 'Nyalakan sekali, AI langsung membalas chat masuk. Mati = dummy diam total.'
+      : 'Turn on once, AI replies to incoming chats. Off = dummy stays silent.';
+
+  String get dummyAiPersonaDesc => isId
+      ? 'Kosongkan semua = AI meniru profil dummy otomatis. Isi hanya kalau mau karakter khusus.'
+      : 'Leave all empty = AI follows the dummy profile automatically. Fill only for a custom character.';
+
   String get dummyNeedAdmin => isId
       ? 'Bukan sesi admin — kembali ke akun admin dulu baru simpan'
       : 'Not an admin session — switch back to the admin account first';
@@ -617,6 +643,10 @@ extension SAdminX on S {
   String get dummyAiGuardHint => isId
       ? 'Global = ikut pengaturan AI Bot; ON/OFF = khusus dummy ini'
       : 'Global = follow AI Bot settings; ON/OFF = this dummy only';
+
+  String get aiGuardGlobal => 'Global';
+  String get aiGuardOn => 'ON';
+  String get aiGuardOff => 'OFF';
 
   String get dummyRateTitle => isId ? 'Rate limit' : 'Rate limit';
 
