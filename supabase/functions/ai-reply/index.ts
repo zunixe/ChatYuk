@@ -360,19 +360,28 @@ async function fetchBytes(
   url: string,
   ms: number,
   headers?: Record<string, string>,
+  retries = 0,
 ): Promise<Uint8Array | null> {
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const r = await fetch(url, { signal: ctrl.signal, headers });
-    if (!r.ok) return null;
-    const buf = new Uint8Array(await r.arrayBuffer());
-    return buf.length > 10000 ? buf : null;
-  } catch (_) {
-    return null;
-  } finally {
-    clearTimeout(to);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, headers });
+      if (r.ok) {
+        const buf = new Uint8Array(await r.arrayBuffer());
+        if (buf.length > 10000) {
+          clearTimeout(to);
+          return buf;
+        }
+      }
+    } catch (_) {
+      // Timeout/5xx ringan Pollinations → coba lagi di bawah.
+    } finally {
+      clearTimeout(to);
+    }
+    if (attempt < retries) await new Promise((r) => setTimeout(r, 1500));
   }
+  return null;
 }
 
 // ── BROWSING info terkini (skor/berita/cuaca/harga) ──
@@ -391,7 +400,22 @@ function needsFreshInfo(t: string): boolean {
     .test(t);
 }
 
+// Normalisasi pertanyaan jadi kunci cache (huruf kecil, tanpa tanda
+// baca, 120 char): "SKOR Madrid vs Barca?!" = "skor madrid vs barca".
+function browseTopicKey(t: string): string {
+  return t
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+const FRESH_PREFIX =
+  'INFO TERKINI (kamu tahu dari timeline/temanmu — JANGAN sebut browsing/internet/AI, jawab natural kayak orang yang update): ';
+
 async function lookupFreshInfo(
+  admin: any,
   userText: string,
   todayWib: string,
 ): Promise<string> {
@@ -399,6 +423,24 @@ async function lookupFreshInfo(
     if (!needsFreshInfo(userText)) return '';
     const key = (Deno.env.get('POLLINATIONS_KEY') || '').trim();
     if (!key) return '';
+    // Cache 1 jam per topik: pertanyaan berita yang sama tidak lookup
+    // ulang (hemat pollen). Stale → dianggap miss, ditimpa di bawah.
+    const tkey = browseTopicKey(userText);
+    try {
+      const { data: hit } = await admin
+        .from('ai_browse_cache')
+        .select('answer,created_at')
+        .eq('topic_key', tkey)
+        .maybeSingle();
+      if (
+        hit && typeof hit.answer === 'string' && hit.answer.length > 0 &&
+        Date.now() - new Date(hit.created_at).getTime() < 3600_000
+      ) {
+        return FRESH_PREFIX + (hit.answer as string).slice(0, 500);
+      }
+    } catch (e) {
+      console.log(`[ai-reply] browse-cache read GAGAL: ${e}`);
+    }
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 25000);
     try {
@@ -435,7 +477,22 @@ async function lookupFreshInfo(
       const c: string = j?.choices?.[0]?.message?.content ?? '';
       const clean = c.replace(/\[\d+\]/g, '').trim();
       if (!clean || /TIDAK_TAHU/.test(clean)) return '';
-      return `INFO TERKINI (kamu tahu dari timeline/temanmu — JANGAN sebut browsing/internet/AI, jawab natural kayak orang yang update): ${clean.slice(0, 500)}`;
+      // Simpan ke cache + buang entri >6 jam (pengaman ukuran tabel).
+      try {
+        await admin.from('ai_browse_cache').upsert(
+          {
+            topic_key: tkey,
+            answer: clean.slice(0, 500),
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'topic_key' },
+        );
+        await admin.from('ai_browse_cache').delete().lt(
+          'created_at',
+          new Date(Date.now() - 6 * 3600_000).toISOString(),
+        );
+      } catch (_) {}
+      return FRESH_PREFIX + clean.slice(0, 500);
     } finally {
       clearTimeout(to);
     }
@@ -519,7 +576,7 @@ async function generateAndSendImage(
     if (key) {
       const auth = { Authorization: `Bearer ${key}` };
       const refUrl = fluxGen(plan.refPrompt, refSeed, 512, 512, key);
-      const refOk = await fetchBytes(refUrl, 40000, auth);
+      const refOk = await fetchBytes(refUrl, 40000, auth, 1);
       if (refOk) {
         const kb = await fetchBytes(
           kontextGen(plan.kontextPrompt, outSeed, refUrl, 768, 1024, key),
@@ -539,7 +596,7 @@ async function generateAndSendImage(
     // Seed sama + anchor wajah di prompt = wajah konsisten "mirip";
     // outSeed tetap utk nama file (hindari tabrakan path).
     if (!buf) {
-      buf = await fetchBytes(fluxFree(plan.fluxPrompt, refSeed, 768, 1024), 55000);
+      buf = await fetchBytes(fluxFree(plan.fluxPrompt, refSeed, 768, 1024), 55000, undefined, 1);
     }
     if (!buf) {
       console.log(`[ai-reply] image GAGAL chat=${chatId} uid=${dummyUid}`);
@@ -2102,7 +2159,7 @@ Deno.serve(async (req: Request) => {
     // BROWSING: bila pesan user butuh fakta terbaru (skor/berita/cuaca/
     // harga), lookup cepat via sonar lalu suntik hasilnya. Gagal → diam.
     try {
-      const freshLine = await lookupFreshInfo(lastUserText, todayWib);
+      const freshLine = await lookupFreshInfo(admin, lastUserText, todayWib);
       if (freshLine !== '') systemParts.push(freshLine);
     } catch (_) {}
     const system = systemParts.filter(Boolean).join(' ');

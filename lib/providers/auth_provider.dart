@@ -51,7 +51,7 @@ class AuthProvider extends ChangeNotifier {
   bool _manualSignOut = false;
   bool _isIdle = false;
   static const Duration idleTimeout = Duration(minutes: 3);
-  static const Duration heartbeatInterval = Duration(seconds: 120);
+  static const Duration heartbeatInterval = Duration(seconds: 240);
 
   static const String _notifPrefKey = 'notif_enabled';
   bool _notificationsEnabled = true;
@@ -60,6 +60,7 @@ class AuthProvider extends ChangeNotifier {
   // dan di-bind ke profile saat registerProfile selesai.
   static const String _referrerPrefKey = 'pending_referrer_uid';
   String? _pendingReferrer;
+
 
   bool _screenshotEnabled = true;
   bool _watermarkEnabled = false;
@@ -74,9 +75,7 @@ class AuthProvider extends ChangeNotifier {
   StreamSubscription<Map<String, dynamic>?>? _appSettingsSub;
   Timer? _settingsPollTimer;
 
-  UserModel? get profile => _profile;
-  bool get loading => _loading;
-  String? get error => _error;
+
   bool get screenshotEnabled => _screenshotEnabled;
   bool get watermarkEnabled => _watermarkEnabled;
   bool get invisibleEnabled => _invisibleEnabled;
@@ -87,6 +86,11 @@ class AuthProvider extends ChangeNotifier {
   List<String> get excludedDevices => List.unmodifiable(_excludedDevices);
   bool isDeviceExcluded(String? installId) =>
       installId != null && installId.isNotEmpty && _excludedDevices.contains(installId);
+
+
+  UserModel? get profile => _profile;
+  bool get loading => _loading;
+  String? get error => _error;
   bool get isSignedIn => _auth.isSignedIn;
   String? get uid => _auth.uid;
   bool get isAnonymous => _auth.isAnonymous;
@@ -282,7 +286,9 @@ class AuthProvider extends ChangeNotifier {
         dlog('[AUTH] _init attempt $attempt/$maxAttempts hasSession=$hasSession');
         if (!hasSession) await _auth.signInAnonymously();
         dlog('[AUTH] signInAnonymously OK');
-        // Lite dulu (tanpa avatar) → langsung notify, UI tidak nunggu foto
+        // Satu fetch saja (tanpa avatar) → langsung notify, UI tidak nunggu
+        // foto. Dulu ada SELECT ke-2 (full avatar) — kini avatar di-resolve
+        // lazy dari cache disk/RAM via AvatarB64Service, tanpa SELECT ulang.
         _profile = await _auth.getProfile(withAvatar: false);
         dlog('[AUTH] getProfile lite -> ${_profile?.uid}');
         // ── Sinkronisasi flag dummy vs sesi nyata (anti "setengah admin") ──
@@ -298,28 +304,32 @@ class AuthProvider extends ChangeNotifier {
           safeUnawaited(_saveCachedProfile(_profile!));
           if (!_disposed) notifyListeners();
         }
-        // Full avatar fire-and-forget
-        if (_profile != null) {
-          _auth.getProfile().then((full) {
-            if (full != null && !_disposed) {
-              _profile = full;
-              safeUnawaited(_saveCachedProfile(full));
-              notifyListeners();
+        // Avatar lazy: path storage → base64 via AvatarB64Service (disk
+        // first, network hanya saat miss). Fire-and-forget — boot tidak
+        // menunggu download avatar, dan TANPA SELECT profil kedua.
+        final p0 = _profile;
+        if (p0 != null &&
+            p0.avatar.isNotEmpty &&
+            StoragePhotoService.instance.isAvatarPath(p0.avatar)) {
+          AvatarB64Service.instance.getByPath(p0.avatar).then((b64) {
+            if (!_disposed && b64.isNotEmpty) {
+              final p = _profile;
+              if (p != null) {
+                _profile = p.copyWith(avatar: b64);
+                safeUnawaited(_saveCachedProfile(_profile!));
+                notifyListeners();
+              }
             }
           });
         }
         await AdminGate.restoreDummySession?.call();
         _listenProfile();
-        // Fire-and-forget (dulu await cap 2s): entry screen hanya pakai ini
-        // untuk sembunyikan kartu anon — boleh menyusul, jangan tahan loading.
-        _loadRequireRegistration().then((_) {
-          if (!_disposed) notifyListeners();
-        }).catchError((e) => dlog('[AUTH] requireReg error: $e'));
-        safeUnawaited(_loadScreenshotSetting());
-        safeUnawaited(_loadCallAllSetting());
-        safeUnawaited(_loadWatermarkSetting());
-        safeUnawaited(_loadInvisibleSetting());
-        safeUnawaited(loadReengageSetting());
+        // Satu query ambil SEMUA setting global (pengganti 7× fetch
+        // sequential) → split di memori. Fire-and-forget: entry screen
+        // hanya pakai require_registration untuk sembunyikan kartu anon —
+        // boleh menyusul, jangan tahan loading.
+        _loadGlobalSettings()
+            .catchError((e) => dlog('[AUTH] globalSettings error: $e'));
         safeUnawaited(_loadExcludedDevices());
         _listenAppSettings();
         _startSettingsPolling();
@@ -516,22 +526,35 @@ class AuthProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  /// Ambil setting admin global (screenshot enabled?) lalu terapkan.
-  Future<void> _loadScreenshotSetting() async {
-    _screenshotEnabled = await _auth.fetchScreenshotEnabled();
+
+  /// Bersihkan presence room yang basi di server (fire-and-forget).
+  Future<void> cleanupStalePresence({int minAgeMinutes = 10}) {
+    return _auth.cleanupStalePresence(minAgeMinutes: minAgeMinutes);
+  }
+
+  /// Satu query ambil SEMUA setting global lalu split di memori (pengganti
+  /// 7× fetch sequential saat boot — hemat 6 RPC per user). Realtime
+  /// (_listenAppSettings) menutup gap perubahan setelah boot.
+  Future<void> _loadGlobalSettings() async {
+    final row = await _auth.fetchGlobalSettings();
+    if (row == null) {
+      if (!_disposed) notifyListeners();
+      return;
+    }
+    _screenshotEnabled = row['screenshot_enabled'] == true;
     ScreenSecureService.setScreenshotEnabled(_screenshotEnabled);
-    if (!_disposed) notifyListeners();
-  }
-
-  Future<void> _loadCallAllSetting() async {
-    _callAllEnabled = await _auth.fetchCallAllEnabled();
-    _callAnonEnabled = await _auth.fetchCallAnonEnabled();
-    if (!_disposed) notifyListeners();
-  }
-
-  /// Ambil toggle pengingat harian (re-engagement) — dipakai admin panel.
-  Future<void> loadReengageSetting() async {
-    _reengageEnabled = await _auth.fetchReengageEnabled();
+    _callAllEnabled = row['call_all_enabled'] == true;
+    _callAnonEnabled = row['call_anon_enabled'] == true;
+    _reengageEnabled = row['reengage_enabled'] != false;
+    _watermarkEnabled = row['watermark_enabled'] == true;
+    _requireRegistration = row['require_registration'] == true;
+    final invisibleOn = row['invisible_enabled'] == true &&
+        row['invisible_admin_uid'] == _auth.uid;
+    _invisibleEnabled = invisibleOn;
+    if (invisibleOn) {
+      _profile = _profile?.copyWith(status: 'invisible');
+      safeUnawaited(_auth.goInvisible());
+    }
     if (!_disposed) notifyListeners();
   }
 
@@ -580,12 +603,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Ambil setting admin global (watermark forensik view-once?).
-  Future<void> _loadWatermarkSetting() async {
-    _watermarkEnabled = await _auth.fetchWatermarkEnabled();
-    if (!_disposed) notifyListeners();
-  }
-
   /// Admin mengaktifkan/menonaktifkan watermark forensik foto view-once.
   Future<void> setWatermarkEnabled(bool enabled) async {
     _watermarkEnabled = enabled;
@@ -599,16 +616,7 @@ class AuthProvider extends ChangeNotifier {
 
   /// Ambil setting admin global (invisible — tidak muncul di daftar online).
   /// Hanya admin dengan UID yang tercatat yang ikut jadi invisible.
-  Future<void> _loadInvisibleSetting() async {
-    final setting = await _auth.fetchInvisibleSetting();
-    _invisibleEnabled =
-        setting['enabled'] == true && setting['adminUid'] == _auth.uid;
-    if (_invisibleEnabled) {
-      _profile = _profile?.copyWith(status: 'invisible');
-      safeUnawaited(_auth.goInvisible());
-    }
-    if (!_disposed) notifyListeners();
-  }
+  /// (Dipanggil dari _loadGlobalSettings + resyncInvisible saat resume.)
 
   /// Re-sync setting invisible (dipanggil saat app resumed). Supaya device
   /// kedua ikut tahu toggle dari device pertama dan tidak menimpa balik.
@@ -657,12 +665,6 @@ class AuthProvider extends ChangeNotifier {
   /// Bersihkan akun anonymous stale di server (fire-and-forget).
   Future<void> cleanupStaleAnonymous({int minAgeDays = 7}) {
     return _auth.cleanupStaleAnonymous(minAgeDays: minAgeDays);
-  }
-
-  /// Ambil setting admin global (wajib registrasi sebelum masuk?).
-  Future<void> _loadRequireRegistration() async {
-    _requireRegistration = await _auth.fetchRequireRegistration();
-    if (!_disposed) notifyListeners();
   }
 
   /// Ambil daftar device ter-exclude (admin-only) — hanya untuk sesi
@@ -736,25 +738,28 @@ class AuthProvider extends ChangeNotifier {
     );
   }
 
-  /// Polling cadangan bila websocket realtime mati — 5 menit (realtime
-  /// tetap jalur utama; 30s seumur app terlalu boros RPC per user).
+  /// Polling cadangan bila websocket realtime mati — 15 menit (realtime
+  /// tetap jalur utama; dulu 5 mnt, dijarangkan lagi supaya hemat RPC
+  /// per user — realtime app_settings sudah menutup perubahan instan).
   void _startSettingsPolling() {
     _settingsPollTimer?.cancel();
-    _settingsPollTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+    _settingsPollTimer = Timer.periodic(const Duration(minutes: 15), (_) async {
       if (_disposed || !_auth.isSignedIn) return;
       try {
-        final callAll = await _auth.fetchCallAllEnabled();
+        final row = await _auth.fetchGlobalSettings();
+        if (row == null) return;
         var changed = false;
+        final callAll = row['call_all_enabled'] == true;
         if (callAll != _callAllEnabled) {
           _callAllEnabled = callAll;
           changed = true;
         }
-        final callAnon = await _auth.fetchCallAnonEnabled();
+        final callAnon = row['call_anon_enabled'] == true;
         if (callAnon != _callAnonEnabled) {
           _callAnonEnabled = callAnon;
           changed = true;
         }
-        final reqReg = await _auth.fetchRequireRegistration();
+        final reqReg = row['require_registration'] == true;
         if (reqReg != _requireRegistration) {
           _requireRegistration = reqReg;
           changed = true;
@@ -769,18 +774,11 @@ class AuthProvider extends ChangeNotifier {
             changed = true;
           }
         }
-        dlog('[SETTINGS-POLL] callAll=$callAll '
-            'cur=$_callAllEnabled changed=$changed');
         if (changed && !_disposed) notifyListeners();
       } catch (e) {
         dlog('[SETTINGS-POLL] error: $e');
       }
     });
-  }
-
-  /// Bersihkan presence room yang basi di server (fire-and-forget).
-  Future<void> cleanupStalePresence({int minAgeMinutes = 10}) {
-    return _auth.cleanupStalePresence(minAgeMinutes: minAgeMinutes);
   }
 
   /// Ambil profil user lain by UID.
@@ -1235,13 +1233,18 @@ class AuthProvider extends ChangeNotifier {
     safeUnawaited(RealtimeHub.instance.untrackOnline());
   }
 
-  /// Heartbeat berkala: update last_seen di server tiap 120 detik + Presence.
+  /// Heartbeat berkala: update last_seen di server tiap 240 detik + Presence.
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
       if (_disposed) return;
       safeUnawaited(_auth.updateLastSeen());
-      if (uid != null && !_invisibleEnabled && !_isIdle) {
+      // Hemat presence: re-track HANYA bila channel putus (dulu tiap 120 dtk
+      // untrack+subscribe ulang → flap presence massal).
+      if (uid != null &&
+          !_invisibleEnabled &&
+          !_isIdle &&
+          !RealtimeHub.instance.isOnlineTracking) {
         safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''));
       }
     });

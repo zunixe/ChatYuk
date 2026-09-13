@@ -892,6 +892,9 @@ class ChatService {
   }
 
   /// Kirim sinyal typing/recording (throttle dilakukan di screen).
+  /// Ping DB di-throttle 10 dtk per chat (broadcast realtime tetap tiap
+  /// sinyal — murah; yang mahal write ping_typing-nya).
+  final Map<String, int> _lastPingTyping = {};
   void sendTyping(String chatId, {String kind = 'typing'}) {
     final uid = _sb.auth.currentUser?.id;
     if (uid == null) return;
@@ -906,6 +909,9 @@ class ChatService {
         )
         .catchError((_) => ChannelResponse.error);
     // Ping DB untuk ai-reply: AI menunggu selama user masih mengetik.
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - (_lastPingTyping[chatId] ?? 0) < 10000) return;
+    _lastPingTyping[chatId] = now;
     _sb
         .rpc('ping_typing', params: {'p_chat_id': chatId})
         .catchError((_) {});
