@@ -11,7 +11,7 @@ import '../services/story_service.dart';
 /// dibuka, dan sinkron realtime (slide baru / dilihat) supaya ring di tray
 /// update tanpa refresh manual.
 class StoryProvider extends ChangeNotifier {
-  final StoryService _service = StoryService();
+  final StoryService _service;
   bool _disposed = false;
 
   List<StoryTrayItem> _tray = [];
@@ -39,7 +39,7 @@ class StoryProvider extends ChangeNotifier {
     return null;
   }
 
-  StoryProvider() {
+  StoryProvider({StoryService? service}) : _service = service ?? StoryService() {
     // Resilient: tanpa onError, error channel MEMBUNUH subscription
     // (tray story freeze sampai restart).
     _storiesSub = listenResilient<String>(

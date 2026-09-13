@@ -8,7 +8,7 @@ import '../config/theme.dart';
 import '../utils.dart';
 
 class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
-  final PointsService _service = PointsService(Supabase.instance.client);
+  final PointsService _service;
   int _points = 50;
   bool _disposed = false;
   int _todayOnlineSeconds = 0;
@@ -114,7 +114,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  PointsProvider() {
+  PointsProvider({PointsService? service})
+      : _service = service ?? PointsService(Supabase.instance.client) {
     // Daftarkan observer + mulai sesi online SEKARANG. Tanpa ini,
     // didChangeAppLifecycleState tidak pernah terpanggil (observer tak
     // terdaftar) sehingga bonus online tidak pernah jalan, dan sesi
@@ -484,6 +485,13 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     _claimed60min = false;
     _claimed120min = false;
   }
+
+  /// Hook test: set detik online + picu klaim milestone tanpa menunggu timer.
+  @visibleForTesting
+  void setOnlineSecondsForTest(int v) => _todayOnlineSeconds = v;
+
+  @visibleForTesting
+  Future<void> debugClaimOnlineBonus() => _tryClaimOnlineBonus();
 
   Future<void> claimDailyLogin() async {
     if (!_enabled) return;
