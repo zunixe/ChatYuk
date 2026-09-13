@@ -415,7 +415,9 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? const {};
   }
 
-  /// Hapus provider (yang aktif tidak bisa — aktifkan lain dulu).
+  /// Hapus provider. Server menolak hapus provider AKTIF kecuali ada
+  /// pengganti (failover otomatis di RPC); UI sebaiknya failover dulu
+  /// via activateAiProvider supaya UX satu klik.
   Future<void> deleteAiProvider(String id) async {
     await _sb.rpc('admin_ai_provider_delete', params: {'p_id': id});
   }

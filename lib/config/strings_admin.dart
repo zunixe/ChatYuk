@@ -330,6 +330,13 @@ extension SAdminX on S {
       ? 'Saat aktif, ikon panggilan (audio/video) tampil untuk semua user termasuk yang belum daftar.'
       : 'When enabled, the call (audio/video) icon appears for all users including unregistered ones.';
 
+  String get adminCallAnonTitle => isId
+      ? 'Anon & Dummy Bisa Call'
+      : 'Anon & Dummy Can Call';
+  String get adminCallAnonDesc => isId
+      ? 'Saat aktif, user anon dan akun dummy bisa menelepon. Saat mati, hanya user terdaftar (+ admin) yang bisa call (anti spam).'
+      : 'When enabled, anon users and dummy accounts can call. When off, only registered users (+ admin) can call (anti-spam).';
+
   String get adminRegisteredOnly =>
       isId ? 'Hanya user registered' : 'Registered users only';
 
@@ -464,6 +471,9 @@ extension SAdminX on S {
 
   String get dummyEmpty =>
       isId ? 'Belum ada akun dummy' : 'No dummy accounts yet';
+
+  String get dummySearchEmpty =>
+      isId ? 'Tidak ada dummy yang cocok' : 'No matching dummy found';
 
   String get dummyChatAs => isId ? 'Chat Sebagai' : 'Chat As';
 
@@ -674,6 +684,10 @@ extension SAdminX on S {
   String get aiProviderDeleteActive => isId
       ? 'Aktifkan provider lain dulu sebelum menghapus yang ini'
       : 'Activate another provider before deleting this one';
+
+  String get aiProviderDeleteLast => isId
+      ? 'Tidak bisa hapus satu-satunya provider'
+      : 'Cannot delete the only provider';
 
   String get aiProviderLoadFail => isId
       ? 'Gagal memuat provider'

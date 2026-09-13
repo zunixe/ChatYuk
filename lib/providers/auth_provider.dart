@@ -67,6 +67,7 @@ class AuthProvider extends ChangeNotifier {
   bool _reengageEnabled = true;
   bool _requireRegistration = false;
   bool _callAllEnabled = false;
+  bool _callAnonEnabled = false;
   // Daftar install_id yang di-exclude admin dari ringkasan & daftar
   // perangkat (fitur khusus admin, sinkron via app_settings.global).
   List<String> _excludedDevices = [];
@@ -82,6 +83,7 @@ class AuthProvider extends ChangeNotifier {
   bool get reengageEnabled => _reengageEnabled;
   bool get requireRegistration => _requireRegistration;
   bool get callAllEnabled => _callAllEnabled;
+  bool get callAnonEnabled => _callAnonEnabled;
   List<String> get excludedDevices => List.unmodifiable(_excludedDevices);
   bool isDeviceExcluded(String? installId) =>
       installId != null && installId.isNotEmpty && _excludedDevices.contains(installId);
@@ -523,6 +525,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _loadCallAllSetting() async {
     _callAllEnabled = await _auth.fetchCallAllEnabled();
+    _callAnonEnabled = await _auth.fetchCallAnonEnabled();
     if (!_disposed) notifyListeners();
   }
 
@@ -551,6 +554,17 @@ class AuthProvider extends ChangeNotifier {
       await _auth.updateCallAllEnabled(enabled);
     } catch (e) {
       dlog('[AUTH] updateCallAllEnabled error: $e');
+    }
+  }
+
+  /// Admin: anon & dummy boleh call. OFF = hanya terdaftar (+ admin).
+  Future<void> setCallAnonEnabled(bool enabled) async {
+    _callAnonEnabled = enabled;
+    if (!_disposed) notifyListeners();
+    try {
+      await _auth.updateCallAnonEnabled(enabled);
+    } catch (e) {
+      dlog('[AUTH] updateCallAnonEnabled error: $e');
     }
   }
 
@@ -697,11 +711,17 @@ class AuthProvider extends ChangeNotifier {
         if (row == null) return;
         dlog('[SETTINGS] row call_all_enabled='
             '${row['call_all_enabled']} '
+            'call_anon_enabled=${row['call_anon_enabled']} '
             'require_registration=${row['require_registration']}');
         var changed = false;
         final nextCall = row['call_all_enabled'] == true;
         if (nextCall != _callAllEnabled) {
           _callAllEnabled = nextCall;
+          changed = true;
+        }
+        final nextAnon = row['call_anon_enabled'] == true;
+        if (nextAnon != _callAnonEnabled) {
+          _callAnonEnabled = nextAnon;
           changed = true;
         }
         final nextReq = row['require_registration'] == true;
@@ -727,6 +747,11 @@ class AuthProvider extends ChangeNotifier {
         var changed = false;
         if (callAll != _callAllEnabled) {
           _callAllEnabled = callAll;
+          changed = true;
+        }
+        final callAnon = await _auth.fetchCallAnonEnabled();
+        if (callAnon != _callAnonEnabled) {
+          _callAnonEnabled = callAnon;
           changed = true;
         }
         final reqReg = await _auth.fetchRequireRegistration();
