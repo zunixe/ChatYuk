@@ -1626,6 +1626,7 @@ Deno.serve(async (req: Request) => {
                     content:
                       `Kamu ${nick}. Tentukan jam kamu ONLINE hari ini (${weekday}). ` +
                       `Kebiasaan jam aktifmu (WIB): ${histHours.join(',') || 'belum ada data'}. ` +
+                      `Wajib ada jeda istirahat offline 1-2 jam di siang hari (11-15, mis. makan/tidur siang) — JANGAN blok penuh tanpa jeda. ` +
                       `Balas HANYA JSON array angka jam 0-23, 8-16 jam, contoh [9,10,11,14,15,20,21]. Tanpa teks lain.`,
                   },
                 ],
@@ -1655,6 +1656,16 @@ Deno.serve(async (req: Request) => {
             histHours.length >= 6
               ? histHours
               : [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+        }
+        // Jeda offline siang WAJIB (deterministik, bukan terserah LLM):
+        // kalau 11-15 terisi ≥4 jam (blok siang penuh), buang 12 & 13
+        // sebagai jam makan siang. Total dijaga ≥6 jam. (LLM sering balas
+        // blok penuh 8-23 walau prompt sudah melarang.)
+        if (hours.filter((x) => x >= 11 && x <= 15).length >= 4) {
+          for (const h of [12, 13]) {
+            if (hours.length <= 6) break;
+            if (hours.includes(h)) hours = hours.filter((x) => x !== h);
+          }
         }
         await admin
           .from('dummy_accounts')
