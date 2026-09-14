@@ -1,0 +1,47 @@
+# Lapis 2 — daftar fungsi FROZEN (25 kritis).
+# Diurut berdasar berapa kali pernah di-replace di migrasi (paling rawan
+# regresi = paling atas). Setiap migrasi yang men-replace fungsi di sini
+# WAJIB menyertakan header komentar:
+#   -- menyentuh: <nama_fn>
+# dan WAJIB memperbarui snapshot supabase/snapshots/functions.sql
+# (jalankan scripts/snapshot_functions.sh, review diff, commit).
+#
+# Jangan hapus baris. Kalau perlu menonaktifkan sementara:
+# beri prefix '#'.
+#
+# ── presence / AI (terbukti pernah regresi) ──
+ai_presence_tick
+ai_reply_enqueue
+ai_reply_post
+ai_reply_claim_recovery
+admin_set_dummy_ai
+admin_ai_settings
+admin_register_dummy
+# ── notifikasi ──
+notify_private_message
+notify_call_ended
+call_push
+handle_new_private_message
+# ── chat / room ──
+create_private_room
+join_private_room
+extend_private_room
+deduct_chat_point
+new_chat_bonus
+# ── poin / ekonomi ──
+one_time_bonus
+send_coins
+send_gift
+room_read_bonus
+daily_login_bonus
+claim_weekly_quest
+points_leaderboard
+# ── feed / sosial ──
+list_posts
+story_slides
+create_story
+follow_count_sync
+nearby_users
+# ── admin (paling sering di-replace: 18x & 12x) ──
+admin_list_dummies
+admin_stats_detail

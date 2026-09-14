@@ -7,6 +7,30 @@ on:
     branches: [develop, master]
 
 jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Lapis 1: cek tabrakan timestamp + DROP tanpa SAFE + header kontrak.
+      # (Snapshot vs DB dilewati di CI karena butuh token/DB; jalankan
+      #  scripts/snapshot_functions.sh lokal sebelum commit.)
+      - name: Guard migrasi (timestamp unik, DROP/ALTER selamat)
+        run: bash scripts/check_migrations.sh --all
+
+       # Lapis 4: larangan typografi/string (AGENTS.md) — 0 fontSize liar.
+      - name: Guard tipografi (fontSize di luar config)
+        run: |
+          hits=$(grep -rn 'fontSize:' lib --include='*.dart' --exclude-dir=config | wc -l)
+          echo "fontSize manual di luar lib/config: $hits"
+          if [ "$hits" -ne 0 ]; then
+            grep -rn 'fontSize:' lib --include='*.dart' --exclude-dir=config | head -20
+            exit 1
+          fi
+
   analyze-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -32,3 +56,16 @@ jobs:
 
       - name: Test
         run: flutter test --no-pub
+
+  edge-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+
+      - name: Deno test (helper edge murni)
+        run: deno test --allow-read supabase/functions/_shared/
