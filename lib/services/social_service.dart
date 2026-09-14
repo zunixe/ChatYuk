@@ -93,9 +93,15 @@ class SocialService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> friendRequestInbox() async {
+  Future<List<Map<String, dynamic>>> friendRequestInbox({
+    int limit = 50,
+    int offset = 0,
+  }) async {
     try {
-      final res = await _sb.rpc('friend_request_inbox');
+      final res = await _sb.rpc(
+        'friend_request_inbox_page',
+        params: {'p_limit': limit, 'p_offset': offset},
+      );
       return _list(res);
     } catch (e) {
       dlog('[SocialService] inbox error: $e');
@@ -103,9 +109,15 @@ class SocialService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> friendRequestOutbox() async {
+  Future<List<Map<String, dynamic>>> friendRequestOutbox({
+    int limit = 50,
+    int offset = 0,
+  }) async {
     try {
-      final res = await _sb.rpc('friend_request_outbox');
+      final res = await _sb.rpc(
+        'friend_request_outbox_page',
+        params: {'p_limit': limit, 'p_offset': offset},
+      );
       return _list(res);
     } catch (e) {
       dlog('[SocialService] outbox error: $e');

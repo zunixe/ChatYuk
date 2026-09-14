@@ -51,10 +51,25 @@ class _GroupMediaScreenState extends State<GroupMediaScreen> {
         _paths = paths;
         _loading = false;
       });
-      for (final p in paths) {
-        StoragePhotoService.instance.downloadThumbBytes(p).then((b) {
-          if (mounted && b != null && b.isNotEmpty) {
-            setState(() => _thumbs[p] = b);
+      // Unduh thumbnail dengan batas concurrency 6 + setState per-batch —
+      // dulu fire-all 200 request + setState PER file (200 rebuild beruntun).
+      const concurrency = 6;
+      for (var i = 0; i < paths.length; i += concurrency) {
+        if (!mounted) return;
+        final batch = paths.sublist(
+          i,
+          (i + concurrency) > paths.length ? paths.length : i + concurrency,
+        );
+        final results = await Future.wait(
+          batch.map((p) => StoragePhotoService.instance
+              .downloadThumbBytes(p)
+              .then((b) => MapEntry(p, b))),
+        );
+        if (!mounted) return;
+        setState(() {
+          for (final e in results) {
+            final b = e.value;
+            if (b != null && b.isNotEmpty) _thumbs[e.key] = b;
           }
         });
       }

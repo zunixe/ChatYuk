@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../config/supabase_config.dart';
+import '../utils.dart';
 import 'media_disk_cache.dart';
 import 'storage_photo_service.dart';
 
@@ -128,6 +129,51 @@ class AvatarB64Service {
   void clearForPath(String path) {
     _pathCache.remove(path);
     _inflight.remove(path);
+  }
+
+  /// Batch prefetch avatar untuk banyak uid sekaligus (1 query `in` ganti
+  /// N+1 select per-uid). Dipakai daftar user (leaderboard, social, dll)
+  /// supaya tiap kartu tak memicu query sendiri. Fire-and-forget: yang
+  /// sudah ada di cache dilewati; hasil masuk RAM+disk lewat setForUid.
+  Future<void> prefetch(List<String> uids) async {
+    final need = uids
+        .where((u) => u.isNotEmpty && !_cache.containsKey(u))
+        .toSet()
+        .toList();
+    if (need.isEmpty) return;
+    try {
+      // Cek disk dulu (instan) supaya tidak query yang sudah tersedia lokal.
+      await MediaDiskCache.instance.waitReady();
+      final missing = <String>[];
+      for (final uid in need) {
+        final disk = MediaDiskCache.instance.readSync('avatars/$uid.jpg');
+        if (disk != null && disk.isNotEmpty) {
+          final b64 = base64Encode(disk);
+          if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
+          _cache[uid] = b64;
+        } else {
+          missing.add(uid);
+        }
+      }
+      if (missing.isEmpty) return;
+      final res = await SupabaseConfig.client
+          .from('profiles')
+          .select('id,avatar')
+          .inFilter('id', missing);
+      for (final row in (res as List? ?? const [])) {
+        final uid = '${(row as Map)['id'] ?? ''}';
+        var avatar = '${row['avatar'] ?? ''}';
+        if (uid.isEmpty) continue;
+        if (avatar.isNotEmpty &&
+            StoragePhotoService.instance.isAvatarPath(avatar)) {
+          avatar = await _downloadWithDisk(avatar);
+        }
+        if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
+        _cache[uid] = avatar;
+      }
+    } catch (e) {
+      dlog('[avatar] prefetch error: $e');
+    }
   }
 
   void setForUid(String uid, String base64) {

@@ -22,7 +22,8 @@ class AdminDevicesTab extends StatefulWidget {
   State<AdminDevicesTab> createState() => _AdminDevicesTabState();
 }
 
-class _AdminDevicesTabState extends State<AdminDevicesTab> {
+class _AdminDevicesTabState extends State<AdminDevicesTab>
+    with WidgetsBindingObserver {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   String _query = '';
@@ -32,16 +33,41 @@ class _AdminDevicesTabState extends State<AdminDevicesTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.microtask(() => context.read<AdminProvider>().fetchDevices());
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    // 30 dtk (dulu 15). Polling hanya refresh halaman-1 diam-diam; kalau
+    // user sudah load-more, LEWATI agar tidak reset paginasi + lompat scroll.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
-      context.read<AdminProvider>().refreshDevicesSilent();
+      final admin = context.read<AdminProvider>();
+      if (admin.devices.length > 100) return;
+      admin.refreshDevicesSilent();
     });
     _scrollCtrl.addListener(_onScroll);
   }
 
+  /// App di-background → stop polling.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    } else if (state == AppLifecycleState.resumed && mounted) {
+      if (_refreshTimer == null) {
+        context.read<AdminProvider>().refreshDevicesSilent();
+        _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+          if (!mounted) return;
+          final admin = context.read<AdminProvider>();
+          if (admin.devices.length > 100) return;
+          admin.refreshDevicesSilent();
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _searchCtrl.dispose();
     _scrollCtrl.dispose();

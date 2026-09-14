@@ -56,7 +56,8 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
     // Retry bila hasil kosong — fetch serentak untuk uid yang sama
     // mengembalikan '' (inflight) dan widget ini tidak boleh menyerah
     // (kalau tidak, avatar stuck inisial sampai rebuild = kedip).
-    for (var attempt = 0; attempt < 10; attempt++) {
+    // 3× (dulu 10×) — cukup untuk inflight race tanpa membebani list.
+    for (var attempt = 0; attempt < 3; attempt++) {
       final b64 = await AvatarB64Service.instance.get(widget.uid);
       if (!mounted) return;
       if (b64.isNotEmpty) {

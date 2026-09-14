@@ -318,6 +318,19 @@ class AdminService {
     return list.cast<Map<String, dynamic>>();
   }
 
+  /// Varian ber-paginasi: `{items, total, limit, offset}`. Ganti
+  /// `listDummies()` (tanpa limit) supaya polling tak menarik seluruh tabel.
+  Future<Map<String, dynamic>> listDummiesPage({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _sb.rpc(
+      'admin_list_dummies_page',
+      params: {'p_limit': limit, 'p_offset': offset},
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
   /// Set status dummy: 'online' | 'idle' | 'offline' | 'invisible'.
   Future<void> setDummyStatus(String uid, String status) async {
     await _sb.rpc(
@@ -437,6 +450,8 @@ class AdminService {
     String? apiBase,
     String? apiKey,
     String? defaultModel,
+    String? storyModel,
+    String? fallbackModel,
   }) async {
     final res = await _sb.rpc('admin_ai_provider_save', params: {
       if (id != null) 'p_id': id,
@@ -444,6 +459,8 @@ class AdminService {
       if (apiBase != null) 'p_api_base': apiBase,
       if (apiKey != null) 'p_api_key': apiKey,
       if (defaultModel != null) 'p_default_model': defaultModel,
+      if (storyModel != null) 'p_story_model': storyModel,
+      if (fallbackModel != null) 'p_fallback_model': fallbackModel,
     });
     return (res as Map<String, dynamic>?) ?? const {};
   }

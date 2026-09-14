@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
+import '../services/avatar_service.dart';
 import '../services/points_service.dart';
 import '../providers/theme_provider.dart';
 
@@ -62,6 +64,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         _me = res['me'] is Map ? Map<String, dynamic>.from(res['me']) : null;
         _loading = false;
       });
+      // Prefetch avatar semua uid sekaligus (1 query) — cegah N+1 per kartu.
+      unawaited(
+        AvatarB64Service.instance.prefetch(
+          _entries
+              .map((e) => '${(e as Map)['uid'] ?? ''}')
+              .where((u) => u.isNotEmpty)
+              .toList(),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -230,15 +241,59 @@ class _RankBadge extends StatelessWidget {
   }
 }
 
-class _Avatar extends StatelessWidget {
+class _Avatar extends StatefulWidget {
   final String base64;
   final String nickname;
   const _Avatar({required this.base64, required this.nickname});
 
+  // Cache hasil decode lintas-instance — cegah spawn isolate berulang saat
+  // item di-recycle/di-rebuild (dulu compute() tiap build).
+  static final Map<String, Uint8List> _cache = {};
+
+  @override
+  State<_Avatar> createState() => _AvatarState();
+}
+
+class _AvatarState extends State<_Avatar> {
+  Uint8List? _bytes;
+  bool _started = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _decode();
+  }
+
+  @override
+  void didUpdateWidget(_Avatar old) {
+    super.didUpdateWidget(old);
+    if (old.base64 != widget.base64) {
+      _bytes = null;
+      _started = false;
+      _decode();
+    }
+  }
+
+  Future<void> _decode() async {
+    final b64 = widget.base64;
+    if (b64.isEmpty || _started) return;
+    _started = true;
+    final cached = _Avatar._cache[b64];
+    if (cached != null) {
+      if (mounted) setState(() => _bytes = cached);
+      return;
+    }
+    final b = await compute(_decodeAvatar, b64);
+    if (b == null) return;
+    if (_Avatar._cache.length < 100) _Avatar._cache[b64] = b;
+    if (mounted) setState(() => _bytes = b);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final initial = nickname.isNotEmpty ? nickname[0].toUpperCase() : '?';
-    if (base64.isEmpty) {
+    final initial =
+        widget.nickname.isNotEmpty ? widget.nickname[0].toUpperCase() : '?';
+    if (widget.base64.isEmpty || _bytes == null) {
       return CircleAvatar(
         radius: 18,
         backgroundColor: AppTheme.accent.withValues(alpha: 0.2),
@@ -251,27 +306,9 @@ class _Avatar extends StatelessWidget {
         ),
       );
     }
-    return FutureBuilder<Uint8List?>(
-      future: compute(_decodeAvatar, base64),
-      builder: (_, snap) {
-        if (snap.data == null) {
-          return CircleAvatar(
-            radius: 18,
-            backgroundColor: AppTheme.accent.withValues(alpha: 0.2),
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: AppTheme.accent,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          );
-        }
-        return CircleAvatar(
-          radius: 18,
-          backgroundImage: MemoryImage(snap.data!),
-        );
-      },
+    return CircleAvatar(
+      radius: 18,
+      backgroundImage: MemoryImage(_bytes!),
     );
   }
 }

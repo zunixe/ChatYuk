@@ -92,7 +92,8 @@ class AdminDummyTab extends StatefulWidget {
   State<AdminDummyTab> createState() => _AdminDummyTabState();
 }
 
-class _AdminDummyTabState extends State<AdminDummyTab> {
+class _AdminDummyTabState extends State<AdminDummyTab>
+    with WidgetsBindingObserver {
   final AdminService _svc = AdminService(SupabaseConfig.client);
   final _nickCtrl = TextEditingController();
   final _nicknameFocus = FocusNode();
@@ -113,20 +114,83 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
   String? _error;
   List<Map<String, dynamic>> _items = [];
   Timer? _refreshTimer;
+  // Paginasi server (admin_list_dummies_page) — cegah tarik seluruh tabel.
+  static const int _pageSize = 50;
+  bool _hasMore = true;
+  bool _fetchingMore = false;
+  int _total = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
-    // Polling berkala → badge unread per dummy muncul tanpa pull manual
-    // (pola sama seperti AdminChatListScreen 15 dtk).
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) _load(silent: true);
+    _scrollCtrl.addListener(_onScroll);
+    // Polling 30 dtk (dulu 15 dtk) — cukup untuk badge unread per dummy
+    // tanpa membebani DB/rebuild berlebihan. Lewati kalau sudah load-more
+    // (jangan reset paginasi yang sedang di-scroll).
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      if (_items.length > _pageSize) return;
+      _load(silent: true);
     });
+  }
+
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 300) {
+      _loadMore();
+    }
+  }
+
+  /// Muat halaman dummy berikutnya (append).
+  Future<void> _loadMore() async {
+    if (_fetchingMore || !_hasMore || _loading) return;
+    _fetchingMore = true;
+    try {
+      final res = await _svc.listDummiesPage(
+        limit: _pageSize,
+        offset: _items.length,
+      );
+      final more = ((res['items'] as List?) ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final total = (res['total'] as num?)?.toInt() ?? _total;
+      if (!mounted) return;
+      setState(() {
+        _items = [..._items, ...more];
+        _total = total;
+        _hasMore = _items.length < total && more.isNotEmpty;
+      });
+    } catch (e) {
+      dlog('[DUMMY] loadMore error: $e');
+    } finally {
+      _fetchingMore = false;
+    }
+  }
+
+  /// App di-background → stop polling (hemat baterai & beban DB).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    } else if (state == AppLifecycleState.resumed && mounted) {
+      if (_refreshTimer == null) {
+        _load(silent: true);
+        _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+          if (!mounted) return;
+          if (_items.length > _pageSize) return;
+          _load(silent: true);
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _nickCtrl.dispose();
     _nicknameFocus.dispose();
@@ -143,10 +207,16 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
       });
     }
     try {
-      final items = await _svc.listDummies();
+      final res = await _svc.listDummiesPage(limit: _pageSize, offset: 0);
+      final items = ((res['items'] as List?) ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final total = (res['total'] as num?)?.toInt() ?? items.length;
       if (!mounted) return;
       setState(() {
         _items = items;
+        _total = total;
+        _hasMore = items.length < total;
         _loading = false;
       });
     } catch (e) {
@@ -531,7 +601,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     final s = context.watch<LocaleProvider>().s;
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(
+      child: ListView.builder(
         controller: _scrollCtrl,
         padding: EdgeInsets.fromLTRB(
           16,
@@ -539,125 +609,149 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
           16,
           MediaQuery.of(context).padding.bottom + 24,
         ),
-        children: [
-          // ── Daftar akun dummy (form tambah/edit pindah ke bottom sheet) ──
-          Row(
-            children: [
-              Text(s.dummyListTitle, style: AppText.titleEmphasis),
-              Spacer(),
-              Text(
-                _search.isEmpty
-                    ? '${_items.length}'
-                    : '${_filtered.length}/${_items.length}',
-                style: AppText.label.copyWith(color: AppTheme.textSecondary),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => _openDummySheet(s: s),
-                icon: const Icon(Icons.add, size: 18),
-                label: Text(s.dummyAdd),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  textStyle: AppText.label,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // ── Filter tipe: Semua / Biasa / Expert (dari kolom `kind`) ──
-          SegmentedButton<String>(
-            showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            segments: [
-              ButtonSegment(
-                value: '',
-                label: Text(s.dummyKindAll, style: AppText.label),
-              ),
-              ButtonSegment(
-                value: 'regular',
-                label: Text(s.dummyKindRegular, style: AppText.label),
-              ),
-              ButtonSegment(
-                value: 'expert',
-                label: Text(s.dummyKindExpert, style: AppText.label),
-              ),
-            ],
-            selected: {_kindFilter ?? ''},
-            onSelectionChanged: (v) => setState(
-              () => _kindFilter = v.first.isEmpty ? null : v.first,
-            ),
-          ),
-          const SizedBox(height: 8),
-          // ── Pencarian dummy (filter lokal by nickname) ──
-          TextField(
-            controller: _searchCtrl,
-            onChanged: (v) => setState(() => _search = v.trim()),
-            style: AppText.body.copyWith(color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: s.searchHint,
-              hintStyle:
-                  AppText.body.copyWith(color: AppTheme.textSecondary),
-              prefixIcon:
-                  Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
-              prefixIconConstraints:
-                  const BoxConstraints(minWidth: 36, minHeight: 0),
-              suffixIcon: _search.isNotEmpty
-                  ? IconButton(
-                      icon: Icon(
-                        Icons.clear,
-                        size: 18,
-                        color: AppTheme.textSecondary,
-                      ),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        setState(() => _search = '');
-                      },
-                    )
-                  : null,
-              filled: true,
-              fillColor: AppTheme.bgCard,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text(
-                  '${s.dummyListFail}: $_error',
-                  style: AppText.bodySmall.copyWith(color: AppTheme.danger),
-                ),
-              ),
-            )
-          else if (_filtered.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text(
-                  _items.isEmpty ? s.dummyEmpty : s.dummySearchEmpty,
-                  style: AppText.bodySmall,
-                ),
-              ),
-            )
-          else
-            ..._filtered.map((item) => _itemCard(item, s)),
-        ],
+        // Lazy: header tetap + daftar kartu via builder (dulu ListView biasa
+        // membangun SEMUA kartu dummy sekaligus → lag saat polling 30 dtk).
+        itemCount: _headerCount + _filtered.length,
+        itemBuilder: (ctx, i) {
+          if (i < _headerCount) return _headerChild(i, s);
+          return _itemCard(_filtered[i - _headerCount], s);
+        },
       ),
     );
+  }
+
+  /// Jumlah widget header tetap di atas daftar (dipetakan via _headerChild).
+  static const int _headerCount = 9;
+
+  Widget _headerChild(int i, S s) {
+    switch (i) {
+      case 0:
+        // ── Daftar akun dummy (form tambah/edit pindah ke bottom sheet) ──
+        return Row(
+          children: [
+            Text(s.dummyListTitle, style: AppText.titleEmphasis),
+            Spacer(),
+            Text(
+              _search.isEmpty
+                  ? '${_items.length}'
+                  : '${_filtered.length}/${_items.length}',
+              style: AppText.label.copyWith(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: () => _openDummySheet(s: s),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(s.dummyAdd),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                textStyle: AppText.label,
+              ),
+            ),
+          ],
+        );
+      case 1:
+        return const SizedBox(height: 8);
+      case 2:
+        // ── Filter tipe: Semua / Biasa / Expert (dari kolom `kind`) ──
+        return SegmentedButton<String>(
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: [
+            ButtonSegment(
+              value: '',
+              label: Text(s.dummyKindAll, style: AppText.label),
+            ),
+            ButtonSegment(
+              value: 'regular',
+              label: Text(s.dummyKindRegular, style: AppText.label),
+            ),
+            ButtonSegment(
+              value: 'expert',
+              label: Text(s.dummyKindExpert, style: AppText.label),
+            ),
+          ],
+          selected: {_kindFilter ?? ''},
+          onSelectionChanged: (v) =>
+              setState(() => _kindFilter = v.first.isEmpty ? null : v.first),
+        );
+      case 3:
+        return const SizedBox(height: 8);
+      case 4:
+        // ── Pencarian dummy (filter lokal by nickname) ──
+        return TextField(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _search = v.trim()),
+          style: AppText.body.copyWith(color: AppTheme.textPrimary),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: s.searchHint,
+            hintStyle: AppText.body.copyWith(color: AppTheme.textSecondary),
+            prefixIcon:
+                Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+            prefixIconConstraints:
+                const BoxConstraints(minWidth: 36, minHeight: 0),
+            suffixIcon: _search.isNotEmpty
+                ? IconButton(
+                    icon: Icon(
+                      Icons.clear,
+                      size: 18,
+                      color: AppTheme.textSecondary,
+                    ),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _search = '');
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: AppTheme.bgCard,
+            contentPadding:
+                const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      case 5:
+        return const SizedBox(height: 6);
+      case 6:
+        if (_loading) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return const SizedBox.shrink();
+      case 7:
+        if (!_loading && _error != null) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                '${s.dummyListFail}: $_error',
+                style: AppText.bodySmall.copyWith(color: AppTheme.danger),
+              ),
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+      default:
+        if (!_loading && _error == null && _filtered.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                _items.isEmpty ? s.dummyEmpty : s.dummySearchEmpty,
+                style: AppText.bodySmall,
+              ),
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+    }
   }
 
   /// Dialog info jadwal AI dummy (dari cron ai_presence_tick).

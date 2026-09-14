@@ -19,7 +19,8 @@ class AdminChatListScreen extends StatefulWidget {
   State<AdminChatListScreen> createState() => _AdminChatListScreenState();
 }
 
-class _AdminChatListScreenState extends State<AdminChatListScreen> {
+class _AdminChatListScreenState extends State<AdminChatListScreen>
+    with WidgetsBindingObserver {
   Timer? _refreshTimer;
   Timer? _callTimer;
   final _searchCtrl = TextEditingController();
@@ -29,24 +30,51 @@ class _AdminChatListScreenState extends State<AdminChatListScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final admin = context.read<AdminProvider>();
     Future.microtask(() {
       admin.fetchChats();
       admin.fetchActiveCalls();
     });
-    // Polling berkala → daftar chat selalu fresh tanpa loading flash.
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _startTimers();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  void _startTimers() {
+    _refreshTimer?.cancel();
+    _callTimer?.cancel();
+    final admin = context.read<AdminProvider>();
+    // 30 dtk (dulu 15) — cukup fresh tanpa rebuild berlebihan.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
       admin.refreshChats();
     });
     // Polling call aktif lebih cepat — badge video/audio call harus live.
-    _callTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _callTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (!mounted) return;
       admin.fetchActiveCalls();
     });
-    _scrollCtrl.addListener(_onScroll);
+  }
+
+  /// App di-background → stop polling (hemat baterai & beban DB).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+      _callTimer?.cancel();
+      _callTimer = null;
+    } else if (state == AppLifecycleState.resumed && mounted) {
+      if (_refreshTimer == null) {
+        context.read<AdminProvider>().fetchActiveCalls();
+        _startTimers();
+      }
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _callTimer?.cancel();
     _scrollCtrl.dispose();

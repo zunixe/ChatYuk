@@ -1318,6 +1318,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
               final paged = users.take(_page * _pageSize).toList();
               final hasMore = paged.length < users.length;
+              // Map uid→index sekali (dulu indexWhere linear per kunci anak
+              // → O(n²) saat presence heartbeat menggeser posisi tiap emit).
+              final indexByUid = <String, int>{
+                for (var i = 0; i < paged.length; i++) paged[i].uid: i,
+              };
 
               return Column(
                 children: [
@@ -1443,10 +1448,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                             // di-dispose/recreate → avatar tidak kedip.
                             findChildIndexCallback: (key) {
                               final k = key as ValueKey<String>;
-                              final idx = paged.indexWhere(
-                                (u) => 'uc-${u.uid}' == k.value,
-                              );
-                              return idx < 0 ? null : idx;
+                              // 'uc-<uid>' → index via Map O(1).
+                              final uid = k.value.startsWith('uc-')
+                                  ? k.value.substring(3)
+                                  : k.value;
+                              return indexByUid[uid];
                             },
                             itemCount: paged.length + (hasMore ? 1 : 0),
                             itemBuilder: (_, i) {
