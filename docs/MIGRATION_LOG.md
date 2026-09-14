@@ -3,6 +3,39 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-14 — Audit drift kode ↔ DB: pulihkan fitur & sinkron pencatatan
+
+**Masalah ditemukan (audit):** 3 fitur rusak di produksi karena migrasi ada di
+repo tapi tak ter-apply; 38 versi sudah ter-apply tapi tak tercatat di
+`schema_migrations` (drift pencatatan).
+
+**Aksi — apply migrasi yang selama ini tertunda:**
+
+| Versi | Fitur dipulihkan |
+|---|---|
+| 20260909000000_mute_archive_chats.sql | Bisukan & Arsipkan chat (kolom `muted_by`/`archived_by` + RPC `mute_private_chat`/`archive_private_chat`) |
+| 20260908000000_room_gift.sql | Kirim gift di room live (RPC `send_room_gift`) |
+| 20260914110000_dummy_kind.sql | Filter Expert/Regular di admin (kolom `kind` + `admin_list_dummies`) |
+| 20260914110001_dummy_kind_experts.sql | Koreksi set EXPERT (5 akun: Admin Chatyuk, Dr Nara, HardwareExpert, Kang Modal, SoftwareExpert) |
+| 20260914110002_expert_flags.sql | Admin Chatyuk `ai_always_reply=true`; HardwareExpert `long_answers=true` |
+
+**Aksi — sinkron pencatatan:** 38 versi yang objeknya sudah ada di DB (diverifikasi
+via probe `pg_proc`/`information_schema.tables`) dicatat ke
+`schema_migrations`. Total kini 246 versi file bertimestamp tercatat (sebelumnya
+205). Tidak ada lagi versi file yang belum tercatat.
+
+**Obsolete (JANGAN apply — sengaja dihapus):**
+- `20260819150001_calls_notify_trigger.sql` + `20260823155000_notify_call_trigger.sql`
+  → membuat trigger `notify_call_trigger` yang **redundan** dengan
+  `notify_call_ringing_trigger`; sudah dihapus di `20260827000000_notif_fix.sql`.
+  Fungsi `notify_call` memang tidak ada di DB (by design).
+
+**Selaraskan kode ke skema (bukan ubah DB):**
+- `messages.inserted_at` tidak ada → kode diselaraskan ke `created_at`
+  (`room_chat_screen.dart`, `group_media_screen.dart`).
+- `room_presence.country/city` tidak ada → pembacaan dihapus di
+  `chat_service.dart` (kosongkan, tanpa query kolom nir-skema).
+
 ## 2026-09-14 — Lapis 6: perbaikan 8 timestamp duplikat
 
 **Masalah:** `supabase_migrations.schema_migrations.version` adalah PRIMARY KEY,

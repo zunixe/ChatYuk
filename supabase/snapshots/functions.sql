@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-14T11:34:13Z
+-- Timestamp: 2026-09-14T11:50:55Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -1780,6 +1780,7 @@ begin
       from public.private_chats c
       where d.uid = any (c.participants)
     ), 0),
+    'kind', coalesce(d.kind, 'regular'),
     'ai_enabled', d.ai_enabled,
     'ai_persona', d.ai_persona,
     'ai_model', d.ai_model,

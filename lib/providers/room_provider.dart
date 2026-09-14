@@ -114,7 +114,11 @@ class RoomProvider extends ChangeNotifier {
   }
 
   RoomProvider() {
-    // Unified fan-out: Presence room juga update counts per-room (RealtimeHub per-room presence)
+    // C2 audit: SATU konsep "online count room" tapi DUA sumber. Aturan:
+    //   - DB (count_room_presence_by_country) = SUMBER KEBENARAN absolut.
+    //   - Presence lokal = nilai OPTIMISTIK: hanya dipakai untuk NAIKKAN
+    //     angka sementara (member baru join belum masuk DB), TIDAK PERNAH
+    //     menurunkan angka DB (presence bisa belum lengkap → jangan reset).
     _presenceSub = RealtimeHub.instance.roomPresence.listen((msg) {
       final roomId = msg['roomId'] as String?;
       final state = msg['state'] as Map?;
@@ -123,7 +127,8 @@ class RoomProvider extends ChangeNotifier {
       for (final v in state.values) {
         if (v is List) total += v.length;
       }
-      if (_counts[roomId] == total) return;
+      final current = _counts[roomId] ?? 0;
+      if (total <= current) return; // jangan turunkan angka DB
       _counts = {..._counts, roomId: total};
       _applyCounts();
       if (!_disposed) notifyListeners();
@@ -136,6 +141,8 @@ class RoomProvider extends ChangeNotifier {
 
   void _subscribeCounts() {
     _countsSub?.cancel();
+    // SUMBER KEBENARAN online-count room (absolut, lintas-device). Nilai
+    // presence lokal di atas hanya boleh menaikkan sementara; DB menimpa.
     // Resilient: channelError/network blip me-restart subscription
     // otomatis (dulu: mati permanen → badge online freeze sampai restart).
     _countsSub = listenResilient<Map<String, int>>(

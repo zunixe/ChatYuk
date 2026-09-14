@@ -251,6 +251,11 @@ class ChatProvider extends ChangeNotifier {
     await _service.mutePrivateChat(chatId, mute, myUidParam: myUid);
   }
 
+  /// Mute/unmute notifikasi room live — sync server + lokal (C1 audit).
+  Future<void> muteRoom(String roomId, bool mute) {
+    return _service.muteRoom(roomId, mute);
+  }
+
   Future<void> archiveChat(String chatId, bool archive, {String? myUid}) async {
     await _service.archivePrivateChat(chatId, archive, myUidParam: myUid);
   }
