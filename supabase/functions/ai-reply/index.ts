@@ -1102,6 +1102,47 @@ Deno.serve(async (req: Request) => {
   }
   try {
     const body = await req.json().catch(() => null);
+    // ── Observability (ai_reply_log): shadow `rawJson` — tanpa mengubah
+    // 25+ call-site, setiap keputusan (replied / skipped:<alasan> / error)
+    // tercatat fire-and-forget. Insert try/catch + waitUntil → tabel belum
+    // ada (migrasi belum di-apply) TIDAK PERNAH menggagalkan balasan.
+    let arlCtx: { chatId: string | null; triggerMsgId: number | null; senderId: string | null; dummyUid: string | null; proactive: boolean } = { chatId: null, triggerMsgId: null, senderId: null, dummyUid: null, proactive: false };
+    try {
+      arlCtx = {
+        chatId: (body as any)?.chat_id ?? null,
+        triggerMsgId: (body as any)?.trigger_msg_id ?? null,
+        senderId: (body as any)?.sender_id ?? null,
+        dummyUid: (body as any)?.dummy_uid ?? null,
+        proactive: (body as any)?.proactive === true,
+      };
+    } catch (_) {}
+    let arlAdmin: any = null;
+    function json(obj: unknown, status = 200): Response {
+      try {
+        const o: any = (obj as any) ?? {};
+        let decision: string | null = null;
+        if (o.reply != null) decision = 'replied' + (o.blocked ? ':' + o.blocked : '');
+        else if (o.skipped) decision = 'skipped:' + o.skipped;
+        else if (o.blocked) decision = 'blocked:' + o.blocked;
+        else if (o.ok === false) decision = 'error:' + (o.error ?? 'unknown');
+        if (decision && arlAdmin && (arlCtx.chatId || decision.startsWith('replied'))) {
+          const row = {
+            chat_id: arlCtx.chatId,
+            trigger_msg_id: arlCtx.triggerMsgId,
+            sender_id: arlCtx.senderId,
+            dummy_uid: arlCtx.dummyUid,
+            proactive: arlCtx.proactive,
+            stage: 'edge',
+            decision,
+            detail: { model: o.model_used ?? null, http: status },
+          };
+          runPostResponse((async () => {
+            try { await arlAdmin.from('ai_reply_log').insert(row); } catch (_) {}
+          })());
+        }
+      } catch (_) {}
+      return rawJson(obj, status);
+    }
     if (!body || !body.chat_id || !body.dummy_uid) {
       return json({ ok: false, error: 'bad_request' }, 400);
     }
@@ -1121,6 +1162,7 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+    arlAdmin = admin;
 
     // ── AUTH (#1): secret internal ATAU JWT milik pengirim sendiri ──
     // Jalur DB (trigger/proactive/recovery via ai_reply_post) membawa
@@ -1660,7 +1702,13 @@ Deno.serve(async (req: Request) => {
     ]);
     const dummy = (dummyRes as any)?.data;
     const settings = (settingsRes as any)?.data;
-    if (!dummy || dummy.ai_enabled !== true) {
+    // ── PENGECUALIAN always_reply (expert/CS) — kontrak SAMA dengan trigger
+    // ai_reply_enqueue: expert harus SELALU dibalas. Dipindah ke sini
+    // (sebelum cek ai_enabled) supaya expert yang ai_enabled=false pun tetap
+    // membalas. Gate `hold` DI BAWAH tetap menang atas ini (manusia yang
+    // memegang akun dummy harus selalu diprioritaskan).
+    const alwaysReply = dummy?.ai_always_reply === true;
+    if (!dummy || (dummy.ai_enabled !== true && !alwaysReply)) {
       return json({ ok: false, skipped: 'ai_disabled' });
     }
     // ── HOLD: admin sedang pegang sesi dummy ini ("masuk dummy") →
@@ -1685,8 +1733,8 @@ Deno.serve(async (req: Request) => {
     // chat ini, AI tidak membalas chat ini — chat lain tetap normal.
     // Flag global ai_offline_until lama tetap dihormati sebagai fallback.
     // PENGECUALIAN: dummy always_reply (expert) tidak pernah ngambek —
-    // pesan harus selalu dibalas. ──
-    const alwaysReply = (dummy as any).ai_always_reply === true;
+    // pesan harus selalu dibalas. (alwaysReply sudah dihitung di atas,
+    // sebelum gate ai_disabled.) ──
     let chatStormed = false;
     try {
       const st: any = (
@@ -2091,6 +2139,10 @@ Deno.serve(async (req: Request) => {
       .filter((m) => m.role === 'user')
       .slice(-3)
       .reduce((max, m) => Math.max(max, contentText(m.content).length), 0);
+    // Sinkron dengan prompt PANJANG FLEKSIBEL (di bawah): cap sanitize
+    // harus muat 2-4 kalimat — kalau tetap 90, balasan soal kerjaan/cerita
+    // selalu terpenggal "..." walau prompt membolehkan panjang.
+    const flexibleLong = !freshStage && recentUserMaxLen >= 80;
     const lastUserMsg = [...history].reverse().find((m) => m.role === 'user');
     let cadenceSec: number | null = null;
     for (let i = history.length - 1; i >= 1; i--) {
@@ -2236,7 +2288,7 @@ Deno.serve(async (req: Request) => {
         : 'FASE SEKARANG: makin akrab — kehangatan dan godaan naik PELAN-PELAN sesuai keakraban; masih jaga sopan santinya.',
       // Nyaman + lawan nulis panjang → balasan boleh lebih panjang bila
       // benar-benar perlu (mengikuti panjang cerita), tanpa jadi esei.
-      !freshStage && recentUserMaxLen >= 80
+      flexibleLong
         ? 'PANJANG FLEKSIBEL: lawan bicaramu sering nulis panjang — kalau dia bercerita panjang dan perlu dijawab serius, balasanmu boleh 2-4 kalimat untuk mengikuti. Sisanya tetap pendek kayak chat biasa.'
         : '',
       'GAYA NGOBROL NATURAL (wajib — ini yang bikin kamu kelihatan manusia, bukan AI): (1) JANGAN selalu bertanya balik — cukup 1 dari 3 balasan yang ada pertanyaannya; sisanya cukup reaksi atau pernyataan ("wkwk iya", "masa sih", "oalah gitu"), jangan interogasi. (2) Boleh beda pendapat, boleh bilang "ga tau", boleh cuek dikit — jangan iya-iya melulu. (3) Bahasa chat asli: lowercase sering, singkatan (yg, gpp, bgt, klo, ntar, wkwk), typo ringan sesekali, tanda baca seadanya. (4) Jangan mulai balasan dengan kata yang sama seperti 2 balasan terakhirmu di riwayat. (5) Kadang cukup jawab super pendek ("wkwk", "iya", "oh gitu") tanpa embel-embel — itu normal.',
@@ -2432,6 +2484,11 @@ Deno.serve(async (req: Request) => {
         headers: {},
       };
     };
+    // Model cadangan gratis (OpenCode Zen) bila provider utama menolak
+    // (saldo $0/402, kuota habis/429, model salah/404, 5xx) — TokenHarbor
+    // tetap utama; Mimo hanya dipakai saat utama gagal.
+    const MIMO_FREE = 'mimo-v2.5-free';
+    const FALLBACKABLE = /http_(401|402|404|429|5\d\d)/;
     // ── JADWAL HARIAN AI + CERITA KEHIDUPAN HARIAN ──
     // AI menentukan sendiri jam onlinenya SETIAP HARI (menggerakkan
     // cronjob ai_presence_tick) DAN generate cerita kegiatannya hari ini
@@ -2615,11 +2672,13 @@ Deno.serve(async (req: Request) => {
           : 'Ini hari pertamamu punya rutinitas tercatat — mulai yang wajar.';
         // Story/jadwal SELALU pakai glm (B.AI) — model chat (Zen/free)
         // sering menolak system-only JSON call (500) & format tidak stabil.
-        const sModel = 'glm-5.3-flash';
-        const sRoute = routeFor(sModel);
-        const sBase = sRoute.base;
-        const sKey = sRoute.key;
-        const sHeaders = sRoute.headers;
+        // Bila glm mati (saldo $0/402, 429, 5xx) → fallback Mimo free (Zen);
+        // TokenHarbor tetap utama.
+        let sModel = 'glm-5.3-flash';
+        let sRoute = routeFor(sModel);
+        let sBase = sRoute.base;
+        let sKey = sRoute.key;
+        let sHeaders = sRoute.headers;
         const sNick = (dummy as any).nickname || profile.nickname || 'teman';
         const sCity = profile.city || profile.country || 'kotamu';
         const sHobbies = hobbies || 'ngobrol santai';
@@ -2748,6 +2807,29 @@ Deno.serve(async (req: Request) => {
           if (storyThin(story)) {
             const retry = await tryStoryGen(true);
             if (retry != null) story = retry;
+          }
+          // Provider utama mati untuk story (saldo $0/402, 429, 5xx) →
+          // coba sekali via Mimo free (Zen) sebelum menyerah ke fallback
+          // tipis. reasoning_effort otomatis hilang (hanya untuk glm).
+          if (story == null && sModel !== MIMO_FREE) {
+            const lastHttp = (storyDbg as any)?.http;
+            if (
+              [401, 402, 404, 429, 500, 502, 503, 504].includes(lastHttp)
+            ) {
+              const mRoute = routeFor(MIMO_FREE);
+              if (mRoute.key) {
+                sModel = MIMO_FREE;
+                sRoute = mRoute;
+                sBase = mRoute.base;
+                sKey = mRoute.key;
+                sHeaders = mRoute.headers;
+                story = await tryStoryGen(false);
+                if (storyThin(story)) {
+                  const retry2 = await tryStoryGen(true);
+                  if (retry2 != null) story = retry2;
+                }
+              }
+            }
           }
         }
         if (story == null) {
@@ -2894,12 +2976,24 @@ Deno.serve(async (req: Request) => {
       maxTokens: number,
       temperature = 0.9,
       modelOverride?: string,
+      allowMimoFallback = true,
     ): Promise<{ res?: any; err?: string }> => {
       const m = modelOverride || model;
       // TokenHarbor: prefix vendor 'th/' hanya alamat routing internal —
       // API hanya terima bare ID (cth: 'deepseek-v4.1-flash:free').
       const apiModel = m.replace(/^th\//, '');
       const rt = modelOverride ? routeFor(modelOverride) : route;
+      const mimoFallback = async (
+        err: string,
+      ): Promise<{ res?: any; err?: string } | null> => {
+        if (
+          allowMimoFallback && m !== MIMO_FREE && FALLBACKABLE.test(err)
+        ) {
+          modelUsed = MIMO_FREE;
+          return llmCall(messages, maxTokens, temperature, MIMO_FREE, false);
+        }
+        return null;
+      };
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           const r = await fetch(`${rt.base}/chat/completions`, {
@@ -2923,17 +3017,24 @@ Deno.serve(async (req: Request) => {
               messages,
             }),
           });
-          if (r.status === 429 && attempt < 3) {
-            await sleep(2500 * attempt + Math.random() * 1000);
-            continue;
-          }
           if (!r.ok) {
             const errText = await r.text().catch(() => '');
-            return { err: `http_${r.status}: ${errText.slice(0, 200)}` };
+            const err = `http_${r.status}: ${errText.slice(0, 200)}`;
+            const fb = await mimoFallback(err);
+            if (fb) return fb;
+            if (r.status === 429 && attempt < 3) {
+              await sleep(2500 * attempt + Math.random() * 1000);
+              continue;
+            }
+            return { err };
           }
           return { res: await r.json() };
         } catch (e) {
-          if (attempt >= 3) return { err: `exc:${e}` };
+          if (attempt >= 3) {
+            const fb = await mimoFallback(`exc:${e}`);
+            if (fb) return fb;
+            return { err: `exc:${e}` };
+          }
           await sleep(2000);
         }
       }
@@ -3059,7 +3160,9 @@ Deno.serve(async (req: Request) => {
       stripMoodMarker(rawLlm),
       // longAnswers (CS + expert): ruang untuk blok kode (max_tokens 1000
       // ≈ 4000 char, jadi 3000 char tidak jebol budget token).
-      longAnswers ? 3000 : guardOn ? MAX_REPLY_CHARS : 220,
+      // Fleksibel (lawan nulis panjang): muat 2-4 kalimat (~300 char) —
+      // cap 90 memenggal jawaban soal kerjaan/cerita jadi "...".
+      longAnswers ? 3000 : guardOn ? (flexibleLong ? 300 : MAX_REPLY_CHARS) : 220,
       longAnswers, // CS: pertahankan baris → poin/angka bernomor rapi
     );
     // Jaring pengaman kode (selain instruksi prompt): maks 1 emoji,
@@ -3343,7 +3446,7 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-function json(obj: unknown, status = 200): Response {
+function rawJson(obj: unknown, status = 200): Response {
   return new Response(JSON.stringify(obj), {
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },

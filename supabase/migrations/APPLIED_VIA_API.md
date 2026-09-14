@@ -664,3 +664,24 @@ Jika `supabase db push` timeout lagi:
 - **String:** `btnRefresh` baru di `strings.dart`.
 - **Apply:** via Management API. Tercatat di `schema_migrations` (20260914010000).
 - **Verifikasi:** query anon sorted by `last_seen desc` — yusuf (terbaru) di posisi paling atas. Admin APK rebuild + push ke HP (.33).
+
+## 2026-09-14 — 20260914030000_admin_chatyuk_long_answers.sql + 20260914040000_ai_missed_recovery.sql (APPLY) + ai-daily-life/ai-reply fallback Mimo (DEPLOY)
+- **#1 long_answers Admin Chatyuk:** tanpa flag, balasan Admin kepotong guard sanitize 90 char ("sedikit-sedikit kayak terbatas"). `ai_persona || long_answers:true` (merge, personality/tone/extra_prompt lama utuh). Verifikasi: `ai_persona->>'long_answers'` = true.
+- **#2 missed_recovery (kasus Dhanu & Sarah):** pesan manusia tersimpan tapi tanpa claim → tak dibaca & tak dibalas. `ai_reply_claim_recovery` cuma tangani claim BASI + POST tanpa-auth (401 sejak gate callback_auth). Fix: recovery pakai helper ber-auth `ai_reply_post`; baru `ai_reply_missed_recovery` (cron */3 mnt, pesan manusia 4–20 mnt tanpa claim & tanpa balasan, terbaru per chat, maks 20). Verifikasi: kedua cron terdaftar, `ai_reply_missed_recovery()` ada.
+- **ai-daily-life (kasus Dhanu: Mimo 200 tapi JSON invalid):** retry strict saja tidak cukup. Kini: `storyThin` ketat (work/activities≥2/hangout/place-spesifik, pola ai-reply) gantikan cek summary-only; primer tipis/gagal-parse → fallback Mimo (bukan cuma saat HTTP-error); Mimo `max_tokens` 1000 (headroom reasoning) + baca `reasoning_content` bila content kosong; `extractJson` repair trailing-comma; `failWhy` bawa rawHead untuk diagnosis; multi-pass 3x tetap.
+- **Client:** `_invokeAiReply` fallback berlapis (cache → server participants → parse chat_id) agar pesan pertama di chat baru tidak silent-skip; `_personaMap` pertahankan flag non-teks (long_answers/diagrams/charts/dsb) dari `ai_persona` lama.
+- **Apply (Windows):** via Management API `POST /v1/projects/{ref}/database/query` pakai Node (PowerShell 5.1 `ConvertTo-Json` bungkus string jadi `{"value":...}` → 400; `supabase db push --linked` hang di "Initialising login role"). Kedua versi tercatat di `schema_migrations`.
+- **Deploy:** `supabase functions deploy ai-daily-life` + `ai-reply` OK (keduanya "Deployed Functions").
+
+## 2026-09-14 — Audit AI dummy + 20260914060000_ai_reply_log_fix.sql (APPLY) + ai-reply v146 (DEPLOY)
+
+- **Latar (temuan audit dari DB live):** `ai_reply_log` **0 baris** padahal tabel+cron ada. Akar: `20260914050000` ter-apply SEBAGIAN (tabel/fungsi/cron jadi, versi TIDAK tercatat) dan `ai_reply_post` di DB masih versi LAMA (boolean tanpa log) → `ai_log_reply` tak pernah dipanggil. Plus `ai_reply_enqueue` live KEHILANGAN 2 pengecualian yang ada di file 20260913140000: `ai_always_reply` + both-`ai_no_rate_limit` → jalur trigger & edge BEDA kontrak.
+- **Bom waktu:** 20260914050000 mengubah `ai_reply_post` jadi `void`, sementara 20260914040000 (`claim_recovery`) pakai `v_ok := ai_reply_post(...)` → kalau di-apply penuh, recovery ERROR.
+- **KEPUTUSAN OWNER:** (1) expert = selalu balas (`ai_always_reply` menembus `ai_enabled`/sleep/storm/rate); (2) `ai_reply_post` = **BOOLEAN ber-log** (bukan void); (3) `ai_active_hours` tetap kosmetik; (4) `hold` menang atas `always_reply`.
+- **Isi 20260914060000_ai_reply_log_fix.sql:** menormalkan `ai_log_reply` + `ai_reply_post` (boolean + log tiap cabang: `skipped:no_secret`/`error:http_<code>`/`enqueued`) + `ai_reply_enqueue` (pulihkan `ai_always_reply` short-circuit & both-no_rate; default max 30, min 5) + `admin_get_ai_reply_log` + catat versi. Menggantikan 20260914050000 (tidak pernah tercatat).
+- **Edge:** `alwaysReply` dihitung SEBELUM gate `ai_disabled` → expert `ai_enabled=false` tetap dibalas; gate `hold` dipindah tetap di atas (hold menang).
+- **Data:** `HardwareExpert.ai_enabled` 0→1 (semua 4 expert/CS kini `always_reply=true`).
+- **Apply:** Management API (curl + body JSON dibangun manual UTF-8 — `ConvertTo-Json` PS 5.1 men-escape salah → 400). Verifikasi: `ai_reply_post` ret=boolean + has_log ✅; trigger has_always+has_both+has_log ✅; versi tercatat ✅; **log hidup (28 baris, dari 0)** ✅.
+- **Deploy:** `supabase functions deploy ai-reply --use-api` → **ACTIVE v146**.
+- **Observasi lanjutan dari log hidup:** model balasan sukses = `mimo-v2.5-free` (artinya provider TokenHarbor utama gagal → fallback jalan, aman); 2× `error:empty_reply` (http 200 tapi content kosong). Kandidat perbaikan sesi berikut.
+- **Ditunda (disepakati):** pisah cron `chatyuk-ai-presence`; satukan konsep ngambek (`storm_until` vs `ai_offline_until`).
