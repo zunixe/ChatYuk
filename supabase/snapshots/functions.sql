@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-14T11:15:47Z
+-- Timestamp: 2026-09-14T11:34:13Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -366,7 +366,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: admin_set_dummy_ai @ 20260913190000_dummy_photos_toggle.sql
+-- snapshot-fn: admin_set_dummy_ai @ 20260913190001_dummy_photos_toggle.sql
 CREATE OR REPLACE FUNCTION public.admin_set_dummy_ai(p_uid uuid, p_enabled boolean, p_persona jsonb DEFAULT '{}'::jsonb, p_schedule_auto boolean DEFAULT NULL::boolean, p_guard_enabled boolean DEFAULT NULL::boolean, p_max_replies integer DEFAULT NULL::integer, p_min_interval integer DEFAULT NULL::integer, p_no_rate_limit boolean DEFAULT NULL::boolean, p_active_hours jsonb DEFAULT NULL::jsonb, p_model text DEFAULT NULL::text, p_photos_enabled boolean DEFAULT NULL::boolean)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1752,7 +1752,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: admin_list_dummies @ 20260913190000_dummy_photos_toggle.sql
+-- snapshot-fn: admin_list_dummies @ 20260914110000_dummy_kind.sql
 CREATE OR REPLACE FUNCTION public.admin_list_dummies()
  RETURNS jsonb[]
  LANGUAGE plpgsql

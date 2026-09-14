@@ -44,3 +44,24 @@ curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
 ```
 
 Lalu tambahkan baris ke tabel di atas.
+
+## 2026-09-14 — INSIDEN: guard mendeteksi regresi live (ai_always_online)
+
+**Kejadian:** saat menerapkan Lapis 6 (apply ulang file migrasi yang di-rename),
+`20260913180001_dummy_wake.sql` ter-apply — fungsi `ai_presence_tick` versi itu
+**tidak punya blok `if ai_always_online`**, sehingga cabang Admin Chatyuk 24/7
+hilang di DB live (persis pola regresi lama). Restore-nya ada di
+`20260914020000_admin_chatyuk_always_online_restore.sql` yang tidak ikut ter-apply
+(urutan).
+
+**Deteksi:** `scripts/run_sql_tests.sh` (test `presence_test.sql`) GAGAL dengan
+"definisi memuat cabang ai_always_online" + "always_online → online". Guard
+bekerja seperti desain.
+
+**Perbaikan:** apply ulang `20260914020000` → `ai_always_online` kembali (pos=389).
+Semua 35 assert hijau kembali.
+
+**Pelajaran (WAJIB):** setelah apply ulang file lama, **re-apply migrasi
+"restore/patch" yang lebih baru** untuk fungsi yang sama, ATAU gunakan
+`create or replace` dari snapshot terbaru sebagai sumber. Inilah alasan
+frozen-functions guard + snapshot ada.
