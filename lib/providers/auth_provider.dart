@@ -108,6 +108,14 @@ class AuthProvider extends ChangeNotifier {
   bool get isRealAdmin =>
       AdminGate.isRealAdmin(_auth.currentUser?.email);
   String? get userEmail => _auth.userEmail;
+
+  /// True bila profil aktif memakai nickname terlarang dan bukan admin.
+  /// Dipakai gerbang login (blokir masuk app) + matikan presence supaya
+  /// akun banned tidak tampil online / di orang-sekitar.
+  bool get isProfileBanned =>
+      _profile != null &&
+      !isRealAdmin &&
+      isBannedNickname(_profile!.nickname);
   bool get hasPassword => _auth.hasPassword;
   Future<bool> fetchHasPassword() => _auth.fetchHasPassword();
   bool get hasPasswordSync => _auth.hasPassword;
@@ -302,6 +310,8 @@ class AuthProvider extends ChangeNotifier {
         }
         if (_profile != null) {
           safeUnawaited(_saveCachedProfile(_profile!));
+          // Akun banned: paksa offline supaya hilang dari daftar online.
+          if (isProfileBanned) safeUnawaited(_auth.goOffline());
           if (!_disposed) notifyListeners();
         }
         // Avatar lazy: path storage → base64 via AvatarB64Service (disk
@@ -371,7 +381,11 @@ class AuthProvider extends ChangeNotifier {
         _startLocationPing();
         safeUnawaited(_initLocation());
       });
-      if (_profile != null && !_invisibleEnabled && !_isIdle && uid != null) {
+      if (_profile != null &&
+          !_invisibleEnabled &&
+          !_isIdle &&
+          !isProfileBanned &&
+          uid != null) {
         safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile!.nickname));
       }
       // Daily login bonus poin
@@ -574,25 +588,16 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Admin: tombol call tampil ke semua user (termasuk anon/guest).
-  Future<void> setCallAllEnabled(bool enabled) async {
+  /// Admin: call untuk semua user. Satu toggle menulis kedua flag
+  /// (tampil tombol + izin anon/dummy) supaya selalu sinkron.
+  Future<void> setCallEnabled(bool enabled) async {
     _callAllEnabled = enabled;
-    if (!_disposed) notifyListeners();
-    try {
-      await _auth.updateCallAllEnabled(enabled);
-    } catch (e) {
-      dlog('[AUTH] updateCallAllEnabled error: $e');
-    }
-  }
-
-  /// Admin: anon & dummy boleh call. OFF = hanya terdaftar (+ admin).
-  Future<void> setCallAnonEnabled(bool enabled) async {
     _callAnonEnabled = enabled;
     if (!_disposed) notifyListeners();
     try {
-      await _auth.updateCallAnonEnabled(enabled);
+      await _auth.updateCallEnabled(enabled);
     } catch (e) {
-      dlog('[AUTH] updateCallAnonEnabled error: $e');
+      dlog('[AUTH] updateCallEnabled error: $e');
     }
   }
 
@@ -1158,6 +1163,8 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       dlog('[AUTH] reloadProfile full FAILED: $e');
     }
+    // Akun banned: paksa offline supaya hilang dari daftar online.
+    if (isProfileBanned) safeUnawaited(_auth.goOffline());
     _listenProfile();
     _restartPresenceTimers();
     // Update FCM token untuk sesi yang baru aktif (swap dummy ⇄ admin) —
@@ -1171,6 +1178,7 @@ class AuthProvider extends ChangeNotifier {
   /// If user was idle, go back online. Resets the idle countdown.
   void notifyActivity() {
     if (_idleTimer == null) return; // not signed in yet
+    if (isProfileBanned) return; // banned → tetap offline, jangan online lagi
     if (dummySessionActive) return; // status dummy dikontrol admin panel
     if (_invisibleEnabled) return; // invisible → jangan pernah kembali online
     if (_isIdle) {
@@ -1194,6 +1202,12 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _becomeIdle() async {
     if (_disposed) return;
+    if (isProfileBanned) {
+      await _auth.goOffline();
+      _profile = _profile?.copyWith(status: 'offline');
+      if (!_disposed) notifyListeners();
+      return;
+    }
     if (dummySessionActive) return; // status dummy dikontrol admin panel
     if (_invisibleEnabled) return;
     _isIdle = true;
@@ -1204,6 +1218,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> goOnline() async {
     if (_disposed) return;
+    if (isProfileBanned) return; // banned → tetap offline
     if (dummySessionActive) return;
     if (_invisibleEnabled) return;
     await _auth.goOnline();
@@ -1243,6 +1258,7 @@ class AuthProvider extends ChangeNotifier {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
       if (_disposed) return;
+      if (isProfileBanned) return; // banned → jangan refresh last_seen
       safeUnawaited(_auth.updateLastSeen());
       // Hemat presence: re-track HANYA bila channel putus (dulu tiap 120 dtk
       // untrack+subscribe ulang → flap presence massal).
@@ -1262,6 +1278,7 @@ class AuthProvider extends ChangeNotifier {
     _locationTimer?.cancel();
     _locationTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       if (_disposed || dummySessionActive) return;
+      if (isProfileBanned) return; // banned → jangan update lokasi
       safeUnawaited(LocationService().updateMyLocation());
     });
   }
@@ -1271,6 +1288,7 @@ class AuthProvider extends ChangeNotifier {
   /// GPS dipakai kalau izin ada, else perkiraan IP.
   Future<void> _updateLocationOnOnline() async {
     if (_disposed || dummySessionActive) return;
+    if (isProfileBanned) return;
     try {
       await LocationService().updateMyLocation();
     } catch (e) {

@@ -644,3 +644,23 @@ Jika `supabase db push` timeout lagi:
 - **Ganti:** `lookupFreshInfo` kini GET Google News RSS (`hl=id&gl=ID`, tanpa key/kuota) → helper pure `summarizeNewsRss` (3 item teratas: headline + media + tanggal, cap 500 char). Cache 1 jam tak berubah. Terverifikasi manual: query "harga emas hari ini" → 3 berita 12-13 Sep 2026 + media.
 - **Helper:** `summarizeNewsRss` mirror di `_shared/ai-helpers.ts` (gantikan `summarizeBraveResults`) + 2 tes; `deno test` 57/57.
 - **Deploy:** v138 ACTIVE. Tanpa secret baru — browsing aktif segera setelah deploy.
+## 2026-09-13 — Konsistensi tidur vs presence (DEPLOY v139)
+- **Lapor:** Aqila/Sarah tidur (bungkam sejak 20:00) tapi status tampil online → user chat dikacangin.
+- **Akar:** dua sistem tak sinkron — gate balasan `asleepAt` (tidur 20-23) vs `ai_active_hours` buatan LLM (ada 21,22,23) yang dibaca tick presence → online padahal bungkam. `dummy_heartbeat` ikut menyegarkan last_seen.
+- **Fix:** generator jadwal kini buang semua jam >= sleepHour via `applySleepToSchedule` (floor 6 jam → siang standar 7-18) — tick otomatis meng-offline-kan saat jam tidur, selaras gate balasan. Helper mirror di `_shared/ai-helpers.ts` + 2 tes; `deno test` 59/59. `deno check` identik sebelum/sesudah (error pre-existing).
+- **Malam ini:** Aqila+Sarah di-offline-kan manual + jam 20-23 dibuang dari jadwal hariannya. Pagi (05/06) tick + cron proaktif membangunkan normal.
+- **Deploy:** v139 ACTIVE.
+
+## 2026-09-13 — 20260914000000_banned_nicknames.sql (APPLY)
+- **Isi:** blokir nickname mengandung zaini/hafid (substring, case-insensitive, spasi/_/- digabung) kecuali admin. Fungsi `is_banned_nickname()`, trigger `trg_profiles_ban_nickname` (BEFORE INSERT OR UPDATE OF nickname, raise `nickname_banned`), guard di `claim_nickname()` (return false), rename paksa akun pelanggar → `User_<8char>` + offline (skip email admin & dummy).
+- **Apply:** via Management API (token Keychain; `supabase db query --linked` hang >180s). Tercatat di `schema_migrations` (20260914000000).
+- **Verifikasi:** `is_banned_nickname('ZAINIHAFID'/'Hafid Zaini'/'zaini-hafid')`=true, `('Budi'/'Zain')`=false; trigger ada di profiles; claim def mengandung guard; 1 akun ter-rename (`6e372845-...` → `User_6e372845`, offline). Tidak ada lagi nickname %zaini%/%hafid%.
+- **Client sinkron:** `isBannedNickname` (utils), `errNicknameBanned` (strings), gate entry/register/edit-profil, layar blokir + paksa offline di app gate (kecuali admin). Test `test/banned_nickname_test.dart` 16/16, analyze 0 error.
+
+## 2026-09-14 — 20260914010000_admin_anon_sort_last_seen.sql (APPLY)
+- **Masalah:** daftar Anon di admin panel di-sort alphabetically (A→Z) — user anon baru terlihat "hilang" karena ada di posisi tengah/bawah, tidak mudah dikenali. Tombol refresh juga belum ada di sheet detail.
+- **Fix server:** rewrite `admin_stats_detail()` — `users_anonymous` (dan `users_registered`, `users_active`) sekarang `order by last_seen desc nulls last` (user terbaru di atas). Migration file `20260914010000_admin_anon_sort_last_seen.sql`.
+- **Fix client:** tombol refresh ↻ di header sheet detail + `invalidateStatsDetail()` saat pull-to-refresh Ringkasan. Pull-to-refresh sekarang juga membuang cache list (sebelumnya hanya angka kartu).
+- **String:** `btnRefresh` baru di `strings.dart`.
+- **Apply:** via Management API. Tercatat di `schema_migrations` (20260914010000).
+- **Verifikasi:** query anon sorted by `last_seen desc` — yusuf (terbaru) di posisi paling atas. Admin APK rebuild + push ke HP (.33).

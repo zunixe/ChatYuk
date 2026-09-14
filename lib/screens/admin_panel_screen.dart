@@ -370,6 +370,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             onRefresh: () async {
               // force = server hitung ulang sekarang (lewati cache 5 mnt).
               await admin.fetchStats(force: true);
+              // List user per kartu (anon/dll) di-cache terpisah 60 dtk —
+              // buang juga supaya sheet berikutnya segar.
+              admin.invalidateStatsDetail();
               if (mounted) setState(() => _lastUpdated = DateTime.now());
             },
             child: ListView(
@@ -654,7 +657,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     if (!context.mounted) return;
 
     final key = item.$5;
-    final list = (detail[key] as List<dynamic>?) ?? const [];
+    var list = (detail[key] as List<dynamic>?) ?? const [];
+    // Refresh manual di dalam sheet — list beku saat dibuka + cache
+    // provider 60 dtk, tanpa ini daftar (mis. anon) terlihat tidak update.
+    var refreshing = false;
 
     showModalBottomSheet(
       context: context,
@@ -933,7 +939,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             expand: false,
             initialChildSize: 0.7,
             maxChildSize: 0.9,
-            builder: (ctx, scrollCtrl) => Column(
+            builder: (ctx, scrollCtrl) => StatefulBuilder(
+          builder: (ctx, setSheet) => Column(
               children: [
                 Padding(
                   padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -946,6 +953,31 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                           '${item.$1} (${list.length})',
                           style: AppText.titleEmphasis,
                         ),
+                      ),
+                      IconButton(
+                        icon: refreshing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh),
+                        tooltip: s.btnRefresh,
+                        onPressed: refreshing
+                            ? null
+                            : () async {
+                                setSheet(() => refreshing = true);
+                                final d =
+                                    await admin.fetchStatsDetail(force: true);
+                                if (ctx.mounted) {
+                                  setSheet(() {
+                                    list =
+                                        (d[key] as List<dynamic>?) ?? const [];
+                                    refreshing = false;
+                                  });
+                                }
+                              },
                       ),
                       IconButton(
                         icon: Icon(Icons.close),
@@ -993,6 +1025,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 ),
               ],
             ),
+        ),
           ),
         );
       },

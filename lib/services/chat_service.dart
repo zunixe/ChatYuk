@@ -1259,6 +1259,35 @@ class ChatService {
     return stale ? 'offline' : s;
   }
 
+  /// True bila event status profil harus langsung membuang user dari
+  /// daftar online tayang (tanpa menunggu full resync).
+  static bool shouldDropOnlineUid(String? status) {
+    return status == 'offline' || status == 'invisible';
+  }
+
+  /// Filter hasil RPC daftar online terhadap presence WebSocket.
+  /// - Ada di presence → WebSocket hidup, tampil apa pun statusnya.
+  /// - Status 'online' tapi belum di-presence → baru connect, tampil
+  ///   (presence butuh ~1 detik untuk track).
+  /// - Status selain 'online' tanpa presence (mis. 'idle' zombie karena
+  ///   app di-kill) → buang.
+  /// Safety net: kalau filter membuang semua, kembalikan RPC asli
+  /// (kemungkinan presence belum sync — cold start).
+  static List<dynamic> filterRpcOnlineRows(
+    List<dynamic> rpcRows,
+    Set<String> presenceUids,
+  ) {
+    final filtered = rpcRows.where((r) {
+      final m = r as Map;
+      final id = '${m['id'] ?? ''}';
+      final st = '${m['status'] ?? ''}';
+      if (presenceUids.contains(id)) return true;
+      if (st == 'online') return true;
+      return false;
+    }).toList();
+    return filtered.isEmpty ? rpcRows : filtered;
+  }
+
   /// Stream status realtime satu user (online/idle/offline).
   /// Pakai channel postgres changes pada profiles — ringan, hanya 1 row.
   /// Status dihitung efektif: last_seen basi (> 30 menit) dianggap offline,
@@ -1493,7 +1522,18 @@ class ChatService {
         } catch (_) {}
         List<dynamic> rows;
         if (usedRpc) {
-          rows = rpcRows;
+          // ── PRESENCE CROSS-REFERENCE ────────────────────────────────────
+          // RPC return user berdasarkan DB (status + last_seen). Kalau app
+          // di-kill tanpa lifecycle event, profiles.status tetap 'online'/
+          // 'idle' dan last_seen masih fresh → user zombie muncul di list.
+          final presenceUids = <String>{};
+          for (final list in state.values) {
+            for (final m in list) {
+              final uid = '${(m as Map)['uid'] ?? ''}';
+              if (uid.isNotEmpty) presenceUids.add(uid);
+            }
+          }
+          rows = ChatService.filterRpcOnlineRows(rpcRows, presenceUids);
         } else {
           // Fallback hybrid lama jika RPC belum deploy / gagal — tetap batasi O(50)
           final presenceUids = firstNPresenceUids(50);
@@ -1630,6 +1670,23 @@ class ChatService {
           callback: (payload) {
             if (controller.isClosed) return;
             final st = payload.newRecord['status'] as String?;
+            final changedUid = '${payload.newRecord['id'] ?? ''}';
+            // Realtime OFFLINE: user (termasuk dummy tanpa presence socket
+            // yang di-offline-kan tick server) langsung dibuang dari list
+            // tayang — tanpa menunggu full resync. Idempoten: uid yang
+            // memang tak ada di list = no-op. Event online/idle di bawah
+            // tetap full resync seperti semula.
+            if (ChatService.shouldDropOnlineUid(st)) {
+              if (changedUid.isNotEmpty &&
+                  cached.any((c) => c.uid == changedUid)) {
+                cached = cached.where((c) => c.uid != changedUid).toList();
+                dlog('[ONLINE-EMIT] profile $st event → drop $changedUid');
+                if (!controller.isClosed) {
+                  controller.add(List.unmodifiable(cached));
+                }
+              }
+              return;
+            }
             // Hanya re-sync saat ada yang masuk jadi online/idle.
             if (st != 'online' && st != 'idle') return;
             final ls = DateTime.tryParse(

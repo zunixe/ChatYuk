@@ -28,6 +28,21 @@ bool isValidEmail(String email) {
   ).hasMatch(email.trim());
 }
 
+/// Normalisasi nickname untuk cek larangan: lowercase + buang
+/// spasi/underscore/dash supaya ZAINI-HAFID, ZAINI_HAFID, ZAINIHAFID sama.
+String normalizeNicknameForBan(String nickname) {
+  final lower = nickname.trim().toLowerCase();
+  return lower.replaceAll(RegExp(r'[\s_\-]+'), '');
+}
+
+/// True bila nickname mengandung kata terlarang (substring, case-insensitive).
+/// Daftar blokir: zaini, hafid — mencakup ZAINIHAFID dan kombinasinya.
+bool isBannedNickname(String nickname) {
+  final flat = normalizeNicknameForBan(nickname);
+  if (flat.isEmpty) return false;
+  return flat.contains('zaini') || flat.contains('hafid');
+}
+
 /// Validasi nickname — boleh huruf Unicode, angka, spasi, underscore, dash.
 bool isValidNickname(String nickname) {
   final trimmed = nickname.trim();

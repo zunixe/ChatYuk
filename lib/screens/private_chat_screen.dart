@@ -1093,7 +1093,31 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   Future<void> _deleteMessage(MessageModel msg) async {
-    await ChatService().deletePrivateMessage(msg.id);
+    final s = context.read<LocaleProvider>().s;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.btnDelete),
+        content: Text(s.confirmDeleteMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.btnDelete, style: TextStyle(color: AppTheme.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await context.read<ChatProvider>().deletePrivateMessage(msg.id);
+    if (ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.messageDeleted)),
+      );
+    }
   }
 
   Future<void> _sendPhoto() async {

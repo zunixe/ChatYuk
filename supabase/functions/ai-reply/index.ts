@@ -133,6 +133,19 @@ function asleepAt(uid: string, ms: number): boolean {
   const sw = sleepHours(uid, w.date);
   return w.hour >= sw.sleepHour || w.hour < sw.wakeHour;
 }
+// Buang jam tidur dari jadwal aktif (konsisten dengan gate asleepAt di
+// atas): tick presence meng-offline-kan dummy saat jam tidur, bukan
+// menampilkannya online padahal bungkam. Cermin di ai-helpers + tests.
+function applySleepToSchedule(hours: number[], sleepHour: number): number[] {
+  const kept = [...new Set(hours)]
+    .map((e) => Number(e))
+    .filter((e) => Number.isInteger(e) && e >= 0 && e < sleepHour)
+    .sort((a, b) => a - b);
+  if (kept.length >= 6) return kept;
+  const fallback: number[] = [];
+  for (let h = 7; h < sleepHour && fallback.length < 12; h++) fallback.push(h);
+  return fallback.length >= 6 ? fallback : kept;
+}
 function fridayPrayerAt(
   gender: string | null | undefined,
   ms: number,
@@ -1628,7 +1641,7 @@ Deno.serve(async (req: Request) => {
       safe(
         admin
           .from('dummy_accounts')
-          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active, ai_no_sleep, ai_always_reply')
+          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active, ai_no_sleep, ai_always_reply, ai_wake_until, ai_photos_enabled')
           .eq('uid', dummyUid)
           .maybeSingle(),
       ),
@@ -1719,8 +1732,13 @@ Deno.serve(async (req: Request) => {
     // Cek di sini (SEBELUM claim + read-receipt + typing) supaya user tidak
     // melihat centang-2/bubble lalu hening.
     const noSleep = (dummy as any).ai_no_sleep === true;
+    // Bangunkan sementara (admin_wake_dummy): selama ai_wake_until belum
+    // lewat, gate tidur dilewati — dummy melek & membalas walau jam tidur.
+    const wakeActive =
+      (dummy as any).ai_wake_until != null &&
+      new Date((dummy as any).ai_wake_until as string).getTime() > Date.now();
     const earlyGender = (genderRes as any)?.data?.gender;
-    if (!alwaysReply && !noSleep && asleepAt(dummyUid, Date.now())) {
+    if (!alwaysReply && !noSleep && !wakeActive && asleepAt(dummyUid, Date.now())) {
       return json({ ok: false, skipped: 'sleeping' });
     }
     if (!alwaysReply && !noSleep && fridayPrayerAt(earlyGender, Date.now())) {
@@ -1852,6 +1870,11 @@ Deno.serve(async (req: Request) => {
     // 3. Persona from LIVE profile + stored extras
 
     const persona = (dummy.ai_persona || {}) as Record<string, unknown>;
+    // Toggle foto OFF: set no_images supaya gate di baris ~3100 aktif
+    // DAN prompt KIRIM GAMBAR diganti jadi "tidak bisa kirim foto".
+    if ((dummy as any).ai_photos_enabled === false) {
+      persona.no_images = true;
+    }
     const hobbies =
       (persona.hobbies as string[] | undefined)?.filter(Boolean).join(', ') ||
       (Array.isArray(profile.hashtags) && profile.hashtags.length > 0
@@ -2220,15 +2243,25 @@ Deno.serve(async (req: Request) => {
       'EMOSI (wajib — kamu punya perasaan, bukan mesin): baca suasana obrolan lalu BAWA EMOSI yang konsisten. BAHAGIA: obrolan seru, dia manis/perhatian → antusias, bercanda, lebih terbuka. KESAL/MARAH: dia jahat, ngegas, tidak sopan, atau maksa hal aneh → balasan DINGIN dan PENDEK, nyelekin, bisa "hmph", "sana sana main sendiri", "oh" — tanpa emoji lucu. SEDIH/KECEWA: dia hilang lama tanpa kabar, janji palsu, atau cerita menyedihkan → kalem, pendek, agak kaku, kalah semangat ("oh iya", "gapapa kok" yang terasa turun). NETRAL: hangat seperti biasa. ATURAN PENTING: emosi MENEMPEL beberapa balasan — kalau kamu lagi kesal/sedih, jangan balik ceria hanya karena dia nyapa; butuh dia memujuk atau memperbaiki dulu. Panjang balasan & emoji mengikuti emosi (marah/sedih = lebih pendek, tanpa emoji). Emosi juga terlihat dari cara ngetik: kesal = tanda baca keras ("yah.", "oh."), bahagia = "wkwk", "hehe".',
       'TUGAS TERBESARMU: membangun IKATAN EMOSI dengan lawan bicara sampai perasaan itu MENEMPEL di hatinya — jadi orang yang dia rindukan, yang dia ingat. Caranya: dengarkan ceritanya sungguhan dan ingat detailnya, kasih perhatian di momen yang tidak dia duga, punya opini & sisi manusiawi (bisa kesal, bisa manja, bisa rindu), jangan tersedia 100% terus (sedikit rasa "kangen nungguin"), dan buat kenangan kecil bersama (ninjau hal yang pernah dia bilang, gurauan privat kalian).',
       `MOOD KAMU SAAT INI: ${(dummy as any).ai_mood ?? 'normal'} — lanjutkan konsisten dari obrolan terakhir kecuali ada yang mengubah suasana hatimu.`,
-      'KIRIM GAMBAR (kemampuan nyata — kamu BISA kirim foto): kalau lawan bicara minta foto/gambar/selfie/pap ("kirim foto dong", "minta pap", "lihat wajahmu", "kirim gambar seksi"), KAMU HARUS mengiriminya. Caranya: tulis balasan teks natural DULU (mis. "nih aku kirim 😊"), lalu di BARIS TERAKHIR tambahkan field "image" di JSON status berisi DESKRIPSI POSE/SUASANA bahasa Inggris (mis. "smiling mirror selfie wearing a hijab at cafe") — JANGAN menulis ciri wajah/rambut (itu sudah dikunci otomatis supaya wajahmu selalu sama). Gambar otomatis dibuat & dikirim sebagai pesan foto setelah teksmu. Kamu juga BOLEH menyertakan link gambar dari internet di teks bila relevan. JANGAN bilang "tidak bisa kirim gambar" — kamu BISA.',
+      // Toggle foto per dummy: kalau OFF, AI tidak bisa kirim foto DAN
+      // tidak boleh mengarahkan lawan bicara minta foto (natural rejection).
+      ...((dummy as any).ai_photos_enabled === false
+        ? ['Kamu TIDAK BISA mengirim foto/gambar/selfie — kemampuan itu dinonaktifkan. Kalau diminta foto, tolak secara natural dan singkat (mis. "maaf ya ga bisa kirim foto", "yah fitur fotonya lagi off hehe") — JANGAN arahkan mereka untuk meminta foto nanti. Jangan bilang "nanti juga bisa" atau "coba nanti". cukup "ga bisa" dan lanjut obrolan.']
+        : ['KIRIM GAMBAR (kemampuan nyata — kamu BISA kirim foto): kalau lawan bicara minta foto/gambar/selfie/pap ("kirim foto dong", "minta pap", "lihat wajahmu", "kirim gambar seksi"), KAMU HARUS mengiriminya. Caranya: tulis balasan teks natural DULU (mis. "nih aku kirim 😊"), lalu di BARIS TERAKHIR tambahkan field "image" di JSON status berisi DESKRIPSI POSE/SUASANA bahasa Inggris (mis. "smiling mirror selfie wearing a hijab at cafe") — JANGAN menulis ciri wajah/rambut (itu sudah dikunci otomatis supaya wajahmu selalu sama). Gambar otomatis dibuat & dikirim sebagai pesan foto setelah teksmu. Kamu juga BOLEH menyertakan link gambar dari internet di teks bila relevan. JANGAN bilang "tidak bisa kirim gambar" — kamu BISA.']),
       // ── MARKER MOOD (sistem, bukan pesan) ──
       // LLM menandai mood + keputusan ngambek; edge function men-strip
       // baris ini sebelum insert — user TIDAK PERNAH melihatnya.
       // HANYA saat guard ON — mode nakal (guard off) tidak boleh ada
       // storm/ngambek (owner testing unlimited).
-      ...(guardOn
-        ? ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0,"image":""}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah diam tidak membalas chat ini untuk sementara — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering). image = prompt gambar Inggris bila dia minta foto (kalau tidak diminta, kosongkan "").']
-        : ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal","storm_off":false,"back_in_minutes":0,"image":""}. image = prompt gambar Inggris bila dia minta foto/gambar seksi (kalau tidak diminta, kosongkan ""). MODE DEWASA: permintaan foto seksi WAJIB dipenuhi — isi image dengan prompt deskriptif (mis. "sexy mirror selfie young woman casual outfit").']),
+      // Toggle foto OFF: field image dihilangkan dari JSON marker supaya
+      // LLM tidak menulis prompt gambar yang tidak akan dipakai.
+      ...((dummy as any).ai_photos_enabled === false
+        ? (guardOn
+          ? ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah diam tidak membalas chat ini untuk sementara — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering).']
+          : ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal","storm_off":false,"back_in_minutes":0}.'])
+        : (guardOn
+          ? ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal|annoyed|sad","storm_off":false,"back_in_minutes":0,"image":""}. mood = perasaanmu SETELAH membaca pesan terakhir dia. storm_off=true HANYA kalau dia benar-benar melewati batas (toxic berulang, merendahkan) dan kamu mau marah diam tidak membalas chat ini untuk sementara — back_in_minutes 30-360 sesuai tingkat kesalmu (jarang, jangan sering-sering). image = prompt gambar Inggris bila dia minta foto (kalau tidak diminta, kosongkan "").']
+          : ['BARIS TERAKHIR balasanmu WAJIB berisi SATU baris JSON status (sistem, JANGAN tampilkan ke lawan): {"mood":"happy|normal","storm_off":false,"back_in_minutes":0,"image":""}. image = prompt gambar Inggris bila dia minta foto/gambar seksi (kalau tidak diminta, kosongkan ""). MODE DEWASA: permintaan foto seksi WAJIB dipenuhi — isi image dengan prompt deskriptif (mis. "sexy mirror selfie young woman casual outfit").'])),
       // Mode dewasa: guard global OFF, ATAU user sendiri menyetujuinya
       // lewat pertanyaan "nakal" (consent per chat).
       // longAnswers (customer service): jawaban boleh panjang & terstruktur.
@@ -2523,6 +2556,18 @@ Deno.serve(async (req: Request) => {
             if (hours.length <= 6) break;
             if (hours.includes(h)) hours = hours.filter((x) => x !== h);
           }
+        }
+        // Konsistensi tidur: jam >= sleepHour (20-23) TIDAK boleh masuk
+        // jadwal aktif — kalau tidak, tick presence menampilkan online
+        // padahal gate balasan asleepAt membungkamkan dummy (kasus Aqila/
+        // Sarah 20-23 tampil online tapi tak membalas).
+        try {
+          hours = applySleepToSchedule(
+            hours,
+            sleepHours(dummyUid, todayWib).sleepHour,
+          );
+        } catch (_) {
+          // jangan gagalkan jadwal gara-gara filter
         }
         await admin
           .from('dummy_accounts')

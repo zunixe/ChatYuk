@@ -273,11 +273,15 @@ class AuthService {
     }
   }
 
-  /// Update setting admin global. RLS membatasi hanya email admin (zunixe@gmail.com).
-  Future<void> updateCallAllEnabled(bool enabled) async {
+  /// Update setting admin global: satu toggle call untuk semua user.
+  /// Menulis kedua kolom sekaligus supaya tombol tampil (call_all) dan
+  /// izin anon/dummy (call_anon, ditegakkan RLS calls_insert) selalu sinkron.
+  /// RLS membatasi hanya email admin (zunixe@gmail.com).
+  Future<void> updateCallEnabled(bool enabled) async {
     await _sb.from('app_settings').upsert({
       'id': 'global',
       'call_all_enabled': enabled,
+      'call_anon_enabled': enabled,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     }, onConflict: 'id');
   }
@@ -296,15 +300,6 @@ class AuthService {
       dlog('[AUTH] fetchCallAnonEnabled error: $e');
       return false;
     }
-  }
-
-  /// Update setting admin global. RLS membatasi hanya email admin (zunixe@gmail.com).
-  Future<void> updateCallAnonEnabled(bool enabled) async {
-    await _sb.from('app_settings').upsert({
-      'id': 'global',
-      'call_anon_enabled': enabled,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'id');
   }
 
   /// Ambil setting admin global: apakah foto view-once di-watermark forensik.
@@ -660,8 +655,11 @@ class AuthService {
   }
 
   /// Cek apakah nickname sudah dipakai oleh user lain.
+  /// Nickname terlarang dianggap "tidak tersedia" untuk non-admin.
   Future<bool> isNicknameAvailable(String nickname) async {
-    final id = uid;
+    if (isBannedNickname(nickname) && !AdminGate.isRealAdmin(userEmail)) {
+      return false;
+    }    final id = uid;
     var query = _sb.from('profiles').select('id').eq('nickname', nickname);
     if (id != null) query = query.neq('id', id);
     final res = await query.maybeSingle();
@@ -671,6 +669,10 @@ class AuthService {
   /// Ambil alih nickname milik akun anon yang tidak aktif > 7 hari
   /// (dummy yang di-uninstall tidak terhapus di server).
   Future<bool> claimNickname(String nickname) async {
+    // Nickname terlarang tidak bisa diklaim (kecuali admin).
+    if (isBannedNickname(nickname) && !AdminGate.isRealAdmin(userEmail)) {
+      return false;
+    }
     final res = await _sb.rpc(
       'claim_nickname',
       params: {'p_nickname': nickname},
@@ -687,6 +689,13 @@ class AuthService {
     String ipAddress =
         '', // disimpan di server saja, tidak disimpan di aplikasi
   }) async {
+    // Nickname terlarang ditolak sebelum tulis server (kecuali admin).
+    if (isBannedNickname(nickname)) {
+      final user = _sb.auth.currentUser;
+      if (!AdminGate.isRealAdmin(user?.email)) {
+        throw Exception('nickname_banned');
+      }
+    }
     // Kalau session hilang (misal habis logout Google), buat session
     // anonymous baru supaya user baru tetap bisa daftar.
     var user = _sb.auth.currentUser;
@@ -844,6 +853,12 @@ class AuthService {
   }) async {
     final id = uid;
     if (id == null) return;
+    // Nickname terlarang ditolak sebelum tulis server (kecuali admin).
+    if (nickname != null &&
+        isBannedNickname(nickname) &&
+        !AdminGate.isRealAdmin(userEmail)) {
+      throw Exception('nickname_banned');
+    }
     final data = <String, dynamic>{
       if (age != null) 'age': age,
       if (country != null) 'country': country,

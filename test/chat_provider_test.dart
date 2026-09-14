@@ -58,6 +58,23 @@ void main() {
     });
   });
 
+  group('hapus pesan', () {
+    test('deletePrivateMessage teruskan ke service + return hasil', () async {
+      when(() => service.deletePrivateMessage(any()))
+          .thenAnswer((_) async => true);
+      final ok = await provider.deletePrivateMessage('m1');
+      expect(ok, isTrue);
+      verify(() => service.deletePrivateMessage('m1')).called(1);
+    });
+
+    test('deletePrivateMessage gagal → return false', () async {
+      when(() => service.deletePrivateMessage(any()))
+          .thenAnswer((_) async => false);
+      final ok = await provider.deletePrivateMessage('m2');
+      expect(ok, isFalse);
+    });
+  });
+
   group('block list', () {
     test('loadBlockedUids mengisi + isBlocked akurat', () async {
       when(() => service.getBlockedUids('u1'))

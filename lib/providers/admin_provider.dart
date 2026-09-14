@@ -128,8 +128,9 @@ class AdminProvider extends ChangeNotifier {
   DateTime? _detailCacheAt;
   static const _detailTtl = Duration(seconds: 60);
 
-  Future<Map<String, dynamic>> fetchStatsDetail() async {
-    if (_detailCache != null &&
+  Future<Map<String, dynamic>> fetchStatsDetail({bool force = false}) async {
+    if (!force &&
+        _detailCache != null &&
         _detailCacheAt != null &&
         DateTime.now().difference(_detailCacheAt!) < _detailTtl) {
       return _detailCache!;

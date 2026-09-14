@@ -687,6 +687,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   focus.requestFocus();
                                   return;
                                 }
+                                if (isBannedNickname(nick) &&
+                                    !context
+                                        .read<AuthProvider>()
+                                        .isRealAdmin) {
+                                  setSheet(() => error = s.errNicknameBanned);
+                                  focus.requestFocus();
+                                  return;
+                                }
                                 final available = await context
                                     .read<AuthProvider>()
                                     .isNicknameAvailable(nick);
@@ -728,9 +736,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 }
                               } catch (e) {
                                 if (sheetCtx.mounted) {
+                                  final msg = e.toString().toLowerCase();
                                   setSheet(() {
                                     loading = false;
-                                    error = s.errGeneric; dlog(e.toString(), tag: 'PROFILE');
+                                    error =
+                                        (msg.contains('nickname_banned') ||
+                                            msg.contains('banned'))
+                                        ? s.errNicknameBanned
+                                        : s.errGeneric; dlog(e.toString(), tag: 'PROFILE');
                                   });
                                 }
                               }

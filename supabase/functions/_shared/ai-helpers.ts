@@ -56,6 +56,21 @@ export function asleepAt(uid: string, ms: number): boolean {
   return w.hour >= sw.sleepHour || w.hour < sw.wakeHour;
 }
 
+// Cermin index.ts: buang jam tidur dari jadwal aktif harian supaya tick
+// presence ikut meng-offline-kan dummy saat jam tidur (konsisten dengan
+// gate balasan asleepAt). Floor 6 jam: jadwal degeneratif diganti
+// siang standar sebelum jam tidur.
+export function applySleepToSchedule(hours: number[], sleepHour: number): number[] {
+  const kept = [...new Set(hours)]
+    .map((e) => Number(e))
+    .filter((e) => Number.isInteger(e) && e >= 0 && e < sleepHour)
+    .sort((a, b) => a - b);
+  if (kept.length >= 6) return kept;
+  const fallback: number[] = [];
+  for (let h = 7; h < sleepHour && fallback.length < 12; h++) fallback.push(h);
+  return fallback.length >= 6 ? fallback : kept;
+}
+
 export function fridayPrayerAt(
   gender: string | null | undefined,
   ms: number,
