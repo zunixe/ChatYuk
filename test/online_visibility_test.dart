@@ -63,6 +63,26 @@ void main() {
       expect(identical(rows, rpc), isTrue);
     });
 
+    test('dummy idle tanpa presence tetap tampil', () {
+      final rows = ChatService.filterRpcOnlineRows(
+        [_row('sarah', 'idle'), _row('zombie', 'idle')],
+        <String>{},
+        dummyUids: {'sarah'},
+      );
+      expect(rows.map((r) => (r as Map)['id']).toList(), ['sarah']);
+    });
+
+    test('guest idle tanpa presence tetap dibuang (bukan dummy)', () {
+      // is_registered=false saja tidak cukup — 73 guest non-dummy juga
+      // false. Hanya UID di dummy_accounts yang lolos jalur dummy.
+      final rows = ChatService.filterRpcOnlineRows(
+        [_row('guest1', 'idle'), _row('sarah', 'idle')],
+        <String>{},
+        dummyUids: {'sarah'},
+      );
+      expect(rows.map((r) => (r as Map)['id']).toList(), ['sarah']);
+    });
+
     test('campuran: presence menang, online lolos, idle zombie gugur', () {
       final rows = ChatService.filterRpcOnlineRows(
         [
