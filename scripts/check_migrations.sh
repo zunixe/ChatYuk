@@ -124,6 +124,38 @@ else
   note "snapshot belum ada — jalankan scripts/snapshot_functions.sh"
 fi
 
+# ── 6. Regresi-urutan: migrasi lama men-replace fungsi frozen TANPA patch lebih baru ──
+# Pola insiden 2026-09-14: apply ulang migrasi LAMA (dummy_wake) menghapus
+# cabang yang dipatch migrasi LEBIH BARU (restore). Deteksi: kalau file
+# migrasi >= cutoff men-replace fungsi frozen, tapi versi terakhir fungsi itu
+# (menurut timestamp) justru file yang TIDAK punya cabang kritis yang ada di
+# snapshot — beri peringatan keras.
+echo "[5] Cek cabang kritis tiap migrasi yang men-replace fungsi FROZEN"
+while IFS= read -r fn; do
+  [ -z "$fn" ] && continue
+  case "$fn" in \#*) continue ;; esac
+  last=$(grep -rlE "create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.${fn}\b" "$MIG_DIR" --include="*.sql" 2>/dev/null | sort | tail -1 || true)
+  [ -z "$last" ] && continue
+  b=$(basename "$last"); v=${b%%_*}
+  case "$v" in ''|*[!0-9]*) continue ;; esac
+  if [ "$v" \> "$CUTOFF" ] || [ "$v" = "$CUTOFF" ]; then
+    # Kumpulkan token 'cabang' penting yang ada di snapshot untuk fn ini.
+    if [ -f "$SNAP" ]; then
+      # baris-baris snapshot untuk fn ini
+      snap_block=$(awk -v pat="snapshot-fn: $fn @" '
+        $0 ~ pat {p=1} p {print} p && /^\$function\$/ {exit}' "$SNAP")
+      for tok in ai_always_online ai_wake_until ai_offline_until invisible; do
+        if echo "$snap_block" | grep -q "$tok"; then
+          if ! grep -q "$tok" "$last"; then
+            fail "REGRESI-URUTAN: '$fn' di $b TIDAK memuat '$tok' padahal snapshot punya — kemungkinan versi lama menimpa patch lebih baru. Re-apply migrasi restore/terbaru."
+          fi
+        fi
+      done
+    fi
+  fi
+done < "$FROZEN_LIST"
+ok "cek cabang kritis selesai"
+
 echo
 if [ "$FAIL" -ne 0 ]; then
   echo "==> check_migrations: DITOLAK. Perbaiki dulu (baca AGENTS.md § SQL)."
