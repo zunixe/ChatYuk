@@ -122,7 +122,13 @@ class _GroupMediaScreenState extends State<GroupMediaScreen> {
                           color: AppTheme.textSecondary)),
                 )
               : GridView.builder(
-                  padding: const EdgeInsets.all(8),
+                  // Insets bawah (nav bar/gesture) — edge-to-edge Android 15.
+                  padding: EdgeInsets.fromLTRB(
+                    8,
+                    8,
+                    8,
+                    8 + MediaQuery.of(context).padding.bottom,
+                  ),
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,

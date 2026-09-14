@@ -591,37 +591,44 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     return Scaffold(
         body: Column(
           children: [
+            // Banner anon: cegah tertutup status bar pada edge-to-edge
+            // Android 15. Banner jadi elemen teratas → ambil inset atas
+            // sendiri; AppBar tab di bawahnya di-nol-kan inset atasnya
+            // (removeTop) supaya tidak dobel.
             if (anonBanner)
-              Material(
-                color: AppTheme.primary.withValues(alpha: 0.12),
-                child: InkWell(
-                  onTap: () => showAnonPromptDialog(context),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 16,
-                              color: AppTheme.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              s.anonGateBanner,
-                              style: AppText.caption
-                                  .copyWith(color: AppTheme.textPrimary),
+              SafeArea(
+                bottom: false,
+                child: Material(
+                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  child: InkWell(
+                    onTap: () => showAnonPromptDialog(context),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                size: 16,
+                                color: AppTheme.primary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                s.anonGateBanner,
+                                style: AppText.caption
+                                    .copyWith(color: AppTheme.textPrimary),
+                              ),
                             ),
-                          ),
-                          Text(
-                            s.anonGateBannerCta,
-                            style: AppText.caption.copyWith(
-                              color: AppTheme.primary,
-                              fontWeight: FontWeight.w700,
+                            Text(
+                              s.anonGateBannerCta,
+                              style: AppText.caption.copyWith(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -633,14 +640,20 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
                 onTap: () => context.read<AuthProvider>().notifyActivity(),
                 onPanDown: (_) =>
                     context.read<AuthProvider>().notifyActivity(),
-                child: IndexedStack(
-                  index: tab,
-                  children: [
-                    for (var i = 0; i < _pages!.length; i++)
-                      _visitedTabs.contains(i)
-                          ? _pages![i]
-                          : const SizedBox.shrink(),
-                  ],
+                // Saat banner menempel di atas, ia sudah mengambil inset atas
+                // → nol-kan inset atas AppBar tab supaya tidak dobel.
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeTop: anonBanner,
+                  child: IndexedStack(
+                    index: tab,
+                    children: [
+                      for (var i = 0; i < _pages!.length; i++)
+                        _visitedTabs.contains(i)
+                            ? _pages![i]
+                            : const SizedBox.shrink(),
+                    ],
+                  ),
                 ),
               ),
             ),

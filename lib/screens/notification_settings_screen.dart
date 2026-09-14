@@ -56,7 +56,13 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(title: Text(s.notifDetailTitle)),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(16, 12, 16, 24),
+        // Insets bawah (nav bar) — edge-to-edge Android 15.
+        padding: EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          24 + MediaQuery.of(context).padding.bottom,
+        ),
         children: [
           Text(s.notifDetailHint, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
           if (!masterOn) ...[SizedBox(height: 8), Container(padding: EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.orange.shade200)), child: Row(children: [Icon(Icons.notifications_off_outlined, size: 16, color: Colors.orange.shade700), SizedBox(width: 8), Expanded(child: Text(s.notifEnabledDesc, style: AppText.bodySmall.copyWith(color: Colors.orange.shade700)))]))],

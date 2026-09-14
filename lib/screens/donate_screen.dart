@@ -116,7 +116,13 @@ class _QrisTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     return SingleChildScrollView(
-      padding: EdgeInsets.all(24),
+      // Insets bawah (nav bar) — edge-to-edge Android 15.
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        24 + MediaQuery.of(context).padding.bottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -189,7 +195,13 @@ class _UsdtTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(24),
+      // Insets bawah (nav bar) — edge-to-edge Android 15.
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        24 + MediaQuery.of(context).padding.bottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -95,7 +95,13 @@ class _LinkEmailScreenState extends State<LinkEmailScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(s.titleLinkEmail)),
       body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        // Insets bawah (nav bar) — edge-to-edge Android 15.
+        padding: EdgeInsets.fromLTRB(
+          24,
+          24,
+          24,
+          24 + MediaQuery.of(context).padding.bottom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
