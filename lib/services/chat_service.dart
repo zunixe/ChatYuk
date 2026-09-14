@@ -55,6 +55,30 @@ class ChatService {
     return _invisibleUidCache;
   }
 
+  // UID dummy (TTL 5 mnt) — dummy tak punya socket presence, jadi filter
+  // presence cross-reference butuh daftar ini supaya dummy idle tetap tampil.
+  Set<String>? _dummyUidCache;
+  DateTime? _dummyUidFetchedAt;
+  Future<Set<String>> _fetchDummyUids() async {
+    final last = _dummyUidFetchedAt;
+    if (last != null &&
+        DateTime.now().difference(last).inMinutes < 5 &&
+        _dummyUidCache != null) {
+      return _dummyUidCache!;
+    }
+    try {
+      final rows = await _sb
+          .from('dummy_accounts')
+          .select('uid')
+          .timeout(const Duration(seconds: 2));
+      _dummyUidCache = {
+        for (final r in rows as List) '${(r as Map)['uid'] ?? ''}',
+      }..remove('');
+      _dummyUidFetchedAt = DateTime.now();
+    } catch (_) {}
+    return _dummyUidCache ?? <String>{};
+  }
+
   Future<String?> _fetchOwnCountry() async {
     if (_ownCountryCache != null) return _ownCountryCache;
     try {
@@ -1269,20 +1293,24 @@ class ChatService {
   /// - Ada di presence → WebSocket hidup, tampil apa pun statusnya.
   /// - Status 'online' tapi belum di-presence → baru connect, tampil
   ///   (presence butuh ~1 detik untuk track).
-  /// - Status selain 'online' tanpa presence (mis. 'idle' zombie karena
-  ///   app di-kill) → buang.
+  /// - Dummy (tanpa socket presence, status dikelola cron/tick) → selalu
+  ///   tampil sesuai status DB (idle dummy tetap tampil).
+  /// - Status selain 'online' tanpa presence dan bukan dummy (mis. 'idle'
+  ///   zombie karena app di-kill) → buang.
   /// Safety net: kalau filter membuang semua, kembalikan RPC asli
   /// (kemungkinan presence belum sync — cold start).
   static List<dynamic> filterRpcOnlineRows(
     List<dynamic> rpcRows,
-    Set<String> presenceUids,
-  ) {
+    Set<String> presenceUids, {
+    Set<String> dummyUids = const {},
+  }) {
     final filtered = rpcRows.where((r) {
       final m = r as Map;
       final id = '${m['id'] ?? ''}';
       final st = '${m['status'] ?? ''}';
       if (presenceUids.contains(id)) return true;
       if (st == 'online') return true;
+      if (dummyUids.contains(id)) return true;
       return false;
     }).toList();
     return filtered.isEmpty ? rpcRows : filtered;
@@ -1533,7 +1561,12 @@ class ChatService {
               if (uid.isNotEmpty) presenceUids.add(uid);
             }
           }
-          rows = ChatService.filterRpcOnlineRows(rpcRows, presenceUids);
+          final dummyUids = await _fetchDummyUids();
+          rows = ChatService.filterRpcOnlineRows(
+            rpcRows,
+            presenceUids,
+            dummyUids: dummyUids,
+          );
         } else {
           // Fallback hybrid lama jika RPC belum deploy / gagal — tetap batasi O(50)
           final presenceUids = firstNPresenceUids(50);
