@@ -1173,13 +1173,29 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
   }
 
   /// Nilai persona dari kolom teks (kepribadian/gaya/prompt tambahan).
-  Map<String, dynamic> _personaMap() => {
-        if (_personalityCtrl.text.trim().isNotEmpty)
-          'personality': _personalityCtrl.text.trim(),
-        if (_toneCtrl.text.trim().isNotEmpty) 'tone': _toneCtrl.text.trim(),
-        if (_extraCtrl.text.trim().isNotEmpty)
-          'extra_prompt': _extraCtrl.text.trim(),
-      };
+  /// Flag non-teks (long_answers/diagrams/charts/no_images/dsb) dipertahankan
+  /// dari ai_persona lama supaya tidak ter-wipe oleh RPC yang menimpa penuh.
+  Map<String, dynamic> _personaMap() {
+    final prev = (widget.item['ai_persona'] as Map?) ?? const {};
+    return {
+      if (_personalityCtrl.text.trim().isNotEmpty)
+        'personality': _personalityCtrl.text.trim(),
+      if (_toneCtrl.text.trim().isNotEmpty) 'tone': _toneCtrl.text.trim(),
+      if (_extraCtrl.text.trim().isNotEmpty)
+        'extra_prompt': _extraCtrl.text.trim(),
+      for (final k in const [
+        'profession',
+        'profession_skills',
+        'greeting',
+        'long_answers',
+        'diagrams',
+        'charts',
+        'no_images',
+        'market_data',
+      ])
+        if (prev[k] != null) k: prev[k],
+    };
+  }
 
   /// Terapkan SEMUA setting saat ini ke server. Dipakai toggle instan
   /// (diam-diam, tanpa tutup sheet) maupun tombol Simpan (dengan hasil).
@@ -1222,6 +1238,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
       widget.item['ai_active_hours'] = _hours.toList()..sort();
       widget.item['ai_schedule_auto'] = _schedAuto;
       widget.item['ai_photos_enabled'] = _photosEnabled;
+      widget.item['ai_persona'] = _personaMap();
       if (!mounted) return;
       if (showResult) {
         Navigator.pop(context, true);

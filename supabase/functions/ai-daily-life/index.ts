@@ -33,10 +33,19 @@ function extractJson(s: string): any {
       else if (c === '}') {
         depth--;
         if (depth === 0) {
+          const slice = t.slice(start, i + 1);
           try {
-            return JSON.parse(t.slice(start, i + 1));
+            return JSON.parse(slice);
           } catch (_) {
-            return null;
+            // Repair ringan: trailing comma sebelum } / ] (khas output
+            // Mimo/Zen yang hampir-valid) lalu coba sekali lagi.
+            try {
+              return JSON.parse(
+                slice.replace(/,\s*([}\]])/g, '$1'),
+              );
+            } catch (_) {
+              return null;
+            }
           }
         }
       }
@@ -78,6 +87,25 @@ Deno.serve(async (req: Request) => {
     const sKey = provCfg?.api_key || Deno.env.get('AI_API_KEY');
     if (!sKey) return json({ ok: false, error: 'no_api_key' }, 500);
 
+    // Cadangan gratis (OpenCode Zen, Mimo) bila provider utama menolak
+    // (saldo $0/402, 429, 5xx) — TokenHarbor tetap utama.
+    const MIMO_FREE = 'mimo-v2.5-free';
+    const zenRoute = (): { base: string; key?: string; headers: Record<string, string> } => {
+      const hex = (n: number) =>
+        [...crypto.getRandomValues(new Uint8Array(n))]
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+      return {
+        base: 'https://opencode.ai/zen/v1',
+        key: Deno.env.get('AI_API_KEY_ZEN') || Deno.env.get('AI_API_KEY'),
+        headers: {
+          'x-opencode-session': `ses_${hex(32)}`,
+          'x-opencode-request': `msg_${hex(8)}`,
+          'x-opencode-client': 'tui',
+          'User-Agent': 'opencode/1.18.25',
+        },
+      };
+    };
     // Dummy AI-enabled yang belum punya cerita hari ini.
     const { data: dummies } = await admin
       .from('dummy_accounts')
@@ -86,6 +114,11 @@ Deno.serve(async (req: Request) => {
     const generated: string[] = [];
     const skipped: string[] = [];
     const failed: string[] = [];
+    // Alasan gagal per-dummy (observability: 402/429/500/parse) — dibersihkan
+    // saat dummy tsb sukses di pass berikutnya.
+    const failWhy: Record<string, string> = {};
+    // Sink per-pass untuk retry multi-pass (di bawah).
+    let failSink: string[] = failed;
 
     // Proses SATU dummy (cek hari ini + profil + prev, lalu LLM + upsert).
     // Dipanggil worker pool di bawah. Format output JSON story TIDAK berubah.
@@ -120,6 +153,7 @@ Deno.serve(async (req: Request) => {
       const todayRow = (todayRes as any)?.data;
       if (todayRow) {
         skipped.push(uid);
+        delete failWhy[uid];
         return;
       }
       const profile = (profileRes as any)?.data;
@@ -156,33 +190,123 @@ Deno.serve(async (req: Request) => {
         `ATURAN HARI: Senin–Jumat = hari kerja kantoran (aktivitas seputar kantor/sepulang kerja); Sabtu–Minggu = boleh ada kerja sampingan (mis. pemandu wisata) dan jalan-jalan. ` +
         `Isi: apa pekerjaanmu hari ini + masalah/kejadian di tempat kerja, main dengan siapa, jalan-jalan ke mana (sebutkan TEMPAT NYATA yang wajar di ${city} — mall, kafe, taman, warung). ` +
         `Balas HANYA JSON valid tanpa markdown: {"summary":"1 kalimat ringkasan harimu","work":"pekerjaan + masalah hari ini","problem":"masalah/kejadian paling menonjol (boleh kosong)","activities":["kegiatan 1","kegiatan 2"],"hangout":"dengan siapa / sendiri","place":"tempat utama hari ini"}.`;
-      const sr = await fetch(`${sBase}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sKey}`,
-        },
-        body: JSON.stringify({
-          model: 'glm-5.3-flash',
-          max_tokens: 600,
-          temperature: 0.8,
-          reasoning_effort: 'low',
-          messages: [
-            { role: 'system', content: storyPrompt },
-            { role: 'user', content: 'Oke, buatkan.' },
-          ],
-        }),
-      });
-      if (!sr.ok) {
-        failed.push(uid);
-        return;
+      // Generate cerita: primer (glm) → fallback Mimo free (Zen) saat primer
+      // menolak (402/429/5xx) ATAU hasil primer tipis/gagal-parse (kasus
+      // Dhanu: Mimo 200 tapi JSON tidak valid). Gagal parse/tipis → ulangi
+      // sekali dengan instruksi tegas (pola sama seperti ai-reply strict).
+      const strictSuffix =
+        `WAJIB TANPA KECUALI: work HARUS terisi (pekerjaan + kejadian konkret hari ini), activities MINIMAL 2 kegiatan konkret, hangout HARUS terisi (dengan siapa / kalau sendiri tulis "sendiri"), place HARUS tempat SPESIFIK (nama mall/kafe/taman/warung, BUKAN cuma nama kota). JANGAN kosongkan field apa pun kecuali problem.`;
+      type GenRes = {
+        parsed: any;
+        http: number | null;
+        via: string;
+        rawLen: number;
+        rawHead: string;
+      };
+      const rawOf = (j: any): string => {
+        const m = j?.choices?.[0]?.message;
+        const c = m?.content;
+        if (typeof c === 'string' && c.length > 0) return c;
+        // Zen/Mimo kadang menaruh teks di reasoning_content saat content
+        // kosong — pakai sebagai cadangan sebelum menyerah.
+        const rc = (m as any)?.reasoning_content;
+        if (typeof rc === 'string' && rc.length > 0) return rc;
+        return '';
+      };
+      const callPrimary = async (strict: boolean): Promise<GenRes> => {
+        const prompt = strict ? `${storyPrompt} ${strictSuffix}` : storyPrompt;
+        try {
+          const r = await fetch(`${sBase}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sKey}`,
+            },
+            body: JSON.stringify({
+              model: 'glm-5.3-flash',
+              max_tokens: 600,
+              temperature: 0.8,
+              reasoning_effort: 'low',
+              messages: [
+                { role: 'system', content: prompt },
+                { role: 'user', content: 'Oke, buatkan.' },
+              ],
+            }),
+          });
+          if (!r.ok) return { parsed: null, http: r.status, via: 'th', rawLen: 0, rawHead: '' };
+          const j: any = await r.json().catch(() => null);
+          const raw = rawOf(j);
+          return { parsed: extractJson(raw), http: r.status, via: 'th', rawLen: raw.length, rawHead: raw.slice(0, 120) };
+        } catch (_) {
+          return { parsed: null, http: null, via: 'exc', rawLen: 0, rawHead: '' };
+        }
+      };
+      const callMimo = async (strict: boolean): Promise<GenRes | null> => {
+        try {
+          const zr = zenRoute();
+          if (!zr.key) return null;
+          const prompt = strict ? `${storyPrompt} ${strictSuffix}` : storyPrompt;
+          const mr = await fetch(`${zr.base}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${zr.key}`,
+              ...zr.headers,
+            },
+            body: JSON.stringify({
+              model: MIMO_FREE,
+              // Headroom: Mimo/Zen bisa menghabiskan token untuk reasoning
+              // sebelum content — budget kecil = JSON terpotong = parse gagal.
+              max_tokens: 1000,
+              temperature: 0.8,
+              messages: [
+                { role: 'system', content: prompt },
+                { role: 'user', content: 'Oke, buatkan.' },
+              ],
+            }),
+          });
+          if (!mr.ok) return { parsed: null, http: mr.status, via: 'mimo', rawLen: 0, rawHead: '' };
+          const mj: any = await mr.json().catch(() => null);
+          const raw = rawOf(mj);
+          return { parsed: extractJson(raw), http: mr.status, via: 'mimo', rawLen: raw.length, rawHead: raw.slice(0, 120) };
+        } catch (_) {
+          return { parsed: null, http: null, via: 'exc', rawLen: 0, rawHead: '' };
+        }
+      };
+      // Validasi KETAT (sama seperti storyThin ai-reply): cerita tipis =
+      // tidak guna sebagai topik. summary saja tidak cukup (kasus Dhanu).
+      const storyThin = (p: any): boolean => {
+        if (p == null || typeof p.summary !== 'string') return true;
+        if (String((p as any).work ?? '').trim() === '') return true;
+        if (!Array.isArray((p as any).activities) || (p as any).activities.length < 2) return true;
+        if (String((p as any).hangout ?? '').trim() === '') return true;
+        const pl = String((p as any).place ?? '').trim();
+        if (pl === '' || pl.toLowerCase() === city.toLowerCase()) return true;
+        return false;
+      };
+      let g = await callPrimary(false);
+      if (storyThin(g.parsed)) {
+        const gStrict = await callPrimary(true);
+        if (!storyThin(gStrict.parsed)) g = gStrict;
+        else {
+          // Primer tipis/gagal (termasuk 200-parse-null) → coba Mimo,
+          // bukan cuma saat primer HTTP-error. Lalu strict sekali lagi.
+          const m1 = await callMimo(false);
+          const m2 = storyThin(m1?.parsed) ? await callMimo(true) : null;
+          const best = [gStrict, m1, m2].find((x) => x && !storyThin(x?.parsed));
+          if (best) g = best;
+          else {
+            const tail = [gStrict, m1, m2]
+              .filter(Boolean)
+              .map((x) => `${(x as GenRes).via}:${(x as GenRes).http}:len${(x as GenRes).rawLen}:${((x as GenRes).rawHead || '').replace(/\s+/g, ' ').slice(0, 60)}`)
+              .join(' | ');
+            failWhy[uid] = `thin(${g.via}:${g.http}+${tail})`;
+          }
+        }
       }
-      const sj: any = await sr.json();
-      const parsed = extractJson(
-        sj?.choices?.[0]?.message?.content ?? '',
-      );
-      if (!parsed || typeof parsed.summary !== 'string') {
-        failed.push(uid);
+      const parsed = storyThin(g.parsed) ? null : g.parsed;
+      if (!parsed) {
+        failSink.push(uid);
         return;
       }
       const story = {
@@ -200,28 +324,39 @@ Deno.serve(async (req: Request) => {
         { onConflict: 'dummy_uid,story_date' },
       );
       generated.push(uid);
+      delete failWhy[uid];
     };
 
     // Worker pool paralel terbatas (5 concurrent) — hindari membuka ratusan
     // koneksi LLM sekaligus tapi tetap jauh lebih cepat dari serial.
+    // Retry multi-pass (maks 3 pass): yang gagal di-pass awal dicoba lagi
+    // sampai terisi — "coba lagi sampe terisi storynya tiap orang".
     const CONCURRENCY = 5;
-    const queue = [...((dummies as any[]) || [])].map((d) => d.uid as string);
-    const workers = Array.from(
-      { length: Math.min(CONCURRENCY, queue.length) },
-      async () => {
-        while (queue.length > 0) {
-          const uid = queue.shift()!;
-          try {
-            await processDummy(uid);
-          } catch (_) {
-            failed.push(uid);
+    let pending: string[] = [...((dummies as any[]) || [])].map((d) => d.uid as string);
+    for (let pass = 0; pass < 3 && pending.length > 0; pass++) {
+      if (pass > 0) await new Promise((r) => setTimeout(r, 15000));
+      const queue = pending;
+      pending = [];
+      failSink = [];
+      const workers = Array.from(
+        { length: Math.min(CONCURRENCY, queue.length) },
+        async () => {
+          while (queue.length > 0) {
+            const uid = queue.shift()!;
+            try {
+              await processDummy(uid);
+            } catch (_) {
+              failSink.push(uid);
+            }
           }
-        }
-      },
-    );
-    await Promise.all(workers);
+        },
+      );
+      await Promise.all(workers);
+      pending = [...failSink];
+    }
+    failed.push(...pending);
 
-    return json({ ok: true, date: todayWib, generated, skipped, failed });
+    return json({ ok: true, date: todayWib, generated, skipped, failed, failedWhy: failWhy });
   } catch (e) {
     return json({ ok: false, error: String(e) }, 500);
   }

@@ -498,24 +498,56 @@ class ChatService {
   /// Panggil edge function ai-reply langsung seusai kirim (fire-and-forget).
   /// Kalau lawan bicara bukan dummy AI, function langsung skip (murah).
   /// Kalau dummy AI, balasan mulai ~1-2 detik (bukan nunggu antrean pg_net).
+  /// Fallback berlapis saat cache list belum hangat (mis. pesan pertama di
+  /// chat baru): fetch participants server, lalu parse chat_id — JANGAN
+  /// silent-skip, karena itu bikin pesan tak dibaca & tak dibalas.
   Future<void> _invokeAiReply(
     String chatId,
     String senderId,
     dynamic triggerId,
   ) async {
     try {
-      final chats = _privateChatsLast[senderId];
-      if (chats == null) return;
       String? other;
-      for (final c in chats) {
-        if (c.chatId != chatId) continue;
-        for (final p in c.participants) {
-          if (p != senderId) {
+      final chats = _privateChatsLast[senderId];
+      if (chats != null) {
+        for (final c in chats) {
+          if (c.chatId != chatId) continue;
+          for (final p in c.participants) {
+            if (p != senderId) {
+              other = p;
+              break;
+            }
+          }
+          break;
+        }
+      }
+      // Fallback 1: ambil participants langsung dari server.
+      if (other == null) {
+        try {
+          final row = await _sb
+              .from('private_chats')
+              .select('participants')
+              .eq('chat_id', chatId)
+              .maybeSingle();
+          final parts = (row as Map?)?['participants'];
+          if (parts is List) {
+            for (final p in parts) {
+              if ('$p' != senderId) {
+                other = '$p';
+                break;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      // Fallback 2: chat_id 1-1 selalu format "uid1_uid2".
+      if (other == null) {
+        for (final p in chatId.split('_')) {
+          if (p != senderId && p.isNotEmpty) {
             other = p;
             break;
           }
         }
-        break;
       }
       if (other == null) return;
       await _sb.functions.invoke(
@@ -544,16 +576,6 @@ class ChatService {
     });
     _privateBroadcastRefs[chatId] = (_privateBroadcastRefs[chatId] ?? 0) + 1;
     return ch;
-  }
-
-  /// Channel tanpa refcount untuk kirim fire-and-forget (tidak perlu dilepas).
-  /// DIPAKAI di bawah oleh _sendBroadcastOnce.
-  RealtimeChannel _privateBroadcastChannelNoRef(String chatId) {
-    return _privateBroadcastChannels.putIfAbsent(chatId, () {
-      final c = _sb.channel('private_$chatId');
-      c.subscribe();
-      return c;
-    });
   }
 
   /// Kirim broadcast sekali pakai channel refcounted — acquire + release
