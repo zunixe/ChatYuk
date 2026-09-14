@@ -2003,6 +2003,13 @@ Deno.serve(async (req: Request) => {
     // OPT: sudah diambil paralel di BATCH 2 (hemat 1 RTT).
     const chatState: any = (chatStateRes as any)?.data ?? null;
     adultMode = chatState?.adult_mode === true;
+    // ── GUARD OFF = BEBAS (tanpa ritual consent) ──
+    // Bug lama: guard off justru MEMATIKAN jalur consent (shouldAskNakal
+    // mensyaratkan guardOn, lihat bawah) → adultMode tetap false → dummy
+    // tetap menolak topik dewasa walau admin sudah mematikan guard. Fix:
+    // guard off diperlakukan sebagai adultMode aktif — jadi perilakunya
+    // konsisten dengan ekspektasi "guard off = bebas".
+    if (!guardOn) adultMode = true;
     const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
     const askedInLastTurn =
       lastAssistant != null && /nakal/i.test(contentText(lastAssistant.content));
