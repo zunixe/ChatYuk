@@ -3,6 +3,19 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-14 — Audit performa: paginasi & hilangkan fetch tanpa limit
+
+**Masalah:** beberapa RPC/query memuat SELURUH tabel tanpa limit → lag (polling
+admin tiap 15–30 dtk menarik ribuan baris).
+
+| Versi | Aksi |
+|---|---|
+| 20260914130050_admin_list_dummies_page.sql | RPC baru `admin_list_dummies_page(p_limit,p_offset)` — paging daftar dummy (versi lama `admin_list_dummies()` TIDAK diubah) |
+| 20260914140000_friend_request_pagination.sql | RPC baru `friend_request_inbox_page/outbox_page(p_limit,p_offset)` (versi lama tidak diubah) |
+
+**Catatan:** `20260914130050` awalnya ditulis `...130000` lalu di-rename karena
+bentrok timestamp dengan `20260914130000_ai_provider_models.sql` (session paralel).
+
 ## 2026-09-14 — Audit drift kode ↔ DB: pulihkan fitur & sinkron pencatatan
 
 **Masalah ditemukan (audit):** 3 fitur rusak di produksi karena migrasi ada di

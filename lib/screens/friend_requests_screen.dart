@@ -72,45 +72,59 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
             )
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  12,
-                  12,
-                  12,
-                  MediaQuery.of(context).padding.bottom + 24,
-                ),
-                children: [
-                  if (_inbox.isNotEmpty) ...[
-                    Text(
-                      s.socialFollowers,
-                      style: AppText.label.copyWith(
-                        color: AppTheme.textSecondary,
+              child: Builder(
+                builder: (ctx) {
+                  // Susun daftar datar: label section + baris, sekali saja,
+                  // lalu render lazy via builder (dulu ListView eager
+                  // membangun SEMUA tile sekaligus → lag saat setState).
+                  final rows = <Widget>[];
+                  if (_inbox.isNotEmpty) {
+                    rows.add(
+                      Text(
+                        s.socialFollowers,
+                        style: AppText.label.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 6),
-                    ..._inbox.map(
-                      (r) => _RequestTile(
-                        entry: r,
-                        pending: true,
-                        onAccept: () => _respond(r, true),
-                        onReject: () => _respond(r, false),
+                    );
+                    rows.add(const SizedBox(height: 6));
+                    for (final r in _inbox) {
+                      rows.add(
+                        _RequestTile(
+                          entry: r,
+                          pending: true,
+                          onAccept: () => _respond(r, true),
+                          onReject: () => _respond(r, false),
+                        ),
+                      );
+                    }
+                    rows.add(const SizedBox(height: 16));
+                  }
+                  if (_outbox.isNotEmpty) {
+                    rows.add(
+                      Text(
+                        s.btnFriendRequested,
+                        style: AppText.label.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
+                    );
+                    rows.add(const SizedBox(height: 6));
+                    for (final r in _outbox) {
+                      rows.add(_RequestTile(entry: r, pending: false));
+                    }
+                  }
+                  return ListView.builder(
+                    padding: EdgeInsets.fromLTRB(
+                      12,
+                      12,
+                      12,
+                      MediaQuery.of(ctx).padding.bottom + 24,
                     ),
-                    SizedBox(height: 16),
-                  ],
-                  if (_outbox.isNotEmpty) ...[
-                    Text(
-                      s.btnFriendRequested,
-                      style: AppText.label.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    ..._outbox.map(
-                      (r) => _RequestTile(entry: r, pending: false),
-                    ),
-                  ],
-                ],
+                    itemCount: rows.length,
+                    itemBuilder: (_, i) => rows[i],
+                  );
+                },
               ),
             ),
     );

@@ -38,9 +38,14 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
 
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    // 30 dtk (dulu 15). Hanya refresh halaman-1 diam-diam — jangan reset
+    // paginasi yang sedang di-scroll user (dulu tiap 15 dtk buang load-more).
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
-      context.read<AdminProvider>().fetchDeleted();
+      final p = context.read<AdminProvider>();
+      // Lewati polling kalau user sudah load-more (jangan reset paginasi).
+      if (p.deleted.length > 100) return;
+      p.fetchDeleted();
     });
   }
 

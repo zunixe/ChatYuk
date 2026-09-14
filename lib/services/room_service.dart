@@ -50,7 +50,8 @@ class RoomService {
         .select(_roomCols)
         .eq('country', country)
         .eq('is_private', false)
-        .order('order');
+        .order('order')
+        .limit(200);
     return rows.map((row) => RoomModel.fromMap('${row['id']}', row)).toList();
   }
 
@@ -94,7 +95,8 @@ class RoomService {
         // Grup tanpa password = permanen (expires_at NULL) — jangan
         // difilter keluar seperti grup expired.
         .or('expires_at.is.null,expires_at.gt.$nowIso')
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .limit(200);
     return rows.map((row) => RoomModel.fromMap('${row['id']}', row)).toList();
   }
 
@@ -104,7 +106,8 @@ class RoomService {
       final rows = await _sb
           .from('room_members')
           .select('room_id')
-          .eq('user_id', uid);
+          .eq('user_id', uid)
+          .limit(500);
       return rows.map((r) => '${r['room_id']}').toSet();
     } catch (e) {
       dlog('[room] fetchMyMemberships error: $e');
@@ -166,13 +169,18 @@ class RoomService {
   /// tersinkron di semua device tanpa reload manual. Mengembalikan daftar
   /// private room terbaru setiap ada perubahan.
   Stream<List<RoomModel>> watchPrivateRooms(String country) {
-    return _sb.from('rooms').stream(primaryKey: ['id']).map((rows) {
+    // Filter di SERVER (dulu tarik SELURUH tabel rooms lintas-negara lalu
+    // filter di Dart → payload besar + realtime kirim ulang semua baris).
+    return _sb
+        .from('rooms')
+        .stream(primaryKey: ['id'])
+        .eq('country', country)
+        .eq('is_private', true)
+        .map((rows) {
       final now = DateTime.now().toUtc();
       return rows
           .where(
             (row) =>
-                row['is_private'] == true &&
-                row['country'] == country &&
                 row['expires_at'] != null &&
                 DateTime.tryParse('${row['expires_at']}')?.isAfter(now) == true,
           )
@@ -203,4 +211,22 @@ class RoomService {
     }
   }
 
+  /// Batch: 1 query `in` untuk banyak room sekaligus (ganti N+1 fetchRoomById).
+  Future<List<Map<String, dynamic>>> fetchRoomsByIds(
+      List<String> roomIds) async {
+    if (roomIds.isEmpty) return const [];
+    try {
+      final rows = await _sb
+          .from('rooms')
+          .select(
+              'id,name,description,icon,country,category,is_private,owner_id,owner_name,has_password,expires_at,created_at,live_uid,live_started_at,max_members')
+          .inFilter('id', roomIds);
+      return ((rows as List?) ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    } catch (e) {
+      dlog('[room] fetchRoomsByIds error: $e');
+      return const [];
+    }
+  }
 }

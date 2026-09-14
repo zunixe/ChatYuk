@@ -109,11 +109,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // sesi dummy ⇄ admin (ProfileScreen hidup di IndexedStack, initState
   // tidak jalan lagi saat swap), supaya foto/hashtag/avatar ikut ganti.
   String? _loadedUid;
+  // Status "punya password" di-cache di state (dulu dipanggil via
+  // FutureBuilder(future: fetchHasPassword()) di build → RPC jaringan tiap
+  // rebuild = flicker + boros). Fetch sekali di initState.
+  bool _hasPassword = false;
 
   @override
   void initState() {
     super.initState();
     _loadPhotos();
+    _hasPassword = context.read<AuthProvider>().hasPassword;
+    // Refresh dari server sekali (non-blocking) supaya label akurat.
+    Future.microtask(() async {
+      final v = await context.read<AuthProvider>().fetchHasPassword();
+      if (mounted) setState(() => _hasPassword = v);
+    });
     _hashtags = List.of(
       context.read<AuthProvider>().profile?.hashtags ?? const [],
     );
@@ -1835,23 +1845,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 SizedBox(width: 12),
                                 Expanded(
-                                  child: FutureBuilder<bool>(
-                                    future: auth.fetchHasPassword(),
-                                    builder: (ctx, snap) {
-                                      final hasPw = snap.data ?? auth.hasPassword;
-                                      return Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            hasPw
-                                                ? s.btnChangePassword
-                                                : s.btnSetPassword,
-                                        style: AppText.bodyStrong.copyWith(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _hasPassword
+                                            ? s.btnChangePassword
+                                            : s.btnSetPassword,
+                                        style:
+                                            AppText.bodyStrong.copyWith(
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                       Text(
-                                        hasPw
+                                        _hasPassword
                                             ? s.descChangePassword
                                             : s.descSetPassword,
                                         style: AppText.bodySmall.copyWith(
@@ -1859,11 +1867,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                       ),
                                     ],
-                                  );
-                                },
-                              ),
-                            ),
-                            Icon(
+                                  ),
+                                ),
+                                Icon(
                                   Icons.chevron_right,
                                   color: AppTheme.textSecondary,
                                 ),
