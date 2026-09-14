@@ -79,7 +79,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(strokeWidth: 2.4))
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              // Insets bawah (nav bar) — edge-to-edge Android 15.
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                24 + MediaQuery.of(context).padding.bottom,
+              ),
               children: [
                 Center(
                   child: Container(

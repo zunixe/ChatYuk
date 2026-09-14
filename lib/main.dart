@@ -35,6 +35,7 @@ import 'utils.dart';
 import 'services/message_cache.dart';
 import 'services/media_disk_cache.dart';
 import 'services/photo_cache.dart';
+import 'services/post_photo_cache.dart';
 import 'services/chat_background.dart';
 import 'services/notification_prefs_service.dart';
 
@@ -883,6 +884,7 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   unawaited(AdminGate.postInit?.call());
   unawaited(MessageCache.instance.clearLegacyV1Only());
   unawaited(PhotoCache.instance.cleanOldPhotos());
+  unawaited(PostPhotoCache.instance.cleanOldPhotos());
   if (_firebaseReady) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
@@ -890,6 +892,11 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   await _initNotificationsFast();
   await warmChatBackground();
   await AppTheme.init();
+  // Jaring aman edge-to-edge Android 15: pastikan mode default (edgeToEdge)
+  // selalu aktif di start. Bila proses di-kill saat Story composer terbuka
+  // (mode manual menyembunyikan nav bar), state bisa tertinggal untuk frame
+  // berikutnya — reset di sini supaya inset benar sejak awal.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   // Kunci portrait dua lapis (manifest sudah portrait — ini lapisan Dart,
   // menutup edge-case hot-restart / perangkat yang mengabaikan manifest).
   SystemChrome.setPreferredOrientations([

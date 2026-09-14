@@ -268,7 +268,10 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
                 )
               : GridView.builder(
                   controller: _scrollCtrl,
-                  padding: EdgeInsets.zero,
+                  // Insets bawah (nav bar) — edge-to-edge Android 15.
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).padding.bottom,
+                  ),
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,

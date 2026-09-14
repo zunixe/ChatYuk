@@ -543,7 +543,8 @@ class _QrScanScreenState extends State<QrScanScreen> {
         children: [
           MobileScanner(controller: _ctrl, onDetect: _onDetect),
           Positioned(
-            bottom: 48,
+            // Insets bawah (nav bar) — edge-to-edge Android 15.
+            bottom: 48 + MediaQuery.paddingOf(context).bottom,
             left: 24,
             right: 24,
             child: Text(

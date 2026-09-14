@@ -105,6 +105,10 @@ class _GiftFlyOverlayState extends State<GiftFlyOverlay> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final combo = controller.activeCombo;
+    // Insets bawah (nav bar/gesture) — overlay ini Positioned.fill di room,
+    // jadi badge kombo harus ikut naik dari dasar layar (edge-to-edge
+    // Android 15; dulu bottom:12 → tertutup navigation bar).
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return IgnorePointer(
       child: Stack(
@@ -114,7 +118,7 @@ class _GiftFlyOverlayState extends State<GiftFlyOverlay> {
           if (combo != null)
             Positioned(
               left: 12,
-              bottom: 12,
+              bottom: 12 + bottomInset,
               child: _ComboBadge(gift: combo.$1, count: combo.$2),
             ),
           // Gift terbang

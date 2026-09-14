@@ -17,10 +17,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Android 15 (SDK 35)+ edge-to-edge default. Flutter menangani inset
-        // via Scaffold/SafeArea/MediaQuery — tidak perlu enableEdgeToEdge()
-        // eksplisit (FlutterActivity sudah melakukannya, dan androidx.activity
-        // versi runtime gagal resolve extension ini → build gagal).
+        // Android 15 (SDK 35+) memaksa edge-to-edge; targetSdk 36 tidak bisa
+        // opt-out. Mode eksplisit + kompat-mundur: setDecorFitsSystemWindows
+        // (false) membuat konten menggambar di bawah status/nav bar.
+        // Flutter menangani inset via Scaffold/SafeArea/MediaQuery.
+        // (enableEdgeToEdge() androidx.activity setara — dipakai WindowCompat
+        //  agar tidak bergantung versi runtime androidx.activity.)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Anti-blink: task snapshot HyperOS bisa STALE terang (force-stop tidak
