@@ -537,7 +537,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final s = context.read<LocaleProvider>().s;
     final next = !_muted;
     try {
-      await NotificationPrefsService.setChatMuted(widget.room.id, next);
+      // Sinkron ke server (rooms.muted_by) + cermin lokal — model sama
+      // dengan mute private chat, biar konsisten antar device.
+      await _chat.muteRoom(widget.room.id, next);
       if (!mounted) return;
       setState(() => _muted = next);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -572,10 +574,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             try {
               final rows = await Supabase.instance.client
                   .from('messages')
-                  .select('id,text,sender_name,sender_id,inserted_at')
+                  .select('id,text,sender_name,sender_id,created_at')
                   .eq('room_id', widget.room.id)
                   .ilike('text', '%$query%')
-                  .order('inserted_at', ascending: false)
+                  .order('created_at', ascending: false)
                   .limit(30);
               if (ctx.mounted) {
                 setSheet(() {

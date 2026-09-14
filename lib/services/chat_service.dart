@@ -1118,6 +1118,19 @@ class ChatService {
     await _sb.rpc('mute_private_chat', params: {'p_chat_id': chatId, 'p_mute': mute});
   }
 
+  /// Mute/unmute notifikasi ROOM live — server sebagai sumber kebenaran
+  /// (kolom rooms.muted_by via RPC mute_room) + cermin lokal untuk
+  /// offline-first. Menyamakan model dengan private chat (C1 audit).
+  Future<void> muteRoom(String roomId, bool mute) async {
+    await NotificationPrefsService.setChatMuted(roomId, mute);
+    try {
+      await _sb.rpc('mute_room', params: {'p_room_id': roomId, 'p_mute': mute});
+    } catch (e) {
+      // Server gagal (offline) → tetap tersimpan lokal; sinkron lain waktu.
+      dlog('[chat] muteRoom server gagal (lokal tersimpan): $e');
+    }
+  }
+
   /// Archive/unarchive chat — optimistic update + RPC.
   /// Chat terarsip difilter di layar (tidak di service) agar daftar
   /// arsip bisa ditampilkan dari cache yang sama.
@@ -1823,8 +1836,10 @@ class ChatService {
                   nickname: d['nickname'] ?? 'Anon',
                   gender: d['gender'] ?? 'other',
                   age: (d['age'] as num?)?.toInt() ?? 0,
-                  country: d['country'] ?? '',
-                  city: d['city'] ?? '',
+                  // room_presence tidak menyimpan lokasi (hanya profil); biarkan
+                  // kosong agar tidak query kolom nir-skema.
+                  country: '',
+                  city: '',
                   ipAddress: '',
                   status: 'online',
                   avatar: '',

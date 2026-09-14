@@ -39,7 +39,7 @@ class _GroupMediaScreenState extends State<GroupMediaScreen> {
           .select('image_path')
           .eq('room_id', widget.room.id)
           .neq('image_path', '')
-          .order('inserted_at', ascending: false)
+          .order('created_at', ascending: false)
           .limit(200);
       final paths = <String>[];
       for (final r in (rows as List)) {

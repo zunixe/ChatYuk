@@ -68,46 +68,6 @@ class RealtimeHub {
     }
   }
 
-  // ── Broadcast timeline ───────────────────────────────────────────────────
-  RealtimeChannel? _timelineChannel;
-  final _timelineCtrl = StreamController<Map<String, dynamic>>.broadcast();
-
-  RealtimeChannel ensureTimeline() {
-    if (_timelineChannel != null) return _timelineChannel!;
-    final ch = _sb.channel('timeline-all');
-    ch.onBroadcast(event: 'new_post', callback: (payload, {event}) {
-      if (!_timelineCtrl.isClosed) {
-        _timelineCtrl.add({'event': 'new_post', 'payload': payload});
-      }
-    });
-    ch.onBroadcast(event: 'post_update', callback: (payload, {event}) {
-      if (!_timelineCtrl.isClosed) {
-        _timelineCtrl.add({'event': 'post_update', 'payload': payload});
-      }
-    });
-    ch.subscribe();
-    _timelineChannel = ch;
-    return ch;
-  }
-
-  Stream<Map<String, dynamic>> get timelineBroadcast => _timelineCtrl.stream;
-
-  /// Keluar dari channel timeline (panggil saat provider terkait dispose).
-  Future<void> leaveTimeline() async {
-    final ch = _timelineChannel;
-    _timelineChannel = null;
-    if (ch != null) {
-      try {
-        await _sb.removeChannel(ch);
-      } catch (_) {}
-    }
-  }
-
-  Future<void> broadcastTimeline(String event, Map<String, dynamic> payload) async {
-    final ch = ensureTimeline();
-    await ch.sendBroadcastMessage(event: event, payload: payload);
-  }
-
   // ── Presence room ────────────────────────────────────────────────────────
   final Map<String, RealtimeChannel> _roomChannels = {};
   final _roomCtrl = StreamController<Map<String, dynamic>>.broadcast();
