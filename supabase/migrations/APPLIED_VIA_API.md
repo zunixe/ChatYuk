@@ -685,3 +685,40 @@ Jika `supabase db push` timeout lagi:
 - **Deploy:** `supabase functions deploy ai-reply --use-api` → **ACTIVE v146**.
 - **Observasi lanjutan dari log hidup:** model balasan sukses = `mimo-v2.5-free` (artinya provider TokenHarbor utama gagal → fallback jalan, aman); 2× `error:empty_reply` (http 200 tapi content kosong). Kandidat perbaikan sesi berikut.
 - **Ditunda (disepakati):** pisah cron `chatyuk-ai-presence`; satukan konsep ngambek (`storm_until` vs `ai_offline_until`).
+
+## 2026-09-14 — 20260914110000_dummy_kind.sql (APPLY) + filter Expert/Biasa (UI)
+
+- **Latar:** semua akun dummy (biasa + expert) nyampur di `dummy_accounts` tanpa penanda tipe. "Expert" cuma ditebak via `lower(nickname) in ('softwareexpert','hardwareexpert')` (rapuh — ganti nickname = rusak) atau flag `ai_always_reply` (semantik salah: itu perilaku balas, dipakai expert & CS).
+- **Keputusan owner:** cukup 1 label → kolom **`kind`** (`'regular'`|`'expert'`). Bukan tabel terpisah (over-engineering utk ~4 akun; RLS/RPC/presence/ai-reply semua baca dari `dummy_accounts`).
+- **Isi migration:** `alter table dummy_accounts add column if not exists kind text not null default 'regular' check (kind in ('regular','expert'))` + `comment` + backfill expert dari nickname lama (idempotent) + `admin_list_dummies` ditulis ulang eksplisit (basis 20260913190001 + field `''kind''`, output jadi expose `kind`).
+- **Apply (Mac):** via **Management API** `POST /v1/projects/{ref}/database/query` (token dari `security find-generic-password -s "Supabase CLI" -a "supabase"`). `supabase db push` **TIDAK dipakai** (lihat catatan drift di bawah). Versi `20260914110000` tercatat di `schema_migrations`.
+- **Verifikasi (DB live):** `kind_col=1` ✅; `kind='expert'` = **2** (HardwareExpert, SoftwareExpert) ✅; total dummy 12 ✅; `pg_get_functiondef(admin_list_dummies) like '%''kind''%'` = true ✅.
+- **UI (belum di-deploy build, sudah di-commit):** `lib/screens/admin_dummy_tab.dart` → `SegmentedButton` filter **Semua / Biasa / Expert** (state `_kindFilter`, getter `_filtered` gabung kind + search). `lib/config/strings_admin.dart` → `dummyKindAll`/`dummyKindRegular`/`dummyKindExpert` (ID/EN). `flutter analyze` bersih, `flutter test test/strings_test.dart` 8/8 hijau.
+- **Catatan desain:** `kind` sengaja **belum** dipakai jadi gate apapun di `ai-reply` (masih pakai `ai_always_reply`) — nol risiko. Ganti deteksi expert → `kind` nanti bila perlu.
+
+### ⚠️ DRIFT TERDETEKSI — status history migration (PENTING utk sesi berikutnya)
+
+Saat apply, `supabase db push` melaporkan **42 migration lokal tidak ada di history remote**:
+- **1 benar-benar baru:** `20260914110000_dummy_kind` → sudah di-apply & tercatat (di atas).
+- **41 lainnya = versi LEBIH LAMA dari remote max `20260914100000`** → out-of-order. Bukti kuat sudah jalan di DB (mis. `ai_always_reply`, `app_settings`, `admin_list_dummies` sudah ada padahal versi belum tercatat). Kemungkinan besar di-apply via Management API tapi `schema_migrations` tidak di-insert.
+- **JANGAN `supabase db push --include-all`** untuk 41 ini → bakal replay migration lama yang sudah jalan (risiko drop/recreate objek / error / rusak data).
+- **Rekomendasi sesi berikutnya:** audit 41 versi satu-satu (bandingkan objek DB vs file), lalu `repair` sebagai applied. Daftar 41 ada di `/tmp/pending_old.txt` (sesi 2026-09-14) — regenerate kalau hilang:
+  ```bash
+  # remote versions
+  supabase db query --linked --dns-resolver https --output json \
+    "select version from supabase_migrations.schema_migrations order by version"
+  # bandingkan: comm -23 <(local sorted) <(remote sorted)
+  ```
+
+## 2026-09-14 — 20260914110001_dummy_kind_experts.sql + 20260914110002_expert_flags.sql (APPLY)
+
+- **Koreksi owner atas set EXPERT** (semula hanya 2 dari nickname):
+  - Expert = akun dengan ciri **online 24 jam + teks panjang** → mencakup Admin Chatyuk (CS resmi) & CS teknis (Dr Nara, Kang Modal), bukan cuma yg namanya "Expert".
+  - **Definisi terukur:** `ai_always_online=true` OR `ai_always_reply=true` OR `(ai_persona->>'long_answers')='true'`.
+- **20260914110001_dummy_kind_experts:** backfill ulang `kind` dari kriteria di atas → EXPERT = Admin Chatyuk, Dr Nara, HardwareExpert, Kang Modal, SoftwareExpert (5); REGULAR = agoy, aqila, BinorMuda, Dhanu, MbakSari, Sarah, Venty (7).
+- **20260914110002_expert_flags:** koreksi 2 flag data (bukan cuma kind):
+  1. `Admin Chatyuk.ai_always_reply` false→**true** (CS wajib selalu dibalas).
+  2. `HardwareExpert.ai_persona` merge `long_answers:true` (persona lama — tone/diagrams/personality/extra_prompt — TIDAK terhapus).
+- **Apply:** Management API (pola sama). Kedua versi dicatat di `schema_migrations`.
+- **Verifikasi (DB live):** 5 expert SEMUA `always_reply=true` + `long_answers=true` ✅; 7 regular SEMUA false/null ✅. Admin Chatyuk always_reply=true ✅; HardwareExpert long_answers=true ✅.
+- **Catatan disiplin:** 20260914110000 (sudah applied) TIDAK diedit — koreksi dibuat sebagai migration BARU (immutability).

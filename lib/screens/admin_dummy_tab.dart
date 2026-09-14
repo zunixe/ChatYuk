@@ -62,6 +62,25 @@ String _wibClock(String iso) {
   return '${wib.hour.toString().padLeft(2, '0')}:${wib.minute.toString().padLeft(2, '0')}';
 }
 
+/// Filter daftar dummy (pure — dipakai `_filtered` + unit test).
+/// - [search]: cocokkan substring nickname (case-insensitive). Kosong = lolos.
+/// - [kind]: `null` = semua tipe; `'regular'`/`'expert'` = hanya tipe itu.
+///   Nilai item yang tak punya/missing `kind` dianggap `'regular'`.
+List<Map<String, dynamic>> filterDummies(
+  List<Map<String, dynamic>> items, {
+  String search = '',
+  String? kind,
+}) {
+  final q = search.toLowerCase();
+  return items.where((m) {
+    if (kind != null && (m['kind'] as String? ?? 'regular') != kind) {
+      return false;
+    }
+    if (q.isEmpty) return true;
+    return (m['nickname'] as String? ?? '').toLowerCase().contains(q);
+  }).toList();
+}
+
 /// Tab Dummy di Admin Panel — buat/daftarkan akun dummy (anonymous, tanpa
 /// email/password) dengan gender/umur/negara/kota, chat sebagai akun itu
 /// (swap sesi tanpa login manual), set status online/idle/offline,
@@ -81,6 +100,9 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
   final _scrollCtrl = ScrollController();
   final _searchCtrl = TextEditingController();
   String _search = '';
+  /// Filter tipe akun: null = semua, 'regular' = biasa, 'expert' = expert.
+  /// Diisi dari kolom `kind` (RPC admin_list_dummies), bukan nickname.
+  String? _kindFilter;
   String _gender = 'male';
   int _age = 25;
   String _negara = 'Indonesia';
@@ -142,17 +164,11 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     }
   }
 
-  /// Daftar dummy terfilter pencarian (by nickname, case-insensitive).
-  /// Query kosong = semua item.
-  List<Map<String, dynamic>> get _filtered {
-    if (_search.isEmpty) return _items;
-    final q = _search.toLowerCase();
-    return _items
-        .where(
-          (m) => (m['nickname'] as String? ?? '').toLowerCase().contains(q),
-        )
-        .toList();
-  }
+  /// Daftar dummy terfilter pencarian (by nickname, case-insensitive)
+  /// dan filter tipe (`kind`: regular/expert). Query kosong + filter
+  /// null = semua item.
+  List<Map<String, dynamic>> get _filtered =>
+      filterDummies(_items, search: _search, kind: _kindFilter);
 
   void _toast(S s, String message) {
     if (!mounted) return;
@@ -551,6 +567,30 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
             ],
           ),
           const SizedBox(height: 8),
+          // ── Filter tipe: Semua / Biasa / Expert (dari kolom `kind`) ──
+          SegmentedButton<String>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            segments: [
+              ButtonSegment(
+                value: '',
+                label: Text(s.dummyKindAll, style: AppText.label),
+              ),
+              ButtonSegment(
+                value: 'regular',
+                label: Text(s.dummyKindRegular, style: AppText.label),
+              ),
+              ButtonSegment(
+                value: 'expert',
+                label: Text(s.dummyKindExpert, style: AppText.label),
+              ),
+            ],
+            selected: {_kindFilter ?? ''},
+            onSelectionChanged: (v) => setState(
+              () => _kindFilter = v.first.isEmpty ? null : v.first,
+            ),
+          ),
+          const SizedBox(height: 8),
           // ── Pencarian dummy (filter lokal by nickname) ──
           TextField(
             controller: _searchCtrl,
@@ -705,11 +745,53 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        nickname,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.bodyStrong,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              nickname,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.bodyStrong,
+                            ),
+                          ),
+                          // Badge EXPERT: dari kolom `kind` (bukan nickname).
+                          if ((item['kind'] as String? ?? 'regular') ==
+                              'expert') ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accent.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: AppTheme.accent.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.verified_rounded,
+                                    size: 11,
+                                    color: AppTheme.accent,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    s.dummyKindExpert,
+                                    style: AppText.caption.copyWith(
+                                      color: AppTheme.accent,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       if (info.isNotEmpty)
                         Text(

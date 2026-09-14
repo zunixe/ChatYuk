@@ -466,6 +466,11 @@ extension SAdminX on S {
   String get dummySearchEmpty =>
       isId ? 'Tidak ada dummy yang cocok' : 'No matching dummy found';
 
+  // Filter tipe akun dummy (kolom `kind`: regular/expert).
+  String get dummyKindAll => isId ? 'Semua' : 'All';
+  String get dummyKindRegular => isId ? 'Biasa' : 'Regular';
+  String get dummyKindExpert => isId ? 'Expert' : 'Expert';
+
   String get dummyChatAs => isId ? 'Chat Sebagai' : 'Chat As';
 
   String get dummyChatAsTitle =>
