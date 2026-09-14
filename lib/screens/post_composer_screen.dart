@@ -47,7 +47,8 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
   String _visibility = 'public';
   bool _posting = false;
   bool _picking = false;
-  double _fieldHeight = 120;
+  // Tinggi minimum area tulis (tumbuh otomatis saat teks panjang).
+  static const double _fieldHeight = 120;
 
   static const _maxImages = 5;
   static const _maxText = 2000;
@@ -308,132 +309,174 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Header profil — avatar + nama + "Posting sebagai" ──
+            // ── Header profil: avatar ring gradient + nama + identitas ──
             Row(
               children: [
-                ProfileAvatar(
-                  uid: auth.uid ?? '',
-                  name: myName,
-                  size: 44,
-                  borderRadius: 22,
+                // Ring gradient tipis di sekitar avatar — kesan premium.
+                Container(
+                  padding: const EdgeInsets.all(2.5),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppTheme.headerGradient,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgScreen,
+                      shape: BoxShape.circle,
+                    ),
+                    child: ProfileAvatar(
+                      uid: auth.uid ?? '',
+                      name: myName,
+                      size: 46,
+                      borderRadius: 23,
+                    ),
+                  ),
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(myName, style: AppText.bodyStrong),
-                      SizedBox(height: 2),
-                      Text(
-                        s.postingAs,
-                        style: AppText.bodySmall.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.campaign_outlined,
+                            size: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              s.postingAs,
+                              style: AppText.bodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 18),
 
-            // ── Card tulis — text input + drag handle resize (pojok kanan) ──
+            // ── Headline pengajak — bikin user tertarik menulis ──
+            Text(
+              s.composerIntroHeadline,
+              style: AppText.title.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              s.composerIntroSub,
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 14),
+
+            // ── Kartu tulis — input + counter + toolbar aksi media ──
             Container(
-              padding: EdgeInsets.fromLTRB(14, 8, 14, 4),
               decoration: BoxDecoration(
                 color: AppTheme.bgCard,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.divider),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              child: Stack(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    height: _fieldHeight,
+                  // Input teks — tumbuh otomatis; min via _fieldHeight.
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: _fieldHeight,
+                      maxHeight: 360,
+                    ),
                     child: TextField(
                       controller: _textCtrl,
                       maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
+                      expands: false,
                       maxLength: _maxText,
                       style: AppText.body,
+                      textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
                         hintText: s.hintWritePost,
                         hintStyle: AppText.body.copyWith(
                           color: AppTheme.textSecondary,
                         ),
-                        filled: true,
-                        fillColor: AppTheme.bgCard,
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(14)),
-                          borderSide: BorderSide(
-                            color: AppTheme.bgCard,
-                            width: 1.5,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(14)),
-                          borderSide: BorderSide(
-                            color: AppTheme.bgCard,
-                            width: 1.5,
-                          ),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(14)),
-                          borderSide: BorderSide(
-                            color: AppTheme.bgCard,
-                            width: 1.5,
-                          ),
-                        ),
+                        filled: false,
+                        border: InputBorder.none,
                         counterText: '',
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          16,
+                          14,
+                          16,
+                          6,
+                        ),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
-                  // Pojok kanan bawah: emoji kecil + handle drag naik/turun
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
+                  // Baris bawah: emoji cepat (kiri) + counter karakter (kanan).
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 16, 8),
                     child: Row(
                       children: [
-                        _mediaIconButton(
+                        _miniAction(
                           Icons.sentiment_satisfied_alt,
                           Colors.amber.shade700,
-                          s.btnEmoji,
+                          s.composerActionEmoji,
                           () => EmojiPickerSheet.show(context, _textCtrl),
                         ),
-                        SizedBox(width: 6),
-                        Tooltip(
-                          message: s.tooltipResize,
-                          child: GestureDetector(
-                            onVerticalDragUpdate: (d) => setState(
-                              () => _fieldHeight = (_fieldHeight + d.delta.dy)
-                                  .clamp(80, 320),
-                            ),
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: AppTheme.textSecondary.withValues(
-                                  alpha: 0.08,
-                                ),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.unfold_more,
-                                size: 18,
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
+                        const Spacer(),
+                        _charCounter(s),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
+
+            // ── Media: hint + kotak "Add" (Galeri/Kamera via sheet) ──
+            // Tombol Galeri/Kamera TIDAK lagi berupa chip terpisah di dalam
+            // kartu (dulu double dengan kotak Add). Cukup SATU pintu: kotak
+            // Add besar → bottom sheet pilih Galeri/Kamera.
+            if (_images.isEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(left: 2, bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.photo_library_outlined,
+                      size: 15,
+                      color: AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        s.composerMediaHint,
+                        style: AppText.caption.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _emptyAddTile(s),
+            ] else
+              _imagesGrid(),
 
             // ── Hashtag chip badge — muncul otomatis saat mengetik #tag ──
             if (hashtags.isNotEmpty) ...[
@@ -486,63 +529,15 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
               const SizedBox(height: 12),
             ],
 
-            // ── Foto: kotak tambah (awal) / grid foto + kotak plus ──
-            if (_images.isEmpty)
-              _emptyAddTile(s)
-            else
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                ),
-                itemCount: _images.length + 1, // + kotak plus
-                itemBuilder: (_, i) {
-                  if (i < _images.length) {
-                    final idx = i;
-                    return Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.memory(_images[idx], fit: BoxFit.cover),
-                        ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: GestureDetector(
-                            onTap: () => setState(() => _images.removeAt(idx)),
-                            child: Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.55),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                  return _addTile(s);
-                },
-              ),
+            // (Grid foto ditangani `_imagesGrid()` di atas saat ada foto.)
             if (_images.isNotEmpty) ...[
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 '${_images.length}/$_maxImages ${s.photoCountLabel}',
                 style: AppText.caption.copyWith(color: AppTheme.textSecondary),
               ),
             ],
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
 
             // ── Visibilitas — card putih ala profil: ikon + label + chip ──
             Container(
@@ -617,12 +612,17 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+
+            // ── Tips — dorong kualitas & minat posting ──
+            _tipsCard(s),
           ],
         ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
+          border: Border(top: BorderSide(color: AppTheme.divider)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.08),
@@ -651,7 +651,13 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                   : const Icon(Icons.send_rounded, size: 18),
               label: Text(s.btnPost, style: AppText.button),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
+                backgroundColor: _hasContent ? AppTheme.primary : null,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor:
+                    AppTheme.textSecondary.withValues(alpha: 0.25),
+                disabledForegroundColor: AppTheme.textSecondary,
+                elevation: _hasContent ? 2 : 0,
+                shadowColor: AppTheme.primary.withValues(alpha: 0.4),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -663,10 +669,62 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
     );
   }
 
-  /// Tombol media ikon bulat (galeri/kamera) — tanpa spinner, hanya
-  /// fade saat picker sedang diproses supaya UI tetap tenang.
-  /// [color] ikon & latar mengikuti komposisi warna ala menu profil.
-  Widget _mediaIconButton(
+  /// Ada isi (teks atau foto) → tombol Post aktif & bergradient.
+  bool get _hasContent =>
+      _textCtrl.text.trim().isNotEmpty || _images.isNotEmpty;
+
+  /// Grid foto terpilih + kotak plus di akhir (maks _maxImages).
+  Widget _imagesGrid() {
+    final s = context.read<LocaleProvider>().s;
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemCount: _images.length + 1, // + kotak plus
+      itemBuilder: (_, i) {
+        if (i < _images.length) {
+          final idx = i;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(_images[idx], fit: BoxFit.cover),
+              ),
+              Positioned(
+                top: 4,
+                right: 4,
+                child: GestureDetector(
+                  onTap: () => setState(() => _images.removeAt(idx)),
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+        return _addTile(s);
+      },
+    );
+  }
+
+  /// Tombol aksi kecil di dalam kartu (emoji) — bulat, rapi.
+  Widget _miniAction(
     IconData icon,
     Color color,
     String label,
@@ -675,21 +733,88 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
     return Tooltip(
       message: label,
       child: GestureDetector(
-        onTap: _picking ? null : onTap,
-        child: AnimatedOpacity(
-          opacity: _picking ? 0.4 : 1,
-          duration: const Duration(milliseconds: 180),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-              border: Border.all(color: color.withValues(alpha: 0.3)),
-            ),
-            child: Icon(icon, size: 18, color: color),
+        onTap: onTap,
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
+          child: Icon(icon, size: 19, color: color),
         ),
+      ),
+    );
+  }
+
+  /// Counter karakter: sembunyi saat kosong; berubah merah mendekati batas.
+  Widget _charCounter(S s) {
+    final len = _textCtrl.text.length;
+    if (len == 0) return const SizedBox.shrink();
+    final nearLimit = len > (_maxText * 0.9);
+    final color = nearLimit ? AppTheme.danger : AppTheme.textSecondary;
+    return Text(
+      '$len / $_maxText',
+      style: AppText.caption.copyWith(
+        color: color,
+        fontWeight: nearLimit ? FontWeight.w700 : FontWeight.w500,
+      ),
+    );
+  }
+
+  /// Kartu tips — dorong kualitas & minat posting.
+  Widget _tipsCard(S s) {
+    final tips = [s.composerTip1, s.composerTip2, s.composerTip3];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.lightbulb_outline_rounded,
+                size: 17,
+                color: AppTheme.accent,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                s.composerTipsTitle,
+                style: AppText.label.copyWith(color: AppTheme.accent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final tip in tips)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.check_circle_outline_rounded,
+                    size: 14,
+                    color: AppTheme.accent.withValues(alpha: 0.8),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      tip,
+                      style: AppText.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

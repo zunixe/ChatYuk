@@ -1326,6 +1326,30 @@ class S {
   String get hintWritePost =>
       isId ? 'Tulis sesuatu...' : "Share what's on your mind...";
   String get btnPost => isId ? 'Posting' : 'Post';
+  // ── Composer (posting) — judul, tip, aksi ──
+  String get composerTitle =>
+      isId ? 'Buat Postingan' : 'Create Post';
+  String get composerIntroHeadline =>
+      isId ? 'Apa yang ingin kamu bagikan?' : 'What do you want to share?';
+  String get composerIntroSub => isId
+      ? 'Bagikan momen, ide, atau cerita ke semua orang.'
+      : 'Share moments, ideas, or stories with everyone.';
+  String get composerActionGallery => isId ? 'Galeri' : 'Gallery';
+  String get composerActionCamera => isId ? 'Kamera' : 'Camera';
+  String get composerActionEmoji => isId ? 'Emoji' : 'Emoji';
+  String get composerMediaHint =>
+      isId ? 'Tambahkan foto biar makin menarik' : 'Add photos to stand out';
+  String get composerTipsTitle =>
+      isId ? 'Tips biar dilihat banyak orang' : 'Tips to get more views';
+  String get composerTip1 => isId
+      ? 'Pakai foto yang jelas & menarik'
+      : 'Use clear, engaging photos';
+  String get composerTip2 => isId
+      ? 'Tambahkan #hashtag biar mudah ditemukan'
+      : 'Add #hashtags so people can find you';
+  String get composerTip3 => isId
+      ? 'Ceritakan singkat, jujur, dan menarik'
+      : 'Keep it short, honest, and interesting';
   String get btnAdd => isId ? 'Add' : 'Add';
   String get btnCamera => isId ? 'Kamera' : 'Camera';
   String get btnGallery => isId ? 'Galeri' : 'Gallery';
