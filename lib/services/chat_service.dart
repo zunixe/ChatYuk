@@ -848,19 +848,7 @@ class ChatService {
     // Batalkan grace-removal bila subscribe lagi sebelum timer jalan.
     _typingGrace[chatId]?.cancel();
     _typingGrace.remove(chatId);
-    final ch = _typingChannels.putIfAbsent(chatId, () {
-      final c = _sb.channel('typing-$chatId');
-      // Diagnosis typing: status subscribe terlihat di logcat (release
-      // build tetap mencetak debugPrint).
-      c.subscribe((status, error) {
-        debugPrint('[TYPING] subscribe $chatId -> $status err=$error');
-      });
-      c.onBroadcast(
-        event: 'typing',
-        callback: (raw) => _fanoutTyping(chatId, raw),
-      );
-      return c;
-    });
+    final ch = _typingChannelRaw(chatId);
     _typingRefs[chatId] = (_typingRefs[chatId] ?? 0) + 1;
     return ch;
   }
@@ -878,25 +866,50 @@ class ChatService {
     }
     final senderId = data['sender_id'] as String?;
     final myId = _sb.auth.currentUser?.id;
-    if (senderId == null || senderId == myId) return;
+    if (senderId == null || senderId == myId) {
+      debugPrint('[TYPING] fanout drop chat=$chatId sender=$senderId me=$myId keys=${data.keys.toList()}');
+      return;
+    }
     final ts = (data['ts'] as num?)?.toInt() ??
         DateTime.now().millisecondsSinceEpoch;
     final subs = _typingSubs[chatId];
-    if (subs == null) return;
+    if (subs == null || subs.isEmpty) {
+      debugPrint('[TYPING] fanout no-subs chat=$chatId (bubble tak bisa tampil)');
+      return;
+    }
+    debugPrint('[TYPING] fanout ok chat=$chatId subs=${subs.length}');
     for (final c in subs.toList()) {
       if (!c.isClosed) c.add(((data['kind'] as String?) ?? 'typing', ts));
     }
   }
 
-  /// Channel typing tanpa refcount untuk kirim fire-and-forget.
+  /// Channel typing untuk kirim fire-and-forget (tanpa refcount).
+  /// PENTING: harus memakai jalur yang SAMA dengan [_typingChannel] supaya
+  /// channel selalu punya handler onBroadcast — kalau tidak, channel "buta"
+  /// yang terbuat di sini akan dipakai ulang oleh subscriber dan bubble
+  /// "titik 3" tak pernah tampil (bug: putIfAbsent ke map yang sama).
   RealtimeChannel _typingChannelNoRef(String chatId) {
-    return _typingChannels.putIfAbsent(chatId, () {
-      final c = _sb.channel('typing-$chatId');
-      c.subscribe((status, error) {
-        debugPrint('[TYPING] subscribe $chatId -> $status err=$error');
-      });
-      return c;
+    return _typingChannelRaw(chatId);
+  }
+
+  /// Buat/ambil channel typing TANPA menyentuh refcount. Selalu memasang
+  /// handler + subscribe dengan urutan yang benar (handler dulu).
+  RealtimeChannel _typingChannelRaw(String chatId) {
+    final existing = _typingChannels[chatId];
+    if (existing != null) return existing;
+    final c = _sb.channel('typing-$chatId');
+    c.onBroadcast(
+      event: 'typing',
+      callback: (raw) {
+        debugPrint('[TYPING] onBroadcast chat=$chatId raw=$raw');
+        _fanoutTyping(chatId, raw);
+      },
+    );
+    c.subscribe((status, error) {
+      debugPrint('[TYPING] subscribe $chatId -> $status err=$error');
     });
+    _typingChannels[chatId] = c;
+    return c;
   }
 
   /// Lepas satu pemakai channel typing; hapus channel saat tak dipakai.
