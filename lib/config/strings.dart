@@ -428,6 +428,9 @@ class S {
       isId ? 'Sedang mengedit pesan' : 'Editing message';
   String get menuReply => isId ? 'Balas' : 'Reply';
   String get messageDeleted => isId ? 'Pesan dihapus' : 'Message deleted';
+  String get confirmDeleteMessage => isId
+      ? 'Hapus pesan ini? Pesan tidak bisa dipulihkan.'
+      : 'Delete this message? It cannot be recovered.';
   String get replyingTo => isId ? 'Membalas' : 'Replying to';
   String get errProfileSave =>
       isId ? 'Gagal simpan profil: ' : 'Failed to save profile: ';
@@ -730,6 +733,9 @@ class S {
   String get errNicknameTaken => isId
       ? 'Nickname sudah digunakan, pilih yang lain'
       : 'Nickname already taken, choose another';
+  String get errNicknameBanned => isId
+      ? 'Nickname ini tidak diizinkan, pilih yang lain'
+      : 'This nickname is not allowed, choose another';
   String get errEmailNotVerified => isId
       ? 'Email belum diverifikasi. Cek inbox kamu.'
       : 'Email not verified. Check your inbox.';
@@ -1147,6 +1153,7 @@ class S {
   String get mFirstPhoto => isId ? 'Kirim foto pertama' : 'Send first photo';
   String get mFirstRoomChat => isId ? 'Chat room pertama' : 'First room chat';
   String get btnRetry => isId ? 'Coba Lagi' : 'Retry';
+  String get btnRefresh => isId ? 'Segarkan' : 'Refresh';
   String get msgServerError =>
       isId ? 'Gagal terhubung ke server' : 'Failed to connect to server';
   String get msgServerErrorHint => isId

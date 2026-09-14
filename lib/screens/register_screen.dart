@@ -106,6 +106,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _nicknameError = null);
       return;
     }
+    // Nickname terlarang langsung ditolak tanpa RPC (kecuali admin).
+    if (isBannedNickname(val) &&
+        !context.read<AuthProvider>().isRealAdmin) {
+      final s = context.read<LocaleProvider>().s;
+      setState(() => _nicknameError = s.errNicknameBanned);
+      return;
+    }
     _nicknameDebounce = Timer(const Duration(milliseconds: 600), () async {
       final available = await context.read<AuthProvider>().isNicknameAvailable(
         val,
@@ -165,6 +172,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _popupError(s.errNicknameLong);
       } else {
         _snack(s.errNicknameLong);
+      }
+      return;
+    }
+    if (isBannedNickname(nickname) &&
+        !context.read<AuthProvider>().isRealAdmin) {
+      if (profileOnly) {
+        _popupError(s.errNicknameBanned);
+      } else {
+        _snack(s.errNicknameBanned);
       }
       return;
     }
@@ -247,7 +263,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
       } else {
         final msg = e.toString().toLowerCase();
-        if (msg.contains('no authenticated user')) {
+        if (msg.contains('nickname_banned') || msg.contains('banned')) {
+          if (profileOnly) {
+            _popupError(s.errNicknameBanned);
+          } else {
+            _snack(s.errNicknameBanned);
+          }
+        } else if (msg.contains('no authenticated user')) {
           // Session hilang saat mode profileOnly — coba login anon lalu ulangi
           if (profileOnly) {
             try {

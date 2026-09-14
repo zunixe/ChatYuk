@@ -100,6 +100,13 @@ class _EntryScreenState extends State<EntryScreen> {
       setState(() => _nicknameError = null);
       return;
     }
+    // Nickname terlarang langsung ditolak tanpa RPC (kecuali admin).
+    if (isBannedNickname(val) &&
+        !context.read<AuthProvider>().isRealAdmin) {
+      final s = context.read<LocaleProvider>().s;
+      setState(() => _nicknameError = s.errNicknameBanned);
+      return;
+    }
     _nicknameDebounce = Timer(const Duration(milliseconds: 600), () async {
       final available = await context.read<AuthProvider>().isNicknameAvailable(
         val,
@@ -196,6 +203,13 @@ class _EntryScreenState extends State<EntryScreen> {
       ).showSnackBar(SnackBar(content: Text(s.errNicknameInvalid)));
       return;
     }
+    final auth0 = context.read<AuthProvider>();
+    if (isBannedNickname(nick) && !auth0.isRealAdmin) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errNicknameBanned)));
+      return;
+    }
     if (_nicknameError != null) {
       _nicknameFocus.requestFocus();
       return;
@@ -267,7 +281,10 @@ class _EntryScreenState extends State<EntryScreen> {
     if (!mounted) return;
     setState(() => _loading = false);
     final msg = error.toString().toLowerCase();
-    if (forceTaken ||
+    if (msg.contains('nickname_banned') || msg.contains('banned')) {
+      setState(() => _nicknameError = s.errNicknameBanned);
+      _nicknameFocus.requestFocus();
+    } else if (forceTaken ||
         msg.contains('duplicate') ||
         msg.contains('nickname') ||
         msg.contains('taken')) {

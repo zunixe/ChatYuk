@@ -1,6 +1,7 @@
 import { assertEquals } from 'https://deno.land/std/assert/mod.ts';
 import {
   asleepAt,
+  applySleepToSchedule,
   browseTopicKey,
   chartUrl,
   extractChartJs,
@@ -243,6 +244,21 @@ Deno.test('summarizeNewsRss: 3 item + media + tanggal', () => {
 Deno.test('summarizeNewsRss: kosong/rusak → string kosong', () => {
   assertEquals(summarizeNewsRss(''), '');
   assertEquals(summarizeNewsRss('<rss></rss>'), '');
+});
+
+// ── applySleepToSchedule (cermin index.ts) ──
+Deno.test('applySleepToSchedule: sisa < 6 jam → siang standar', () => {
+  assertEquals(
+    applySleepToSchedule([8, 9, 10, 14, 20, 21, 22, 23], 20),
+    [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+  );
+});
+
+Deno.test('applySleepToSchedule: sisa cukup → jam tidur dibuang', () => {
+  assertEquals(
+    applySleepToSchedule([7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 21, 22], 20),
+    [7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19],
+  );
 });
 
 // ── needsFreshInfo ──

@@ -41,9 +41,7 @@ class AdminGlobalSettingTab extends StatelessWidget {
         const SizedBox(height: 10),
         const _InvisibleToggle(),
         const SizedBox(height: 10),
-        const _CallAllToggle(),
-        const SizedBox(height: 10),
-        const _CallAnonToggle(),
+        const _CallToggle(),
         const SizedBox(height: 10),
         const _RequireRegistrationToggle(),
         const SizedBox(height: 10),
@@ -267,8 +265,8 @@ class _InvisibleToggle extends StatelessWidget {
   }
 }
 
-class _CallAllToggle extends StatelessWidget {
-  const _CallAllToggle();
+class _CallToggle extends StatelessWidget {
+  const _CallToggle();
 
   @override
   Widget build(BuildContext context) {
@@ -298,11 +296,11 @@ class _CallAllToggle extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  s.adminCallAllTitle,
+                  s.adminCallTitle,
                   style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
                 ),
                 Text(
-                  s.adminCallAllDesc,
+                  s.adminCallDesc,
                   style: AppText.bodySmall.copyWith(
                     color: AppTheme.textSecondary,
                   ),
@@ -312,65 +310,9 @@ class _CallAllToggle extends StatelessWidget {
             ),
           ),
           Switch(
-            value: auth.callAllEnabled,
+            value: auth.callAllEnabled && auth.callAnonEnabled,
             onChanged: (v) =>
-                context.read<AuthProvider>().setCallAllEnabled(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CallAnonToggle extends StatelessWidget {
-  const _CallAnonToggle();
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    final auth = context.watch<AuthProvider>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.person_outline_rounded,
-                color: Colors.orange, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.adminCallAnonTitle,
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  s.adminCallAnonDesc,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.callAnonEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setCallAnonEnabled(v),
+                context.read<AuthProvider>().setCallEnabled(v),
             activeThumbColor: AppTheme.primary,
           ),
         ],

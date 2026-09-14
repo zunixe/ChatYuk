@@ -21,6 +21,47 @@ import '../utils.dart';
 bool _isAdminSession() =>
     AdminGate.isRealAdmin(SupabaseConfig.client.auth.currentUser?.email);
 
+/// Port Dart dari sleepHours/hashInt edge function (ai-helpers.ts):
+/// `| 0` JS = 32-bit wrap → `.toSigned(32)`. HARUS identik supaya chip
+/// Tidur/Bangun di kartu sama dengan gate balasan di server.
+int _sleepHash(String s) {
+  var h = 0;
+  for (var i = 0; i < s.length; i++) {
+    h = (h * 31 + s.codeUnitAt(i)).toSigned(32);
+  }
+  return h.abs();
+}
+
+({int sleepHour, int wakeHour}) _sleepSpec(String uid, String dateWib) {
+  final h = _sleepHash('$uid|$dateWib|sleep');
+  return (sleepHour: 20 + (h % 4), wakeHour: 4 + ((h ~/ 4) % 3));
+}
+
+/// True bila dummy sedang jam tidur menurut jadwal server (WIB).
+bool _isAsleepNow(String uid, DateTime now) {
+  final wib = now.toUtc().add(const Duration(hours: 7));
+  final date =
+      '${wib.year.toString().padLeft(4, '0')}-${wib.month.toString().padLeft(2, '0')}-${wib.day.toString().padLeft(2, '0')}';
+  final spec = _sleepSpec(uid, date);
+  return wib.hour >= spec.sleepHour || wib.hour < spec.wakeHour;
+}
+
+/// ai_wake_until masih berlaku → dibangunkan paksa (balasan + online).
+bool _isWakeActive(Map<String, dynamic> item, DateTime now) {
+  final raw = '${item['ai_wake_until'] ?? ''}';
+  if (raw.isEmpty) return false;
+  final until = DateTime.tryParse(raw);
+  return until != null && until.isAfter(now);
+}
+
+/// Jam:menit WIB dari ISO string — netral bahasa (netral di semua locale).
+String _wibClock(String iso) {
+  final dt = DateTime.tryParse(iso);
+  if (dt == null) return '';
+  final wib = dt.toUtc().add(const Duration(hours: 7));
+  return '${wib.hour.toString().padLeft(2, '0')}:${wib.minute.toString().padLeft(2, '0')}';
+}
+
 /// Tab Dummy di Admin Panel — buat/daftarkan akun dummy (anonymous, tanpa
 /// email/password) dengan gender/umur/negara/kota, chat sebagai akun itu
 /// (swap sesi tanpa login manual), set status online/idle/offline,
@@ -368,6 +409,19 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     }
   }
 
+  /// Bangunkan dummy 30 menit: AI melek & membalas walau jam tidur,
+  /// presence dipaksa online. Chip kartu ikut berubah (konsisten).
+  Future<void> _wake(Map<String, dynamic> item, S s) async {
+    try {
+      await _svc.wakeDummy(item['uid'] as String);
+      await _load();
+      _toast(s, s.dummyWakeDone);
+    } catch (e) {
+      dlog('[DUMMY] wake error: $e');
+      _toast(s, s.dummyWakeFail);
+    }
+  }
+
   Future<void> _chatAs(Map<String, dynamic> item, S s) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -675,6 +729,7 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                             color: AppTheme.accent,
                           ),
                         ),
+                      _sleepChip(item, s),
                     ],
                   ),
                 ),
@@ -728,6 +783,16 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
                 ),
                 const SizedBox(width: 6),
                 _aiChip(item, s),
+                _dummyIconBtn(
+                  tooltip: s.dummyWake,
+                  icon: _isWakeActive(item, DateTime.now())
+                      ? Icons.alarm_on
+                      : Icons.alarm_add_outlined,
+                  color: _isWakeActive(item, DateTime.now())
+                      ? AppTheme.primary
+                      : AppTheme.textSecondary,
+                  onTap: () => _wake(item, s),
+                ),
                 _dummyIconBtn(
                   tooltip: s.statusInvisible,
                   icon: status == 'invisible'
@@ -869,11 +934,53 @@ class _AdminDummyTabState extends State<AdminDummyTab> {
     );
   }
 
+  /// Chip Tidur/Bangun di kartu dummy — bedakan "AI error" vs "lagi tidur":
+  /// Bangun paksa (wake aktif, teks + jam s/d) / Bangun (jam melek) / Tidur.
+  /// Dihitung dari jam tidur server + ai_wake_until (konsisten dgn gate).
+  /// Kalau ai_active_hours mencakup jam sekarang → paksa bangun (online 24j).
+  Widget _sleepChip(Map<String, dynamic> item, S s) {
+    final now = DateTime.now();
+    final wakeActive = _isWakeActive(item, now);
+    // Cek apakah jam sekarang ada di ai_active_hours → dummy bangun.
+    final wib = now.toUtc().add(const Duration(hours: 7));
+    final activeHours = _DummyAiSheetState._parseHours(item['ai_active_hours']);
+    final inActiveHours = activeHours.contains(wib.hour);
+    final asleep =
+        !wakeActive && !inActiveHours && _isAsleepNow('${item['uid'] ?? ''}', now);
+    final label = wakeActive
+        ? '${s.dummyAwake} • ${s.dummyWakeUntil.replaceFirst('%s', _wibClock('${item['ai_wake_until'] ?? ''}'))}'
+        : asleep
+            ? s.dummyAsleep
+            : s.dummyAwake;
+    final color = asleep ? AppTheme.textSecondary : AppTheme.online;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            asleep ? Icons.bedtime_outlined : Icons.alarm_on_outlined,
+            size: 13,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.caption.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Tombol ikon kartu dummy yang mepet: InkWell padding 4 (total 28px),
   /// tanpa min touch-target 48 ala IconButton. Visual ikon 20, jarak
   /// antar-ikon = 8px.
-  Widget _dummyIconBtn({
-    required String tooltip,
+  Widget _dummyIconBtn({    required String tooltip,
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
@@ -982,6 +1089,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
   late bool _enabled;
   int _guardSel = 0; // 0 = ikuti global, 1 = ON, 2 = OFF
   bool _noRate = false;
+  bool _photosEnabled = true;
   late final TextEditingController _maxRateCtrl;
   late final TextEditingController _minRateCtrl;
   // Default global (AI Bot) untuk hint: null = belum dimuat/gagal.
@@ -1009,6 +1117,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     _guardSel = g == true ? 1 : g == false ? 2 : 0;
     _schedAuto = (widget.item['ai_schedule_auto'] as bool?) ?? true;
     _noRate = (widget.item['ai_no_rate_limit'] as bool?) ?? false;
+    _photosEnabled = (widget.item['ai_photos_enabled'] as bool?) ?? true;
     _maxRateCtrl = TextEditingController(
       text: (widget.item['ai_max_replies'] as num?)?.toString() ?? '',
     );
@@ -1103,6 +1212,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
         maxReplies: int.tryParse(_maxRateCtrl.text.trim()),
         minInterval: int.tryParse(_minRateCtrl.text.trim()),
         activeHours: _hours.toList()..sort(),
+        photosEnabled: _photosEnabled,
       );
       widget.item['ai_enabled'] = _enabled;
       widget.item['ai_guard_enabled'] = guardValue;
@@ -1111,6 +1221,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
       widget.item['ai_min_interval'] = int.tryParse(_minRateCtrl.text.trim());
       widget.item['ai_active_hours'] = _hours.toList()..sort();
       widget.item['ai_schedule_auto'] = _schedAuto;
+      widget.item['ai_photos_enabled'] = _photosEnabled;
       if (!mounted) return;
       if (showResult) {
         Navigator.pop(context, true);
@@ -1381,6 +1492,36 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                     ),
                   ),
                   const Divider(height: 20),
+                  // ── Kirim foto AI ──
+                  _subBlock(
+                    label: s.dummyPhotosTitle,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          value: _photosEnabled,
+                          onChanged: (v) {
+                            setState(() => _photosEnabled = v);
+                            unawaited(_applyAi());
+                          },
+                          title: Text(
+                            s.dummyPhotosLabel,
+                            style: AppText.bodySmall,
+                          ),
+                          activeThumbColor: AppTheme.primary,
+                        ),
+                        Text(
+                          s.dummyPhotosDesc,
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 20),
                   // ── Jadwal kehadiran AI ──
                   // Cronjob online/idle/offline mengikuti jam aktif; offline =
                   // AI tidak membalas sama sekali. Jadwal dari kebiasaan chat.
@@ -1470,6 +1611,30 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
                           style: AppText.caption.copyWith(
                             color: AppTheme.textSecondary,
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            OutlinedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _hours = List.generate(24, (i) => i);
+                                });
+                                unawaited(_applyAi());
+                              },
+                              child: Text(s.dummyHoursSelectAll,
+                                  style: AppText.label),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: () {
+                                setState(() => _hours.clear());
+                                unawaited(_applyAi());
+                              },
+                              child: Text(s.dummyHoursClearAll,
+                                  style: AppText.label),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(

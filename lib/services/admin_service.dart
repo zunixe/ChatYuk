@@ -326,6 +326,15 @@ class AdminService {
     );
   }
 
+  /// Bangunkan dummy N menit (default 30): AI melek & membalas walau jam
+  /// tidur, presence dipaksa online. Lewat masa → normal otomatis.
+  Future<void> wakeDummy(String uid, {int minutes = 30}) async {
+    await _sb.rpc(
+      'admin_wake_dummy',
+      params: {'p_uid': uid, 'p_minutes': minutes},
+    );
+  }
+
   /// Toggle AI mode dummy + persona ({} = otomatis dari profil dummy).
   Future<void> setDummyAi(
     String uid,
@@ -340,6 +349,8 @@ class AdminService {
     // Model LLM per-dummy: id model (mis. 'mimo-v2.5-free'), 'NULL'
     // (uppercase) = reset ke default global, null = tidak diubah.
     String? model,
+    // Toggle kirim foto: true = AI bisa kirim foto, false = ditolak.
+    bool? photosEnabled,
   }) async {
     await _sb.rpc('admin_set_dummy_ai', params: {
       'p_uid': uid,
@@ -355,6 +366,7 @@ class AdminService {
       // Jadwal jam online: selalu dikirim (list dari editor grid).
       'p_active_hours': activeHours ?? const <int>[],
       if (model != null) 'p_model': model,
+      if (photosEnabled != null) 'p_photos_enabled': photosEnabled,
     });
   }
 

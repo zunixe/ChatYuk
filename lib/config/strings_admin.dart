@@ -321,21 +321,12 @@ extension SAdminX on S {
       ? 'Realtime — efek langsung ke semua device'
       : 'Realtime — immediate effect on all devices';
 
-  String get adminCallAllTitle => isId
-      ? 'Tombol Call untuk Semua User'
-      : 'Call Button for All Users';
-  String get adminCallAllOn => isId ? 'Semua user' : 'All users';
-  String get adminCallAllOff => isId ? 'Terdaftar saja' : 'Registered only';
-  String get adminCallAllDesc => isId
-      ? 'Saat aktif, ikon panggilan (audio/video) tampil untuk semua user termasuk yang belum daftar.'
-      : 'When enabled, the call (audio/video) icon appears for all users including unregistered ones.';
-
-  String get adminCallAnonTitle => isId
-      ? 'Anon & Dummy Bisa Call'
-      : 'Anon & Dummy Can Call';
-  String get adminCallAnonDesc => isId
-      ? 'Saat aktif, user anon dan akun dummy bisa menelepon. Saat mati, hanya user terdaftar (+ admin) yang bisa call (anti spam).'
-      : 'When enabled, anon users and dummy accounts can call. When off, only registered users (+ admin) can call (anti-spam).';
+  String get adminCallTitle => isId
+      ? 'Anon Bisa Call'
+      : 'Anon Can Call';
+  String get adminCallDesc => isId
+      ? 'Saat aktif, tombol panggilan tampil untuk semua user dan user anon/belum daftar bisa menelepon. Saat mati, hanya user terdaftar (+ admin) yang bisa call (anti spam).'
+      : 'When enabled, the call button appears for all users and anon/unregistered users can call. When off, only registered users (+ admin) can call (anti-spam).';
 
   String get adminRegisteredOnly =>
       isId ? 'Hanya user registered' : 'Registered users only';
@@ -519,6 +510,21 @@ extension SAdminX on S {
 
   String get dummyAiTooltip => isId ? 'Mode AI' : 'AI Mode';
 
+  // ── Bangunkan dummy 30 menit ──
+  String get dummyWake => isId ? 'Bangunkan 30 menit' : 'Wake up for 30 min';
+
+  String get dummyWakeDone =>
+      isId ? 'Dibangunkan 30 menit' : 'Woken for 30 minutes';
+
+  String get dummyWakeFail =>
+      isId ? 'Gagal membangunkan' : 'Failed to wake up';
+
+  String get dummyAwake => isId ? 'Bangun' : 'Awake';
+
+  String get dummyAsleep => isId ? 'Tidur' : 'Asleep';
+
+  String get dummyWakeUntil => isId ? 's/d %s' : 'till %s';
+
   String get dummyAiTitle => isId ? 'Mode AI Dummy' : 'Dummy AI Mode';
 
   String get dummyAiDesc => isId
@@ -541,6 +547,17 @@ extension SAdminX on S {
 
   String get dummyAiExtraHint =>
       isId ? 'Instruksi khusus untuk AI...' : 'Special instructions for the AI...';
+
+  // ── Kirim Foto (toggle per dummy) ──
+  String get dummyPhotosTitle =>
+      isId ? 'Kirim Foto' : 'Send Photos';
+
+  String get dummyPhotosLabel =>
+      isId ? 'AI bisa kirim foto' : 'AI can send photos';
+
+  String get dummyPhotosDesc => isId
+      ? 'Saat dimatikan, AI tidak mengirim foto dan tidak mengarahkan minta foto'
+      : 'When off, AI won\'t send photos or direct users to request them';
 
   String get dummyAiEnabledLabel => isId ? 'AI aktif' : 'AI on';
 
@@ -667,6 +684,9 @@ extension SAdminX on S {
   String get dummyHoursHint => isId
       ? 'Pilih jam online — kosong semua = tanpa jadwal otomatis. Cron menyeting status tiap 5 menit.'
       : 'Pick online hours — empty = no auto schedule. Cron sets status every 5 minutes.';
+
+  String get dummyHoursSelectAll => isId ? 'Semua 24 Jam' : 'All 24 Hours';
+  String get dummyHoursClearAll => isId ? 'Hapus Semua' : 'Clear All';
 
   String get aiGlobalModel => isId ? 'Model default' : 'Default model';
 

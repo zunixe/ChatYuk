@@ -295,6 +295,46 @@ class _AuthGateState extends State<_AuthGate> {
       return EntryScreen();
     }
 
+    // Nickname terlarang: user tidak bisa masuk app (kecuali admin).
+    // Berdiri SEBELUM needsProfile/MainNav — sesi tetap ada tapi diblokir
+    // di gerbang dengan pesan + tombol keluar.
+    final isAdminGate = context.select<AuthProvider, bool>((a) => a.isRealAdmin);
+    if (profile != null &&
+        !isAdminGate &&
+        isBannedNickname(profile.nickname)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
+      return Scaffold(
+        backgroundColor: AppTheme.bgScreen,
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.block, color: AppTheme.textSecondary, size: 48),
+                SizedBox(height: 16),
+                Text(s.errNicknameBanned, style: AppText.title),
+                SizedBox(height: 8),
+                Text(
+                  profile.nickname,
+                  textAlign: TextAlign.center,
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () => context.read<AuthProvider>().signOut(),
+                  icon: const Icon(Icons.logout),
+                  label: Text(s.btnLogout),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (needsProfile) {
       return _ProfileGate(child: _MainNav());
     }
@@ -498,8 +538,11 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final auth = context.read<AuthProvider>();
     if (state == AppLifecycleState.paused) {
-      // App di-background/ditutup → set idle, bukan offline.
-      // User tetap tampil di menu online sebagai idle, baru hilang saat logout.
+      // App di-background → set idle, bukan offline.
+      // User tetap tampil di menu online sebagai idle.
+      auth.goIdle();
+    } else if (state == AppLifecycleState.detached) {
+      // App di-kill/force-close → set idle (offline otomatis setelah threshold).
       auth.goIdle();
     } else if (state == AppLifecycleState.resumed) {
       // Re-sync invisible dulu (multi-device) supaya device kedua tidak
