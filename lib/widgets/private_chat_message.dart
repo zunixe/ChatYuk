@@ -925,7 +925,7 @@ class MessageBubble extends StatelessWidget {
                                 : AppTheme.textSecondary;
                             return RichText(
                               text: TextSpan(
-                                style: AppText.body.copyWith(
+                                style: AppText.chatBody.copyWith(
                                   color: AppTheme.textSecondary,
                                 ),
                                 children: [
