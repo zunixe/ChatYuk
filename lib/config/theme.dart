@@ -2,47 +2,108 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'fonts.dart';
+
 /// Skala tipografi resmi ChatYuk — 8 ukuran, 11 token.
 /// Aturan lengkap ada di AGENTS.md bagian "Tipografi".
 /// JANGAN tulis `fontSize:` di file lain — pakai token ini.
 /// Token berupa getter supaya warna teks ikut mode terang/gelap.
+///
+/// Font mengikuti [AppFonts.current] (dipilih admin, global realtime):
+/// - key 'default' → judul/CTA Poppins, body Roboto (perilaku lama).
+/// - key lain (mis. 'inter') → SEMUA token teks memakai font itu.
+/// Blok kode [code] selalu monospace, tidak terpengaruh.
 class AppText {
   AppText._();
 
+  // ── Helper font dinamis ──
+  /// Token judul/CTA: Poppins saat default, font terpilih saat override.
+  static TextStyle _brand(
+    double size,
+    FontWeight weight, {
+    double? height,
+    Color? color,
+    double? letterSpacing,
+  }) {
+    final family = AppFonts.family();
+    if (family == null) {
+      return GoogleFonts.poppins(
+        fontSize: size,
+        fontWeight: weight,
+        height: height,
+        color: color,
+        letterSpacing: letterSpacing,
+      );
+    }
+    return GoogleFonts.getFont(
+      family,
+      fontSize: size,
+      fontWeight: weight,
+      height: height,
+      color: color,
+      letterSpacing: letterSpacing,
+    );
+  }
+
+  /// Token body: Roboto (tanpa fontFamily) saat default, font terpilih
+  /// saat override.
+  ///
+  /// PENTING: saat override, WAJIB lewat `the underlying provider Fonts.getFont`
+  /// (bukan `TextStyle(fontFamily: 'Inter')`) karena font runtime the underlying provider Fonts
+  /// terdaftar dengan nama family internal ber-suffix (mis. `Inter_regular`,
+  /// `Inter_700`) + `fontFamilyFallback`. `TextStyle(fontFamily: 'Inter')`
+  /// TIDAK memetakan ke font itu → teks jatuh ke default (bug "cuma header
+  /// yang berubah").
+  static TextStyle _plain(
+    double size,
+    FontWeight weight, {
+    required double height,
+    required Color color,
+    double? letterSpacing,
+  }) {
+    final family = AppFonts.family();
+    if (family != null) {
+      return GoogleFonts.getFont(
+        family,
+        fontSize: size,
+        fontWeight: weight,
+        height: height,
+        letterSpacing: letterSpacing,
+        color: color,
+      );
+    }
+    return TextStyle(
+      fontSize: size,
+      fontWeight: weight,
+      height: height,
+      letterSpacing: letterSpacing,
+      color: color,
+    );
+  }
+
   // 10 — timestamp, badge unread, counter overlay
-  static TextStyle get micro => TextStyle(
-    fontSize: 10,
-    fontWeight: FontWeight.w500,
-    height: 1.2,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get micro =>
+      _plain(10, FontWeight.w500, height: 1.2, color: AppTheme.textPrimary);
 
   // 11 — label di atas nilai, helper text, chip status
-  static TextStyle get caption => TextStyle(
-    fontSize: 11,
-    fontWeight: FontWeight.w400,
-    height: 1.3,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get caption =>
+      _plain(11, FontWeight.w400, height: 1.3, color: AppTheme.textPrimary);
 
   // 12 w600 — section label, tab, chip/badge
-  static TextStyle get label => TextStyle(
-    fontSize: 12,
-    fontWeight: FontWeight.w600,
+  static TextStyle get label => _plain(
+    12,
+    FontWeight.w600,
     height: 1.2,
     letterSpacing: 0.3,
     color: AppTheme.textPrimary,
   );
 
   // 12 w400 — subtitle list, deskripsi, teks sekunder
-  static TextStyle get bodySmall => TextStyle(
-    fontSize: 12,
-    fontWeight: FontWeight.w400,
-    height: 1.35,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get bodySmall =>
+      _plain(12, FontWeight.w400, height: 1.35, color: AppTheme.textPrimary);
 
-  // 12 w400 monospace — isi blok kode di bubble chat
+  // 12 w400 monospace — isi blok kode di bubble chat.
+  // Sengaja TIDAK ikut font global supaya kode tetap rapi.
   static TextStyle get code => TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w400,
@@ -53,60 +114,33 @@ class AppText {
   );
 
   // 14 w400 — bubble chat, isi dialog, composer, paragraf
-  static TextStyle get body => TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w400,
-    height: 1.35,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get body =>
+      _plain(14, FontWeight.w400, height: 1.35, color: AppTheme.textPrimary);
 
   // 14 w600 — judul list tile, label setting, nilai info
-  static TextStyle get bodyStrong => TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w600,
-    height: 1.35,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get bodyStrong =>
+      _plain(14, FontWeight.w600, height: 1.35, color: AppTheme.textPrimary);
 
   // 16 w700 — label tombol CTA (warna ikut foregroundColor tombol)
-  // Heading & CTA memakai Poppins (brand); body chat tetap Roboto.
-  static TextStyle get button => GoogleFonts.poppins(
-    fontSize: 16,
-    fontWeight: FontWeight.w700,
-    height: 1.2,
-  );
+  // Heading & CTA memakai Poppins (brand) saat default; saat admin memilih
+  // font lain, token judul/CTA ikut font itu.
+  static TextStyle get button => _brand(16, FontWeight.w700, height: 1.2);
 
   // 16 w700 — judul kartu / section (admin)
-  static TextStyle get titleEmphasis => GoogleFonts.poppins(
-    fontSize: 16,
-    fontWeight: FontWeight.w700,
-    height: 1.25,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get titleEmphasis =>
+      _brand(16, FontWeight.w700, height: 1.25, color: AppTheme.textPrimary);
 
   // 17 w700 — judul AppBar, dialog, bottom sheet
-  static TextStyle get title => GoogleFonts.poppins(
-    fontSize: 17,
-    fontWeight: FontWeight.w700,
-    height: 1.25,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get title =>
+      _brand(17, FontWeight.w700, height: 1.25, color: AppTheme.textPrimary);
 
   // 20 w800 — nama user di header profil
-  static TextStyle get headline => GoogleFonts.poppins(
-    fontSize: 20,
-    fontWeight: FontWeight.w800,
-    height: 1.2,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get headline =>
+      _brand(20, FontWeight.w800, height: 1.2, color: AppTheme.textPrimary);
 
   // 24 w800 — saldo wallet, angka hero, tagline
-  static TextStyle get display => GoogleFonts.poppins(
-    fontSize: 24,
-    fontWeight: FontWeight.w800,
-    height: 1.15,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle get display =>
+      _brand(24, FontWeight.w800, height: 1.15, color: AppTheme.textPrimary);
 }
 
 /// Ukuran emoji & ikon dekoratif (bukan teks). Lihat AGENTS.md.
@@ -158,12 +192,18 @@ class AppTheme {
   /// Mode aktif — di-set oleh ThemeProvider sebelum notifyListeners.
   static bool isDark = false;
 
+  /// Revisi font — di-increment tiap font global berubah supaya ThemeData
+  /// getter menghasilkan instance baru (MaterialApp rebuild penuh).
+  static int fontRevision = 0;
+
   /// Inisialisasi sinkron theme dari SharedPreferences.
   /// HARUS dipanggil SEBELUM runApp() supaya frame pertama langsung pakai
   /// tema yang benar (menghilangkan flash putih saat cold start).
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     isDark = prefs.getBool('app_theme_dark') ?? true;
+    // Font global tersimpan — frame pertama langsung pakai font yang benar.
+    await AppFonts.init();
   }
 
   // ── Brand (konstan di kedua mode) ──
@@ -250,9 +290,14 @@ class AppTheme {
     required Color textSecondary,
   }) {
     final isLight = brightness == Brightness.light;
+    // Jaring aman: teks yang tidak lewat token AppText (style bawaan
+    // Material/ListTile default, dsb) tetap ikut font global.
+    final fontOverride = AppFonts.themeFontOverride();
     return ThemeData(
       brightness: brightness,
       primaryColor: primary,
+      fontFamily: fontOverride?.family,
+      fontFamilyFallback: fontOverride?.fallback,
       scaffoldBackgroundColor: bgScreen,
       colorScheme: ColorScheme(
         brightness: brightness,

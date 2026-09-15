@@ -420,6 +420,7 @@ class AdminService {
     int? maxReplies,
     int? minInterval,
     bool? guardEnabled,
+    bool? aiAiEnabled,
     String? apiBase,
     String? apiKey,
     String? defaultModel,
@@ -429,6 +430,7 @@ class AdminService {
       if (maxReplies != null) 'p_max_replies': maxReplies,
       if (minInterval != null) 'p_min_interval': minInterval,
       if (guardEnabled != null) 'p_guard_enabled': guardEnabled,
+      if (aiAiEnabled != null) 'p_ai_ai_enabled': aiAiEnabled,
       if (apiBase != null && apiBase.isNotEmpty) 'p_api_base': apiBase,
       if (apiKey != null && apiKey.isNotEmpty) 'p_api_key': apiKey,
       if (defaultModel != null && defaultModel.isNotEmpty)

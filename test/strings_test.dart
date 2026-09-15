@@ -165,11 +165,16 @@ void main() {
         .where((f) => f.path.endsWith('.dart'))
         .toList();
 
+    // Normalisasi separator path (Windows: `lib\config\...`) supaya
+    // pengecualian lib/config bekerja lintas OS.
+    bool inLibConfig(File f) =>
+        f.path.replaceAll(r'\', '/').contains('lib/config/');
+
     test('tidak ada fontSize numerik di luar lib/config', () {
       final hits = <String>[];
       final re = RegExp(r'fontSize:\s*[0-9]');
       for (final f in libFiles()) {
-        if (f.path.contains('lib/config/')) continue;
+        if (inLibConfig(f)) continue;
         final src = f.readAsStringSync();
         for (final m in re.allMatches(src)) {
           hits.add('${f.path}: ${m.group(0)}');
@@ -194,7 +199,7 @@ void main() {
       final hits = <String>[];
       final re = RegExp(r'height:\s*1\.');
       for (final f in libFiles()) {
-        if (f.path.contains('lib/config/')) continue;
+        if (inLibConfig(f)) continue;
         final src = f.readAsStringSync();
         for (final m in re.allMatches(src)) {
           hits.add('${f.path}: ${m.group(0)}');

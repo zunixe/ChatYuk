@@ -14,6 +14,7 @@ import 'providers/points_provider.dart';
 import 'providers/social_provider.dart';
 import 'core/admin_gate.dart';
 import 'providers/locale_provider.dart';
+import 'services/message_cache.dart';
 import 'models/user_model.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/call_provider.dart';
@@ -86,52 +87,60 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider.value(value: CallProvider.instance),
       ],
-      child: Consumer2<LocaleProvider, ThemeProvider>(
-        builder: (context, _, theme, _) => MaterialApp(
-          title: 'ChatYuk',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: theme.themeMode,
-          navigatorKey: navigatorKey,
-          navigatorObservers: [routeTracker],
-          // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
-          // tapi tetap menghormati preferensi aksesibilitas user.
-          builder: (context, child) => WithForegroundTask(
-            // Pelapor aktivitas GLOBAL: setiap sentuhan di layar APAPUN
-            // (chat/room/profil/dialog/bottom-sheet) me-reset timer idle
-            // dan mengembalikan idle→online. Dulu hanya body _MainNav yang
-            // melapor, sehingga user yang lama di layar chat tercatat
-            // 'idle' di server walau sedang aktif mengetik.
-            // Listener hanya mengamati (tidak rebut gesture), murah:
-            // tanpa idle→online cuma cancel+restart satu Timer.
-            child: Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: (_) {
-                try {
-                  context.read<AuthProvider>().notifyActivity();
-                } catch (_) {}
-              },
-              child: OfflineBanner(
-                child: Stack(
-                  children: [
-                    MediaQuery.withClampedTextScaling(
-                      minScaleFactor: 0.9,
-                      maxScaleFactor: 1.3,
-                      child: child ?? const SizedBox.shrink(),
-                    ),
-                    const Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: CallBanner(),
-                    ),
-                  ],
+      // Selector hanya pada appFontFamily → MaterialApp hanya rebuild saat
+      // font global berubah (bukan tiap notifikasi AuthProvider).
+      child: Selector<AuthProvider, String>(
+        selector: (_, auth) => auth.appFontFamily,
+        builder: (context, _, __) => Consumer2<LocaleProvider, ThemeProvider>(
+          builder: (context, _, theme, _) => MaterialApp(
+            title: 'ChatYuk',
+            debugShowCheckedModeBanner: false,
+            // Tidak pakai `key` agar navigasi tidak ter-reset saat font berubah;
+            // rebuild + getter AppTheme.*Theme (dibangun ulang tiap build)
+            // sudah cukup mengganti ThemeData ke font terbaru.
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: theme.themeMode,
+            navigatorKey: navigatorKey,
+            navigatorObservers: [routeTracker],
+            // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
+            // tapi tetap menghormati preferensi aksesibilitas user.
+            builder: (context, child) => WithForegroundTask(
+              // Pelapor aktivitas GLOBAL: setiap sentuhan di layar APAPUN
+              // (chat/room/profil/dialog/bottom-sheet) me-reset timer idle
+              // dan mengembalikan idle→online. Dulu hanya body _MainNav yang
+              // melapor, sehingga user yang lama di layar chat tercatat
+              // 'idle' di server walau sedang aktif mengetik.
+              // Listener hanya mengamati (tidak rebut gesture), murah:
+              // tanpa idle→online cuma cancel+restart satu Timer.
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (_) {
+                  try {
+                    context.read<AuthProvider>().notifyActivity();
+                  } catch (_) {}
+                },
+                child: OfflineBanner(
+                  child: Stack(
+                    children: [
+                      MediaQuery.withClampedTextScaling(
+                        minScaleFactor: 0.9,
+                        maxScaleFactor: 1.3,
+                        child: child ?? const SizedBox.shrink(),
+                      ),
+                      const Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: CallBanner(),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
+            home: _AuthGate(),
           ),
-          home: _AuthGate(),
         ),
       ),
     );
@@ -224,9 +233,12 @@ class _AuthGateState extends State<_AuthGate> {
     // me-rebuild seluruh gate pada tiap notifyListeners (presence, poin).
     final loading = context.select<AuthProvider, bool>((a) => a.loading);
     final error = context.select<AuthProvider, String?>((a) => a.error);
-    final isAnonymous = context.select<AuthProvider, bool>((a) => a.isAnonymous);
-    final dummySessionActive =
-        context.select<AuthProvider, bool>((a) => a.dummySessionActive);
+    final isAnonymous = context.select<AuthProvider, bool>(
+      (a) => a.isAnonymous,
+    );
+    final dummySessionActive = context.select<AuthProvider, bool>(
+      (a) => a.dummySessionActive,
+    );
     final profile = context.select<AuthProvider, UserModel?>((a) => a.profile);
     final s = context.watch<LocaleProvider>().s;
     // Watch ThemeProvider supaya seluruh tree rebuild saat mode gelap/terang
@@ -283,11 +295,10 @@ class _AuthGateState extends State<_AuthGate> {
     // diisi. Anon bebas (pakai AnonPromptDialog per fitur). Sesi dummy
     // admin juga bebas — bukan user sungguhan.
     final p = profile;
-    final needsProfile = !isAnonymous &&
+    final needsProfile =
+        !isAnonymous &&
         !dummySessionActive &&
-        (p == null ||
-            p.nickname.trim().isEmpty ||
-            !p.isRegistered);
+        (p == null || p.nickname.trim().isEmpty || !p.isRegistered);
 
     if (profile == null && isAnonymous) {
       // Jalur anon belum isi form: EntryScreen first-frame → angkat overlay.
@@ -298,10 +309,10 @@ class _AuthGateState extends State<_AuthGate> {
     // Nickname terlarang: user tidak bisa masuk app (kecuali admin).
     // Berdiri SEBELUM needsProfile/MainNav — sesi tetap ada tapi diblokir
     // di gerbang dengan pesan + tombol keluar.
-    final isAdminGate = context.select<AuthProvider, bool>((a) => a.isRealAdmin);
-    if (profile != null &&
-        !isAdminGate &&
-        isBannedNickname(profile.nickname)) {
+    final isAdminGate = context.select<AuthProvider, bool>(
+      (a) => a.isRealAdmin,
+    );
+    if (profile != null && !isAdminGate && isBannedNickname(profile.nickname)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
       return Scaffold(
         backgroundColor: AppTheme.bgScreen,
@@ -341,9 +352,13 @@ class _AuthGateState extends State<_AuthGate> {
 
     // Warm-gate: tunggu disk cache tab pertama siap (maks 800ms) dengan
     // tampilan polos bgScreen — NOL warna abu — lalu konten langsung utuh.
+    // + Preload list chat ke MEMORI: layar chat membaca `lastReadAt` dari
+    //   sana secara SINKRON → centang-2 tidak lagi menunggu hop async.
+    final warmUid = context.read<AuthProvider>().uid;
     _warmFuture ??= Future.wait([
       context.read<RoomProvider>().warmFuture,
       context.read<OnlineUsersProvider>().warmup(),
+      if (warmUid != null) MessageCache.instance.preloadRawList(warmUid),
     ]).timeout(_warmTimeout, onTimeout: () async => const <void>[]);
     return FutureBuilder<void>(
       future: _warmFuture,
@@ -406,28 +421,26 @@ class _ProfileGate extends StatelessWidget {
                   24,
                   16 + MediaQuery.viewInsetsOf(context).bottom,
                 ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: screenH * 0.85,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: screenH * 0.85),
+                  // Bayangan luar supaya kartu terlihat mengambang.
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 32,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
                     ),
-                    // Bayangan luar supaya kartu terlihat mengambang.
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            blurRadius: 32,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: RegisterScreen(mode: RegisterMode.profileOnly),
-                      ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: RegisterScreen(mode: RegisterMode.profileOnly),
                     ),
                   ),
+                ),
               ),
             ),
           ),
@@ -454,14 +467,14 @@ class _SwapMaskState extends State<_SwapMask> {
       });
     });
   }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         widget.child,
         // Penutup sementara — samakan tampilan dengan warm-gate di atasnya.
-        if (_covered)
-          const Positioned.fill(child: _AuthSkeletonScreen()),
+        if (_covered) const Positioned.fill(child: _AuthSkeletonScreen()),
       ],
     );
   }
@@ -589,122 +602,126 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     // Read tetap jalan (anon masih browsing), tulis dicegat di composer.
     final anonBanner = auth.anonBlocked;
     return Scaffold(
-        body: Column(
-          children: [
-            // Banner anon: cegah tertutup status bar pada edge-to-edge
-            // Android 15. Banner jadi elemen teratas → ambil inset atas
-            // sendiri; AppBar tab di bawahnya di-nol-kan inset atasnya
-            // (removeTop) supaya tidak dobel.
-            if (anonBanner)
-              SafeArea(
-                bottom: false,
-                child: Material(
-                  color: AppTheme.primary.withValues(alpha: 0.12),
-                  child: InkWell(
-                    onTap: () => showAnonPromptDialog(context),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline,
-                                size: 16,
-                                color: AppTheme.primary),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                s.anonGateBanner,
-                                style: AppText.caption
-                                    .copyWith(color: AppTheme.textPrimary),
-                              ),
-                            ),
-                            Text(
-                              s.anonGateBannerCta,
+      body: Column(
+        children: [
+          // Banner anon: cegah tertutup status bar pada edge-to-edge
+          // Android 15. Banner jadi elemen teratas → ambil inset atas
+          // sendiri; AppBar tab di bawahnya di-nol-kan inset atasnya
+          // (removeTop) supaya tidak dobel.
+          if (anonBanner)
+            SafeArea(
+              bottom: false,
+              child: Material(
+                color: AppTheme.primary.withValues(alpha: 0.12),
+                child: InkWell(
+                  onTap: () => showAnonPromptDialog(context),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: AppTheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              s.anonGateBanner,
                               style: AppText.caption.copyWith(
-                                color: AppTheme.primary,
-                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          Text(
+                            s.anonGateBannerCta,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: () => context.read<AuthProvider>().notifyActivity(),
-                onPanDown: (_) =>
-                    context.read<AuthProvider>().notifyActivity(),
-                // Saat banner menempel di atas, ia sudah mengambil inset atas
-                // → nol-kan inset atas AppBar tab supaya tidak dobel.
-                child: MediaQuery.removePadding(
-                  context: context,
-                  removeTop: anonBanner,
-                  child: IndexedStack(
-                    index: tab,
-                    children: [
-                      for (var i = 0; i < _pages!.length; i++)
-                        _visitedTabs.contains(i)
-                            ? _pages![i]
-                            : const SizedBox.shrink(),
-                    ],
-                  ),
-                ),
-              ),
             ),
-          ],
-        ),
-        floatingActionButton: SizedBox(
-          width: 52,
-          height: 52,
-          child: FloatingActionButton(
-            onPressed: () {
-              final auth = context.read<AuthProvider>();
-              // Anon (belum isi email) — samakan dengan timeline: arahkan
-              // ke profil, jangan buka composer.
-              if (!(auth.profile?.isRegistered ?? false)) {
-                showAnonPromptDialog(context);
-                return;
-              }
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const PostComposerScreen()),
-              );
-            },
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppTheme.primaryDark,
-                    AppTheme.primary,
-                    AppTheme.accent,
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => context.read<AuthProvider>().notifyActivity(),
+              onPanDown: (_) => context.read<AuthProvider>().notifyActivity(),
+              // Saat banner menempel di atas, ia sudah mengambil inset atas
+              // → nol-kan inset atas AppBar tab supaya tidak dobel.
+              child: MediaQuery.removePadding(
+                context: context,
+                removeTop: anonBanner,
+                child: IndexedStack(
+                  index: tab,
+                  children: [
+                    for (var i = 0; i < _pages!.length; i++)
+                      _visitedTabs.contains(i)
+                          ? _pages![i]
+                          : const SizedBox.shrink(),
                   ],
                 ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primary.withValues(alpha: 0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
-              child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
             ),
           ),
+        ],
+      ),
+      floatingActionButton: SizedBox(
+        width: 52,
+        height: 52,
+        child: FloatingActionButton(
+          onPressed: () {
+            final auth = context.read<AuthProvider>();
+            // Anon (belum isi email) — samakan dengan timeline: arahkan
+            // ke profil, jangan buka composer.
+            if (!(auth.profile?.isRegistered ?? false)) {
+              showAnonPromptDialog(context);
+              return;
+            }
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PostComposerScreen()),
+            );
+          },
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.primaryDark,
+                  AppTheme.primary,
+                  AppTheme.accent,
+                ],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
+          ),
         ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: _BottomNav(currentIndex: tab, onTap: _onNavTap),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: _BottomNav(currentIndex: tab, onTap: _onNavTap),
     );
   }
 }
@@ -722,15 +739,14 @@ class _BottomNav extends StatelessWidget {
     // Badge hijau = jumlah user berstatus online (di luar diri sendiri
     // & yang diblokir) — cermin filter list tab Online tanpa filter
     // negara/gender/search.
-    final onlineCount = context
-        .select<OnlineUsersProvider, int>(
-          (p) => p.users
-              .where((u) =>
-                  u.uid != uid &&
-                  !chat.isBlocked(u.uid) &&
-                  u.status == 'online')
-              .length,
-        );
+    final onlineCount = context.select<OnlineUsersProvider, int>(
+      (p) => p.users
+          .where(
+            (u) =>
+                u.uid != uid && !chat.isBlocked(u.uid) && u.status == 'online',
+          )
+          .length,
+    );
 
     return StreamBuilder<List<PrivateChatInfo>>(
       stream: uid != null ? chat.getMyPrivateChats(uid) : const Stream.empty(),
@@ -747,12 +763,23 @@ class _BottomNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _navItem(context, Icons.group_rounded, s.navOnline, 0,
-                  badge: onlineCount,
-                  badgeColor: AppTheme.onlineDark,
-                  badgePill: true),
-              _navItem(context, Icons.chat_bubble, s.navChats, 1,
-                  badge: totalUnread, badgePill: true),
+              _navItem(
+                context,
+                Icons.group_rounded,
+                s.navOnline,
+                0,
+                badge: onlineCount,
+                badgeColor: AppTheme.onlineDark,
+                badgePill: true,
+              ),
+              _navItem(
+                context,
+                Icons.chat_bubble,
+                s.navChats,
+                1,
+                badge: totalUnread,
+                badgePill: true,
+              ),
               const SizedBox(width: 48),
               _navItem(context, Icons.dynamic_feed_rounded, s.navTimeline, 2),
               _navItem(context, Icons.person, s.navProfile, 3),
@@ -798,11 +825,9 @@ class _BottomNav extends StatelessWidget {
       );
     }
     return TweenAnimationBuilder<double>(
-      tween: Tween<double>(
-          begin: selected ? 0 : 1, end: selected ? 1 : 0),
+      tween: Tween<double>(begin: selected ? 0 : 1, end: selected ? 1 : 0),
       duration: Duration(milliseconds: selected ? 500 : 250),
-      curve:
-          selected ? Curves.linear : const Cubic(0.2, 0.0, 0.0, 1.0),
+      curve: selected ? Curves.linear : const Cubic(0.2, 0.0, 0.0, 1.0),
       builder: (context, t, child) {
         final w = t >= 1 ? 1.0 : 1 - math.pow(2, -10 * t).toDouble();
         final o = (t / 0.25).clamp(0.0, 1.0);
@@ -836,10 +861,15 @@ class _BottomNav extends StatelessWidget {
     );
   }
 
-  Widget _navItem(BuildContext context, IconData icon, String label, int index,
-      {int badge = 0,
-      Color badgeColor = AppTheme.danger,
-      bool badgePill = false}) {
+  Widget _navItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    int index, {
+    int badge = 0,
+    Color badgeColor = AppTheme.danger,
+    bool badgePill = false,
+  }) {
     final selected = currentIndex == index;
     // Pil terpilih = soft transparan ala WhatsApp: tint primary tipis
     // di belakang ikon solid — kalem, tidak norak.
@@ -863,11 +893,12 @@ class _BottomNav extends StatelessWidget {
               context: context,
               selected: selected,
               child: _BadgedIcon(
-                  icon: icon,
-                  count: badge,
-                  color: iconColor,
-                  badgeColor: badgeColor,
-                  badgePill: badgePill),
+                icon: icon,
+                count: badge,
+                color: iconColor,
+                badgeColor: badgeColor,
+                badgePill: badgePill,
+              ),
             ),
             const SizedBox(height: 1),
             Text(label, style: AppText.micro.copyWith(color: labelColor)),
@@ -884,12 +915,13 @@ class _BadgedIcon extends StatelessWidget {
   final Color? color;
   final Color badgeColor;
   final bool badgePill;
-  const _BadgedIcon(
-      {required this.icon,
-      required this.count,
-      this.color,
-      this.badgeColor = AppTheme.danger,
-      this.badgePill = false});
+  const _BadgedIcon({
+    required this.icon,
+    required this.count,
+    this.color,
+    this.badgeColor = AppTheme.danger,
+    this.badgePill = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -908,7 +940,8 @@ class _BadgedIcon extends StatelessWidget {
             width: badgePill || count >= 10 ? null : 16,
             height: 16,
             padding: EdgeInsets.symmetric(
-                horizontal: badgePill ? 6 : (count < 10 ? 0 : 4)),
+              horizontal: badgePill ? 6 : (count < 10 ? 0 : 4),
+            ),
             constraints: const BoxConstraints(minWidth: 16),
             decoration: BoxDecoration(
               color: badgeColor,
@@ -983,11 +1016,7 @@ class _AuthSkeletonScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
-          children: [
-            box(100, 18),
-            const SizedBox(height: 2),
-            box(60, 12),
-          ],
+          children: [box(100, 18), const SizedBox(height: 2), box(60, 12)],
         ),
         actions: [
           Padding(
@@ -1042,14 +1071,12 @@ class _AuthSkeletonScreen extends StatelessWidget {
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       itemCount: 3,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(width: 10),
+                      separatorBuilder: (_, __) => const SizedBox(width: 10),
                       itemBuilder: (_, __) => Container(
                         width: 64,
                         height: 96,
                         decoration: BoxDecoration(
-                          color:
-                              AppTheme.primary.withValues(alpha: 0.10),
+                          color: AppTheme.primary.withValues(alpha: 0.10),
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),

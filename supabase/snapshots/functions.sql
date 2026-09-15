@@ -25,14 +25,14 @@ begin
     where da.ai_enabled = true
   loop
     begin
-      -- Invisible manual (set dari admin panel) — cron tidak boleh
+      -- Invisible manual (set dari admin panel) â€” cron tidak boleh
       -- menimpa (baik membangunkan saat jam aktif maupun meng-offline-kan
       -- di luar jam). AI tetap membalas; presence-wake ai-reply juga
       -- mempertahankan status ini (cabang else = refresh last_seen saja).
       if d.cur_status = 'invisible' then
         continue;
       end if;
-      -- ── BANGUNKAN SEMENTARA (admin_wake_dummy): paksa online + segar
+      -- â”€â”€ BANGUNKAN SEMENTARA (admin_wake_dummy): paksa online + segar
       -- sampai ai_wake_until lewat. Mengalahkan jadwal & tidur.
       v_wake := d.ai_wake_until is not null and d.ai_wake_until > now();
       if v_wake then
@@ -45,11 +45,11 @@ begin
         end if;
         continue;
       end if;
-      -- Wake kedaluwarsa → bersihkan sekali (jadwal di bawah mengambil alih).
+      -- Wake kedaluwarsa â†’ bersihkan sekali (jadwal di bawah mengambil alih).
       if d.ai_wake_until is not null then
         update public.dummy_accounts set ai_wake_until = null where uid = d.uid;
       end if;
-      -- ── MODE NGAMBEK (marah pergi) ──
+      -- â”€â”€ MODE NGAMBEK (marah pergi) â”€â”€
       if d.ai_offline_until is not null and d.ai_offline_until > now() then
         if d.cur_status <> 'offline' then
           update public.profiles
@@ -58,7 +58,7 @@ begin
         end if;
         continue; -- abaikan jadwal jam aktif selama ngambek
       end if;
-      -- Waktu ngambek habis → bangunkan sesuai jadwal.
+      -- Waktu ngambek habis â†’ bangunkan sesuai jadwal.
       if d.ai_offline_until is not null and d.ai_offline_until <= now() then
         update public.dummy_accounts set ai_offline_until = null, ai_mood = 'normal'
           where uid = d.uid;
@@ -73,8 +73,8 @@ begin
         continue;
       end if;
 
-      -- ── SELALU ONLINE (cabang restore 13070000; hanya Admin Chatyuk
-      -- yang flag-nya true) — jadwal & idle-drift dilewati: paksa online
+      -- â”€â”€ SELALU ONLINE (cabang restore 13070000; hanya Admin Chatyuk
+      -- yang flag-nya true) â€” jadwal & idle-drift dilewati: paksa online
       -- + last_seen segar. Dummy lain (false) lewat sini tanpa perubahan.
       if coalesce(d.ai_always_online, false) then
         if d.cur_status <> 'online' then
@@ -87,7 +87,7 @@ begin
         continue;
       end if;
 
-      -- Jadwal belum diatur → jangan sentuh presence (mode manual).
+      -- Jadwal belum diatur â†’ jangan sentuh presence (mode manual).
       if d.ai_active_hours is null or
          jsonb_array_length(d.ai_active_hours) = 0 then
         continue;
@@ -106,7 +106,7 @@ begin
            set status = 'online', last_seen = now()
          where id = d.uid;
       elsif v_active and d.cur_status = 'online' then
-        -- Kadang melamun seperti user mendiamkan app: 30%/tick → idle.
+        -- Kadang melamun seperti user mendiamkan app: 30%/tick â†’ idle.
         if random() < 0.30 then
           update public.profiles
              set status = 'idle', last_seen = now()
@@ -116,7 +116,7 @@ begin
           update public.profiles set last_seen = now() where id = d.uid;
         end if;
       elsif v_active and d.cur_status = 'idle' then
-        -- Kembali pegang HP: 50%/tick → online. last_seen selalu segar
+        -- Kembali pegang HP: 50%/tick â†’ online. last_seen selalu segar
         -- supaya idle tetap tampil di daftar online.
         if random() < 0.50 then
           update public.profiles
@@ -136,7 +136,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: ai_reply_enqueue @ 20260914060000_ai_reply_log_fix.sql
+-- snapshot-fn: ai_reply_enqueue @ 20260915093000_ai_reply_enqueue_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_reply_enqueue()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -150,6 +150,7 @@ declare
   v_sender_no_rate boolean;
   v_sender_is_dummy boolean;
   v_global boolean;
+  v_ai_ai_on boolean;
   v_max int;
   v_min int;
   v_gmax int;
@@ -176,7 +177,7 @@ begin
   end if;
 
   -- Recipient must be an AI-enabled dummy (ambil config sekalian).
-  -- PENTING: pakai IF NOT FOUND (bukan cek null!) — kolom flag boleh null.
+  -- PENTING: pakai IF NOT FOUND (bukan cek null!) â”œÃ„Î“Ã‡Â£â”œÃ¢Î“Ã‡Ã­â”œÃ¢â”¬â•¢ kolom flag boleh null.
   select d.ai_no_rate_limit, d.ai_always_reply, d.ai_max_replies, d.ai_min_interval
     into v_no_rate, v_always_reply, v_max, v_min
   from public.dummy_accounts d
@@ -190,15 +191,22 @@ begin
     select 1 from public.dummy_accounts d where d.uid = new.sender_id
   );
 
-  select s.ai_global_enabled, s.ai_max_replies_per_hour, s.ai_min_interval_sec
-    into v_global, v_gmax, v_gmin
+  select s.ai_global_enabled, s.ai_max_replies_per_hour, s.ai_min_interval_sec,
+         coalesce(s.ai_ai_chat_enabled, true)
+    into v_global, v_gmax, v_gmin, v_ai_ai_on
   from public.app_settings s where s.id = 'global';
   if v_global is distinct from true then
     perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other, false, 'enqueue', 'skipped:global_off', '{}');
     return new;
   end if;
 
-  -- ── always_reply (expert/CS): LEWATI semua cap & rate. Pesan selalu enqueue.
+  -- Î“Ã¶Ã‡Î“Ã¶Ã‡ TOGGLE AIÎ“Ã¥Ã¶AI: sender dummy & tombol off Î“Ã¥Ã† dummy tidak dibalas. Î“Ã¶Ã‡Î“Ã¶Ã‡
+  if v_sender_is_dummy and not coalesce(v_ai_ai_on, true) then
+    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other, false, 'enqueue', 'skipped:ai_ai_off', '{}');
+    return new;
+  end if;
+
+  -- â”œÃ„Î“Ã‡Â£â”œÃ¢â”¬â•¢â”œÃ¢Î“Ã‡Ã­â”œÃ„Î“Ã‡Â£â”œÃ¢â”¬â•¢â”œÃ¢Î“Ã‡Ã­ always_reply (expert/CS): LEWATI semua cap & rate. Pesan selalu enqueue.
   if coalesce(v_always_reply, false) then
     perform public.ai_reply_post(new.chat_id, new.id, new.sender_id, v_other, false);
     return new;
@@ -208,8 +216,8 @@ begin
   v_min := coalesce(v_min, v_gmin, 5);
 
   if v_sender_is_dummy then
-    -- ── AI↔AI: cap KERAS gabungan 40 pesan/jam — KECUALI kedua dummy
-    -- eksplisit no_rate_limit (unlimited by design, mis. Expert×Expert).
+    -- â”œÃ„Î“Ã‡Â£â”œÃ¢â”¬â•¢â”œÃ¢Î“Ã‡Ã­â”œÃ„Î“Ã‡Â£â”œÃ¢â”¬â•¢â”œÃ¢Î“Ã‡Ã­ AIâ”œÃ„Î“Ã‡Â£â”œÃ¢â”¬Ã‘â”œÃ¢â”¬â•¢AI: cap KERAS gabungan 40 pesan/jam â”œÃ„Î“Ã‡Â£â”œÃ¢Î“Ã‡Ã­â”œÃ¢â”¬â•¢ KECUALI kedua dummy
+    -- eksplisit no_rate_limit (unlimited by design, mis. Expertâ”œÃ³Î“Ã‡Â¥â”¼Ã´â”œÃ¢â”¬â•£Expert).
     select coalesce(d.ai_no_rate_limit, false) into v_sender_no_rate
     from public.dummy_accounts d where d.uid = new.sender_id;
     if not (coalesce(v_no_rate, false) and coalesce(v_sender_no_rate, false)) then
@@ -224,7 +232,7 @@ begin
       end if;
     end if;
   else
-    -- ── Sender manusia: rate limit (per-dummy override → global)
+    -- â”œÃ„Î“Ã‡Â£â”œÃ¢â”¬â•¢â”œÃ¢Î“Ã‡Ã­â”œÃ„Î“Ã‡Â£â”œÃ¢â”¬â•¢â”œÃ¢Î“Ã‡Ã­ Sender manusia: rate limit (per-dummy override â”œÃ„Î“Ã‡Â£â”œÃ¢â”¬Ã‘â”œÃ¢Î“Ã‡Ã¡ global)
     if not coalesce(v_no_rate, false) then
       select count(*) into v_dummy_out_1h
       from public.private_messages m
@@ -232,7 +240,7 @@ begin
         and m.sender_id = v_other
         and m.created_at > now() - interval '1 hour';
       if v_dummy_out_1h >= v_max then
-        -- Kuota habis → tampil idle (downgrade online→idle saja).
+        -- Kuota habis â”œÃ„Î“Ã‡Â£â”œÃ¢â”¬Ã‘â”œÃ¢Î“Ã‡Ã¡ tampil idle (downgrade onlineâ”œÃ„Î“Ã‡Â£â”œÃ¢â”¬Ã‘â”œÃ¢Î“Ã‡Ã¡idle saja).
         -- Exception-safe: kolom ai_always_online mungkin belum ada di DB
         -- lama; kegagalan presence TIDAK BOLEH menggagalkan insert pesan.
         begin
@@ -294,7 +302,7 @@ begin
   select value into v_url from public.ai_internal_config where key = 'ai_reply_url';
   select value into v_secret from public.ai_internal_config where key = 'callback_secret';
   if v_url is null or v_url = '' or v_secret is null or v_secret = '' then
-    -- Fail-closed (semua dummy diam) — kini TERCATAT, bukan misteri.
+    -- Fail-closed (semua dummy diam) â€” kini TERCATAT, bukan misteri.
     perform public.ai_log_reply(p_chat_id, p_trigger_msg_id, p_sender_id, p_dummy_uid, p_proactive, 'enqueue', 'skipped:no_secret', '{}');
     return false;
   end if;
@@ -400,8 +408,8 @@ begin
 end;
 $function$
 
--- snapshot-fn: admin_ai_settings @ 20260912140000_ai_settings_no_resurrect.sql
-CREATE OR REPLACE FUNCTION public.admin_ai_settings(p_global_enabled boolean DEFAULT NULL::boolean, p_max_replies integer DEFAULT NULL::integer, p_min_interval integer DEFAULT NULL::integer, p_guard_enabled boolean DEFAULT NULL::boolean, p_api_base text DEFAULT NULL::text, p_api_key text DEFAULT NULL::text, p_default_model text DEFAULT NULL::text, p_stt_base text DEFAULT NULL::text, p_stt_key text DEFAULT NULL::text)
+-- snapshot-fn: admin_ai_settings @ 20260915090000_ai_ai_chat_toggle.sql
+CREATE OR REPLACE FUNCTION public.admin_ai_settings(p_global_enabled boolean DEFAULT NULL::boolean, p_max_replies integer DEFAULT NULL::integer, p_min_interval integer DEFAULT NULL::integer, p_guard_enabled boolean DEFAULT NULL::boolean, p_api_base text DEFAULT NULL::text, p_api_key text DEFAULT NULL::text, p_default_model text DEFAULT NULL::text, p_stt_base text DEFAULT NULL::text, p_stt_key text DEFAULT NULL::text, p_ai_ai_enabled boolean DEFAULT NULL::boolean)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -422,6 +430,7 @@ begin
       ai_max_replies_per_hour = coalesce(p_max_replies, ai_max_replies_per_hour),
       ai_min_interval_sec = coalesce(p_min_interval, ai_min_interval_sec),
       ai_guard_enabled = coalesce(p_guard_enabled, ai_guard_enabled),
+      ai_ai_chat_enabled = coalesce(p_ai_ai_enabled, ai_ai_chat_enabled),
       updated_at = now()
   where id = 'global'
   returning * into v_row;
@@ -453,6 +462,7 @@ begin
     'ai_max_replies_per_hour', v_row.ai_max_replies_per_hour,
     'ai_min_interval_sec', v_row.ai_min_interval_sec,
     'ai_guard_enabled', v_row.ai_guard_enabled,
+    'ai_ai_chat_enabled', v_row.ai_ai_chat_enabled,
     'ai_api_base', v_prov.api_base,
     'ai_api_key', v_prov.api_key,
     'ai_default_model', v_prov.default_model,
@@ -867,7 +877,7 @@ begin
                             is_private, owner_id, owner_name, password_hash, has_password,
                             expires_at, created_at,
                             join_token, max_members, approval_required)
-  values (new_id, p_name, '', coalesce(nullif(p_icon, ''), '🔒'), 999, p_country, 'private',
+  values (new_id, p_name, '', coalesce(nullif(p_icon, ''), 'ðŸ”’'), 999, p_country, 'private',
           true, uid, coalesce(my_name, 'Anon'),
           case when has_pw then crypt(p_password, gen_salt('bf')) else null end,
           has_pw,
@@ -1146,7 +1156,7 @@ begin
        or (b.blocker_id = p_receiver_id and b.blocked_id = uid)) then
     raise exception 'Blocked'; end if;
 
-  -- Hanya koin belian (topup+earned) — koin bonus TIDAK bisa ditransfer.
+  -- Hanya koin belian (topup+earned) â€” koin bonus TIDAK bisa ditransfer.
   remaining := public.ledger_spend_paid(uid, 'coin_sent', p_amount, p_chat_id);
 
   -- Penerima selalu dapat 'earned' (bisa dicairkan setelah KYC).

@@ -178,6 +178,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     // Lazy load centang-2: baca last-read tersimpan dari disk DULU supaya
     // pesan yang sudah dibaca langsung centang 2 — tanpa menunggu network.
     // Network tetap sumber kebenaran dan me-refresh diam-diam bila berubah.
+    // JALUR CEPAT (sinkron): snapshot list chat di MEMORI (sudah di-preload
+    // saat bootstrap) — `lastReadAt` langsung terisi sebelum frame pertama
+    // dirender, jadi centang-2 tidak menunggu satu hop async apa pun.
+    _primeReadFromCache();
+    // Fallback: kv `read:` (bila snapshot memori belum ada) — async.
     _loadCachedRead();
     // Rebuild saat status call berubah (overlay video dalam chat muncul/hilang).
     CallProvider.instance.addListener(_onCallChanged);
@@ -333,6 +338,28 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void _hideActionBar() {
     _actionBar?.remove();
     _actionBar = null;
+  }
+
+  /// Baca last-read lawan SECARA SINKRON dari snapshot list chat di memori
+  /// (SQLite sudah dimuat saat bootstrap). Tidak ada await → `_otherLastRead`
+  /// siap sebelum frame pertama, jadi centang-2 tampil instan.
+  void _primeReadFromCache() {
+    try {
+      final myUid = context.read<AuthProvider>().uid;
+      if (myUid == null) return;
+      final rows = MessageCache.instance.peekRawList(myUid);
+      if (rows.isEmpty) return;
+      for (final row in rows) {
+        if ('${row['chatId']}' != widget.chatId) continue;
+        final raw = row['lastReadAt'];
+        if (raw is! Map) return;
+        final v = raw[widget.otherUid];
+        if (v == null) return;
+        final t = v is DateTime ? v : DateTime.tryParse('$v');
+        if (t != null) _otherLastRead = t;
+        return;
+      }
+    } catch (_) {}
   }
 
   /// Baca last-read tersimpan (kv terenkripsi) — dipanggil di initState agar

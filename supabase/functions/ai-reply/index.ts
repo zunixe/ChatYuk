@@ -286,6 +286,50 @@ function contentText(c: any): string {
   return String(c ?? '');
 }
 
+// ── Konsistensi waktu di riwayat chat ──
+// Riwayat yang dikirim ke LLM tadinya tanpa timestamp → saat ditanya
+// "kapan", model menebak sendiri dan kejadian lama diceritakan sebagai
+// "tadi/hari ini". Format label: [kemarin 14.05], [hari ini 09.12] —
+// pendek, deterministik, WIB (konsisten dgn sisa kode yg hitung WIB
+// manual +7 jam).
+function historyTimeLabel(at: unknown): string {
+  const t = new Date(String(at ?? '')).getTime();
+  if (isNaN(t)) return '';
+  const wib = new Date(t + 7 * 3600 * 1000);
+  const nowWib = new Date(Date.now() + 7 * 3600 * 1000);
+  const day = wib.toISOString().slice(0, 10);
+  const today = nowWib.toISOString().slice(0, 10);
+  // Kemarin dihitung dari waktu SEKARANG (bukan waktu pesan) — bandingkan
+  // tanggal kalender WIB. WIB tanpa DST jadi selisih 24 jam deterministik.
+  const yesterday = new Date(nowWib.getTime() - 86400e3)
+    .toISOString()
+    .slice(0, 10);
+  const hhmm = `${String(wib.getUTCHours()).padStart(2, '0')}.${String(
+    wib.getUTCMinutes(),
+  ).padStart(2, '0')}`;
+  if (day === today) return `[hari ini ${hhmm}]`;
+  if (day === yesterday) return `[kemarin ${hhmm}]`;
+  return `[${wib.getUTCDate()} ${bulan(wib.getUTCMonth())} ${hhmm}]`;
+}
+function bulan(m: number): string {
+  return [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+  ][m] ?? '';
+}
+// Buang label waktu yang bocor ditiru model di balasan ("[hari ini
+// 14.05]..."). Frasa wajar seperti "kemarin jam 21.30" TIDAK kena
+// (ditengahi kata "jam").
+function stripTimeLabel(t: string): string {
+  return t
+    .replace(
+      /\[?(hari ini|kemarin|\d{1,2} (?:Jan|Feb|Mar|Apr|Mei|Jun|Jul|Agu|Sep|Okt|Nov|Des))\s+\d{1,2}[.:]\d{2}\]?/gi,
+      '',
+    )
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // ── IMAGE SENDING: user minta foto/gambar → AI bisa kirim gambar ──
 // LLM menandai niat kirim gambar lewat field "image" di JSON mood
 // (baris terakhir, sistem — tidak terlihat user):
@@ -1478,6 +1522,29 @@ Deno.serve(async (req: Request) => {
       console.log(`[ai-reply] sender-dummy-check GAGAL: ${e}`);
     }
 
+    // ── TOGGLE AI↔AI (cermin trigger ai_reply_enqueue) ──
+    // Sender dummy + tombol off → dummy tidak dibalas. Wajib di sini juga:
+    // invoke langsung (admin/manual/recovery) mem-bypass trigger. Cek
+    // SEBELUM debounce supaya isolate tidak tertahan 120s sia-sia.
+    if (senderDummyRow != null && !proactive) {
+      let aiAiOn = true;
+      try {
+        const { data: aiAiSet } = await admin
+          .from('app_settings')
+          .select('ai_ai_chat_enabled')
+          .eq('id', 'global')
+          .maybeSingle();
+        aiAiOn = (aiAiSet as any)?.ai_ai_chat_enabled !== false;
+      } catch (e) {
+        // Baca gagal = biarkan perilaku lama (default on) — jangan matikan
+        // AI↔AI gara-gara DB hiccup.
+        console.log(`[ai-reply] ai-ai-toggle GAGAL: ${e}`);
+      }
+      if (!aiAiOn) {
+        return json({ ok: false, skipped: 'ai_ai_off' });
+      }
+    }
+
     // ── DEBOUNCE SAAT ADMIN PEGANG SESI DUMMY ──
     // Sender = dummy → admin sedang main manual sebagai dummy itu. AI penerima
     // TIDAK boleh balas tiap pesan: tunggu sampai HENING ~25 detik, lalu
@@ -1690,7 +1757,7 @@ Deno.serve(async (req: Request) => {
       safe(
         admin
           .from('app_settings')
-          .select('ai_global_enabled, ai_min_interval_sec, ai_guard_enabled')
+          .select('ai_global_enabled, ai_min_interval_sec, ai_guard_enabled, ai_ai_chat_enabled')
           .eq('id', 'global')
           .maybeSingle(),
       ),
@@ -2272,8 +2339,16 @@ Deno.serve(async (req: Request) => {
       memoryLine,
       partnerLine,
       'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
-      'OUTPUT WAJIB: HANYA satu pesan chat pendek berbahasa Indonesia sebagai ${profile.nickname} — DILARANG menulis analisis, narasi pihak ketiga ("The user..."), bahasa Inggris, atau kalimat meta apa pun. Hormati gender lawan bicara: panggilan (om/tante/sayang) harus sesuai gender dan usia kalian.',
+      `OUTPUT WAJIB: HANYA satu pesan chat pendek berbahasa Indonesia sebagai ${profile.nickname} — DILARANG menulis analisis, narasi pihak ketiga ("The user..."), bahasa Inggris, atau kalimat meta apa pun. Hormati gender lawan bicara: panggilan (om/tante/sayang) harus sesuai gender dan usia kalian.`,
+      // Anti gaya customer-service: model murah jatuh ke sapaan template
+      // ("Halo, selamat pagi! Ada yang bisa dibantu?") walau persona bukan CS.
+      // PENGECUALIAN longAnswers (mis. Admin Chatyuk): dia MEMANG CS resmi —
+      // sapaan ramah & siap membantu justru benar untuknya.
+      ...(longAnswers
+        ? []
+        : ['DILARANG KERAS menulis sapaan template ala customer service / asisten ("Ada yang bisa dibantu?", "Halo, selamat pagi!", "Senang bertemu denganmu", "Ada yang bisa saya bantu?"). Kamu ini TEMAN ngobrol, bukan CS. Balasan pertama ke orang baru TIDAK perlu formal — cukup reaksi singkat santai yang sesuai kepribadianmu (mis. "eh halo", "hai juga", "wuih org baru", "hallo, lg ngapain").']),
       'REALISTIS (wajib): JANGAN mengarang nama orang, nama tempat, kejadian, atau topik yang TIDAK ADA di riwayat obrolan maupun di KEGIATANMU HARI INI (itu dua sumber kebenaranmu). Kalau belum tahu sesuatu, akui atau bertanya. Ngomongnya tetap yang sudah diketahui dari obrolan saja.',
+      'KONSISTENSI WAKTU (wajib): tiap pesan riwayat berlabel waktu ([hari ini 14.05], [kemarin 21.30], [3 Sep 08.15]). Saat bercerita/ditanya "kapan", sebut waktu SESUAI LABEL pesan itu — pesan berlabel [kemarin] = "kemarin", bukan "tadi/hari ini"; label tanggal lampau = sebut tanggalnya ("hari Senin", "3 hari lalu"). KEGIATANMU HARI INI = hari INI saja — jangan bilang "tadi/tadi siang" untuk kegiatan kemarin. Dilarang menyamarkan kejadian lama jadi kejadian baru.',
       // Expert (always_reply): jawaban teknis/faktual WAJIB berdasar data.
       // INFO TERKINI di atas = hasil browsing barusan (ada tanggalnya) —
       // pakai itu sebagai jawaban. Kalau tidak ada INFO TERKINI dan kamu
@@ -2289,7 +2364,10 @@ Deno.serve(async (req: Request) => {
       'Kalau ada [pesan suara] TANPA transkrip isi, berarti kamu BELUM bisa mendengarnya — tanggapi natural (minta dijelasin / lanjutkan topik), JANGAN pura-pura dengar isinya.',
       'PACING: ikuti fase obrolan. Kalau masih awal perkenalan (chat baru mulai / belum akrab), kamu JAIM dulu — jangan ramah berlebihan, jangan langsung gas ke topik dewasa walau diminta; tanggapi main-main sambil geli ("pelan-pelan dong, baru kenal 😏") dan bangun suasana pelan-pelan. Naikkan intensitas godaan progresif seiring obrolan makin akrab.',
       freshStage
-        ? 'FASE SEKARANG: ORANG BARU — kamu belum kenal dia. WARMING UP dulu: ramah tapi reserved, ngobrol ringan (sapaan, aktivitas, hobi), JANGAN gombal, JANGAN menggoda, JANGAN menyentuh topik dewasa, JANGAN bertingkah seolah sudah kenal lama. Keadaban dan kehangatan naik PELAN-PELAN seiring obrolan — baru setelah saling nyaman kamu mulai flirty.'
+        ? (longAnswers
+          // CS (mis. Admin Chatyuk): sapaan ramah & profesional memang benar.
+          ? 'FASE SEKARANG: user baru menghubungi layanan. Sambut dengan ramah dan profesional khas customer service resmi, tawarkan bantuan, tetap fokus membantu menjawab pertanyaan seputar aplikasi.'
+          : 'FASE SEKARANG: ORANG BARU — kamu belum kenal dia. WARMING UP dulu: tetap santai & natural sesuai kepribadianmu (bukan formal ala CS), ngobrol ringan (sapaan, aktivitas, hobi), JANGAN gombal, JANGAN menggoda, JANGAN menyentuh topik dewasa, JANGAN bertingkah seolah sudah kenal lama. Keadaban dan kehangatan naik PELAN-PELAN seiring obrolan — baru setelah saling nyaman kamu mulai flirty.')
         : hot
         ? 'FASE SEKARANG: obrolan lagi panas dan kalian sudah akrab — ikuti intensitasnya, boleh makin berani.'
         : 'FASE SEKARANG: makin akrab — kehangatan dan godaan naik PELAN-PELAN sesuai keakraban; masih jaga sopan santinya.',
@@ -3069,11 +3147,27 @@ Deno.serve(async (req: Request) => {
 
     // LLM history: buang meta internal (API bisa menolak field tak dikenal).
     // historyText = versi string-only (ekstraksi memori & burst, hemat token).
+    // Timestamp WIB disuntik sebagai prefix [hari ini 14.05] — model bisa
+    // membedakan pesan kemarin vs hari ini → cerita "kapan" konsisten.
+    const withTime = (m: any): string => {
+      const label = historyTimeLabel(m.at);
+      const body = contentText(m.content);
+      return label ? `${label} ${body}` : body;
+    };
     const llmHistory = history.map(({ at, img, voice, secs, ...m }: any) => m);
+    // history & llmHistory index-aligned → suntik label via index (aman
+    // walau ada pesan duplikat).
+    for (let i = 0; i < llmHistory.length; i++) {
+      const m = llmHistory[i] as any;
+      if (typeof m.content === 'string' && m.content.trim() !== '') {
+        const label = historyTimeLabel((history[i] as any)?.at);
+        if (label) m.content = `${label} ${m.content}`;
+      }
+    }
     const historyText = history.map(
       ({ at, img, voice, secs, ...m }: any) => ({
         role: m.role,
-        content: contentText(m.content),
+        content: withTime({ ...m, at }),
       }),
     );
     let llmRes = await llmCall(
@@ -3182,7 +3276,14 @@ Deno.serve(async (req: Request) => {
     // STRIP marker DULU sebelum sanitize: JSON di akhir bisa panjang
     // (apalagi field "image") dan sanitize memotong di 90/220 char —
     // JSON terpenggal = tidak match regex = bocor utuh ke chat user.
-    const rawLlm = String(llm?.choices?.[0]?.message?.content || '');
+    // FALLBACK reasoning_content: model reasoning (qwen3.8-flash dkk) bisa
+    // menghabiskan seluruh budget token di reasoning → `content` KOSONG
+    // walau HTTP 200 → dummy diam (error:empty_reply berulang, mis. MbakSari
+    // mode dewasa). Bila content kosong, pakai reasoning_content.
+    const msgObj: any = llm?.choices?.[0]?.message ?? {};
+    const rawLlm = String(
+      msgObj.content || msgObj.reasoning_content || '',
+    );
     const markedPre = parseImagePrompt(rawLlm);
     let preMood = 'normal';
     let preStorm = false;
@@ -3211,6 +3312,10 @@ Deno.serve(async (req: Request) => {
     // mode dewasa maks 3 kalimat — prompt kadang tetap dilanggar.
     // CS: panjang bebas tapi batasi baris (jangan meratakan newline).
     replyVisible = capEmoji(replyVisible);
+    // Strip label waktu yang diirigasi dari riwayat — model kadang meniru
+    // pola "[hari ini 14.05]" di balasannya; itu metadata sistem, bukan
+    // kalimat manusia.
+    replyVisible = stripTimeLabel(replyVisible);
     // Enforcement anti-repeat: buang emoji yang sama dengan 2 balasan
     // sebelumnya (model sering mengunci 1 emoji, mis. 😈 beruntun).
     replyVisible = stripBannedEmojis(replyVisible, bannedEmojis);
@@ -3218,7 +3323,12 @@ Deno.serve(async (req: Request) => {
     else if (!guardOn) replyVisible = capSentences(replyVisible, 3);
     if (!replyVisible) {
       await closeTyping();
-      return json({ ok: false, error: 'empty_reply' });
+      // model_used WAJIB ikut dilaporkan — tanpa ini log jadi
+      // {"model": null} dan diagnosa (model mana yang kosong) jadi buta.
+      console.log(
+        `[ai-reply] EMPTY model=${modelUsed} chat=${chatId} rawLen=${rawLlm.length} finish=${msgObj?.finish_reason ?? '-'} reasoningTok=${msgObj?.usage?.completion_tokens_details?.reasoning_tokens ?? '-'}`,
+      );
+      return json({ ok: false, error: 'empty_reply', model_used: modelUsed });
     }
 
     // Output-side NSFW guard: LLM tetap saja bisa lolos — cek balasan
@@ -3391,9 +3501,11 @@ Deno.serve(async (req: Request) => {
             );
             const burst = stripBannedEmojis(
               capEmoji(
-                sanitize(
-                  stripMoodMarker(String(bRes?.choices?.[0]?.message?.content || '')),
-                  guardOn ? MAX_REPLY_CHARS : 220,
+                stripTimeLabel(
+                  sanitize(
+                    stripMoodMarker(String(bRes?.choices?.[0]?.message?.content || '')),
+                    guardOn ? MAX_REPLY_CHARS : 220,
+                  ),
                 ),
               ),
               [...bannedEmojis, ...extractEmojis(replyVisible)],
