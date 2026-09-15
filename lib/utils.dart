@@ -10,6 +10,19 @@ void dlog(String message, {String? tag}) {
   }
 }
 
+/// Kapitalkan huruf pertama pesan saat dikirim (gaya WhatsApp) — hanya bila
+/// karakter pertama huruf kecil. Teks yang sudah mulai dengan simbol/emoji
+/// atau sudah kapital dibiarkan apa adanya. Huruf setelah simbol pembuka
+/// (mis. '"halo' → '"Halo') tidak disentuh agar tidak merusak format.
+String capitalizeFirst(String text) {
+  if (text.isEmpty) return text;
+  final first = text[0];
+  final upper = first.toUpperCase();
+  if (first == upper) return text; // sudah kapital / simbol (emoji, tanda)
+  if (!RegExp(r'[a-z]').hasMatch(first)) return text;
+  return upper + text.substring(1);
+}
+
 DateTime parseDate(dynamic v) {
   if (v == null) return DateTime.now();
   if (v is DateTime) return v;
