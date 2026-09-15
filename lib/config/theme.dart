@@ -91,6 +91,17 @@ class AppText {
     );
   }
 
+  /// Turunkan satu langkah weight untuk font System.
+  /// Font platform tertentu (MiSans di HyperOS/Xiaomi) tampil LEBIH BERAT
+  /// daripada Roboto pada weight yang sama → bubble chat terlihat "tebal/
+  /// bold" padahal w400. Dipakai HANYA oleh token chat.
+  static FontWeight _systemChatWeight(FontWeight w) {
+    if (!AppFonts.isSystem()) return w;
+    if (w.index >= FontWeight.w600.index) return FontWeight.w500;
+    if (w.index >= FontWeight.w400.index) return FontWeight.w300;
+    return w;
+  }
+
   // 10 — timestamp, badge unread, counter overlay
   static TextStyle get micro =>
       _plain(10, FontWeight.w500, height: 1.2, color: AppTheme.textPrimary);
@@ -132,14 +143,14 @@ class AppText {
   // dan jam pesan diskalakan supaya proporsional.
   static TextStyle get chatBody => _plain(
     ChatTextScale.scale(14),
-    FontWeight.w400,
+    _systemChatWeight(FontWeight.w400),
     height: 1.35,
     color: AppTheme.textPrimary,
   );
 
   static TextStyle get chatName => _plain(
     ChatTextScale.scale(12),
-    FontWeight.w600,
+    _systemChatWeight(FontWeight.w600),
     height: 1.2,
     letterSpacing: 0.2,
     color: AppTheme.textPrimary,
@@ -147,7 +158,7 @@ class AppText {
 
   static TextStyle get chatTime => _plain(
     ChatTextScale.scale(10),
-    FontWeight.w500,
+    _systemChatWeight(FontWeight.w500),
     height: 1.2,
     color: AppTheme.textPrimary,
   );
