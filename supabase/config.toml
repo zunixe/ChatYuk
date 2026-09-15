@@ -402,6 +402,11 @@ verify_jwt = false
 [functions.ai-reply]
 verify_jwt = false
 
+# ai-daily-life dipanggil pg_cron (net.http_post) dengan header x-app-secret,
+# tanpa JWT user — verifikasi identitas di dalam function (checkAppSecret).
+[functions.ai-daily-life]
+verify_jwt = false
+
 # send-push dipanggil oleh DB trigger (net.http_post) tanpa JWT user.
 # Tanpa ini semua push dari trigger gagal 401 diam-diam.
 [functions.send-push]

@@ -800,6 +800,201 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     );
   }
 
+  /// Sheet riwayat story harian dummy (biasa). Menampilkan N hari terakhir
+  /// + status terisi/kosong supaya ketahuan hari mana yang belum
+  /// ke-generate. Expert tidak punya story (server tak generate).
+  void _showDummyStories(Map<String, dynamic> item, S s) {
+    final nickname = item['nickname'] as String? ?? '';
+    final uid = item['uid'] as String? ?? '';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7,
+          maxChildSize: 0.92,
+          minChildSize: 0.4,
+          builder: (ctx, scrollCtrl) {
+            return FutureBuilder<Map<String, dynamic>>(
+              future: _svc.getDummyStories(uid, days: 14),
+              builder: (ctx, snap) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.auto_stories_outlined,
+                                  size: 20, color: AppTheme.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '${s.dummyStoryList} — $nickname',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.title,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            (snap.data?['story_expected'] == false)
+                                ? s.dummyStoryNotExpected
+                                : s.dummyStoryListDesc,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1),
+                    Expanded(
+                      child: snap.connectionState == ConnectionState.waiting
+                          ? const Center(child: CircularProgressIndicator())
+                          : snap.hasError
+                              ? Center(
+                                  child: Text(
+                                    '${s.dummyStoryLoadFail}: ${snap.error}',
+                                    style: AppText.bodySmall.copyWith(
+                                      color: AppTheme.danger,
+                                    ),
+                                  ),
+                                )
+                              : _storyList(
+                                  snap.data ?? const {}, s, scrollCtrl),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _storyList(
+    Map<String, dynamic> data,
+    S s,
+    ScrollController scrollCtrl,
+  ) {
+    final days = (data['days'] as List?) ?? const [];
+    if (days.isEmpty) {
+      return Center(
+        child: Text(s.dummyStoryEmpty, style: AppText.bodySmall),
+      );
+    }
+    final missing =
+        days.where((d) => (d as Map)['has_story'] != true).length;
+    return ListView.separated(
+      controller: scrollCtrl,
+      padding: EdgeInsets.fromLTRB(
+        12,
+        8,
+        12,
+        16 + MediaQuery.of(context).padding.bottom,
+      ),
+      itemCount: days.length + 1,
+      separatorBuilder: (_, i) => const SizedBox(height: 6),
+      itemBuilder: (_, i) {
+        if (i == 0) {
+          if (missing == 0) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 6),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 16, color: AppTheme.danger),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    s.dummyStoryMissingCount.replaceAll('%s', '$missing'),
+                    style: AppText.caption.copyWith(color: AppTheme.danger),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        final d = Map<String, dynamic>.from(days[i - 1] as Map);
+        final has = d['has_story'] == true;
+        final story = d['story'];
+        return _SectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    has ? Icons.check_circle : Icons.cancel,
+                    size: 16,
+                    color: has ? AppTheme.primary : AppTheme.danger,
+                  ),
+                  const SizedBox(width: 8),
+                  Text('${d['date']}', style: AppText.bodyStrong),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: (has ? AppTheme.primary : AppTheme.danger)
+                          .withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      has ? s.dummyStoryFilled : s.dummyStoryMissing,
+                      style: AppText.caption.copyWith(
+                        color: has ? AppTheme.primary : AppTheme.danger,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (has && story != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  _storySummary(story),
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Ringkas story (jsonb) jadi satu kalimat untuk ditampilkan.
+  String _storySummary(dynamic story) {
+    if (story is String) return story;
+    if (story is Map) {
+      for (final k in ['summary', 'work', 'place', 'problem', 'hangout']) {
+        final v = story[k];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+      return story.values
+          .whereType<String>()
+          .where((v) => v.trim().isNotEmpty)
+          .join(' · ');
+    }
+    return '$story';
+  }
+
   Widget _itemCard(Map<String, dynamic> item, S s) {
     final nickname = item['nickname'] as String? ?? '';
     final status = item['status'] as String? ?? 'offline';
@@ -945,6 +1140,17 @@ class _AdminDummyTabState extends State<AdminDummyTab>
                   tooltip: s.dummyAiScheduleTitle,
                   onPressed: () => _showScheduleInfo(item, s),
                 ),
+                // Story harian — HANYA dummy biasa (expert tak punya story).
+                if ((item['kind'] as String? ?? 'regular') == 'regular')
+                  IconButton(
+                    icon: Icon(
+                      Icons.auto_stories_outlined,
+                      size: 18,
+                      color: AppTheme.textSecondary,
+                    ),
+                    tooltip: s.dummyStoryList,
+                    onPressed: () => _showDummyStories(item, s),
+                  ),
               ],
             ),
             SizedBox(height: 8),

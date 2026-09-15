@@ -606,6 +606,34 @@ extension SAdminX on S {
       ? 'Jadwal kehadiran AI'
       : 'AI presence schedule';
 
+  String get dummyStoryList => isId ? 'Story harian' : 'Daily story';
+
+  String get dummyStoryListDesc => isId
+      ? 'Riwayat cerita harian dummy biasa (expert tidak punya story).'
+      : 'Daily story history for regular dummies (experts have no story).';
+
+  String get dummyStoryExpected => isId
+      ? 'Dummy biasa — story harian di-generate tiap 22:00 WIB.'
+      : 'Regular dummy — daily story generated daily at 22:00 WIB.';
+
+  String get dummyStoryNotExpected => isId
+      ? 'Akun expert — tidak dibuatkan story.'
+      : 'Expert account — no story generated.';
+
+  String get dummyStoryEmpty => isId ? 'Belum ada story.' : 'No story yet.';
+
+  String get dummyStoryMissing => isId ? 'KOSONG' : 'MISSING';
+
+  String get dummyStoryFilled => isId ? 'Ada' : 'OK';
+
+  String get dummyStoryMissingCount => isId
+      ? '%s hari belum ke-generate'
+      : '%s day(s) not generated';
+
+  String get dummyStoryLoadFail => isId
+      ? 'Gagal memuat story'
+      : 'Failed to load stories';
+
   String get dummyAiScheduleDesc => isId
       ? 'AI online/idle/offline mengikuti jam aktif. Offline = AI tidak membalas sama sekali.'
       : 'AI goes online/idle/offline following active hours. Offline = AI never replies.';
@@ -743,6 +771,17 @@ extension SAdminX on S {
   String get aiProviderModelPreset =>
       isId ? 'Pilih preset model' : 'Pick a model preset';
 
+  String get aiProviderStoryModel =>
+      isId ? 'Model cerita harian' : 'Daily story model';
+  String get aiProviderStoryModelHint => isId
+      ? 'Model untuk cerita/kegiatan harian AI. Kosong = ikut model chat.'
+      : 'Model for the AI daily story/activity. Empty = follow chat model.';
+  String get aiProviderFallbackModel =>
+      isId ? 'Model cadangan' : 'Fallback model';
+  String get aiProviderFallbackModelHint => isId
+      ? 'Dipakai bila model utama gagal (saldo habis/limit). Kosong = bawaan gratis.'
+      : 'Used when the main model fails (out of balance/limit). Empty = built-in free.';
+
   String get dummyListFail =>
       isId ? 'Gagal memuat akun dummy' : 'Failed to load dummy accounts';
 
@@ -821,4 +860,14 @@ extension SAdminExcludeX on S {
 
   String get adminExcludeAddTitle =>
       isId ? 'Kelola Perangkat Ter-exclude' : 'Manage Excluded Devices';
+
+  String get adminPointSettingsSaved =>
+      isId ? 'Pengaturan poin tersimpan' : 'Point settings saved';
+
+  String adminSaveFailed(String e) =>
+      isId ? 'Gagal menyimpan: $e' : 'Failed to save: $e';
+
+  String get adminShareLinkLabel => isId
+      ? 'Link tujuan share (Google Play / apkpure)'
+      : 'Share destination link (Google Play / apkpure)';
 }

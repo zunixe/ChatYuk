@@ -74,7 +74,7 @@ Deno.serve(async (req: Request) => {
     try {
       const { data: act } = await admin
         .from('ai_provider_config')
-        .select('api_base, api_key, default_model')
+        .select('api_base, api_key, default_model, story_model, fallback_model')
         .eq('is_active', true)
         .limit(1)
         .maybeSingle();
@@ -86,10 +86,17 @@ Deno.serve(async (req: Request) => {
       'https://api.b.ai/v1';
     const sKey = provCfg?.api_key || Deno.env.get('AI_API_KEY');
     if (!sKey) return json({ ok: false, error: 'no_api_key' }, 500);
+    // Model story = ai_provider_config.story_model → default_model →
+    // 'glm-5.3-flash'. Ganti model cukup lewat panel admin, tanpa redeploy.
+    const sModel =
+      (provCfg?.story_model || '').trim() ||
+      (provCfg?.default_model || '').trim() ||
+      'glm-5.3-flash';
 
     // Cadangan gratis (OpenCode Zen, Mimo) bila provider utama menolak
-    // (saldo $0/402, 429, 5xx) — TokenHarbor tetap utama.
-    const MIMO_FREE = 'mimo-v2.5-free';
+    // (saldo $0/402, 429, 5xx). Bisa di-override dari panel admin via
+    // ai_provider_config.fallback_model.
+    const MIMO_FREE = (provCfg?.fallback_model || '').trim() || 'mimo-v2.5-free';
     const zenRoute = (): { base: string; key?: string; headers: Record<string, string> } => {
       const hex = (n: number) =>
         [...crypto.getRandomValues(new Uint8Array(n))]
@@ -107,10 +114,14 @@ Deno.serve(async (req: Request) => {
       };
     };
     // Dummy AI-enabled yang belum punya cerita hari ini.
+    // HANYA dummy biasa (kind='regular') yang punya story harian — akun
+    // expert (CS/Admin Chatyuk) tidak perlu story. Kolom `kind` ada sejak
+    // migrasi 20260914110000; fallback 'regular' bila null.
     const { data: dummies } = await admin
       .from('dummy_accounts')
-      .select('uid, ai_model')
-      .eq('ai_enabled', true);
+      .select('uid, ai_model, kind')
+      .eq('ai_enabled', true)
+      .eq('kind', 'regular');
     const generated: string[] = [];
     const skipped: string[] = [];
     const failed: string[] = [];
@@ -223,10 +234,14 @@ Deno.serve(async (req: Request) => {
               Authorization: `Bearer ${sKey}`,
             },
             body: JSON.stringify({
-              model: 'glm-5.3-flash',
+              model: sModel,
               max_tokens: 600,
               temperature: 0.8,
-              reasoning_effort: 'low',
+              // Base OpenRouter (provider aktif): matikan reasoning Nemotron
+              // (cepat + hemat token). Base lain: reasoning_effort low (glm).
+              ...(sBase.includes('openrouter.ai')
+                ? { reasoning: { enabled: false, exclude: true } }
+                : { reasoning_effort: 'low' }),
               messages: [
                 { role: 'system', content: prompt },
                 { role: 'user', content: 'Oke, buatkan.' },
