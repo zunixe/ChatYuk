@@ -27,11 +27,12 @@ class AppText {
   }) {
     final family = AppFonts.family();
     if (family == null) {
-      // System: judul pakai font bawaan perangkat (bukan Poppins).
+      // System: judul pakai font bawaan perangkat (bukan Poppins) +
+      // turunkan weight (MiSans lebih berat dari Roboto).
       if (AppFonts.isSystem()) {
         return TextStyle(
           fontSize: size,
-          fontWeight: weight,
+          fontWeight: _systemWeight(weight),
           height: height,
           color: color,
           letterSpacing: letterSpacing,
@@ -82,23 +83,26 @@ class AppText {
         color: color,
       );
     }
+    // Font System (mis. MiSans di HyperOS/Xiaomi) tampil LEBIH BERAT daripada
+    // Roboto pada weight sama → SEMUA teks body diturunkan satu tingkat agar
+    // bobot visual setara.
+    final w = _systemWeight(weight);
     return TextStyle(
       fontSize: size,
-      fontWeight: weight,
+      fontWeight: w,
       height: height,
       letterSpacing: letterSpacing,
       color: color,
     );
   }
 
-  /// Turunkan satu langkah weight untuk font System.
-  /// Font platform tertentu (MiSans di HyperOS/Xiaomi) tampil LEBIH BERAT
-  /// daripada Roboto pada weight yang sama → bubble chat terlihat "tebal/
-  /// bold" padahal w400. Dipakai HANYA oleh token chat.
-  static FontWeight _systemChatWeight(FontWeight w) {
+  /// Turunkan weight untuk font System (berlaku semua token body/judul).
+  /// w400 → w200 (paling ringan), w600+ → w500, w500 → w400, w300 → w300.
+  static FontWeight _systemWeight(FontWeight w) {
     if (!AppFonts.isSystem()) return w;
+    if (w == FontWeight.w400) return FontWeight.w200;
     if (w.index >= FontWeight.w600.index) return FontWeight.w500;
-    if (w.index >= FontWeight.w400.index) return FontWeight.w300;
+    if (w.index >= FontWeight.w500.index) return FontWeight.w400;
     return w;
   }
 
@@ -143,14 +147,14 @@ class AppText {
   // dan jam pesan diskalakan supaya proporsional.
   static TextStyle get chatBody => _plain(
     ChatTextScale.scale(14),
-    _systemChatWeight(FontWeight.w400),
+    FontWeight.w400,
     height: 1.35,
     color: AppTheme.textPrimary,
   );
 
   static TextStyle get chatName => _plain(
     ChatTextScale.scale(12),
-    _systemChatWeight(FontWeight.w600),
+    FontWeight.w600,
     height: 1.2,
     letterSpacing: 0.2,
     color: AppTheme.textPrimary,
@@ -158,7 +162,7 @@ class AppText {
 
   static TextStyle get chatTime => _plain(
     ChatTextScale.scale(10),
-    _systemChatWeight(FontWeight.w500),
+    FontWeight.w500,
     height: 1.2,
     color: AppTheme.textPrimary,
   );
