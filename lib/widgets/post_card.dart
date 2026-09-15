@@ -435,7 +435,7 @@ class _PostCardState extends State<PostCard> {
     final isFriend = _p['isFriend'] == true;
 
     return Container(
-      margin: EdgeInsets.fromLTRB(12, 6, 12, 6),
+      margin: EdgeInsets.fromLTRB(10, 6, 10, 6),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(18),

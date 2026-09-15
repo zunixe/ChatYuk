@@ -95,7 +95,7 @@ class _GroupListState extends State<_GroupList> {
           )
         else
           ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+            padding: const EdgeInsets.fromLTRB(10, 12, 10, 88),
             itemCount: rooms.length,
             itemBuilder: (_, i) => _GroupCard(room: rooms[i]),
           ),

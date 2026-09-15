@@ -113,7 +113,7 @@ class PostSkeletonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
