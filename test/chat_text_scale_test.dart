@@ -63,4 +63,42 @@ void main() {
       expect(ChatTextScale.notifier.value, 1.25);
     });
   });
+
+  group('step ↔ pt (slider angka)', () {
+    test('step 0 = pt terkecil (min), step terakhir = pt terbesar', () {
+      expect(ChatTextScale.multOfStep(0), ChatTextScale.min);
+      expect(ChatTextScale.multOfStep(ChatTextScale.steps), ChatTextScale.max);
+      final lo = ChatTextScale.ptOf(ChatTextScale.multOfStep(0));
+      final hi = ChatTextScale.ptOf(
+        ChatTextScale.multOfStep(ChatTextScale.steps),
+      );
+      expect(lo, lessThan(hi));
+    });
+
+    test('ptOf monoton naik tiap step', () {
+      var prev = 0;
+      for (var i = 0; i <= ChatTextScale.steps; i++) {
+        final pt = ChatTextScale.ptOf(ChatTextScale.multOfStep(i));
+        expect(pt, greaterThanOrEqualTo(prev));
+        prev = pt;
+      }
+    });
+
+    test('stepIndex round-trip dengan multOfStep', () {
+      for (var i = 0; i <= ChatTextScale.steps; i++) {
+        final m = ChatTextScale.multOfStep(i);
+        expect(ChatTextScale.indexOf(m).round(), i);
+      }
+    });
+
+    test('pt = 14 saat normal (mid mendekati 1.0)', () {
+      ChatTextScale.setLocal(1.0);
+      expect(ChatTextScale.pt, 14);
+    });
+
+    test('chatBodyAt(ukuran) mengikuti pt eksplisit', () {
+      expect(AppText.chatBodyAt(18).fontSize, 18.0);
+      expect(AppText.chatBodyAt(22).fontSize, 22.0);
+    });
+  });
 }

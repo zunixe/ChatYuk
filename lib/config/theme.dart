@@ -159,6 +159,15 @@ class AppText {
     color: AppTheme.textPrimary,
   );
 
+  /// chatBody pada ukuran pt eksplisit — dipakai PREVIEW slider ukuran font
+  /// agar contoh persis mengikuti nilai slider (bukan `current` tersimpan).
+  static TextStyle chatBodyAt(double pt) => _plain(
+    pt,
+    FontWeight.w400,
+    height: 1.35,
+    color: AppTheme.textPrimary,
+  );
+
   static TextStyle get chatName => _plain(
     ChatTextScale.scale(12),
     FontWeight.w600,
@@ -215,12 +224,39 @@ class ChatTextScale {
   /// Langkah diskret slider (7 tingkat) agar nilai rapi & mudah diulang.
   static const int steps = 6;
 
+  /// Ukuran font chat (pt) pada multiplier 1.0 — dipakai menampilkan angka
+  /// di slider (lebih intuitif daripada persen).
+  static const double basePt = 14;
+
   /// Nilai aktif (1.0 = normal).
   static double current = 1.0;
 
   /// Notifier untuk rebuild subtree chat saat nilai berubah (tanpa
   /// me-restart navigasi). Di-listen di app.dart.
   static final ValueNotifier<double> notifier = ValueNotifier<double>(1.0);
+
+  /// Ukuran font efektif (pt) untuk nilai saat ini — dibulatkan ke integer
+  /// agar label slider rapi & bernilai bulat (mis. 12, 14, 16, 19).
+  static int get pt => (basePt * current.clamp(min, max)).round();
+
+  /// Ukuran (pt) pada multiplier tertentu.
+  static int ptOf(double mult) =>
+      (basePt * mult.clamp(min, max)).round();
+
+  /// Index step slider saat ini (0..steps).
+  static int get stepIndex => (indexOf(current)).round();
+
+  /// Multiplier untuk index step tertentu (0..steps).
+  static double multOfStep(int index) {
+    final i = index.clamp(0, steps);
+    return min + (max - min) * (i / steps);
+  }
+
+  /// Index step (desimal) untuk multiplier tertentu.
+  static double indexOf(double mult) {
+    final m = mult.clamp(min, max);
+    return ((m - min) / (max - min)) * steps;
+  }
 
   /// Terapkan multiplier aman (clamp ke [min,max]).
   static double scale(double base) =>
