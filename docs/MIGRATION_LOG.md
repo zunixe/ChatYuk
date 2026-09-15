@@ -3,6 +3,41 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-15 — Story harian: expert dikecualikan + panel admin
+
+| Versi | Aksi |
+|---|---|
+| 20260914150050_admin_get_dummy_stories.sql | RPC baru `admin_get_dummy_stories(p_uid,p_days)` — list story harian satu dummy (14 hari) + status terisi/kosong (panel admin) |
+
+**Catatan:** awalnya `...150000` lalu di-rename karena bentrok dengan
+`20260914150000_storage_ownership.sql` (session paralel).
+
+**Fix terkait (bukan migrasi):**
+- `ai-daily-life`: story harian HANYA untuk dummy `kind='regular'` — expert
+  (Admin Chatyuk/CS) tidak dibuatkan story.
+- `config.toml`: `[functions.ai-daily-life] verify_jwt=false`.
+- **INSIDEN**: env `APP_SHARED_SECRET` edge ≠ `app_settings.app_shared_secret`
+  → cron `chatyuk-ai-daily-life` gagal diam-diam (pg_net anggap HTTP 200 sukses
+  walau body `{"error":"unauthorized"}`). Disamakan via
+  `supabase secrets set APP_SHARED_SECRET=<nilai app_settings>`; invoke manual
+  kini `ok:true`.
+
+## 2026-09-14 — Security: fix Storage IDOR + limit upload server-side
+
+**Masalah (review ulang):** policy bucket `chat-photos` hanya cek
+`auth.role() = 'authenticated'` tanpa ownership/path check → IDOR: user
+authenticated mana pun bisa overwrite/delete file user lain (avatar, gallery,
+voice, story, post).
+
+| Versi | Aksi |
+|---|---|
+| 20260914150000_storage_ownership.sql | Helper `storage_object_owner_ok(name)` (owner-or-admin per path) + ganti 4 policy bucket `chat-photos` (insert/update/delete wajib owner) + trigger `trg_chat_photos_guard` (whitelist `content_type` + limit 8 MB) |
+
+**Catatan:** path layout mengikuti `storage_photo_service.dart`:
+`avatars/<uid>_<ts>.jpg`, `gallery|posts|story|timeline/<uid>/<file>`,
+`chat|voice/<chatId>/<file>` (chat/voice divalidasi sebagai peserta `private_chats`).
+Admin lewat `is_admin_request()`. Tidak menyentuh fungsi FROZEN.
+
 ## 2026-09-14 — Audit performa: paginasi & hilangkan fetch tanpa limit
 
 **Masalah:** beberapa RPC/query memuat SELURUH tabel tanpa limit → lag (polling

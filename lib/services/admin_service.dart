@@ -331,6 +331,20 @@ class AdminService {
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
+  /// Riwayat story harian satu dummy N hari terakhir: `{kind, story_expected,
+  /// days:[{date, has_story, story, created_at}]}`. Untuk panel admin —
+  /// ketahuan hari mana yang belum ke-generate.
+  Future<Map<String, dynamic>> getDummyStories(
+    String uid, {
+    int days = 14,
+  }) async {
+    final res = await _sb.rpc(
+      'admin_get_dummy_stories',
+      params: {'p_uid': uid, 'p_days': days},
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
   /// Set status dummy: 'online' | 'idle' | 'offline' | 'invisible'.
   Future<void> setDummyStatus(String uid, String status) async {
     await _sb.rpc(
