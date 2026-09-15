@@ -1034,7 +1034,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Padding(
               // Top 10 = sama dengan jarak card pertama timeline ke atas
               // (list padding 4 + margin card 6) — konsisten antar halaman.
-              padding: EdgeInsets.fromLTRB(16, 10, 16, 24),
+              padding: EdgeInsets.fromLTRB(10, 10, 10, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
