@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +15,12 @@ class AppFonts {
   static const String defaultKey = 'default';
   static const String prefKey = 'app_font_family';
 
+  /// Key font SISTEM (font bawaan perangkat) — teks memakai font platform
+  /// (Roboto di Android, SF di iOS) baik judul maupun body, tanpa memuat
+  /// the underlying providerFonts. Berbeda dari [defaultKey] yang tetap
+  /// Poppins (judul) + Roboto (body).
+  static const String systemKey = 'system';
+
   /// Key font aktif (default = perilaku lama: Poppins + Roboto).
   static String current = defaultKey;
 
@@ -22,6 +29,11 @@ class AppFonts {
     defaultKey: AppFontOption(
       key: defaultKey,
       label: 'Default (Poppins + Roboto)',
+      family: null,
+    ),
+    systemKey: AppFontOption(
+      key: systemKey,
+      label: 'System — font bawaan HP',
       family: null,
     ),
     'inter': AppFontOption(
@@ -59,6 +71,9 @@ class AppFonts {
 
   /// Apakah key = default (perilaku lama: Poppins + Roboto).
   static bool isDefault([String? key]) => (key ?? current) == defaultKey;
+
+  /// Apakah key = font sistem (bawaan perangkat, tanpa the underlying providerFonts).
+  static bool isSystem([String? key]) => (key ?? current) == systemKey;
 
   /// Normalisasi key tak dikenal → default.
   static String resolve(String? key) {
@@ -108,6 +123,37 @@ class AppFonts {
     final fam = st.fontFamily;
     if (fam == null) return null;
     return (family: fam, fallback: st.fontFamilyFallback);
+  }
+
+  /// Style preview untuk picker font admin: font the underlying providerFonts
+  /// terpilih, font sistem (polos) bila System, atau fallback bila default.
+  /// Ditaruh di lib/config agar tidak melanggar aturan "tidak ada fontSize
+  /// numerik di luar lib/config" (preview butuh ukuran spesifik 24/14).
+  static TextStyle previewStyle(
+    String? key, {
+    required double size,
+    required FontWeight weight,
+    required Color color,
+    required String fallback,
+  }) {
+    final fam = family(key);
+    if (fam != null) {
+      return GoogleFonts.getFont(
+        fam,
+        fontSize: size,
+        fontWeight: weight,
+        color: color,
+      );
+    }
+    if (isSystem(key)) {
+      return TextStyle(fontSize: size, fontWeight: weight, color: color);
+    }
+    return GoogleFonts.getFont(
+      fallback,
+      fontSize: size,
+      fontWeight: weight,
+      color: color,
+    );
   }
 }
 

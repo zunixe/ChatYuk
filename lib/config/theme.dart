@@ -27,6 +27,16 @@ class AppText {
   }) {
     final family = AppFonts.family();
     if (family == null) {
+      // System: judul pakai font bawaan perangkat (bukan Poppins).
+      if (AppFonts.isSystem()) {
+        return TextStyle(
+          fontSize: size,
+          fontWeight: weight,
+          height: height,
+          color: color,
+          letterSpacing: letterSpacing,
+        );
+      }
       return GoogleFonts.poppins(
         fontSize: size,
         fontWeight: weight,

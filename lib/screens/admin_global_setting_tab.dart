@@ -862,7 +862,6 @@ class _AppFontSheetState extends State<_AppFontSheet> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
-    final selectedFamily = AppFonts.catalog[_selected]?.family;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -900,21 +899,23 @@ class _AppFontSheetState extends State<_AppFontSheet> {
                 children: [
                   Text(
                     s.adminFontPreviewHeading,
-                    style: GoogleFonts.getFont(
-                      selectedFamily ?? 'Poppins',
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
+                    style: AppFonts.previewStyle(
+                      _selected,
+                      size: 24,
+                      weight: FontWeight.w800,
                       color: AppTheme.textPrimary,
+                      fallback: 'Poppins',
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     s.adminFontPreviewBody,
-                    style: GoogleFonts.getFont(
-                      selectedFamily ?? 'Roboto',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
+                    style: AppFonts.previewStyle(
+                      _selected,
+                      size: 14,
+                      weight: FontWeight.w400,
                       color: AppTheme.textPrimary,
+                      fallback: 'Roboto',
                     ),
                   ),
                 ],
@@ -935,11 +936,12 @@ class _AppFontSheetState extends State<_AppFontSheet> {
                           contentPadding: EdgeInsets.zero,
                           title: Text(
                             opt.label,
-                            style: GoogleFonts.getFont(
-                              opt.family ?? 'Poppins',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                            style: AppFonts.previewStyle(
+                              opt.key,
+                              size: 15,
+                              weight: FontWeight.w600,
                               color: AppTheme.textPrimary,
+                              fallback: 'Poppins',
                             ),
                           ),
                         ),
