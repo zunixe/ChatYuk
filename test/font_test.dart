@@ -63,6 +63,26 @@ void main() {
       expect(AppFonts.isDefault('inter'), isFalse);
     });
 
+    test('isSystem hanya true untuk key system', () {
+      expect(AppFonts.isSystem('system'), isTrue);
+      expect(AppFonts.isSystem('default'), isFalse);
+      expect(AppFonts.isSystem('inter'), isFalse);
+    });
+
+    test('system ada di katalog, family null, resolve valid', () {
+      expect(AppFonts.catalog.containsKey(AppFonts.systemKey), isTrue);
+      expect(AppFonts.family('system'), isNull);
+      expect(AppFonts.resolve('system'), 'system');
+      expect(AppFonts.label('system'), contains('System'));
+    });
+
+    test('themeFontOverride system → null (pakai font platform)', () {
+      AppFonts.current = AppFonts.systemKey;
+      expect(AppFonts.themeFontOverride(), isNull);
+      expect(AppFonts.family(), isNull);
+      expect(AppFonts.isSystem(), isTrue);
+    });
+
     test('resolve key tak dikenal → default', () {
       expect(AppFonts.resolve('ngawur'), 'default');
       expect(AppFonts.resolve(null), 'default');
