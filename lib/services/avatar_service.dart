@@ -47,7 +47,14 @@ class AvatarB64Service {
         final b64 = base64Encode(disk);
         if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
         _cache[uid] = b64;
-        if (_bgRefreshed.add(uid)) unawaited(_refreshInBackground(uid));
+        if (_bgRefreshed.add(uid)) {
+          // Cap: set ini dedupe bg-refresh per-uid tapi tidak pernah dibersihkan
+          // → tumbuh 1 entry per user yang pernah dilihat. Bounded FIFO.
+          if (_bgRefreshed.length > _maxCache) {
+            _bgRefreshed.remove(_bgRefreshed.first);
+          }
+          unawaited(_refreshInBackground(uid));
+        }
         return b64;
       }
     } catch (_) {}

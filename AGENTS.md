@@ -122,16 +122,83 @@ Ukuran `Icon(size:)` — panduan, bukan wajib: **14** (inline teks kecil),
 **16** (dalam tombol), **18** (list dense), **20** (list/AppBar standar),
 **24** (aksi utama), **40** (empty state). Hindari angka lain.
 
+### Token family ke-2 — nilai non-`AppText` (SAH)
+
+Aturan "jangan tulis `fontSize:`" berlaku untuk **angka mentah**. Nilai ukuran
+yang diambil dari **token resmi** tetap sah walau ditulis sebagai `fontSize:`
+di luar `theme.dart`, karena token itu sendiri yang menjaga skala:
+
+- `AppText.*` — teks UI (lihat tabel di atas). Ini jalur utama.
+- `AppGlyph.*` — emoji, ikon dekoratif, inisial avatar (`avatarInitial`).
+- `StoryText.*` — teks overlay story (skala khusus story).
+
+```dart
+// BENAR — nilai dari token (skala tetap terjaga)
+TextStyle(fontSize: AppGlyph.sm)
+Text(StoryText.size(...))
+
+// SALAH — angka mentah (ini yang dilarang)
+TextStyle(fontSize: 13)
+TextStyle(fontSize: 11.5)
+```
+
+**Yang dilarang hanya angka literal.** Kalau butuh ukuran baru, tambahkan
+token baru di `theme.dart` — jangan tulis angkanya langsung.
+
 ### Line height
 
 Sudah termasuk di token. Jangan tulis `height:` sendiri.
 Referensi: teks padat 1.2, teks yang dibaca 1.35, angka besar 1.15.
 
 ### Checklist sebelum commit
-- [ ] `grep -rn 'fontSize:' lib --exclude-dir=config` → **0 hasil**
+- [ ] `grep -rnE 'fontSize: [0-9]' lib --exclude-dir=config` → **0 hasil**
+      (angka mentah — token `AppText`/`AppGlyph`/`StoryText` sah)
 - [ ] `grep -rn 'height: 1\.' lib --exclude-dir=config` → **0 hasil**
 - [ ] Tidak ada `copyWith(fontSize:` di mana pun
 - [ ] `flutter analyze` → 0 error, 0 warning
+
+## SQL / Migrasi (WAJIB — baca SEBELUM mengubah DB)
+
+**Latar:** di project ini fungsi SQL sering di-`create or replace` dengan
+**copy-paste seluruh isi lalu tambah 1-2 baris** — tanpa sadar MENGHAPUS cabang
+yang ditambahkan orang/migrasi lain. Kasus nyata: `ai_presence_tick` di-replace
+8x, `ai_always_online` (Admin Chatyuk) hilang 2x → harus bikin migrasi
+"restore". Ini yang bikin "pas migrasi, fitur lain rusak".
+
+### Aturan pantang dilanggar
+
+1. **DILARANG redefine fungsi FROZEN dengan copy-paste.** Daftar ada di
+   `scripts/frozen_functions.txt` (30 fungsi: presence/AI, notif, chat, poin,
+   admin). Kalau HARUS mengubahnya:
+   - Ambil versi TERBARU dari `supabase/snapshots/functions.sql` (yang
+     mencerminkan DB live), jangan dari migrasi lama/memori.
+   - Tempel header komentar: `-- menyentuh: <nama_fn>` — kalau tidak,
+     `scripts/check_migrations.sh` akan MENOLAK.
+   - Setelah migrasi, WAJIB jalankan `scripts/snapshot_functions.sh`,
+     review `git diff supabase/snapshots/functions.sql` untuk memastikan
+     **tidak ada cabang hilang**, lalu commit snapshot-nya.
+2. **Timestamp migrasi harus UNIK.** Format `YYYYMMDDHHMMSS_nama.sql`.
+   Tabrakan (2 file prefix sama) = urutan apply tidak deterministik → CI
+   menolak. Naikkan detik kalau bentrok.
+3. **DROP TABLE / DROP COLUMN / ALTER COLUMN TYPE** wajib penanda di baris
+   yang sama: `-- SAFE: alasan + siapa/tabel mana yang sudah tidak pakai`.
+   CI menolak tanpa penanda.
+4. **Jangan ubah semantik kolom yang dipakai lintas-fitur** tanpa cek
+   `docs/FEATURE_MAP.md`. Kolom/flag kritis (mis. `dummy_accounts.ai_always_online`,
+   `ai_no_sleep`, `ai_wake_until`, `ai_offline_until`, `profiles.status`,
+   `app_settings.ai_global_enabled`, `ai_internal_config.callback_secret`)
+   dipakai presence, notif, chat, admin, poin sekaligus.
+5. **Penerapan SQL di Mac ini HANYA lewat Management API** (CLI `db push`/`db query`
+   HANG). Cheat sheet: `supabase/migrations/APPLIED_VIA_API.md`.
+
+### Checklist sebelum commit migrasi
+
+- [ ] `bash scripts/check_migrations.sh --all` → **OK bersih**
+- [ ] Kalau menyentuh fungsi FROZEN: header `-- menyentuh: <fn>` ada +
+      `scripts/snapshot_functions.sh` dijalankan + diff snapshot direview
+- [ ] Kalau mengubah perilaku fitur: tambah/aktifkan test di
+      `supabase/tests/` (pgTAP) dan `flutter test` tetap 100% hijau
+- [ ] Catat migrasi yang di-apply di `docs/MIGRATION_LOG.md`
 
 ## Struktur Project
 

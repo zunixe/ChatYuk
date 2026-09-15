@@ -1,5 +1,6 @@
 import '../utils.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -26,6 +27,57 @@ class DummySession {
   static SupabaseClient get _sb => SupabaseConfig.client;
   static const _kAdminAccessToken = 'dummy_admin_access_token';
   static const _kAdminRefreshToken = 'dummy_admin_refresh_token';
+
+  /// Token admin = kredensial paling berharga di app → simpan TERENKRIPSI
+  /// (Keystore/Keychain), bukan SharedPreferences plaintext. Kunci prefs
+  /// lama (_kAdminAccessToken/_kAdminRefreshToken) tetap dibaca sekali untuk
+  /// migrasi, lalu dihapus.
+  static const _secure = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  static Future<String?> _readSecure(String key) async {
+    try {
+      return await _secure.read(key: key);
+    } catch (e) {
+      dlog('[DUMMY] secure read error ($key): $e');
+      return null;
+    }
+  }
+
+  static Future<void> _writeSecure(String key, String? value) async {
+    try {
+      if (value == null) {
+        await _secure.delete(key: key);
+      } else {
+        await _secure.write(key: key, value: value);
+      }
+    } catch (e) {
+      dlog('[DUMMY] secure write error ($key): $e');
+    }
+  }
+
+  /// Migrasi sekali: token lama di SharedPreferences → secure storage.
+  static bool _adminTokensMigrated = false;
+  static Future<void> _migrateAdminTokensOnce() async {
+    if (_adminTokensMigrated) return;
+    _adminTokensMigrated = true;
+    try {
+      final existing = await _readSecure(_kAdminRefreshToken);
+      if (existing != null && existing.isNotEmpty) return;
+      final prefs = await SharedPreferences.getInstance();
+      final refresh = prefs.getString(_kAdminRefreshToken);
+      final access = prefs.getString(_kAdminAccessToken);
+      if (refresh == null || refresh.isEmpty) return;
+      await _writeSecure(_kAdminRefreshToken, refresh);
+      await _writeSecure(_kAdminAccessToken, access);
+      await prefs.remove(_kAdminRefreshToken);
+      await prefs.remove(_kAdminAccessToken);
+      dlog('[DUMMY] migrasi token admin ke secure storage OK');
+    } catch (e) {
+      dlog('[DUMMY] migrasi token admin error: $e');
+    }
+  }
 
   static String? _adminAccessToken;
   static String? _adminRefreshToken;
@@ -215,9 +267,9 @@ class DummySession {
     // Uid dummy yang dilepas (untuk lepas HOLD AI-nya).
     final heldUid = _sb.auth.currentUser?.id;
     if (adminAccess == null || adminRefresh == null) {
-      final prefs = await SharedPreferences.getInstance();
-      adminAccess = prefs.getString(_kAdminAccessToken);
-      adminRefresh = prefs.getString(_kAdminRefreshToken);
+      await _migrateAdminTokensOnce();
+      adminAccess = await _readSecure(_kAdminAccessToken);
+      adminRefresh = await _readSecure(_kAdminRefreshToken);
     }
     if (adminRefresh == null || adminAccess == null) {
       dlog('[DUMMY] backToAdmin: no admin tokens (memory+prefs empty)');
@@ -293,9 +345,9 @@ class DummySession {
       }
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
-    final refresh = prefs.getString(_kAdminRefreshToken);
-    final access = prefs.getString(_kAdminAccessToken);
+    await _migrateAdminTokensOnce();
+    final refresh = await _readSecure(_kAdminRefreshToken);
+    final access = await _readSecure(_kAdminAccessToken);
     if (refresh == null || refresh.isEmpty) return;
     _adminRefreshToken = refresh;
     _adminAccessToken = access;
@@ -303,10 +355,10 @@ class DummySession {
     dlog('[DUMMY] session restored: $uid');
   }
 
-  /// Ada token admin tersimpan di SharedPreferences? Dipakai recovery.
+  /// Ada token admin tersimpan (secure storage)? Dipakai recovery.
   static Future<bool> hasStoredTokens() async {
-    final prefs = await SharedPreferences.getInstance();
-    final refresh = prefs.getString(_kAdminRefreshToken);
+    await _migrateAdminTokensOnce();
+    final refresh = await _readSecure(_kAdminRefreshToken);
     return refresh != null && refresh.isNotEmpty;
   }
 
@@ -346,16 +398,20 @@ class DummySession {
 
   /// Hapus token admin tersimpan (dipanggil saat logout total).
   static Future<void> clearStored() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kAdminAccessToken);
-    await prefs.remove(_kAdminRefreshToken);
+    await _writeSecure(_kAdminAccessToken, null);
+    await _writeSecure(_kAdminRefreshToken, null);
+    // Bersihkan juga sisa kunci lama (kalau migrasi belum jalan).
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kAdminAccessToken);
+      await prefs.remove(_kAdminRefreshToken);
+    } catch (_) {}
   }
 
   static Future<void> _saveAdminTokens(String? access, String? refresh) async {
     if (access == null || refresh == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kAdminAccessToken, access);
-    await prefs.setString(_kAdminRefreshToken, refresh);
+    await _writeSecure(_kAdminAccessToken, access);
+    await _writeSecure(_kAdminRefreshToken, refresh);
   }
 
   /// Pulihkan sesi admin tanpa menyentuh state dummy lainnya.

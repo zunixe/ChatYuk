@@ -367,6 +367,10 @@ class S {
   String deleteSelectedSuccess(int n) =>
       isId ? '$n chat dihapus' : '$n chats deleted';
   String selectedCount(int n) => isId ? '$n terpilih' : '$n selected';
+  /// Badge jumlah pesan baru pada mini-preview (mis. "3 baru").
+  String newCount(int n) => isId ? '$n baru' : '$n new';
+  /// Label jumlah penonton siaran langsung (mis. "4 peers").
+  String viewerCount(int n) => isId ? '$n penonton' : '$n viewers';
   String get btnArchive => isId ? 'Arsipkan' : 'Archive';
   String get btnUnarchive => isId ? 'Keluarkan dari Arsip' : 'Unarchive';
   String get msgArchived => isId ? 'Chat diarsipkan' : 'Chat archived';

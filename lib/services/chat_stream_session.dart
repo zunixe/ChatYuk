@@ -338,13 +338,32 @@ class ChatStreamSession {
           if (v != null) ts = DateTime.tryParse('$v')?.toLocal();
         }
         _hiddenCutoffCache[filterVal] = (ts: ts, fetchedAt: DateTime.now());
+        // Cap: tiap chat yang pernah dibuka menyisipkan 1 entry yang tidak
+        // pernah dihapus (kecuali ada event realtime) → bounded FIFO.
+        while (_hiddenCutoffCache.length > 200) {
+          _hiddenCutoffCache.remove(_hiddenCutoffCache.keys.first);
+        }
         return ts;
       } catch (_) {
         return null;
       }
     }
 
+    // Guard re-entry: reload() dipanggil dari banyak sumber konkuren
+    // (poll timer, INSERT error, UPDATE/DELETE realtime). Tanpa flag ini,
+    // burst event memicu N fetch paralel yang saling menimpa _current
+    // (race duplicate-insert / reorder). Cukup satu reload berjalan;
+    // permintaan berikutnya di-coalesce lewat _reloadQueued.
+    var _reloading = false;
+    var _reloadQueued = false;
+    Timer? reloadDebounce;
+
     Future<void> reload() async {
+      if (_reloading) {
+        _reloadQueued = true;
+        return;
+      }
+      _reloading = true;
       try {
         // Emit cache lokal DULU tanpa tunggu cutoff network — frame pertama
         // instant. Cutoff & server menyusul dan mengkoreksi di emit berikutnya.
@@ -355,7 +374,7 @@ class ChatStreamSession {
         final cached = await cacheF;
         if (cached.isNotEmpty && !controller.isClosed) {
           _current = cached;
-          controller.add(_current);
+          controller.add(List.unmodifiable(_current));
           loadPhotosAsync(cached);
         }
         _hiddenCutoff = await cutoffF;
@@ -366,7 +385,7 @@ class ChatStreamSession {
               .toList();
           if (filtered.length != _current.length) {
             _current = filtered;
-            controller.add(_current);
+            controller.add(List.unmodifiable(_current));
           }
         }
         final swServer = Stopwatch()..start();
@@ -401,7 +420,7 @@ class ChatStreamSession {
           merged.removeWhere((m) => !m.timestamp.isAfter(_hiddenCutoff!));
         }
         _current = merged;
-        controller.add(_current);
+        controller.add(List.unmodifiable(_current));
         scheduleCacheSave();
         // Foto di-load background — teks tidak menunggu decrypt foto.
         loadPhotosAsync(merged);
@@ -420,11 +439,28 @@ class ChatStreamSession {
             }
             if (list.isEmpty) return;
             _current = list;
-            controller.add(_current);
+            controller.add(List.unmodifiable(_current));
             loadPhotosAsync(list);
           }
         });
+      } finally {
+        _reloading = false;
+        // Ada permintaan reload yang datang saat proses berjalan → jalankan
+        // sekali lagi supaya tidak ada event yang hilang.
+        if (_reloadQueued && !controller.isClosed) {
+          _reloadQueued = false;
+          reload();
+        }
       }
+    }
+
+    // Jadwalkan reload ter-debounce (500ms) — dipakai untuk UPDATE/DELETE/
+    // fallback realtime supaya burst event tidak memicu reload beruntun.
+    void scheduleReload() {
+      reloadDebounce?.cancel();
+      reloadDebounce = Timer(const Duration(milliseconds: 500), () {
+        reload();
+      });
     }
 
     // Nama deterministik + filter server-side (dulu hashCode tak stabil +
@@ -510,10 +546,10 @@ class ChatStreamSession {
           if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'voice') {
             dlog('[PHOTO-DBG] rt-insert ${msg.id} type=${msg.type} imgLen=${msg.imageData.length} head=${msg.imageData.isEmpty ? '' : msg.imageData.substring(0, msg.imageData.length > 30 ? 30 : msg.imageData.length)}');
           }
-          controller.add(_current);
+          controller.add(List.unmodifiable(_current));
           scheduleCacheSave();
         } catch (_) {
-          reload();
+          scheduleReload();
         }
       },
     );
@@ -528,12 +564,12 @@ class ChatStreamSession {
         try {
           final newRecord = payload.newRecord;
           if (newRecord['id'] == null) {
-            reload();
+            scheduleReload();
             return;
           }
           final idx = _current.indexWhere((x) => x.id == newRecord['id']);
           if (idx < 0) {
-            reload();
+            scheduleReload();
             return;
           }
           final updated = _current[idx].copyWith(
@@ -558,7 +594,7 @@ class ChatStreamSession {
           controller.add(List.unmodifiable(_current));
           scheduleCacheSave();
         } catch (_) {
-          reload();
+          scheduleReload();
         }
       },
     );
@@ -574,7 +610,7 @@ class ChatStreamSession {
       callback: (_) {
         _hiddenCutoffCache.remove(filterVal);
         lastRealtime = DateTime.now();
-        reload();
+        scheduleReload();
       },
     );
     channel.onBroadcast(event: 'new_message', callback: (payload, [ref]) async {
@@ -696,6 +732,7 @@ class ChatStreamSession {
     controller.onCancel = () {
       pollTimer.cancel();
       saveDebounce?.cancel();
+      reloadDebounce?.cancel();
       // Flush cache pending kalau ada data yang belum tersimpan.
       if (_current.isNotEmpty) {
         final sig = _current.isEmpty

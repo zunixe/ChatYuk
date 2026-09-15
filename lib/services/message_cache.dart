@@ -87,8 +87,18 @@ class MessageCache {
 
   Future<SecretKey> _getKey() async {
     if (_key != null) return _key!;
-    _keyFuture ??= _loadKey();
-    return _keyFuture!;
+    // Kalau _loadKey gagal (mis. secure-storage belum siap), JANGAN simpan
+    // future yang gagal — future gagal "teracun" selamanya dan semua call
+    // berikutnya ikut throw (persistensi pesan rusak sepanjang sesi).
+    // Reset supaya call berikutnya mencoba lagi.
+    try {
+      _keyFuture ??= _loadKey();
+      return await _keyFuture!;
+    } catch (e) {
+      _keyFuture = null;
+      _key = null;
+      rethrow;
+    }
   }
 
   Future<SecretKey> _loadKey() async {

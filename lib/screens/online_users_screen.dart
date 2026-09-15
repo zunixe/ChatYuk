@@ -63,6 +63,17 @@ void clearAllAvatarCaches() {
   _avatarImageByUid.clear();
 }
 
+// Batas ukuran map avatar global — tanpa ini, 3 map tumbuh seumur sesi
+// (1 entry per user yang pernah terlihat) → risiko memori besar di HP
+// low-end saat sesi panjang. Evict FIFO (urutan insert) kalau lewat cap.
+const _avatarMapCap = 200;
+
+void _boundAvatarMap(Map<String, Object?> m) {
+  while (m.length > _avatarMapCap) {
+    m.remove(m.keys.first);
+  }
+}
+
 String? _processAvatarImage(Uint8List bytes) {
   // Fallback SAMA PERSIS dengan profile_screen: JPEG 1024 q92 kalau
   // encoder WebP gagal di device tertentu (dulu q70 300px — jelek).
@@ -146,6 +157,10 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
 
   void _resolve() {
     final src = widget.avatarB64;
+    // Batasi map global sebelum tulis baru — evict FIFO kalau lewat cap.
+    _boundAvatarMap(_avatarBytesByUid);
+    _boundAvatarMap(_avatarLastSrcByUid);
+    _boundAvatarMap(_avatarImageByUid);
     final srcType = src.isEmpty ? 'EMPTY' : src.startsWith('avatars/') ? 'PATH' : 'B64';
     // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
     if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) {
@@ -167,6 +182,8 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
           widget.uid,
           () => MemoryImage(_avatarBytesByUid[widget.uid]!),
         );
+        _boundAvatarMap(_avatarBytesByUid);
+        _boundAvatarMap(_avatarImageByUid);
         dlog('[AVATAR] $_uid8 FROM-DISK');
       }
       // Tidak ada di disk → biarkan inisial; batch network akan mengisi.
@@ -199,6 +216,8 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
             widget.uid,
             () => MemoryImage(_avatarBytesByUid[widget.uid]!),
           );
+          _boundAvatarMap(_avatarBytesByUid);
+          _boundAvatarMap(_avatarImageByUid);
           if (mounted) setState(() => _provider = _avatarImageByUid[widget.uid]);
         });
         return;
@@ -223,6 +242,9 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
       widget.uid,
       () => MemoryImage(_avatarBytesByUid[widget.uid]!),
     );
+    _boundAvatarMap(_avatarBytesByUid);
+    _boundAvatarMap(_avatarLastSrcByUid);
+    _boundAvatarMap(_avatarImageByUid);
   }
 
   @override
@@ -954,6 +976,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
   Future<void> _showUnreadBubble(BuildContext cardCtx, UserModel user, int unreadCount, Offset globalPos) async {
     final myUid = cardCtx.read<AuthProvider>().uid;
+    final s = cardCtx.read<LocaleProvider>().s;
     if (myUid == null) return;
     final ids = [myUid, user.uid]..sort();
     final chatId = '${ids[0]}_${ids[1]}';
@@ -1039,7 +1062,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                           Row(children: [
                             Text(user.nickname, style: AppText.bodyStrong),
                             const SizedBox(width: 6),
-                            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)), child: Text('$unreadCount baru', style: AppText.micro.copyWith(color: AppTheme.danger, fontWeight: FontWeight.w800))),
+                            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)), child: Text(s.newCount(unreadCount), style: AppText.micro.copyWith(color: AppTheme.danger, fontWeight: FontWeight.w800))),
                             const Spacer(),
                             GestureDetector(onTap: () => entry.remove(), child: Icon(Icons.close, size: 16, color: AppTheme.textSecondary)),
                           ]),
@@ -1051,7 +1074,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
                                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Expanded(child: Text(m.text.isNotEmpty ? m.text : (m.type == 'image' ? '[Foto]' : m.type), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodySmall)),
+                                    Expanded(child: Text(m.text.isNotEmpty ? m.text : (m.type == 'image' ? s.msgPhoto : m.type), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodySmall)),
                                     const SizedBox(width: 8),
                                     Text(DateFormat('HH:mm').format(m.timestamp.toLocal()), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
                                   ]),
