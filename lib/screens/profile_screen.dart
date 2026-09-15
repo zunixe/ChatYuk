@@ -2826,11 +2826,14 @@ class _ChatFontTile extends StatefulWidget {
 }
 
 class _ChatFontTileState extends State<_ChatFontTile> {
-  late double _value = ChatTextScale.current;
+  // Slider bekerja pada INDEX step (0..steps) → label berupa ANGKA ukuran
+  // font (pt), lebih rapat & intuitif daripada persen.
+  late int _step = ChatTextScale.stepIndex;
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
+    final mult = ChatTextScale.multOfStep(_step);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Column(
@@ -2872,7 +2875,7 @@ class _ChatFontTileState extends State<_ChatFontTile> {
                 ),
               ),
               Text(
-                '${ChatTextScale.percent}%',
+                '${ChatTextScale.ptOf(mult)}',
                 style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
               ),
             ],
@@ -2888,21 +2891,45 @@ class _ChatFontTileState extends State<_ChatFontTile> {
             ),
             child: Text(
               s.chatFontPreview,
-              style: AppText.chatBody.copyWith(color: AppTheme.textPrimary),
+              // Ukuran contoh mengikuti NILAI SLIDER saat ini (bukan current
+              // tersimpan) → tidak ada jeda/beda antara geser dan contoh.
+              style: AppText.chatBodyAt(
+                ChatTextScale.ptOf(mult).toDouble(),
+              ).copyWith(color: AppTheme.textPrimary),
             ),
           ),
           Slider(
-            value: _value,
-            min: ChatTextScale.min,
-            max: ChatTextScale.max,
+            value: _step.toDouble(),
+            min: 0,
+            max: ChatTextScale.steps.toDouble(),
             divisions: ChatTextScale.steps,
-            label: '${(_value * 100).round()}%',
+            label: '${ChatTextScale.ptOf(mult)}',
             activeColor: AppTheme.primary,
-            onChanged: (v) => setState(() => _value = v),
+            onChanged: (v) => setState(() => _step = v.round()),
             onChangeEnd: (v) async {
-              await ChatTextScale.set(v);
+              await ChatTextScale.set(ChatTextScale.multOfStep(v.round()));
               // Subtree chat rebuild via ChatTextScale.notifier (app.dart).
             },
+          ),
+          // Skala angka rapat (semua tingkat) supaya user lihat pilihan.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                for (var i = 0; i <= ChatTextScale.steps; i++)
+                  Text(
+                    '${ChatTextScale.ptOf(ChatTextScale.multOfStep(i))}',
+                    style: AppText.caption.copyWith(
+                      color: i == _step
+                          ? AppTheme.primary
+                          : AppTheme.textSecondary,
+                      fontWeight:
+                          i == _step ? FontWeight.w700 : FontWeight.w400,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
