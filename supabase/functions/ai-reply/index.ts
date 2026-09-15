@@ -77,18 +77,18 @@ function isInsult(text: string): boolean {
 }
 
 const DEFLECTIONS = [
-  'haha nggak ah, ngobrol yang wajar aja deh',
-  'wah ganti topik dong wkwk',
-  'nggak nyambung nih, lagi ngapain aja hari ini?',
-  'eh ganti topik ya, kamu hobi ngapain aja sih',
-  'bete deh, kita ngobrol yang lain aja',
-  'hmm gpp tapi ganti bahasan dulu',
-  'wkwk nggak deng, kamu udah makan belum?',
-  'jangan gituan dong, cerita dong hari kamu gimana',
-  'males bahas gituan, lagi sibuk apa sekarang?',
-  'ya ampun wkwk, ngobrol yang benar aja ya',
-  'haha skip, kemarin kamu ngapain aja?',
-  'ah ganti topik, kamu kenapa sih tiba tiba gitu',
+  'Haha nggak ah, ngobrol yang wajar aja deh',
+  'Wah ganti topik dong wkwk',
+  'Nggak nyambung nih, lagi ngapain aja hari ini?',
+  'Eh ganti topik ya, kamu hobi ngapain aja sih',
+  'Bete deh, kita ngobrol yang lain aja',
+  'Hmm gpp tapi ganti bahasan dulu',
+  'Wkwk nggak deng, kamu udah makan belum?',
+  'Jangan gituan dong, cerita dong hari kamu gimana',
+  'Males bahas gituan, lagi sibuk apa sekarang?',
+  'Ya ampun wkwk, ngobrol yang benar aja ya',
+  'Haha skip, kemarin kamu ngapain aja?',
+  'Ah ganti topik, kamu kenapa sih tiba tiba gitu',
 ];
 
 function randomOf(arr: string[]): string {
@@ -197,6 +197,8 @@ function sanitize(
       .replace(/\n{3,}/g, '\n\n')
       .trim();
     if (maxChars != null && t.length > maxChars) t = t.slice(0, maxChars).trim();
+    // Kapitalkan huruf pertama jawaban CS/expert (kecuali baris mulai kode).
+    if (t && t[0] >= 'a' && t[0] <= 'z') t = t[0].toUpperCase() + t.slice(1);
     return t;
   }
   t = t.replace(/\n+/g, ' ');
@@ -214,6 +216,11 @@ function sanitize(
     t = (lastStop > 30 ? cut.slice(0, lastStop + 1) : cut).trim();
     t = t.replace(/[,;:]$/, '');
     if (!/[.!?]$/.test(t)) t += '...';
+  }
+  // Kapitalkan huruf pertama (gaya chat WhatsApp) — hanya jika karakter
+  // pertama huruf kecil; emoji/simbol/angka dibiarkan apa adanya.
+  if (t && t[0] >= 'a' && t[0] <= 'z') {
+    t = t[0].toUpperCase() + t.slice(1);
   }
   return t;
 }
