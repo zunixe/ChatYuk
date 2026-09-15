@@ -39,6 +39,21 @@ class RealtimeHub {
     ch.subscribe((status, _) async {
       if (status == RealtimeSubscribeStatus.subscribed) {
         await ch.track({'uid': uid, 'nickname': nickname, 'at': DateTime.now().toIso8601String()});
+        return;
+      }
+      // Channel error/closed: presence mati senyap → user hilang dari daftar
+      // online orang lain sampai restart. Bersihkan state supaya heartbeat
+      // di auth_provider (cek isOnlineTracking) bisa re-track.
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.closed ||
+          status == RealtimeSubscribeStatus.timedOut) {
+        if (identical(_onlineChannel, ch)) {
+          _onlineChannel = null;
+          _trackedUid = null;
+        }
+        try {
+          await _sb.removeChannel(ch);
+        } catch (_) {}
       }
     });
     _onlineChannel = ch;
@@ -84,6 +99,19 @@ class RealtimeHub {
     ch.subscribe((status, _) async {
       if (status == RealtimeSubscribeStatus.subscribed) {
         await ch.track({'uid': uid, 'roomId': roomId});
+        return;
+      }
+      // Channel error/closed: presence room mati senyap → bersihkan map
+      // supaya open berikutnya membuat channel baru.
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.closed ||
+          status == RealtimeSubscribeStatus.timedOut) {
+        if (identical(_roomChannels[key], ch)) {
+          _roomChannels.remove(key);
+        }
+        try {
+          await _sb.removeChannel(ch);
+        } catch (_) {}
       }
     });
     _roomChannels[key] = ch;

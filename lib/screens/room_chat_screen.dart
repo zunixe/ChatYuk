@@ -240,6 +240,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         table: 'rooms',
         filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: widget.room.id),
         callback: (payload) {
+          if (!mounted) return;
           final live = payload.newRecord['live_uid']?.toString();
           dlog('[BDBG] realtime rooms update live=$live current=$_liveUid');
           if (live != _liveUid) {
@@ -426,6 +427,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _broadcastSession = session;
     try {
       await session.start();
+      if (!mounted) return;
       // Foreground service: broadcast tetap hidup saat app di-background
       CallNotification.startLive(
           text: context.read<LocaleProvider>().s.broadcastLiveNotif);
@@ -453,6 +455,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     );
     _broadcastSession = session;
     await session.start();
+    if (!mounted) return;
     // Foreground service: menonton broadcast tetap hidup di background
     CallNotification.startLive(
         text: context.read<LocaleProvider>().s.broadcastWatchingNotif);
@@ -1982,7 +1985,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(_replyingTo!.senderName, style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
-                        Text(_replyingTo!.text.isNotEmpty ? _replyingTo!.text : '[Foto]', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.bodySmall),
+                        Text(_replyingTo!.text.isNotEmpty ? _replyingTo!.text : s.msgPhoto, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.bodySmall),
                       ],
                     ),
                   ),
@@ -3486,7 +3489,7 @@ class _BroadcastStage extends StatelessWidget {
             Positioned(
               bottom: 8,
               right: 10,
-              child: Text('${session.viewerCount} peers',
+              child: Text(s.viewerCount(session.viewerCount),
                   style: AppText.micro.copyWith(color: Colors.white54)),
             ),
         ],

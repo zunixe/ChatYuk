@@ -297,7 +297,7 @@ class _PostCardState extends State<PostCard> {
       'parentId': parentId ?? 0,
       'text': text,
       'authorId': auth.uid ?? '',
-      'authorName': auth.profile?.nickname ?? 'Kamu',
+      'authorName': auth.profile?.nickname ?? s.labelYou,
       'authorGender': auth.profile?.gender ?? '',
       'likeCount': 0,
       'shareCount': 0,

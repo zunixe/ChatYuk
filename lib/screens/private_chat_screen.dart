@@ -149,7 +149,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   // Call video dalam chat: overlay panel draggable di atas layar chat.
   bool _callExpanded = false;
 
-  LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
+  LayerLink _linkFor(String id) {
+    // Cap peta link — tanpa ini tumbuh tanpa batas di sesi panjang
+    // (LayerLink per pesan yang pernah dirender). Evict FIFO.
+    if (_msgLinks.length > 500 && !_msgLinks.containsKey(id)) {
+      _msgLinks.remove(_msgLinks.keys.first);
+    }
+    return _msgLinks.putIfAbsent(id, () => LayerLink());
+  }
   // Foto yang sudah dikonfirmasi server (id pesan server) — dipakai dedupe
   // FIFO karena imageData di stream berupa thumbnail, bukan base64 penuh.
   // Hanya foto dengan timestamp setelah screen dibuka yang diproses, supaya
@@ -868,6 +875,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void _startVoiceTimer() {
     _voiceTimer?.cancel();
     _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
       if (_voiceSeconds >= 59) { _stopVoiceRecord(send: true); return; }
       _sendRecordingSignal();
       setState(() => _voiceSeconds++);
@@ -1851,18 +1859,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         : widget.otherGender == 'female'
         ? '👩'
         : '';
-    final genderLabel = widget.otherGender == 'male'
-        ? s.genderMalePlain
-        : widget.otherGender == 'female'
-        ? s.genderFemalePlain
-        : '';
     final agePart = widget.otherAge > 0 ? '${widget.otherAge}' : '';
     final cityPart = _otherCity.isNotEmpty ? _otherCity : widget.otherCity;
     final countryPart = _otherCountry.isNotEmpty
         ? _otherCountry
         : widget.otherCountry;
+    // Label gender teks ("Perempuan"/"Laki-laki") TIDAK dipakai — sudah
+    // diwakilkan oleh emoji gender (👨/👩) di depan subtitle.
     final subtitle = [
-      if (genderLabel.isNotEmpty) '$genderLabel $agePart'.trim(),
+      if (agePart.isNotEmpty) agePart,
       if (cityPart.isNotEmpty && cityPart != countryPart) cityPart,
       if (countryPart.isNotEmpty) countryPart,
     ].where((e) => e.isNotEmpty).join(', ');
@@ -2029,6 +2034,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               ((auth.profile?.isRegistered ?? false) &&
                   (_otherRegistered || widget.otherRegistered)))
             PopupMenuButton(
+              padding: EdgeInsets.zero,
+              iconSize: 22,
+              // Rapatkan ke kanan: kurangi area sentuh bawaan PopupMenuButton
+              // (default ~48px) supaya jarak ke ikon more_vert tidak lebar.
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               icon: Icon(Icons.call, color: Colors.white, size: 22),
               color: AppTheme.bgCard,
               tooltip: s.callAudio,
@@ -2057,6 +2067,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               ],
             ),
           PopupMenuButton(
+            padding: EdgeInsets.zero,
+            iconSize: 24,
             icon: Icon(Icons.more_vert, color: Colors.white),
             color: AppTheme.bgCard,
             onSelected: (val) {

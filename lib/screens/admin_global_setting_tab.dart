@@ -1156,6 +1156,8 @@ class _ProviderCardState extends State<_ProviderCard> {
   final AdminService _svc = AdminService(SupabaseConfig.client);
   late final TextEditingController _labelCtrl;
   late final TextEditingController _modelCtrl;
+  late final TextEditingController _storyModelCtrl;
+  late final TextEditingController _fallbackModelCtrl;
   late final TextEditingController _baseCtrl;
   late final TextEditingController _keyCtrl;
   bool _busy = false;
@@ -1166,7 +1168,11 @@ class _ProviderCardState extends State<_ProviderCard> {
   /// dari base URL kartu itu — tanpa dropdown provider terpisah.
   static const _modelsByBase = {
     'tokenharbor.ai': ['th/deepseek-v4.1-flash:free'],
-    'openrouter.ai': ['nvidia/nemotron-3-ultra-550b-a55b:free'],
+    'openrouter.ai': [
+      'nvidia/nemotron-3.5-lightning:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'inclusionai/ling-3.0-flash-fin:free',
+    ],
     'api.b.ai': ['mimo-v2.5', 'qwen3.8-flash'],
   };
 
@@ -1197,6 +1203,10 @@ class _ProviderCardState extends State<_ProviderCard> {
     _labelCtrl = TextEditingController(text: '${widget.data['label'] ?? ''}');
     _modelCtrl = TextEditingController(
         text: '${widget.data['default_model'] ?? ''}');
+    _storyModelCtrl = TextEditingController(
+        text: '${widget.data['story_model'] ?? ''}');
+    _fallbackModelCtrl = TextEditingController(
+        text: '${widget.data['fallback_model'] ?? ''}');
     _baseCtrl = TextEditingController(text: '${widget.data['api_base'] ?? ''}');
     _keyCtrl = TextEditingController(text: '${widget.data['api_key'] ?? ''}');
     _modelCtrl.addListener(_onModelTextChanged);
@@ -1211,6 +1221,8 @@ class _ProviderCardState extends State<_ProviderCard> {
     _modelCtrl.removeListener(_onModelTextChanged);
     _labelCtrl.dispose();
     _modelCtrl.dispose();
+    _storyModelCtrl.dispose();
+    _fallbackModelCtrl.dispose();
     _baseCtrl.dispose();
     _keyCtrl.dispose();
     super.dispose();
@@ -1229,6 +1241,12 @@ class _ProviderCardState extends State<_ProviderCard> {
         apiKey: _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim(),
         defaultModel:
             _modelCtrl.text.trim().isEmpty ? null : _modelCtrl.text.trim(),
+        storyModel: _storyModelCtrl.text.trim().isEmpty
+            ? null
+            : _storyModelCtrl.text.trim(),
+        fallbackModel: _fallbackModelCtrl.text.trim().isEmpty
+            ? null
+            : _fallbackModelCtrl.text.trim(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -1515,6 +1533,26 @@ class _ProviderCardState extends State<_ProviderCard> {
                     style: AppText.body,
                     decoration: InputDecoration(
                       labelText: s.aiGlobalModel,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _storyModelCtrl,
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      labelText: s.aiProviderStoryModel,
+                      helperText: s.aiProviderStoryModelHint,
+                      helperMaxLines: 2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _fallbackModelCtrl,
+                    style: AppText.body,
+                    decoration: InputDecoration(
+                      labelText: s.aiProviderFallbackModel,
+                      helperText: s.aiProviderFallbackModelHint,
+                      helperMaxLines: 2,
                     ),
                   ),
                   const SizedBox(height: 8),

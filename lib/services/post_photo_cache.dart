@@ -236,4 +236,43 @@ class PostPhotoCache {
       dlog('[PostPhotoCache] clearAll ignored: $e');
     }
   }
+
+  /// Purge cache disk yang basi + enforce quota (dipanggil saat startup).
+  /// Tanpa ini, `post_photos_v2/*.jpg` tumbuh tanpa batas seiring scroll feed.
+  /// - Hapus file lebih tua dari 14 hari.
+  /// - Kalau total masih > 150 MB, hapus yang paling lama sampai di bawah.
+  Future<void> cleanOldPhotos() async {
+    try {
+      final folder = await _folder();
+      if (!await folder.exists()) return;
+      final cutoff = DateTime.now().subtract(const Duration(days: 14));
+      const maxBytes = 150 * 1024 * 1024;
+      final files = <MapEntry<File, FileStat>>[];
+      var total = 0;
+      await for (final entity in folder.list()) {
+        if (entity is! File) continue;
+        final stat = await entity.stat();
+        if (stat.modified.isBefore(cutoff)) {
+          try {
+            await entity.delete();
+          } catch (_) {}
+          continue;
+        }
+        files.add(MapEntry(entity, stat));
+        total += stat.size;
+      }
+      if (total <= maxBytes) return;
+      // Hapus tertua lebih dulu sampai di bawah quota.
+      files.sort((a, b) => a.value.modified.compareTo(b.value.modified));
+      for (final e in files) {
+        if (total <= maxBytes) break;
+        try {
+          await e.key.delete();
+          total -= e.value.size;
+        } catch (_) {}
+      }
+    } catch (e) {
+      dlog('[PostPhotoCache] cleanOldPhotos ignored: $e');
+    }
+  }
 }

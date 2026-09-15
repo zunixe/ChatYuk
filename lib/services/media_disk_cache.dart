@@ -103,7 +103,9 @@ class MediaDiskCache {
   Future<void> _saveIndex() async {
     try {
       final f = File('$_docs/$_dirName/$_indexName');
-      f.writeAsStringSync(
+      // Async write — index bisa besar (250 MB cache) dan writeSync+flush
+      // di main isolate berisiko jank UI.
+      await f.writeAsString(
         jsonEncode(_index.map((k, v) => MapEntry(k, v.toIso8601String()))),
         flush: true,
       );
@@ -219,6 +221,7 @@ class MediaDiskCache {
       }
       final existing = byName.keys.toSet();
       _index.removeWhere((k, v) => !existing.contains(_fileName(k)));
+      _fileNameToPath.removeWhere((name, path) => !existing.contains(name));
       _scheduleSaveIndex();
     } catch (e) {
       dlog('[MediaDisk] quota error: $e');
@@ -253,6 +256,8 @@ class MediaDiskCache {
           _index.removeWhere((k, v) => _fileName(k) == name);
         }
       }
+      // Bersihkan juga index terbalik untuk file yang sudah dihapus.
+      _fileNameToPath.removeWhere((name, path) => !active.contains(name));
       _scheduleSaveIndex();
     } catch (e) {
       dlog('[MediaDisk] keepOnly error: $e');
@@ -264,6 +269,7 @@ class MediaDiskCache {
       final d = Directory('$_docs/$_dirName');
       if (d.existsSync()) await d.delete(recursive: true);
       _index.clear();
+      _fileNameToPath.clear();
       _indexLoaded = false;
     } catch (_) {}
   }

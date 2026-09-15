@@ -722,3 +722,73 @@ Saat apply, `supabase db push` melaporkan **42 migration lokal tidak ada di hist
 - **Apply:** Management API (pola sama). Kedua versi dicatat di `schema_migrations`.
 - **Verifikasi (DB live):** 5 expert SEMUA `always_reply=true` + `long_answers=true` ✅; 7 regular SEMUA false/null ✅. Admin Chatyuk always_reply=true ✅; HardwareExpert long_answers=true ✅.
 - **Catatan disiplin:** 20260914110000 (sudah applied) TIDAK diedit — koreksi dibuat sebagai migration BARU (immutability).
+
+## 2026-09-14 — 20260914130000_ai_provider_models.sql (APPLY) + qwen3.8-flash untuk chat & story
+
+- **Latar:** MbakSari ngaku AI ("Tidak seperti manusia...") + balas Inggris typo. Akar: provider aktif = inxora `ixlabs/deepseek-v4.1-flash-free` (model coding-agent "CodeBuddy", lemah, tak patuh prompt anti-AI). B.AI token dikira habis, tapi tes langsung: `qwen3.8-flash` di B.AI jalan stabil 3/3, natural, nakal/playful, tak ngaku AI.
+- **Isi migration:** `ai_provider_config` + kolom `story_model` & `fallback_model`; `admin_ai_provider_save/list` handle 2 kolom baru; set b-ai: `default_model=qwen3.8-flash`, `story_model=qwen3.8-flash` (fallback kosong = mimo-v2.5-free).
+- **Edge:** `ai-reply` baca `default_model` (chat), `story_model` (story inline), `fallback_model` (MIMO_FREE + fallbackModel); `ai-daily-life` baca `story_model`→`default_model`→glm + `fallback_model`→mimo. Semua bisa diatur dari UI tanpa hardcode.
+- **UI:** kartu provider + 2 field (Model cerita harian, Model cadangan) + string bilingual; `saveAiProvider` kirim `p_story_model`/`p_fallback_model`.
+- **Deploy:** `ai-reply` v148 + `ai-daily-life` v18 ACTIVE.
+- **Verifikasi:** `ai_provider_config` b-ai aktif qwen3.8-flash ✅; `check_migrations.sh` OK ✅; `flutter test` hijau ✅; APK admin rebuilt + installed ke HP ✅.
+
+## 2026-09-14 — 20260914150000_storage_ownership.sql (APPLY)
+
+- **Latar:** review ulang menemukan IDOR di bucket `chat-photos`. Policy lama
+  (`20260813000000` + `20260829050000`) hanya cek `auth.role()='authenticated'`
+  tanpa ownership path → user authenticated mana pun bisa overwrite/delete
+  file user lain (avatar/gallery/voice/story/post).
+- **Isi migration:**
+  1. `storage_object_owner_ok(name)` — helper owner-or-admin per path
+     (`avatars/<uid>_<ts>.jpg`, `gallery|posts|story|timeline/<uid>/…`,
+     `chat|voice/<chatId>/…` divalidasi peserta `private_chats`; admin via
+     `is_admin_request()`; prefix tak dikenal = fail-closed).
+  2. Ganti 4 policy: insert/update/delete wajib `storage_object_owner_ok(name)`;
+     select tetap public read.
+  3. Trigger `trg_chat_photos_guard` (BEFORE INSERT/UPDATE storage.objects,
+     bucket chat-photos): whitelist `content_type` (jpeg/png/webp/m4a/mp3) +
+     limit 8 MB — enforcement server-side.
+- **Apply:** via Management API `POST /v1/projects/{ref}/database/query`.
+  Versi `20260914150000` dicatat di `schema_migrations`.
+- **Verifikasi (DB live):**
+  - 4 policy baru ada (owner_insert/update/delete + public_read) ✅
+  - fungsi `storage_object_owner_ok` + `chat_photos_guard` ada ✅
+  - trigger `trg_chat_photos_guard` terpasang ✅
+  - uji owner: `avatars/<uid>.jpg` & `_<ts>` = true, `avatars/other.jpg` = false,
+    `gallery/<uid>/…` = true, `posts/other/…` = false, `chat/nonexist/…` = false,
+    `evil/x.jpg` = false ✅
+  - uji guard: image/jpeg & audio/m4a lolos; application/pdf ditolak; 9 MB ditolak ✅
+  - mimetype objek eksisting: image/jpeg (122), audio/m4a (212), image/png (3) —
+    semua tercakup whitelist ✅
+- **Tidak menyentuh** fungsi FROZEN; `check_migrations.sh --all` OK bersih.
+
+## 2026-09-14 — Bot AI global → OpenRouter nemotron-3.5-lightning:free (DATA, bukan migrasi)
+- **Minta user:** pakai `nvidia/nemotron-3.5-lightning:free` (OpenRouter) untuk bot AI + key `sk-or-v1-68…069d`. Dites langsung via OpenRouter: eksplisit ditolak, tapi roleplay romantis non-eksplisit ("ciuman yuk") DILAYANI — cocok untuk mode dewasa guard-off.
+- **Client:** `lib/screens/admin_global_setting_tab.dart` `_modelsByBase['openrouter.ai']` tambah `'nvidia/nemotron-3.5-lightning:free'` (dropdown panel admin; ID model = data key, tanpa string UI baru).
+- **DATA live (query API):** upsert baris `ai_provider_config(id='openrouter', label='OpenRouter', api_base='https://openrouter.ai/api/v1', api_key=key user, default_model='nvidia/nemotron-3.5-lightning:free', story/fallback='')` + aktifkan (nonaktifkan `b-ai` dulu — constraint `ai_provider_config_one_active` hanya 1 aktif).
+- **Secret:** `AI_API_KEY_OPENROUTER` di-update ke key user (routing edge `:free`/`nvidia/` pakai secret ini, BUKAN kolom api_key DB).
+- **Tidak menyentuh** fungsi FROZEN / skema; `flutter analyze` file terkait: 0 error/warning (3 info lama Radio-deprecated, tidak terkait).
+- **Verifikasi:** select live → `openrouter` is_active=true, default_model nemotron-3.5-lightning:free ✅
+
+## 2026-09-14 — Reasoning Nemotron OFF (ai-reply v150 + ai-daily-life v20) (DEPLOY)
+- **Keluhan:** balasan bot AI (Nemotron via OpenRouter) lama — model "berpikir" ~300 token reasoning dulu sebelum jawab.
+- **Tes langsung OpenRouter:** `reasoning:{"exclude":true}` cuma sembunyikan output (reasoning 234 token tetap jalan); `reasoning:{"enabled":false,"exclude":true}` → reasoning_tokens=0, jawaban tetap bagus + roleplay romantis jalan.
+- **Code:** `ai-reply` `llmCall` + `tryStoryGen` kirim `reasoning:{enabled:false,exclude:true}` untuk rute OpenRouter (`:free`/`nvidia/`/base openrouter.ai); `ai-daily-life` `callPrimary` kirim param yang sama bila base OpenRouter (ganti `reasoning_effort:'low'` yang rawan ditolak gateway). Provider lain tidak tersentuh.
+- **Deploy:** single-file mgmt API GAGAL (`Module not found ../_shared/auth.ts`) → bundle lokal via esbuild (`--external:https://esm.sh/*`, auth.ts ter-inline) lalu deploy bundle: **ai-reply v149→v150 ACTIVE** (verify_jwt=false), **ai-daily-life v19→v20 ACTIVE** (verify_jwt=true dipertahankan).
+- **Tidak menyentuh** fungsi FROZEN / skema DB.
+
+## 2026-09-14 — Ling-3.0-Flash sebagai fallback bot AI (DATA, tanpa deploy)
+- **Tes OpenRouter `openrouter/inclusionai/ling-3.0-flash-fin:free`:** eksplisit DITOLAK ("I am content-filtered..."); romantis ringan ("cium aku dong") DILAYANI, bahkan lebih berani dari Nemotron. Reasoning rakus (600+ token) TAPI `reasoning:{enabled:false,exclude:true}` → 1,4 dtk, 0 token reasoning, kualitas tetap.
+- **Client:** `_modelsByBase['openrouter.ai']` + `'openrouter/inclusionai/ling-3.0-flash-fin:free'` (dropdown admin).
+- **DATA live:** baris `openrouter.fallback_model` = Ling (default tetap Nemotron). Alur fallback `llmCall.mimoFallback` pakai `routeFor` → `:free` lari ke OpenRouter + reasoning-off otomatis (deploy v150). Tanpa deploy ulang.
+- **Verifikasi:** select live default=nemotron/fallback=ling ✅; analyze 3 info lama saja ✅.
+
+## 2026-09-14 — Swap utama/fallback: Ling utama, Nemotron fallback (DATA, tanpa deploy)
+- Minta user: yang utama Ling, fallback Nemotron. Baris `openrouter`: default_model=Ling, fallback_model=Nemotron. Keduanya `:free` → rute OpenRouter + reasoning-off (v150) berlaku untuk keduanya.
+
+## 2026-09-14 — Bot diam: ID Ling salah + fallback luar buta rute (ai-reply v151) (FIX+DEPLOY)
+- **Akar:** default_model tertulis `openrouter/inclusionai/ling-3.0-flash-fin:free` — ID valid OpenRouter adalah `inclusionai/ling-3.0-flash-fin:free` (tanpa prefix `openrouter/`). OpenRouter balas 400; 400 tidak masuk daftar retry → diam. Fallback luar ikut gagal: ID Nemotron dikirim ke base B.AI (404). Gagal ganda = tidak ada balasan sama sekali.
+- **Fix DATA:** default_model → `inclusionai/ling-3.0-flash-fin:free`; dropdown admin dikoreksi sama.
+- **Fix code:** (1) FALLBACKABLE +400 (model-ID-salah ikut di-retry model lain); (2) fallback luar kini sadar rute — fallbackModel `:free`/`nvidia/` → OpenRouter + secret OR + reasoning-off; selain itu tetap B.AI + reasoning_effort low khusus glm.
+- **Deploy:** bundle esbuild → **ai-reply v150→v151 ACTIVE**.
+- **Tidak menyentuh** fungsi FROZEN / skema DB.

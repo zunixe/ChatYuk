@@ -1453,6 +1453,9 @@ class ChatService {
     final controller = StreamController<List<UserModel>>.broadcast();
     List<UserModel> cached = [];
     Timer? debounce;
+    // Map uid→path dibangun ulang tiap stream dibuka — tanpa clear, tumbuh
+    // seumur instance (1 entry per user yang pernah online).
+    _onlinePathByUid.clear();
     // Coalesce fallback: kapan sync terakhir jalan (sumber mana pun).
     DateTime? lastSyncAt;
 

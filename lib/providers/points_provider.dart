@@ -668,27 +668,27 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final overlay = Overlay.of(context);
       late OverlayEntry entry;
-      entry = OverlayEntry(
-        builder: (_) => _PointsToast(
-          message: message,
-          isError: isError,
-          onDismiss: () {
-            try {
-              entry.remove();
-            } catch (e) {
-              dlog('[PointsProvider] showPointsToast ignored: $e');
-            }
-          },
-        ),
-      );
-      overlay.insert(entry);
-      Future.delayed(const Duration(milliseconds: 2000), () {
+      var removed = false;
+      void removeOnce() {
+        if (removed) return;
+        removed = true;
         try {
           entry.remove();
         } catch (e) {
           dlog('[PointsProvider] showPointsToast ignored: $e');
         }
-      });
+      }
+      entry = OverlayEntry(
+        builder: (_) => _PointsToast(
+          message: message,
+          isError: isError,
+          onDismiss: removeOnce,
+        ),
+      );
+      overlay.insert(entry);
+      // Safety net: kalau widget tidak sempat dismiss sendiri (mis. overlay
+      // lain menutupi), paksa lepas setelah 2s. Idempotent via removeOnce.
+      Future.delayed(const Duration(milliseconds: 2000), removeOnce);
     } catch (e) {
       dlog('[PointsProvider] showPointsToast ignored: $e');
     }

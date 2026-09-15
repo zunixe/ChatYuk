@@ -1060,7 +1060,7 @@ async function loadProvCfg(admin: any): Promise<any> {
   try {
     const { data: act } = await admin
       .from('ai_provider_config')
-      .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
+      .select('api_base, api_key, default_model, story_model, fallback_model, stt_api_base, stt_api_key')
       .eq('is_active', true)
       .limit(1)
       .maybeSingle();
@@ -1071,7 +1071,7 @@ async function loadProvCfg(admin: any): Promise<any> {
   try {
     const { data: glob } = await admin
       .from('ai_provider_config')
-      .select('api_base, api_key, default_model, stt_api_base, stt_api_key')
+      .select('api_base, api_key, default_model, story_model, fallback_model, stt_api_base, stt_api_key')
       .eq('id', 'global')
       .maybeSingle();
     return glob;
@@ -2491,11 +2491,14 @@ Deno.serve(async (req: Request) => {
         headers: {},
       };
     };
-    // Model cadangan gratis (OpenCode Zen) bila provider utama menolak
-    // (saldo $0/402, kuota habis/429, model salah/404, 5xx) — TokenHarbor
-    // tetap utama; Mimo hanya dipakai saat utama gagal.
-    const MIMO_FREE = 'mimo-v2.5-free';
-    const FALLBACKABLE = /http_(401|402|404|429|5\d\d)/;
+    // Model cadangan bila provider utama menolak (saldo $0/402, kuota
+    // habis/429, model salah/404, 5xx). Default gratis OpenCode Zen (Mimo);
+    // bisa di-override dari panel admin via ai_provider_config.fallback_model.
+    const MIMO_FREE = (provCfg?.fallback_model || '').trim() || 'mimo-v2.5-free';
+    // 400 ikut di-retry: sering berarti "model ID tidak dikenal" di
+    // provider — coba model lain lebih berguna daripada diam. (400
+    // parameter-invalid ikut nyoba sekali, lalu jatuh ke fallback luar.)
+    const FALLBACKABLE = /http_(400|401|402|404|429|5\d\d)/;
     // ── JADWAL HARIAN AI + CERITA KEHIDUPAN HARIAN ──
     // AI menentukan sendiri jam onlinenya SETIAP HARI (menggerakkan
     // cronjob ai_presence_tick) DAN generate cerita kegiatannya hari ini
@@ -2677,11 +2680,12 @@ Deno.serve(async (req: Request) => {
         const prevText = prevStory
           ? `Kemarin (${prevStory.story_date}): ${JSON.stringify(prevStory.story)}`
           : 'Ini hari pertamamu punya rutinitas tercatat — mulai yang wajar.';
-        // Story/jadwal SELALU pakai glm (B.AI) — model chat (Zen/free)
-        // sering menolak system-only JSON call (500) & format tidak stabil.
-        // Bila glm mati (saldo $0/402, 429, 5xx) → fallback Mimo free (Zen);
-        // TokenHarbor tetap utama.
-        let sModel = 'glm-5.3-flash';
+        // Story/jadwal: model dari panel admin (ai_provider_config.story_model)
+        // → fallback ke model chat (default_model) → 'glm-5.3-flash'.
+        // Bila gagal (saldo $0/402, 429, 5xx) → fallback Mimo free (Zen).
+        let sModel = (provCfg?.story_model || '').trim() ||
+          (provCfg?.default_model || '').trim() ||
+          'glm-5.3-flash';
         let sRoute = routeFor(sModel);
         let sBase = sRoute.base;
         let sKey = sRoute.key;
@@ -2760,6 +2764,12 @@ Deno.serve(async (req: Request) => {
                 // (JSON terpotong = parse gagal = cerita tipis).
                 // HANYA untuk glm — provider lain/Zen menolak param ini (500).
                 ...(sModel.includes('glm') ? { reasoning_effort: 'low' } : {}),
+                // Rute OpenRouter: matikan reasoning (cepat, hemat token).
+                ...(sModel.includes(':free') ||
+                sModel.startsWith('nvidia/') ||
+                sBase.includes('openrouter.ai')
+                  ? { reasoning: { enabled: false, exclude: true } }
+                  : {}),
                 messages: [
                   { role: 'system', content: storyPrompt(strict) },
                   { role: 'user', content: 'Oke, buatkan.' },
@@ -2972,8 +2982,10 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: 'no_api_key' }, 500);
     }
     // Model cadangan bila model utama error (mis. Zen free down 500) —
-    // dummy tidak boleh diam. Default glm B.AI (sudah terbukti jalan).
+    // dummy tidak boleh diam. Prioritas: panel admin (fallback_model) →
+    // env AI_FALLBACK_MODEL → 'glm-5.3-flash'.
     const fallbackModel =
+      (provCfg?.fallback_model || '').trim() ||
       Deno.env.get('AI_FALLBACK_MODEL') || 'glm-5.3-flash';
     // Penanda model yg menjawab (observability: respons + function logs).
     let modelUsed = model;
@@ -3020,6 +3032,13 @@ Deno.serve(async (req: Request) => {
               // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
               // Param ini glm-specific; provider lain bisa menolak.
               ...(m.includes('glm') ? { reasoning_effort: 'low' } : {}),
+              // OpenRouter (model ':free' / 'nvidia/'): matikan reasoning
+              // Nemotron total — tanpa ini 300+ token "berpikir" dulu
+              // sebelum jawab = balas lama. Param 'reasoning' milik gateway
+              // OpenRouter (bukan provider), aman di rute ini.
+              ...(m.includes(':free') || m.startsWith('nvidia/')
+                ? { reasoning: { enabled: false, exclude: true } }
+                : {}),
               temperature,
               messages,
             }),
@@ -3077,26 +3096,36 @@ Deno.serve(async (req: Request) => {
     }
     // Fallback MODEL: bila model utama error (mis. Zen free down 500),
     // coba sekali ke model cadangan supaya dummy tidak diam.
-    // Rute fallback HARDCODE ke B.AI via key di DB (JANGAN via routeFor:
-    // routeFor me-resolve glm lewat provCfg = provider AKTIF, yang bisa
-    // jadi TokenHarbor/OpenRouter dan tidak kenal model glm → 404 ganda).
+    // Rute fallback: model OpenRouter (':free'/'nvidia/') → OpenRouter +
+    // secret OR (model itu tidak dikenal B.AI); selain itu HARDCODE ke B.AI
+    // via key di DB (JANGAN via routeFor: routeFor me-resolve glm lewat
+    // provCfg = provider AKTIF, yang bisa jadi TokenHarbor/OpenRouter dan
+    // tidak kenal model glm → 404 ganda).
     // Key diambil dari baris b-ai (fallback) lalu env — TANPA pernah
     // di-print ke log (secret).
     if (llmRes.err && model !== fallbackModel) {
       modelUsed = fallbackModel;
-      let fbBase: string =
-        Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
-      let fbKey: string | undefined = Deno.env.get('AI_API_KEY');
-      try {
-        const { data: fbRow } = await admin
-          .from('ai_provider_config')
-          .select('api_base, api_key')
-          .eq('id', 'b-ai')
-          .maybeSingle();
-        if (fbRow?.api_base) fbBase = fbRow.api_base as string;
-        if (fbRow?.api_key) fbKey = fbRow.api_key as string;
-      } catch (e) {
-        console.log(`[ai-reply] fallback-key read GAGAL: ${e}`);
+      const fbIsOR =
+        fallbackModel.includes(':free') ||
+        fallbackModel.startsWith('nvidia/');
+      let fbBase: string = fbIsOR
+        ? 'https://openrouter.ai/api/v1'
+        : Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
+      let fbKey: string | undefined = fbIsOR
+        ? Deno.env.get('AI_API_KEY_OPENROUTER') || Deno.env.get('AI_API_KEY')
+        : Deno.env.get('AI_API_KEY');
+      if (!fbIsOR) {
+        try {
+          const { data: fbRow } = await admin
+            .from('ai_provider_config')
+            .select('api_base, api_key')
+            .eq('id', 'b-ai')
+            .maybeSingle();
+          if (fbRow?.api_base) fbBase = fbRow.api_base as string;
+          if (fbRow?.api_key) fbKey = fbRow.api_key as string;
+        } catch (e) {
+          console.log(`[ai-reply] fallback-key read GAGAL: ${e}`);
+        }
       }
       const fbRoute = {
         base: fbBase,
@@ -3118,7 +3147,13 @@ Deno.serve(async (req: Request) => {
             body: JSON.stringify({
               model: fallbackModel,
               max_tokens: maxTokens,
-              reasoning_effort: 'low',
+              // glm = reasoning_effort low; rute OpenRouter = reasoning off;
+              // (reasoning_effort di gateway lain bisa ditolak).
+              ...(fbIsOR
+                ? { reasoning: { enabled: false, exclude: true } }
+                : fallbackModel.includes('glm')
+                  ? { reasoning_effort: 'low' }
+                  : {}),
               temperature,
               messages,
             }),

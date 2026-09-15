@@ -214,9 +214,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         if (v != null) payload[e.key] = v;
       }
       await AdminService(SupabaseConfig.client).updatePointSettings(payload);
-      _toast('Pengaturan poin tersimpan');
+      if (mounted) _toast(context.read<LocaleProvider>().s.adminPointSettingsSaved);
     } catch (e) {
-      _toast('Gagal menyimpan: $e');
+      if (mounted) _toast(context.read<LocaleProvider>().s.adminSaveFailed('$e'));
     } finally {
       if (mounted) setState(() => _savingPointSettings = false);
     }
@@ -1177,7 +1177,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           keyboardType: TextInputType.url,
           style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
           decoration: InputDecoration(
-            labelText: 'Link tujuan share (Google Play / apkpure)',
+            labelText: s.adminShareLinkLabel,
             isDense: true,
             filled: true,
             fillColor: AppTheme.bgInput,
