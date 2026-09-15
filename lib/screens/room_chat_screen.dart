@@ -1081,7 +1081,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   Future<void> _send() async {
-    final text = _msgCtrl.text.trim();
+    final raw = _msgCtrl.text.trim();
+    // Kapitalkan huruf pertama saat kirim PESAN BARU (gaya WhatsApp).
+    // Mode edit pakai teks asli.
+    final text = capitalizeFirst(raw);
     final hasPhoto = _pendingPhotoBase64 != null;
     if (text.isEmpty && !hasPhoto) return;
     if (_isSending) return;
@@ -1118,7 +1121,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     // Mode edit pesan sendiri (text): simpan perubahan, tanpa koin/kirim baru.
     final editing = _editingMessage;
     if (editing != null && !hasPhoto) {
-      if (text.isEmpty || text == editing.text) {
+      if (raw.isEmpty || raw == editing.text) {
         _cancelEdit();
         return;
       }
@@ -1126,7 +1129,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       setState(() => _editingMessage = null);
       _isSending = true;
       try {
-        final ok = await ChatService().editRoomMessage(editing.id, text);
+        final ok = await ChatService().editRoomMessage(editing.id, raw);
         if (mounted) {
           final s = context.read<LocaleProvider>().s;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2729,7 +2732,7 @@ class _MessageBubble extends StatelessWidget {
                     children: [
                       Text(
                         msg.senderName,
-                        style: AppText.label.copyWith(
+                        style: AppText.chatName.copyWith(
                           color: color,
                           letterSpacing: 0,
                         ),
