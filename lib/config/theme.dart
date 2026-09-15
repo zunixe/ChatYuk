@@ -97,10 +97,10 @@ class AppText {
   }
 
   /// Turunkan weight untuk font System (berlaku semua token body/judul).
-  /// w400 → w200 (paling ringan), w600+ → w500, w500 → w400, w300 → w300.
+  /// w400 → w100 (paling tipis), w600+ → w500, w500 → w400, w300 → w300.
   static FontWeight _systemWeight(FontWeight w) {
     if (!AppFonts.isSystem()) return w;
-    if (w == FontWeight.w400) return FontWeight.w200;
+    if (w == FontWeight.w400) return FontWeight.w100;
     if (w.index >= FontWeight.w600.index) return FontWeight.w500;
     if (w.index >= FontWeight.w500.index) return FontWeight.w400;
     return w;
