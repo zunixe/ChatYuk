@@ -174,7 +174,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   /// Bar seleksi dalam body (mode embedded — tab Chat tidak punya AppBar sendiri).
   Widget _selectionBar(String uid, S s) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      margin: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(12),
@@ -215,7 +215,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
         _page = 1;
       }),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: AppTheme.bgCard,
@@ -463,9 +463,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 return ListView.builder(
                   controller: _scrollCtrl,
                   padding: EdgeInsets.fromLTRB(
-                    16,
                     10,
-                    16,
+                    10,
+                    10,
                     MediaQuery.of(context).padding.bottom + 16,
                   ),
                   itemCount: paged.length + (hasMore ? 1 : 0),

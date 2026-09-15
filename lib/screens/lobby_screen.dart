@@ -117,7 +117,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
           // Pilih negara (hanya room global — tab Grup punya layar sendiri).
           // Field saja tanpa kartu & ikon samping (seperti filter online).
           Padding(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding: EdgeInsets.fromLTRB(10, 12, 10, 4),
             child: SearchDropdown(
               value: roomProvider.country,
               label: s.lobbyCountryHint,
@@ -168,9 +168,9 @@ class _GlobalRoomsTab extends StatelessWidget {
     }
     return ListView.builder(
       padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
+        10,
+        12,
+        10,
         MediaQuery.of(context).padding.bottom + 24,
       ),
       itemCount: rooms.length,
