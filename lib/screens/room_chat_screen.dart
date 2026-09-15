@@ -2526,7 +2526,7 @@ class _MessageBubble extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               child: LinkifyText(
                 msg.text,
-                style: AppText.body.copyWith(color: _textColor),
+                style: AppText.chatBody.copyWith(color: _textColor),
               ),
             ),
         ],
@@ -2627,8 +2627,8 @@ class _MessageBubble extends StatelessWidget {
         MessageTextWithTime(
           text: msg.text,
           timeStr: timeStr,
-          textStyle: AppText.body.copyWith(color: _textColor),
-          timeStyle: AppText.micro.copyWith(
+          textStyle: AppText.chatBody.copyWith(color: _textColor),
+          timeStyle: AppText.chatTime.copyWith(
             color: _textColor.withValues(alpha: 0.45),
             fontWeight: FontWeight.w400,
           ),
@@ -3122,10 +3122,10 @@ class _ChatInputState extends State<_ChatInput> {
                               Expanded(
                                 child: TextField(
                                   controller: widget.controller,
-                                  style: AppText.body,
+                                  style: AppText.chatBody,
                                   decoration: InputDecoration(
                                     hintText: s.hintTypeMessage,
-                                    hintStyle: AppText.body.copyWith(
+                                    hintStyle: AppText.chatBody.copyWith(
                                       color: AppTheme.textSecondary,
                                     ),
                                     filled: false,

@@ -2550,10 +2550,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                             child: TextField(
                                               controller: _msgCtrl,
                                               focusNode: _inputFocus,
-                                              style: AppText.body,
+                                              style: AppText.chatBody,
                                               decoration: InputDecoration(
                                                 hintText: s.hintTypeMessage,
-                                                hintStyle: AppText.body.copyWith(
+                                                hintStyle: AppText.chatBody.copyWith(
                                                   color: AppTheme.textSecondary,
                                                 ),
                                                 filled: false,
