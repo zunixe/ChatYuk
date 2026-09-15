@@ -657,7 +657,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   Future<void> _send() async {
-    final text = _msgCtrl.text.trim();
+    final raw = _msgCtrl.text.trim();
+    // Kapitalkan huruf pertama saat kirim PESAN BARU (gaya WhatsApp).
+    // Mode edit pakai teks asli (user sengaja mengubah).
+    final text = capitalizeFirst(raw);
     final hasPhoto = _pendingPhotoBase64 != null;
     if (text.isEmpty && !hasPhoto) return;
     if (_isSending) return;
@@ -675,8 +678,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       final original = _editingMessage!.text;
       _msgCtrl.clear();
       setState(() => _editingMessage = null);
-      if (text != original) {
-        await ChatService().editPrivateMessage(id, text);
+      if (raw != original) {
+        await ChatService().editPrivateMessage(id, raw);
       }
       return;
     }
@@ -2236,7 +2239,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           return ListView.builder(
                             controller: _scrollCtrl,
                             reverse: true,
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
                             itemCount: items.length,
                             itemBuilder: (_, i) {
                               final item = items[items.length - 1 - i];

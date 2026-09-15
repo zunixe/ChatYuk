@@ -1903,7 +1903,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 return ListView.builder(
                   controller: _scrollCtrl,
                   reverse: true,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
                   itemCount: items.length,
                   itemBuilder: (_, i) {
                     final item = items[items.length - 1 - i];
