@@ -167,8 +167,33 @@ void main() {
       final m = ChatItem.message(_dummyMsg());
       expect(m.msg, isNotNull);
       expect(m.dateLabel, isNull);
-      const d = ChatItem.date('Hari ini');      expect(d.msg, isNull);
+      const d = ChatItem.date('Hari ini');
+      expect(d.msg, isNull);
       expect(d.dateLabel, 'Hari ini');
+    });
+  });
+
+  group('capitalizeFirst', () {
+    test('huruf kecil pertama → kapital', () {
+      expect(utils.capitalizeFirst('halo apa kabar'), 'Halo apa kabar');
+    });
+
+    test('sudah kapital → tidak berubah', () {
+      expect(utils.capitalizeFirst('Halo'), 'Halo');
+    });
+
+    test('mulai emoji/simbol → tidak berubah', () {
+      expect(utils.capitalizeFirst('😀 halo'), '😀 halo');
+      expect(utils.capitalizeFirst('"halo'), '"halo');
+      expect(utils.capitalizeFirst('123 abc'), '123 abc');
+    });
+
+    test('angka & huruf besar dalam kata tetap', () {
+      expect(utils.capitalizeFirst('wkwk Keren'), 'Wkwk Keren');
+    });
+
+    test('kosong → kosong', () {
+      expect(utils.capitalizeFirst(''), '');
     });
   });
 }
