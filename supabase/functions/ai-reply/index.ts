@@ -128,8 +128,18 @@ function wibParts(
     weekday: d.getUTCDay(), // 0=Minggu … 5=Jumat
   };
 }
-function asleepAt(uid: string, ms: number): boolean {
+function asleepAt(
+  uid: string,
+  ms: number,
+  activeHours?: number[] | null,
+): boolean {
   const w = wibParts(ms);
+  // ai_active_hours = override EKSPLISIT dari admin: jam yang tercantum =
+  // dianggap BANGUN (menang atas jam tidur acak). Panel admin memakai
+  // aturan yang sama, jadi keduanya konsisten.
+  if (activeHours && activeHours.length > 0 && activeHours.includes(w.hour)) {
+    return false;
+  }
   const sw = sleepHours(uid, w.date);
   return w.hour >= sw.sleepHour || w.hour < sw.wakeHour;
 }
@@ -1750,7 +1760,7 @@ Deno.serve(async (req: Request) => {
       safe(
         admin
           .from('dummy_accounts')
-          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active, ai_no_sleep, ai_always_reply, ai_wake_until, ai_photos_enabled')
+          .select('ai_enabled, ai_persona, ai_model, ai_guard_enabled, nickname, ai_schedule_date, ai_schedule_auto, ai_mood, ai_offline_until, ai_hold_active, ai_no_sleep, ai_always_reply, ai_wake_until, ai_photos_enabled, ai_active_hours')
           .eq('uid', dummyUid)
           .maybeSingle(),
       ),
@@ -1853,7 +1863,16 @@ Deno.serve(async (req: Request) => {
       (dummy as any).ai_wake_until != null &&
       new Date((dummy as any).ai_wake_until as string).getTime() > Date.now();
     const earlyGender = (genderRes as any)?.data?.gender;
-    if (!alwaysReply && !noSleep && !wakeActive && asleepAt(dummyUid, Date.now())) {
+    if (
+      !alwaysReply &&
+      !noSleep &&
+      !wakeActive &&
+      asleepAt(
+        dummyUid,
+        Date.now(),
+        ((dummy as any).ai_active_hours as number[] | null),
+      )
+    ) {
       return json({ ok: false, skipped: 'sleeping' });
     }
     if (!alwaysReply && !noSleep && fridayPrayerAt(earlyGender, Date.now())) {
@@ -2311,7 +2330,13 @@ Deno.serve(async (req: Request) => {
           lastAsst?.at != null &&
           new Date(lastAsst.at as string).getTime() > t;
         if (!repliedAfter && (Date.now() - t) / 3600000 >= 1) {
-          if (asleepAt(dummyUid, t)) {
+          if (
+            asleepAt(
+              dummyUid,
+              t,
+              ((dummy as any).ai_active_hours as number[] | null),
+            )
+          ) {
             wakeUpLine =
               'Kamu BARU BANGUN tidur dan melihat pesan ini telat BERJAM-JAM — awali balasan dengan permintaan maaf telat yang natural ("eh sori baru bangun 🙏"), JANGAN menjelaskan jam tidurmu, lalu balas isi pesannya.';
           } else if (fridayPrayerAt(earlyGender, t)) {

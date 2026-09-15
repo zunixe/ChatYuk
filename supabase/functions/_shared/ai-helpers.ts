@@ -50,8 +50,18 @@ export function sleepHours(
   return { sleepHour: 20 + (h % 4), wakeHour: 4 + (Math.floor(h / 4) % 3) };
 }
 
-export function asleepAt(uid: string, ms: number): boolean {
+export function asleepAt(
+  uid: string,
+  ms: number,
+  activeHours?: number[] | null,
+): boolean {
   const w = wibParts(ms);
+  // ai_active_hours = override EKSPLISIT dari admin: jam yang tercantum =
+  // BANGUN (menang atas jam tidur acak). Konsisten dgn presence-tick (yang
+  // memakai ai_active_hours murni) & chip "Bangun/Tidur" di panel admin.
+  if (activeHours && activeHours.length > 0 && activeHours.includes(w.hour)) {
+    return false;
+  }
   const sw = sleepHours(uid, w.date);
   return w.hour >= sw.sleepHour || w.hour < sw.wakeHour;
 }
