@@ -70,7 +70,10 @@ Deno.serve(async (req) => {
     // Hapus field signature bila ada di body
     delete raw.signature;
 
-    // Validasi signature (secret key = Nomor VA)
+    // Validasi signature (secret key = Nomor VA).
+    // WAJIB: tanpa header x-signature yang valid → tolak. Sebelumnya
+    // `receivedSig && ...` membuat header absen = verifikasi DILEWATI
+    // (siapa pun bisa forge status_code=1 → credit order pending).
     const receivedSig = req.headers.get('x-signature') || '';
     const normalized = normalize(raw);
     const sorted = phpKsort(normalized);
@@ -78,7 +81,7 @@ Deno.serve(async (req) => {
     jsonStr = jsonStr.replace(/\//g, '\\/');
     const expected = await hmacSha256Hex(IPAYMU_VA, jsonStr);
 
-    if (receivedSig && expected !== receivedSig) {
+    if (!receivedSig || expected !== receivedSig) {
       return json({ error: 'Invalid signature' }, 403);
     }
 

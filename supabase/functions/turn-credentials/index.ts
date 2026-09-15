@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { isServiceRoleJwt } from "../_shared/auth.ts"
+import { isServiceRoleJwt, unauthorized } from "../_shared/auth.ts"
 
 // Kredensial Cloudflare Realtime TURN dibaca dari Edge Function Secrets
 // (TURN_TOKEN_ID, TURN_API_TOKEN) — jangan hardcode di sini.

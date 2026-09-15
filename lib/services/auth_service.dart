@@ -252,11 +252,18 @@ class AuthService {
 
   /// Satu query ambil SEMUA setting global (pengganti 7× fetch terpisah
   /// saat boot — hemat 6 RPC per user). Return raw row (null bila gagal).
+  ///
+  /// Kolom EKSPLISIT (bukan `*`): `app_shared_secret` di-revoke dari anon/
+  /// authenticated (hardening) — `select('*')` akan gagal permission.
   Future<Map<String, dynamic>?> fetchGlobalSettings() async {
     try {
       return await _sb
           .from('app_settings')
-          .select('*')
+          .select(
+            'screenshot_enabled,watermark_enabled,call_all_enabled,'
+            'call_anon_enabled,reengage_enabled,require_registration,'
+            'app_font_family,invisible_enabled,invisible_admin_uid',
+          )
           .eq('id', 'global')
           .maybeSingle();
     } catch (e) {
