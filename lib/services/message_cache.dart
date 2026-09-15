@@ -242,9 +242,16 @@ class MessageCache {
   // prefs+AES. API tidak berubah supaya call site (timeline, room, chat
   // list) tidak perlu disentuh.
 
+  /// Snapshot in-memory list chat terakhir (per key) — supaya UI bisa
+  /// membaca data (mis. `lastReadAt` untuk centang-2) TANPA await/decrypt:
+  /// satu hop async yang hilang = centang-2 terisi sejak frame pertama.
+  final Map<String, List<Map<String, dynamic>>> _memRawList = {};
+
   Future<void> saveRawList(String key, List<Map<String, dynamic>> rows) async {
     try {
       if (rows.isEmpty) return;
+      // Memori dulu (sinkron untuk pembaca berikutnya), lalu disk.
+      _memRawList[key] = List<Map<String, dynamic>>.of(rows);
       await _ensureDb();
       await MessageStore.instance.saveKv(key, jsonEncode(rows));
     } catch (_) {}
@@ -252,15 +259,33 @@ class MessageCache {
 
   Future<List<Map<String, dynamic>>> loadRawList(String key) async {
     try {
+      final mem = _memRawList[key];
+      if (mem != null && mem.isNotEmpty) return mem;
       final json = await _loadKvSafe(key);
       if (json == null || json.isEmpty) return [];
       final list = jsonDecode(json) as List<dynamic>;
-      return list
+      final rows = list
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+      _memRawList[key] = rows;
+      return rows;
     } catch (_) {
       return [];
     }
+  }
+
+  /// Versi SINKRON: langsung dari memori, tanpa await. Kosong bila snapshot
+  /// belum pernah dimuat di sesi ini (layar tetap menunggu jalur async).
+  List<Map<String, dynamic>> peekRawList(String key) =>
+      _memRawList[key] ?? const [];
+
+  /// Muat list chat dari SQLite ke memori (dipanggil saat prewarm/bootstrap)
+  /// supaya `peekRawList` sudah terisi begitu user membuka chat pertama.
+  Future<void> preloadRawList(String key) async {
+    try {
+      if ((_memRawList[key]?.length ?? 0) > 0) return;
+      await loadRawList(key);
+    } catch (_) {}
   }
 
   Future<void> removeRawList(String key) async {
@@ -351,6 +376,7 @@ class MessageCache {
   /// Hapus SEMUA cache (dipakai saat logout / reset).
   Future<void> clearAllLegacy() async {
     _memCache.clear();
+    _memRawList.clear();
     try {
       await MessageStore.instance.clearAll();
     } catch (_) {}

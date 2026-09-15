@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/config/theme.dart';
+import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/core/admin_gate.dart';
 
 void main() {
@@ -20,21 +21,61 @@ void main() {
       expect(AppText.label.fontWeight, isNot(AppText.bodySmall.fontWeight));
     });
 
-    test('token Poppins (button/title/headline/display) sesuai skala via sumber', () {
-      final src = File('lib/config/theme.dart').readAsStringSync();
-      int fontSizeFor(String getter) {
-        final m = RegExp('static TextStyle get $getter => GoogleFonts.poppins\\(\\s*fontSize: ([0-9.]+),',
-                multiLine: true)
-            .firstMatch(src);
-        expect(m, isNotNull, reason: '$getter tidak ditemukan di theme.dart');
-        return double.parse(m!.group(1)!).toInt();
-      }
+    test(
+      'token Poppins (button/title/headline/display) sesuai skala via sumber',
+      () {
+        final src = File('lib/config/theme.dart').readAsStringSync();
+        // Token judul/CTA lewat helper _brand; saat default memakai
+        // GoogleFonts.poppins(fontSize: <size>, fontWeight: <w>).
+        int brandSizeFor(String getter) {
+          // Ambil body getter (mis. `static TextStyle get title =>`), lalu
+          // temukan pasangan _brand(size, weight, ...) tepat setelahnya —
+          // toleran newline/spasi (dart format boleh memecah baris).
+          final getterIdx = src.indexOf('static TextStyle get $getter =>');
+          expect(
+            getterIdx,
+            isNot(-1),
+            reason: '$getter tidak memakai _brand di theme.dart',
+          );
+          final after = src.substring(getterIdx);
+          final m = RegExp(
+            r'_brand\(\s*([0-9.]+)\s*,\s*FontWeight\.w[0-9]+',
+            multiLine: true,
+          ).firstMatch(after);
+          expect(m, isNotNull, reason: '$getter: _brand args tidak ditemukan');
+          return double.parse(m!.group(1)!).toInt();
+        }
 
-      expect(fontSizeFor('button'), 16);
-      expect(fontSizeFor('titleEmphasis'), 16);
-      expect(fontSizeFor('title'), 17);
-      expect(fontSizeFor('headline'), 20);
-      expect(fontSizeFor('display'), 24);
+        expect(brandSizeFor('button'), 16);
+        expect(brandSizeFor('titleEmphasis'), 16);
+        expect(brandSizeFor('title'), 17);
+        expect(brandSizeFor('headline'), 20);
+        expect(brandSizeFor('display'), 24);
+
+        // Sumber tetap memuat Poppins (jalur default).
+        expect(src.contains('GoogleFonts.poppins('), isTrue);
+      },
+    );
+
+    test('blok kode tetap monospace (tidak ikut font global)', () {
+      expect(AppText.code.fontFamily, 'monospace');
+    });
+  });
+
+  group('AppFonts', () {
+    test('default = tanpa override family (perilaku lama)', () {
+      expect(AppFonts.isDefault('default'), isTrue);
+      expect(AppFonts.family('default'), isNull);
+    });
+
+    test('key tak dikenal fallback ke default', () {
+      expect(AppFonts.resolve('tidak-ada'), 'default');
+      expect(AppFonts.resolve(null), 'default');
+    });
+
+    test('inter punya family Inter (sans-serif modern)', () {
+      expect(AppFonts.resolve('inter'), 'inter');
+      expect(AppFonts.family('inter'), 'Inter');
     });
   });
 

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
 import '../config/theme.dart';
+import '../config/fonts.dart';
 import '../models/user_model.dart';
 import '../providers/locale_provider.dart';
 import '../core/admin_gate.dart';
@@ -61,7 +62,6 @@ class AuthProvider extends ChangeNotifier {
   static const String _referrerPrefKey = 'pending_referrer_uid';
   String? _pendingReferrer;
 
-
   bool _screenshotEnabled = true;
   bool _watermarkEnabled = false;
   bool _invisibleEnabled = false;
@@ -69,12 +69,13 @@ class AuthProvider extends ChangeNotifier {
   bool _requireRegistration = false;
   bool _callAllEnabled = false;
   bool _callAnonEnabled = false;
+  // Font global (key katalog AppFonts) — 'default' = Poppins + Roboto.
+  String _appFontFamily = AppFonts.defaultKey;
   // Daftar install_id yang di-exclude admin dari ringkasan & daftar
   // perangkat (fitur khusus admin, sinkron via app_settings.global).
   List<String> _excludedDevices = [];
   StreamSubscription<Map<String, dynamic>?>? _appSettingsSub;
   Timer? _settingsPollTimer;
-
 
   bool get screenshotEnabled => _screenshotEnabled;
   bool get watermarkEnabled => _watermarkEnabled;
@@ -83,10 +84,12 @@ class AuthProvider extends ChangeNotifier {
   bool get requireRegistration => _requireRegistration;
   bool get callAllEnabled => _callAllEnabled;
   bool get callAnonEnabled => _callAnonEnabled;
+  String get appFontFamily => _appFontFamily;
   List<String> get excludedDevices => List.unmodifiable(_excludedDevices);
   bool isDeviceExcluded(String? installId) =>
-      installId != null && installId.isNotEmpty && _excludedDevices.contains(installId);
-
+      installId != null &&
+      installId.isNotEmpty &&
+      _excludedDevices.contains(installId);
 
   UserModel? get profile => _profile;
   bool get loading => _loading;
@@ -105,17 +108,14 @@ class AuthProvider extends ChangeNotifier {
   /// User sesi aktif adalah admin sungguhan (zunixe)? Dipakai untuk
   /// menampilkan/menyembunyikan seluruh UI admin di build admin — login
   /// anon/user biasa di ChatYuk Admin tetap melihat tampilan USER biasa.
-  bool get isRealAdmin =>
-      AdminGate.isRealAdmin(_auth.currentUser?.email);
+  bool get isRealAdmin => AdminGate.isRealAdmin(_auth.currentUser?.email);
   String? get userEmail => _auth.userEmail;
 
   /// True bila profil aktif memakai nickname terlarang dan bukan admin.
   /// Dipakai gerbang login (blokir masuk app) + matikan presence supaya
   /// akun banned tidak tampil online / di orang-sekitar.
   bool get isProfileBanned =>
-      _profile != null &&
-      !isRealAdmin &&
-      isBannedNickname(_profile!.nickname);
+      _profile != null && !isRealAdmin && isBannedNickname(_profile!.nickname);
   bool get hasPassword => _auth.hasPassword;
   Future<bool> fetchHasPassword() => _auth.fetchHasPassword();
   bool get hasPasswordSync => _auth.hasPassword;
@@ -123,6 +123,7 @@ class AuthProvider extends ChangeNotifier {
     await _auth.fetchHasPassword();
     if (!_disposed) notifyListeners();
   }
+
   bool get notificationsEnabled => _notificationsEnabled;
 
   AuthProvider() {
@@ -213,9 +214,7 @@ class AuthProvider extends ChangeNotifier {
           dlog('[AUTH] signedOut recovery error: $e');
         }
       }
-      dlog(
-        '[AUTH] SIGNED_OUT unexpected, resetting profile (session hilang)',
-      );
+      dlog('[AUTH] SIGNED_OUT unexpected, resetting profile (session hilang)');
       _idleTimer?.cancel();
       _heartbeatTimer?.cancel();
       _locationTimer?.cancel();
@@ -258,7 +257,9 @@ class AuthProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-          '$_profileCachePrefix${p.uid}', jsonEncode(p.toMap()));
+        '$_profileCachePrefix${p.uid}',
+        jsonEncode(p.toMap()),
+      );
     } catch (_) {}
   }
 
@@ -291,7 +292,9 @@ class AuthProvider extends ChangeNotifier {
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        dlog('[AUTH] _init attempt $attempt/$maxAttempts hasSession=$hasSession');
+        dlog(
+          '[AUTH] _init attempt $attempt/$maxAttempts hasSession=$hasSession',
+        );
         if (!hasSession) await _auth.signInAnonymously();
         dlog('[AUTH] signInAnonymously OK');
         // Satu fetch saja (tanpa avatar) → langsung notify, UI tidak nunggu
@@ -338,8 +341,9 @@ class AuthProvider extends ChangeNotifier {
         // sequential) → split di memori. Fire-and-forget: entry screen
         // hanya pakai require_registration untuk sembunyikan kartu anon —
         // boleh menyusul, jangan tahan loading.
-        _loadGlobalSettings()
-            .catchError((e) => dlog('[AUTH] globalSettings error: $e'));
+        _loadGlobalSettings().catchError(
+          (e) => dlog('[AUTH] globalSettings error: $e'),
+        );
         safeUnawaited(_loadExcludedDevices());
         _listenAppSettings();
         _startSettingsPolling();
@@ -386,7 +390,9 @@ class AuthProvider extends ChangeNotifier {
           !_isIdle &&
           !isProfileBanned &&
           uid != null) {
-        safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile!.nickname));
+        safeUnawaited(
+          RealtimeHub.instance.trackOnline(uid!, _profile!.nickname),
+        );
       }
       // Daily login bonus poin
       safeUnawaited(_claimDailyPoints());
@@ -545,7 +551,6 @@ class AuthProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-
   /// Bersihkan presence room yang basi di server (fire-and-forget).
   Future<void> cleanupStalePresence({int minAgeMinutes = 10}) {
     return _auth.cleanupStalePresence(minAgeMinutes: minAgeMinutes);
@@ -567,7 +572,9 @@ class AuthProvider extends ChangeNotifier {
     _reengageEnabled = row['reengage_enabled'] != false;
     _watermarkEnabled = row['watermark_enabled'] == true;
     _requireRegistration = row['require_registration'] == true;
-    final invisibleOn = row['invisible_enabled'] == true &&
+    _applyAppFont(row['app_font_family'] as String?);
+    final invisibleOn =
+        row['invisible_enabled'] == true &&
         row['invisible_admin_uid'] == _auth.uid;
     _invisibleEnabled = invisibleOn;
     if (invisibleOn) {
@@ -664,7 +671,10 @@ class AuthProvider extends ChangeNotifier {
         _profile = _profile?.copyWith(status: 'online');
         resetIdleTimer();
         safeUnawaited(_updateLocationOnOnline());
-        if (uid != null) safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''));
+        if (uid != null)
+          safeUnawaited(
+            RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''),
+          );
       }
     } catch (e) {
       dlog('[AUTH] updateInvisibleEnabled error: $e');
@@ -708,6 +718,33 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Terapkan font global (key katalog AppFonts): set static + persist prefs,
+  /// increment revisi tema. Return true bila berubah (pemanggil notify).
+  bool _applyAppFont(String? key) {
+    final next = AppFonts.resolve(key);
+    if (next == _appFontFamily) return false;
+    _appFontFamily = next;
+    AppFonts.setLocal(next);
+    AppTheme.fontRevision++;
+    // Persist supaya frame pertama restart pakai font yang sama.
+    SharedPreferences.getInstance().then(
+      (p) => p.setString(AppFonts.prefKey, next),
+    );
+    return true;
+  }
+
+  /// Admin: ganti font global aplikasi. Update lokal instan + upsert server
+  /// (realtime menyebar ke semua device).
+  Future<void> setAppFontFamily(String key) async {
+    final changed = _applyAppFont(key);
+    if (changed && !_disposed) notifyListeners();
+    try {
+      await _auth.updateAppFontFamily(AppFonts.resolve(key));
+    } catch (e) {
+      dlog('[AUTH] updateAppFontFamily error: $e');
+    }
+  }
+
   /// Subscribe realtime app_settings — toggle admin langsung berdampak di
   /// semua device (mis. wajib registrasi, screenshot, watermark, invisible).
   /// Realtime setting global via .stream() — pola yang sama (dan terbukti
@@ -721,10 +758,12 @@ class AuthProvider extends ChangeNotifier {
       (row) {
         if (_disposed) return;
         if (row == null) return;
-        dlog('[SETTINGS] row call_all_enabled='
-            '${row['call_all_enabled']} '
-            'call_anon_enabled=${row['call_anon_enabled']} '
-            'require_registration=${row['require_registration']}');
+        dlog(
+          '[SETTINGS] row call_all_enabled='
+          '${row['call_all_enabled']} '
+          'call_anon_enabled=${row['call_anon_enabled']} '
+          'require_registration=${row['require_registration']}',
+        );
         var changed = false;
         final nextCall = row['call_all_enabled'] == true;
         if (nextCall != _callAllEnabled) {
@@ -741,6 +780,7 @@ class AuthProvider extends ChangeNotifier {
           _requireRegistration = nextReq;
           changed = true;
         }
+        if (_applyAppFont(row['app_font_family'] as String?)) changed = true;
         if (changed && !_disposed) notifyListeners();
       },
       isDisposed: () => _disposed,
@@ -774,10 +814,12 @@ class AuthProvider extends ChangeNotifier {
           _requireRegistration = reqReg;
           changed = true;
         }
+        if (_applyAppFont(row['app_font_family'] as String?)) changed = true;
         // Sinkron daftar device ter-exclude (admin-only).
         if (isRealAdmin) {
           final excl = await _auth.fetchExcludedDevices();
-          final same = excl.length == _excludedDevices.length &&
+          final same =
+              excl.length == _excludedDevices.length &&
               excl.every(_excludedDevices.contains);
           if (!same) {
             _excludedDevices = excl;
@@ -1113,8 +1155,10 @@ class AuthProvider extends ChangeNotifier {
     // Belt-and-suspenders: pastikan flag sesi dummy ter-set di service yang
     // dipakai provider ini (impl juga set, tapi jangan bergantung binding).
     _auth.markDummyState(active: true, uid: uid);
-    dlog('[AUTH] becomeDummy done, uid=$_auth.uid, '
-        'flag=${_auth.dummySessionActive}');
+    dlog(
+      '[AUTH] becomeDummy done, uid=$_auth.uid, '
+      'flag=${_auth.dummySessionActive}',
+    );
     await reloadProfile();
     // Catat device untuk akun dummy — tanpa ini dummy tidak muncul di tab
     // Perangkat admin (dummy dibuat via edge function, tidak pernah lewat
@@ -1227,7 +1271,9 @@ class AuthProvider extends ChangeNotifier {
     resetIdleTimer();
     safeUnawaited(_updateLocationOnOnline());
     if (uid != null) {
-      safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''));
+      safeUnawaited(
+        RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''),
+      );
     }
   }
 
@@ -1266,7 +1312,9 @@ class AuthProvider extends ChangeNotifier {
           !_invisibleEnabled &&
           !_isIdle &&
           !RealtimeHub.instance.isOnlineTracking) {
-        safeUnawaited(RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''));
+        safeUnawaited(
+          RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''),
+        );
       }
     });
   }

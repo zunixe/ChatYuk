@@ -179,10 +179,16 @@ Deno.serve(async (req: Request) => {
         ? (profile.hashtags as string[]).join(', ')
         : '';
       const hobbies = tags || 'ngobrol santai';
+      const persona = ((dummyRes as any)?.data as any)?.ai_persona as any;
+      // Profesi: field profession WAJIB jadi sumber utama. Fallback ke
+      // personality/extra_prompt supaya dummy yang profession-nya belum
+      // diisi tetap punya konteks pekerjaan (dulu kosong → model mengarang
+      // "kerja kantoran" untuk semua orang, mis. MbakSari yang ART).
       const occ =
-        (((dummyRes as any)?.data as any)?.ai_persona as any)?.profession
-          ?.toString()
-          ?.trim() || '';
+        persona?.profession?.toString()?.trim() ||
+        persona?.personality?.toString()?.trim() ||
+        persona?.extra_prompt?.toString()?.trim() ||
+        '';
       const weekday = new Date(nowMs + 7 * 3600 * 1000).toLocaleDateString(
         'id-ID',
         {
@@ -198,8 +204,8 @@ Deno.serve(async (req: Request) => {
         `Buat CERITA KEGIATANMU hari ini, ${weekday}. ${prevText} ` +
         `Ceritamu harus NYAMBUNG dengan kemarin (pekerjaan yang sama, teman yang sama, masalah yang berlanjut kalau ada). ` +
         `VARIASI TEMPAT (wajib): tempat utama hari ini (place) HARUS BEDA dari tempat kemarin — jangan pakai tempat yang sama 2 hari berturut-turut, pilih tempat nyata lain yang wajar di ${city}. ` +
-        `ATURAN HARI: Senin–Jumat = hari kerja kantoran (aktivitas seputar kantor/sepulang kerja); Sabtu–Minggu = boleh ada kerja sampingan (mis. pemandu wisata) dan jalan-jalan. ` +
-        `Isi: apa pekerjaanmu hari ini + masalah/kejadian di tempat kerja, main dengan siapa, jalan-jalan ke mana (sebutkan TEMPAT NYATA yang wajar di ${city} — mall, kafe, taman, warung). ` +
+        `AKTIVITAS HARUS SESUAI PEKERJAANMU — JANGAN paksa kerja kantoran kalau pekerjaanmu bukan kantoran (mis. asisten rumah tangga ya kerja di rumah; pedagang ya jualan; mahasiswa ya kuliah; freelancer ya kerja dari mana saja). Kalau tidak punya pekerjaan tetap, isi "work" dengan kegiatan produktif nyata (kuliah, bantu usaha, kerja sampingan, urus rumah). ` +
+        `Isi: apa yang kamu kerjakan hari ini + masalah/kejadian seputar itu, main dengan siapa, jalan-jalan ke mana (sebutkan TEMPAT NYATA yang wajar di ${city} — mall, kafe, taman, warung). ` +
         `Balas HANYA JSON valid tanpa markdown: {"summary":"1 kalimat ringkasan harimu","work":"pekerjaan + masalah hari ini","problem":"masalah/kejadian paling menonjol (boleh kosong)","activities":["kegiatan 1","kegiatan 2"],"hangout":"dengan siapa / sendiri","place":"tempat utama hari ini"}.`;
       // Generate cerita: primer (glm) → fallback Mimo free (Zen) saat primer
       // menolak (402/429/5xx) ATAU hasil primer tipis/gagal-parse (kasus
@@ -324,15 +330,27 @@ Deno.serve(async (req: Request) => {
         failSink.push(uid);
         return;
       }
+      // Bersihkan mojibake/karakter rusak dari output model (mis. nama tempat
+      // "Warung Kopi Kemen�?��??"). Penyebab: byte UTF-8 valid tapi ter-decode
+      // salah — muncul U+FFFD, byte kontrol, juga A0 (non-breaking space dari
+      // decode UTF-8 ganda). Rapikan spasi setelah pembersihan.
+      const clean = (s: unknown): string =>
+        String(s ?? '')
+          .replace(/\uFFFD/g, '')            // replacement char
+          .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '') // kontrol
+          .replace(/\u00A0/g, ' ')           // nbsp
+          .replace(/[ \t]{2,}/g, ' ')        // spasi ganda
+          .replace(/\s+([.,!?])/g, '$1')     // spasi sebelum tanda baca
+          .trim();
       const story = {
-        summary: String(parsed.summary).slice(0, 300),
-        work: String(parsed.work ?? '').slice(0, 300),
-        problem: String(parsed.problem ?? '').slice(0, 300),
+        summary: clean(parsed.summary).slice(0, 300),
+        work: clean(parsed.work).slice(0, 300),
+        problem: clean(parsed.problem).slice(0, 300),
         activities: Array.isArray(parsed.activities)
-          ? parsed.activities.map((a: any) => String(a)).slice(0, 6)
+          ? parsed.activities.map((a: any) => clean(a)).slice(0, 6)
           : [],
-        hangout: String(parsed.hangout ?? '').slice(0, 200),
-        place: String(parsed.place ?? '').slice(0, 200),
+        hangout: clean(parsed.hangout).slice(0, 200),
+        place: clean(parsed.place).slice(0, 200),
       };
       await admin.from('ai_daily_story').upsert(
         { dummy_uid: uid, story_date: todayWib, story },

@@ -89,12 +89,18 @@ class AuthService {
 
     if (idToken == null) throw Exception('Google idToken null');
 
-    dlog('[GOOGLE] idToken len=${idToken.length} accessToken len=${accessToken?.length ?? 0} webClientId=$webClientId');
+    dlog(
+      '[GOOGLE] idToken len=${idToken.length} accessToken len=${accessToken?.length ?? 0} webClientId=$webClientId',
+    );
     try {
       final parts = idToken.split('.');
       if (parts.length == 3) {
-        final payload = String.fromCharCodes(base64Url.decode(base64Url.normalize(parts[1])));
-        dlog('[GOOGLE] idToken payload aud check: ${payload.substring(0, payload.length > 500 ? 500 : payload.length)}');
+        final payload = String.fromCharCodes(
+          base64Url.decode(base64Url.normalize(parts[1])),
+        );
+        dlog(
+          '[GOOGLE] idToken payload aud check: ${payload.substring(0, payload.length > 500 ? 500 : payload.length)}',
+        );
       }
     } catch (_) {}
     AuthResponse response;
@@ -108,7 +114,9 @@ class AuthService {
       dlog('[GOOGLE] signInWithIdToken FAILED: $e');
       dlog('[GOOGLE] stack: $st');
       if (e is AuthApiException) {
-        dlog('[GOOGLE] AuthApiException statusCode=${e.statusCode} code=${e.code} message=${e.message}');
+        dlog(
+          '[GOOGLE] AuthApiException statusCode=${e.statusCode} code=${e.code} message=${e.message}',
+        );
       }
       rethrow;
     }
@@ -403,14 +411,40 @@ class AuthService {
   /// supaya ringkasan langsung segar.
   Future<bool> updateExcludedDevices(List<String> installIds) async {
     try {
-      final res = await _sb.rpc('admin_set_excluded_devices', params: {
-        'p_list': installIds,
-      });
+      final res = await _sb.rpc(
+        'admin_set_excluded_devices',
+        params: {'p_list': installIds},
+      );
       return res is List;
     } catch (e) {
       dlog('[AUTH] updateExcludedDevices error: $e');
       return false;
     }
+  }
+
+  /// Ambil font global aplikasi (key katalog AppFonts). Default 'default'.
+  Future<String> fetchAppFontFamily() async {
+    try {
+      final res = await _sb
+          .from('app_settings')
+          .select('app_font_family')
+          .eq('id', 'global')
+          .maybeSingle();
+      final v = res?['app_font_family'] as String?;
+      return (v == null || v.isEmpty) ? 'default' : v;
+    } catch (e) {
+      dlog('[AUTH] fetchAppFontFamily error: $e');
+      return 'default';
+    }
+  }
+
+  /// Update font global aplikasi. RLS membatasi hanya admin.
+  Future<void> updateAppFontFamily(String key) async {
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'app_font_family': key,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
   }
 
   /// Ambil toggle notifikasi pengingat harian (re-engagement) — admin global.
@@ -486,10 +520,10 @@ class AuthService {
       return;
     }
     try {
-      await _sb.from('profiles').update({
-        'is_registered': true,
-        'email': email,
-      }).eq('id', id);
+      await _sb
+          .from('profiles')
+          .update({'is_registered': true, 'email': email})
+          .eq('id', id);
     } catch (e) {
       dlog('[AUTH] markRegistered error: $e');
     }
@@ -659,7 +693,8 @@ class AuthService {
   Future<bool> isNicknameAvailable(String nickname) async {
     if (isBannedNickname(nickname) && !AdminGate.isRealAdmin(userEmail)) {
       return false;
-    }    final id = uid;
+    }
+    final id = uid;
     var query = _sb.from('profiles').select('id').eq('nickname', nickname);
     if (id != null) query = query.neq('id', id);
     final res = await query.maybeSingle();
@@ -896,11 +931,13 @@ class AuthService {
     // Upload ke Storage — DB hanya simpan path (hemat ruang).
     // Path baru diberi timestamp (cache-buster) — hapus file avatar lama
     // supaya Storage tidak menumpuk file versi lama.
-    final oldAvatar = (await _sb
-            .from('profiles')
-            .select('avatar')
-            .eq('id', id)
-            .maybeSingle())?['avatar'] as String? ??
+    final oldAvatar =
+        (await _sb
+                .from('profiles')
+                .select('avatar')
+                .eq('id', id)
+                .maybeSingle())?['avatar']
+            as String? ??
         '';
     final path = base64.isEmpty
         ? ''
@@ -920,8 +957,10 @@ class AuthService {
     // TULIS KE DISK — bytes WebP/JPEG asli, load berikutnya dari lokal.
     if (path.isNotEmpty && base64.isNotEmpty) {
       try {
-        await MediaDiskCache.instance
-            .write(path, Uint8List.fromList(base64Decode(base64)));
+        await MediaDiskCache.instance.write(
+          path,
+          Uint8List.fromList(base64Decode(base64)),
+        );
       } catch (_) {}
     }
     return path;
@@ -943,8 +982,10 @@ class AuthService {
     // race saat dua pemanggil (main.dart lazy + AuthProvider) jalan serentak.
     try {
       final installId = await DeviceInfoService.instance.installId();
-      await _sb.rpc('update_device_fcm_token',
-          params: {'p_install_id': installId, 'p_token': t});
+      await _sb.rpc(
+        'update_device_fcm_token',
+        params: {'p_install_id': installId, 'p_token': t},
+      );
     } catch (_) {}
   }
 
@@ -1030,7 +1071,6 @@ class AuthService {
     }
   }
 
-
   /// Download foto galeri dengan DISK FIRST — b64 di-cache disk per path
   /// (path unik per upload), buka profil berikutnya tanpa network.
   Future<String> _galleryPhotoB64(String path) async {
@@ -1039,8 +1079,10 @@ class AuthService {
     final b64 = await StoragePhotoService.instance.download(path) ?? '';
     if (b64.isNotEmpty) {
       try {
-        await MediaDiskCache.instance
-            .write(path, Uint8List.fromList(base64Decode(b64)));
+        await MediaDiskCache.instance.write(
+          path,
+          Uint8List.fromList(base64Decode(b64)),
+        );
       } catch (_) {}
     }
     return b64;

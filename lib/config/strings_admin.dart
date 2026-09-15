@@ -28,10 +28,12 @@ extension SAdminX on S {
 
   String get adminDeviceTab => isId ? 'Perangkat' : 'Devices';
   String get adminDeviceTitle => isId ? 'Perangkat' : 'Devices';
-  String get adminDeviceSearch => isId ? 'Cari user/device...' : 'Search user/device...';
+  String get adminDeviceSearch =>
+      isId ? 'Cari user/device...' : 'Search user/device...';
   String get adminDeviceNoData =>
       isId ? 'Belum ada device terdeteksi' : 'No devices detected yet';
-  String get adminDeviceNoResult => isId ? 'Tidak ada yang cocok' : 'No match found';
+  String get adminDeviceNoResult =>
+      isId ? 'Tidak ada yang cocok' : 'No match found';
   String get adminDeviceActive => isId ? 'aktif' : 'active';
   String get adminDeviceInactive => isId ? 'lama' : 'inactive';
   String get adminDeviceModel => isId ? 'Device' : 'Device';
@@ -54,11 +56,11 @@ extension SAdminX on S {
   String get adminDeviceCreated => isId ? 'Dibuat' : 'Created';
   String get adminDeviceDevices => isId ? 'Perangkat' : 'Devices';
   String get adminDeviceChats => isId ? 'Chat dengan' : 'Chats with';
-  String get adminDeviceLocation => isId ? 'Riwayat Lokasi' : 'Location History';
+  String get adminDeviceLocation =>
+      isId ? 'Riwayat Lokasi' : 'Location History';
   String get adminDeviceNoDevices =>
       isId ? 'Belum ada perangkat tercatat' : 'No devices recorded';
-  String get adminDeviceNoChats =>
-      isId ? 'Belum ada chat' : 'No chats yet';
+  String get adminDeviceNoChats => isId ? 'Belum ada chat' : 'No chats yet';
   String get adminDeviceCopyId => isId ? 'Salin' : 'Copy';
   String get adminDeviceCopied => isId ? 'Disalin' : 'Copied';
   String get adminDeviceUsersUsed =>
@@ -67,32 +69,26 @@ extension SAdminX on S {
       isId ? 'Belum ada user tercatat' : 'No users recorded';
   String get adminDeviceOpenUser =>
       isId ? 'Lihat detail user' : 'View user detail';
-  String get adminDeviceCount =>
-      isId ? 'user' : 'user';
+  String get adminDeviceCount => isId ? 'user' : 'user';
   String get adminDeviceByUser => isId ? 'Per User' : 'By User';
   String get adminDeviceByDevice => isId ? 'Per Device' : 'By Device';
 
-  String get adminStorageTitle => isId
-      ? 'Penggunaan Data Supabase'
-      : 'Supabase Data Usage';
+  String get adminStorageTitle =>
+      isId ? 'Penggunaan Data Supabase' : 'Supabase Data Usage';
   String get adminStorageDb => isId ? 'Database' : 'Database';
-  String get adminStorageImages => isId
-      ? 'Gambar (chat & publik)'
-      : 'Images (chat & public)';
+  String get adminStorageImages =>
+      isId ? 'Gambar (chat & publik)' : 'Images (chat & public)';
   String get adminStorageFree => isId ? 'Tersedia' : 'Free';
   String get adminStorageTotal => isId ? 'Total Terpakai' : 'Total Used';
   String get adminStorageFiles => isId ? 'File gambar' : 'Image files';
-  String get adminStorageGrowth => isId
-      ? 'Pertumbuhan Data'
-      : 'Data Growth';
+  String get adminStorageGrowth => isId ? 'Pertumbuhan Data' : 'Data Growth';
   String get adminGrowthDay => isId ? 'Hari ini' : 'Today';
   String get adminGrowthWeek => isId ? '7 hari' : '7 days';
   String get adminGrowthMonth => isId ? '30 hari' : '30 days';
   String get adminGrowthMessages => isId ? 'Pesan' : 'Messages';
   String get adminGrowthSignals => isId ? 'Sinyal call' : 'Call signals';
   String get adminGrowthImages => isId ? 'Gambar' : 'Images';
-  String get adminGrowthRegistrations =>
-      isId ? 'Registrasi' : 'Registrations';
+  String get adminGrowthRegistrations => isId ? 'Registrasi' : 'Registrations';
   String get adminRegListTitle =>
       isId ? 'User Terdaftar (Email)' : 'Registered Users (Email)';
   String get adminCfTitle =>
@@ -118,14 +114,10 @@ extension SAdminX on S {
       isId ? 'Stale (anon >7 hari)' : 'Stale (anon >7 days)';
   String get adminDeletedClaim =>
       isId ? 'Nickname diambil' : 'Nickname claimed';
-  String get adminDeletedAdmin =>
-      isId ? 'Dihapus admin' : 'Deleted by admin';
-  String get adminDeletedDummy =>
-      isId ? 'Dummy dihapus' : 'Dummy deleted';
-  String get adminDeletedClaimedBy =>
-      isId ? 'Diambil oleh' : 'Claimed by';
-  String get adminDeletedNewNick =>
-      isId ? 'Nickname baru' : 'New nickname';
+  String get adminDeletedAdmin => isId ? 'Dihapus admin' : 'Deleted by admin';
+  String get adminDeletedDummy => isId ? 'Dummy dihapus' : 'Dummy deleted';
+  String get adminDeletedClaimedBy => isId ? 'Diambil oleh' : 'Claimed by';
+  String get adminDeletedNewNick => isId ? 'Nickname baru' : 'New nickname';
   String get adminDeletedDeviceHistory =>
       isId ? 'Riwayat Device' : 'Device History';
   String get adminDeletedNoDevice =>
@@ -160,43 +152,37 @@ extension SAdminX on S {
       : 'Join request sent. Wait for admin approval before entering.';
   String get privateRoomsJoinedTitle =>
       isId ? 'Berhasil Masuk' : 'Joined Successfully';
-  String get privateRoomsJoinedBody =>
-      isId ? 'Kamu resmi jadi member room ini.' : 'You are now a member of this room.';
+  String get privateRoomsJoinedBody => isId
+      ? 'Kamu resmi jadi member room ini.'
+      : 'You are now a member of this room.';
   String get roomHandRaised => isId
       ? 'Tangan diangkat — tunggu admin mengizinkan'
       : 'Hand raised — waiting for admin approval';
-  String get privateRoomsLiveConnecting => isId
-      ? 'Menyambungkan...'
-      : 'Connecting...';
+  String get privateRoomsLiveConnecting =>
+      isId ? 'Menyambungkan...' : 'Connecting...';
   String get roomShowChat => isId ? 'Chat' : 'Chat';
   String get roomShowMembers => isId ? 'Anggota' : 'Members';
 
   String get privateRoomsScanHint => isId
       ? 'Arahkan kamera ke QR undangan room'
       : 'Point the camera at a room invite QR';
-  String get privateRoomsShowQr =>
-      isId ? 'Kode QR Undangan' : 'Invite QR';
-  String get privateRoomsMembersTitle =>
-      isId ? 'Anggota' : 'Members';
+  String get privateRoomsShowQr => isId ? 'Kode QR Undangan' : 'Invite QR';
+  String get privateRoomsMembersTitle => isId ? 'Anggota' : 'Members';
   String get privateRoomsPendingQueue =>
       isId ? 'Menunggu Persetujuan' : 'Pending Approvals';
   String get roomRoleOwner => isId ? 'Pemilik' : 'Owner';
   String get roomRoleAdmin => isId ? 'Admin' : 'Admin';
   String get roomRoleMember => isId ? 'Member' : 'Member';
-  String get roomActionPromote => isId
-      ? 'Jadikan admin'
-      : 'Promote to admin';
-  String get roomActionDemote => isId
-      ? 'Turunkan jadi member'
-      : 'Demote to member';
+  String get roomActionPromote => isId ? 'Jadikan admin' : 'Promote to admin';
+  String get roomActionDemote =>
+      isId ? 'Turunkan jadi member' : 'Demote to member';
   String get roomActionKick => isId ? 'Keluarkan' : 'Remove';
   String get roomActionBroadcast =>
       isId ? 'Izinkan Broadcast' : 'Allow Broadcast';
   String get roomActionRevokeBroadcast =>
       isId ? 'Batalkan Broadcast' : 'Revoke Broadcast';
-  String get roomKickConfirmTitle => isId
-      ? 'Keluarkan dari room?'
-      : 'Remove from room?';
+  String get roomKickConfirmTitle =>
+      isId ? 'Keluarkan dari room?' : 'Remove from room?';
   String get roomKickConfirmBody => isId
       ? 'User bisa request masuk lagi, tapi harus di-approve.'
       : 'They can request again but must be approved.';
@@ -206,18 +192,19 @@ extension SAdminX on S {
   String get menuGroupInfo => isId ? 'Info grup' : 'Group info';
   String get menuGroupMedia => isId ? 'Media grup' : 'Group media';
   String get menuSearchMessages => isId ? 'Cari pesan' : 'Search messages';
-  String get menuMuteNotif => isId ? 'Bisukan notifikasi' : 'Mute notifications';
+  String get menuMuteNotif =>
+      isId ? 'Bisukan notifikasi' : 'Mute notifications';
   String get menuUnmuteNotif =>
       isId ? 'Nyalakan notifikasi' : 'Unmute notifications';
   String get menuMore => isId ? 'Lainnya' : 'More';
   String get menuExitGroup => isId ? 'Keluar grup' : 'Exit group';
   String get menuDeleteGroup => isId ? 'Hapus grup' : 'Delete group';
-  String get exitGroupTitle =>
-      isId ? 'Keluar dari grup?' : 'Exit this group?';
+  String get exitGroupTitle => isId ? 'Keluar dari grup?' : 'Exit this group?';
   String get exitGroupBody => isId
       ? 'Kamu tidak lagi menerima pesan dari grup ini.'
       : 'You will stop receiving messages from this group.';
-  String get deleteGroupTitle => isId ? 'Hapus grup ini?' : 'Delete this group?';
+  String get deleteGroupTitle =>
+      isId ? 'Hapus grup ini?' : 'Delete this group?';
   String get deleteGroupBody => isId
       ? 'Grup dan semua pesannya hilang permanen untuk semua member.'
       : 'The group and all its messages are permanently gone for everyone.';
@@ -228,8 +215,7 @@ extension SAdminX on S {
   String get groupInfoPermanent => isId ? 'Permanen' : 'Permanent';
   String get groupInfoExpired => isId ? 'Kedaluwarsa' : 'Expired';
   String get groupInfoToken => isId ? 'Token undangan' : 'Invite token';
-  String get groupInfoTokenCopied =>
-      isId ? 'Token tersalin' : 'Token copied';
+  String get groupInfoTokenCopied => isId ? 'Token tersalin' : 'Token copied';
   String get groupMediaEmpty =>
       isId ? 'Belum ada foto di grup ini' : 'No photos in this group yet';
   String get roomSearchHint =>
@@ -321,9 +307,7 @@ extension SAdminX on S {
       ? 'Realtime — efek langsung ke semua device'
       : 'Realtime — immediate effect on all devices';
 
-  String get adminCallTitle => isId
-      ? 'Anon Bisa Call'
-      : 'Anon Can Call';
+  String get adminCallTitle => isId ? 'Anon Bisa Call' : 'Anon Can Call';
   String get adminCallDesc => isId
       ? 'Saat aktif, tombol panggilan tampil untuk semua user dan user anon/belum daftar bisa menelepon. Saat mati, hanya user terdaftar (+ admin) yang bisa call (anti spam).'
       : 'When enabled, the call button appears for all users and anon/unregistered users can call. When off, only registered users (+ admin) can call (anti-spam).';
@@ -521,8 +505,7 @@ extension SAdminX on S {
   String get dummyWakeDone =>
       isId ? 'Dibangunkan 30 menit' : 'Woken for 30 minutes';
 
-  String get dummyWakeFail =>
-      isId ? 'Gagal membangunkan' : 'Failed to wake up';
+  String get dummyWakeFail => isId ? 'Gagal membangunkan' : 'Failed to wake up';
 
   String get dummyAwake => isId ? 'Bangun' : 'Awake';
 
@@ -550,12 +533,12 @@ extension SAdminX on S {
 
   String get dummyAiExtra => isId ? 'Prompt tambahan' : 'Extra prompt';
 
-  String get dummyAiExtraHint =>
-      isId ? 'Instruksi khusus untuk AI...' : 'Special instructions for the AI...';
+  String get dummyAiExtraHint => isId
+      ? 'Instruksi khusus untuk AI...'
+      : 'Special instructions for the AI...';
 
   // ── Kirim Foto (toggle per dummy) ──
-  String get dummyPhotosTitle =>
-      isId ? 'Kirim Foto' : 'Send Photos';
+  String get dummyPhotosTitle => isId ? 'Kirim Foto' : 'Send Photos';
 
   String get dummyPhotosLabel =>
       isId ? 'AI bisa kirim foto' : 'AI can send photos';
@@ -602,9 +585,8 @@ extension SAdminX on S {
       ? 'Bukan sesi admin — kembali ke akun admin dulu baru simpan'
       : 'Not an admin session — switch back to the admin account first';
 
-  String get dummyAiScheduleTitle => isId
-      ? 'Jadwal kehadiran AI'
-      : 'AI presence schedule';
+  String get dummyAiScheduleTitle =>
+      isId ? 'Jadwal kehadiran AI' : 'AI presence schedule';
 
   String get dummyStoryList => isId ? 'Story harian' : 'Daily story';
 
@@ -626,29 +608,25 @@ extension SAdminX on S {
 
   String get dummyStoryFilled => isId ? 'Ada' : 'OK';
 
-  String get dummyStoryMissingCount => isId
-      ? '%s hari belum ke-generate'
-      : '%s day(s) not generated';
+  String get dummyStoryMissingCount =>
+      isId ? '%s hari belum ke-generate' : '%s day(s) not generated';
 
-  String get dummyStoryLoadFail => isId
-      ? 'Gagal memuat story'
-      : 'Failed to load stories';
+  String get dummyStoryLoadFail =>
+      isId ? 'Gagal memuat story' : 'Failed to load stories';
 
   String get dummyAiScheduleDesc => isId
       ? 'AI online/idle/offline mengikuti jam aktif. Offline = AI tidak membalas sama sekali.'
       : 'AI goes online/idle/offline following active hours. Offline = AI never replies.';
 
-  String get dummyAiScheduleAuto => isId
-      ? 'Jadwal otomatis dari kebiasaan'
-      : 'Auto schedule from habits';
+  String get dummyAiScheduleAuto =>
+      isId ? 'Jadwal otomatis dari kebiasaan' : 'Auto schedule from habits';
 
   String get dummyAiScheduleEmpty => isId
       ? 'Belum diatur — presence dikontrol manual'
       : 'Not set — presence controlled manually';
 
-  String get dummyAiScheduleAutoLabel => isId
-      ? 'Jadwal otomatis harian (AI)'
-      : 'Daily auto schedule (AI)';
+  String get dummyAiScheduleAutoLabel =>
+      isId ? 'Jadwal otomatis harian (AI)' : 'Daily auto schedule (AI)';
 
   String get dummyAiScheduleAutoDesc => isId
       ? 'AI menentukan sendiri jam onlinenya tiap hari. Matikan untuk kontrol manual penuh.'
@@ -660,23 +638,27 @@ extension SAdminX on S {
       ? 'Master switch semua balasan AI dummy + batas rate.'
       : 'Master switch for all dummy AI replies + rate limits.';
 
-  String get aiGlobalMaxReplies => isId
-      ? 'Maks balasan per chat per jam'
-      : 'Max replies per chat per hour';
+  String get aiGlobalMaxReplies =>
+      isId ? 'Maks balasan per chat per jam' : 'Max replies per chat per hour';
 
   String get aiGlobalMinInterval => isId
       ? 'Jeda minimal antar balasan (detik)'
       : 'Min interval between replies (seconds)';
 
-  String get aiGlobalSaved => isId
-      ? 'Pengaturan AI global disimpan'
-      : 'Global AI settings saved';
+  String get aiGlobalSaved =>
+      isId ? 'Pengaturan AI global disimpan' : 'Global AI settings saved';
 
   String get aiGlobalGuardTitle => isId ? 'Guard NSFW' : 'NSFW guard';
 
   String get aiGlobalGuardDesc => isId
       ? 'Blokir obrolan vulgar — matikan untuk mode nakal'
       : 'Block vulgar chat — turn off for naughty mode';
+
+  String get aiAiChatTitle => isId ? 'Chat AI ↔ AI' : 'AI ↔ AI chat';
+
+  String get aiAiChatDesc => isId
+      ? 'Izinkan dummy AI saling membalas (uji coba bot vs bot). Matikan agar dummy hanya membalas manusia.'
+      : 'Allow AI dummies to reply to each other (bot vs bot testing). Turn off so dummies only reply to humans.';
 
   String get dummyAiGuardHint => isId
       ? 'Global = ikut pengaturan AI Bot; ON/OFF = khusus dummy ini'
@@ -686,6 +668,31 @@ extension SAdminX on S {
   String get aiGuardOn => 'ON';
   String get aiGuardOff => 'OFF';
 
+  // ── Font global (tampilan aplikasi) ──
+  String get adminFontTitle => isId ? 'Font Aplikasi' : 'App Font';
+
+  String get adminFontDesc => isId
+      ? 'Ganti font seluruh aplikasi untuk semua pengguna (realtime).'
+      : 'Change the whole app font for all users (realtime).';
+
+  String get adminFontCurrent => isId ? 'Aktif' : 'Active';
+
+  String get adminFontPickTitle => isId ? 'Pilih Font' : 'Choose Font';
+
+  String get adminFontPreviewHeading =>
+      isId ? 'Judul Contoh 24' : 'Sample Heading 24';
+
+  String get adminFontPreviewBody => isId
+      ? 'Teks isi contoh 14 — tampilan chat, tombol, dan label ikut font ini.'
+      : 'Sample body 14 — chat text, buttons, and labels follow this font.';
+
+  String get adminFontSaved =>
+      isId ? 'Font aplikasi diperbarui' : 'App font updated';
+
+  String get adminFontDefaultNote => isId
+      ? 'Default = judul/Cta Poppins, isi Roboto (seperti semula).'
+      : 'Default = Poppins headings/CTA, Roboto body (unchanged).';
+
   String get dummyRateTitle => isId ? 'Rate limit' : 'Rate limit';
 
   String get dummyRateUnlimited =>
@@ -694,8 +701,9 @@ extension SAdminX on S {
   String get dummyRateMax =>
       isId ? 'Maks balasan per chat per jam' : 'Max replies per chat per hour';
 
-  String get dummyRateMin =>
-      isId ? 'Jeda antar balasan (detik)' : 'Interval between replies (seconds)';
+  String get dummyRateMin => isId
+      ? 'Jeda antar balasan (detik)'
+      : 'Interval between replies (seconds)';
 
   String get dummyRateGlobalHint => isId
       ? 'Kosongkan = ikut pengaturan AI Bot (global)'
@@ -731,11 +739,9 @@ extension SAdminX on S {
       ? 'Kosongkan = pakai default server. Base URL tanpa /chat/completions.'
       : 'Empty = use server default. Base URL without /chat/completions.';
 
-  String get aiProviderListTitle =>
-      isId ? 'Provider AI' : 'AI providers';
+  String get aiProviderListTitle => isId ? 'Provider AI' : 'AI providers';
 
-  String get aiProviderActive =>
-      isId ? 'Dipakai' : 'In use';
+  String get aiProviderActive => isId ? 'Dipakai' : 'In use';
 
   String get aiProviderAdd => isId ? 'Tambah provider' : 'Add provider';
 
@@ -743,8 +749,7 @@ extension SAdminX on S {
 
   String get aiProviderSave => isId ? 'Simpan provider' : 'Save provider';
 
-  String get aiProviderSaved =>
-      isId ? 'Provider disimpan' : 'Provider saved';
+  String get aiProviderSaved => isId ? 'Provider disimpan' : 'Provider saved';
 
   String get aiProviderActivated =>
       isId ? 'Provider diaktifkan' : 'Provider activated';
@@ -752,9 +757,8 @@ extension SAdminX on S {
   String get aiProviderDeleted =>
       isId ? 'Provider dihapus' : 'Provider deleted';
 
-  String get aiProviderDeleteConfirm => isId
-      ? 'Hapus provider ini?'
-      : 'Delete this provider?';
+  String get aiProviderDeleteConfirm =>
+      isId ? 'Hapus provider ini?' : 'Delete this provider?';
 
   String get aiProviderDeleteActive => isId
       ? 'Aktifkan provider lain dulu sebelum menghapus yang ini'
@@ -764,9 +768,8 @@ extension SAdminX on S {
       ? 'Tidak bisa hapus satu-satunya provider'
       : 'Cannot delete the only provider';
 
-  String get aiProviderLoadFail => isId
-      ? 'Gagal memuat provider'
-      : 'Failed to load providers';
+  String get aiProviderLoadFail =>
+      isId ? 'Gagal memuat provider' : 'Failed to load providers';
 
   String get aiProviderModelPreset =>
       isId ? 'Pilih preset model' : 'Pick a model preset';
@@ -820,13 +823,11 @@ extension SAdminExcludeX on S {
       ? 'Perangkat yang di-exclude tidak dihitung di ringkasan (users, aktif, anon) & disembunyikan dari daftar Perangkat'
       : 'Excluded devices are not counted in the summary (users, active, anon) & hidden from the Devices list';
 
-  String get adminExcludeCount => isId
-      ? '%d perangkat ter-exclude'
-      : '%d device(s) excluded';
+  String get adminExcludeCount =>
+      isId ? '%d perangkat ter-exclude' : '%d device(s) excluded';
 
-  String get adminExcludeNone => isId
-      ? 'Belum ada perangkat yang di-exclude'
-      : 'No devices excluded yet';
+  String get adminExcludeNone =>
+      isId ? 'Belum ada perangkat yang di-exclude' : 'No devices excluded yet';
 
   String get adminExcludeAddHint =>
       isId ? 'Tempel Install ID...' : 'Paste Install ID...';
@@ -835,9 +836,8 @@ extension SAdminExcludeX on S {
 
   String get adminExcludeRemove => isId ? 'Hapus' : 'Remove';
 
-  String get adminExcludeEmptyId => isId
-      ? 'Install ID tidak boleh kosong'
-      : 'Install ID cannot be empty';
+  String get adminExcludeEmptyId =>
+      isId ? 'Install ID tidak boleh kosong' : 'Install ID cannot be empty';
 
   String get adminExcludeSaved =>
       isId ? 'Daftar exclude tersimpan' : 'Exclusion list saved';
@@ -854,9 +854,8 @@ extension SAdminExcludeX on S {
 
   String get adminExcludedBadge => isId ? 'EXCLUDED' : 'EXCLUDED';
 
-  String get adminExcludeConfirmRemove => isId
-      ? 'Hapus dari daftar exclude?'
-      : 'Remove from exclusion list?';
+  String get adminExcludeConfirmRemove =>
+      isId ? 'Hapus dari daftar exclude?' : 'Remove from exclusion list?';
 
   String get adminExcludeAddTitle =>
       isId ? 'Kelola Perangkat Ter-exclude' : 'Manage Excluded Devices';

@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../config/fonts.dart';
 import '../config/strings_admin.dart';
 import '../config/supabase_config.dart';
 import '../providers/admin_provider.dart';
@@ -49,6 +51,8 @@ class AdminGlobalSettingTab extends StatelessWidget {
         const SizedBox(height: 10),
         const _AiGlobalTile(),
         const SizedBox(height: 10),
+        const _AppFontTile(),
+        const SizedBox(height: 10),
         const _ExcludedDevicesTile(),
       ],
     );
@@ -69,15 +73,16 @@ class _InfoCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.admin_panel_settings_outlined,
-              size: 20, color: AppTheme.primary),
+          Icon(
+            Icons.admin_panel_settings_outlined,
+            size: 20,
+            color: AppTheme.primary,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               s.descScreenshotAdminBuild,
-              style: AppText.bodySmall.copyWith(
-                color: AppTheme.textSecondary,
-              ),
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
             ),
           ),
         ],
@@ -121,7 +126,9 @@ class _ScreenshotToggle extends StatelessWidget {
               children: [
                 Text(
                   s.labelScreenshotAllow,
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   s.descScreenshotAdmin,
@@ -241,7 +248,9 @@ class _InvisibleToggle extends StatelessWidget {
               children: [
                 Text(
                   s.labelInvisibleAdmin,
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   s.descInvisibleAdmin,
@@ -287,8 +296,11 @@ class _CallToggle extends StatelessWidget {
               color: Colors.green.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.phone_in_talk_rounded,
-                color: Colors.green, size: 20),
+            child: Icon(
+              Icons.phone_in_talk_rounded,
+              color: Colors.green,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -297,7 +309,9 @@ class _CallToggle extends StatelessWidget {
               children: [
                 Text(
                   s.adminCallTitle,
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   s.adminCallDesc,
@@ -311,8 +325,7 @@ class _CallToggle extends StatelessWidget {
           ),
           Switch(
             value: auth.callAllEnabled && auth.callAnonEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setCallEnabled(v),
+            onChanged: (v) => context.read<AuthProvider>().setCallEnabled(v),
             activeThumbColor: AppTheme.primary,
           ),
         ],
@@ -342,8 +355,11 @@ class _RequireRegistrationToggle extends StatelessWidget {
               color: Colors.deepPurple.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.how_to_reg_outlined,
-                color: Colors.deepPurple, size: 20),
+            child: Icon(
+              Icons.how_to_reg_outlined,
+              color: Colors.deepPurple,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -352,7 +368,9 @@ class _RequireRegistrationToggle extends StatelessWidget {
               children: [
                 Text(
                   s.labelRequireRegistration,
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   s.descRequireRegistration,
@@ -399,8 +417,11 @@ class _ReengageToggle extends StatelessWidget {
               color: Colors.deepOrange.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.notifications_active_outlined,
-                color: Colors.deepOrange, size: 20),
+            child: Icon(
+              Icons.notifications_active_outlined,
+              color: Colors.deepOrange,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -409,7 +430,9 @@ class _ReengageToggle extends StatelessWidget {
               children: [
                 Text(
                   s.labelReengageNotif,
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   s.descReengageNotif,
@@ -432,6 +455,7 @@ class _ReengageToggle extends StatelessWidget {
     );
   }
 }
+
 /// Exclude perangkat (install_id): perangkat yang di-exclude tidak dihitung
 /// di ringkasan (users/aktif/anon) & disembunyikan dari tab Perangkat.
 /// Fitur admin-only — dikelola dari Pengaturan Global.
@@ -451,6 +475,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
   int _maxReplies = 20;
   int _minInterval = 2;
   bool _guardEnabled = true;
+  bool _aiAiEnabled = true;
   String _activeLabel = '';
 
   @override
@@ -479,6 +504,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
         _maxReplies = (st['ai_max_replies_per_hour'] as num?)?.toInt() ?? 20;
         _minInterval = (st['ai_min_interval_sec'] as num?)?.toInt() ?? 2;
         _guardEnabled = st['ai_guard_enabled'] != false;
+        _aiAiEnabled = st['ai_ai_chat_enabled'] != false;
         _activeLabel = activeLabel;
         _loading = false;
       });
@@ -500,6 +526,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
     final maxCtrl = TextEditingController(text: '$_maxReplies');
     final minCtrl = TextEditingController(text: '$_minInterval');
     bool guardTmp = _guardEnabled;
+    bool aiAiTmp = _aiAiEnabled;
     final s = context.read<LocaleProvider>().s;
     await showModalBottomSheet<void>(
       context: context,
@@ -535,9 +562,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   style: AppText.body,
-                  decoration: InputDecoration(
-                    labelText: s.aiGlobalMaxReplies,
-                  ),
+                  decoration: InputDecoration(labelText: s.aiGlobalMaxReplies),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -545,9 +570,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   style: AppText.body,
-                  decoration: InputDecoration(
-                    labelText: s.aiGlobalMinInterval,
-                  ),
+                  decoration: InputDecoration(labelText: s.aiGlobalMinInterval),
                 ),
                 Row(
                   children: [
@@ -573,6 +596,30 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.aiAiChatTitle, style: AppText.body),
+                          Text(
+                            s.aiAiChatDesc,
+                            style: AppText.caption.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: aiAiTmp,
+                      onChanged: (v) => setSheetState(() => aiAiTmp = v),
+                      activeThumbColor: AppTheme.primary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 FilledButton(
                   onPressed: () async {
                     final max =
@@ -584,12 +631,14 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                         maxReplies: max,
                         minInterval: min,
                         guardEnabled: guardTmp,
+                        aiAiEnabled: aiAiTmp,
                       );
                       if (!mounted) return;
                       setState(() {
                         _maxReplies = max;
                         _minInterval = min;
                         _guardEnabled = guardTmp;
+                        _aiAiEnabled = aiAiTmp;
                       });
                       if (ctx.mounted) {
                         ScaffoldMessenger.of(ctx)
@@ -603,10 +652,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                   child: Text(s.btnSave),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  s.aiProviderListTitle,
-                  style: AppText.bodyStrong,
-                ),
+                Text(s.aiProviderListTitle, style: AppText.bodyStrong),
                 const _ProviderListSection(),
                 const SizedBox(height: 8),
               ],
@@ -652,7 +698,9 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
               children: [
                 Text(
                   s.aiGlobalTitle,
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   s.aiGlobalDesc,
@@ -665,7 +713,7 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      '${s.aiGlobalMaxReplies}: $_maxReplies · ${s.aiGlobalMinInterval}: $_minInterval · ${s.aiGlobalGuardTitle}: ${_guardEnabled ? 'ON' : 'OFF'}${_activeLabel.isNotEmpty ? ' · $_activeLabel' : ''}',
+                      '${s.aiGlobalMaxReplies}: $_maxReplies · ${s.aiGlobalMinInterval}: $_minInterval · ${s.aiGlobalGuardTitle}: ${_guardEnabled ? 'ON' : 'OFF'} · ${s.aiAiChatTitle}: ${_aiAiEnabled ? 'ON' : 'OFF'}${_activeLabel.isNotEmpty ? ' · $_activeLabel' : ''}',
                       style: AppText.caption.copyWith(
                         color: AppTheme.textSecondary,
                       ),
@@ -692,6 +740,228 @@ class _AiGlobalTileState extends State<_AiGlobalTile> {
                   activeThumbColor: AppTheme.primary,
                 ),
         ],
+      ),
+    );
+  }
+}
+
+/// Pilih font global aplikasi (katalog AppFonts) — berlaku semua user
+/// realtime. Default = Poppins + Roboto (perilaku lama).
+class _AppFontTile extends StatelessWidget {
+  const _AppFontTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final auth = context.watch<AuthProvider>();
+    final currentKey = auth.appFontFamily;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.text_fields_rounded,
+              color: AppTheme.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.adminFontTitle,
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  s.adminFontDesc,
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${s.adminFontCurrent}: ${AppFonts.label(currentKey)}',
+                  style: AppText.caption.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.tune, size: 20),
+            color: AppTheme.primary,
+            tooltip: s.adminFontTitle,
+            onPressed: () => _showFontSheet(context, currentKey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFontSheet(BuildContext context, String currentKey) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _AppFontSheet(currentKey: currentKey),
+    );
+  }
+}
+
+/// Bottom sheet picker font + preview live.
+class _AppFontSheet extends StatefulWidget {
+  final String currentKey;
+  const _AppFontSheet({required this.currentKey});
+
+  @override
+  State<_AppFontSheet> createState() => _AppFontSheetState();
+}
+
+class _AppFontSheetState extends State<_AppFontSheet> {
+  late String _selected;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = AppFonts.resolve(widget.currentKey);
+  }
+
+  Future<void> _save() async {
+    final s = context.read<LocaleProvider>().s;
+    setState(() => _saving = true);
+    await context.read<AuthProvider>().setAppFontFamily(_selected);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(s.adminFontSaved)));
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    final selectedFamily = AppFonts.catalog[_selected]?.family;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 16,
+          bottom: 20 + MediaQuery.of(context).padding.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              s.adminFontPickTitle,
+              style: AppText.title,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              s.adminFontDefaultNote,
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            // Preview live mengikuti font yang dipilih.
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.bgScreen,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.divider),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.adminFontPreviewHeading,
+                    style: GoogleFonts.getFont(
+                      selectedFamily ?? 'Poppins',
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    s.adminFontPreviewBody,
+                    style: GoogleFonts.getFont(
+                      selectedFamily ?? 'Roboto',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: SingleChildScrollView(
+                child: RadioGroup<String>(
+                  groupValue: _selected,
+                  onChanged: (v) => setState(() => _selected = v ?? _selected),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final opt in AppFonts.options)
+                        RadioListTile<String>(
+                          value: opt.key,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            opt.label,
+                            style: GoogleFonts.getFont(
+                              opt.family ?? 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check, size: 18),
+              label: Text(s.btnSave),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -732,7 +1002,9 @@ class _ExcludedDevicesTile extends StatelessWidget {
               children: [
                 Text(
                   s.adminExcludeTitle,
-                  style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500),
+                  style: AppText.bodyStrong.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   s.adminExcludeSubtitle,
@@ -743,8 +1015,10 @@ class _ExcludedDevicesTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  s.adminExcludeCount
-                      .replaceFirst('%d', '${auth.excludedDevices.length}'),
+                  s.adminExcludeCount.replaceFirst(
+                    '%d',
+                    '${auth.excludedDevices.length}',
+                  ),
                   style: AppText.caption.copyWith(
                     color: auth.excludedDevices.isEmpty
                         ? AppTheme.textSecondary
@@ -876,10 +1150,7 @@ class _ExcludedDevicesSheetState extends State<_ExcludedDevicesSheet> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        s.adminExcludeAddTitle,
-                        style: AppText.title,
-                      ),
+                      child: Text(s.adminExcludeAddTitle, style: AppText.title),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
@@ -949,7 +1220,9 @@ class _ExcludedDevicesSheetState extends State<_ExcludedDevicesSheet> {
                           return Container(
                             margin: const EdgeInsets.only(bottom: 6),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: AppTheme.bgScreen,
                               borderRadius: BorderRadius.circular(10),
@@ -1077,10 +1350,7 @@ class _ProviderListSectionState extends State<_ProviderListSection> {
                 ),
               ),
             ),
-            TextButton(
-              onPressed: _reload,
-              child: Text(s.btnRetry),
-            ),
+            TextButton(onPressed: _reload, child: Text(s.btnRetry)),
           ],
         ),
       );
@@ -1095,8 +1365,7 @@ class _ProviderListSectionState extends State<_ProviderListSection> {
             expanded: _expandedId == '${p['id']}',
             onToggleExpand: () {
               setState(() {
-                _expandedId =
-                    _expandedId == '${p['id']}' ? null : '${p['id']}';
+                _expandedId = _expandedId == '${p['id']}' ? null : '${p['id']}';
               });
             },
             onChanged: _reload,
@@ -1119,9 +1388,9 @@ class _ProviderListSectionState extends State<_ProviderListSection> {
             onPressed: _adding
                 ? null
                 : () => setState(() {
-                      _adding = true;
-                      _expandedId = null;
-                    }),
+                    _adding = true;
+                    _expandedId = null;
+                  }),
             icon: const Icon(Icons.add_rounded, size: 18),
             label: Text(s.aiProviderAdd),
           ),
@@ -1202,11 +1471,14 @@ class _ProviderCardState extends State<_ProviderCard> {
     super.initState();
     _labelCtrl = TextEditingController(text: '${widget.data['label'] ?? ''}');
     _modelCtrl = TextEditingController(
-        text: '${widget.data['default_model'] ?? ''}');
+      text: '${widget.data['default_model'] ?? ''}',
+    );
     _storyModelCtrl = TextEditingController(
-        text: '${widget.data['story_model'] ?? ''}');
+      text: '${widget.data['story_model'] ?? ''}',
+    );
     _fallbackModelCtrl = TextEditingController(
-        text: '${widget.data['fallback_model'] ?? ''}');
+      text: '${widget.data['fallback_model'] ?? ''}',
+    );
     _baseCtrl = TextEditingController(text: '${widget.data['api_base'] ?? ''}');
     _keyCtrl = TextEditingController(text: '${widget.data['api_key'] ?? ''}');
     _modelCtrl.addListener(_onModelTextChanged);
@@ -1234,13 +1506,12 @@ class _ProviderCardState extends State<_ProviderCard> {
     try {
       await _svc.saveAiProvider(
         id: widget.isNew ? null : '${widget.data['id']}',
-        label: _labelCtrl.text.trim().isEmpty
-            ? null
-            : _labelCtrl.text.trim(),
+        label: _labelCtrl.text.trim().isEmpty ? null : _labelCtrl.text.trim(),
         apiBase: _baseCtrl.text.trim().isEmpty ? null : _baseCtrl.text.trim(),
         apiKey: _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim(),
-        defaultModel:
-            _modelCtrl.text.trim().isEmpty ? null : _modelCtrl.text.trim(),
+        defaultModel: _modelCtrl.text.trim().isEmpty
+            ? null
+            : _modelCtrl.text.trim(),
         storyModel: _storyModelCtrl.text.trim().isEmpty
             ? null
             : _storyModelCtrl.text.trim(),
@@ -1407,26 +1678,24 @@ class _ProviderCardState extends State<_ProviderCard> {
                           size: 22,
                         )
                       : _activating
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: Padding(
-                                padding: EdgeInsets.all(3),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                          : Radio<bool>(
-                              value: true,
-                              groupValue: active ? true : null,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                              onChanged: (_) {
-                                if (!active) _activate();
-                              },
-                            ),
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: Padding(
+                            padding: EdgeInsets.all(3),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : Radio<bool>(
+                          value: true,
+                          groupValue: active ? true : null,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                          onChanged: (_) {
+                            if (!active) _activate();
+                          },
+                        ),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1458,15 +1727,12 @@ class _ProviderCardState extends State<_ProviderCard> {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color:
-                            AppTheme.primary.withValues(alpha: 0.12),
+                        color: AppTheme.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         s.aiProviderActive,
-                        style: AppText.label.copyWith(
-                          color: AppTheme.primary,
-                        ),
+                        style: AppText.label.copyWith(color: AppTheme.primary),
                       ),
                     ),
                   Icon(
@@ -1490,9 +1756,7 @@ class _ProviderCardState extends State<_ProviderCard> {
                   TextField(
                     controller: _labelCtrl,
                     style: AppText.body,
-                    decoration: InputDecoration(
-                      labelText: s.aiProviderLabel,
-                    ),
+                    decoration: InputDecoration(labelText: s.aiProviderLabel),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1531,9 +1795,7 @@ class _ProviderCardState extends State<_ProviderCard> {
                   TextField(
                     controller: _modelCtrl,
                     style: AppText.body,
-                    decoration: InputDecoration(
-                      labelText: s.aiGlobalModel,
-                    ),
+                    decoration: InputDecoration(labelText: s.aiGlobalModel),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -1570,9 +1832,7 @@ class _ProviderCardState extends State<_ProviderCard> {
                     controller: _keyCtrl,
                     obscureText: true,
                     style: AppText.body,
-                    decoration: InputDecoration(
-                      labelText: s.aiGlobalApiKey,
-                    ),
+                    decoration: InputDecoration(labelText: s.aiGlobalApiKey),
                   ),
                   const SizedBox(height: 10),
                   Row(

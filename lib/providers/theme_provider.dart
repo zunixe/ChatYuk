@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
+import '../config/fonts.dart';
 
 /// Kontrol mode terang/gelap — persist di SharedPreferences.
 class ThemeProvider extends ChangeNotifier {
@@ -18,11 +19,18 @@ class ThemeProvider extends ChangeNotifier {
   bool get isDark => _dark;
   ThemeMode get themeMode => _dark ? ThemeMode.dark : ThemeMode.light;
 
+  /// Key font global aktif (katalog AppFonts) — dipakai sebagai dependency
+  /// rebuild MaterialApp saat admin mengganti font.
+  String get fontKey => AppFonts.current;
+
   Future<void> init() async {
     if (_initialized) return;
     final prefs = await SharedPreferences.getInstance();
     _dark = prefs.getBool(_prefKey) ?? true;
     AppTheme.isDark = _dark;
+    // Font tersimpan — pastikan static sudah ter-set sebelum frame pertama
+    // (AppTheme.init juga memuatnya; ini jaring aman bila urutan berubah).
+    await AppFonts.init();
     _initialized = true;
     if (!_disposed) notifyListeners();
   }
