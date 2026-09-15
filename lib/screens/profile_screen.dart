@@ -1807,6 +1807,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       Divider(height: 1, indent: 52),
+                      // Ukuran font chat (slider) — hanya berlaku di bubble
+                      // chat, tidak mengubah tipografi halaman lain.
+                      const _ChatFontTile(),
+                      Divider(height: 1, indent: 52),
                       // Admin: toggle screenshot/watermark/invisible —
                       // hanya ada di build admin (via AdminGate).
                       if (!dummyActive && auth.isRealAdmin) ...?AdminGate.profileSettingsTail?.call(context),
@@ -2807,6 +2811,101 @@ class _ActionGrid extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Tile setelan ukuran font chat (slider) — berlaku untuk bubble chat,
+/// nama pengirim, dan jam pesan. Tersimpan lokal (SharedPreferences) dan
+/// langsung terlihat di preview.
+class _ChatFontTile extends StatefulWidget {
+  const _ChatFontTile();
+
+  @override
+  State<_ChatFontTile> createState() => _ChatFontTileState();
+}
+
+class _ChatFontTileState extends State<_ChatFontTile> {
+  late double _value = ChatTextScale.current;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<LocaleProvider>().s;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.format_size_rounded,
+                  color: AppTheme.primary,
+                  size: 20,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.labelChatFontSize,
+                      style: AppText.bodyStrong.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      s.descChatFontSize,
+                      style: AppText.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${ChatTextScale.percent}%',
+                style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
+              ),
+            ],
+          ),
+          // Preview bubble mengikuti ukuran.
+          Container(
+            margin: const EdgeInsets.only(top: 8, left: 48, right: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.bgScreen,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.divider),
+            ),
+            child: Text(
+              s.chatFontPreview,
+              style: AppText.chatBody.copyWith(color: AppTheme.textPrimary),
+            ),
+          ),
+          Slider(
+            value: _value,
+            min: ChatTextScale.min,
+            max: ChatTextScale.max,
+            divisions: ChatTextScale.steps,
+            label: '${(_value * 100).round()}%',
+            activeColor: AppTheme.primary,
+            onChanged: (v) => setState(() => _value = v),
+            onChangeEnd: (v) async {
+              await ChatTextScale.set(v);
+              // Subtree chat rebuild via ChatTextScale.notifier (app.dart).
+            },
+          ),
+        ],
+      ),
     );
   }
 }

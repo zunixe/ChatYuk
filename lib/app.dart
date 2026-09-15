@@ -91,57 +91,63 @@ class _ChatYukAppState extends State<ChatYukApp> {
       // font global berubah (bukan tiap notifikasi AuthProvider).
       child: Selector<AuthProvider, String>(
         selector: (_, auth) => auth.appFontFamily,
-        builder: (context, _, __) => Consumer2<LocaleProvider, ThemeProvider>(
-          builder: (context, _, theme, _) => MaterialApp(
-            title: 'ChatYuk',
-            debugShowCheckedModeBanner: false,
-            // Tidak pakai `key` agar navigasi tidak ter-reset saat font berubah;
-            // rebuild + getter AppTheme.*Theme (dibangun ulang tiap build)
-            // sudah cukup mengganti ThemeData ke font terbaru.
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: theme.themeMode,
-            navigatorKey: navigatorKey,
-            navigatorObservers: [routeTracker],
-            // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
-            // tapi tetap menghormati preferensi aksesibilitas user.
-            builder: (context, child) => WithForegroundTask(
-              // Pelapor aktivitas GLOBAL: setiap sentuhan di layar APAPUN
-              // (chat/room/profil/dialog/bottom-sheet) me-reset timer idle
-              // dan mengembalikan idle→online. Dulu hanya body _MainNav yang
-              // melapor, sehingga user yang lama di layar chat tercatat
-              // 'idle' di server walau sedang aktif mengetik.
-              // Listener hanya mengamati (tidak rebut gesture), murah:
-              // tanpa idle→online cuma cancel+restart satu Timer.
-              child: Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: (_) {
-                  try {
-                    context.read<AuthProvider>().notifyActivity();
-                  } catch (_) {}
-                },
-                child: OfflineBanner(
-                  child: Stack(
-                    children: [
-                      MediaQuery.withClampedTextScaling(
-                        minScaleFactor: 0.9,
-                        maxScaleFactor: 1.3,
-                        child: child ?? const SizedBox.shrink(),
+        builder: (context, _, __) =>
+            // Rebuild subtree saat ukuran font chat berubah (slider user) —
+            // bubble chat langsung menyesuaikan tanpa restart navigasi.
+            ValueListenableBuilder<double>(
+              valueListenable: ChatTextScale.notifier,
+              builder: (context, _, __) => Consumer2<LocaleProvider, ThemeProvider>(
+                builder: (context, _, theme, _) => MaterialApp(
+                  title: 'ChatYuk',
+                  debugShowCheckedModeBanner: false,
+                  // Tidak pakai `key` agar navigasi tidak ter-reset saat font berubah;
+                  // rebuild + getter AppTheme.*Theme (dibangun ulang tiap build)
+                  // sudah cukup mengganti ThemeData ke font terbaru.
+                  theme: AppTheme.lightTheme,
+                  darkTheme: AppTheme.darkTheme,
+                  themeMode: theme.themeMode,
+                  navigatorKey: navigatorKey,
+                  navigatorObservers: [routeTracker],
+                  // Batasi skala font sistem supaya label kecil & baris padat tidak pecah,
+                  // tapi tetap menghormati preferensi aksesibilitas user.
+                  builder: (context, child) => WithForegroundTask(
+                    // Pelapor aktivitas GLOBAL: setiap sentuhan di layar APAPUN
+                    // (chat/room/profil/dialog/bottom-sheet) me-reset timer idle
+                    // dan mengembalikan idle→online. Dulu hanya body _MainNav yang
+                    // melapor, sehingga user yang lama di layar chat tercatat
+                    // 'idle' di server walau sedang aktif mengetik.
+                    // Listener hanya mengamati (tidak rebut gesture), murah:
+                    // tanpa idle→online cuma cancel+restart satu Timer.
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (_) {
+                        try {
+                          context.read<AuthProvider>().notifyActivity();
+                        } catch (_) {}
+                      },
+                      child: OfflineBanner(
+                        child: Stack(
+                          children: [
+                            MediaQuery.withClampedTextScaling(
+                              minScaleFactor: 0.9,
+                              maxScaleFactor: 1.3,
+                              child: child ?? const SizedBox.shrink(),
+                            ),
+                            const Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: CallBanner(),
+                            ),
+                          ],
+                        ),
                       ),
-                      const Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: CallBanner(),
-                      ),
-                    ],
+                    ),
                   ),
+                  home: _AuthGate(),
                 ),
               ),
             ),
-            home: _AuthGate(),
-          ),
-        ),
       ),
     );
   }

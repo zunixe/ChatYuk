@@ -127,6 +127,31 @@ class AppText {
   static TextStyle get body =>
       _plain(14, FontWeight.w400, height: 1.35, color: AppTheme.textPrimary);
 
+  // ── Teks chat yang ikut slider ukuran font (setelan user) ──
+  // Faktor dari ChatTextScale.current (0.85–1.4). Bubble isi, nama pengirim,
+  // dan jam pesan diskalakan supaya proporsional.
+  static TextStyle get chatBody => _plain(
+    ChatTextScale.scale(14),
+    FontWeight.w400,
+    height: 1.35,
+    color: AppTheme.textPrimary,
+  );
+
+  static TextStyle get chatName => _plain(
+    ChatTextScale.scale(12),
+    FontWeight.w600,
+    height: 1.2,
+    letterSpacing: 0.2,
+    color: AppTheme.textPrimary,
+  );
+
+  static TextStyle get chatTime => _plain(
+    ChatTextScale.scale(10),
+    FontWeight.w500,
+    height: 1.2,
+    color: AppTheme.textPrimary,
+  );
+
   // 14 w600 — judul list tile, label setting, nilai info
   static TextStyle get bodyStrong =>
       _plain(14, FontWeight.w600, height: 1.35, color: AppTheme.textPrimary);
@@ -151,6 +176,62 @@ class AppText {
   // 24 w800 — saldo wallet, angka hero, tagline
   static TextStyle get display =>
       _brand(24, FontWeight.w800, height: 1.15, color: AppTheme.textPrimary);
+}
+
+/// Skala ukuran teks chat — diatur user lewat slider di Pengaturan.
+/// Multiplier diterapkan ke token AppText.chatBody/chatName/chatTime saja
+/// (tidak mengubah tipografi halaman lain).
+class ChatTextScale {
+  ChatTextScale._();
+
+  static const String prefKey = 'chat_text_scale';
+
+  /// Batas slider.
+  static const double min = 0.85;
+  static const double max = 1.40;
+
+  /// Langkah diskret slider (7 tingkat) agar nilai rapi & mudah diulang.
+  static const int steps = 6;
+
+  /// Nilai aktif (1.0 = normal).
+  static double current = 1.0;
+
+  /// Notifier untuk rebuild subtree chat saat nilai berubah (tanpa
+  /// me-restart navigasi). Di-listen di app.dart.
+  static final ValueNotifier<double> notifier = ValueNotifier<double>(1.0);
+
+  /// Terapkan multiplier aman (clamp ke [min,max]).
+  static double scale(double base) =>
+      base * current.clamp(min, max);
+
+  /// Normalisasi nilai (bulatkan, clamp).
+  static double resolve(double? v) {
+    if (v == null || v.isNaN || v.isInfinite) return 1.0;
+    return double.parse(v.clamp(min, max).toStringAsFixed(2));
+  }
+
+  /// Inisialisasi sinkron dari SharedPreferences (sebelum runApp).
+  static void initSync(SharedPreferences prefs) {
+    current = resolve(prefs.getDouble(prefKey));
+    notifier.value = current;
+  }
+
+  /// Simpan + terapkan.
+  static Future<void> set(double v) async {
+    current = resolve(v);
+    notifier.value = current;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(prefKey, current);
+  }
+
+  /// Persentase untuk label UI (mis. 100%).
+  static int get percent => (current * 100).round();
+
+  /// Set tanpa menulis prefs (untuk restore realtime, tak perlu).
+  static void setLocal(double v) {
+    current = resolve(v);
+    notifier.value = current;
+  }
 }
 
 /// Ukuran emoji & ikon dekoratif (bukan teks). Lihat AGENTS.md.
@@ -212,6 +293,8 @@ class AppTheme {
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     isDark = prefs.getBool('app_theme_dark') ?? true;
+    // Skala font chat tersimpan — frame pertama bubble pakai ukuran benar.
+    ChatTextScale.initSync(prefs);
     // Font global tersimpan — frame pertama langsung pakai font yang benar.
     await AppFonts.init();
   }

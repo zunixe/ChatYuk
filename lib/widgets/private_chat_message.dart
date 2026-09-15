@@ -719,7 +719,7 @@ class MessageBubble extends StatelessWidget {
                                         children: [
                                           Text(
                                             timeStr,
-                                            style: AppText.micro.copyWith(
+                                            style: AppText.chatTime.copyWith(
                                               color: Colors.white,
                                             ),
                                           ),
@@ -753,7 +753,7 @@ class MessageBubble extends StatelessWidget {
                                 padding: const EdgeInsets.only(top: 4),
                                 child: LinkifyText(
                                   msg.text,
-                                  style: AppText.body.copyWith(color: AppTheme.textPrimary),
+                                  style: AppText.chatBody.copyWith(color: AppTheme.textPrimary),
                                 ),
                               ),
                           ],
@@ -794,7 +794,7 @@ class MessageBubble extends StatelessWidget {
                                   children: [
                                     Text(
                                       timeStr,
-                                      style: AppText.micro.copyWith(
+                                      style: AppText.chatTime.copyWith(
                                         color: Colors.white,
                                       ),
                                     ),
@@ -838,7 +838,8 @@ class MessageBubble extends StatelessWidget {
                                     isMe
                                         ? s.coinBubbleSent(amount)
                                         : s.coinBubbleReceived(amount),
-                                    style: AppText.bodyStrong.copyWith(
+                                    style: AppText.chatBody.copyWith(
+                                      fontWeight: FontWeight.w600,
                                       color: Color(0xFFB8860B),
                                     ),
                                   ),
@@ -846,7 +847,7 @@ class MessageBubble extends StatelessWidget {
                                 SizedBox(width: 6),
                                 Text(
                                   timeStr,
-                                  style: AppText.micro.copyWith(
+                                  style: AppText.chatTime.copyWith(
                                     color: AppTheme.textSecondary,
                                   ),
                                 ),
@@ -876,7 +877,8 @@ class MessageBubble extends StatelessWidget {
                                     isMe
                                         ? s.giftBubbleSent(name)
                                         : s.giftBubbleReceived(name),
-                                    style: AppText.bodyStrong.copyWith(
+                                    style: AppText.chatBody.copyWith(
+                                      fontWeight: FontWeight.w600,
                                       color: Color(0xFFB8860B),
                                     ),
                                   ),
@@ -884,7 +886,7 @@ class MessageBubble extends StatelessWidget {
                                 SizedBox(width: 6),
                                 Text(
                                   timeStr,
-                                  style: AppText.micro.copyWith(
+                                  style: AppText.chatTime.copyWith(
                                     color: AppTheme.textSecondary,
                                   ),
                                 ),
@@ -944,7 +946,7 @@ class MessageBubble extends StatelessWidget {
                                     baseline: TextBaseline.alphabetic,
                                     child: Text(
                                       timeStr,
-                                      style: AppText.micro.copyWith(
+                                      style: AppText.chatTime.copyWith(
                                         color: AppTheme.textSecondary,
                                       ),
                                     ),
@@ -960,8 +962,8 @@ class MessageBubble extends StatelessWidget {
                           timeStr: msg.edited
                               ? '$timeStr ${s.msgEdited}'
                               : timeStr,
-                          textStyle: AppText.body,
-                          timeStyle: AppText.micro.copyWith(
+                          textStyle: AppText.chatBody,
+                          timeStyle: AppText.chatTime.copyWith(
                             color: AppTheme.textSecondary,
                             fontWeight: FontWeight.w400,
                           ),

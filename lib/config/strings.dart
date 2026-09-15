@@ -557,6 +557,16 @@ class S {
       ? 'Terima notifikasi pesan baru'
       : 'Receive new message notifications';
 
+  // ── Ukuran font chat (slider di profil) ──
+  String get labelChatFontSize =>
+      isId ? 'Ukuran font chat' : 'Chat font size';
+  String get descChatFontSize => isId
+      ? 'Atur besar teks di pesan chat'
+      : 'Adjust text size in chat messages';
+  String get chatFontPreview => isId
+      ? 'Contoh: Halo, apa kabar? 👋'
+      : 'Preview: Hi, how are you? 👋';
+
   // ── Call 1:1 (audio/video) ──
   String get callAudio => isId ? 'Panggilan Audio' : 'Audio Call';
   String get callVideo => isId ? 'Panggilan Video' : 'Video Call';
