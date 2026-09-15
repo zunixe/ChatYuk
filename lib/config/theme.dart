@@ -27,8 +27,9 @@ class AppText {
   }) {
     final family = AppFonts.family();
     if (family == null) {
-      // System: judul pakai font bawaan perangkat (bukan Poppins) +
-      // turunkan weight (MiSans lebih berat dari Roboto).
+      // System: judul pakai font bawaan perangkat (bukan Poppins).
+      // Weight: null = biarkan berat natural font sistem (ramping seperti
+      // WhatsApp), selain itu pakai hasil pemetaan _systemWeight.
       if (AppFonts.isSystem()) {
         return TextStyle(
           fontSize: size,
@@ -83,9 +84,9 @@ class AppText {
         color: color,
       );
     }
-    // Font System (mis. MiSans di HyperOS/Xiaomi) tampil LEBIH BERAT daripada
-    // Roboto pada weight sama → SEMUA teks body diturunkan satu tingkat agar
-    // bobot visual setara.
+    // Font System: biarkan berat natural font perangkat (fontWeight null =
+    // regular asli) supaya ramping seperti WhatsApp. Memaksa weight membuat
+    // teks terlihat tebal/sintetis.
     final w = _systemWeight(weight);
     return TextStyle(
       fontSize: size,
@@ -96,14 +97,20 @@ class AppText {
     );
   }
 
-  /// Turunkan weight untuk font System (berlaku semua token body/judul).
-  /// w400 → w100 (paling tipis), w600+ → w500, w500 → w400, w300 → w300.
-  static FontWeight _systemWeight(FontWeight w) {
+  /// Weight efektif untuk font System.
+  ///
+  /// Font sistem (MiSans di HyperOS) punya berat natural REGULAR saat
+  /// fontWeight dibiarkan null — persis seperti WhatsApp. Memaksa weight
+  /// (w100..w400) justru membuat sintesis bold/varian aneh. Jadi saat mode
+  /// System kita TIDAK memaksa weight untuk teks body (w400/w500/w300);
+  /// hanya heading tebal (w600+) yang tetap dipetakan agar tidak terlalu
+  /// berat.
+  static FontWeight? _systemWeight(FontWeight w) {
     if (!AppFonts.isSystem()) return w;
-    if (w == FontWeight.w400) return FontWeight.w100;
-    if (w.index >= FontWeight.w600.index) return FontWeight.w500;
-    if (w.index >= FontWeight.w500.index) return FontWeight.w400;
-    return w;
+    // Body & teks sedang → biarkan natural (null = regular sistem).
+    if (w.index <= FontWeight.w500.index) return null;
+    // Judul/tombol tebal → turunkan satu tingkat agar tidak kelebihan bobot.
+    return FontWeight.w500;
   }
 
   // 10 — timestamp, badge unread, counter overlay
