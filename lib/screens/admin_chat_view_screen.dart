@@ -40,7 +40,9 @@ class AdminChatViewScreen extends StatefulWidget {
 
 class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   List<MessageModel> _msgs = [];
-  bool _loading = true;
+  // Mulai false → tidak ada bar loading saat masuk; _fetch menyalakan HANYA
+  // bila cache lokal kosong (belum pernah dibuka). Anti-blink saat buka ulang.
+  bool _loading = false;
   String? _error;
   String? _leftUid;
   String get _chatKey => cacheKeyFor(widget.chatId);
@@ -196,6 +198,16 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     // pesan (mis. poll sementara gagal/slow), pertahankan yang lama —
     // jangan kosongkan layar.
     if (list.isEmpty && _msgs.isNotEmpty) return;
+    // Anti-rebuild: bila id + isi terakhir sama persis (poll tanpa perubahan),
+    // tak perlu setState → layar tak berkedip/repaint tiap 5 dtk.
+    if (list.isNotEmpty &&
+        _msgs.isNotEmpty &&
+        list.length == _msgs.length &&
+        list.first.id == _msgs.first.id &&
+        list.last.id == _msgs.last.id &&
+        list.last.text == _msgs.last.text) {
+      return;
+    }
     // Pertahankan imageData yang sudah di-load
     final oldMap = <String, String>{};
     for (final m in _msgs) {
@@ -277,6 +289,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         _loadPhotos();
       }
     } catch (_) {}
+    // Bar loading HANYA bila belum ada apa pun untuk ditampilkan.
+    if (mounted && _msgs.isEmpty && !_loading) {
+      setState(() => _loading = true);
+    }
     try {
       final ok = await admin.fetchChatMessages(widget.chatId);
       if (!mounted) return;
