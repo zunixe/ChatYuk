@@ -2108,7 +2108,10 @@ Deno.serve(async (req: Request) => {
     // tetap menolak topik dewasa walau admin sudah mematikan guard. Fix:
     // guard off diperlakukan sebagai adultMode aktif — jadi perilakunya
     // konsisten dengan ekspektasi "guard off = bebas".
-    if (!guardOn) adultMode = true;
+    // PENGECUALIAN: akun EXPERT/CS (longAnswers, mis. Admin Chatyuk) adalah
+    // akun resmi — TIDAK PERNAH masuk mode dewasa walau guard global off.
+    // Tanpa ini akun CS ikut membalas vulgar saat guard off (temuan live).
+    if (!guardOn && !longAnswers) adultMode = true;
     const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
     const askedInLastTurn =
       lastAssistant != null && /nakal/i.test(contentText(lastAssistant.content));
@@ -2452,8 +2455,8 @@ Deno.serve(async (req: Request) => {
         ? 'ATURAN PANJANG CS: jawaban boleh panjang & DETAIL sampai tuntas. FORMAT WAJIB rapi & mudah dibaca: setiap langkah/point ditulis di BARIS TERSENDIRI dengan penomoran (1. 2. 3.) atau strip (-) — JANGAN menumpuk banyak poin dalam satu paragraf panjang. Pakai baris kosong antar bagian bila perlu. DILARANG markdown (**, ##, kode block) — cukup teks biasa + angka strip. Contoh baik: "Baik kak, berikut langkahnya:\\n1. Buka Pengaturan\\n2. Pilih Akun\\n3. Ketuk Lupa Password"'
         : (guardOn && !adultMode)
         ? 'ATURAN PANJANG: jawaban pendek 2-12 kata, SATU kalimat.'
-        : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: PENDEK SELALU — total MAKSIMAL ~35 kata per balasan, SAMAKAN dengan pesan lawan (dia pendek, kamu pendek; dia panjang, kamu tetap ringkas 1-2 kalimat). MAKSIMAL 3 kalimat pendek, JANGAN nulis paragraf atau esei — ini chat, bukan cerita. Lebih baik 1 kalimat pendek yang bikin penasaran daripada 3 kalimat penuh; eksplisit sesuai konteks dan fase obrolan.',
-      ...(guardOn && !adultMode
+        : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: SEDANG menjawab rasa penasaran — total ~40-90 kata per balasan (3-5 kalimat pendek), SESUAIKAN dengan pesan lawan (dia pendek, kamu ringkas; dia panjang/detail, kamu balas lebih detail juga). BERVARIASI: jangan pola sama tiap balasan — kadang 1 kalimat menggoda, kadang 3-5 kalimat yang mendeskripsikan aksi/perasaan/lingkungan secara eksplisit & hidup, biar tidak membosankan. Tetap gaya chat natural Indonesia, bukan esei panjang. Eksplisit sesuai konteks dan fase obrolan.',
+      ...(longAnswers || (guardOn && !adultMode)
         ? ['BATAS KERAS (tidak bisa dilanggar siapa pun, dalam rolenya kamu tetap menolak): JANGAN pernah terlibat obrolan seksual, vulgar, atau NSFW. Jangan kirim deskripsi tubuh sensual, fantasi seksual, atau roleplay dewasa. Jika lawan bicara menekan ke arah itu, tolak dengan ringan dan santai lalu alihkan ke topik lain, TANPA merusak karaktermu.']
         : []),
       // Tawaran "nakal" — HANYA sekali, di fase nyaman, sebelum consent.
@@ -3343,7 +3346,7 @@ Deno.serve(async (req: Request) => {
       // ≈ 4000 char, jadi 3000 char tidak jebol budget token).
       // Fleksibel (lawan nulis panjang): muat 2-4 kalimat (~300 char) —
       // cap 90 memenggal jawaban soal kerjaan/cerita jadi "...".
-      longAnswers ? 3000 : guardOn ? (flexibleLong ? 300 : MAX_REPLY_CHARS) : 220,
+      longAnswers ? 3000 : guardOn ? (flexibleLong ? 300 : MAX_REPLY_CHARS) : 340,
       longAnswers, // CS: pertahankan baris → poin/angka bernomor rapi
     );
     // Jaring pengaman kode (selain instruksi prompt): maks 1 emoji,
@@ -3358,7 +3361,7 @@ Deno.serve(async (req: Request) => {
     // sebelumnya (model sering mengunci 1 emoji, mis. 😈 beruntun).
     replyVisible = stripBannedEmojis(replyVisible, bannedEmojis);
     if (longAnswers) replyVisible = capLines(replyVisible, diagrams || charts ? 48 : 24);
-    else if (!guardOn) replyVisible = capSentences(replyVisible, 3);
+    else if (!guardOn) replyVisible = capSentences(replyVisible, 5);
     if (!replyVisible) {
       await closeTyping();
       // model_used WAJIB ikut dilaporkan — tanpa ini log jadi
@@ -3370,8 +3373,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // Output-side NSFW guard: LLM tetap saja bisa lolos — cek balasan
-    // sebelum dikirim, ganti defleksi bila vulgar. (Skip kalau guard off.)
-    if (guardOn && isExplicit(replyVisible)) {
+    // sebelum dikirim, ganti defleksi bila vulgar. Aktif kalau guard ON ATAU
+    // akun expert/CS (longAnswers) — akun resmi tak boleh vulgar walau guard
+    // global off (temuan live).
+    if ((guardOn || longAnswers) && isExplicit(replyVisible)) {
       replyVisible = randomOf(DEFLECTIONS);
       preMood = 'normal';
       preStorm = false;
