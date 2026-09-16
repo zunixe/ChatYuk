@@ -43,6 +43,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   // True setelah SQLite/server pertama selesai — supaya empty-state TIDAK
   // berkedip muncul sesaat sebelum pesan terisi.
   bool _firstResolved = false;
+  // Masih ada pesan lama untuk dimuat (pagination) — state lokal supaya
+  // build tak perlu watch AdminProvider.
+  bool _hasMore = false;
   String? _error;
   String? _leftUid;
   String get _chatKey => cacheKeyFor(widget.chatId);
@@ -183,7 +186,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         _scrollCtrl.position.maxScrollExtent - 300) {
       if (admin.chatMessagesHasMore && !admin.chatsLoading) {
         admin.fetchMoreChatMessages(widget.chatId).then((_) {
-          if (mounted) _applyMessages();
+          if (mounted) {
+            _applyMessages();
+            _hasMore = admin.chatMessagesHasMore;
+          }
         });
       }
     }
@@ -309,6 +315,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       }
       _applyMessages();
       unawaited(_refreshRead());
+      _hasMore = admin.chatMessagesHasMore;
       // Simpan ke cache untuk buka berikutnya (instant).
       if (_msgs.isNotEmpty) {
         unawaited(MessageCache.instance.saveMessages(_chatKey, _msgs));
@@ -326,6 +333,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     await admin.refreshChatMessages(widget.chatId);
     if (!mounted) return;
     _applyMessages();
+    _hasMore = admin.chatMessagesHasMore;
     unawaited(_refreshRead());
   }
 
@@ -465,7 +473,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final admin = context.watch<AdminProvider>();
+    // JANGAN watch AdminProvider — notifyListeners (poll/tab lain) bikin
+    // seluruh layar rebuild = kedip. Data pesan diambil via _applyMessages
+    // (read), hasMore disimpan di state lokal.
+    final admin = context.read<AdminProvider>();
     final watchingVideo = _watch != null && _watch!.isVideo;
 
     return Scaffold(
@@ -533,8 +544,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                             MediaQuery.of(context).padding.bottom + 16,
                           ),
                           itemCount:
-                              _items.length +
-                              (admin.chatMessagesHasMore ? 1 : 0),
+                              _items.length + (_hasMore ? 1 : 0),
                           itemBuilder: (_, i) {
                             if (i >= _items.length) {
                               return const Padding(
