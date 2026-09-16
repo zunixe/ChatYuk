@@ -162,4 +162,29 @@ void main() {
     await MessageStore.instance.clearAll();
     expect(await MessageStore.instance.loadKv('rooms_ID'), isNull);
   });
+
+  test('SELF-HEAL: open gagal (DB korup) → delete + buka ulang sukses',
+      () async {
+    // Tutup & reset store supaya open() dipanggil ulang.
+    await MessageStore.instance.clearAll();
+    await MessageStore.instance.close();
+    // Opener pertama MENIRU "file is not a database" (kunci berubah/korup),
+    // panggilan berikutnya normal (setelah delete). open() harus self-heal.
+    var calls = 0;
+    MessageStore.debugOpener = (path) {
+      calls++;
+      if (calls == 1) {
+        throw Exception('file is not a database (code 26)');
+      }
+      return databaseFactory.openDatabase(path);
+    };
+    final db = await MessageStore.instance.open('test');
+    expect(calls, greaterThanOrEqualTo(2), reason: 'harus retry setelah hapus');
+    expect(db.isOpen, isTrue);
+    // DB baru sehat → bisa simpan/normal.
+    await MessageStore.instance.saveMessages('chat-x', [_msg('z', DateTime(2026, 1, 1))]);
+    expect((await MessageStore.instance.loadMessages('chat-x')).single.id, 'z');
+    // Pulihkan opener default untuk test lain.
+    MessageStore.debugOpener = (path) => databaseFactory.openDatabase(path);
+  });
 }

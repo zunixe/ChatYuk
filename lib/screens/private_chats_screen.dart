@@ -596,7 +596,11 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                           color: Colors.transparent,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: _selectionMode ? () => _toggleSelect(chat.chatId) : () => Navigator.push(
+                            onTap: _selectionMode ? () => _toggleSelect(chat.chatId) : () {
+                              // Prefetch pesan ke memori sebelum push →
+                              // buka chat instant (tanpa loading pesan).
+                              ChatService().prefetchPrivateChat(chat.chatId);
+                              Navigator.push(
                               context,
                               PageRouteBuilder(
                                 transitionDuration: const Duration(
@@ -636,7 +640,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                   );
                                 },
                               ),
-                            ),
+                            );
+                            },
                             child: Padding(
                               padding: EdgeInsets.symmetric(
                                 horizontal: 12,

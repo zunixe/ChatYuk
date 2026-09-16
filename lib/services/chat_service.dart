@@ -96,6 +96,11 @@ class ChatService {
     return _ownCountryCache;
   }
 
+  /// Salinan key cache avatar — dipakai unit test untuk mengunci batas
+  /// [_avatarCacheMax] (dulu tumbuh tanpa batas per user yang pernah online).
+  @visibleForTesting
+  static Set<String> get avatarCacheKeys => _avatarCache.keys.toSet();
+
   static void clearAvatarCacheForPath(String path) {
     _avatarCache.remove(path);
   }
@@ -307,8 +312,21 @@ class ChatService {
 
   String _chatId(String uid1, String uid2) => privateChatId(uid1, uid2);
 
+  /// Kunci cache pesan private chat (dipakai stream + prefetch). Konsisten
+  /// supaya prefetch saat tap di list mengisi key yang sama dengan stream.
+  static String privateCacheKey(String chatId) => 'private_$chatId';
+
   ChatMessageStream getPrivateChatMessages(String chatId) {
-    return _cachedMessagesStream(cacheKey: 'private_$chatId');
+    return _cachedMessagesStream(cacheKey: privateCacheKey(chatId));
+  }
+
+  /// Prefetch pesan ke memori (fire-and-forget) — dipanggil saat user TAP
+  /// item chat di list, supaya saat PrivateChatScreen mount cache sudah
+  /// panas → emit frame-pertama instan (tanpa "loading pesan").
+  void prefetchPrivateChat(String chatId) {
+    unawaited(
+      MessageCache.instance.preloadMessages(privateCacheKey(chatId)),
+    );
   }
 
   /// Edit teks pesan sendiri di private chat. RLS menjamin hanya sender_id

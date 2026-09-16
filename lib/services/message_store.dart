@@ -46,9 +46,24 @@ class MessageStore {
       final dirPath = debugDir ??
           (await getApplicationDocumentsDirectory()).path;
       final path = '$dirPath/chatyuk_messages_v1.db';
-      final db = debugOpener != null
-          ? await debugOpener!(path)
-          : await openDatabase(path, password: password);
+      Database db;
+      try {
+        db = debugOpener != null
+            ? await debugOpener!(path)
+            : await openDatabase(path, password: password);
+      } catch (e) {
+        // SELF-HEAL: DB tak bisa dibuka (kunci SQLCipher berubah / file
+        // korup → "file is not a database", code 26). Dulu hanya rethrow →
+        // cache pesan MATI sepanjang sesi (tiap buka chat selalu fetch
+        // server = terasa loading). Kini hapus DB lama & buat ulang bersih.
+        dlog('[STORE] open gagal ($e) → recreate DB bersih');
+        try {
+          await deleteDatabase(path);
+        } catch (_) {}
+        db = debugOpener != null
+            ? await debugOpener!(path)
+            : await openDatabase(path, password: password);
+      }
       // DDL idempoten di sini (bukan onCreate) agar jalur produksi & test
       // memakai definisi skema yang sama persis.
       await db.execute(
@@ -219,6 +234,21 @@ class MessageStore {
       await db.delete('kv');
     } catch (e) {
       dlog('[STORE] clearAll error: $e');
+    }
+  }
+
+  /// Tutup DB & reset state (dipakai test / switch akun). open() berikutnya
+  /// membuka ulang dari disk.
+  Future<void> close() async {
+    final db = _db;
+    _db = null;
+    _opening = null;
+    if (db != null && db.isOpen) {
+      try {
+        await db.close();
+      } catch (e) {
+        dlog('[STORE] close error: $e');
+      }
     }
   }
 

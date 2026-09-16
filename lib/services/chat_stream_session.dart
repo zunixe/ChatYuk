@@ -365,8 +365,21 @@ class ChatStreamSession {
       }
       _reloading = true;
       try {
-        // Emit cache lokal DULU tanpa tunggu cutoff network — frame pertama
-        // instant. Cutoff & server menyusul dan mengkoreksi di emit berikutnya.
+        // ── FRAME PERTAMA INSTAN: emit SINKRON dari memori (tanpa await) ──
+        // Bila chat sudah di cache memori (dari kunjungan sebelumnya / hasil
+        // prefetch saat tap di list), emit langsung → TIDAK ada "loading
+        // pesan". Kalau kosong (cold start), lanjut ke muat SQLite.
+        if (_current.isEmpty) {
+          final mem = MessageCache.instance.peekMessages(cacheKey);
+          if (mem != null && mem.isNotEmpty && !controller.isClosed) {
+            _current = mem;
+            controller.add(List.unmodifiable(_current));
+            loadPhotosAsync(mem);
+          }
+        }
+
+        // Emit cache lokal (SQLite) tanpa tunggu cutoff network — frame
+        // pertama tetap cepat bila memori miss. Cutoff & server menyusul.
         final cutoffF = fetchHiddenCutoff();
         final cacheF = _current.isEmpty
             ? MessageCache.instance.loadMessages(cacheKey)

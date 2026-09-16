@@ -895,6 +895,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     // Hitung chatId lokal (deterministik, tanpa network) → navigate instant.
     final ids = [myUid, user.uid]..sort();
     final chatId = '${ids[0]}_${ids[1]}';
+    // Prefetch pesan ke memori sebelum push → buka chat instant.
+    ChatService().prefetchPrivateChat(chatId);
     if (!context.mounted) return;
     Navigator.push(
       context,

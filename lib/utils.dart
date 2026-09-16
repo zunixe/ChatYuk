@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 /// compiler tree-shake pemanggilan). debugPrint di 150+ call site
 /// sebelumnya tetap menyusun string + menulis log di produksi.
 void dlog(String message, {String? tag}) {
-  if (kDebugMode) {
+  if (kDebugMode || kProfileMode) {
     debugPrint(tag == null ? message : '[$tag] $message');
   }
 }
