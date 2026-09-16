@@ -245,7 +245,9 @@ class AdminProvider extends ChangeNotifier {
 
   // ── Admin Chat Monitor ──
   static const int chatPageSize = 50;
-  static const int messagePageSize = 100;
+  // 40 (dulu 100): buka chat ringan — 100 pesan + view_once base64 berat
+  // di-serialize sekaligus bikin lambat. Sisanya dimuat saat scroll ke atas.
+  static const int messagePageSize = 40;
 
   List<Map<String, dynamic>> _chats = [];
   List<Map<String, dynamic>> _chatMessages = [];
