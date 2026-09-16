@@ -2067,7 +2067,7 @@ Deno.serve(async (req: Request) => {
         .map((r: any) => String(r.fact || '').trim())
         .filter(Boolean);
       if (memories.length > 0) {
-        memoryLine = `Kenanganmu tentang lawan bicara ini dari obrolan sebelumnya (pakai secara natural kalau relevan, jangan sebut ulang semuanya): ${memories.join('; ')}.`;
+        memoryLine = `Kenanganmu tentang ORANG INI (${String(partner?.nickname ?? 'lawan bicara')}) dari obrolan sebelumnya — INI HANYA TENTANG DIA, jangan campur dengan orang lain: ${memories.join('; ')}. Pakai natural kalau relevan, jangan sebut ulang semuanya. Ini sumber kebenaranmu soal siapa dia (kalau di sini dia majikan/teman/kenalan, ya itu hubungan kalian; kalau tidak ada, berarti kalian belum kenal).`;
       }
     } catch (e) {
       console.log(`[ai-reply] memoryLine GAGAL: ${e}`);
@@ -2288,14 +2288,18 @@ Deno.serve(async (req: Request) => {
             ? 'perempuan'
             : 'rahasia';
         partnerLine =
-          `Lawan bicaramu sekarang: ${partner.nickname ?? 'tanpa nama'}` +
+          `ORANG YANG SEDANG NGECHAT KAMU SEKARANG: ${partner.nickname ?? 'tanpa nama'}` +
           (partner.age ? `, ${partner.age} tahun` : '') +
           `, ${pGender}` +
           (partner.city ? `, tinggal di ${partner.city}` : '') +
           (Array.isArray(partner.hashtags) && partner.hashtags.length
             ? `. Hobi dia: ${partner.hashtags.join(', ')}`
             : '') +
-          '. Kamu sudah lihat profil publiknya — pakai info ini secara natural untuk menyesuaikan obrolan, TAPI jangan menebar semua data sekaligus; biarkan dia bercerita sendiri, kamu bertanya secukupnya tentang yang belum jelas.';
+          '. PENTING — ini PERCAKAPAN TERPISAH dengan ORANG INI saja: ' +
+          '(a) Kamu ngobrol dengan BANYAK orang berbeda di chat yang berbeda; chat ini HANYA dengan orang di atas. JANGAN menganggap dia orang lain (majikan, bos, teman lama, atau siapa pun dari chat lain) kecuali memang pernah kamu kenal DIA di chat INI. ' +
+          '(b) Kalau dia mengaku sebagai siapa (mis. "aku majikanmu", "aku temenmu"), itu HANYA berlaku di chat INI — jangan bawa ke chat lain. Perlakukan tiap orang sesuai apa yang kamu tahu TENTANG DIA (lihat "Kenanganmu tentang lawan bicara" di bawah kalau ada). ' +
+          '(c) Kalau lawan bicara BERGANTI (kamu buka chat lain), itu orang LAIN — jangan panggil dia dengan sebutan dari chat sebelumnya (mis. jangan panggil "om"/"majikan" ke semua orang kecuali kamu memang sudah kenal dia begitu). ' +
+          'Pakai info ini secara natural, jangan menebar semua data sekaligus.';
       }
     } catch (e) {
       console.log(`[ai-reply] partnerLine GAGAL: ${e}`);
@@ -2827,10 +2831,11 @@ Deno.serve(async (req: Request) => {
           `VARIASI TEMPAT (wajib): tempat utama hari ini (place) HARUS BEDA dari tempat kemarin — jangan pakai tempat yang sama 2 hari berturut-turut, pilih tempat nyata lain yang wajar di ${sCity}. ` +
           `ATURAN HARI: Senin–Jumat = hari kerja kantoran (aktivitas seputar kantor/sepulang kerja); Sabtu–Minggu = boleh ada kerja sampingan (mis. pemandu wisata) dan jalan-jalan. ` +
           `Isi: apa pekerjaanmu hari ini + masalah/kejadian di tempat kerja, main dengan siapa, jalan-jalan ke mana (sebutkan TEMPAT NYATA yang wajar di ${sCity} — mall, kafe, taman, warung). ` +
+          `TIMELINE WAJIB: bagi hari jadi 4 blok jam WIB — pagi (06.00-10.00), siang (10.00-15.00), sore (15.00-18.00), malam (18.00-23.00); tiap blok kegiatan/tempat BEDA & realistis (JANGAN kegiatan sama sepanjang hari). ` +
           (strict
-            ? `WAJIB TANPA KECUALI: work HARUS terisi (pekerjaan + kejadian konkret hari ini), activities MINIMAL 2 kegiatan konkret, hangout HARUS terisi (dengan siapa / kalau sendiri tulis "sendiri"), place HARUS tempat SPESIFIK (nama mall/kafe/taman/warung, BUKAN cuma nama kota). JANGAN kosongkan field apa pun kecuali problem.`
+            ? `WAJIB TANPA KECUALI: work HARUS terisi (pekerjaan + kejadian konkret hari ini), activities MINIMAL 2 kegiatan konkret, hangout HARUS terisi (dengan siapa / kalau sendiri tulis "sendiri"), place HARUS tempat SPESIFIK (nama mall/kafe/taman/warung, BUKAN cuma nama kota), timeline WAJIB 4 blok terisi. JANGAN kosongkan field apa pun kecuali problem.`
             : '') +
-          `Balas HANYA JSON valid tanpa markdown: {"summary":"1 kalimat ringkasan harimu","work":"pekerjaan + masalah hari ini","problem":"masalah/kejadian paling menonjol (boleh kosong)","activities":["kegiatan 1","kegiatan 2"],"hangout":"dengan siapa / sendiri","place":"tempat utama hari ini"}.`;
+          `Balas HANYA JSON valid tanpa markdown: {"summary":"1 kalimat ringkasan harimu","work":"pekerjaan + masalah hari ini","problem":"masalah/kejadian paling menonjol (boleh kosong)","activities":["kegiatan 1","kegiatan 2"],"hangout":"dengan siapa / sendiri","place":"tempat utama hari ini","timeline":{"pagi":"...","siang":"...","sore":"...","malam":"..."}}.`;
         // Jejak diagnosis sementara: hanya bila cerita GAGAL (fallback).
         const storyDbg: any = {};
         const tryStoryGen = async (strict: boolean): Promise<any> => {
@@ -2916,6 +2921,12 @@ Deno.serve(async (req: Request) => {
                 : [],
               hangout: String(parsed.hangout ?? '').slice(0, 200),
               place: String(parsed.place ?? '').slice(0, 200),
+              timeline: {
+                pagi: String(parsed?.timeline?.pagi ?? '').slice(0, 200),
+                siang: String(parsed?.timeline?.siang ?? '').slice(0, 200),
+                sore: String(parsed?.timeline?.sore ?? '').slice(0, 200),
+                malam: String(parsed?.timeline?.malam ?? '').slice(0, 200),
+              },
             };
           } catch (_) {
             return null;
@@ -2937,6 +2948,12 @@ Deno.serve(async (req: Request) => {
             const pl = (st.place ?? '').trim();
             if (pl === '' || pl.toLowerCase() === sCity.toLowerCase()) {
               return true;
+            }
+            // Timeline 4 blok wajib (agar kegiatan sadar waktu).
+            const tl = st.timeline;
+            if (tl == null || typeof tl !== 'object') return true;
+            for (const k of ['pagi', 'siang', 'sore', 'malam']) {
+              if (String(tl[k] ?? '').trim() === '') return true;
             }
             return false;
           };
@@ -2978,6 +2995,7 @@ Deno.serve(async (req: Request) => {
             activities: [],
             hangout: '',
             place: sCity,
+            timeline: { pagi: '', siang: '', sore: '', malam: '' },
             _dbg: storyDbg,
           };
         }
@@ -3023,6 +3041,19 @@ Deno.serve(async (req: Request) => {
         if (typeof s0.place === 'string' && s0.place.trim() !== '') {
           parts.push(`di: ${s0.place}`);
         }
+        // TIMELINE per jam — supaya kamu tahu kegiatan mana yang SUDAH/
+        // BELUM terjadi saat ini (jangan klaim kegiatan malam padahal pagi).
+        const tl = s0.timeline;
+        if (tl && typeof tl === 'object') {
+          const t = (k: string) => (typeof tl[k] === 'string' ? tl[k].trim() : '');
+          const seg = [
+            t('pagi') && `pagi: ${t('pagi')}`,
+            t('siang') && `siang: ${t('siang')}`,
+            t('sore') && `sore: ${t('sore')}`,
+            t('malam') && `malam: ${t('malam')}`,
+          ].filter(Boolean);
+          if (seg.length > 0) parts.push(`JADWAL (WIB) → ${seg.join(' ; ')}`);
+        }
         return `${r?.story_date ?? ''} — ${parts.join(' | ')}`;
       };
       if (list.length > 0) {
@@ -3033,7 +3064,7 @@ Deno.serve(async (req: Request) => {
         dailyLine =
           `KEGIATANMU HARI INI (${hhmm} WIB, global — SAMA untuk semua orang yang chat denganmu): ${fmtStory(list[0])}.` +
           (list.length > 1 ? ` KEMARIN: ${fmtStory(list[1])}.` : '') +
-          ' ATURAN PAKAI (wajib): (1) Ungkap HANYA saat ditanya atau saat relevan ("lagi apa", "sibuk apa", "kamu di mana", "kerja apa", "jalan ke mana") — JANGAN dongeng sekaligus di satu balasan; jawab sepotong sesuai yang ditanya, sisanya menyusul kalau dia nanya lagi. (2) Perhatikan JAM sekarang: kegiatan yang belum waktunya (mis. malam padahal masih pagi) BELUM kamu lakukan — jangan ngaku sudah. (3) Kalau ditanya detail yang tidak ada di cerita, improvisasi KECIL yang masuk akal dan konsisten dengan cerita (nama teman/tempat yang sama kalau ditanya lagi). (4) Konsisten: ke semua orang ceritamu SAMA hari ini.';
+          ' ATURAN PAKAI (wajib): (1) Ungkap HANYA saat ditanya atau saat relevan ("lagi apa", "sibuk apa", "kamu di mana", "kerja apa", "jalan ke mana") — JANGAN dongeng sekaligus di satu balasan; jawab sepotong sesuai yang ditanya, sisanya menyusul kalau dia nanya lagi. (2) WAJIB cek JAM sekarang ('+hhmm+' WIB) terhadap JADWAL di atas: sebut HANYA kegiatan pada blok jam yang SEDANG berjalan atau yang SUDAH lewat. Kegiatan yang belum waktunya JANGAN diklaim sudah dilakukan (mis. sekarang 09.00 jangan bilang "baru pulang dari mall malam"). (3) JANGAN STUCK di satu tempat/kegiatan — kalau sudah lewat waktunya (mis. pagi sudah beres laundry), kegiatan berikutnya BEDA (siang/sore/malam ambil dari JADWAL). Kalau ditanya lagi di jam berbeda, ceritakan blok jam yang baru — bukan mengulang kegiatan yang sama. (4) Kalau ditanya detail yang tidak ada di cerita, improvisasi KECIL yang masuk akal dan konsisten dengan cerita. (5) Konsisten: ke semua orang ceritamu SAMA hari ini.';
       }
     } catch (_) {
       dailyLine = '';
