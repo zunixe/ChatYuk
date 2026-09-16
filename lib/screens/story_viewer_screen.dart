@@ -678,7 +678,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
   /// Kirim balasan story sebagai pesan private chat ke pembuat story,
   /// lalu langsung pindah ke halaman chat orang itu.
   Future<void> _sendReply() async {
-    final text = _replyCtrl.text.trim();
+    // Kapitalkan huruf pertama balasan story (gaya WhatsApp).
+    final text = capitalizeFirst(_replyCtrl.text.trim());
     if (text.isEmpty || _sendingReply) return;
     final auth = context.read<AuthProvider>();
     final myUid = auth.uid;

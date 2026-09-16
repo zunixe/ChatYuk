@@ -1389,6 +1389,12 @@ Deno.serve(async (req: Request) => {
       }
       visibleText = visibleText.replace(/\s*\{[^}]*$/g, '').trim();
       visibleText = visibleText.replace(/\s*\{[\s\S]*"image"[\s\S]*$/i, '').trim();
+      // FINAL capitalize (defense-in-depth): pastikan pesan mulai huruf besar
+      // walau ada jalur yang melewatkan sanitize.
+      visibleText = visibleText.trim();
+      if (visibleText && visibleText[0] >= 'a' && visibleText[0] <= 'z') {
+        visibleText = visibleText[0].toUpperCase() + visibleText.slice(1);
+      }
 
       // Durasi DITURUNKAN DARI PANJANG TEKS (simulasi kecepatan ketik):
       // typeMs = 700ms buka chat + len / cps, cps acak 8-14 char/dtk.
