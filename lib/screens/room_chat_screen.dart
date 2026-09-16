@@ -133,10 +133,17 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   bool get watchingLive =>
       _broadcastSession != null && !iAmBroadcasting;
 
+  /// Slider ukuran font chat berubah → rebuild bubble & composer room.
+  void _onFontScaleChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Ukuran font chat berubah (slider) → rebuild bubble & composer room.
+    ChatTextScale.notifier.addListener(_onFontScaleChanged);
     _auth = context.read<AuthProvider>();
     _chat = context.read<ChatProvider>();
     // DEFER seperti private chat — hindari setState-during-build glitch.
@@ -879,6 +886,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   void dispose() {
+    ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
     _roomUsersEmptyTimer?.cancel();
@@ -1987,8 +1995,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_replyingTo!.senderName, style: AppText.caption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
-                        Text(_replyingTo!.text.isNotEmpty ? _replyingTo!.text : s.msgPhoto, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.bodySmall),
+                        Text(_replyingTo!.senderName, style: AppText.chatCaption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
+                        Text(_replyingTo!.text.isNotEmpty ? _replyingTo!.text : s.msgPhoto, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.chatBodySmall),
                       ],
                     ),
                   ),
@@ -2011,7 +2019,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   Expanded(
                     child: Text(
                       s.editingMessage,
-                      style: AppText.bodySmall.copyWith(color: AppTheme.primary),
+                      style: AppText.chatBodySmall.copyWith(color: AppTheme.primary),
                     ),
                   ),
                   IconButton(
@@ -2457,12 +2465,12 @@ class _MessageBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(msg.repliedToSenderName ?? '', style: AppText.label.copyWith(color: AppTheme.primary)),
+          Text(msg.repliedToSenderName ?? '', style: AppText.chatName.copyWith(color: AppTheme.primary)),
           Text(
             quoteText,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppText.bodySmall.copyWith(
+            style: AppText.chatBodySmall.copyWith(
               fontStyle: targetDeleted ? FontStyle.italic : FontStyle.normal,
             ),
           ),
@@ -2517,7 +2525,7 @@ class _MessageBubble extends StatelessWidget {
                     ),
                     child: Text(
                       timeStr,
-                      style: AppText.micro.copyWith(color: Colors.white),
+                      style: AppText.chatTime.copyWith(color: Colors.white),
                     ),
                   ),
                 ),
@@ -2557,7 +2565,7 @@ class _MessageBubble extends StatelessWidget {
               ),
               child: Text(
                 timeStr,
-                style: AppText.micro.copyWith(color: Colors.white),
+                style: AppText.chatTime.copyWith(color: Colors.white),
               ),
             ),
           ),
@@ -2596,11 +2604,11 @@ class _MessageBubble extends StatelessWidget {
                           : (context.read<LocaleProvider>().s.isId
                               ? gift.nameId
                               : gift.nameEn),
-                      style: AppText.label.copyWith(color: _textColor),
+                      style: AppText.chatName.copyWith(color: _textColor),
                     ),
                     Text(
                       '🎁 gift',
-                      style: AppText.micro.copyWith(
+                      style: AppText.chatTime.copyWith(
                         color: Colors.pinkAccent,
                         fontWeight: FontWeight.w600,
                       ),
@@ -2614,7 +2622,7 @@ class _MessageBubble extends StatelessWidget {
             padding: const EdgeInsets.only(top: 3),
             child: Text(
               timeStr,
-              style: AppText.micro.copyWith(
+              style: AppText.chatTime.copyWith(
                 color: _textColor.withValues(alpha: 0.45),
               ),
             ),
@@ -2650,7 +2658,7 @@ class _MessageBubble extends StatelessWidget {
         child: Row(
           mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
-            Text(s.messageDeleted, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary, fontStyle: FontStyle.italic)),
+            Text(s.messageDeleted, style: AppText.chatBodySmall.copyWith(color: AppTheme.textSecondary, fontStyle: FontStyle.italic)),
           ],
         ),
       );
@@ -2797,9 +2805,8 @@ class _MessageBubble extends StatelessWidget {
                             children: [
                               Text(
                                 msg.repliedToSenderName ?? '',
-                                style: AppText.caption.copyWith(
+                                style: AppText.chatName.copyWith(
                                   color: AppTheme.primary,
-                                  fontWeight: FontWeight.w600,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -2807,7 +2814,7 @@ class _MessageBubble extends StatelessWidget {
                               const SizedBox(height: 2),
                               Text(
                                 msg.repliedToText ?? '',
-                                style: AppText.caption.copyWith(
+                                style: AppText.chatBodySmall.copyWith(
                                   color: _textColor.withValues(alpha: 0.6),
                                 ),
                                 maxLines: 2,
@@ -3079,7 +3086,7 @@ class _ChatInputState extends State<_ChatInput> {
                                   _voiceSeconds < 60
                                       ? '${_voiceSeconds.toString().padLeft(2, '0')}s'
                                       : '${(_voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(_voiceSeconds % 60).toString().padLeft(2, '0')}',
-                                  style: AppText.bodyStrong.copyWith(color: Colors.red),
+                                  style: AppText.chatBodyStrong.copyWith(color: Colors.red),
                                 ),
                                 const Spacer(),
                                 if (!_isVoiceLocked || _voicePickUp) ...[
@@ -3090,7 +3097,7 @@ class _ChatInputState extends State<_ChatInput> {
                                   ),
                                   Text(
                                     s.hintSlideToCancel,
-                                    style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+                                    style: AppText.chatCaption.copyWith(color: AppTheme.textSecondary),
                                   ),
                                 ] else ...[
                                   GestureDetector(

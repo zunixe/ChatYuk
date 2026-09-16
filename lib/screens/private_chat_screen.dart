@@ -169,9 +169,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void initState() {
     super.initState();
     _openedAt = DateTime.now();
-    // DEFER: ValueNotifier jangan ditulis saat build phase — listener
-    // (ValueListenableBuilder) sedang build → markNeedsBuild error yang
-    // terlihat sebagai glitch/frame rusak saat pindah tab.
+    // Ukuran font chat berubah (slider) → rebuild bubble & composer langsung.
+    ChatTextScale.notifier.addListener(_onFontScaleChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) activeChatId.value = widget.chatId;
     });
@@ -389,6 +388,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   @override
   void dispose() {
     _hideActionBar();
+    ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     _pendingConfirmTimer?.cancel();
     CallProvider.instance.removeListener(_onCallChanged);
     // Keluar chat TIDAK memutus panggilan — call lanjut berjalan dan notifikasi
@@ -421,6 +421,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   CallPhase? _prevCallPhase;
+  /// Slider ukuran font chat berubah → rebuild bubble & composer langsung.
+  void _onFontScaleChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onCallChanged() {
     final sess = CallProvider.instance.activeSession;
     // Call baru berakhir di chat ini → tampilkan bubble "Call ended" INSTAN
@@ -2358,7 +2363,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                     children: [
                                       Text(
                                         s.replyingTo,
-                                        style: AppText.caption.copyWith(
+                                        style: AppText.chatCaption.copyWith(
                                           color: AppTheme.primary,
                                         ),
                                       ),
@@ -2366,7 +2371,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                         _replyingTo!.text,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: AppText.bodySmall.copyWith(
+                                        style: AppText.chatBodySmall.copyWith(
                                           color: AppTheme.textSecondary,
                                         ),
                                       ),
@@ -2400,7 +2405,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                 Expanded(
                                   child: Text(
                                     s.editingMessage,
-                                    style: AppText.bodySmall.copyWith(
+                                    style: AppText.chatBodySmall.copyWith(
                                       color: AppTheme.primary,
                                     ),
                                   ),
@@ -2506,7 +2511,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                               _voiceSeconds < 60
                                                   ? '${_voiceSeconds.toString().padLeft(2, '0')}s'
                                                   : '${(_voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(_voiceSeconds % 60).toString().padLeft(2, '0')}',
-                                              style: AppText.bodyStrong.copyWith(color: Colors.red),
+                                              style: AppText.chatBodyStrong.copyWith(color: Colors.red),
                                             ),
                                             const Spacer(),
                                             if (!_isVoiceLocked || _voicePickUp) ...[
@@ -2517,7 +2522,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                               ),
                                               Text(
                                                 s.hintSlideToCancel,
-                                                style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+                                                style: AppText.chatCaption.copyWith(color: AppTheme.textSecondary),
                                               ),
                                             ] else ...[
                                               GestureDetector(
