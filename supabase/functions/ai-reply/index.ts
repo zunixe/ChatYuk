@@ -1958,7 +1958,7 @@ Deno.serve(async (req: Request) => {
     // history butuh `msgs`; freshStage/shouldAskNakal butuh `chatMsgCount`;
     // partnerLine butuh `partner`; adultMode butuh `chatState`.
     // Masing-masing dibaca dari hasil batch ini.
-    const [profileRes, memRes, msgsRes, countRes, partnerRes, chatStateRes] =
+    const [profileRes, memRes, msgsRes, countRes, partnerRes, chatStateRes, summaryRes] =
       await Promise.all([
         safe(
           admin
@@ -1984,7 +1984,7 @@ Deno.serve(async (req: Request) => {
             )
             .eq('chat_id', chatId)
             .order('created_at', { ascending: false })
-            .limit(12),
+            .limit(40),
         ),
         safe(
           admin
@@ -2006,12 +2006,23 @@ Deno.serve(async (req: Request) => {
             .eq('chat_id', chatId)
             .maybeSingle(),
         ),
+        // Ringkasan percakapan lama (ingatan jangka-panjang per lawan).
+        safe(
+          admin
+            .from('ai_chat_summary')
+            .select('summary, covered_count')
+            .eq('dummy_uid', dummyUid)
+            .eq('user_id', senderId)
+            .maybeSingle(),
+        ),
       ]);
     const profile = (profileRes as any)?.data;
     const memRows = (memRes as any)?.data;
     const msgs = (msgsRes as any)?.data;
     const chatMsgCount = (countRes as any)?.count ?? 0;
     const partner = (partnerRes as any)?.data;
+    const summaryRow = (summaryRes as any)?.data;
+    const priorSummary = String(summaryRow?.summary ?? '').trim();
     if (!profile) return json({ ok: false, skipped: 'no_profile' });
 
     // 3. Persona from LIVE profile + stored extras
@@ -2071,6 +2082,14 @@ Deno.serve(async (req: Request) => {
       }
     } catch (e) {
       console.log(`[ai-reply] memoryLine GAGAL: ${e}`);
+    }
+
+    // Ringkasan percakapan JAUH (di luar window history) — supaya kamu ingat
+    // obrolan lama: janji, cerita hidup, kejadian penting yang pernah dibahas.
+    let summaryLine = '';
+    if (priorSummary !== '') {
+      summaryLine =
+        `RINGKASAN OBROLAN LAMU dengan ORANG INI (yang sudah lewat — kamu INGAT ini; pakai kalau relevan, jangan sebut "ringkasan"/"catatan" ke dia): ${priorSummary}`;
     }
 
     // 4. Last 12 messages as chat history (created_at utk ritme jeda;
@@ -2382,6 +2401,7 @@ Deno.serve(async (req: Request) => {
       persona.greeting ? `Pembukaanmu: ${persona.greeting}.` : '',
       extra,
       memoryLine,
+      summaryLine,
       partnerLine,
       'JANGAN pernah menyebut dirimu AI, robot, model, atau asisten. Jangan buat daftar/poin. Jangan pakai markdown. Jawab seolah kamu memang orang itu.',
       `OUTPUT WAJIB: HANYA satu pesan chat pendek berbahasa Indonesia sebagai ${profile.nickname} — DILARANG menulis analisis, narasi pihak ketiga ("The user..."), bahasa Inggris, atau kalimat meta apa pun. Hormati gender lawan bicara: panggilan (om/tante/sayang) harus sesuai gender dan usia kalian.`,
@@ -3599,10 +3619,21 @@ Deno.serve(async (req: Request) => {
         // Gagal ekstraksi tidak mempengaruhi balasan yang sudah terkirim.
         try {
           const exPrompt =
-            'Ekstrak fakta PENTING dan tahan-lama tentang lawan bicara dari percakapan ini: nama panggilan, usia, kota, pekerjaan, hobi, kepribadian, keluarga, preferensi, rencana/janji. JANGAN fakta sementara (lagi makan, lagi rebahan). ' +
-            'Output HANYA JSON array of strings pendek (maks 12 kata per fakta), maksimal 3 fakta PALING penting. Jika tidak ada, output []';
+            'Ekstrak fakta PENTING dan TAHAN-LAMA tentang lawan bicara dari percakapan ini (nama panggilan, usia, kota, pekerjaan, hobi, kepribadian, keluarga, preferensi tetap, rencana/janji, hal yang dia ceritakan tentang hidupnya). ' +
+            'DILARANG fakta SESAAAT/berubah (sedang makan/rebahan/di laundry/ngobrol X, cuaca, "sedang di mana", perasaan sesaat) — itu BUKAN kenangan. ' +
+            'DILARANG mengulang fakta yang isinya sama dengan yang sudah kamu tahu (lihat daftar "sudah tahu" di bawah bila ada). ' +
+            'Output HANYA JSON array of strings pendek (maks 12 kata per fakta), maksimal 3 fakta BARU paling penting. Jika tidak ada fakta baru yang tahan-lama, output []';
           const exRes = await llmCall(
-            [{ role: 'system', content: exPrompt }, ...historyText],
+            [
+              {
+                role: 'system',
+                content:
+                  memories.length > 0
+                    ? `${exPrompt}\nSUDAH TAHU (jangan ulangi): ${memories.slice(0, 30).join('; ')}`
+                    : exPrompt,
+              },
+              ...historyText,
+            ],
             500,
             0.3,
           );
@@ -3634,7 +3665,7 @@ Deno.serve(async (req: Request) => {
                     .eq('dummy_uid', dummyUid)
                     .eq('user_id', senderId)
                     .order('created_at', { ascending: false });
-                  const rows = ((allMem as any[]) ?? []).slice(30).map((r) =>
+                  const rows = ((allMem as any[]) ?? []).slice(80).map((r) =>
                     String(r.fact ?? '')
                   ).filter(Boolean);
                   if (rows.length > 0) {
@@ -3653,6 +3684,66 @@ Deno.serve(async (req: Request) => {
           }
         } catch (e) {
           console.log(`[ai-reply] memsave GAGAL chat=${chatId}: ${e}`);
+        }
+
+        // 8. Ringkasan jangka-panjang: bila pesan sudah jauh melebihi window
+        // history, rangkum percakapan lama → ai_chat_summary. Dijalankan
+        // hemat (tiap +20 pesan) agar tidak menambah LLM call tiap balasan.
+        try {
+          const covered = Number(summaryRow?.covered_count ?? 0);
+          if (chatMsgCount >= covered + 20 && chatMsgCount > 30) {
+            // Ambil pesan LAMA yang di luar window 40 terbaru (yang belum
+            // tercakup) — sisipkan ke ringkasan lama.
+            const from = covered;
+            const olderRes: any = await admin
+              .from('private_messages')
+              .select('sender_id, text, type, created_at')
+              .eq('chat_id', chatId)
+              .order('created_at', { ascending: true })
+              .range(from, from + 39);
+            const older = ((olderRes?.data as any[]) ?? []).filter(
+              (m) => (m.type === 'text' || !m.type) && m.text,
+            );
+            if (older.length >= 5) {
+              const convo = older
+                .map(
+                  (m) =>
+                    `${m.sender_id === dummyUid ? 'KAMU' : 'DIA'}: ${String(m.text).slice(0, 160)}`,
+                )
+                .join('\n');
+              const sumPrompt =
+                'Ringkas percakapan ini jadi catatan ingatan jangka-panjang dari sudut pandang KAMU (yang membalas): siapa lawan bicaranya, apa yang penting dibahas (nama, janji, cerita, masalah, rencana, preferensi tetap), kesepakatan, dan hal emosional penting. ' +
+                (priorSummary ? `Gabung dengan ringkasan lama: ${priorSummary}\n\n` : '') +
+                'Tulis padat 3-6 kalimat bahasa Indonesia, HANYA fakta tahan-lama (buang obrolan sesaat). Output HANYA teks ringkasan, tanpa embel-embel.';
+              const sRes = await llmCall(
+                [{ role: 'system', content: sumPrompt }, { role: 'user', content: convo }],
+                400,
+                0.3,
+              );
+              const sTxt = String(
+                sRes?.res?.choices?.[0]?.message?.content ??
+                  sRes?.res?.choices?.[0]?.message?.reasoning_content ??
+                  '',
+              )
+                .replace(/```[a-z]*|```/g, '')
+                .trim()
+                .slice(0, 1500);
+              if (sTxt.length > 10) {
+                await admin.from('ai_chat_summary').upsert(
+                  {
+                    dummy_uid: dummyUid,
+                    user_id: senderId,
+                    summary: sTxt,
+                    covered_count: from + older.length,
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: 'dummy_uid,user_id' },
+                );
+              }
+            }
+          }
+        } catch (e) {
+          console.log(`[ai-reply] summary GAGAL chat=${chatId}: ${e}`);
         }
       })(),
     );
