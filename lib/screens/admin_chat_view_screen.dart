@@ -12,6 +12,7 @@ import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_call_watch_service.dart';
 import '../services/photo_cache.dart';
+import '../services/message_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import '../widgets/admin_call_watch_overlay.dart';
@@ -191,6 +192,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     if (!mounted) return;
     final admin = context.read<AdminProvider>();
     final list = _mapMessages(admin.chatMessages);
+    // Anti-blink: bila server mengembalikan KOSONG tapi kita sudah punya
+    // pesan (mis. poll sementara gagal/slow), pertahankan yang lama —
+    // jangan kosongkan layar.
+    if (list.isEmpty && _msgs.isNotEmpty) return;
     // Pertahankan imageData yang sudah di-load
     final oldMap = <String, String>{};
     for (final m in _msgs) {
@@ -260,6 +265,18 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   Future<void> _fetch() async {
     final admin = context.read<AdminProvider>();
+    // CACHE-FIRST (anti-blink): tampilkan pesan dari cache lokal dulu
+    // (instant), lalu server menyusul & menggantikan. Sama seperti chat user.
+    try {
+      final cached = await MessageCache.instance.loadMessages(_chatKey);
+      if (mounted && cached.isNotEmpty && _msgs.isEmpty) {
+        setState(() {
+          _msgs = cached;
+          _loading = false;
+        });
+        _loadPhotos();
+      }
+    } catch (_) {}
     try {
       final ok = await admin.fetchChatMessages(widget.chatId);
       if (!mounted) return;
@@ -273,6 +290,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       _applyMessages();
       unawaited(_refreshRead());
       _loading = false;
+      // Simpan ke cache untuk buka berikutnya (instant).
+      if (_msgs.isNotEmpty) {
+        unawaited(MessageCache.instance.saveMessages(_chatKey, _msgs));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -445,7 +466,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       ),
       body: Column(
         children: [
-          if (_loading)
+          // Indikator tipis HANYA saat load pertama (belum ada pesan) —
+          // saat poll/refresh biasa, jangan tampilkan bar (anti-blink).
+          if (_loading && _msgs.isEmpty)
             LinearProgressIndicator(minHeight: 2, color: AppTheme.primary),
           if (_error != null)
             Container(

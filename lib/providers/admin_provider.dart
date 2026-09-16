@@ -710,16 +710,18 @@ Future<void> fetchDevices() async {
   bool get chatMessagesHasMore => _chatMessagesHasMore;
 
   Future<bool> fetchChatMessages(String chatId) async {
-    _chatMessages = [];
+    // JANGAN kosongkan list dulu — biar pesan lama tetap tampil selama fetch
+    // (anti-blink: dulu _chatMessages=[] → layar kosong → isi ulang, ikut
+    // terulang tiap poll 5s).
     _chatMessagesHasMore = true;
-    if (!_disposed) notifyListeners();
     try {
-      _chatMessages = await _service.getChatMessages(
+      final fresh = await _service.getChatMessages(
         chatId,
         limit: messagePageSize,
         offset: 0,
       );
-      _chatMessagesHasMore = _chatMessages.length >= messagePageSize;
+      _chatMessages = fresh;
+      _chatMessagesHasMore = fresh.length >= messagePageSize;
       return true;
     } catch (e) {
       dlog('[ADMIN] fetchChatMessages error: $e');
