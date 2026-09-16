@@ -2197,6 +2197,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     children: [
                       StreamBuilder<List<MessageModel>>(
                         stream: _msgsStream,
+                        // FRAME PERTAMA LANGSUNG: data awal dari cache memori
+                        // (sinkron) → pesan "nempel" sejak frame pertama
+                        // (ala WhatsApp), bukan layar kosong lalu muncul.
+                        initialData:
+                            MessageCache.instance.peekMessages(
+                              cacheKeyFor(widget.chatId),
+                            ) ??
+                            const <MessageModel>[],
                         builder: (_, snap) {
                           final msgs = snap.data ?? [];
                           final all = [...msgs, ..._pending];
