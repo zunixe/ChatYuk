@@ -40,9 +40,9 @@ class AdminChatViewScreen extends StatefulWidget {
 
 class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   List<MessageModel> _msgs = [];
-  // Mulai false → tidak ada bar loading saat masuk; _fetch menyalakan HANYA
-  // bila cache lokal kosong (belum pernah dibuka). Anti-blink saat buka ulang.
-  bool _loading = false;
+  // True setelah SQLite/server pertama selesai — supaya empty-state TIDAK
+  // berkedip muncul sesaat sebelum pesan terisi.
+  bool _firstResolved = false;
   String? _error;
   String? _leftUid;
   String get _chatKey => cacheKeyFor(widget.chatId);
@@ -277,35 +277,38 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   Future<void> _fetch() async {
     final admin = context.read<AdminProvider>();
-    // CACHE-FIRST (anti-blink): tampilkan pesan dari cache lokal dulu
-    // (instant), lalu server menyusul & menggantikan. Sama seperti chat user.
+    // 1) SINKRON dari memori (jika sudah panas) — tampil seketika, no skeleton.
+    final mem = MessageCache.instance.peekMessages(_chatKey);
+    if (mem != null && mem.isNotEmpty && _msgs.isEmpty) {
+      setState(() {
+        _msgs = mem;
+      });
+      _loadPhotos();
+    }
+    // 2) SQLite (cache lokal) — cepat, tetap tanpa skeleton. Tampilkan begitu
+    //    ada, server menyusul & menggantikan.
     try {
       final cached = await MessageCache.instance.loadMessages(_chatKey);
       if (mounted && cached.isNotEmpty && _msgs.isEmpty) {
         setState(() {
           _msgs = cached;
-          _loading = false;
         });
         _loadPhotos();
       }
     } catch (_) {}
-    // Bar loading HANYA bila belum ada apa pun untuk ditampilkan.
-    if (mounted && _msgs.isEmpty && !_loading) {
-      setState(() => _loading = true);
-    }
+    // SQLite sudah dicek → boleh tentukan kosong/isi (hindari empty-state blink).
+    if (mounted && !_firstResolved) setState(() => _firstResolved = true);
     try {
       final ok = await admin.fetchChatMessages(widget.chatId);
       if (!mounted) return;
       if (!ok) {
         setState(() {
-          _loading = false;
           _error = 'fetchChatMessages returned false';
         });
         return;
       }
       _applyMessages();
       unawaited(_refreshRead());
-      _loading = false;
       // Simpan ke cache untuk buka berikutnya (instant).
       if (_msgs.isNotEmpty) {
         unawaited(MessageCache.instance.saveMessages(_chatKey, _msgs));
@@ -313,7 +316,6 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
         _error = 'EXCEPTION: $e';
       });
     }
@@ -482,10 +484,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       ),
       body: Column(
         children: [
-          // Indikator tipis HANYA saat load pertama (belum ada pesan) —
-          // saat poll/refresh biasa, jangan tampilkan bar (anti-blink).
-          if (_loading && _msgs.isEmpty)
-            LinearProgressIndicator(minHeight: 2, color: AppTheme.primary),
+          // Tanpa bar loading — data dari SQLite instan (WhatsApp-style).
           if (_error != null)
             Container(
               width: double.infinity,
@@ -504,7 +503,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
           Expanded(
             child: Stack(
               children: [
-                _msgs.isEmpty && !_loading
+                _msgs.isEmpty && _firstResolved
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
