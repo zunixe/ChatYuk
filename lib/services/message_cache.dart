@@ -73,7 +73,9 @@ class MessageCache {
   static final MessageCache instance = MessageCache._();
 
   static const _keyPrefix = 'chat_cache_v2_';
-  static const _storage = FlutterSecureStorage();
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
   static final _aes = AesGcm.with256bits();
 
   // In-memory cache: sekali decrypt, buka ulang chat tidak perlu decrypt lagi.
@@ -234,7 +236,10 @@ class MessageCache {
       for (final k in legacy) {
         await prefs.remove(k);
       }
-    } catch (_) {}
+    } catch (e) {
+      // Jangan telan total — bantu diagnosa (terlihat di build debug/profile).
+      dlog('[CACHE] prewarmDb gagal: $e');
+    }
   }
 
   // â”€â”€ List private chat / timeline / rooms (persist antar restart app) â”€â”€â”€â”€â”€

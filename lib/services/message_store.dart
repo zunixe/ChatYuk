@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 
 import '../utils.dart';
 import 'package:path_provider/path_provider.dart';
@@ -57,9 +58,19 @@ class MessageStore {
         // cache pesan MATI sepanjang sesi (tiap buka chat selalu fetch
         // server = terasa loading). Kini hapus DB lama & buat ulang bersih.
         dlog('[STORE] open gagal ($e) → recreate DB bersih');
+        // deleteDatabase saja kadang tak cukup (file masih ke-lock / handle
+        // error) → hapus file mentah + wal/shm manual, baru buka ulang.
         try {
           await deleteDatabase(path);
         } catch (_) {}
+        try {
+          for (final suffix in ['', '-wal', '-shm', '-journal']) {
+            final f = File('$path$suffix');
+            if (f.existsSync()) f.deleteSync();
+          }
+        } catch (e2) {
+          dlog('[STORE] hapus file DB manual error: $e2');
+        }
         db = debugOpener != null
             ? await debugOpener!(path)
             : await openDatabase(path, password: password);
