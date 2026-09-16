@@ -170,9 +170,9 @@ class _AuthGateState extends State<_AuthGate> {
   // Selama menunggu: layar polos bgScreen TANPA elemen abu (nol blink abu).
   Future<void>? _warmFuture;
   // Warm-gate: disk HANYA cache — tidak layak menahan skeleton lama.
-  // Cap 2 detik (dulu 8s): kalau Keystore/SQLite lambat, konten tetap
-  // tampil; disk load jalan di belakang dan merge saat selesai.
-  static const _warmTimeout = Duration(seconds: 2);
+  // Turun ke 400ms (dulu 2s): konten tampil cepat; disk/server menyusul di
+  // belakang & merge (list chat pakai peekRawList sinkron setelah siap).
+  static const _warmTimeout = Duration(milliseconds: 400);
 
   @override
   void initState() {
@@ -356,10 +356,11 @@ class _AuthGateState extends State<_AuthGate> {
       return _ProfileGate(child: _MainNav());
     }
 
-    // Warm-gate: tunggu disk cache tab pertama siap (maks 800ms) dengan
-    // tampilan polos bgScreen — NOL warna abu — lalu konten langsung utuh.
-    // + Preload list chat ke MEMORI: layar chat membaca `lastReadAt` dari
-    //   sana secara SINKRON → centang-2 tidak lagi menunggu hop async.
+    // Warm-gate: tunggu SEKADARNYA saja (cap 400ms) lalu tampil konten.
+    // Disk/server menyusul & merge di belakang — jangan tahan splash demi
+    // cache. Preload list chat ke MEMORI tetap diikutkan supaya centang-2
+    // terisi sejak frame pertama (SQLite lokal = cepat); kalau lambat,
+    // timeout → konten tetap tampil (skeleton tidak menahan lama).
     final warmUid = context.read<AuthProvider>().uid;
     _warmFuture ??= Future.wait([
       context.read<RoomProvider>().warmFuture,

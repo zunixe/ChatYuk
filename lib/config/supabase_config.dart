@@ -30,11 +30,30 @@ class SecureSessionStorage extends LocalStorage {
 
   bool _migrated = false;
 
+  // ── Memo sesi in-memory: baca Keystore SEKALI per sesi app ──
+  // Keystore Xiaomi bisa 300ms-1s+; sebelumnya `initialize` + `hasAccessToken`
+  // + `accessToken` masing-masing baca → 3× latensi saat cold start. Setelah
+  // baca pertama, nilainya di-cache (null = sudah dibaca & kosong).
+  bool _readDone = false;
+  String? _session;
+
+  Future<String?> _readSession() async {
+    if (_readDone) return _session;
+    try {
+      _session = await _storage.read(key: persistSessionKey);
+    } catch (e) {
+      dlog('[SecureSessionStorage] baca sesi error: $e');
+      _session = null;
+    }
+    _readDone = true;
+    return _session;
+  }
+
   Future<void> _migrateLegacyOnce() async {
     if (_migrated || legacyPrefsKey == null) return;
     _migrated = true;
     try {
-      final secure = await _storage.read(key: persistSessionKey);
+      final secure = await _readSession();
       if (secure != null && secure.isNotEmpty) return;
       final prefs = await SharedPreferences.getInstance();
       final legacy = prefs.getString(legacyPrefsKey!);
@@ -50,13 +69,14 @@ class SecureSessionStorage extends LocalStorage {
   @override
   Future<void> initialize() async {
     await _migrateLegacyOnce();
+    await _readSession(); // warm memo sekali di awal
   }
 
   @override
   Future<bool> hasAccessToken() async {
     try {
       await _migrateLegacyOnce();
-      return (await _storage.read(key: persistSessionKey)) != null;
+      return (await _readSession()) != null;
     } catch (e) {
       dlog('[SecureSessionStorage] hasAccessToken error: $e');
       return false;
@@ -67,7 +87,7 @@ class SecureSessionStorage extends LocalStorage {
   Future<String?> accessToken() async {
     try {
       await _migrateLegacyOnce();
-      return await _storage.read(key: persistSessionKey);
+      return await _readSession();
     } catch (e) {
       dlog('[SecureSessionStorage] accessToken error: $e');
       return null;
@@ -76,6 +96,8 @@ class SecureSessionStorage extends LocalStorage {
 
   @override
   Future<void> removePersistedSession() async {
+    _readDone = true;
+    _session = null;
     try {
       await _storage.delete(key: persistSessionKey);
     } catch (e) {
@@ -85,6 +107,8 @@ class SecureSessionStorage extends LocalStorage {
 
   @override
   Future<void> persistSession(String persistSessionString) async {
+    _readDone = true;
+    _session = persistSessionString;
     try {
       await _storage.write(key: persistSessionKey, value: persistSessionString);
     } catch (e) {

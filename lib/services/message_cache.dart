@@ -373,6 +373,27 @@ class MessageCache {
     }
   }
 
+  /// Baca pesan dari RAM TANPA async/decrypt — untuk emit frame-pertama
+  /// instan saat buka chat (memori-first). Kosong bila chat belum di cache
+  /// memori (setelah cold start) → pemanggil fallback ke `loadMessages`.
+  List<MessageModel>? peekMessages(String chatKey) {
+    final mem = _memCache[chatKey];
+    if (mem != null) {
+      _memCacheUpdate(chatKey, mem); // refresh LRU
+      return mem;
+    }
+    return null;
+  }
+
+  /// Prefetch pesan ke memori (fire-and-forget) — dipanggil saat user TAP
+  /// item chat, supaya saat screen mount cache sudah panas → bubble instant.
+  Future<void> preloadMessages(String chatKey) async {
+    try {
+      if ((_memCache[chatKey]?.isNotEmpty ?? false)) return;
+      await loadMessages(chatKey);
+    } catch (_) {}
+  }
+
   /// Hapus SEMUA cache (dipakai saat logout / reset).
   Future<void> clearAllLegacy() async {
     _memCache.clear();
