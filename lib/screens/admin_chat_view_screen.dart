@@ -128,7 +128,13 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
   // pola WhatsApp — sama seperti room chat. _msgs datang DESC (terbaru dulu),
   // jadi iterasi dibalik supaya terbaru tampil di bawah.
+  // ── Items cache: dihitung SEKALI per perubahan _msgs (bukan tiap build) ──
+  // Dulu getter dihitung ulang tiap frame → list panjang O(n²) + scroll
+  // jump/kedip. Sekarang cache.
+  List<ChatItem>? _itemsCache;
   List<ChatItem> get _items {
+    final cached = _itemsCache;
+    if (cached != null) return cached;
     final items = <ChatItem>[];
     String? prevDateKey;
     for (final m in _msgs.reversed) {
@@ -144,8 +150,11 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       prevDateKey = dateKey;
       items.add(ChatItem.message(m));
     }
+    _itemsCache = items;
     return items;
   }
+
+  void _invalidateItems() => _itemsCache = null;
 
   @override
   void initState() {
@@ -231,6 +240,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     }
     setState(() {
       _msgs = list;
+      _invalidateItems();
       _leftUid = _computeLeftUid(senders);
       _error = null;
     });
@@ -288,6 +298,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     if (mem != null && mem.isNotEmpty && _msgs.isEmpty) {
       setState(() {
         _msgs = mem;
+        _invalidateItems();
       });
       _loadPhotos();
     }
@@ -298,6 +309,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       if (mounted && cached.isNotEmpty && _msgs.isEmpty) {
         setState(() {
           _msgs = cached;
+          _invalidateItems();
         });
         _loadPhotos();
       }
@@ -402,11 +414,23 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         final imgData = thumb.isNotEmpty ? thumb : data;
         if (_msgs[idx].imageData.isEmpty || _msgs[idx].imageData != imgData) {
           _msgs[idx] = _msgs[idx].copyWith(imageData: imgData);
-          if (mounted) setState(() {});
+          // Batch: TIDAK setState per foto (dulu tiap foto = rebuild seluruh
+          // list → blink/jank). Jadwalkan satu rebuild per frame.
+          _schedulePhotoSetState();
         }
       }
     }
     _photoLoading.remove(msg.id);
+  }
+
+  bool _photoSetStateScheduled = false;
+  void _schedulePhotoSetState() {
+    if (_photoSetStateScheduled || !mounted) return;
+    _photoSetStateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _photoSetStateScheduled = false;
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _retryImage(String msgId) async {
@@ -420,22 +444,32 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   void _subscribeRealtime() {
     final sb = Supabase.instance.client;
     _channel = sb.channel('admin-${widget.chatId.hashCode}');
+    // FILTER chat_id — tanpa ini SETIAP pesan di seluruh app memicu _poll
+    // (fetch+setState) → blink/berat. Hanya perubahan chat INI yang reaksi.
+    final filter = PostgresChangeFilter(
+      type: PostgresChangeFilterType.eq,
+      column: 'chat_id',
+      value: widget.chatId,
+    );
     _channel!.onPostgresChanges(
       event: PostgresChangeEvent.insert,
       schema: 'public',
       table: 'private_messages',
+      filter: filter,
       callback: (_) => _poll(),
     );
     _channel!.onPostgresChanges(
       event: PostgresChangeEvent.update,
       schema: 'public',
       table: 'private_messages',
+      filter: filter,
       callback: (_) => _poll(),
     );
     _channel!.onPostgresChanges(
       event: PostgresChangeEvent.delete,
       schema: 'public',
       table: 'private_messages',
+      filter: filter,
       callback: (_) => _poll(),
     );
     _channel!.subscribe();
