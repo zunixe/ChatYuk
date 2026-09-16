@@ -792,3 +792,13 @@ Saat apply, `supabase db push` melaporkan **42 migration lokal tidak ada di hist
 - **Fix code:** (1) FALLBACKABLE +400 (model-ID-salah ikut di-retry model lain); (2) fallback luar kini sadar rute — fallbackModel `:free`/`nvidia/` → OpenRouter + secret OR + reasoning-off; selain itu tetap B.AI + reasoning_effort low khusus glm.
 - **Deploy:** bundle esbuild → **ai-reply v150→v151 ACTIVE**.
 - **Tidak menyentuh** fungsi FROZEN / skema DB.
+
+## 2026-09-15 — 20260915120000_security_hardening.sql (APPLY) + fix edge ipaymu/turn
+
+Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
+- **CRITICAL ipaymu-callback:** signature opsional (`receivedSig && ...`) → header absen = bypass → forge paid. Kini wajib (`!receivedSig || ...`) → 403. Deploy --no-verify-jwt (callback butuh anon, signature jadi gate). Fitur belum dipakai (14 order pending, client tak panggil).
+- **CRITICAL ledger_credit/ledger_spend:** anon bisa EXECUTE → cetak/kuras koin. Revoke dari public,anon.
+- **HIGH app_settings.app_shared_secret:** terbaca anon (grant tabel-level). Revoke SELECT tabel + grant kolom aman; client fetchGlobalSettings select eksplisit.
+- **HIGH profiles:** email/ip_address/fcm_token/lat/lon bocor anon. Grant tabel-level → revoke SELECT + grant 33 kolom aman. Client buang `email` dari colsFast/cols2.
+- **MEDIUM:** revoke anon admin_dummy_uids/admin_excluded_uids/call_push(2 overload)/social_push; guard list_my_groups; revoke wallet_balances(anon); fix import turn-credentials.
+- **Pelajari:** `GRANT SELECT ON TABLE` meng-override revoke kolom → harus revoke tabel + grant kolom. Terverifikasi via probe anon (401) & `relacl`.
