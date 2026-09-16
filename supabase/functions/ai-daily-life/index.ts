@@ -206,13 +206,14 @@ Deno.serve(async (req: Request) => {
         `VARIASI TEMPAT (wajib): tempat utama hari ini (place) HARUS BEDA dari tempat kemarin — jangan pakai tempat yang sama 2 hari berturut-turut, pilih tempat nyata lain yang wajar di ${city}. ` +
         `AKTIVITAS HARUS SESUAI PEKERJAANMU — JANGAN paksa kerja kantoran kalau pekerjaanmu bukan kantoran (mis. asisten rumah tangga ya kerja di rumah; pedagang ya jualan; mahasiswa ya kuliah; freelancer ya kerja dari mana saja). Kalau tidak punya pekerjaan tetap, isi "work" dengan kegiatan produktif nyata (kuliah, bantu usaha, kerja sampingan, urus rumah). ` +
         `Isi: apa yang kamu kerjakan hari ini + masalah/kejadian seputar itu, main dengan siapa, jalan-jalan ke mana (sebutkan TEMPAT NYATA yang wajar di ${city} — mall, kafe, taman, warung). ` +
-        `Balas HANYA JSON valid tanpa markdown: {"summary":"1 kalimat ringkasan harimu","work":"pekerjaan + masalah hari ini","problem":"masalah/kejadian paling menonjol (boleh kosong)","activities":["kegiatan 1","kegiatan 2"],"hangout":"dengan siapa / sendiri","place":"tempat utama hari ini"}.`;
+        `TIMELINE WAJIB (ini kunci biar kamu sadar waktu): bagi harimu jadi 4 blok jam WIB — pagi (06.00-10.00), siang (10.00-15.00), sore (15.00-18.00), malam (18.00-23.00). Tiap blok HARUS kegiatan/tempat BEDA dan realistis sesuai pekerjaanmu (ART ya beres-beres/masak/belanja; pedagang ya jualan; mahasiswa ya kuliah). JANGAN taruh kegiatan yang sama di semua blok (mis. "di laundry" terus sepanjang hari = SALAH). Tempat boleh sama antar blok kalau memang wajar (mis. kerja di rumah), TAPI kegiatannya harus beda. ` +
+        `Balas HANYA JSON valid tanpa markdown: {"summary":"1 kalimat ringkasan harimu","work":"pekerjaan + masalah hari ini","problem":"masalah/kejadian paling menonjol (boleh kosong)","activities":["kegiatan 1","kegiatan 2"],"hangout":"dengan siapa / sendiri","place":"tempat utama hari ini","timeline":{"pagi":"kegiatan+tempat 06.00-10.00","siang":"kegiatan+tempat 10.00-15.00","sore":"kegiatan+tempat 15.00-18.00","malam":"kegiatan+tempat 18.00-23.00"}}.`;
       // Generate cerita: primer (glm) → fallback Mimo free (Zen) saat primer
       // menolak (402/429/5xx) ATAU hasil primer tipis/gagal-parse (kasus
       // Dhanu: Mimo 200 tapi JSON tidak valid). Gagal parse/tipis → ulangi
       // sekali dengan instruksi tegas (pola sama seperti ai-reply strict).
       const strictSuffix =
-        `WAJIB TANPA KECUALI: work HARUS terisi (pekerjaan + kejadian konkret hari ini), activities MINIMAL 2 kegiatan konkret, hangout HARUS terisi (dengan siapa / kalau sendiri tulis "sendiri"), place HARUS tempat SPESIFIK (nama mall/kafe/taman/warung, BUKAN cuma nama kota). JANGAN kosongkan field apa pun kecuali problem.`;
+        `WAJIB TANPA KECUALI: work HARUS terisi (pekerjaan + kejadian konkret hari ini), activities MINIMAL 2 kegiatan konkret, hangout HARUS terisi (dengan siapa / kalau sendiri tulis "sendiri"), place HARUS tempat SPESIFIK (nama mall/kafe/taman/warung, BUKAN cuma nama kota), timeline WAJIB ada 4 blok (pagi/siang/sore/malam) dengan kegiatan BEDA tiap blok. JANGAN kosongkan field apa pun kecuali problem.`;
       type GenRes = {
         parsed: any;
         http: number | null;
@@ -303,6 +304,12 @@ Deno.serve(async (req: Request) => {
         if (String((p as any).hangout ?? '').trim() === '') return true;
         const pl = String((p as any).place ?? '').trim();
         if (pl === '' || pl.toLowerCase() === city.toLowerCase()) return true;
+        // Timeline 4 blok (pagi/siang/sore/malam) wajib & tiap blok terisi.
+        const tl: any = (p as any).timeline;
+        if (tl == null || typeof tl !== 'object') return true;
+        for (const k of ['pagi', 'siang', 'sore', 'malam']) {
+          if (String(tl[k] ?? '').trim() === '') return true;
+        }
         return false;
       };
       let g = await callPrimary(false);
@@ -342,6 +349,7 @@ Deno.serve(async (req: Request) => {
           .replace(/[ \t]{2,}/g, ' ')        // spasi ganda
           .replace(/\s+([.,!?])/g, '$1')     // spasi sebelum tanda baca
           .trim();
+      const tlRaw: any = (parsed as any).timeline ?? {};
       const story = {
         summary: clean(parsed.summary).slice(0, 300),
         work: clean(parsed.work).slice(0, 300),
@@ -351,6 +359,13 @@ Deno.serve(async (req: Request) => {
           : [],
         hangout: clean(parsed.hangout).slice(0, 200),
         place: clean(parsed.place).slice(0, 200),
+        // Timeline 4 blok jam WIB — dipakai ai-reply agar kegiatan sesuai JAM.
+        timeline: {
+          pagi: clean(tlRaw.pagi).slice(0, 200),
+          siang: clean(tlRaw.siang).slice(0, 200),
+          sore: clean(tlRaw.sore).slice(0, 200),
+          malam: clean(tlRaw.malam).slice(0, 200),
+        },
       };
       await admin.from('ai_daily_story').upsert(
         { dummy_uid: uid, story_date: todayWib, story },
