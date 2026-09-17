@@ -802,3 +802,25 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
 - **HIGH profiles:** email/ip_address/fcm_token/lat/lon bocor anon. Grant tabel-level → revoke SELECT + grant 33 kolom aman. Client buang `email` dari colsFast/cols2.
 - **MEDIUM:** revoke anon admin_dummy_uids/admin_excluded_uids/call_push(2 overload)/social_push; guard list_my_groups; revoke wallet_balances(anon); fix import turn-credentials.
 - **Pelajari:** `GRANT SELECT ON TABLE` meng-override revoke kolom → harus revoke tabel + grant kolom. Terverifikasi via probe anon (401) & `relacl`.
+
+## 2026-09-17 — 20260920120000_ai_ai_off_proactive_gate.sql (APPLY) + ai-reply v175 (DEPLOY)
+
+- **Keluhan owner:** "Sarah masih chat AI dengan AI padahal AI↔AI sudah dinonaktifkan."
+- **Verifikasi laporan (DB live):** `app_settings.ai_ai_chat_enabled = false` (toggle memang OFF) TAPI chat dummy↔dummy `3819c1dd (agoy) ↔ b5ee6593 (Sarah)` masih aktif (`dummy_participants=2`).
+- **Bukti log `ai_reply_log` (id 3411→3413, 07:20–07:21):**
+  - `enqueue`/`proactive:true` → decision **`enqueued`** (tick menyapa)
+  - `enqueue`/`proactive:false` → `skipped:ai_ai_off` (jalur trigger BENAR blokir)
+  - `edge`/`proactive:true` → decision **`replied`** ← **bocor di sini**
+- **Akar masalah (2 lapis, keduanya di jalur proactive yang mem-bypass trigger):**
+  1. **edge `ai-reply`:** gate toggle dibungkus `&& !proactive` → invoke `{proactive:true}` melewati gate sama sekali.
+  2. **sql `ai_proactive_tick`:** hanya menyaring "pengirim terakhir = dummy", TIDAK menyaring chat yang **seluruh pesertanya dummy**. Di chat dummy×dummy yang admin pegang sesaat (pesan terakhir = admin), tick tetap menyapa.
+- **Fix code (edge):** hapus `&& !proactive` pada gate toggle (baris ~1552) → gate berlaku untuk SEMUA jalur (proxy/admin/recovery/proactive). Cap AI↔AI 40/jam sengaja dibiarkan `!proactive` (proaktif = 1 sapaan, sudah dijaga SQL).
+- **Fix SQL:** `ai_proactive_tick` — (a) early-return `skipped:ai_ai_off` bila toggle OFF; (b) query loop mengecualikan chat dummy×dummy saat toggle OFF (defense in depth). Migration lama `20260912100000` TIDAK diedit (immutability) — dibuat file baru.
+- **Apply:** `supabase db push --linked --include-all` (dry-run dulu: hanya 1 migration baru); versi `20260920120000` tercatat di `schema_migrations`.
+- **Deploy:** `supabase functions deploy ai-reply --no-verify-jwt` → **ai-reply v175 ACTIVE**.
+- **Verifikasi (DB live pasca-fix):**
+  - `ai_proactive_tick()` → `{"nudged":0,"ok":true,"skipped":"ai_ai_off"}` ✅
+  - insert test dummy→dummy (id 5298) → `ai_reply_log` hanya `skipped:ai_ai_off`, **TIDAK ada** `stage:edge replied` ✅ (test row dihapus lagi)
+  - `pg_proc.prosrc` ai_proactive_tick punya `ai_ai_off` gate + filter dummy-pair ✅
+  - 0 pesan dummy dalam 2 menit terakhir ✅
+- **Tidak menyentuh** fungsi FROZEN / skema lain.
