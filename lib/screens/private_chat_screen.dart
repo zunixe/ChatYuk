@@ -43,6 +43,7 @@ import '../widgets/anon_prompt_dialog.dart';
 import '../services/message_reaction_service.dart';
 import '../widgets/message_reaction_bar.dart';
 import '../widgets/forward_picker_sheet.dart';
+import '../widgets/reaction_detail_sheet.dart';
 import '../utils.dart';
 
 // Top-level function untuk compute() isolate — resize 1024 + embed forensic watermark
@@ -1640,6 +1641,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _clearSelection();
   }
 
+  void _openReactionDetail(MessageModel msg) {
+    if (_inSelection) return;
+    final auth = context.read<AuthProvider>();
+    showReactionDetailSheet(
+      context,
+      chatType: 'private',
+      messageId: msg.id,
+      myUid: auth.uid ?? '',
+      myName: auth.profile?.nickname ?? '',
+      knownNames: {widget.otherUid: widget.otherName},
+    );
+  }
+
   PreferredSizeWidget _buildSelectionAppBar() {
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
@@ -2948,6 +2962,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                 selected: _selectedIds.contains(msg.id),
                                 reactions: _reactions[msg.id],
                                 starred: _starredIds.contains(msg.id),
+                                onTapBadge: _reactions[msg.id]?.isNotEmpty == true
+                                    ? () => _openReactionDetail(msg)
+                                    : null,
                                 // Geser ke kanan = balas. Hanya pesan lawan
                                 // (gaya WhatsApp) — pesan sendiri tidak,
                                 // supaya tidak bentrok dengan swipe-back

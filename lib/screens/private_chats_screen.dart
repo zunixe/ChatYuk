@@ -953,6 +953,7 @@ class _FriendButton extends StatefulWidget {
 
 class _FriendButtonState extends State<_FriendButton> {
   bool _busy = false;
+  double _scale = 1.0;
 
   Future<void> _send() async {
     final s = context.read<LocaleProvider>().s;
@@ -964,6 +965,11 @@ class _FriendButtonState extends State<_FriendButton> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (res != 'rejected') {
+      // Pop sukses: membesar sesaat lalu kembali (tanpa controller).
+      setState(() => _scale = 1.3);
+      await Future.delayed(const Duration(milliseconds: 150));
+      if (!mounted) return;
+      setState(() => _scale = 1.0);
       messenger.showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
     }
   }
@@ -975,37 +981,41 @@ class _FriendButtonState extends State<_FriendButton> {
     final isFriend = social.isFriend(widget.otherUid);
     final pending = social.isPendingFriendRequest(widget.otherUid);
     final done = isFriend || pending;
-    final label = isFriend
+    final icon = isFriend
+        ? Icons.how_to_reg_rounded
+        : (pending ? Icons.schedule_rounded : Icons.person_add_alt_rounded);
+    final tip = isFriend
         ? s.btnFriends
         : (pending ? s.btnFriendRequested : s.btnAddFriend);
-    return GestureDetector(
-      onTap: done || _busy ? null : _send,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: done
-                ? AppTheme.textSecondary.withValues(alpha: 0.4)
-                : AppTheme.primary,
+    return Tooltip(
+      message: tip,
+      child: GestureDetector(
+        onTap: done || _busy ? null : _send,
+        onTapDown: done || _busy ? null : (_) => setState(() => _scale = 0.8),
+        onTapUp: done || _busy ? null : (_) => setState(() => _scale = 1.0),
+        onTapCancel: () => setState(() => _scale = 1.0),
+        child: AnimatedScale(
+          scale: _scale,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: _busy
+                ? const Padding(
+                    padding: EdgeInsets.all(9),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: AppTheme.primary,
+                    ),
+                  )
+                : Icon(
+                    icon,
+                    size: 20,
+                    color: done ? AppTheme.textSecondary : AppTheme.primary,
+                  ),
           ),
-          borderRadius: BorderRadius.circular(8),
         ),
-        child: _busy
-            ? SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: AppTheme.primary,
-                ),
-              )
-            : Text(
-                label,
-                style: AppText.caption.copyWith(
-                  color: done ? AppTheme.textSecondary : AppTheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
       ),
     );
   }

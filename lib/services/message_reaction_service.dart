@@ -47,6 +47,75 @@ class MessageReactionService {
     }
   }
 
+  Future<bool> removeReaction({
+    required String chatType,
+    required String messageId,
+    required String emoji,
+  }) async {
+    final me = _sb.auth.currentUser?.id;
+    if (me == null) return false;
+    try {
+      await _sb
+          .from('message_reactions')
+          .delete()
+          .eq('chat_type', chatType)
+          .eq('message_id', messageId)
+          .eq('user_id', me)
+          .eq('emoji', emoji);
+      return true;
+    } catch (e) {
+      dlog('[Reaction] remove error: $e');
+      return false;
+    }
+  }
+
+  Future<List<Map<String, String>>> fetchReactors({
+    required String chatType,
+    required String messageId,
+  }) async {
+    try {
+      final rows = await _sb
+          .from('message_reactions')
+          .select('user_id,emoji,created_at')
+          .eq('chat_type', chatType)
+          .eq('message_id', messageId)
+          .order('created_at');
+      final out = <Map<String, String>>[];
+      for (final row in rows as List) {
+        final r = row as Map;
+        final userId = '${r['user_id'] ?? ''}';
+        final emoji = '${r['emoji'] ?? ''}';
+        if (userId.isEmpty || emoji.isEmpty) continue;
+        out.add({'userId': userId, 'emoji': emoji});
+      }
+      return out;
+    } catch (e) {
+      dlog('[Reaction] fetch error: $e');
+      return [];
+    }
+  }
+
+  Future<Map<String, String>> fetchNicknames(Set<String> uids) async {
+    final ids = uids.where((u) => u.isNotEmpty).toList();
+    if (ids.isEmpty) return {};
+    try {
+      final rows = await _sb
+          .from('profiles')
+          .select('id,nickname')
+          .inFilter('id', ids)
+          .limit(50);
+      final out = <String, String>{};
+      for (final row in rows as List) {
+        final r = row as Map;
+        out['${r['id']}'] = '${r['nickname'] ?? ''}';
+      }
+      return out;
+    } catch (e) {
+      dlog('[Reaction] nicknames error: $e');
+      return {};
+    }
+  }
+
   Stream<Map<String, Map<String, int>>> watchReactions(String chatId) {
     try {
       return _sb

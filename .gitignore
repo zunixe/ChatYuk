@@ -52,6 +52,11 @@ fastlane/README.md
 /android/app/debug
 /android/app/profile
 /android/app/release
+# Artefak build Gradle — jangan commit, hanya hasil generate lokal
+/android/build/
+/android/.kotlin/
+**/.gradle/
+third_party/**/build/
 .code-graph/
 
 # Keystore — JANGAN pernah commit ke git

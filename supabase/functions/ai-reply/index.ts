@@ -1904,6 +1904,9 @@ Deno.serve(async (req: Request) => {
     // bagi user. Karena itu: invisible = tidak membalas sama sekali.
     // PENGECUALIAN: dummy always_reply (expert/CS) yang memang harus selalu
     // melayani tetap dibalas.
+    // PENGECUALIAN ADMIN: yang bertanya admin (zunixe@gmail.com) tetap
+    // dibalas SEMUA dummy walau invisible — admin panel butuh memverifikasi
+    // perilaku bot. User biasa → tetap diam (anti bocor status aktif).
     if (!alwaysReply) {
       try {
         const { data: presInv } = await admin
@@ -1912,7 +1915,25 @@ Deno.serve(async (req: Request) => {
           .eq('id', dummyUid)
           .maybeSingle();
         if (presInv?.status === 'invisible') {
-          return json({ ok: false, skipped: 'invisible_silent' });
+          let senderIsAdmin = false;
+          try {
+            const { data: sdr } = await admin
+              .from('profiles')
+              .select('email')
+              .eq('id', senderId)
+              .maybeSingle();
+            senderIsAdmin =
+              String((sdr as any)?.email ?? '').toLowerCase() ===
+              'zunixe@gmail.com';
+          } catch (e) {
+            console.log(`[ai-reply] admin-check GAGAL chat=${chatId}: ${e}`);
+          }
+          if (!senderIsAdmin) {
+            return json({ ok: false, skipped: 'invisible_silent' });
+          }
+          console.log(
+            `[ai-reply] invisible tapi sender admin → tetap balas chat=${chatId}`,
+          );
         }
       } catch (e) {
         console.log(`[ai-reply] invisible-check GAGAL chat=${chatId}: ${e}`);

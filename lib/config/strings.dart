@@ -1465,6 +1465,12 @@ class S {
   String get msgForwardedLabel => isId ? 'Diteruskan' : 'Forwarded';
   String get msgReactionFailed =>
       isId ? 'Gagal memberi reaksi' : 'Failed to react';
+  String get msgReactionRemoveFailed =>
+      isId ? 'Gagal menghapus reaksi' : 'Failed to remove reaction';
+  String reactionsTitle(int n) =>
+      isId ? '$n reaksi' : (n == 1 ? '1 reaction' : '$n reactions');
+  String get msgTapToRemove =>
+      isId ? 'Ketuk untuk menghapus' : 'Tap to remove';
 }
 
 const _privacyId = <LegalSection>[
