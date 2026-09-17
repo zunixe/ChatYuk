@@ -1078,7 +1078,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                     Expanded(child: Text(m.text.isNotEmpty ? m.text : (m.type == 'image' ? s.msgPhoto : m.type), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodySmall)),
                                     const SizedBox(width: 8),
-                                    Text(DateFormat('HH:mm').format(m.timestamp.toLocal()), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                                    Text(formatBubbleTime(m.timestamp), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
                                   ]),
                                 ),
                                 if (m != msgs.last) Divider(height: 1, color: AppTheme.divider.withValues(alpha: 0.3)),
