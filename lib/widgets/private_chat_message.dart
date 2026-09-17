@@ -585,6 +585,7 @@ class MessageBubble extends StatelessWidget {
   final Map<String, int>? reactions;
   final bool starred;
   final VoidCallback? onTapSelect;
+  final VoidCallback? onTapBadge;
   const MessageBubble({
     super.key,
     required this.msg,
@@ -605,6 +606,7 @@ class MessageBubble extends StatelessWidget {
     this.reactions,
     this.starred = false,
     this.onTapSelect,
+    this.onTapBadge,
   });
 
   @override
@@ -1095,7 +1097,10 @@ class MessageBubble extends StatelessWidget {
                         bottom: -10,
                         left: isMe ? null : 8,
                         right: isMe ? 8 : null,
-                        child: _InlineReactionBadge(counts: reactions!),
+                        child: _InlineReactionBadge(
+                          counts: reactions!,
+                          onTap: onTapBadge,
+                        ),
                       ),
                   ],
                 ),
@@ -1111,14 +1116,18 @@ class MessageBubble extends StatelessWidget {
 
 class _InlineReactionBadge extends StatelessWidget {
   final Map<String, int> counts;
-  const _InlineReactionBadge({required this.counts});
+  final VoidCallback? onTap;
+  const _InlineReactionBadge({required this.counts, this.onTap});
   @override
   Widget build(BuildContext context) {
     final entries = counts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final shown = entries.take(3).map((e) => e.key).join();
     final total = entries.fold<int>(0, (p, e) => p + e.value);
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
@@ -1143,6 +1152,7 @@ class _InlineReactionBadge extends StatelessWidget {
             ),
           ],
         ],
+      ),
       ),
     );
   }

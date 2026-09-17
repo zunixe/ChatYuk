@@ -162,7 +162,9 @@ Future<void> showMoreReactions(
 class ReactionBadge extends StatelessWidget {
   final Map<String, int> counts;
   final bool isMe;
-  const ReactionBadge({super.key, required this.counts, required this.isMe});
+  final VoidCallback? onTap;
+  const ReactionBadge(
+      {super.key, required this.counts, required this.isMe, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -171,7 +173,10 @@ class ReactionBadge extends StatelessWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
     final shown = entries.take(3).map((e) => e.key).join();
     final total = entries.fold<int>(0, (p, e) => p + e.value);
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
@@ -196,6 +201,7 @@ class ReactionBadge extends StatelessWidget {
             ),
           ],
         ],
+      ),
       ),
     );
   }

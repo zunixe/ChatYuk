@@ -56,6 +56,7 @@ import 'package:flutter/services.dart';
 import '../services/message_reaction_service.dart';
 import '../widgets/message_reaction_bar.dart';
 import '../widgets/forward_picker_sheet.dart';
+import '../widgets/reaction_detail_sheet.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 String? _roomPassthroughImage(Uint8List bytes) {
@@ -1575,6 +1576,17 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _clearSelection();
   }
 
+  void _openReactionDetail(MessageModel msg) {
+    if (_inSelection) return;
+    showReactionDetailSheet(
+      context,
+      chatType: 'room',
+      messageId: msg.id,
+      myUid: _auth.uid ?? '',
+      myName: _auth.profile?.nickname ?? '',
+    );
+  }
+
   PreferredSizeWidget _buildSelectionAppBar() {
     final s = context.read<LocaleProvider>().s;
     final single = _singleSelected;
@@ -2695,6 +2707,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                                       child: ReactionBadge(
                                         counts: reacts,
                                         isMe: isMe,
+                                        onTap: _inSelection
+                                            ? null
+                                            : () => _openReactionDetail(m),
                                       ),
                                     ),
                                 ],
