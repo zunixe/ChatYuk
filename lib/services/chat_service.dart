@@ -1069,6 +1069,7 @@ class ChatService {
           ),
       lastMessage: d['lastMessage'] ?? '',
       lastMessageAt: parseDate(d['lastMessageAt']),
+      lastSenderId: '${d['lastSenderId'] ?? ''}',
       messageCount: (d['messageCount'] as num?)?.toInt() ?? 0,
       unreadCounts: (d['unreadCounts'] as Map<dynamic, dynamic>? ?? {}).map(
         (k, v) => MapEntry(k.toString(), (v as num).toInt()),
@@ -2084,6 +2085,7 @@ class PrivateChatInfo {
   final Map<String, bool> participantRegistered;
   final String lastMessage;
   final DateTime lastMessageAt;
+  final String lastSenderId;
   final int messageCount;
   final Map<String, int> unreadCounts;
   final Map<String, DateTime> lastReadAt;
@@ -2102,6 +2104,7 @@ class PrivateChatInfo {
     this.participantRegistered = const {},
     required this.lastMessage,
     required this.lastMessageAt,
+    this.lastSenderId = '',
     this.messageCount = 0,
     this.unreadCounts = const {},
     this.lastReadAt = const {},
@@ -2126,6 +2129,7 @@ class PrivateChatInfo {
     'participantRegistered': participantRegistered,
     'lastMessage': lastMessage,
     'lastMessageAt': lastMessageAt.toIso8601String(),
+    'lastSenderId': lastSenderId,
     'messageCount': messageCount,
     'unreadCounts': unreadCounts,
     'lastReadAt': lastReadAt.map((k, v) => MapEntry(k, v.toIso8601String())),
@@ -2155,6 +2159,7 @@ class PrivateChatInfo {
       lastMessageAt:
           DateTime.tryParse('${d['lastMessageAt'] ?? ''}') ??
           DateTime.fromMillisecondsSinceEpoch(0),
+      lastSenderId: '${d['lastSenderId'] ?? ''}',
       messageCount: (d['messageCount'] as num?)?.toInt() ?? 0,
       unreadCounts: ((d['unreadCounts'] as Map?) ?? {}).map(
         (k, v) => MapEntry('$k', (v as num).toInt()),
@@ -2182,6 +2187,7 @@ class PrivateChatInfo {
     Map<String, bool>? participantRegistered,
     String? lastMessage,
     DateTime? lastMessageAt,
+    String? lastSenderId,
     int? messageCount,
     Map<String, int>? unreadCounts,
     Map<String, DateTime>? lastReadAt,
@@ -2201,6 +2207,7 @@ class PrivateChatInfo {
           participantRegistered ?? this.participantRegistered,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      lastSenderId: lastSenderId ?? this.lastSenderId,
       messageCount: messageCount ?? this.messageCount,
       unreadCounts: unreadCounts ?? this.unreadCounts,
       lastReadAt: lastReadAt ?? this.lastReadAt,

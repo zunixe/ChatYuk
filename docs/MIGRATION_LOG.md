@@ -3,6 +3,27 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-17 — Centang-2 di preview list Pesan (kolom `last_sender_id`)
+
+Migrasi `20260917180000_last_sender_id.sql` SUDAH APPLY via Management API + recorded
+di `schema_migrations`. Menyentuh FROZEN `handle_new_private_message` (header ada,
+snapshot di-regenerate — diff hanya stamp + 1 baris `last_sender_id`, tanpa cabang hilang).
+
+| Objek | Isi |
+|---|---|
+| `private_chats.last_sender_id` (uuid, nullable) | Pengirim pesan terakhir; diisi trigger tiap pesan baru; backfill 50/50 chat berisi (0 chat berisi tanpa sender) |
+| Trigger `handle_new_private_message` | Tambah `last_sender_id = new.sender_id`; cabang preview image/view_once/coin/gift + unread + last_read dipertahankan |
+
+UI: preview pesan terakhir di card list Pesan (`private_chats_screen.dart`) kini
+diawali `✓✓` bila pesan terakhir dariku — biru (`primary`) kalau lawan sudah baca
+(`lastMessageAt <= lastReadAt[lawan]`), abu kalau belum; tanpa centang bila dari lawan.
+Model `PrivateChatInfo.lastSenderId` (fromMap/toMap/copyWith + `_rowToPrivateChat`).
+
+Verifikasi: `flutter analyze` 2 file 0 error 0 warning (infos pre-existing);
+`flutter test` 227/227 hijau; `run_sql_tests.sh notif_chat_test.sql` lolos (2 assert baru);
+`check_migrations --all` FAIL pre-existing lapis 5 `ai_reply_enqueue`/`ai_always_online`
+(sudah gagal di HEAD bersih sebelum migrasi ini — bukan dari migrasi ini).
+
 ## 2026-09-17 — Fitur: long-press ala WA (reaksi + bintang + teruskan) — private & room
 
 Migrasi `20260917000000_message_reactions_stars.sql` SUDAH APPLY via Management API.
