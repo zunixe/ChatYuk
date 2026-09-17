@@ -106,6 +106,11 @@ class OnlineUsersProvider extends ChangeNotifier {
           }).toList();
         } catch (_) {}
         if (_users.isEmpty) {
+          // Saring baris basi (invisible/offline/last_seen basi) dari cache
+          // lama — jangan tampilkan akun yang sudah tidak online.
+          diskUsers = diskUsers
+              .where((u) => ChatService.isVisibleOnline(u.status, u.lastSeen))
+              .toList();
           // Disk menang race → tampilkan langsung list disk (deduped di atas),
           // tapi tetap lewat sort bucket supaya frame pertama sudah rapi
           // (online di atas, paling lama offline di bawah).
@@ -241,8 +246,12 @@ class OnlineUsersProvider extends ChangeNotifier {
         if (users.isEmpty && _users.isNotEmpty) {
           _emptyGrace?.cancel();
           _emptyGrace = Timer(const Duration(seconds: 8), () {
-            if (_disposed || _users.isNotEmpty) return;
+            if (_disposed) return;
+            // Timer habis = memang sepi sungguhan: bersihkan list basi
+            // (mis. semua user jadi invisible/offline) supaya akun yang
+            // sudah tidak online tidak nempel selamanya.
             _debounce?.cancel();
+            _users = [];
             _error = null;
             if (!_disposed) notifyListeners();
           });
@@ -258,6 +267,11 @@ class OnlineUsersProvider extends ChangeNotifier {
         final seen = <String>{};
         var deduped = users
             .where((u) => u.uid.isNotEmpty && seen.add(u.uid))
+            .toList();
+        // Baris invisible/offline/basi tidak boleh masuk daftar tayang
+        // (maupun cache disk di bawah) — lapis pertahanan terakhir.
+        deduped = deduped
+            .where((u) => ChatService.isVisibleOnline(u.status, u.lastSeen))
             .toList();
         // Merge monotonic: stream bisa emit fast-path TANPA avatar (belum
         // terdownload) setelah emit dengan avatar — tanpa ini foto yang

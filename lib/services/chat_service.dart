@@ -1359,6 +1359,26 @@ class ChatService {
     return status == 'offline' || status == 'invisible';
   }
 
+  /// True bila status mentah layak tampil di daftar Online: hanya
+  /// 'online'/'idle'. 'offline'/'invisible'/lainnya selalu gugur — socket
+  /// presence yang hidup tidak mengalahkan pilihan invisible manual.
+  static bool isVisibleOnlineStatus(String? rawStatus) {
+    final s = rawStatus ?? 'offline';
+    return s == 'online' || s == 'idle';
+  }
+
+  /// True bila user layak tampil di daftar Online: status terlihat +
+  /// last_seen segar (≤ 30 menit, sama seperti RPC + effectiveStatusOf).
+  /// Dipakai menyaring cache disk basi & emission berstatus basi supaya
+  /// akun invisible/offline tidak nempel di daftar Online.
+  static bool isVisibleOnline(String? rawStatus, DateTime lastSeen) {
+    if (!isVisibleOnlineStatus(rawStatus)) return false;
+    final stale = lastSeen.toUtc().isBefore(
+      DateTime.now().toUtc().subtract(const Duration(minutes: 30)),
+    );
+    return !stale;
+  }
+
   /// Filter hasil RPC daftar online terhadap presence WebSocket.
   /// - Ada di presence → WebSocket hidup, tampil apa pun statusnya.
   /// - Status 'online' tapi belum di-presence → baru connect, tampil
@@ -1378,6 +1398,9 @@ class ChatService {
       final m = r as Map;
       final id = '${m['id'] ?? ''}';
       final st = '${m['status'] ?? ''}';
+      // Offline/invisible selalu gugur — walau socket presence-nya hidup
+      // (invisible manual harus menang).
+      if (!isVisibleOnlineStatus(st)) return false;
       if (presenceUids.contains(id)) return true;
       if (st == 'online') return true;
       if (dummyUids.contains(id)) return true;
@@ -1516,6 +1539,8 @@ class ChatService {
                 try {
                   var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
                   if (!seenFast.add(u.uid)) continue;
+                  // Invisible/offline/basi tidak ikut emission cepat.
+                  if (!isVisibleOnline(u.status, u.lastSeen)) continue;
                   if (u.avatar.isNotEmpty &&
                       StoragePhotoService.instance.isAvatarPath(u.avatar)) {
                     _onlinePathByUid[u.uid] = u.avatar;
@@ -1679,6 +1704,8 @@ class ChatService {
           try {
             var u = UserModel.fromMap('${row['id']}', snakeToCamel(row));
             if (!seen.add(u.uid)) continue;
+            // Invisible/offline/basi tidak ikut daftar tayang & cache.
+            if (!isVisibleOnline(u.status, u.lastSeen)) continue;
             if (u.avatar.isNotEmpty &&
                 StoragePhotoService.instance.isAvatarPath(u.avatar)) {
               _onlinePathByUid[u.uid] = u.avatar;
