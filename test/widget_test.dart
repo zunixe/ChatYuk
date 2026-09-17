@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/config/theme.dart';
-import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/core/admin_gate.dart';
+
+// Catatan: pengujian katalog font (AppFonts) tinggal di `font_test.dart` —
+// satu rumah supaya tidak ada dua versi ekspektasi yang bisa berbeda.
 
 void main() {
   group('token tipografi AppText (8 ukuran resmi)', () {
@@ -59,23 +61,6 @@ void main() {
 
     test('blok kode tetap monospace (tidak ikut font global)', () {
       expect(AppText.code.fontFamily, 'monospace');
-    });
-  });
-
-  group('AppFonts', () {
-    test('default = tanpa override family (perilaku lama)', () {
-      expect(AppFonts.isDefault('default'), isTrue);
-      expect(AppFonts.family('default'), isNull);
-    });
-
-    test('key tak dikenal fallback ke default', () {
-      expect(AppFonts.resolve('tidak-ada'), 'default');
-      expect(AppFonts.resolve(null), 'default');
-    });
-
-    test('inter punya family Inter (sans-serif modern)', () {
-      expect(AppFonts.resolve('inter'), 'inter');
-      expect(AppFonts.family('inter'), 'Inter');
     });
   });
 

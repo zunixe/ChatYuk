@@ -67,4 +67,30 @@ void main() {
       expect(filterDummies(items, search: ' '), isEmpty);
     });
   });
+
+  group('filterDummies — kontrak tipe (kind dari RPC admin)', () {
+    test('kind expert + search menyaring dua-duanya', () {
+      final r = filterDummies(items, search: 'hardware', kind: 'expert');
+      expect(r.map((m) => m['nickname']), ['HardwareExpert']);
+    });
+
+    test('search tidak di-trim (spasi pinggir = tak cocok)', () {
+      expect(filterDummies(items, search: ' Budi '), isEmpty);
+      expect(filterDummies(items, search: 'Budi').length, 1);
+    });
+
+    test('kind peka huruf besar/kecil (nilai dari server lower-case)', () {
+      expect(filterDummies(items, kind: 'EXPERT'), isEmpty);
+      expect(filterDummies(items, kind: 'expert').length, 2);
+    });
+
+    test('hasil filter = list baru, input tidak diubah', () {
+      final asli = List<Map<String, dynamic>>.from(items);
+      final r = filterDummies(items, kind: 'expert');
+      expect(identical(r, items), isFalse);
+      expect(items.length, asli.length);
+      expect(items.map((m) => m['nickname']).toList(),
+          asli.map((m) => m['nickname']).toList());
+    });
+  });
 }

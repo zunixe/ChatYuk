@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -23,6 +26,9 @@ void main() {
         .thenAnswer((_) async => 999);
     when(() => service.watchOwnPoints())
         .thenAnswer((_) => Stream<int>.empty());
+    when(() => service.getWallet()).thenAnswer(
+      (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50},
+    );
     provider = PointsProvider(service: service);
   });
 
@@ -68,6 +74,150 @@ void main() {
       provider.setOnlineSecondsForTest(7200);
       await provider.debugClaimOnlineBonus();
       verify(() => service.oneTimeBonus('online_120min', 15)).called(1);
+    });
+  });
+
+  group('wallet bucket (RPC get_wallet)', () {
+    test('bonus/earned/total dipetakan ke getter', () async {
+      when(() => service.getWallet()).thenAnswer(
+        (_) async => <String, dynamic>{'bonus': 7, 'earned': 3, 'total': 60},
+      );
+      await provider.refreshWallet();
+      expect(provider.bonusBalance, 7);
+      expect(provider.earnedBalance, 3);
+      expect(provider.points, 60);
+    });
+
+    test('key hilang/null → bonus & earned 0, total tak mereset saldo lama',
+        () async {
+      when(() => service.getWallet()).thenAnswer(
+        (_) async => <String, dynamic>{'bonus': 7, 'earned': 3, 'total': 60},
+      );
+      await provider.refreshWallet();
+      when(() => service.getWallet()).thenAnswer(
+        (_) async => <String, dynamic>{'bonus': null, 'earned': null},
+      );
+      await provider.refreshWallet();
+      expect(provider.bonusBalance, 0);
+      expect(provider.earnedBalance, 0);
+      expect(provider.points, 60,
+          reason: 'total null → saldo lama dipertahankan, bukan reset 0');
+    });
+
+    test('getWallet error → nilai lama bertahan, tidak throw', () async {
+      when(() => service.getWallet()).thenAnswer(
+        (_) async => <String, dynamic>{'bonus': 12, 'earned': 4, 'total': 66},
+      );
+      await provider.refreshWallet();
+      when(() => service.getWallet()).thenThrow(Exception('offline'));
+      await provider.refreshWallet();
+      expect(provider.bonusBalance, 12);
+      expect(provider.earnedBalance, 4);
+      expect(provider.points, 66);
+    });
+
+    test('refreshWallet notify listener', () async {
+      var notified = 0;
+      provider.addListener(() => notified++);
+      await provider.refreshWallet();
+      expect(notified, 1);
+    });
+  });
+
+  group('realtime poin + debounce wallet', () {
+    // Catatan: saat konstruksi, provider men-subscribe ulang pada event auth
+    // `initialSession` + mengambil rincian wallet. Tes di bawah menunggu
+    // fase itu selesai dulu supaya hitungan panggilan deterministik.
+    test('event stream poin memperbarui saldo + notify', () async {
+      final ctrl = StreamController<int>.broadcast();
+      when(() => service.watchOwnPoints()).thenAnswer((_) => ctrl.stream);
+      final p = PointsProvider(service: service);
+      addTearDown(p.dispose);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      var notified = 0;
+      p.addListener(() => notified++);
+      ctrl.add(120);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(p.points, 120);
+      expect(notified, 1);
+      await ctrl.close();
+    });
+
+    test('burst event → get_wallet dipanggil sekali (debounce 800ms)', () {
+      var walletCalls = 0;
+      when(() => service.getWallet()).thenAnswer((_) async {
+        walletCalls++;
+        return <String, dynamic>{'bonus': 1, 'earned': 2, 'total': 100};
+      });
+      final ctrl = StreamController<int>.broadcast();
+      when(() => service.watchOwnPoints()).thenAnswer((_) => ctrl.stream);
+
+      fakeAsync((async) {
+        final p = PointsProvider(service: service);
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 1));
+        final base = walletCalls;
+        expect(base, greaterThanOrEqualTo(1),
+            reason: 'rincian awal diambil saat subscribe');
+
+        // Bonus online / bonus pesan memicu beberapa event beruntun.
+        ctrl.add(60);
+        ctrl.add(61);
+        ctrl.add(62);
+        async.flushMicrotasks();
+        expect(p.points, 62, reason: 'saldo total ikut event terbaru');
+        expect(walletCalls - base, 0, reason: 'belum lewat window debounce');
+
+        // Lewat 800ms → satu RPC get_wallet, bucket bonus/earned ikut segar.
+        async.elapse(const Duration(seconds: 2));
+        expect(walletCalls - base, 1,
+            reason: 'burst → tetap 1 RPC get_wallet');
+        expect(p.bonusBalance, 1);
+        expect(p.earnedBalance, 2);
+        expect(p.points, 100, reason: 'total ikut rincian wallet terbaru');
+        p.dispose();
+      });
+      ctrl.close();
+    });
+
+    test('event dengan nilai sama tidak memicu get_wallet ulang', () {
+      var walletCalls = 0;
+      when(() => service.getWallet()).thenAnswer((_) async {
+        walletCalls++;
+        return <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50};
+      });
+      final ctrl = StreamController<int>.broadcast();
+      when(() => service.watchOwnPoints()).thenAnswer((_) => ctrl.stream);
+
+      fakeAsync((async) {
+        final p = PointsProvider(service: service);
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 1));
+        final base = walletCalls;
+        expect(p.points, 50);
+
+        ctrl.add(50); // sama dengan saldo sekarang → tak ada perubahan
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 2));
+        expect(walletCalls, base, reason: 'nilai sama → tak perlu tarik bucket');
+        p.dispose();
+      });
+      ctrl.close();
+    });
+  });
+
+  group('syncFromProfile', () {
+    test('nilai beda → notify; sama → no-op', () {
+      var notified = 0;
+      provider.addListener(() => notified++);
+
+      provider.syncFromProfile(75);
+      expect(provider.points, 75);
+      expect(notified, 1);
+
+      provider.syncFromProfile(75);
+      expect(notified, 1, reason: 'nilai sama tidak memicu rebuild');
     });
   });
 }

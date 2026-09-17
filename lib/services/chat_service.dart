@@ -237,6 +237,7 @@ class ChatService {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    bool isForwarded = false,
   }) async {
     // Validasi tipe pesan
     if (!['text', 'image', 'view_once', 'voice'].contains(type)) {
@@ -264,6 +265,7 @@ class ChatService {
       if (repliedToId != null) 'replied_to_id': repliedToId,
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
+      if (isForwarded) 'is_forwarded': true,
     });
   }
 
@@ -445,6 +447,7 @@ class ChatService {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    bool isForwarded = false,
   }) async {
     // Validasi tipe pesan
     if (!['text', 'image', 'view_once', 'call', 'voice'].contains(type)) {
@@ -487,6 +490,7 @@ class ChatService {
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null)
         'replied_to_sender_name': repliedToSenderName,
+      if (isForwarded) 'is_forwarded': true,
     }).select('id').maybeSingle();
     // Pemicu AI LANGSUNG (tanpa nunggu antrean pg_net trigger yang lambat —
     // terbukti delay ~1 menit): panggil edge function fire-and-forget.

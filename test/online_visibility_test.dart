@@ -98,4 +98,62 @@ void main() {
       expect(ids, {'p1', 'p2', 'baru'});
     });
   });
+
+  group('avatar cache (batas memori)', () {
+    // Cache avatar statis lintas test → bersihkan key yang dipakai di sini.
+    tearDown(() {
+      for (final k in ChatService.avatarCacheKeys) {
+        if (k.startsWith('avatars/cache-') || k.startsWith('cache-')) {
+          ChatService.clearAvatarCacheForPath(k);
+        }
+      }
+    });
+
+    test('set uid → satu entri di path kanonik avatars/<uid>.jpg', () {
+      final before = ChatService.avatarCacheKeys.length;
+      ChatService.setAvatarCacheForUid('cache-1', 'B64');
+      expect(ChatService.avatarCacheKeys, contains('avatars/cache-1.jpg'));
+      expect(ChatService.avatarCacheKeys.length, before + 1);
+    });
+
+    test('clear per uid menghapus entri itu saja', () {
+      ChatService.setAvatarCacheForUid('cache-2', 'B64');
+      ChatService.setAvatarCacheForPath('cache-lain.jpg', 'B64');
+      ChatService.clearAvatarCacheForUid('cache-2');
+      final keys = ChatService.avatarCacheKeys;
+      expect(keys, isNot(contains('avatars/cache-2.jpg')));
+      expect(keys, contains('cache-lain.jpg'));
+    });
+
+    test('base64 kosong = hapus entri, bukan simpan string kosong', () {
+      final before = ChatService.avatarCacheKeys.length;
+      ChatService.setAvatarCacheForUid('cache-3', 'B64');
+      ChatService.setAvatarCacheForUid('cache-3', '');
+      expect(ChatService.avatarCacheKeys.length, before);
+
+      ChatService.setAvatarCacheForPath('cache-3.jpg', 'B64');
+      ChatService.setAvatarCacheForPath('cache-3.jpg', '');
+      expect(ChatService.avatarCacheKeys.length, before);
+    });
+
+    test('path kosong diabaikan (tidak bikin entri "")', () {
+      final before = ChatService.avatarCacheKeys.length;
+      ChatService.setAvatarCacheForPath('', 'B64');
+      expect(ChatService.avatarCacheKeys.length, before);
+      expect(ChatService.avatarCacheKeys, isNot(contains('')));
+    });
+
+    test('cap 100: entri tertua ter-evict lebih dulu', () {
+      for (var i = 0; i < 130; i++) {
+        ChatService.setAvatarCacheForUid('cache-$i', 'B64');
+      }
+      final keys = ChatService.avatarCacheKeys;
+      expect(keys.length, lessThanOrEqualTo(100),
+          reason: 'cache tak boleh tumbuh tanpa batas');
+      expect(keys, contains('avatars/cache-129.jpg'),
+          reason: 'entri terbaru tetap ada');
+      expect(keys, isNot(contains('avatars/cache-0.jpg')),
+          reason: 'entri tertua yang ter-evict lebih dulu (FIFO)');
+    });
+  });
 }

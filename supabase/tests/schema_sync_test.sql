@@ -43,5 +43,19 @@ select supabase_tests.check('messages pakai created_at (bukan inserted_at)',
   and not exists(select 1 from information_schema.columns
          where table_schema='public' and table_name='messages' and column_name='inserted_at'));
 
+-- ── Reaksi + bintang + teruskan ala WA (20260917000000) ──
+select supabase_tests.check('tabel message_reactions ada',
+  exists(select 1 from information_schema.tables
+         where table_schema='public' and table_name='message_reactions'));
+select supabase_tests.check('tabel starred_messages ada',
+  exists(select 1 from information_schema.tables
+         where table_schema='public' and table_name='starred_messages'));
+select supabase_tests.check('kolom private_messages.is_forwarded ada',
+  exists(select 1 from information_schema.columns
+         where table_schema='public' and table_name='private_messages' and column_name='is_forwarded'));
+select supabase_tests.check('kolom messages.is_forwarded ada',
+  exists(select 1 from information_schema.columns
+         where table_schema='public' and table_name='messages' and column_name='is_forwarded'));
+
 select supabase_tests.report() as result;
 rollback;

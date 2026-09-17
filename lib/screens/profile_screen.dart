@@ -2875,7 +2875,7 @@ class _ChatFontTileState extends State<_ChatFontTile> {
                 ),
               ),
               Text(
-                '${ChatTextScale.ptOf(mult)}',
+                ChatTextScale.labelOf(mult),
                 style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
               ),
             ],
@@ -2894,7 +2894,7 @@ class _ChatFontTileState extends State<_ChatFontTile> {
               // Ukuran contoh mengikuti NILAI SLIDER saat ini (bukan current
               // tersimpan) → tidak ada jeda/beda antara geser dan contoh.
               style: AppText.chatBodyAt(
-                ChatTextScale.ptOf(mult).toDouble(),
+                ChatTextScale.ptOf(mult),
               ).copyWith(color: AppTheme.textPrimary),
             ),
           ),
@@ -2903,7 +2903,7 @@ class _ChatFontTileState extends State<_ChatFontTile> {
             min: 0,
             max: ChatTextScale.steps.toDouble(),
             divisions: ChatTextScale.steps,
-            label: '${ChatTextScale.ptOf(mult)}',
+            label: ChatTextScale.labelOf(mult),
             activeColor: AppTheme.primary,
             onChanged: (v) => setState(() => _step = v.round()),
             onChangeEnd: (v) async {
@@ -2919,7 +2919,7 @@ class _ChatFontTileState extends State<_ChatFontTile> {
               children: [
                 for (var i = 0; i <= ChatTextScale.steps; i++)
                   Text(
-                    '${ChatTextScale.ptOf(ChatTextScale.multOfStep(i))}',
+                    ChatTextScale.labelOf(ChatTextScale.multOfStep(i)),
                     style: AppText.caption.copyWith(
                       color: i == _step
                           ? AppTheme.primary

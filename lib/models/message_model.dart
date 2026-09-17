@@ -16,6 +16,7 @@ class MessageModel {
   final String? repliedToText;
   final String? repliedToSenderName;
   final int? durationMs;
+  final bool isForwarded;
 
   MessageModel({
     required this.id,
@@ -33,6 +34,7 @@ class MessageModel {
     this.repliedToText,
     this.repliedToSenderName,
     this.durationMs,
+    this.isForwarded = false,
   });
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
@@ -61,6 +63,7 @@ class MessageModel {
       repliedToText: map['repliedToText'],
       repliedToSenderName: map['repliedToSenderName'],
       durationMs: (map['durationMs'] ?? map['duration_ms'] ?? map['duration']) is num ? (map['durationMs'] ?? map['duration_ms'] ?? map['duration'] as num).toInt() : null,
+      isForwarded: map['isForwarded'] == true || map['is_forwarded'] == true,
     );
   }
 
@@ -89,6 +92,7 @@ class MessageModel {
       'repliedToText': repliedToText,
       'repliedToSenderName': repliedToSenderName,
       'durationMs': durationMs,
+      'isForwarded': isForwarded,
     };
   }
 
@@ -102,6 +106,7 @@ class MessageModel {
     String? repliedToText,
     String? repliedToSenderName,
     int? durationMs,
+    bool? isForwarded,
   }) {
     final newDeleted = isDeleted ?? this.isDeleted;
     // PRIVASI: begitu berstatus terhapus, konten dikosongkan — update
@@ -122,6 +127,7 @@ class MessageModel {
       repliedToText: repliedToText ?? this.repliedToText,
       repliedToSenderName: repliedToSenderName ?? this.repliedToSenderName,
       durationMs: durationMs ?? this.durationMs,
+      isForwarded: isForwarded ?? this.isForwarded,
     );
   }
 }

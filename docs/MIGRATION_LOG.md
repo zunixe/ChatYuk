@@ -3,6 +3,97 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-17 — Fitur: long-press ala WA (reaksi + bintang + teruskan) — private & room
+
+Migrasi `20260917000000_message_reactions_stars.sql` SUDAH APPLY via Management API.
+Tabel baru saja, tidak menyentuh fungsi FROZEN.
+
+| Objek | Isi |
+|---|---|
+| `message_reactions` | Satu baris = satu user + satu emoji (`chat_type` private/room, `chat_id`, `message_id`, `user_id`, `emoji`, unique per kombinasi) |
+| `starred_messages` | Bintang per-user (`user_id`, `chat_type`, `chat_id`, `message_id`, unique per user+pesan) |
+| `private_messages.is_forwarded` / `messages.is_forwarded` | Flag label "Diteruskan" di bubble |
+
+UI: tahan pesan → header jadi toolbar (balas/bintang/hapus/teruskan/•••) + bar emoji
+(👍 ❤️ 😂 😮 😢 🙏 😁 +) mengambang di atas bubble; tap = multi-seleksi.
+Badge reaksi + ikon bintang + label Diteruskan tampil di bubble.
+Forward: sheet pilih chat/room → kirim ulang dengan `is_forwarded=true`.
+
+| File | Perubahan |
+|---|---|
+| `lib/services/message_reaction_service.dart` | Baru: toggle/watch reaksi & bintang |
+| `lib/widgets/message_reaction_bar.dart` | Baru: `ReactionBar`, `ReactionBadge`, sheet emoji tambahan |
+| `lib/widgets/forward_picker_sheet.dart` | Baru: picker chat/room tujuan teruskan |
+| `lib/models/message_model.dart` | Tambah `isForwarded` (fromMap/toMap/copyWith) |
+| `lib/services/chat_service.dart` + `chat_stream_session.dart` + `providers/chat_provider.dart` | Select + insert `is_forwarded` |
+| `lib/widgets/private_chat_message.dart` | `MessageBubble`: `selected`, `reactions`, `starred`, `onTapSelect`, label Teruskan, badge reaksi |
+| `lib/screens/private_chat_screen.dart` + `room_chat_screen.dart` | Mode seleksi WA: AppBar toolbar, reaction overlay, aksi balas/bintang/salin/hapus/teruskan/edit, `PopScope` back = batal seleksi |
+| `lib/config/strings.dart` | 11 getter bilingual baru (menuForward/menuStar/menuUnstar/menuCopy/msgMessageCopied/msgStarred/msgUnstarred/msgForwarded/forwardTitle/forwardSearchHint/msgForwardedLabel/msgReactionFailed) |
+| `supabase/tests/schema_sync_test.sql` | 4 assert baru utk 2 tabel + 2 kolom |
+
+Verifikasi: `flutter analyze` file terkait 0 error 0 warning (1 warning pre-existing di
+`admin_chat_view_screen.dart:513` + FAIL pre-existing `check_migrations` lapis 5
+`ai_reply_enqueue`/`ai_always_online` — bukan dari migrasi ini);
+`flutter test` 216/216 hijau; tabel + kolom terverifikasi ada di DB live.
+
+## 2026-09-16 — Fitur: swipe-to-reply (geser kanan = balas) — private & grup
+
+Tanpa migrasi SQL. Murni Dart.
+
+| File | Perubahan |
+|---|---|
+| `widgets/private_chat_message.dart` | Widget baru `SwipeToReply` (publik) + param opsional `MessageBubble.onSwipeReply` |
+| `screens/private_chat_screen.dart` | `onSwipeReply` diisi untuk pesan LAWAN saja (`isMe \|\| isDeleted` → null) |
+| `screens/room_chat_screen.dart` | `SwipeToReply(enabled: m.senderId != auth.uid && !m.isDeleted)` membungkus `_MessageBubble` |
+
+**Cara kerja:** `onHorizontalDragUpdate` menggeser bubble 0–72 px ke kanan; ikon
+reply di kiri muncul & menguat; lepas ≥48 px → masuk mode balas, <48 px → balik.
+
+**Jebakan yang sudah dihindari:**
+- Pesan SENDIRI tidak di-swipe — swipe kanan dari tepi kiri = swipe-back sistem
+  iOS, kalau aktif user tidak bisa keluar chat.
+- Pakai `onHorizontalDrag*`, BUKAN `Dismissible` (Dismissible menggeser permanen
+  & bentrok dengan long-press action bar).
+- `SwipeToReply` wajib PUBLIK — sempat `_SwipeToReply` sehingga gagal dipakai
+  dari `room_chat_screen.dart`.
+
+Detail invariant: `docs/FEATURE_MAP.md` §3b.
+
+## 2026-09-16 — Perf: buka private chat instan + centang-2 instan + typing ikut scroll
+
+Tanpa migrasi SQL. Murni Dart — detail invariant di
+`docs/FEATURE_MAP.md` §3a (baca dulu sebelum menyentuh file di bawah).
+
+**Masalah (dilaporkan user):**
+1. Buka private chat ada jeda (tidak seperti WhatsApp).
+2. Centang-2 muncul belakangan — padahal kalau sudah pernah dibaca harusnya
+   langsung centang-2.
+3. Bubble typing tidak ikut scroll bersama pesan.
+
+**Akar masalah & perbaikan:**
+
+| File | Perubahan |
+|---|---|
+| `private_chats_screen.dart` | Transisi `PageRouteBuilder` 320 ms → 150 ms (sempat 0 ms, dikembalikan karena terasa "patah"); tambah `_warmTopChats()` — 6 chat teratas di-prefetch ke memori saat list dimuat |
+| `online_users_screen.dart`, `story_viewer_screen.dart` | Transisi ke `PrivateChatScreen` 320 ms → 150 ms |
+| `chat_stream_session.dart` | `controller.onListen` = **replay** `_current`. Broadcast tidak menyimpan emit terakhir; emit memori di `initState` hilang sebelum `StreamBuilder` subscribe |
+| `private_chat_screen.dart` | `_primeReadFromCache()` baca 2 sumber memori (snapshot live `_privateChatsLast` + `peekRawList`), ambil terbaru — sebelumnya hanya `peekRawList` yang bisa basi |
+| `private_chat_screen.dart` | `_otherLastRead` jadi **monoton maju** (di stream & kv): nilai null/lebih tua tidak boleh menurunkan centang-2 |
+| `private_chat_screen.dart` | `isRead` pakai `!msg.timestamp.isAfter(...)` (`<=`) — sebelumnya `isBefore` ketat, pesan dengan timestamp sama tidak ikut centang-2 |
+| `private_chat_screen.dart` | Subscription non-kritis (`_subscribeStatus`, `_subscribeTyping`, `_chatInfoSub`, profil lawan, `markAsRead`) ditunda ke post-frame |
+| `private_chat_screen.dart` | Toast bonus: `Future.microtask` ke-dobel tiap `build()` → dijaga `_bonusToastScheduled` (sekali per buka chat) |
+| `private_chat_screen.dart` | Bubble typing dipindah dari luar `ListView` jadi **item list paling bawah** (`itemCount + 1`, index 0 saat `reverse: true`) supaya ikut scroll |
+
+**Catatan build (bukan migrasi):** flavor admin yang benar = `adminProd`
+(bukan `admin`), karena ada dimensi env dev/prod. RK:
+
+```sh
+flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
+  --obfuscate --split-debug-info=build/app/symbols
+flutter build apk --release --flavor adminProd -t lib/main_admin.dart \
+  --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols
+```
+
 ## 2026-09-15 — Story harian: expert dikecualikan + panel admin
 
 | Versi | Aksi |

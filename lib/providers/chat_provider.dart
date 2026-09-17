@@ -38,6 +38,7 @@ class ChatProvider extends ChangeNotifier {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    bool isForwarded = false,
   }) async {
     await _service.sendRoomMessage(
       roomId: roomId,
@@ -51,6 +52,7 @@ class ChatProvider extends ChangeNotifier {
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
+      isForwarded: isForwarded,
     );
   }
 
@@ -156,6 +158,7 @@ class ChatProvider extends ChangeNotifier {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    bool isForwarded = false,
   }) async {
     await _service.sendPrivateMessage(
       chatId: chatId,
@@ -169,6 +172,7 @@ class ChatProvider extends ChangeNotifier {
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
+      isForwarded: isForwarded,
     );
   }
 

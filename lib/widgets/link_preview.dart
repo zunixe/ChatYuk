@@ -41,7 +41,7 @@ class _LinkPreviewState extends State<LinkPreview> {
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(color: AppTheme.bgInput, borderRadius: BorderRadius.circular(8), border: Border(left: BorderSide(color: AppTheme.primary, width: 3))),
-        child: Row(children: [SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)), SizedBox(width: 8), Text(lpv.linkPreviewLoading, style: AppText.caption)]),
+        child: Row(children: [SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)), SizedBox(width: 8), Text(lpv.linkPreviewLoading, style: AppText.chatCaption)]),
       );
     }
     final d = _data;
@@ -67,13 +67,13 @@ class _LinkPreviewState extends State<LinkPreview> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(d.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodyStrong),
+                  Text(d.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.chatBodyStrong),
                   if (d.description.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text(d.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.caption.copyWith(color: AppTheme.textSecondary)),
+                    Text(d.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.chatCaption.copyWith(color: AppTheme.textSecondary)),
                   ],
                   const SizedBox(height: 4),
-                  Text(d.siteName.isNotEmpty ? d.siteName : Uri.tryParse(d.url)?.host ?? d.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.micro.copyWith(color: AppTheme.primary)),
+                  Text(d.siteName.isNotEmpty ? d.siteName : Uri.tryParse(d.url)?.host ?? d.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.chatTime.copyWith(color: AppTheme.primary)),
                 ],
               ),
             ),

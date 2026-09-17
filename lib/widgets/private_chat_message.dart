@@ -302,7 +302,7 @@ class CodeBlock extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 10, top: 6),
                   child: Text(
                     language.isEmpty ? 'code' : language,
-                    style: AppText.caption.copyWith(
+                    style: AppText.chatCaption.copyWith(
                       color: const Color(0x99FFFFFF),
                     ),
                   ),
@@ -339,7 +339,7 @@ class CodeBlock extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: SelectableText.rich(
                 TextSpan(
-                  style: AppText.code.copyWith(color: _codeBase),
+                  style: AppText.chatCode.copyWith(color: _codeBase),
                   children: _highlightCodeSpans(normalized, language),
                 ),
               ),
@@ -351,8 +351,9 @@ class CodeBlock extends StatelessWidget {
   }
 }
 
-// Teks + waktu: 1 baris → inline [teks  waktu]; 2+ baris → waktu di baris
-// baru rata kanan/kiri, sejajar dengan waktu pesan 1 baris di atasnya.
+// Teks + waktu gaya WhatsApp: jam (+ centang) SELALU di bawah teks,
+// kanan-bawah, mepet nyaris nempel tanpa jeda baris — untuk pesan 1 baris
+// maupun multi-baris. Bubble hemat (tidak boros tinggi).
 class MessageTextWithTime extends StatelessWidget {
   final String text;
   final String timeStr;
@@ -396,10 +397,13 @@ class MessageTextWithTime extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Spasi/newline di ujung tidak terlihat tapi menggeser jam — rapikan
+    // dulu (ala WhatsApp) supaya jam selalu mepet akhir teks terlihat.
+    final t = text.trimRight().isEmpty ? text : text.trimRight();
     // Pesan berisi pagar kode ``` → render segmen teks + CodeBlock, waktu
     // di baris bawah seperti bubble multi-baris.
-    if (text.contains('```')) {
-      final segs = _splitCodeSegments(text);
+    if (t.contains('```')) {
+      final segs = _splitCodeSegments(t);
       if (segs.any((e) => e.isCode)) {
         return Column(
           crossAxisAlignment: alignRight
@@ -437,8 +441,9 @@ class MessageTextWithTime extends StatelessWidget {
         final available = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width * 0.8;
+        // Ukur 1 baris: muat sebaris dengan jam?
         final tp = TextPainter(
-          text: TextSpan(text: text, style: textStyle),
+          text: TextSpan(text: t, style: textStyle),
           maxLines: 1,
           textDirection: Directionality.of(context),
         )..layout();
@@ -446,66 +451,96 @@ class MessageTextWithTime extends StatelessWidget {
           text: TextSpan(text: timeStr, style: timeStyle),
           textDirection: Directionality.of(context),
         )..layout();
-        final extra = timeTp.width + 8 + (trailing != null ? 16.0 : 0);
-        final wraps = tp.width + extra > available;
-        if (!wraps) {
-          return RichText(
-            text: TextSpan(
-              style: textStyle,
-              children: [
-                ..._linkifySpans(text, textStyle),
-                const TextSpan(text: '  '),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.belowBaseline,
-                  baseline: TextBaseline.alphabetic,
-                  child: Text(timeStr, style: timeStyle),
-                ),
-                if (trailing != null)
-                  WidgetSpan(
-                    alignment: PlaceholderAlignment.belowBaseline,
-                    baseline: TextBaseline.alphabetic,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 3),
-                      child: trailing,
-                    ),
-                  ),
-              ],
-            ),
-          );
-        }
-        // Teks multi-baris: batasi lebar bubble selebar BARIS TERPANJANG
-        // (bukan selebar constraint penuh) — bubble ngepas ke isi, pengirim
-        // maupun penerima. Tanpa ini bubble selalu selebar 80% layar.
-        final fullTp = TextPainter(
-          text: TextSpan(
-            text: text,
-            style: textStyle,
-          ),
-          textDirection: Directionality.of(context),
-        )..layout(maxWidth: available);
-        double longest = 0;
-        for (final lm in fullTp.computeLineMetrics()) {
-          if (lm.width > longest) longest = lm.width;
-        }
         // Jangan lebih sempit dari baris timestamp (+ centang) sendiri.
         final timeRowW = timeTp.width + 8 + (trailing != null ? 16.0 : 0);
+        final timeRowWidget = Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(timeStr, style: timeStyle),
+            if (trailing != null) ...[
+              const SizedBox(width: 3),
+              trailing!,
+            ],
+          ],
+        );
+        final singleLine =
+            !t.contains('\n') && tp.width + timeRowW + 2 <= available;
+        if (singleLine) {
+          // 1 baris muat: [teks][spasi 2px][jam], jam turun 2px biar
+          // sedikit nempel/overlap ke teks — hemat seperti WA. Tanpa
+          // Flexible supaya teks pendek tidak Terperas rusak.
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              RichText(
+                text: TextSpan(
+                  style: textStyle,
+                  children: _linkifySpans(t, textStyle),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Transform.translate(
+                offset: const Offset(0, 2),
+                child: timeRowWidget,
+              ),
+            ],
+          );
+        }
+        // Multi-baris: jam overlay sudut kanan-bawah. Reserve selebar baris
+        // jam tapi setinggi font jam: muat → nempel di baris terakhir sejajar
+        // baseline; tidak muat → jadi baris pendek sendiri setinggi jam
+        // (bukan setinggi teks) — hemat seperti WA.
+        double timeDescent = 0;
+        try {
+          final tm = timeTp.computeLineMetrics();
+          if (tm.isNotEmpty) timeDescent = tm.first.descent;
+        } catch (_) {}
+        final linkSpans = _linkifySpans(t, textStyle);
+        final reserveTp = TextPainter(
+          text: TextSpan(text: ' ', style: timeStyle),
+          textDirection: Directionality.of(context),
+        )..layout();
+        final reserveW = reserveTp.width > 0 ? reserveTp.width : 3.0;
+        final nSpaces =
+            ((timeTp.width + 8 + (trailing != null ? 16.0 : 0)) / reserveW)
+                    .ceil() +
+                2;
+        final children = <TextSpan>[
+          ...linkSpans,
+          TextSpan(
+            text: String.fromCharCode(0x00A0) * nSpaces,
+            style: timeStyle,
+          ),
+        ];
+        TextPainter probeTp() => TextPainter(
+              text: TextSpan(style: textStyle, children: children),
+              textDirection: Directionality.of(context),
+            );
+        // Probe termasuk reserve: lebar bubble ngepas ke isi (bukan selebar
+        // 80% layar) sekaligus cukup untuk reserve sebaris bila muat.
+        final probe = probeTp()..layout(maxWidth: available);
+        double longest = 0;
+        for (final lm in probe.computeLineMetrics()) {
+          if (lm.width > longest) longest = lm.width;
+        }
         final contentW = math.min(available, math.max(longest, timeRowW));
+        // Metrik baris terakhir layout final → jam sejajar baseline teks.
+        final fin = probeTp()..layout(maxWidth: contentW);
+        final lastLine = fin.computeLineMetrics().last;
+        final timeBottom = math.max(0.0, lastLine.descent - timeDescent);
         return SizedBox(
           width: contentW > 0 ? contentW : null,
-          child: Column(
-            crossAxisAlignment: alignRight
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Stack(
             children: [
-              RichText(text: TextSpan(style: textStyle, children: _linkifySpans(text, textStyle))),
-              const SizedBox(height: 3),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(timeStr, style: timeStyle),
-                  if (trailing != null) ...[const SizedBox(width: 3), trailing!],
-                ],
+              RichText(
+                text: TextSpan(style: textStyle, children: children),
+              ),
+              Positioned(
+                right: 0,
+                bottom: timeBottom,
+                child: timeRowWidget,
               ),
             ],
           ),
@@ -540,6 +575,13 @@ class MessageBubble extends StatelessWidget {
   /// PRIVASI: id pesan (chat/room) yang terhapus — quote reply yang
   /// menunjuk salah satunya dirender "Pesan dihapus", bukan isinya.
   final Set<String> deletedIds;
+  /// Geser bubble ke KANAN → langsung balas pesan ini (ala WhatsApp).
+  /// Kosong = fitur swipe dimatikan (mis. monitor admin read-only).
+  final VoidCallback? onSwipeReply;
+  final bool selected;
+  final Map<String, int>? reactions;
+  final bool starred;
+  final VoidCallback? onTapSelect;
   const MessageBubble({
     super.key,
     required this.msg,
@@ -552,8 +594,13 @@ class MessageBubble extends StatelessWidget {
     this.isAdminView = false,
     this.isRoom = false,
     this.onLongPressMenu,
+    this.onSwipeReply,
     required this.link,
     this.deletedIds = const {},
+    this.selected = false,
+    this.reactions,
+    this.starred = false,
+    this.onTapSelect,
   });
 
   @override
@@ -570,7 +617,7 @@ class MessageBubble extends StatelessWidget {
           children: [
             Text(
               s.messageDeleted,
-              style: AppText.bodySmall.copyWith(
+              style: AppText.chatBodySmall.copyWith(
                 color: AppTheme.textSecondary,
                 fontStyle: FontStyle.italic,
               ),
@@ -584,16 +631,23 @@ class MessageBubble extends StatelessWidget {
       link: link,
       child: GestureDetector(
         onLongPressStart: (d) => onLongPressMenu?.call(d, msg, link),
+        onTap: onTapSelect,
         behavior: HitTestBehavior.opaque,
-        child: Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        child: SwipeToReply(
+          enabled: onSwipeReply != null && onTapSelect == null,
+          onReply: onSwipeReply,
+          child: Padding(
+          padding: EdgeInsets.only(bottom: reactions != null && reactions!.isNotEmpty ? 14 : 8),
           child: Row(
             mainAxisAlignment: isMe
                 ? MainAxisAlignment.end
                 : MainAxisAlignment.start,
             children: [
               Flexible(
-                child: Container(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
                   constraints: BoxConstraints(
                     maxWidth: MediaQuery.sizeOf(context).width * 0.8,
                   ),
@@ -617,6 +671,9 @@ class MessageBubble extends StatelessWidget {
                         offset: const Offset(0, 1.5),
                       ),
                     ],
+                    border: selected
+                        ? Border.all(color: AppTheme.primary, width: 2)
+                        : null,
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(14),
                       topRight: const Radius.circular(14),
@@ -629,6 +686,37 @@ class MessageBubble extends StatelessWidget {
                         ? CrossAxisAlignment.end
                         : CrossAxisAlignment.start,
                     children: [
+                      if (msg.isForwarded)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.forward,
+                                size: 14,
+                                color: AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                s.msgForwardedLabel,
+                                style: AppText.caption.copyWith(
+                                  color: AppTheme.textSecondary,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (starred)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Icon(
+                            Icons.star,
+                            size: 14,
+                            color: const Color(0xFFFFB300),
+                          ),
+                        ),
                       if (msg.repliedToText != null &&
                           msg.repliedToText!.isNotEmpty)
                         Builder(builder: (ctx) {
@@ -659,9 +747,7 @@ class MessageBubble extends StatelessWidget {
                               children: [
                                 Text(
                                   msg.repliedToSenderName ?? '',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  style: AppText.chatName,
                                 ),
                                 Text(
                                   targetDeleted
@@ -669,7 +755,7 @@ class MessageBubble extends StatelessWidget {
                                       : msg.repliedToText!,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
+                                  style: AppText.chatBodySmall.copyWith(
                                     fontStyle: targetDeleted
                                         ? FontStyle.italic
                                         : FontStyle.normal,
@@ -984,11 +1070,153 @@ class MessageBubble extends StatelessWidget {
                         ),
                     ],
                   ),
+                    ),
+                    if (reactions != null && reactions!.isNotEmpty)
+                      Positioned(
+                        bottom: -12,
+                        left: isMe ? null : 8,
+                        right: isMe ? 8 : null,
+                        child: _InlineReactionBadge(counts: reactions!),
+                      ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineReactionBadge extends StatelessWidget {
+  final Map<String, int> counts;
+  const _InlineReactionBadge({required this.counts});
+  @override
+  Widget build(BuildContext context) {
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final shown = entries.take(3).map((e) => e.key).join();
+    final total = entries.fold<int>(0, (p, e) => p + e.value);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(shown, style: TextStyle(fontSize: AppGlyph.sm)),
+          if (total > 1) ...[
+            const SizedBox(width: 3),
+            Text(
+              '$total',
+              style: AppText.micro.copyWith(color: AppTheme.textSecondary),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Geser bubble ke KANAN untuk balas (ala WhatsApp).
+/// - `enabled=false` → widget ini transparan (child dikembalikan apa adanya).
+/// - Tarik 0–72 px: bubble ikut bergeser, ikon reply muncul & menguat.
+/// - Lepas ≥48 px → `onReply()` (composer masuk mode balas + fokus).
+/// - Lepas < 48 px → kembali ke posisi semula (spring balik).
+/// Menggunakan `onHorizontalDrag*` (bukan `Dismissible`) supaya bubble
+/// tidak ikut terhapus/tergeser permanen dan bisa dipakai bersama
+/// long-press + tap biasa.
+class SwipeToReply extends StatefulWidget {
+  final Widget child;
+  final bool enabled;
+  final VoidCallback? onReply;
+  const SwipeToReply({
+    required this.child,
+    required this.enabled,
+    this.onReply,
+  });
+
+  @override
+  State<SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<SwipeToReply> {
+  /// Jarak geser maksimum — cukup terasa tapi tidak menutupi bubble.
+  static const double _maxDrag = 72;
+  /// Ambang lepas untuk memicu balas.
+  static const double _trigger = 48;
+
+  double _drag = 0;
+
+  void _onUpdate(DragUpdateDetails d) {
+    // Hanya ke kanan; ke kiri diabaikan (tidak ada aksi).
+    final next = (_drag + d.delta.dx).clamp(0.0, _maxDrag);
+    if (next != _drag) setState(() => _drag = next);
+  }
+
+  void _onEnd(DragEndDetails d) {
+    final shouldReply = _drag >= _trigger;
+    // Ambang 48 px tercapai → picu balas; selain itu kembali ke 0.
+    setState(() => _drag = 0);
+    if (shouldReply) widget.onReply?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    final t = (_drag / _maxDrag).clamp(0.0, 1.0);
+    return GestureDetector(
+      // Horizontal drag dipakai HANYA untuk swipe-reply; scroll vertikal
+      // list tetap menang karena gesture arena memisahkan arah.
+      onHorizontalDragUpdate: _onUpdate,
+      onHorizontalDragEnd: _onEnd,
+      onHorizontalDragCancel: () => setState(() => _drag = 0),
+      behavior: HitTestBehavior.opaque,
+      child: Stack(
+        children: [
+          // Ikon reply di kiri, muncul seiring tarikan.
+          Positioned(
+            left: 8,
+            top: 0,
+            bottom: 8,
+            child: Center(
+              child: Opacity(
+                opacity: t,
+                child: Transform.scale(
+                  scale: 0.7 + 0.3 * t,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.reply,
+                      size: 16,
+                      color: AppTheme.primary.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Bubble bergeser mengikuti tarikan.
+          Transform.translate(
+            offset: Offset(_drag, 0),
+            child: widget.child,
+          ),
+        ],
       ),
     );
   }
@@ -1044,7 +1272,7 @@ class _DeferredImageState extends State<DeferredImage> {
                   SizedBox(height: 4),
                   Text(
                     s.msgPhotoTapToLoad,
-                    style: AppText.caption.copyWith(
+                    style: AppText.chatCaption.copyWith(
                       color: AppTheme.textSecondary,
                     ),
                   ),
@@ -1165,7 +1393,7 @@ class _MessageImageState extends State<MessageImage> {
           alignment: Alignment.center,
           child: Text(
             s.msgPhotoExpired,
-            style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+            style: AppText.chatBodySmall.copyWith(color: AppTheme.textSecondary),
           ),
         ),
       );
@@ -1212,7 +1440,7 @@ class _MessageImageState extends State<MessageImage> {
               alignment: Alignment.center,
               child: Text(
                 s.msgPhotoExpired,
-                style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                style: AppText.chatBodySmall.copyWith(color: AppTheme.textSecondary),
               ),
             ),
           ),
@@ -1527,7 +1755,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                     const SizedBox(width: 3),
                     Text(
                       s.msgViewOnce,
-                      style: AppText.micro.copyWith(
+                      style: AppText.chatTime.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1649,7 +1877,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                           const SizedBox(width: 3),
                           Text(
                             s.msgViewOnce,
-                            style: AppText.micro.copyWith(
+                            style: AppText.chatTime.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1705,7 +1933,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                   const SizedBox(height: 10),
                   Text(
                     s.viewOnceTitle,
-                    style: AppText.bodySmall.copyWith(
+                    style: AppText.chatBodySmall.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1714,7 +1942,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                   Text(
                     s.viewOnceTap,
                     textAlign: TextAlign.center,
-                    style: AppText.caption.copyWith(
+                    style: AppText.chatCaption.copyWith(
                       color: Colors.white.withValues(alpha: 0.85),
                     ),
                   ),
@@ -1730,7 +1958,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                     ),
                     child: Text(
                       s.btnView,
-                      style: AppText.label.copyWith(
+                      style: AppText.chatName.copyWith(
                         color: const Color(0xFF1E88E5),
                         letterSpacing: 0,
                         fontWeight: FontWeight.w700,
@@ -1808,7 +2036,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                             valueListenable: _tick.countdown,
                             builder: (_, v, _) => Text(
                               '${v}s',
-                              style: AppText.label.copyWith(
+                              style: AppText.chatName.copyWith(
                                 color: Colors.white,
                                 letterSpacing: 0,
                                 fontWeight: FontWeight.w700,
@@ -2179,7 +2407,7 @@ class ViewOnceLockedCard extends StatelessWidget {
                   Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: AppText.label.copyWith(
+                    style: AppText.chatName.copyWith(
                       color: Colors.white,
                       letterSpacing: 0,
                       fontWeight: FontWeight.w700,
@@ -2189,7 +2417,7 @@ class ViewOnceLockedCard extends StatelessWidget {
                   Text(
                     hint,
                     textAlign: TextAlign.center,
-                    style: AppText.micro.copyWith(
+                    style: AppText.chatTime.copyWith(
                       color: Colors.white.withValues(alpha: 0.75),
                       fontWeight: FontWeight.w400,
                     ),

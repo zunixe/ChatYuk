@@ -21,13 +21,21 @@ jobs:
       - name: Guard migrasi (timestamp unik, DROP/ALTER selamat)
         run: bash scripts/check_migrations.sh --all
 
-       # Lapis 4: larangan typografi/string (AGENTS.md) — 0 fontSize liar.
-      - name: Guard tipografi (fontSize di luar config)
+      # Lapis 4: larangan tipografi (AGENTS.md) — hanya ANGKA literal yang
+      # dilarang; nilai dari token resmi (AppText/AppGlyph/StoryText) sah.
+      - name: Guard tipografi (fontSize numerik + height manual di luar config)
         run: |
-          hits=$(grep -rn 'fontSize:' lib --include='*.dart' --exclude-dir=config | wc -l)
-          echo "fontSize manual di luar lib/config: $hits"
+          hits=$(grep -rnE 'fontSize: *[0-9]' lib --include='*.dart' --exclude-dir=config | wc -l)
+          echo "fontSize numerik (angka literal) di luar lib/config: $hits"
           if [ "$hits" -ne 0 ]; then
-            grep -rn 'fontSize:' lib --include='*.dart' --exclude-dir=config | head -20
+            grep -rnE 'fontSize: *[0-9]' lib --include='*.dart' --exclude-dir=config | head -20
+            exit 1
+          fi
+
+          hits=$(grep -rn 'height: 1\.' lib --include='*.dart' --exclude-dir=config | wc -l)
+          echo "height manual (1.x) di luar lib/config: $hits"
+          if [ "$hits" -ne 0 ]; then
+            grep -rn 'height: 1\.' lib --include='*.dart' --exclude-dir=config | head -20
             exit 1
           fi
 

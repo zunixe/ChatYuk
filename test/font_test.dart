@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -100,6 +101,44 @@ void main() {
     test('default → null (tanpa override)', () {
       AppFonts.current = AppFonts.defaultKey;
       expect(AppFonts.themeFontOverride(), isNull);
+    });
+  });
+
+  group('font tipis baru (DM Sans, Figtree, Manrope)', () {
+    test('terdaftar di katalog dengan family Google Fonts', () {
+      expect(AppFonts.family('dm_sans'), 'DM Sans');
+      expect(AppFonts.family('figtree'), 'Figtree');
+      expect(AppFonts.family('manrope'), 'Manrope');
+    });
+
+    test('resolve/isDefault/isSystem: key utuh, bukan default', () {
+      for (final k in ['dm_sans', 'figtree', 'manrope']) {
+        expect(AppFonts.resolve(k), k);
+        expect(AppFonts.isDefault(k), isFalse);
+        expect(AppFonts.isSystem(k), isFalse);
+      }
+    });
+
+    test('label memuat nama font (dipakai baris radio picker)', () {
+      expect(AppFonts.label('dm_sans'), contains('DM Sans'));
+      expect(AppFonts.label('figtree'), contains('Figtree'));
+      expect(AppFonts.label('manrope'), contains('Manrope'));
+    });
+
+    test('lightWeight = w300 (cut tipis untuk pembanding)', () {
+      expect(AppFonts.lightWeight, FontWeight.w300);
+    });
+
+    test('previewStyle menghormati bobot Light (key system, tanpa fetch)', () {
+      final style = AppFonts.previewStyle(
+        AppFonts.systemKey,
+        size: 14,
+        weight: AppFonts.lightWeight,
+        color: const Color(0xFF000000),
+        fallback: 'Roboto',
+      );
+      expect(style.fontWeight, FontWeight.w300);
+      expect(style.fontSize, 14);
     });
   });
 }

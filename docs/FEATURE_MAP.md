@@ -65,14 +65,87 @@ sebagai dummy.
 
 | Lapis | Lokasi |
 |---|---|
-| UI | `lib/screens/private_chat_screen.dart`, `room_chat_screen.dart`, `chats_screen.dart` |
+| UI | `lib/screens/private_chat_screen.dart`, `private_chats_screen.dart`, `room_chat_screen.dart`, `chats_screen.dart`, `online_users_screen.dart` |
+| Widget bubble | `lib/widgets/private_chat_message.dart` — `MessageBubble`, `SwipeToReply` |
 | Provider | `lib/providers/chat_provider.dart`, `room_provider.dart` |
-| Service | `lib/services/chat_service.dart`, `room_service.dart`, `message_store.dart`, `private_room_service.dart` |
-| SQL inti | `create_private_room()`, `join_private_room()`, `extend_private_room()`, `deduct_chat_point()`, `new_chat_bonus()`, `notify_private_message()`, `handle_new_private_message()` |
+| Service | `lib/services/chat_service.dart`, `chat_stream_session.dart`, `message_cache.dart`, `room_service.dart`, `message_store.dart`, `private_room_service.dart` |
+| SQL inti | `create_private_room()`, `join_private_room()`, `extend_private_room()`, `deduct_chat_point()`, `new_chat_bonus()`, `notify_private_message()`, `handle_new_private_message()`, `mark_chat_read()` |
 | Test | `test/chat_provider_test.dart`, `test/message_store_test.dart`, `supabase/tests/chat_test.sql` |
 
 **Invariant:** titik poin terpotong 1× per pesan (idempoten); bonus chat baru
 hanya 1× per pasangan; notif hanya 1× per pesan (dedup).
+
+### 3a. Buka chat instan + centang-2 (anti-lag) — RAWAN REGRESI
+
+Tujuan: buka private chat harus terasa seperti WhatsApp — pesan & centang-2
+sudah ada sejak frame pertama, tanpa layar kosong atau centang yang "nyusul".
+
+| Lapis | Lokasi |
+|---|---|
+| Transisi route | `private_chats_screen.dart:626` (tap list), `online_users_screen.dart:907`, `story_viewer_screen.dart:718` — `PageRouteBuilder` 150 ms slide |
+| Prime centang-2 | `private_chat_screen.dart` — `_primeReadFromCache()` (sinkron), `_loadCachedRead()` (fallback kv), `_persistRead()` |
+| Stream pesan | `chat_stream_session.dart` — `replay onListen`, emit memori → SQLite → server (merge) |
+| Pemanasan cache | `private_chats_screen.dart` — `_warmTopChats()` (6 chat teratas) → `ChatService.prefetchPrivateChat()` → `MessageCache.preloadMessages()` |
+| Snapshot list | `chat_service.dart` — `_privateChatsLast`, `_applyChatEvent()`, `_applyLocalRead()`, `lastPrivateChatsSnapshot()` |
+
+**Aturan yang TIDAK boleh dilanggar (kalau dilanggar, lag balik lagi):**
+
+1. **Read receipt monoton maju.** `_otherLastRead` hanya boleh diganti nilai
+   yang LEBIH BARU. Nilai `null`/lebih tua dari stream/disk tidak boleh
+   menurunkan status → kalau dilanggar, centang-2 muncul belakangan/kedip.
+2. **Prime sinkron sebelum frame pertama.** `_primeReadFromCache()` harus baca
+   DUA sumber memori (snapshot live `_privateChatsLast` + `peekRawList`) dan
+   ambil yang terbaru. Jangan tambahkan `await` di jalur ini.
+3. **Broadcast stream wajib replay.** `ChatStreamSession` membuat stream di
+   `initState` sebelum `StreamBuilder` subscribe; tanpa `controller.onListen`
+   yang meng-emit ulang `_current`, emit memori HILANG → tampil kosong dulu.
+4. **`initialData` StreamBuilder = `MessageCache.peekMessages()`** (sinkron),
+   bukan `const []`. Jangan ganti ke future/async.
+5. **Subscription non-kritis ditunda ke post-frame** (`_subscribeStatus`,
+   `_subscribeTyping`, `_chatInfoSub`, fetch profil lawan, `markAsRead`).
+   Jangan dikembalikan ke `initState` langsung — frame pertama jadi berat.
+6. **Toast bonus sekali per buka chat** (`_bonusToastScheduled`). Jangan pakai
+   `Future.microtask` mentah di dalam `build()` — dulu ke-dobel tiap rebuild.
+7. **Bubble typing = item list paling bawah** (`itemCount + 1`, index 0 saat
+   `reverse: true`). Kalau ditaruh di luar `ListView`, bubble tidak ikut scroll.
+8. **Transisi route tetap ada** (150 ms `SlideTransition`), jangan di-nol-kan
+   (terasa "patah") dan jangan dinaikkan ke 300 ms+ (terasa lag).
+
+**Regresi yang pernah terjadi (jangan diulang):**
+- Transisi 320 ms → terasa jeda saat buka chat.
+- `_primeReadFromCache` hanya baca `peekRawList` yang bisa basi → centang-2 telat.
+- Handler stream menimpa `_otherLastRead` dengan nilai apa pun (termasuk null)
+  → centang-2 balik jadi centang-1 lalu muncul lagi.
+- Batas `isBefore` (ketat) → pesan yang timestamp-nya persis sama dengan waktu
+  baca tidak ikut centang-2. Sekarang pakai `!isAfter` (`<=`).
+- Prefetch saat tap jalan paralel dengan build screen → frame pertama miss cache.
+- Bubble typing di luar `ListView` → tidak ikut scroll (keluhan user).
+
+### 3b. Swipe-to-reply (geser kanan = balas) — private & grup
+
+| Lapis | Lokasi |
+|---|---|
+| Widget | `lib/widgets/private_chat_message.dart` — `SwipeToReply` (publik, dipakai 2 screen) |
+| Private | `private_chat_screen.dart` — `onSwipeReply: isMe \|\| msg.isDeleted ? null : () => _replyMessage(msg)` |
+| Grup/room | `room_chat_screen.dart` — `SwipeToReply(enabled: m.senderId != auth.uid && !m.isDeleted, ...)` |
+
+**Cara kerja:** `onHorizontalDragUpdate` menggeser bubble 0–72 px ke kanan,
+ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_replyMessage`
+(composer masuk mode balas + fokus). Lepas <48 px → spring balik ke 0.
+
+**Aturan yang tidak boleh dilanggar:**
+1. **Pesan sendiri (`isMe`) TIDAK boleh di-swipe-reply.** Menggeser ke kanan dari
+   tepi kiri adalah gesture swipe-back sistem di iOS; kalau pesan sendiri juga
+   aktif, user tidak bisa keluar chat. Semua screen wajib mengecualikan `isMe`.
+2. **Pesan terhapus tidak di-swipe** (`msg.isDeleted` → null).
+3. **Pakai `onHorizontalDrag*`, bukan `Dismissible`** — `Dismissible` menggeser
+   permanen & berkonflik dengan long-press action bar.
+4. **`enabled=false` harus mengembalikan `child` apa adanya** (tanpa `Stack`),
+   supaya screen read-only (monitor admin) tidak menanggung biaya layout.
+
+**Catatan regresi:**
+- `SwipeToReply` harus PUBLIK (tanpa underscore). Sempat ditulis `_SwipeToReply`
+  (privat) → tidak bisa dipakai dari `room_chat_screen.dart`.
 
 ---
 
@@ -160,6 +233,8 @@ hanya 1× per pasangan; notif hanya 1× per pesan (dedup).
 | `ai_internal_config.callback_secret` | ai_reply_post, semua AI |
 | `profiles.points` | poin, gift, chat bonus, leaderboard, admin |
 | `private_messages.*` | chat, notif, AI enqueue, admin monitor |
+| `private_chats.last_read_at` (map uid→ts) | centang-2 di chat, unread badge, mark_chat_read, admin monitor |
+| `private_chats.last_message_at` | urutan list chat, pinned sort, cache warm |
 
 ---
 

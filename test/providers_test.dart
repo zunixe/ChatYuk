@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/theme.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/nav_provider.dart';
 import 'package:chatyuk/providers/theme_provider.dart';
+
+import 'test_helper.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +82,11 @@ void main() {
   });
 
   group('ThemeProvider', () {
+    tearDown(() {
+      resetFontForTest();
+      AppTheme.isDark = true;
+    });
+
     test('default gelap, setDark persist + themeMode', () async {
       SharedPreferences.setMockInitialValues({});
       final tp = ThemeProvider();
@@ -107,6 +115,50 @@ void main() {
       expect(AppTheme.isDark, isFalse);
       tp.dispose();
       AppTheme.isDark = true;
+    });
+
+    test('fontKey mengikuti AppFonts.current (live, bukan snapshot)', () {
+      AppFonts.setLocal('inter');
+      final tp = ThemeProvider();
+      expect(tp.fontKey, 'inter');
+      AppFonts.setLocal(AppFonts.defaultKey);
+      expect(tp.fontKey, AppFonts.defaultKey);
+      tp.dispose();
+    });
+
+    test('init memuat font tersimpan (dependensi rebuild MaterialApp)', () async {
+      SharedPreferences.setMockInitialValues({
+        'app_theme_dark': false,
+        'app_font_family': 'lora',
+      });
+      AppFonts.setLocal(AppFonts.defaultKey);
+      final tp = ThemeProvider();
+      await tp.init();
+      expect(AppFonts.current, 'lora');
+      expect(tp.fontKey, 'lora');
+      expect(tp.isDark, isFalse);
+      tp.dispose();
+    });
+
+    test('init idempoten: panggilan kedua tak menimpa perubahan runtime',
+        () async {
+      SharedPreferences.setMockInitialValues({'app_font_family': 'inter'});
+      final tp = ThemeProvider();
+      await tp.init();
+      expect(AppFonts.current, 'inter');
+      // Admin ganti font realtime → perubahan tak boleh di-revert init ulang.
+      AppFonts.setLocal('montserrat');
+      await tp.init();
+      expect(AppFonts.current, 'montserrat');
+      tp.dispose();
+    });
+
+    test('font tak dikenal di prefs → fallback default', () async {
+      SharedPreferences.setMockInitialValues({'app_font_family': 'ngawur'});
+      final tp = ThemeProvider();
+      await tp.init();
+      expect(tp.fontKey, AppFonts.defaultKey);
+      tp.dispose();
     });
   });
 }
