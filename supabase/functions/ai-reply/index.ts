@@ -1549,7 +1549,10 @@ Deno.serve(async (req: Request) => {
     // Sender dummy + tombol off → dummy tidak dibalas. Wajib di sini juga:
     // invoke langsung (admin/manual/recovery) mem-bypass trigger. Cek
     // SEBELUM debounce supaya isolate tidak tertahan 120s sia-sia.
-    if (senderDummyRow != null && !proactive) {
+    // TIDAK boleh dikecualikan oleh `proactive`: jalur proactive (sapa duluan)
+    // juga bisa dipicu saat lawan ternyata dummy — kalau `!proactive` dipasang,
+    // dummy↔dummy tetap jalan walau tombol AI↔AI sudah OFF.
+    if (senderDummyRow != null) {
       let aiAiOn = true;
       try {
         const { data: aiAiSet } = await admin
@@ -1892,6 +1895,30 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, skipped: 'friday_prayer' });
     }
 
+    // ── INVISIBLE = DIAM TOTAL ──
+    // Dummy yang diset 'invisible' oleh admin sengaja disembunyikan dari
+    // daftar online (user lain melihatnya offline). Kalau dia tetap membalas,
+    // user melihat kejanggalan "kelihatan offline tapi responsif" — itu
+    // membocorkan bahwa akun tersebut sebenarnya aktif, dan fitur invisible
+    // belum ada di sisi user sehingga tidak ada penjelasan yang masuk akal
+    // bagi user. Karena itu: invisible = tidak membalas sama sekali.
+    // PENGECUALIAN: dummy always_reply (expert/CS) yang memang harus selalu
+    // melayani tetap dibalas.
+    if (!alwaysReply) {
+      try {
+        const { data: presInv } = await admin
+          .from('profiles')
+          .select('status')
+          .eq('id', dummyUid)
+          .maybeSingle();
+        if (presInv?.status === 'invisible') {
+          return json({ ok: false, skipped: 'invisible_silent' });
+        }
+      } catch (e) {
+        console.log(`[ai-reply] invisible-check GAGAL chat=${chatId}: ${e}`);
+      }
+    }
+
     // Anti-race claim: dua invokasi bersamaan (pg_net retry) hanya satu
     // yang boleh lanjut — claim unik per trigger message (atomik).
     if (triggerMsgId != null) {
@@ -1928,6 +1955,10 @@ Deno.serve(async (req: Request) => {
     // ngambek / tidur — balasannya di-skip tapi status online-nya nempel
     // selamanya (heartbeat ikut menyegarkan, tick tidak menyentuh karena
     // ai_enabled=false). Offline → online; online/idle → last_seen segar.
+    //
+    // INVISIBLE: status TIDAK disentuh di sini (biar tetap tersembunyi &
+    // tidak muncul di daftar online). Balasan untuk dummy invisible sudah
+    // dihentikan lebih awal oleh gate `invisible_silent`.
     {
       const { data: pres } = await admin
         .from('profiles')
