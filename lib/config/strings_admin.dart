@@ -686,6 +686,14 @@ extension SAdminX on S {
       ? 'Teks isi contoh 14 — tampilan chat, tombol, dan label ikut font ini.'
       : 'Sample body 14 — chat text, buttons, and labels follow this font.';
 
+  String get adminFontPreviewLight => isId
+      ? 'Contoh Light 300 — begini rasa teks tipis di chat.'
+      : 'Light 300 sample — this is how thin text reads in chat.';
+
+  String get adminFontSampleShort => isId
+      ? 'Halo, apa kabar?'
+      : 'Hello, how are you?';
+
   String get adminFontSaved =>
       isId ? 'Font aplikasi diperbarui' : 'App font updated';
 

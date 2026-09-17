@@ -27,6 +27,15 @@ void main() {
         id.msgServerError,
         id.noPrivateChats,
         id.emptyTimeline,
+        // Alur hapus akun (syarat Google Play) + status koneksi.
+        id.btnDeleteAccount,
+        id.confirmDeleteAccountBody,
+        id.labelDeleteAccountConfirm,
+        id.errDeleteAccount,
+        id.errDeleteAccountForbidden,
+        id.msgDeleteAccountSuccess,
+        id.confirmLogoutBody,
+        id.offlineBanner,
       ];
       final gettersEn = <String>[
         en.navOnline,
@@ -43,6 +52,14 @@ void main() {
         en.msgServerError,
         en.noPrivateChats,
         en.emptyTimeline,
+        en.btnDeleteAccount,
+        en.confirmDeleteAccountBody,
+        en.labelDeleteAccountConfirm,
+        en.errDeleteAccount,
+        en.errDeleteAccountForbidden,
+        en.msgDeleteAccountSuccess,
+        en.confirmLogoutBody,
+        en.offlineBanner,
       ];
       for (final v in [...getters, ...gettersEn]) {
         expect(v.trim(), isNotEmpty);

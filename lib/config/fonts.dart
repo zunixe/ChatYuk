@@ -41,6 +41,23 @@ class AppFonts {
       label: 'Inter — sans-serif modern',
       family: 'Inter',
     ),
+    // Klaster "light/tipis" — disengaja berdampingan dengan Inter supaya
+    // gampang dibandingkan di picker admin (sampel Light ada di tiap baris).
+    'dm_sans': AppFontOption(
+      key: 'dm_sans',
+      label: 'DM Sans — light, rounded',
+      family: 'DM Sans',
+    ),
+    'figtree': AppFontOption(
+      key: 'figtree',
+      label: 'Figtree — light, clean',
+      family: 'Figtree',
+    ),
+    'manrope': AppFontOption(
+      key: 'manrope',
+      label: 'Manrope — light, geometric',
+      family: 'Manrope',
+    ),
     'poppins': AppFontOption(
       key: 'poppins',
       label: 'Poppins',
@@ -124,6 +141,10 @@ class AppFonts {
     if (fam == null) return null;
     return (family: fam, fallback: st.fontFamilyFallback);
   }
+
+  /// Bobot "tipis" untuk contoh teks di picker font — dipakai picker DAN
+  /// unit test supaya cut Light tiap font bisa dibandingkan berdampingan.
+  static const FontWeight lightWeight = FontWeight.w300;
 
   /// Style preview untuk picker font admin: font the underlying providerFonts
   /// terpilih, font sistem (polos) bila System, atau fallback bila default.

@@ -141,9 +141,9 @@ class ChatStreamSession {
     // Kolom tanpa image_data — foto diambil terpisah (PhotoCache / download
     // lazy) supaya buka chat tetap cepat walau ada ratusan foto.
     const privateCols =
-        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms';
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,is_forwarded';
     const roomCols =
-        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,replied_to_id,replied_to_text,replied_to_sender_name';
+        'id,sender_id,sender_name,sender_gender,text,type,is_registered,created_at,edited,is_deleted,image_path,voice_path,duration_ms,replied_to_id,replied_to_text,replied_to_sender_name,is_forwarded';
     const replyCols = 'replied_to_id,replied_to_text,replied_to_sender_name';
     final cols = isPrivate ? '$privateCols,$replyCols' : roomCols;
 
@@ -741,6 +741,15 @@ class ChatStreamSession {
         dlog('[chat pagination] fetchImage $messageId error: $e');
       }
     }
+
+    // Replay: broadcast tidak menyimpan emit terakhir — emit memori yang
+    // terjadi sebelum StreamBuilder subscribe akan hilang. Kirim ulang
+    // _current saat listener pertama datang supaya frame pertama instan.
+    controller.onListen = () {
+      if (_current.isNotEmpty && !controller.isClosed) {
+        controller.add(List.unmodifiable(_current));
+      }
+    };
 
     controller.onCancel = () {
       pollTimer.cancel();

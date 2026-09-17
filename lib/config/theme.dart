@@ -84,55 +84,88 @@ class AppText {
         color: color,
       );
     }
-    // Font System: biarkan berat natural font perangkat (fontWeight null =
-    // regular asli) supaya ramping seperti WhatsApp. Memaksa weight membuat
-    // teks terlihat tebal/sintetis.
-    final w = _systemWeight(weight);
+    // Ramping ala WA: bobot diteruskan apa adanya supaya w300 benar-benar
+    // tipis (Roboto Light). Pemetaan null dulu membuat w300 jatuh ke regular
+    // sehingga list pesan tetap terlihat tebal seperti Roboto.
     return TextStyle(
       fontSize: size,
-      fontWeight: w,
+      fontWeight: weight,
       height: height,
       letterSpacing: letterSpacing,
       color: color,
     );
   }
 
-  /// Weight efektif untuk font System.
+  /// Token KHUSUS chat: ramping ala WhatsApp walau global = Default.
   ///
-  /// Font sistem (MiSans di HyperOS) punya berat natural REGULAR saat
-  /// fontWeight dibiarkan null — persis seperti WhatsApp. Memaksa weight
-  /// (w100..w400) justru membuat sintesis bold/varian aneh. Jadi saat mode
-  /// System kita TIDAK memaksa weight untuk teks body (w400/w500/w300);
-  /// hanya heading tebal (w600+) yang tetap dipetakan agar tidak terlalu
-  /// berat.
+  /// Roboto Regular (w400) bawaan terlihat lebih tebal dari huruf WA. Karena
+  /// itu teks percakapan memakai bobot LIGHT (w300/w500) yang dirender dari
+  /// font bawaan tanpa fetch jaringan — aman untuk unit test. Bobot
+  /// diteruskan apa adanya (TANPA pemetaan null seperti _plain) supaya w300
+  /// benar-benar tipis, bukan jatuh ke regular.
+  static TextStyle _chatPlain(
+    double size,
+    FontWeight weight, {
+    required double height,
+    required Color color,
+    double? letterSpacing,
+  }) {
+    final family = AppFonts.family();
+    if (family != null) {
+      return GoogleFonts.getFont(
+        family,
+        fontSize: size,
+        fontWeight: weight,
+        height: height,
+        letterSpacing: letterSpacing,
+        color: color,
+      );
+    }
+    return TextStyle(
+      fontSize: size,
+      fontWeight: weight,
+      height: height,
+      letterSpacing: letterSpacing,
+      color: color,
+    );
+  }
+
+  /// Weight efektif untuk font bawaan (default & system).
+  ///
+  /// WhatsApp memakai berat natural REGULAR font perangkat (MiSans di
+  /// HyperOS) — fontWeight null. Memaksa weight (w100..w500) justru membuat
+  /// sintesis tebal sehingga ChatYuk selalu terlihat lebih tebal dari WA
+  /// (temuan capture HP). Jadi untuk teks body (w500 ke bawah) kita TIDAK
+  /// memaksa weight — biarkan natural (null = regular asli, ramping seperti
+  /// WA); hanya heading tebal (w600+) yang dipetakan ke w500 agar tidak
+  /// kelebihan bobot.
   static FontWeight? _systemWeight(FontWeight w) {
-    if (!AppFonts.isSystem()) return w;
-    // Body & teks sedang → biarkan natural (null = regular sistem).
+    // Body & teks sedang → biarkan natural (null = regular, ramping ala WA).
     if (w.index <= FontWeight.w500.index) return null;
     // Judul/tombol tebal → turunkan satu tingkat agar tidak kelebihan bobot.
     return FontWeight.w500;
   }
 
-  // 10 — timestamp, badge unread, counter overlay
+  // 10 — timestamp list, badge unread, counter overlay (ramping ala WA)
   static TextStyle get micro =>
-      _plain(10, FontWeight.w500, height: 1.2, color: AppTheme.textPrimary);
+      _plain(10, FontWeight.w400, height: 1.2, color: AppTheme.textPrimary);
 
-  // 11 — label di atas nilai, helper text, chip status
+  // 11 — label di atas nilai, helper text, chip status (ramping ala WA)
   static TextStyle get caption =>
-      _plain(11, FontWeight.w400, height: 1.3, color: AppTheme.textPrimary);
+      _plain(11, FontWeight.w300, height: 1.3, color: AppTheme.textPrimary);
 
-  // 12 w600 — section label, tab, chip/badge
+  // 12 w500 — section label, tab, chip/badge (ramping ala WA)
   static TextStyle get label => _plain(
     12,
-    FontWeight.w600,
+    FontWeight.w500,
     height: 1.2,
     letterSpacing: 0.3,
     color: AppTheme.textPrimary,
   );
 
-  // 12 w400 — subtitle list, deskripsi, teks sekunder
+  // 12 w300 — subtitle list, preview pesan, deskripsi (ramping ala WA)
   static TextStyle get bodySmall =>
-      _plain(12, FontWeight.w400, height: 1.35, color: AppTheme.textPrimary);
+      _plain(12, FontWeight.w300, height: 1.35, color: AppTheme.textPrimary);
 
   // 12 w400 monospace — isi blok kode di bubble chat.
   // Sengaja TIDAK ikut font global supaya kode tetap rapi.
@@ -145,47 +178,91 @@ class AppText {
     color: AppTheme.textPrimary,
   );
 
-  // 14 w400 — bubble chat, isi dialog, composer, paragraf
+  // 14 w300 — isi dialog, composer, paragraf (ramping ala WA)
   static TextStyle get body =>
-      _plain(14, FontWeight.w400, height: 1.35, color: AppTheme.textPrimary);
+      _plain(14, FontWeight.w300, height: 1.35, color: AppTheme.textPrimary);
 
   // ── Teks chat yang ikut slider ukuran font (setelan user) ──
-  // Faktor dari ChatTextScale.current (0.85–1.4). Bubble isi, nama pengirim,
-  // dan jam pesan diskalakan supaya proporsional.
-  static TextStyle get chatBody => _plain(
-    ChatTextScale.scale(14),
-    FontWeight.w400,
-    height: 1.35,
+  // Slider 14–18pt per 0.5 (ChatTextScale). Basis 16 = WhatsApp.
+  // bubble 16pt ramping (w300 tipis), timestamp 11pt.
+  // Semua teks di dalam percakapan diskalakan supaya proporsional: isi
+  // bubble, nama pengirim, jam pesan, kutipan balasan, blok kode, dan kolom
+  // ketik pesan. Memakai _chatPlain (bukan _plain) supaya tetap ramping
+  // walau global = Default (Roboto tebal).
+  static TextStyle get chatBody => _chatPlain(
+    ChatTextScale.scale(16),
+    FontWeight.w300,
+    height: 1.4,
     color: AppTheme.textPrimary,
   );
 
   /// chatBody pada ukuran pt eksplisit — dipakai PREVIEW slider ukuran font
   /// agar contoh persis mengikuti nilai slider (bukan `current` tersimpan).
-  static TextStyle chatBodyAt(double pt) => _plain(
+  static TextStyle chatBodyAt(double pt) => _chatPlain(
     pt,
-    FontWeight.w400,
-    height: 1.35,
+    FontWeight.w300,
+    height: 1.4,
     color: AppTheme.textPrimary,
   );
 
-  static TextStyle get chatName => _plain(
-    ChatTextScale.scale(12),
-    FontWeight.w600,
+  static TextStyle get chatName => _chatPlain(
+    ChatTextScale.scale(13),
+    FontWeight.w500,
     height: 1.2,
     letterSpacing: 0.2,
     color: AppTheme.textPrimary,
   );
 
-  static TextStyle get chatTime => _plain(
-    ChatTextScale.scale(10),
-    FontWeight.w500,
+  static TextStyle get chatTime => _chatPlain(
+    ChatTextScale.scale(11),
+    FontWeight.w300,
     height: 1.2,
     color: AppTheme.textPrimary,
   );
 
-  // 14 w600 — judul list tile, label setting, nilai info
+  /// 16 w500 × skala — judul kecil di dalam percakapan (judul kartu link
+  /// preview di bubble & di atas kolom ketik).
+  static TextStyle get chatBodyStrong => _chatPlain(
+    ChatTextScale.scale(16),
+    FontWeight.w500,
+    height: 1.35,
+    color: AppTheme.textPrimary,
+  );
+
+  /// 14 w300 × skala — teks sekunder DI DALAM percakapan: kutipan balasan,
+  /// placeholder "pesan dihapus", "foto kedaluwarsa", status merekam.
+  /// Wajib ikut slider, kalau tidak kutipan balasan tampak terpisah dari
+  /// bubble yang membesarkan diri.
+  static TextStyle get chatBodySmall => _chatPlain(
+    ChatTextScale.scale(14),
+    FontWeight.w300,
+    height: 1.35,
+    color: AppTheme.textPrimary,
+  );
+
+  /// 12 w300 × skala — keterangan kecil di dalam percakapan (label bahasa
+  /// blok kode, hint view-once, "ketuk untuk memuat foto").
+  static TextStyle get chatCaption => _chatPlain(
+    ChatTextScale.scale(12),
+    FontWeight.w300,
+    height: 1.35,
+    color: AppTheme.textPrimary,
+  );
+
+  /// 14 × skala monospace — isi blok kode di bubble chat. Ikut slider
+  /// supaya kode tidak "menyusut" saat teks chat diperbesar.
+  static TextStyle get chatCode => TextStyle(
+    fontSize: ChatTextScale.scale(14),
+    fontWeight: FontWeight.w400,
+    height: 1.35,
+    fontFamily: 'monospace',
+    fontFamilyFallback: const ['Courier', 'Menlo', 'monospace'],
+    color: AppTheme.textPrimary,
+  );
+
+  // 14 w500 — nama di list, judul tile, label setting (ramping ala WA)
   static TextStyle get bodyStrong =>
-      _plain(14, FontWeight.w600, height: 1.35, color: AppTheme.textPrimary);
+      _plain(14, FontWeight.w500, height: 1.35, color: AppTheme.textPrimary);
 
   // 16 w700 — label tombol CTA (warna ikut foregroundColor tombol)
   // Heading & CTA memakai Poppins (brand) saat default; saat admin memilih
@@ -210,38 +287,55 @@ class AppText {
 }
 
 /// Skala ukuran teks chat — diatur user lewat slider di Pengaturan.
-/// Multiplier diterapkan ke token AppText.chatBody/chatName/chatTime saja
-/// (tidak mengubah tipografi halaman lain).
+/// Multiplier diterapkan ke token `AppText.chat*` (chatBody, chatName,
+/// chatTime, chatBodySmall, chatCaption, chatCode) saja — yaitu SEMUA teks
+/// di dalam percakapan (private, room, grup) + kolom ketik pesan. Tipografi
+/// halaman lain (AppBar, dialog, daftar, tombol) tidak ikut berubah.
 class ChatTextScale {
   ChatTextScale._();
 
   static const String prefKey = 'chat_text_scale';
 
-  /// Batas slider.
-  static const double min = 0.85;
-  static const double max = 1.40;
+  /// Batas slider: 14pt (min) – 18pt (max), tick per 0.5pt.
+  /// Dalam multiplier (basis 16): 0.875 – 1.125.
+  static const double min = 0.875;
+  static const double max = 1.125;
 
-  /// Langkah diskret slider (7 tingkat) agar nilai rapi & mudah diulang.
-  static const int steps = 6;
+  /// Langkah diskret slider (9 tick: 14, 14.5, …, 18).
+  static const int steps = 8;
 
   /// Ukuran font chat (pt) pada multiplier 1.0 — dipakai menampilkan angka
-  /// di slider (lebih intuitif daripada persen).
-  static const double basePt = 14;
+  /// di slider (lebih intuitif daripada persen). 16 = basis WhatsApp.
+  static const double basePt = 16;
 
-  /// Nilai aktif (1.0 = normal).
-  static double current = 1.0;
+  /// Default install baru: 14.5pt (tick slider ke-2, mult 0.90625) — lebih
+  /// ramping ala WA. User lama yang sudah punya simpanan tidak terpengaruh.
+  static const double defaultMult = 0.90625;
+
+  /// Nilai aktif (defaultMult = bawaan install baru).
+  static double current = defaultMult;
 
   /// Notifier untuk rebuild subtree chat saat nilai berubah (tanpa
   /// me-restart navigasi). Di-listen di app.dart.
-  static final ValueNotifier<double> notifier = ValueNotifier<double>(1.0);
+  static final ValueNotifier<double> notifier =
+      ValueNotifier<double>(defaultMult);
 
-  /// Ukuran font efektif (pt) untuk nilai saat ini — dibulatkan ke integer
-  /// agar label slider rapi & bernilai bulat (mis. 12, 14, 16, 19).
-  static int get pt => (basePt * current.clamp(min, max)).round();
+  /// Ukuran font efektif (pt) untuk nilai saat ini — kelipatan 0.5
+  /// (mis. 14, 14.5, 16, 18).
+  static double get pt => ptOf(current);
 
-  /// Ukuran (pt) pada multiplier tertentu.
-  static int ptOf(double mult) =>
-      (basePt * mult.clamp(min, max)).round();
+  /// Ukuran (pt) pada multiplier tertentu — dibulatkan ke 0.5 terdekat.
+  static double ptOf(double mult) =>
+      ((basePt * mult.clamp(min, max)) * 2).round() / 2;
+
+  /// Label ukuran untuk slider (mis. "16", "14.5" — tanpa ".0").
+  static String labelOf(double mult) {
+    final v = ptOf(mult);
+    return v % 1 == 0 ? '${v.toInt()}' : '$v';
+  }
+
+  /// Label ukuran saat ini.
+  static String get ptLabel => labelOf(current);
 
   /// Index step slider saat ini (0..steps).
   static int get stepIndex => (indexOf(current)).round();
@@ -262,10 +356,11 @@ class ChatTextScale {
   static double scale(double base) =>
       base * current.clamp(min, max);
 
-  /// Normalisasi nilai (bulatkan, clamp).
+  /// Normalisasi nilai (bulatkan, clamp). Presisi 5 desimal agar tick
+  /// 0.5pt (kelipatan 0.03125) tidak rusak pembulatan.
   static double resolve(double? v) {
-    if (v == null || v.isNaN || v.isInfinite) return 1.0;
-    return double.parse(v.clamp(min, max).toStringAsFixed(2));
+    if (v == null || v.isNaN || v.isInfinite) return defaultMult;
+    return double.parse(v.clamp(min, max).toStringAsFixed(5));
   }
 
   /// Inisialisasi sinkron dari SharedPreferences (sebelum runApp).

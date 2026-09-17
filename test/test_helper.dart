@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/services/media_disk_cache.dart';
+import 'package:chatyuk/services/post_photo_cache.dart';
 
 /// Setup bersama untuk test yang menyentuh Supabase.instance / plugin.
 /// Supabase di-init dengan URL+key dummy (tidak ada network yang dipakai
@@ -47,4 +49,19 @@ void mockPathProvider() {
 Future<void> prewarmMediaForTest() async {
   mockPathProvider();
   await MediaDiskCache.instance.prewarm();
+  await warmPostPhotoCacheForTest();
+}
+
+/// Siapkan folder cache foto post (`post_photos_v2`) di direktori temp.
+/// Dipakai tes yang menyentuh PostPhotoCache supaya tidak menulis ke
+/// direktori dokumen asli HP/desktop.
+Future<void> warmPostPhotoCacheForTest() async {
+  mockPathProvider();
+  await PostPhotoCache.instance.cleanOldPhotos();
+}
+
+/// Reset font global antar test — `AppFonts.current` static dipakai lintas
+/// test dalam satu isolate, jadi harus dikembalikan ke default di tearDown.
+void resetFontForTest() {
+  AppFonts.current = AppFonts.defaultKey;
 }

@@ -1439,6 +1439,21 @@ class S {
   String get badgeFriend => isId ? 'Teman' : 'Friend';
   String get badgeSubscriber => isId ? 'Subscriber' : 'Subscriber';
   String get noResults => isId ? 'Tidak ada hasil ditemukan' : 'No results found';
+
+  // ── Long-press pesan ala WA (reaksi + toolbar seleksi) ──
+  String get menuForward => isId ? 'Teruskan' : 'Forward';
+  String get menuStar => isId ? 'Bintang' : 'Star';
+  String get menuUnstar => isId ? 'Hapus bintang' : 'Unstar';
+  String get menuCopy => isId ? 'Salin' : 'Copy';
+  String get msgMessageCopied => isId ? 'Pesan disalin' : 'Message copied';
+  String get msgStarred => isId ? 'Pesan dibintangi' : 'Message starred';
+  String get msgUnstarred => isId ? 'Bintang dihapus' : 'Star removed';
+  String get msgForwarded => isId ? 'Pesan diteruskan' : 'Message forwarded';
+  String get forwardTitle => isId ? 'Teruskan ke' : 'Forward to';
+  String get forwardSearchHint => isId ? 'Cari chat...' : 'Search chats...';
+  String get msgForwardedLabel => isId ? 'Diteruskan' : 'Forwarded';
+  String get msgReactionFailed =>
+      isId ? 'Gagal memberi reaksi' : 'Failed to react';
 }
 
 const _privacyId = <LegalSection>[

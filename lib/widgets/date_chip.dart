@@ -46,7 +46,7 @@ class DateChip extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: AppText.label.copyWith(
+          style: AppText.chatName.copyWith(
             color: Colors.white,
             letterSpacing: 0,
             fontWeight: FontWeight.w600,

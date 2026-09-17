@@ -713,8 +713,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 320),
-          reverseTransitionDuration: const Duration(milliseconds: 260),
+          transitionDuration: const Duration(milliseconds: 150),
+          reverseTransitionDuration: const Duration(milliseconds: 120),
           pageBuilder: (_, __, ___) => PrivateChatScreen(
             chatId: chatId,
             otherName: _item.authorName,

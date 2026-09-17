@@ -298,6 +298,16 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     super.dispose();
   }
 
+  /// Hangatkan cache pesan chat teratas di background — tap chat yang
+  /// sudah panas langsung emit dari memori (ala WhatsApp), tanpa tunggu SQLite.
+  void _warmTopChats(List<PrivateChatInfo> chats) {
+    if (chats.isEmpty) return;
+    final svc = ChatService();
+    for (final c in chats.take(6)) {
+      svc.prefetchPrivateChat(c.chatId);
+    }
+  }
+
   bool _pageDebounce = false;
 
   void _onScroll() {
@@ -431,6 +441,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 if (_lastChats.length != chats.length ||
                     (chats.isNotEmpty && _lastChats != chats)) {
                   _lastChats = chats;
+                  _warmTopChats(chats);
                   // Reset page jika data berubah total
                   if (chats.length != _lastTotal) {
                     _lastTotal = chats.length;
@@ -604,10 +615,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                               context,
                               PageRouteBuilder(
                                 transitionDuration: const Duration(
-                                  milliseconds: 320,
+                                  milliseconds: 150,
                                 ),
                                 reverseTransitionDuration: const Duration(
-                                  milliseconds: 260,
+                                  milliseconds: 120,
                                 ),
                                 settings: RouteSettings(
                                   name: privateChatRoute(chat.chatId),

@@ -164,7 +164,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
                         await _player.seek(seek);
                       }, activeColor: AppTheme.primary, inactiveColor: AppTheme.divider),
                     ),
-                    Text(_fmt(displayDur), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
+                    Text(_fmt(displayDur), style: AppText.chatTime.copyWith(color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
@@ -175,7 +175,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.timeStr.isNotEmpty)
-                Text(widget.timeStr, style: AppText.micro.copyWith(color: AppTheme.textSecondary.withValues(alpha: 0.7))),
+                Text(widget.timeStr, style: AppText.chatTime.copyWith(color: AppTheme.textSecondary.withValues(alpha: 0.7))),
               if (widget.isMe && widget.timeStr.isNotEmpty) ...[
                 const SizedBox(width: 3),
                 Icon(

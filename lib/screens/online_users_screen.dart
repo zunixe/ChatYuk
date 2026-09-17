@@ -901,8 +901,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     Navigator.push(
       context,
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 320),
-        reverseTransitionDuration: const Duration(milliseconds: 260),
+        transitionDuration: const Duration(milliseconds: 150),
+        reverseTransitionDuration: const Duration(milliseconds: 120),
         settings: RouteSettings(name: privateChatRoute(chatId)),
         pageBuilder: (_, __, ___) => PrivateChatScreen(
           chatId: chatId,

@@ -180,7 +180,9 @@ class _ChatTypingBubbleState extends State<ChatTypingBubble>
             const SizedBox(width: 6),
             Text(
               context.read<LocaleProvider>().s.recordingStatus,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+              style: AppText.chatBodySmall.copyWith(
+                color: AppTheme.textSecondary,
+              ),
             ),
           ],
         ),

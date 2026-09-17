@@ -51,6 +51,10 @@ import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../services/call_notification.dart';
+import 'package:flutter/services.dart';
+import '../services/message_reaction_service.dart';
+import '../widgets/message_reaction_bar.dart';
+import '../widgets/forward_picker_sheet.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 String? _roomPassthroughImage(Uint8List bytes) {
@@ -122,6 +126,23 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   RoomBroadcastSession? _broadcastSession;
   Timer? _livePoll;
   bool _isGrantedBroadcast = false;
+  final Set<String> _selectedIds = {};
+  final Map<String, MessageModel> _selectedMsgs = {};
+  Map<String, Map<String, int>> _reactions = {};
+  Set<String> _starredIds = {};
+  StreamSubscription<Map<String, Map<String, int>>>? _reactionsSub;
+  StreamSubscription<Set<String>>? _starredSub;
+  bool get _inSelection => _selectedIds.isNotEmpty;
+  MessageModel? get _singleSelected =>
+      _selectedIds.length == 1 ? _selectedMsgs[_selectedIds.first] : null;
+  void _clearSelection() {
+    _hideActionBar();
+    if (_selectedIds.isEmpty) return;
+    setState(() {
+      _selectedIds.clear();
+      _selectedMsgs.clear();
+    });
+  }
   bool get isPrivateRoom => widget.room.isPrivate == true;
   bool get canModerate =>
       isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
@@ -162,6 +183,19 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _joinRoom();
     _startPresenceHeartbeat();
     _scrollCtrl.addListener(_onRoomScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _reactionsSub = MessageReactionService.instance
+          .watchReactions(widget.room.id)
+          .listen((m) {
+        if (mounted) setState(() => _reactions = m);
+      });
+      _starredSub = MessageReactionService.instance
+          .watchStarred(widget.room.id)
+          .listen((m) {
+        if (mounted) setState(() => _starredIds = m);
+      });
+    });
   }
 
   // ── Private room v2 ──
@@ -886,6 +920,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   void dispose() {
+    _hideActionBar();
+    _reactionsSub?.cancel();
+    _starredSub?.cancel();
     ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
@@ -1014,12 +1051,18 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _actionBar = null;
   }
 
-  Future<void> _deleteMessage(MessageModel msg) async {
-    final s = context.read<LocaleProvider>().s;
-    final ok = await context.read<ChatProvider>().deleteRoomMessage(msg.id);
-    if (ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgDeletedRoom)));
-    }
+  void _toggleSelect(MessageModel msg) {
+    if (msg.isDeleted || msg.id.startsWith('pending-')) return;
+    setState(() {
+      if (_selectedIds.contains(msg.id)) {
+        _selectedIds.remove(msg.id);
+        _selectedMsgs.remove(msg.id);
+      } else {
+        _selectedIds.add(msg.id);
+        _selectedMsgs[msg.id] = msg;
+      }
+    });
+    _refreshReactionBar(msg);
   }
 
   void _onMessageLongPress(
@@ -1027,23 +1070,19 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     MessageModel msg,
     LayerLink link,
   ) {
-    if (msg.isDeleted) return;
+    if (msg.isDeleted || msg.id.startsWith('pending-')) return;
+    if (_selectedIds.contains(msg.id)) return;
+    setState(() {
+      _selectedIds.add(msg.id);
+      _selectedMsgs[msg.id] = msg;
+    });
+    _refreshReactionBar(msg);
+  }
+
+  void _refreshReactionBar(MessageModel anchor) {
     _hideActionBar();
-    final s = context.read<LocaleProvider>().s;
-    final isMe = msg.senderId == context.read<AuthProvider>().uid;
-
-    Widget iconBtn(IconData icon, String tooltip, VoidCallback onTap, {bool danger = false}) {
-      return IconButton(
-        icon: Icon(icon, size: 20, color: danger ? AppTheme.danger : AppTheme.textPrimary),
-        tooltip: tooltip,
-        splashRadius: 20,
-        onPressed: () {
-          _hideActionBar();
-          onTap();
-        },
-      );
-    }
-
+    if (_selectedIds.length != 1) return;
+    final link = _linkFor(anchor.id);
     _actionBar = OverlayEntry(
       builder: (_) => Stack(
         children: [
@@ -1059,33 +1098,218 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             showWhenUnlinked: false,
             targetAnchor: Alignment.topCenter,
             followerAnchor: Alignment.bottomCenter,
-            offset: const Offset(0, -8),
-            child: Material(
-              color: AppTheme.bgCard,
-              elevation: 6,
-              borderRadius: BorderRadius.circular(12),
-              shadowColor: Colors.black.withValues(alpha: 0.25),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    iconBtn(Icons.reply, s.menuReply, () => _replyMessage(msg)),
-                    // Edit hanya pesan teks milik sendiri (foto/voice/pending
-                    // tidak bisa diedit — sama seperti private chat).
-                    if (isMe && msg.type == 'text' && !msg.id.startsWith('pending-'))
-                      iconBtn(Icons.edit, s.editMessageTitle, () => _editMessage(msg)),
-                    if (isMe)
-                      iconBtn(Icons.delete_outline, s.btnDelete, () => _deleteMessage(msg), danger: true),
-                  ],
-                ),
-              ),
+            offset: const Offset(0, -10),
+            child: ReactionBar(
+              onReact: (emoji) => _reactToSelected(emoji),
             ),
           ),
         ],
       ),
     );
     Overlay.of(context).insert(_actionBar!);
+  }
+
+  Future<void> _reactToSelected(String emoji) async {
+    final msg = _singleSelected;
+    _hideActionBar();
+    if (msg == null) return;
+    final ok = await MessageReactionService.instance.toggleReaction(
+      chatType: 'room',
+      chatId: widget.room.id,
+      messageId: msg.id,
+      emoji: emoji,
+    );
+    if (!ok && mounted) {
+      final s = context.read<LocaleProvider>().s;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.msgReactionFailed)),
+      );
+    }
+    _clearSelection();
+  }
+
+  Future<void> _starSelected() async {
+    if (_selectedIds.isEmpty) return;
+    bool starred = false;
+    for (final id in _selectedIds) {
+      final r = await MessageReactionService.instance.toggleStar(
+        chatType: 'room',
+        chatId: widget.room.id,
+        messageId: id,
+      );
+      starred = r;
+    }
+    if (!mounted) return;
+    final s = context.read<LocaleProvider>().s;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(starred ? s.msgStarred : s.msgUnstarred)),
+    );
+    _clearSelection();
+  }
+
+  Future<void> _copySelected() async {
+    final msg = _singleSelected;
+    if (msg == null || msg.text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: msg.text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.read<LocaleProvider>().s.msgMessageCopied)),
+    );
+    _clearSelection();
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_selectedIds.isEmpty) return;
+    final s = context.read<LocaleProvider>().s;
+    final mine = _selectedMsgs.values
+        .where((m) => m.senderId == _auth.uid)
+        .toList();
+    if (mine.isEmpty) {
+      _clearSelection();
+      return;
+    }
+    final ok = await context.read<ChatProvider>().deleteRoomMessage(mine.first.id);
+    if (mine.length > 1) {
+      for (final m in mine.skip(1)) {
+        await context.read<ChatProvider>().deleteRoomMessage(m.id);
+      }
+    }
+    if (ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.msgDeletedRoom)),
+      );
+    }
+    _clearSelection();
+  }
+
+  Future<void> _forwardSelected() async {
+    if (_selectedIds.isEmpty) return;
+    final target = await showForwardSheet(context);
+    if (target == null || !mounted) return;
+    final uid = _auth.uid;
+    final profile = _auth.profile;
+    if (uid == null || profile == null) return;
+    final msgs = _selectedMsgs.values.toList();
+    for (final m in msgs) {
+      if (m.type == 'call' || m.type == 'coin' || m.type == 'gift') continue;
+      try {
+        if (target.chatType == 'private') {
+          await _chat.sendPrivateMessage(
+            chatId: target.chatId,
+            senderId: uid,
+            senderName: profile.nickname,
+            senderGender: profile.gender,
+            text: m.text,
+            type: m.type == 'text' ? 'text' : m.type,
+            imageData: m.imageData,
+            durationMs: m.durationMs,
+            isForwarded: true,
+          );
+        } else {
+          await _chat.sendRoomMessage(
+            roomId: target.chatId,
+            senderId: uid,
+            senderName: profile.nickname,
+            senderGender: profile.gender,
+            text: m.text,
+            type: m.type == 'text' ? 'text' : m.type,
+            imageData: m.imageData,
+            durationMs: m.durationMs,
+            isForwarded: true,
+          );
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.read<LocaleProvider>().s.msgForwarded)),
+    );
+    _clearSelection();
+  }
+
+  PreferredSizeWidget _buildSelectionAppBar() {
+    final s = context.read<LocaleProvider>().s;
+    final single = _singleSelected;
+    final allMine = _selectedMsgs.values.isNotEmpty &&
+        _selectedMsgs.values.every((m) => m.senderId == _auth.uid);
+    final singleStarred = single != null && _starredIds.contains(single.id);
+    final canEdit = single != null &&
+        single.senderId == _auth.uid &&
+        single.type == 'text' &&
+        !single.id.startsWith('pending-');
+    Widget act(IconData icon, String tip, VoidCallback fn) {
+      return IconButton(
+        icon: Icon(icon, size: 24, color: Colors.white),
+        tooltip: tip,
+        onPressed: fn,
+      );
+    }
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: _clearSelection,
+      ),
+      title: Text(
+        '${_selectedIds.length}',
+        style: AppText.titleEmphasis.copyWith(color: Colors.white),
+      ),
+      actions: [
+        if (single != null)
+          act(Icons.reply, s.menuReply, () {
+            final m = single;
+            _clearSelection();
+            _replyMessage(m);
+          }),
+        if (single != null)
+          act(
+            singleStarred ? Icons.star : Icons.star_outline,
+            singleStarred ? s.menuUnstar : s.menuStar,
+            _starSelected,
+          ),
+        if (allMine) act(Icons.delete_outline, s.btnDelete, _deleteSelected),
+        act(Icons.forward, s.menuForward, _forwardSelected),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, color: Colors.white),
+          color: AppTheme.bgCard,
+          onSelected: (v) {
+            if (v == 'copy') {
+              _copySelected();
+            } else if (v == 'star') {
+              _starSelected();
+            } else if (v == 'edit' && single != null) {
+              final m = single;
+              _clearSelection();
+              _editMessage(m);
+            }
+          },
+          itemBuilder: (_) => [
+            if (single != null && single.text.isNotEmpty)
+              PopupMenuItem(
+                value: 'copy',
+                child: Text(
+                  s.menuCopy,
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
+              ),
+            PopupMenuItem(
+              value: 'star',
+              child: Text(
+                singleStarred ? s.menuUnstar : s.menuStar,
+                style: TextStyle(color: AppTheme.textPrimary),
+              ),
+            ),
+            if (canEdit)
+              PopupMenuItem(
+                value: 'edit',
+                child: Text(
+                  s.editMessageTitle,
+                  style: TextStyle(color: AppTheme.textPrimary),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   Future<void> _send() async {
@@ -1470,9 +1694,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final s = context.watch<LocaleProvider>().s;
     final points = context.watch<PointsProvider>();
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_inSelection,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _inSelection) _clearSelection();
+      },
+      child: Scaffold(
       backgroundColor: AppTheme.bgCard,
-      appBar: AppBar(
+      appBar: _inSelection ? _buildSelectionAppBar() : AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1920,25 +2149,111 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     final m = item.msg!;
                     final isMe = m.senderId == auth.uid;
                     final mkey = _msgKeys.putIfAbsent(m.id, () => GlobalKey());
+                    final selected = _selectedIds.contains(m.id);
+                    final reacts = _reactions[m.id];
+                    final starred = _starredIds.contains(m.id);
                     return Container(
-                      color: _highlightId == m.id
+                      color: selected
                           ? AppTheme.primary.withValues(alpha: 0.22)
-                          : Colors.transparent,
+                          : (_highlightId == m.id
+                              ? AppTheme.primary.withValues(alpha: 0.22)
+                              : Colors.transparent),
                       child: CompositedTransformTarget(
                       link: _linkFor(m.id),
                       child: GestureDetector(
                         onLongPressStart: (d) => _onMessageLongPress(d, m, _linkFor(m.id)),
-                        child: _MessageBubble(
-                          key: mkey,
-                          msg: m,
-                          isMe: isMe,
-                          color: Color(
-                            userColorPalette[colorHashForUid(m.senderId) %
-                                userColorPalette.length],
+                        onTap: _inSelection ? () => _toggleSelect(m) : null,
+                        child: SwipeToReply(
+                          // Geser kanan = balas (grup & room). Pesan sendiri
+                          // dikecualikan agar tidak bentrok swipe-back sistem.
+                          enabled: !_inSelection &&
+                              m.senderId != auth.uid &&
+                              !m.isDeleted,
+                          onReply: () => _replyMessage(m),
+                          child: Column(
+                            crossAxisAlignment: isMe
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (m.isForwarded)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      left: 4, right: 4, bottom: 2),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.forward,
+                                        size: 14,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        s.msgForwardedLabel,
+                                        style: AppText.caption.copyWith(
+                                          color: AppTheme.textSecondary,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Container(
+                                    decoration: selected
+                                        ? BoxDecoration(
+                                            border: Border.all(
+                                              color: AppTheme.primary,
+                                              width: 2,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                          )
+                                        : null,
+                                    child: _MessageBubble(
+                                      key: mkey,
+                                      msg: m,
+                                      isMe: isMe,
+                                      color: Color(
+                                        userColorPalette[colorHashForUid(
+                                                    m.senderId) %
+                                            userColorPalette.length],
+                                      ),
+                                      roomId: widget.room.id,
+                                      onTapUser: () => _onTapUser(m, auth),
+                                      deletedIds: deletedIds,
+                                    ),
+                                  ),
+                                  if (starred)
+                                    Positioned(
+                                      top: -6,
+                                      right: isMe ? 0 : null,
+                                      left: isMe ? null : 0,
+                                      child: const Icon(
+                                        Icons.star,
+                                        size: 14,
+                                        color: Color(0xFFFFB300),
+                                      ),
+                                    ),
+                                  if (reacts != null && reacts.isNotEmpty)
+                                    Positioned(
+                                      bottom: -12,
+                                      left: isMe ? null : 8,
+                                      right: isMe ? 8 : null,
+                                      child: ReactionBadge(
+                                        counts: reacts,
+                                        isMe: isMe,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              if (reacts != null && reacts.isNotEmpty)
+                                const SizedBox(height: 12),
+                            ],
                           ),
-                          roomId: widget.room.id,
-                          onTapUser: () => _onTapUser(m, auth),
-                          deletedIds: deletedIds,
                         ),
                       ),
                       ),
@@ -2126,6 +2441,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           }),
         ]);
       }),
+      ),
     );
   }
 

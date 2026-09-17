@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/fonts.dart';
@@ -918,6 +917,18 @@ class _AppFontSheetState extends State<_AppFontSheet> {
                       fallback: 'Roboto',
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  // Baris Light: pembanding "tipis" antar font terpilih.
+                  Text(
+                    s.adminFontPreviewLight,
+                    style: AppFonts.previewStyle(
+                      _selected,
+                      size: 14,
+                      weight: AppFonts.lightWeight,
+                      color: AppTheme.textSecondary,
+                      fallback: 'Roboto',
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -942,6 +953,20 @@ class _AppFontSheetState extends State<_AppFontSheet> {
                               weight: FontWeight.w600,
                               color: AppTheme.textPrimary,
                               fallback: 'Poppins',
+                            ),
+                          ),
+                          // Sampel cut Light per font — kalimat sama untuk
+                          // semua opsi supaya bisa dibandingkan tanpa memilih
+                          // satu per satu (Inter vs DM Sans vs Figtree vs
+                          // Manrope vs Plus Jakarta Sans).
+                          subtitle: Text(
+                            s.adminFontSampleShort,
+                            style: AppFonts.previewStyle(
+                              opt.key,
+                              size: 14,
+                              weight: AppFonts.lightWeight,
+                              color: AppTheme.textSecondary,
+                              fallback: 'Roboto',
                             ),
                           ),
                         ),
