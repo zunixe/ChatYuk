@@ -6,7 +6,6 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -19,10 +18,12 @@ import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/connectivity_provider.dart';
 import '../services/chat_service.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/storage_photo_service.dart';
+import '../services/offline_outbox.dart';
 import '../services/room_service.dart';
 import '../services/forensic_watermark.dart';
 import '../utils.dart';
@@ -103,6 +104,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<UserModel>> _usersStream;
 
+  // ── Optimistic + antrean offline (centang-1 → centang-2 saat online) ──
+  final List<MessageModel> _pending = [];
+  final Set<String> _queuedIds = {};
+  final Set<String> _confirmedPhotoIds = {};
+  final Set<String> _confirmedVoiceIds = {};
+  late final DateTime _openedAt;
+  ConnectivityProvider? _connProv;
+  VoidCallback? _connListener;
+  bool _flushingOutbox = false;
+
   // ── Room gift (live) ──
   final _giftFly = GiftFlyController();
   // Insertion-order terjaga — cap FIFO (skip terlama) tanpa clear().
@@ -162,6 +173,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   @override
   void initState() {
     super.initState();
+    _openedAt = DateTime.now();
     WidgetsBinding.instance.addObserver(this);
     // Ukuran font chat berubah (slider) → rebuild bubble & composer room.
     ChatTextScale.notifier.addListener(_onFontScaleChanged);
@@ -185,10 +197,18 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _scrollCtrl.addListener(_onRoomScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Cache dulu (tampil instan), stream menimpa sesudahnya.
+      MessageReactionService.instance.loadCachedReactions(widget.room.id).then((
+        cached,
+      ) {
+        if (!mounted || cached.isEmpty || _reactions.isNotEmpty) return;
+        setState(() => _reactions = cached);
+      });
       _reactionsSub = MessageReactionService.instance
           .watchReactions(widget.room.id)
           .listen((m) {
         if (mounted) setState(() => _reactions = m);
+        MessageReactionService.instance.saveCachedReactions(widget.room.id, m);
       });
       _starredSub = MessageReactionService.instance
           .watchStarred(widget.room.id)
@@ -196,6 +216,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         if (mounted) setState(() => _starredIds = m);
       });
     });
+    // Antrean offline: koneksi pulih → kirim otomatis; muat sisa antrean
+    // sesi lalu (app sempat ditutup saat offline).
+    _connProv = context.read<ConnectivityProvider>();
+    _connListener = () {
+      if (mounted && (_connProv?.online ?? false)) _flushOutbox();
+    };
+    _connProv!.addListener(_connListener!);
+    _loadQueuedForChat();
   }
 
   // ── Private room v2 ──
@@ -338,6 +366,59 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           DateTime.now().difference(m.timestamp) < const Duration(seconds: 5);
       if (!fresh) continue;
       _giftFly.push(gift, m.senderName, 1);
+    }
+    // Dedupe bubble optimistik milik sendiri (centang-1 → centang-2):
+    // teks dicocokkan isi, foto/voice FIFO via id server (thumbnail di
+    // stream beda dari base64 pending). Hanya pesan setelah layar dibuka
+    // yang menghapus pending foto/voice (history lama di-skip).
+    if (_pending.isNotEmpty) {
+      var changed = false;
+      final myId = _auth.uid;
+      if (myId != null) {
+        final confirmedTexts = msgs
+            .where((m) => m.senderId == myId && m.type == 'text')
+            .map((m) => m.text)
+            .toList();
+        for (final text in confirmedTexts) {
+          final idx = _pending.indexWhere(
+            (p) => p.type == 'text' && p.text == text,
+          );
+          if (idx != -1) {
+            _queuedIds.remove(_pending[idx].id);
+            _pending.removeAt(idx);
+            changed = true;
+          }
+        }
+        for (final m in msgs) {
+          if (m.senderId == myId &&
+              (m.type == 'image' || m.type == 'view_once') &&
+              m.timestamp.isAfter(_openedAt) &&
+              _confirmedPhotoIds.add(m.id)) {
+            final idx = _pending.indexWhere(
+              (p) => p.type == 'image' || p.type == 'view_once',
+            );
+            if (idx != -1) {
+              _queuedIds.remove(_pending[idx].id);
+              _pending.removeAt(idx);
+              changed = true;
+            }
+          }
+        }
+        for (final m in msgs) {
+          if (m.senderId == myId &&
+              m.type == 'voice' &&
+              m.timestamp.isAfter(_openedAt) &&
+              _confirmedVoiceIds.add(m.id)) {
+            final idx = _pending.indexWhere((p) => p.type == 'voice');
+            if (idx != -1) {
+              _queuedIds.remove(_pending[idx].id);
+              _pending.removeAt(idx);
+              changed = true;
+            }
+          }
+        }
+      }
+      if (changed && mounted) setState(() {});
     }
     // Cap seen-set TANPA clear: buang yang paling lama (FIFO) — id gift
     // lama tidak bisa re-play karena guard fresh di atas sudah memfilter.
@@ -923,6 +1004,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _hideActionBar();
     _reactionsSub?.cancel();
     _starredSub?.cancel();
+    try {
+      final l = _connListener;
+      if (l != null) _connProv?.removeListener(l);
+    } catch (_) {}
+    _connListener = null;
+    _connProv = null;
     ChatTextScale.notifier.removeListener(_onFontScaleChanged);
     WidgetsBinding.instance.removeObserver(this);
     _presenceTimer?.cancel();
@@ -972,21 +1059,258 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   bool _isSending = false;
 
+  // ── Antrean offline: bubble tetap tampil (centang-1), terkirim otomatis
+  // saat koneksi pulih (centang-2) ──
+  bool get _isOnlineNow => _connProv?.online ?? true;
+
+  /// Muat sisa antrean sesi lalu untuk room ini — bubble langsung tampil lagi.
+  Future<void> _loadQueuedForChat() async {
+    await OfflineOutbox.instance.load();
+    if (!mounted) return;
+    final entries = OfflineOutbox.instance.forChat('room', widget.room.id);
+    if (entries.isEmpty) return;
+    setState(() {
+      for (final e in entries) {
+        if (_pending.any((m) => m.id == e.pendingId)) {
+          _queuedIds.add(e.pendingId);
+          continue;
+        }
+        _pending.add(
+          MessageModel(
+            id: e.pendingId,
+            senderId: e.senderId.isNotEmpty ? e.senderId : (_auth.uid ?? ''),
+            senderName: e.senderName.isNotEmpty
+                ? e.senderName
+                : (_auth.profile?.nickname ?? ''),
+            senderGender: e.senderGender,
+            isRegistered: _auth.profile?.isRegistered ?? false,
+            text: e.text,
+            type: e.type,
+            imageData: e.imagePayload,
+            timestamp: e.createdAt,
+            durationMs: e.durationMs,
+            repliedToId: e.repliedToId,
+            repliedToText: e.repliedToText,
+            repliedToSenderName: e.repliedToSenderName,
+            isForwarded: e.isForwarded,
+          ),
+        );
+        _queuedIds.add(e.pendingId);
+      }
+    });
+    _scrollToBottom();
+    _flushOutbox();
+  }
+
+  /// Simpan bubble pending ke antrean — bubble TETAP di layar (centang-1).
+  Future<void> _queueOffline({
+    required MessageModel pending,
+    required String pointsKind,
+    required bool pointsDeducted,
+    String? imagePayload,
+    bool needsUpload = false,
+    String uploadKind = '',
+    int? durationMs,
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
+    bool isForwarded = false,
+  }) async {
+    await OfflineOutbox.instance.enqueue(
+      OutboxEntry(
+        pendingId: pending.id,
+        kind: 'room',
+        chatId: widget.room.id,
+        senderId: pending.senderId,
+        senderName: pending.senderName,
+        senderGender: pending.senderGender,
+        text: pending.text,
+        type: pending.type,
+        imagePayload: imagePayload ?? pending.imageData,
+        needsUpload: needsUpload,
+        uploadKind: uploadKind,
+        durationMs: durationMs ?? pending.durationMs,
+        repliedToId: repliedToId,
+        repliedToText: repliedToText,
+        repliedToSenderName: repliedToSenderName,
+        isForwarded: isForwarded,
+        createdAt: pending.timestamp,
+        pointsDeducted: pointsDeducted,
+        pointsKind: pointsKind,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _queuedIds.add(pending.id));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.read<LocaleProvider>().s.msgQueuedOffline)),
+    );
+  }
+
+  /// Kirim semua antrean room ini (dipanggil saat koneksi pulih).
+  Future<void> _flushOutbox() async {
+    if (_flushingOutbox || !mounted) return;
+    if (!_isOnlineNow) return;
+    final entries = OfflineOutbox.instance.forChat('room', widget.room.id);
+    if (entries.isEmpty) return;
+    _flushingOutbox = true;
+    try {
+      final uploadChatId = 'room_${widget.room.id}';
+      final pp = context.read<PointsProvider>();
+      var sent = 0;
+      for (final e in entries) {
+        if (!mounted || !_isOnlineNow) break;
+        if (!e.pointsDeducted && e.pointsKind != 'none') {
+          final r = await pp.deductBeforeSend(e.pointsKind);
+          if (r == -1) {
+            await OfflineOutbox.instance.remove(e.pendingId);
+            if (!mounted) break;
+            setState(() {
+              _queuedIds.remove(e.pendingId);
+              _pending.removeWhere((m) => m.id == e.pendingId);
+            });
+            if (mounted) {
+              pp.showOutOfPointsDialog(
+                context,
+                context.read<LocaleProvider>().s.isId,
+              );
+            }
+            continue;
+          }
+          if (r < 0) break; // Error jaringan/transien → coba lagi nanti.
+        }
+        try {
+          var imageData = e.imagePayload;
+          if (e.needsUpload && imageData.isNotEmpty) {
+            if (e.uploadKind == 'voice') {
+              final path = await StoragePhotoService.instance.uploadVoice(
+                chatId: uploadChatId,
+                bytes: base64Decode(imageData),
+              );
+              if (path == null || path.isEmpty) {
+                throw const SocketException('voice upload failed');
+              }
+              imageData = path;
+            } else {
+              final path = await StoragePhotoService.instance.upload(
+                chatId: uploadChatId,
+                base64: imageData,
+              );
+              if (path == null || path.isEmpty) {
+                throw const SocketException('photo upload failed');
+              }
+              imageData = path;
+            }
+          }
+          await _chat.sendRoomMessage(
+            roomId: widget.room.id,
+            senderId: e.senderId,
+            senderName: e.senderName,
+            senderGender: e.senderGender,
+            text: e.text,
+            type: e.type,
+            imageData: imageData,
+            durationMs: e.durationMs,
+            repliedToId: e.repliedToId,
+            repliedToText: e.repliedToText,
+            repliedToSenderName: e.repliedToSenderName,
+            isForwarded: e.isForwarded,
+          );
+          await OfflineOutbox.instance.remove(e.pendingId);
+          sent++;
+          if (mounted) setState(() => _queuedIds.remove(e.pendingId));
+          _roomSendCount++;
+          if (_roomSendCount == 5) {
+            _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
+              if (earned && mounted) {
+                final s = context.read<LocaleProvider>().s;
+                _pointsProv?.showPointsToast(
+                  context,
+                  s.pointsGain(5, s.reasonRoomChat),
+                );
+              }
+            });
+          }
+        } catch (err) {
+          if (OfflineOutbox.isNetworkError(err)) break;
+          if (e.pointsDeducted && e.pointsKind != 'none') {
+            safeUnawaited(pp.refundChatPoint(e.pointsKind));
+          }
+          await OfflineOutbox.instance.remove(e.pendingId);
+          if (!mounted) break;
+          setState(() {
+            _queuedIds.remove(e.pendingId);
+            _pending.removeWhere((m) => m.id == e.pendingId);
+          });
+        }
+      }
+      if (sent > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text(context.read<LocaleProvider>().s.msgQueueSent(sent)),
+          ),
+        );
+        _scrollToBottom();
+      }
+    } finally {
+      _flushingOutbox = false;
+    }
+  }
+
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
+    // Offline: bubble tetap tampil (centang-1) + antre, terkirim otomatis
+    // saat koneksi pulih. Voice tidak pakai poin.
+    Future<void> queueVoiceOffline(Uint8List bytes, File f) async {
+      final optimisticOffline = MessageModel(
+        id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        isRegistered: profile.isRegistered,
+        text: '',
+        type: 'voice',
+        imageData: base64Encode(bytes),
+        timestamp: DateTime.now(),
+        durationMs: durationMs,
+      );
+      setState(() => _pending.add(optimisticOffline));
+      _scrollToBottom();
+      try {
+        await f.delete();
+      } catch (_) {}
+      await _queueOffline(
+        pending: optimisticOffline,
+        pointsKind: 'none',
+        pointsDeducted: true,
+        imagePayload: base64Encode(bytes),
+        needsUpload: true,
+        uploadKind: 'voice',
+        durationMs: durationMs,
+      );
+    }
+
     try {
       final f = File(filePath);
       if (!await f.exists()) return;
       final bytes = await f.readAsBytes();
+      if (!_isOnlineNow) {
+        await queueVoiceOffline(bytes, f);
+        return;
+      }
       final storagePath = await StoragePhotoService.instance.uploadVoice(
         chatId: 'room_${widget.room.id}',
         bytes: bytes,
       );
       if (storagePath == null || storagePath.isEmpty) {
+        if (!_isOnlineNow) {
+          await queueVoiceOffline(bytes, f);
+          return;
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(context.read<LocaleProvider>().s.errVoiceUploadFailed)),
@@ -994,6 +1318,20 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         }
         return;
       }
+      final pendingVoice = MessageModel(
+        id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        isRegistered: profile.isRegistered,
+        text: '',
+        type: 'voice',
+        imageData: storagePath,
+        timestamp: DateTime.now(),
+        durationMs: durationMs,
+      );
+      setState(() => _pending.add(pendingVoice));
+      _scrollToBottom();
       await chat.sendRoomMessage(
         roomId: widget.room.id,
         senderId: uid,
@@ -1008,6 +1346,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       _scrollToBottom();
     } catch (e) {
       dlog('[RoomVoice] send error: $e');
+      if (OfflineOutbox.isNetworkError(e) || !_isOnlineNow) {
+        try {
+          final f = File(filePath);
+          if (await f.exists()) {
+            final bytes = await f.readAsBytes();
+            await queueVoiceOffline(bytes, f);
+            return;
+          }
+        } catch (_) {}
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)),
@@ -1384,11 +1732,44 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         _pendingPhotoBase64 = null;
         _replyingTo = null;
       });
+
+      // Optimistic dulu: bubble langsung tampil (centang-1) walau offline.
+      final pendingPhoto = MessageModel(
+        id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        isRegistered: profile.isRegistered,
+        text: text,
+        type: 'image',
+        imageData: photoB64,
+        timestamp: DateTime.now(),
+        repliedToId: replying?.id,
+        repliedToText: replying?.text,
+        repliedToSenderName: replying?.senderName,
+      );
+      setState(() => _pending.add(pendingPhoto));
+      _scrollToBottom();
+      if (!_isOnlineNow) {
+        await _queueOffline(
+          pending: pendingPhoto,
+          pointsKind: 'image',
+          pointsDeducted: false,
+          imagePayload: photoB64,
+          needsUpload: true,
+          uploadKind: 'image',
+          repliedToId: replying?.id,
+          repliedToText: replying?.text,
+          repliedToSenderName: replying?.senderName,
+        );
+        return;
+      }
       _isSending = true;
 
       final pp = context.read<PointsProvider>();
       final rPhoto = await pp.deductBeforeSend('image');
       if (rPhoto < 0) {
+        setState(() => _pending.remove(pendingPhoto));
         _isSending = false;
         if (!mounted) return;
         if (rPhoto == -1) {
@@ -1400,18 +1781,23 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         }
         return;
       }
+      String? uploadedPath;
       try {
         final path = await StoragePhotoService.instance.upload(
           chatId: 'room_${widget.room.id}',
           base64: photoB64,
         );
         if (path == null || path.isEmpty) {
+          if (!_isOnlineNow) throw const SocketException('photo upload failed');
+          safeUnawaited(pp.refundChatPoint('image'));
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)));
+            setState(() => _pending.remove(pendingPhoto));
           }
           _isSending = false;
           return;
         }
+        uploadedPath = path;
         await chat.sendRoomMessage(
           roomId: widget.room.id,
           senderId: uid,
@@ -1426,12 +1812,27 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         );
         _scrollToBottom();
       } catch (e) {
-        safeUnawaited(pp.refundChatPoint('image'));
-        if (mounted) {
-          final s = context.read<LocaleProvider>().s;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(s.errSendPhoto)),
+        if (OfflineOutbox.isNetworkError(e) || !_isOnlineNow) {
+          await _queueOffline(
+            pending: pendingPhoto,
+            pointsKind: 'image',
+            pointsDeducted: true,
+            imagePayload: uploadedPath ?? photoB64,
+            needsUpload: uploadedPath == null,
+            uploadKind: 'image',
+            repliedToId: replying?.id,
+            repliedToText: replying?.text,
+            repliedToSenderName: replying?.senderName,
           );
+        } else {
+          safeUnawaited(pp.refundChatPoint('image'));
+          if (mounted) {
+            final s = context.read<LocaleProvider>().s;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(s.errSendPhoto)),
+            );
+            setState(() => _pending.remove(pendingPhoto));
+          }
         }
       } finally {
         _isSending = false;
@@ -1442,11 +1843,42 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final reply = _replyingTo;
     _msgCtrl.clear();
     setState(() => _replyingTo = null);
+
+    // Optimistic: bubble langsung tampil (centang-1) walau offline —
+    // otomatis terkirim saat koneksi pulih (centang-2).
+    final pending = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
+      text: text,
+      type: 'text',
+      imageData: '',
+      timestamp: DateTime.now(),
+      repliedToId: reply?.id,
+      repliedToText: reply?.text,
+      repliedToSenderName: reply?.senderName,
+    );
+    setState(() => _pending.add(pending));
+    _scrollToBottom();
+    if (!_isOnlineNow) {
+      await _queueOffline(
+        pending: pending,
+        pointsKind: 'text',
+        pointsDeducted: false,
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
+      );
+      return;
+    }
     _isSending = true;
 
     final pp = context.read<PointsProvider>();
     final remaining = await pp.deductBeforeSend('text');
     if (remaining < 0) {
+      setState(() => _pending.remove(pending));
       _isSending = false;
       if (!mounted) return;
       final ss = context.read<LocaleProvider>().s;
@@ -1490,13 +1922,27 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       _scrollToBottom();
     } catch (e) {
-      // Kirim gagal → kembalikan koin yang sudah terpotong.
-      safeUnawaited(pp.refundChatPoint('text'));
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errSendFailed)));
+      if (OfflineOutbox.isNetworkError(e) || !_isOnlineNow) {
+        // Jaringan putus di tengah kirim → antrekan (poin sudah dipotong,
+        // jangan refund — dipakai saat flush).
+        await _queueOffline(
+          pending: pending,
+          pointsKind: 'text',
+          pointsDeducted: true,
+          repliedToId: reply?.id,
+          repliedToText: reply?.text,
+          repliedToSenderName: reply?.senderName,
+        );
+      } else {
+        // Kirim gagal → kembalikan koin yang sudah terpotong.
+        safeUnawaited(pp.refundChatPoint('text'));
+        if (mounted) {
+          final s = context.read<LocaleProvider>().s;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(s.errSendFailed)));
+          setState(() => _pending.remove(pending));
+        }
       }
     } finally {
       _isSending = false;
@@ -2105,7 +2551,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                         _lastMsgs.isNotEmpty
                     ? _lastMsgs
                     : (raw ?? []);
-                if (msgs.isEmpty) {
+                // Bubble optimistik milik sendiri (centang-1) selalu tampil
+                // di ujung list — walau offline, walau stream belum emit.
+                final all = [...msgs, ..._pending];
+                if (all.isEmpty) {
                   // Room baru/kosong — tampilkan layar kosong saja,
                   // tanpa ikon/teks "mulai percakapan".
                   return const SizedBox.shrink();
@@ -2123,12 +2572,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 // PRIVASI: kumpulan id pesan terhapus — quote reply yang
                 // menunjuk pesan ini dirender "Pesan dihapus", bukan isinya.
                 final deletedIds = {
-                  for (final m in msgs)
+                  for (final m in all)
                     if (m.isDeleted) m.id,
                 };
                 final items = <ChatItem>[];
                 String? prevDateKey;
-                for (final m in msgs) {
+                for (final m in all) {
                   final local = m.timestamp.toLocal();
                   final dateKey = '${local.year}-${local.month}-${local.day}';
                   if (prevDateKey != dateKey) {
@@ -2153,11 +2602,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     final reacts = _reactions[m.id];
                     final starred = _starredIds.contains(m.id);
                     return Container(
-                      color: selected
+                      // Tanpa wash biru selebar baris (sama private chat —
+                      // hanya border bubble). Wash tersisa hanya untuk flash
+                      // sesaat saat lompat ke pesan (_highlightId).
+                      color: _highlightId == m.id
                           ? AppTheme.primary.withValues(alpha: 0.22)
-                          : (_highlightId == m.id
-                              ? AppTheme.primary.withValues(alpha: 0.22)
-                              : Colors.transparent),
+                          : Colors.transparent,
                       child: CompositedTransformTarget(
                       link: _linkFor(m.id),
                       child: GestureDetector(
@@ -2203,20 +2653,19 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                                 clipBehavior: Clip.none,
                                 children: [
                                   Container(
-                                    decoration: selected
-                                        ? BoxDecoration(
-                                            border: Border.all(
-                                              color: AppTheme.primary,
-                                              width: 2,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(14),
-                                          )
-                                        : null,
+                                    // Border seleksi digambar DI DALAM bubble
+                                    // (sama seperti private chat) — dulu di
+                                    // Container pembungkus sehingga border
+                                    // memanjang sampai ujung layar.
                                     child: _MessageBubble(
                                       key: mkey,
                                       msg: m,
                                       isMe: isMe,
+                                      isPending:
+                                          m.id.startsWith('pending-'),
+                                      isQueued:
+                                          _queuedIds.contains(m.id),
+                                      isSelected: selected,
                                       color: Color(
                                         userColorPalette[colorHashForUid(
                                                     m.senderId) %
@@ -2240,7 +2689,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                                     ),
                                   if (reacts != null && reacts.isNotEmpty)
                                     Positioned(
-                                      bottom: -12,
+                                      bottom: -10,
                                       left: isMe ? null : 8,
                                       right: isMe ? 8 : null,
                                       child: ReactionBadge(
@@ -2251,7 +2700,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                                 ],
                               ),
                               if (reacts != null && reacts.isNotEmpty)
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 10),
                             ],
                           ),
                         ),
@@ -2298,6 +2747,30 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             ),
           ),
 
+          if (_queuedIds.isNotEmpty)
+            Container(
+              color: AppTheme.bgCard,
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.done,
+                    size: 14,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      s.msgQueuedCount(_queuedIds.length),
+                      style: AppText.caption.copyWith(
+                        color: AppTheme.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_replyingTo != null)
             Container(
               color: AppTheme.bgCard,
@@ -2737,6 +3210,11 @@ class _UserChip extends StatelessWidget {
 class _MessageBubble extends StatelessWidget {
   final MessageModel msg;
   final bool isMe;
+  final bool isPending;
+  final bool isQueued;
+  /// Mode seleksi: border primary digambar mengikuti bentuk bubble
+  /// (bukan pembungkus selebar baris) — sama seperti private chat.
+  final bool isSelected;
   final Color color;
   final String roomId;
   final VoidCallback onTapUser;
@@ -2747,6 +3225,9 @@ class _MessageBubble extends StatelessWidget {
     super.key,
     required this.msg,
     required this.isMe,
+    this.isPending = false,
+    this.isQueued = false,
+    this.isSelected = false,
     required this.color,
     required this.roomId,
     required this.onTapUser,
@@ -2979,7 +3460,7 @@ class _MessageBubble extends StatelessWidget {
         ),
       );
     }
-    final timeStr = DateFormat.Hm().format(msg.timestamp.toLocal());
+    final timeStr = formatBubbleTime(msg.timestamp);
 
     // Pesan sendiri: biru muda (sama private), rata kanan, tanpa avatar
     if (isMe) {
@@ -3000,11 +3481,16 @@ class _MessageBubble extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.25),
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(14),
-                    topRight: Radius.circular(14),
-                    bottomLeft: Radius.circular(14),
+                    topLeft: Radius.circular(10),
+                    topRight: Radius.circular(10),
+                    bottomLeft: Radius.circular(10),
                     bottomRight: Radius.circular(4),
                   ),
+                  // Mode seleksi: border mengikuti bentuk bubble (sama
+                  // private chat) — hanya area bubble, bukan sepajang baris.
+                  border: isSelected
+                      ? Border.all(color: AppTheme.primary, width: 2)
+                      : null,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.05),
@@ -3013,7 +3499,43 @@ class _MessageBubble extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: _content(context, timeStr, alignRight: true),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _content(context, timeStr, alignRight: true),
+                    if (isQueued || isPending)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Tooltip(
+                              message: isQueued
+                                  ? s.msgWaitingConnection
+                                  : '',
+                              child: Icon(
+                                Icons.done,
+                                size: 12,
+                                color: _textColor.withValues(alpha: 0.55),
+                              ),
+                            ),
+                            if (isQueued) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                s.msgWaitingConnection,
+                                style: AppText.chatTime.copyWith(
+                                  color:
+                                      _textColor.withValues(alpha: 0.55),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -3085,11 +3607,15 @@ class _MessageBubble extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppTheme.bgInput,
                     borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(14),
-                      topRight: Radius.circular(14),
+                      topLeft: Radius.circular(10),
+                      topRight: Radius.circular(10),
                       bottomLeft: Radius.circular(4),
-                      bottomRight: Radius.circular(14),
+                      bottomRight: Radius.circular(10),
                     ),
+                    // Mode seleksi: border mengikuti bentuk bubble.
+                    border: isSelected
+                        ? Border.all(color: AppTheme.primary, width: 2)
+                        : null,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.05),

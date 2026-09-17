@@ -7,7 +7,6 @@ import '../utils.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
@@ -467,9 +466,10 @@ class MessageTextWithTime extends StatelessWidget {
         final singleLine =
             !t.contains('\n') && tp.width + timeRowW + 2 <= available;
         if (singleLine) {
-          // 1 baris muat: [teks][spasi 2px][jam], jam turun 2px biar
-          // sedikit nempel/overlap ke teks — hemat seperti WA. Tanpa
-          // Flexible supaya teks pendek tidak Terperas rusak.
+          // 1 baris muat: [teks][spasi 6px][jam], jam turun 3px biar
+          // agak di bawah teks (tidak sejajar) — sama untuk pengirim
+          // maupun penerima, hemat seperti WA. Tanpa Flexible supaya
+          // teks pendek tidak Terperas rusak.
           return Row(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -482,7 +482,7 @@ class MessageTextWithTime extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Transform.translate(
-                offset: const Offset(0, 2),
+                offset: const Offset(0, 3),
                 child: timeRowWidget,
               ),
             ],
@@ -526,10 +526,12 @@ class MessageTextWithTime extends StatelessWidget {
           if (lm.width > longest) longest = lm.width;
         }
         final contentW = math.min(available, math.max(longest, timeRowW));
-        // Metrik baris terakhir layout final → jam sejajar baseline teks.
+        // Metrik baris terakhir layout final → jam 2px di bawah baseline
+        // teks (tidak sejajar) — sama untuk pengirim maupun penerima.
         final fin = probeTp()..layout(maxWidth: contentW);
         final lastLine = fin.computeLineMetrics().last;
-        final timeBottom = math.max(0.0, lastLine.descent - timeDescent);
+        final timeBottom =
+            math.max(0.0, lastLine.descent - timeDescent - 2);
         return SizedBox(
           width: contentW > 0 ? contentW : null,
           child: Stack(
@@ -556,6 +558,7 @@ class MessageBubble extends StatelessWidget {
   final bool isMe;
   final bool isRead;
   final bool isPending;
+  final bool isQueued;
   // Image kosong karena di luar window auto-load (pesan lama) → tampilkan
   // icon refresh; klik memanggil onRetryImage(messageId).
   final bool isImageDeferred;
@@ -589,6 +592,7 @@ class MessageBubble extends StatelessWidget {
     required this.isMe,
     required this.isRead,
     this.isPending = false,
+    this.isQueued = false,
     this.isImageDeferred = false,
     this.onRetryImage,
     this.isAdminView = false,
@@ -626,7 +630,7 @@ class MessageBubble extends StatelessWidget {
         ),
       );
     }
-    final timeStr = DateFormat.Hm().format(msg.timestamp.toLocal());
+    final timeStr = formatBubbleTime(msg.timestamp);
     return CompositedTransformTarget(
       link: link,
       child: GestureDetector(
@@ -637,7 +641,7 @@ class MessageBubble extends StatelessWidget {
           enabled: onSwipeReply != null && onTapSelect == null,
           onReply: onSwipeReply,
           child: Padding(
-          padding: EdgeInsets.only(bottom: reactions != null && reactions!.isNotEmpty ? 14 : 8),
+          padding: EdgeInsets.only(bottom: reactions != null && reactions!.isNotEmpty ? 12 : 8),
           child: Row(
             mainAxisAlignment: isMe
                 ? MainAxisAlignment.end
@@ -651,7 +655,7 @@ class MessageBubble extends StatelessWidget {
                   constraints: BoxConstraints(
                     maxWidth: MediaQuery.sizeOf(context).width * 0.8,
                   ),
-                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     // Bubble solid (tidak transparan) — tint primary di-blend ke bgCard.
                     // Bubble lawan (other) pakai bgCard (putih di light mode) + shadow
@@ -675,13 +679,17 @@ class MessageBubble extends StatelessWidget {
                         ? Border.all(color: AppTheme.primary, width: 2)
                         : null,
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(14),
-                      topRight: const Radius.circular(14),
-                      bottomLeft: Radius.circular(isMe ? 14 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 14),
+                      topLeft: const Radius.circular(10),
+                      topRight: const Radius.circular(10),
+                      bottomLeft: Radius.circular(isMe ? 10 : 4),
+                      bottomRight: Radius.circular(isMe ? 4 : 10),
                     ),
                   ),
                   child: Column(
+                    // Konten (teks + jam) center vertikal dalam bubble saat
+                    // bubble lebih tinggi dari konten (mis. caption pendek di
+                    // bawah foto). Horizontal tetap kiri/kanan seperti semula.
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: isMe
                         ? CrossAxisAlignment.end
                         : CrossAxisAlignment.start,
@@ -772,6 +780,7 @@ class MessageBubble extends StatelessWidget {
                           isMe: isMe,
                           timeStr: timeStr,
                           isPending: isPending,
+                          isQueued: isQueued,
                           isRead: isRead,
                         )
                       else if (msg.type == 'image' && msg.imageData.isNotEmpty)
@@ -811,18 +820,21 @@ class MessageBubble extends StatelessWidget {
                                           ),
                                           if (isMe) ...[
                                             const SizedBox(width: 3),
-                                            Icon(
-                                              isPending
-                                                  ? Icons.done
-                                                  : (isRead
-                                                        ? Icons.done_all
-                                                        : Icons.done),
-                                              size: 12,
-                                              color: isPending
-                                                  ? Colors.white70
-                                                  : (isRead
-                                                        ? const Color(0xFF7EC8FF)
-                                                        : Colors.white70),
+                                            Tooltip(
+                                              message: isQueued
+                                                  ? s.msgWaitingConnection
+                                                  : '',
+                                              child: Icon(
+                                                (isPending || isQueued)
+                                                    ? Icons.done
+                                                    : Icons.done_all,
+                                                size: 12,
+                                                color: (isRead &&
+                                                        !isPending &&
+                                                        !isQueued)
+                                                    ? const Color(0xFF7EC8FF)
+                                                    : Colors.white70,
+                                              ),
                                             ),
                                           ],
                                         ],
@@ -886,18 +898,21 @@ class MessageBubble extends StatelessWidget {
                                     ),
                                     if (isMe) ...[
                                       const SizedBox(width: 3),
-                                      Icon(
-                                        isPending
-                                            ? Icons.done
-                                            : (isRead
-                                                  ? Icons.done_all
-                                                  : Icons.done),
-                                        size: 12,
-                                        color: isPending
-                                            ? Colors.white70
-                                            : (isRead
-                                                  ? const Color(0xFF7EC8FF)
-                                                  : Colors.white70),
+                                      Tooltip(
+                                        message: isQueued
+                                            ? s.msgWaitingConnection
+                                            : '',
+                                        child: Icon(
+                                          (isPending || isQueued)
+                                              ? Icons.done
+                                              : Icons.done_all,
+                                          size: 12,
+                                          color: (isRead &&
+                                                  !isPending &&
+                                                  !isQueued)
+                                              ? const Color(0xFF7EC8FF)
+                                              : Colors.white70,
+                                        ),
                                       ),
                                     ],
                                   ],
@@ -1055,25 +1070,29 @@ class MessageBubble extends StatelessWidget {
                           ),
                           alignRight: isMe,
                           trailing: isMe
-                              ? Icon(
-                                  isPending
-                                      ? Icons.done
-                                      : (isRead ? Icons.done_all : Icons.done),
-                                  size: 12,
-                                  color: isPending
-                                      ? AppTheme.textSecondary
-                                      : (isRead
-                                            ? AppTheme.primary
-                                            : AppTheme.textSecondary),
+                              ? Tooltip(
+                                  message:
+                                      isQueued ? s.msgWaitingConnection : '',
+                                  child: Icon(
+                                    (isPending || isQueued)
+                                        ? Icons.done
+                                        : Icons.done_all,
+                                    size: 12,
+                                    color: (!isQueued &&
+                                            !isPending &&
+                                            isRead)
+                                        ? AppTheme.primary
+                                        : AppTheme.textSecondary,
+                                  ),
                                 )
                               : null,
                         ),
                     ],
                   ),
                     ),
-                    if (reactions != null && reactions!.isNotEmpty)
+                      if (reactions != null && reactions!.isNotEmpty)
                       Positioned(
-                        bottom: -12,
+                        bottom: -10,
                         left: isMe ? null : 8,
                         right: isMe ? 8 : null,
                         child: _InlineReactionBadge(counts: reactions!),
@@ -1100,10 +1119,10 @@ class _InlineReactionBadge extends StatelessWidget {
     final shown = entries.take(3).map((e) => e.key).join();
     final total = entries.fold<int>(0, (p, e) => p + e.value);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.15),
@@ -1115,7 +1134,7 @@ class _InlineReactionBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(shown, style: TextStyle(fontSize: AppGlyph.sm)),
+          Text(shown, style: TextStyle(fontSize: AppGlyph.xs)),
           if (total > 1) ...[
             const SizedBox(width: 3),
             Text(
