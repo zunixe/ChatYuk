@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -61,16 +62,17 @@ void main() {
   }
 
   group('sortir + dedupe emission', () {
-    test('online di atas, idle tengah, offline bawah; lastSeen desc per bucket',
-        () async {
+    test('online di atas lalu idle; offline/invisible/basi dibuang', () async {
       await _emit([
         _u('off1', 'offline', seenMinAgo: 1),
+        _u('inv1', 'invisible', seenMinAgo: 1),
+        _u('basi1', 'online', seenMinAgo: 60),
         _u('idle1', 'idle', seenMinAgo: 5),
         _u('on1', 'online', seenMinAgo: 3),
         _u('on2', 'online', seenMinAgo: 1),
       ]);
       final uids = provider.users.map((u) => u.uid).toList();
-      expect(uids, ['on2', 'on1', 'idle1', 'off1']);
+      expect(uids, ['on2', 'on1', 'idle1']);
     });
 
     test('uid duplikat + uid kosong dibuang', () async {
@@ -91,12 +93,17 @@ void main() {
   });
 
   group('pindah bucket + grace kosong', () {
-    test('online → offline pindah ke bawah', () async {
+    test('online → offline/invisible hilang dari list', () async {
       await _emit([_u('a', 'online'), _u('b', 'online')]);
       await _emit([_u('a', 'offline'), _u('b', 'online')]);
       expect(
         provider.users.map((u) => u.uid).toList(),
-        ['b', 'a'],
+        ['b'],
+      );
+      await _emit([_u('b', 'invisible'), _u('c', 'online')]);
+      expect(
+        provider.users.map((u) => u.uid).toList(),
+        ['c'],
       );
     });
 
@@ -110,6 +117,27 @@ void main() {
       // Emit berisi datang sebelum timer habis → grace batal.
       await _emit([_u('a', 'online'), _u('b', 'online')]);
       expect(provider.users.length, 2);
+    });
+
+    test('grace 8 dtk tanpa emit isi → list basi dibersihkan', () {
+      FakeAsync().run((fake) {
+        final svc = MockChatService();
+        final ctl = StreamController<List<UserModel>>.broadcast();
+        when(() => svc.getOnlineUsers()).thenAnswer((_) => ctl.stream);
+        final p = OnlineUsersProvider(service: svc);
+        ctl.add([_u('a', 'online')]);
+        fake.elapse(const Duration(milliseconds: 100));
+        expect(p.users.map((u) => u.uid).toList(), ['a']);
+        // Semua jadi invisible → stream emit kosong → grace menahan dulu.
+        ctl.add([]);
+        fake.elapse(const Duration(milliseconds: 100));
+        expect(p.users.map((u) => u.uid).toList(), ['a']);
+        // Timer habis tanpa emit isi → list dibersihkan, tidak nempel.
+        fake.elapse(const Duration(seconds: 8));
+        expect(p.users, isEmpty);
+        p.dispose();
+        ctl.close();
+      });
     });
   });
 }

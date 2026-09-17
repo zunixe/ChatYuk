@@ -57,6 +57,22 @@ void main() {
       expect(rows.map((r) => (r as Map)['id']).toList(), ['on']);
     });
 
+    test('invisible dibuang walau presence-nya hidup', () {
+      final rows = ChatService.filterRpcOnlineRows(
+        [_row('admin', 'invisible'), _row('on', 'online')],
+        {'admin', 'on'},
+      );
+      expect(rows.map((r) => (r as Map)['id']).toList(), ['on']);
+    });
+
+    test('invisible tanpa presence dibuang', () {
+      final rows = ChatService.filterRpcOnlineRows(
+        [_row('admin', 'invisible'), _row('on', 'online')],
+        <String>{},
+      );
+      expect(rows.map((r) => (r as Map)['id']).toList(), ['on']);
+    });
+
     test('semua terfilter → fallback RPC asli (cold start)', () {
       final rpc = [_row('a', 'idle'), _row('b', 'idle')];
       final rows = ChatService.filterRpcOnlineRows(rpc, <String>{});
@@ -96,6 +112,31 @@ void main() {
       );
       final ids = rows.map((r) => (r as Map)['id']).toSet();
       expect(ids, {'p1', 'p2', 'baru'});
+    });
+  });
+
+  group('isVisibleOnline', () {
+    DateTime ago(int min) =>
+        DateTime.now().toUtc().subtract(Duration(minutes: min));
+
+    test('online/idle segar tampil', () {
+      expect(ChatService.isVisibleOnline('online', ago(1)), isTrue);
+      expect(ChatService.isVisibleOnline('idle', ago(5)), isTrue);
+    });
+
+    test('invisible segar pun tidak tampil', () {
+      expect(ChatService.isVisibleOnline('invisible', ago(1)), isFalse);
+    });
+
+    test('offline/null/status asing tidak tampil', () {
+      expect(ChatService.isVisibleOnline('offline', ago(1)), isFalse);
+      expect(ChatService.isVisibleOnline(null, ago(1)), isFalse);
+      expect(ChatService.isVisibleOnline('busy', ago(1)), isFalse);
+    });
+
+    test('online/idle basi (>30 mnt) tidak tampil', () {
+      expect(ChatService.isVisibleOnline('online', ago(60)), isFalse);
+      expect(ChatService.isVisibleOnline('idle', ago(31)), isFalse);
     });
   });
 
