@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-16T13:33:07Z
+-- Timestamp: 2026-09-17T11:42:30Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -764,7 +764,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: handle_new_private_message @ 20260814250000_gift_platform_cut_phase3.sql
+-- snapshot-fn: handle_new_private_message @ 20260917180000_last_sender_id.sql
 CREATE OR REPLACE FUNCTION public.handle_new_private_message()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -795,6 +795,7 @@ begin
       when new.type = 'gift' then '[Hadiah]'
       else new.text end,
     last_message_at = now(),
+    last_sender_id = new.sender_id,
     message_count = message_count + 1,
     unread_counts = coalesce(unread, '{}'::jsonb),
     last_read_at = coalesce(lastread, '{}'::jsonb)

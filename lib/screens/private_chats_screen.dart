@@ -785,20 +785,50 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                         Builder(builder: (_) {
                                           final otherStatus = statusMap[otherUid] ?? 'offline';
                                           final isOnline = otherStatus == 'online';
-                                          return Text(
-                                            isOnline ? s.chatOnlineSubtitle : _chatSubtitle(chat, auth.uid!, s),
-                                            style: AppText.bodySmall.copyWith(color: isOnline ? const Color(0xFF4CAF50) : AppTheme.textSecondary, fontWeight: isOnline ? FontWeight.w600 : FontWeight.w400),
-                                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                                          final profile = _chatSubtitle(chat, auth.uid!, s);
+                                          final hasMessage = chat.lastMessage.isNotEmpty;
+                                          final preview = hasMessage ? chat.lastMessage : s.noMessages;
+                                          final hasUnread = unread > 0;
+                                          final myUid = auth.uid ?? '';
+                                          final otherRead = chat.lastReadAt[otherUid];
+                                          final isLastFromMe = hasMessage && chat.lastSenderId.isNotEmpty && chat.lastSenderId == myUid;
+                                          final isLastRead = isLastFromMe && otherRead != null && !chat.lastMessageAt.isAfter(otherRead);
+                                          return Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              if (isOnline || profile.isNotEmpty) ...[
+                                                Text(
+                                                  isOnline ? s.chatOnlineSubtitle : profile,
+                                                  style: AppText.bodySmall.copyWith(color: isOnline ? const Color(0xFF4CAF50) : AppTheme.textSecondary, fontWeight: isOnline ? FontWeight.w600 : FontWeight.w400),
+                                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 4),
+                                              ],
+                                              Row(
+                                                children: [
+                                                  if (isLastFromMe) ...[
+                                                    Icon(
+                                                      Icons.done_all,
+                                                      size: 14,
+                                                      color: isLastRead ? AppTheme.primary : AppTheme.textSecondary,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                  ],
+                                                  Expanded(
+                                                    child: Text(
+                                                      preview,
+                                                      style: AppText.bodySmall.copyWith(
+                                                        color: hasUnread ? AppTheme.textPrimary : AppTheme.textSecondary,
+                                                        fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
+                                                      ),
+                                                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                           );
                                         }),
-                                        SizedBox(height: 4),
-                                        Text(
-                                          '${chat.messageCount} ${s.chatMsgCount}',
-                                          style: AppText.caption.copyWith(
-                                            color: AppTheme.textSecondary,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   ),
@@ -929,8 +959,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       if (genderAgePart.isNotEmpty) genderAgePart,
       if (loc.isNotEmpty) loc,
     ];
-    if (parts.isEmpty)
-      return chat.lastMessage.isEmpty ? s.noMessages : chat.lastMessage;
+    if (parts.isEmpty) return '';
     return parts.join(' · ');
   }
 
