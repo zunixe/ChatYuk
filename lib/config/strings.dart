@@ -381,6 +381,17 @@ class S {
   String get msgUnmuted =>
       isId ? 'Notifikasi chat dinyalakan' : 'Chat notifications unmuted';
   String labelArchived(int n) => isId ? 'Diarsipkan ($n)' : 'Archived ($n)';
+  // ── Antrean offline (pesan menunggu koneksi) ──
+  String get msgQueuedOffline => isId
+      ? 'Disimpan — terkirim otomatis saat online'
+      : 'Saved — will send automatically when online';
+  String get msgWaitingConnection =>
+      isId ? 'Menunggu koneksi' : 'Waiting for connection';
+  String msgQueuedCount(int n) => isId
+      ? '$n menunggu koneksi — terkirim otomatis'
+      : '$n waiting for connection — will send automatically';
+  String msgQueueSent(int n) =>
+      isId ? '$n pesan terkirim' : '$n messages sent';
 
   // ── Profile ──
   String get titleProfile => isId ? 'Profil' : 'Profile';

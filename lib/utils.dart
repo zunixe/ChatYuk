@@ -87,7 +87,12 @@ const userColorPalette = [
   0xFFF4511E,
 ];
 
-/// Format jam pesan — HH:mm.
+/// Format jam bubble chat — 12 jam + AM/PM (mis. "2:30 PM").
+String formatBubbleTime(DateTime dt) {
+  return DateFormat('h:mm a').format(dt.toLocal());
+}
+
+/// Format jam pesan — h:mm AM/PM.
 /// Kalau pesan > hari ini, tampilkan tanggal juga.
 String formatTime(DateTime dt) {
   final now = DateTime.now();
@@ -97,13 +102,13 @@ String formatTime(DateTime dt) {
   final diff = todayStart.difference(msgDay).inDays;
 
   if (diff == 0) {
-    return DateFormat.Hm().format(local);
+    return DateFormat('h:mm a').format(local);
   } else if (diff == 1) {
-    return 'Yesterday ${DateFormat.Hm().format(local)}';
+    return 'Yesterday ${DateFormat('h:mm a').format(local)}';
   } else if (diff < 7) {
-    return DateFormat('EEE HH:mm').format(local);
+    return DateFormat('EEE h:mm a').format(local);
   } else {
-    return DateFormat('d MMM HH:mm').format(local);
+    return DateFormat('d MMM h:mm a').format(local);
   }
 }
 

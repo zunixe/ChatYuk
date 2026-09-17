@@ -32,8 +32,9 @@ class VoiceBubble extends StatefulWidget {
   final bool isMe;
   final String timeStr;
   final bool isPending;
+  final bool isQueued;
   final bool isRead;
-  const VoiceBubble({super.key, required this.path, required this.durationMs, this.isMe = false, this.timeStr = '', this.isPending = false, this.isRead = false});
+  const VoiceBubble({super.key, required this.path, required this.durationMs, this.isMe = false, this.timeStr = '', this.isPending = false, this.isQueued = false, this.isRead = false});
 
   @override
   State<VoiceBubble> createState() => _VoiceBubbleState();
@@ -179,9 +180,15 @@ class _VoiceBubbleState extends State<VoiceBubble> {
               if (widget.isMe && widget.timeStr.isNotEmpty) ...[
                 const SizedBox(width: 3),
                 Icon(
-                  widget.isPending ? Icons.done : (widget.isRead ? Icons.done_all : Icons.done),
+                  (widget.isPending || widget.isQueued)
+                      ? Icons.done
+                      : Icons.done_all,
                   size: 12,
-                  color: widget.isPending ? Colors.white38 : (widget.isRead ? const Color(0xFF7EC8FF) : Colors.white38),
+                  color: (widget.isRead &&
+                          !widget.isPending &&
+                          !widget.isQueued)
+                      ? const Color(0xFF7EC8FF)
+                      : Colors.white38,
                 ),
               ],
             ],
