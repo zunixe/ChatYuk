@@ -172,10 +172,10 @@ class ReactionBadge extends StatelessWidget {
     final shown = entries.take(3).map((e) => e.key).join();
     final total = entries.fold<int>(0, (p, e) => p + e.value);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.15),
@@ -187,7 +187,7 @@ class ReactionBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(shown, style: TextStyle(fontSize: AppGlyph.sm)),
+          Text(shown, style: TextStyle(fontSize: AppGlyph.xs)),
           if (total > 1) ...[
             const SizedBox(width: 3),
             Text(
