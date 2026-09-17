@@ -391,6 +391,7 @@ class ChatTextScale {
 class AppGlyph {
   AppGlyph._();
 
+  static const double xs = 16; // emoji badge reaksi di bawah bubble
   static const double sm = 20; // emoji inline, ikon room list
   static const double md = 24; // emoji bubble, sel emoji picker
   static const double lg = 28; // emoji gift picker

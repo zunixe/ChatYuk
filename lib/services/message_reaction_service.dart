@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../utils.dart';
+import 'message_cache.dart';
 
 class MessageReactionService {
   MessageReactionService._();
@@ -66,6 +67,53 @@ class MessageReactionService {
     } catch (_) {
       return Stream.value({});
     }
+  }
+
+  static String reactionCacheKey(String chatId) => 'reactions:$chatId';
+
+  /// Parse cache disk ke map reaksi — defensif terhadap format lama/rusak.
+  static Map<String, Map<String, int>> parseCachedReactions(
+    Map<String, dynamic> raw,
+  ) {
+    final out = <String, Map<String, int>>{};
+    raw.forEach((mid, v) {
+      if (mid.isEmpty || v is! Map) return;
+      final per = <String, int>{};
+      v.forEach((emoji, c) {
+        final n = c is num ? c.toInt() : int.tryParse('$c') ?? 0;
+        if ('$emoji'.isNotEmpty && n > 0) per['$emoji'] = n;
+      });
+      if (per.isNotEmpty) out[mid] = per;
+    });
+    return out;
+  }
+
+  /// Muat reaksi tersimpan untuk tampil instan — stream realtime menimpa
+  /// sesudahnya (lazy load, pola sama seperti pesan & daftar online).
+  Future<Map<String, Map<String, int>>> loadCachedReactions(
+    String chatId,
+  ) async {
+    try {
+      final raw = await MessageCache.instance.loadRawObj(
+        reactionCacheKey(chatId),
+      );
+      return parseCachedReactions(raw);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Simpan tiap emission stream (termasuk kosong — emission hanya datang
+  /// dari data server asli, jadi aman menimpa).
+  Future<void> saveCachedReactions(
+    String chatId,
+    Map<String, Map<String, int>> m,
+  ) async {
+    try {
+      await MessageCache.instance.saveRawObj(reactionCacheKey(chatId), {
+        for (final e in m.entries) e.key: Map<String, dynamic>.from(e.value),
+      });
+    } catch (_) {}
   }
 
   Future<bool> isStarred({
