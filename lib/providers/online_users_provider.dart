@@ -359,8 +359,18 @@ class OnlineUsersProvider extends ChangeNotifier {
         }
         _armHoldSweep();
         if (_usersEqual(_users, deduped)) return;
-        // Debounce avatar-only churn di cold start (fast 50→ slow 100→ avatar batch 20)
-        // biar list tidak rebuild 3-4x beruntun yang terlihat kedip.
+        // ── SATU JALUR COMMIT (anti 2× notify berurutan) ──
+        // Dulu ada 2 jalur: debounce 180ms untuk avatar-only churn, dan
+        // jalur langsung untuk perubahan lain. Keduanya bisa jalan berurutan
+        // (mis. emit avatar-only lalu emit status) → 2 notifyListeners() →
+        // halaman di-rebuild 2× dalam satu frame.
+        //
+        // Sekarang SEMUA perubahan lewat satu debounce. Delay-nya dibedakan:
+        // - avatar-only churn → 180ms (cold start: fast 50 → slow 100 →
+        //   avatar batch 20; ditahan supaya list tidak kedip 3-4×).
+        // - perubahan nyata (status/anggota berubah) → 32ms, cukup untuk
+        //   menggabungkan beberapa emission yang datang hampir bersamaan
+        //   TANPA terasa lag (setara 2 frame @120Hz).
         final isAvatarOnlyChange = _users.length == deduped.length &&
             _users.isNotEmpty &&
             _users.every((old) {
@@ -369,28 +379,37 @@ class OnlineUsersProvider extends ChangeNotifier {
               final n = deduped[idx];
               return old.status == n.status && old.lastSeen == n.lastSeen;
             });
-        if (isAvatarOnlyChange) {
-          _debounce?.cancel();
-          _debounce = Timer(const Duration(milliseconds: 180), () {
-            _users = _reorderStable(_users, deduped);
-            _error = null;
-            if (!_disposed) notifyListeners();
-          });
-          return;
-        }
-        _debounce?.cancel();
-        _users = _reorderStable(_users, deduped);
-        _error = null;
-        if (!_disposed) notifyListeners();
-        // Simpan ke disk untuk cold start berikutnya (tanpa avatar base64 biar kecil).
-        // Avatar disimpan TERPISAH per-uid (kv terenkripsi, pola sama seperti
-        // pesan foto) supaya cold start langsung tampil foto — tanpa pop-in
-        // dan tanpa download ulang dari network (network hanya bawa update).
-        if (deduped.isNotEmpty) {
-          final rows = deduped.map((u) => {'uid': u.uid, ...u.toMap(), 'avatar': ''}).toList();
-          MessageCache.instance.saveRawList('online_users', rows);
-          _persistAvatars(deduped);
-        }
+        _scheduleCommit(
+          deduped,
+          isAvatarOnlyChange ? _avatarDebounce : _statusDebounce,
+        );
+  }
+
+  /// Debounce terpisah untuk dua sifat perubahan (lihat _onUsers).
+  static const Duration _avatarDebounce = Duration(milliseconds: 180);
+  static const Duration _statusDebounce = Duration(milliseconds: 32);
+
+  /// Satu-satunya tempat yang menulis `_users` + notify + simpan disk.
+  /// Dipanggil lewat debounce supaya burst emission jadi SATU rebuild.
+  void _scheduleCommit(List<UserModel> next, Duration delay) {
+    _debounce?.cancel();
+    _debounce = Timer(delay, () {
+      if (_disposed) return;
+      PerfProbe.notifyCount('onlineUsers');
+      _users = _reorderStable(_users, next);
+      _error = null;
+      if (!_disposed) notifyListeners();
+      // Simpan ke disk untuk cold start berikutnya (tanpa avatar base64 biar
+      // kecil). Avatar disimpan TERPISAH per-uid (kv terenkripsi, pola sama
+      // seperti pesan foto) supaya cold start langsung tampil foto — tanpa
+      // pop-in dan tanpa download ulang dari network.
+      if (next.isNotEmpty) {
+        final rows =
+            next.map((u) => {'uid': u.uid, ...u.toMap(), 'avatar': ''}).toList();
+        MessageCache.instance.saveRawList('online_users', rows);
+        _persistAvatars(next);
+      }
+    });
   }
 
   void updateAvatarForUid(String uid, String base64) {

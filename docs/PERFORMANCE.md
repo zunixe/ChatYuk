@@ -26,6 +26,103 @@ Kesimpulan: rendering sudah mulus dengan margin ~2.5×. **Kalau user masih
 merasa lambat, tersangka utamanya adalah WAKTU TUNGGU DATA (RPC/DB), bukan
 render** — ukur dulu sebelum mengubah kode render.
 
+### 1b. Hasil ukur JALUR DATA (2026-09-18, `PERF_PROBE=true` di build rilis)
+
+Diukur pakai `PerfProbe.timed` (mode `releaseMeasure`) + `adb logcat | grep '[PERF]'`.
+
+| Jalur | Nilai terukur | Verdict |
+|---|---|---|
+| `online.diskLoad` | **20.6 / 23.2 ms** | ✅ aman |
+| `online.rpc` (global) | **21.4 / 127.4 / 235.3 / 260.0 ms** | ⚠️ bervariasi (21→260ms) |
+| `online.rpcCountry` | **135.8 / 136.6 / 162.6 ms** | ⚠️ sedang |
+| `timeline.rpc` (halaman 1) | **142.1 / 147.9 / 148.2 / 168.8 ms** | ✅ aman |
+| `chat.listFetch` | **291–755 ms**, rata-rata **~450-500 ms**, **8× beruntun** | ❌ **BOTTLENECK UTAMA** |
+
+**Temuan kunci (`chat.listFetch`):**
+
+1. **Nilainya paling lambat** (291-755ms) — jauh di atas jalur lain.
+2. **Dipanggil 8× beruntun dalam ~1 detik** (log 10:30:59: 381.9, 462.3, 665.8,
+   677.5, 322.8, 306.6, 425.8, 306.0 ms). Bukan 1 query lambat, tapi **query
+   yang sama diulang-ulang**.
+3. **Sebab:** `getMyPrivateChats(uid)` dipanggil dari 5 tempat —
+   `app.dart:798` (nav), `private_chats_screen.dart:299` (list Pesan),
+   `private_chat_screen.dart:227` (layar chat), `room_members_sheet.dart:516`
+   (sheet anggota), `online_users_screen.dart:426`. Tiap panggilan **pertama**
+   membuat channel realtime baru + memicu `reload()` masing-masing. Tidak ada
+   dedupe → semuanya menembak `private_chats` bersamaan.
+4. **Kerugian:** 8× beban DB + 8× payload `private_chats` (yang berisi banyak
+   jsonb) untuk data yang SAMA, dan 8× `controller.add()` → potensi rebuild
+   beruntun di list chat.
+
+**Perbaikan (sudah diterapkan):** `reload()` sekarang **dedupe in-flight** —
+kalau fetch untuk uid itu sedang jalan, panggilan lain menunggu future yang
+sama (`_chatListFetchInFlight`). 8 fetch → 1.
+
+### 1c. Verifikasi dedupe (2026-09-18, 10:54, proses baru 28001)
+
+Setelah fix, `chat.listFetch` muncul **1× saja (505.8ms)** — bukan 8× beruntun.
+Fix terbukti bekerja.
+
+**Temuan lanjutan dari log yang sama:**
+
+| Jalur | Nilai pasca-fix | Catatan |
+|---|---|---|
+| `online.rpcCountry` | **665.4ms** (1 dari 4 sampel; sisanya 136-171ms) | ⚠️ 1 sampel melonjak — perlu dipantau, belum tentu pola |
+| Semua jalur lain | stabil | `online.rpc` 134-523ms, `timeline.rpc` 167-201ms, `online.diskLoad` 36ms |
+| Anomali | `chat.listFetch` **4314.9ms** di proses LAMA (21363, n=12 — sebelum reinstall fix) | Sampel dari sesi sebelum fix, kemungkinan antrean 8 fetch yang menumpuk. **Abaikan** kecuali muncul lagi di proses baru |
+
+> Catatan metodologi: sampel 10:53:56 berasal dari **proses lama**
+> (PID 21363, app versi sebelum fix). Angka valid pasca-fix hanya dari PID
+> 28001 (10:54 ke atas). Jangan campur keduanya saat menyimpulkan.
+
+> Catatan: `chat.listFetch` sempat ditulis "aman" di dokumen lama karena hanya
+> ada 1 sampel. Setelah diukur berulang, ternyata inilah bottleneck-nya —
+> pelajaran: **jangan simpulkan dari 1 sampel.**
+
+### 1d. Hasil ukur TAB ADMIN PANEL (2026-09-18, semua tab diklik)
+
+Instrumentasi: wrapper `AdminService._rpc()` → metrik `admin.<nama_rpc>`
+(43 RPC terukur otomatis, no-op saat probe off).
+
+| RPC | Nilai | Verdict |
+|---|---|---|
+| `admin_storage_stats` | **340.6 ms** | ❌ terlambat |
+| `admin_ai_provider_list` | **332.5 ms** | ❌ terlambat |
+| `admin_stats` | **316.5 ms** | ❌ terlambat |
+| `admin_list_devices` | **293.5 / 171.6 ms** | ⚠️ borderline (2 sampel) |
+| `admin_get_point_settings` | **292.0 ms** | ⚠️ borderline |
+| `admin_ai_settings` | **287.5 ms** | ⚠️ borderline |
+| `admin_registrations_daily` | 203.6 / 220.5 / 186.6 ms | ✅ aman |
+| `admin_hidden_uids` | 186.4 / 174.1 / 181.4 ms | ✅ aman |
+| `admin_sweep_calls` | 186.4 ms | ✅ aman |
+| `admin_list_dummies_page` | 185.5 ms | ✅ aman |
+| `admin_list_deleted` | 182.9 ms | ✅ aman |
+| `admin_stats_detail` | 167.7 ms | ✅ aman |
+| `admin_active_calls` | 152.9 ms | ✅ aman |
+| `admin_contact_messages_page` | 150.3 ms | ✅ aman |
+| `admin_list_chats_page` | 216.0 ms | ✅ aman |
+
+**Kesimpulan admin panel:**
+
+1. **Tidak ada tab yang benar-benar parah** — tertinggi 340ms, dan semuanya
+   selesai di bawah 350ms. Tidak ada satu pun yang mendekati `chat.listFetch`
+   (505-755ms).
+2. **Rata-rata menumpuk di ~150-340ms** — ini menyerupai *baseline* latency
+   Supabase dari jaringan ini (bandingkan `online.rpc` yang juga 130-260ms).
+   Artinya sebagian besar waktu adalah **jarak jaringan + cold start RPC**,
+   bukan query yang berat.
+3. **3 RPC >300ms** (`admin_storage_stats`, `admin_ai_provider_list`,
+   `admin_stats`) — kandidat optimasi kalau tab tersebut terasa lambat.
+   Perlu ukur ulang beberapa kali dulu untuk memastikan bukan cold start
+   semata (semua sampel ini n=1 di kunjungan pertama tab).
+4. **Tab dibuka berurutan & semua n=1** → angka ini termasuk cold-start RPC
+   (first-call ke Supabase). Kunjungan kedua `admin_list_devices` turun
+   293.5→171.6ms, jadi **cold start memang berpengaruh ~40%**.
+
+**SISA (kalau tab admin terasa lambat):** lakukan pass kedua (buka tab dua
+kali) untuk memisahkan cold-start vs query berat, baru optimasi RPC >300ms
+yang konsisten.
+
 ### Cara mengukur ulang (WAJIB pakai jalur ini)
 
 ```bash
@@ -170,27 +267,41 @@ Titik ukur terpasang:
 | `ChatList` | `private_chats_screen.dart` | build halaman list chat |
 | `chat.listFetch` | `chat_service.dart` | fetch 50 row `private_chats` |
 | `online.diskLoad` | `online_users_provider.dart` | load cache disk pengguna online |
+| `online.rpc` | `chat_service.dart` | RPC `get_online_users` (global, limit 200) |
+| `online.rpcCountry` | `chat_service.dart` | RPC `get_online_users` (shard country, limit 100) |
+| `timeline.rpc` | `timeline_provider.dart` | RPC `list_posts` halaman PERTAMA (refresh) |
+| `timeline.rpcMore` | `timeline_provider.dart` | RPC `list_posts` paginasi (saat scroll) |
+| `onlineUsers` (notify) | `online_users_provider.dart` | jumlah `notifyListeners()` |
+
+> `timeline.rpc` dipisah dari `timeline.rpcMore` karena hanya halaman pertama
+> yang menahan kemunculan tab Timeline; paginasi terjadi saat user sudah
+> melihat konten.
 
 ### ⚠️ Jebakan: probe butuh mode profil, tapi profil merusak Sign-In
 
-`PERF_PROBE` hanya mengeluarkan log di **profil/debug** (karena `dlog`
-di-gate `kDebugMode || kProfileMode`). Tapi build profil = **debug key** →
-SHA-1 `ff:1f:f6:2d:...` tidak terdaftar → **the underlying provider Sign-In gagal
-`DEVELOPER_ERROR`** (sudah 2× kejadian).
+**SUDAH DIPECAHKAN (2026-09-18)** — lihat "Mode pengukuran" di bawah:
 
-Pilihan yang benar (urut rekomendasi):
-1. **Ukur render pakai app rilis** (Sudah login) via `SurfaceFlinger --latency`
-   — tidak butuh build probe sama sekali. Ini yang dipakai untuk baseline 3.5ms.
-2. Kalau memang butuh angka `fetch`/`build`: daftarkan SHA-1 debug
-   (`ff:1f:f6:2d:...` lengkap) sebagai OAuth client tambahan di the underlying provider
-   Cloud untuk package yang dipakai build probe.
-3. JANGAN pasang build debug/profil ke HP yang dipakai kerja harian tanpa
-   mendaftarkan SHA-1-nya lebih dulu.
+`PerfProbe` sekarang punya **dua mode**:
+- `enabled` — butuh debug/profil (log lewat `dlog`).
+- `releaseMeasure` — aktif di **build RILIS** + `--dart-define=PERF_PROBE=true`;
+  log lewat `print` sehingga tetap terbaca `adb logcat` di rilis.
 
-> Flavor `adminDev` pernah dibuat untuk ini (`--flavor adminDev` +
-> `src/adminDev/the underlying provider-services.json`) tapi **sudah dihapus** karena
-> appId-nya (`com.chatyuk.chatyuk.admin.dev`) tetap butuh SHA-1 terdaftar
-> sendiri. Kalau mau dipakai lagi: buat ulang gsj-nya + daftarkan SHA-1 debug.
+Karena pengukuran jalur DATA tidak butuh debug key, **build rilis sudah cukup**
+untuk mengukur `fetch`/`build` — Sign-In tetap jalan, tidak perlu daftar SHA-1
+debug lagi. Yang tetap butuh mode profil hanyalah metrik `tabEnd`/`buildCount`
+(mereka memakai `dlog`).
+
+```bash
+# Ukur jalur data di HP kerja TANPA merusak Sign-In:
+flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
+  --dart-define=PERF_PROBE=true --obfuscate --split-debug-info=build/app/symbols
+adb logcat | grep '\[PERF\]'
+```
+
+> Catatan sejarah: flavor `adminDev` pernah dibuat untuk ini
+> (`--flavor adminDev` + `src/adminDev/google-services.json`) tapi **sudah
+> dihapus** karena appId-nya (`com.chatyuk.chatyuk.admin.dev`) tetap butuh
+> SHA-1 terdaftar sendiri. Tidak perlu dihidupkan lagi — pakai `releaseMeasure`.
 
 ---
 
@@ -244,29 +355,52 @@ Diurutkan berdasar dugaan dampak × risiko. Kerjakan **satu per satu sambil
 mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 
 ### Prioritas tinggi (tersangka utama sisa kelambatan = waktu DATA, bukan render)
-- [ ] **#1 Ukur & perbaiki waktu fetch per tab.** Instrumentasi SUDAH dipasang
-      (`chat.listFetch`, `online.diskLoad`). Yang belum diukur:
-      `OnlineUsersProvider` emit pertama (RPC `get_online_users`),
-      `TimelineProvider.prewarm` (`list_posts`). Cara ukur: lihat bagian 3
-      (ingat: probe butuh profil → jangan di HP kerja tanpa daftar SHA-1 debug).
-      Target: tahu jalur mana yang >300ms, lalu perbaiki yang paling lambat.
-- [ ] **#2 Satukan jalur notify `OnlineUsersProvider`.** Sekarang ada 2 jalur
-      (`_debounce` 180ms untuk avatar-only + jalur langsung). Bisa memicu 2
-      `notifyListeners()` berurutan → 2 rebuild halaman. Satukan jadi satu
-      jalur dengan debounce tunggal.
-- [ ] **#3 Kurangi payload realtime `private_chats`.** Row dikirim LENGKAP tiap
-      perubahan (termasuk `participants`, `participant_names` jsonb, dll).
-      Kalau ada kolom besar yang tidak dipakai kartu list, pindahkan ke tabel
-      terpisah atau pertimbangkan hanya kirim kolom yang berubah.
+- [x] **#1 Instrumentasi jalur data SELESAI + SUDAH DIUKUR (2026-09-18).**
+      Empat titik ukur ditambahkan: `online.rpc` (RPC `get_online_users` global),
+      `online.rpcCountry` (shard country), `timeline.rpc` (RPC `list_posts`
+      halaman pertama), `timeline.rpcMore` (paginasi) + `onlineUsers` (hitung
+      notify). Sekaligus `PerfProbe` diberi mode `releaseMeasure` sehingga
+      pengukuran bisa jalan di **build rilis** (Sign-In tetap aman — tidak perlu
+      daftar SHA-1 debug lagi).
+      Hasil: lihat bagian **1b** (jalur data), **1c** (verifikasi dedupe),
+      **1d** (seluruh tab admin). Kesimpulan: bottleneck tunggal =
+      `chat.listFetch` (duplikasi query) — sudah diperbaiki di #4.
+- [x] **#2 Satukan jalur notify `OnlineUsersProvider` SELESAI (2026-09-18).**
+      Dua jalur (debounce 180ms avatar-only + jalur langsung) digabung jadi
+      SATU fungsi `_scheduleCommit`. Delay dibedakan: avatar-only 180ms
+      (anti-kedip cold start), perubahan nyata 32ms (≈2 frame @120Hz) —
+      cukup menggabungkan burst emission tanpa terasa lag. Efek: burst
+      emission tidak lagi menghasilkan 2 `notifyListeners()` berurutan
+      (2 rebuild halaman per frame). Bisa dipantau lewat metrik
+      `notify onlineUsers`.
+- [x] **#3 DIBATALKAN — tidak mungkin diterapkan (2026-09-18).** Tiga alasan:
+      (a) Supabase Realtime **tidak bisa** memilih kolom — payload ditentukan
+      publication di server, bukan SQL klien, jadi "kirim hanya kolom yang
+      berubah" secara harfiah tidak ada; (b) setelah dilacak, **semua** kolom
+      `private_chats` dikonsumsi `_rowToPrivateChat` (`chat_service.dart:1053`)
+      — tidak ada kolom besar yang bisa dibuang/dipindah; (c) memindah kolom =
+      mengubah skema + publication, berisiko tinggi, sementara belum ada angka
+      yang menunjukkan ini benar-benar masalah. Beban realtime ditangani dari
+      sisi klien lewat #2 (burst digabung jadi satu rebuild) yang aman &
+      terukur. Bukaan ulang hanya bila pengukuran #1 membuktikan payload ini
+      sebagai bottleneck.
 
 ### Prioritas sedang
-- [ ] **#4 `_chatSubtitle` + sort di `_recomputeFiltered`** dijalankan per
-      perubahan data. Kalau list >100 chat, pertimbangkan cache hasil sort per
-      `lastMessageAt` (sekarang `List.of` + sort penuh tiap kali).
+- [x] **#4 Dedupe `chat.listFetch` SELESAI (2026-09-18).** Bukan sekadar
+      "cache hasil sort" seperti rencana awal — akar masalahnya ternyata
+      **duplikasi query**. `getMyPrivateChats` dipanggil 5 tempat, dan tiap
+      panggilan pertama memicu `reload()` sendiri tanpa dedupe → terukur
+      **8 fetch beruntun 291-755ms** untuk data yang sama. Perbaikan:
+      `_chatListFetchInFlight` — panggilan saat fetch sedang jalan menunggu
+      future yang sama. 8 fetch → 1.
+      **SISA (kalau masih perlu):** `_comparePinned` + sort penuh per
+      perubahan data; kerjakan hanya bila pengukuran ulang masih >300ms.
 - [ ] **#5 `RepaintBoundary` pada baris unread/preview** di kartu list — kalau
       profiling menunjukkan masih ada repaint berlebih saat badge berubah.
+      Prioritas TURUN: render sudah 0% jank, jadi ini belum terbukti masalah.
 - [ ] **#6 Tunda fetch avatar batch** di `OnlineUsersProvider` sampai list
-      pertama ter-render (sekarang ikut jalur warm).
+      pertama ter-render (sekarang ikut jalur warm). Prioritas TURUN:
+      `online.diskLoad` terukur cuma ~21ms — bukan bottleneck.
 
 ### Prioritas rendah (fitur, bukan optimasi)
 - [ ] **#7 Badge angka di ikon launcher** (MIUI/Android) — butuh plugin
@@ -294,3 +428,9 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-18 | TickerMode per tab, `select` ganti `watch`, recompute keluar `build()`, `RepaintBoundary`, prewarm tab idle, throttle `notifyActivity`, pil nav 500→260ms | p50 3.5ms / p99 6.6ms / **0% jank** |
 | 2026-09-18 | Long-press 500→320ms (`AppGestureDetector`), tooltip 320ms, haptic tombol kirim, timeout logout (5s/3s/8s) | Responsif (belum ada angka; perlu ukur tap→toolbar) |
 | 2026-09-18 | Instrumentasi `PerfProbe.timed` untuk `chat.listFetch` & `online.diskLoad` | `online.diskLoad` = 75.8ms (1 sampel) |
+| 2026-09-18 | Probe 2-mode (`releaseMeasure` untuk rilis — Sign-In aman tanpa SHA-1 debug); tambah titik ukur `online.rpc`, `online.rpcCountry`, `timeline.rpc`, `timeline.rpcMore`, `onlineUsers` | Belum ada angka — build probe siap, menunggu pembacaan `adb logcat` |
+| 2026-09-18 | `OnlineUsersProvider`: 2 jalur notify → 1 `_scheduleCommit` (avatar-only 180ms / perubahan nyata 32ms) | Belum ada angka — pantau `notify onlineUsers` |
+| 2026-09-18 | **UKUR jalur data** (`PERF_PROBE=true` rilis): `online.rpc` 21-260ms, `online.rpcCountry` 136-163ms, `timeline.rpc` 142-169ms, `online.diskLoad` ~21ms, **`chat.listFetch` 291-755ms × 8 beruntun** | Menemukan bottleneck utama = `chat.listFetch` |
+| 2026-09-18 | **Fix dedupe `chat.listFetch`** (`_chatListFetchInFlight`): 5 pemanggil `getMyPrivateChats` tidak lagi menembak query sama bersamaan | 8 fetch → 1 (terverifikasi: 505.8ms sekali) |
+| 2026-09-18 | **Fix kedip list Pesan**: recompute dipindah dari "build berikutnya" ke dalam `StreamBuilder` (sebelum `_listNotifier.value` dibaca) | List muncul di frame yang sama; hilang kedip EmptyStateView 1 frame |
+| 2026-09-18 | **Instrumentasi seluruh tab admin**: wrapper `AdminService._rpc()` — 43 RPC terukur otomatis | Tidak ada tab >350ms; tertinggi `admin_storage_stats` 340.6ms; cold-start RPC berpengaruh ~40% |

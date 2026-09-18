@@ -520,6 +520,23 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     _pageNotifier.value = 1;
                   }
                 }
+                // ── RECOMPUTE SINKRON (fix kedip "kosong" 1 frame) ──
+                // Dulu recompute baru jalan di build BERIKUTNYA (lewat blok
+                // `_recomputeDirty` di atas build()). Akibatnya di frame
+                // pertama setelah data tiba, `_listNotifier.value` masih []
+                // → user melihat EmptyStateView ("belum ada chat") kedip
+                // walau data SUDAH ada, baru list muncul frame berikutnya.
+                // `_recomputeFiltered` sinkron & murah (≤50 chat), jadi
+                // jalankan langsung di sini — list tampil di frame yang sama.
+                if (_recomputeDirty) {
+                  _recomputeDirty = false;
+                  _lastQueryUsed = effectiveQuery;
+                  _recomputeFiltered(
+                    myUid: auth.uid ?? '',
+                    query: effectiveQuery,
+                    liveNameMap: statusMap,
+                  );
+                }
                 // List terlihat: hanya rebuild bagian ini saat data berganti.
                 final filtered = _listNotifier.value;
                 if (filtered.isEmpty) {

@@ -13,12 +13,48 @@ import '../utils.dart';
 ///
 /// Pakai: `flutter run --dart-define=PERF_PROBE=true`, lalu
 /// `adb logcat | grep '[PERF]'`.
+///
+/// ── DUA MODE (penting) ──
+/// Isu lama: probe butuh build debug/profil supaya `dlog` keluar, tapi
+/// build debug = debug key → SHA-1-nya tidak terdaftar di OAuth client →
+/// Sign-In gagal `DEVELOPER_ERROR`. Itu yang membuat pengukuran jalur data
+/// mandek (lihat docs/PERFORMANCE.md bagian 3).
+///
+/// Solusinya: **pengukuran data boleh jalan di build RILIS.** Yang perlu
+/// hanyalah probe tidak di-strip dan hasilnya terlihat di logcat. Karena itu:
+/// - `enabled`  → butuh debug/profil (aman: tidak ada biaya di rilis biasa).
+/// - `releaseMeasure` → aktif saat rilis + PERF_PROBE, dan output-nya lewat
+///   `print` (bukan `dlog` yang di-gate kDebugMode) supaya tetap muncul di
+///   `adb logcat` build rilis.
+///
+/// Jadi: untuk mengukur `chat.listFetch`, `online.rpc`, dll. di HP kerja,
+/// build RILIS dengan `--dart-define=PERF_PROBE=true` — Sign-In tetap jalan,
+/// angka tetap keluar. Tidak perlu daftar SHA-1 debug lagi.
 class PerfProbe {
   PerfProbe._();
 
   /// Nyalakan dari build: `--dart-define=PERF_PROBE=true`.
   static const bool enabled =
       bool.fromEnvironment('PERF_PROBE') && (kDebugMode || kProfileMode);
+
+  /// Ukur jalur DATA di build rilis (debug key tidak dipakai → Sign-In aman).
+  /// Saat rilis tanpa dart-define = false → nol overhead.
+  static const bool releaseMeasure =
+      bool.fromEnvironment('PERF_PROBE') && !(kDebugMode || kProfileMode);
+
+  /// True bila pengukuran (apa pun modenya) menyala.
+  static const bool measuring = enabled || releaseMeasure;
+
+  /// Log hasil ukur — `dlog` di debug/profil, `print` di rilis (dlog
+  /// di-gate kDebugMode sehingga hilang di rilis).
+  static void _log(String msg) {
+    if (releaseMeasure) {
+      // ignore: avoid_print
+      print(msg);
+    } else {
+      dlog(msg);
+    }
+  }
 
   // ── Tap tab → frame pertama ──
   static final Map<int, Stopwatch> _tabWatch = {};
@@ -74,8 +110,10 @@ class PerfProbe {
   static final Map<String, List<int>> _fetchUs = {};
 
   /// Ukur satu operasi async: `await PerfProbe.timed('chat.fetch', () => ...)`.
+  /// Aktif juga di build rilis (lihat [releaseMeasure]) supaya jalur data
+  /// bisa diukur di HP kerja tanpa merusak Sign-In.
   static Future<T> timed<T>(String key, Future<T> Function() fn) async {
-    if (!enabled) return fn();
+    if (!measuring) return fn();
     final w = Stopwatch()..start();
     try {
       return await fn();
@@ -83,14 +121,14 @@ class PerfProbe {
       w.stop();
       (_fetchUs[key] ??= []).add(w.elapsedMicroseconds);
       final list = _fetchUs[key]!;
-      dlog('[PERF] fetch $key ${(w.elapsedMicroseconds / 1000).toStringAsFixed(1)}ms '
+      _log('[PERF] fetch $key ${(w.elapsedMicroseconds / 1000).toStringAsFixed(1)}ms '
           '(n=${list.length}, avg=${(_avg(list) / 1000).toStringAsFixed(1)}ms)');
     }
   }
 
   /// Ukur blok sinkron (mis. parse + sort list).
   static T measure<T>(String key, T Function() fn) {
-    if (!enabled) return fn();
+    if (!measuring) return fn();
     final w = Stopwatch()..start();
     final r = fn();
     w.stop();
@@ -100,7 +138,7 @@ class PerfProbe {
 
   /// Reset semua hitungan (untuk membandingkan periode tertentu).
   static void reset() {
-    if (!enabled) return;
+    if (!measuring) return;
     _buildCounts.clear();
     _notifyCounts.clear();
     _fetchUs.clear();
@@ -108,29 +146,29 @@ class PerfProbe {
 
   /// Cetak ringkasan + reset hitungan build/notify.
   static void report(String label) {
-    if (!enabled) return;
-    dlog('[PERF] ── $label ──');
+    if (!measuring) return;
+    _log('[PERF] ── $label ──');
     for (int i = 0; i < 4; i++) {
       final list = _tabFramesUs[i];
       if (list == null || list.isEmpty) continue;
-      dlog('[PERF] tab$i avg=${(_avg(list) / 1000).toStringAsFixed(1)}ms '
+      _log('[PERF] tab$i avg=${(_avg(list) / 1000).toStringAsFixed(1)}ms '
           'max=${(list.reduce((a, b) => a > b ? a : b) / 1000).toStringAsFixed(1)}ms '
           'n=${list.length}');
     }
     final builds = _buildCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     for (final e in builds) {
-      dlog('[PERF] build ${e.key}=${e.value}');
+      _log('[PERF] build ${e.key}=${e.value}');
     }
     final notifies = _notifyCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     for (final e in notifies) {
-      dlog('[PERF] notify ${e.key}=${e.value}');
+      _log('[PERF] notify ${e.key}=${e.value}');
     }
     final fetches = _fetchUs.entries.toList()
       ..sort((a, b) => b.value.length.compareTo(a.value.length));
     for (final e in fetches) {
-      dlog('[PERF] fetch ${e.key} n=${e.value.length} '
+      _log('[PERF] fetch ${e.key} n=${e.value.length} '
           'avg=${(_avg(e.value) / 1000).toStringAsFixed(1)}ms '
           'max=${(e.value.reduce((a, b) => a > b ? a : b) / 1000).toStringAsFixed(1)}ms');
     }
