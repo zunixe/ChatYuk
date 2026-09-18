@@ -199,6 +199,11 @@ yang ditambahkan orang/migrasi lain. Kasus nyata: `ai_presence_tick` di-replace
 - [ ] Kalau mengubah perilaku fitur: tambah/aktifkan test di
       `supabase/tests/` (pgTAP) dan `flutter test` tetap 100% hijau
 - [ ] Catat migrasi yang di-apply di `docs/MIGRATION_LOG.md`
+- [ ] Kalau menyentuh performa (render/rebuild/animasi/prefetch): baca
+      `docs/PERFORMANCE.md` DULU, ukur sebelum-sesudah, lalu catat perubahannya
+      di sana. Jangan membalik optimasi yang sudah ada (mis. mengembalikan
+      `context.watch` yang sudah jadi `select`, menghapus `TickerMode` /
+      `RepaintBoundary`, atau memindahkan komputasi berat kembali ke `build()`).
 
 ## Struktur Project
 

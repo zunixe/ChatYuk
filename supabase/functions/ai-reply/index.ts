@@ -183,6 +183,44 @@ function sanitize(
     // TAPI indentasi awal baris DIPERTAHANKAN (tab → 2 spasi) supaya blok
     // kode tetap rapi seperti codingan beneran, bukan rata kiri semua.
     // Maksimal 1 baris kosong antar paragraf.
+    // RAPIKAN LIST: model kadang menulis "1. ... 2. ... 3. ..." sebaris —
+    // pecah jadi satu baris per nomor. Hanya bila terdeteksi ≥2 penomoran
+    // (hindari tanggal/kalimat biasa kepecah) + wajib huruf setelah nomor
+    // (hindari desimal "3.5", jam "14.00", harga "50.000"). Isi blok kode
+    // ``` dilewati (diagram/kode jangan rusak).
+    const splitLists = (src: string): string => {
+      const parts = src.split('```');
+      for (let i = 0; i < parts.length; i += 2) {
+        let p = parts[i];
+        // Poin ANGKA: "1. ... 2. ..." sebaris → pisah + baris kosong
+        // (= satu paragraf per poin). Syarat ≥2 penomoran + huruf
+        // sesudahnya (aman dari desimal "3.5", jam "14.00", "Rp 50.000").
+        const numHits = p.match(/\s\d{1,2}[.)]\s+(?=[A-Za-z])/g);
+        if (numHits && numHits.length >= 2) {
+          p = p.replace(/(\s)(\d{1,2}[.)])(\s+)(?=[A-Za-z])/g, '\n\n$2$3');
+        }
+        // Sub-poin HURUF kurung: "(a) ... (b) ..." → baris sendiri
+        // menjorok 2 spasi (tab). Bentuk kurung nyaris tanpa false
+        // positive, jadi boleh longgar (tengah kalimat pun dipecah).
+        const parHits = p.match(/\([a-eA-E]\)\s+(?=[A-Za-z])/g);
+        if (parHits && parHits.length >= 2) {
+          p = p.replace(
+            /(\([a-eA-E]\))(\s+)(?=[A-Za-z])/g,
+            '\n  $1$2',
+          );
+        }
+        // Sub-poin HURUF telanjang: "a. ... b. ..." → baris sendiri
+        // menjorok. Syarat ≥2 butir (lolos dari "Ia. Dia" tunggal).
+        const letHits = p.match(/\s[a-eA-E][.]\s+(?=[A-Za-z])/g);
+        if (letHits && letHits.length >= 2) {
+          p = p.replace(/(\s)([a-eA-E][.])(\s+)(?=[A-Za-z])/g, '\n  $2$3');
+        }
+        p = p.replace(/^\s*[•*]\s+/gm, '- ');
+        parts[i] = p;
+      }
+      return parts.join('```');
+    };
+    t = splitLists(t);
     t = t
       .split(/\r?\n/)
       .map((line) => {
@@ -1195,7 +1233,11 @@ Deno.serve(async (req: Request) => {
             proactive: arlCtx.proactive,
             stage: 'edge',
             decision,
-            detail: { model: o.model_used ?? null, http: status },
+            detail: {
+              model: o.model_used ?? null,
+              http: status,
+              err: String((o as any)?.detail ?? '').slice(0, 300) || null,
+            },
           };
           runPostResponse((async () => {
             try { await arlAdmin.from('ai_reply_log').insert(row); } catch (_) {}
@@ -2634,6 +2676,19 @@ Deno.serve(async (req: Request) => {
     const routeFor = (
       m: string,
     ): { base: string; key?: string; headers: Record<string, string> } => {
+      // NVIDIA NIM langsung (prefix 'nim/') — ChatYuk id
+      // 'nim/nvidia/...' = provider-native NIM id (NIM wajib prefix vendor,
+      // bare ID 404). Key/base: panel admin → env → default NIM.
+      if (m.startsWith('nim/')) {
+        return {
+          base: provCfg?.api_base || 'https://integrate.api.nvidia.com/v1',
+          key:
+            provCfg?.api_key ||
+            Deno.env.get('AI_API_KEY_NVIDIA') ||
+            Deno.env.get('AI_API_KEY'),
+          headers: {},
+        };
+      }
       // TokenHarbor (prefix 'th/') — dicek SEBELUM ':free' generik supaya
       // model seperti th/deepseek-v4.1-flash:free tidak lari ke OpenRouter.
       // Key/base utama: panel admin (ai_provider_config) → env → default.
@@ -2765,7 +2820,7 @@ Deno.serve(async (req: Request) => {
                 ...hRoute.headers,
               },
               body: JSON.stringify({
-                model: model.replace(/^th\//, ''),
+                model: model.replace(/^(th|nim)\//, ''),
                 max_tokens: 80,
                 temperature: 0.3,
                 messages: [
@@ -2952,7 +3007,7 @@ Deno.serve(async (req: Request) => {
                 ...sHeaders,
               },
               body: JSON.stringify({
-                model: sModel,
+                model: sModel.replace(/^(th|nim)\//, ''),
                 max_tokens: 600,
                 temperature: 0.8,
                 // glm-5.3-flash selalu reasoning — low supaya budget token
@@ -3212,6 +3267,51 @@ Deno.serve(async (req: Request) => {
     // Penanda model yg menjawab (observability: respons + function logs).
     let modelUsed = model;
 
+    // Parse body respons LLM secara defensif. OpenAgentic menempelkan
+    // terminator SSE (`data: [DONE]`) di belakang body JSON biasa sehingga
+    // `response.json()` muntah SyntaxError padahal isi valid. Kupas bingkai
+    // SSE + ambil objek JSON pertama yang seimbang, abaikan ekor sampah.
+    const parseLlmBody = (t: string): any => {
+      let s = t.trim();
+      const doneIdx = s.indexOf('data: [DONE]');
+      if (doneIdx >= 0) s = s.slice(0, doneIdx).trim();
+      if (s.startsWith('data:')) {
+        const payload = s
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.startsWith('data:') && !l.includes('[DONE]'))
+          .map((l) => l.slice(5).trim())
+          .join('\n')
+          .trim();
+        if (payload) s = payload;
+      }
+      try {
+        return JSON.parse(s);
+      } catch (_) {}
+      const start = s.indexOf('{');
+      if (start >= 0) {
+        let depth = 0;
+        let inStr = false;
+        let esc = false;
+        for (let i = start; i < s.length; i++) {
+          const c = s[i];
+          if (inStr) {
+            if (esc) esc = false;
+            else if (c === '\\') esc = true;
+            else if (c === '"') inStr = false;
+          } else if (c === '"') {
+            inStr = true;
+          } else if (c === '{') {
+            depth++;
+          } else if (c === '}') {
+            depth--;
+            if (depth === 0) return JSON.parse(s.slice(start, i + 1));
+          }
+        }
+      }
+      return JSON.parse(s);
+    };
+
     const llmCall = async (
       messages: Array<{ role: string; content: string }>,
       maxTokens: number,
@@ -3220,9 +3320,10 @@ Deno.serve(async (req: Request) => {
       allowMimoFallback = true,
     ): Promise<{ res?: any; err?: string }> => {
       const m = modelOverride || model;
-      // TokenHarbor: prefix vendor 'th/' hanya alamat routing internal —
-      // API hanya terima bare ID (cth: 'deepseek-v4.1-flash:free').
-      const apiModel = m.replace(/^th\//, '');
+      // TokenHarbor/NIM: prefix routing internal ('th/', 'nim/') dikupas —
+      // API hanya terima ID native (cth: 'deepseek-v4.1-flash:free',
+      // 'nvidia/nemotron-3-ultra-550b-a55b').
+      const apiModel = m.replace(/^(th|nim)\//, '');
       const rt = modelOverride ? routeFor(modelOverride) : route;
       const mimoFallback = async (
         err: string,
@@ -3231,7 +3332,17 @@ Deno.serve(async (req: Request) => {
           allowMimoFallback && m !== MIMO_FREE && FALLBACKABLE.test(err)
         ) {
           modelUsed = MIMO_FREE;
-          return llmCall(messages, maxTokens, temperature, MIMO_FREE, false);
+          const r = await llmCall(
+            messages,
+            maxTokens,
+            temperature,
+            MIMO_FREE,
+            false,
+          );
+          // Fallback Zen dari edge SELALU 403 (hanya boleh dari OpenCode) —
+          // jangan timpa error ASLI primer dengan error fallback.
+          if (r.err) return { err };
+          return r;
         }
         return null;
       };
@@ -3250,7 +3361,11 @@ Deno.serve(async (req: Request) => {
               // — headroom besar biar content tidak kosong.
               max_tokens:
                 maxTokens +
-                (m.includes(':free') || m.startsWith('nvidia/') ? 700 : 0),
+                (m.includes(':free') ||
+                m.startsWith('nvidia/') ||
+                m.startsWith('nim/')
+                  ? 700
+                  : 0),
               // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
               // Param ini glm-specific; provider lain bisa menolak.
               ...(m.includes('glm') ? { reasoning_effort: 'low' } : {}),
@@ -3276,7 +3391,7 @@ Deno.serve(async (req: Request) => {
             }
             return { err };
           }
-          return { res: await r.json() };
+          return { res: parseLlmBody(await r.text()) };
         } catch (e) {
           if (attempt >= 3) {
             const fb = await mimoFallback(`exc:${e}`);
@@ -3341,6 +3456,7 @@ Deno.serve(async (req: Request) => {
     // tidak kenal model glm → 404 ganda).
     // Key diambil dari baris b-ai (fallback) lalu env — TANPA pernah
     // di-print ke log (secret).
+    const primaryErr = llmRes.err ? String(llmRes.err).slice(0, 200) : '';
     if (llmRes.err && model !== fallbackModel) {
       modelUsed = fallbackModel;
       const fbIsOR =
@@ -3400,7 +3516,7 @@ Deno.serve(async (req: Request) => {
             const errText = await r.text().catch(() => '');
             return { err: `fb_http_${r.status}: ${errText.slice(0, 200)}` };
           }
-          return { res: await r.json() };
+          return { res: parseLlmBody(await r.text()) };
         } catch (e) {
           return { err: `fb_exc:${e}` };
         }
@@ -3414,8 +3530,12 @@ Deno.serve(async (req: Request) => {
     const { res: llm, err: llmErr } = llmRes;
     if (llmErr) {
       await closeTyping();
-      console.log(`[ai-reply] FAIL model=${modelUsed} chat=${chatId} err=${llmErr}`);
-      return json({ ok: false, error: 'llm_error', detail: llmErr, model_used: modelUsed }, 200);
+      const chained =
+        typeof primaryErr !== 'undefined' && primaryErr
+          ? `primary=${primaryErr} | fb=${llmErr}`
+          : llmErr;
+      console.log(`[ai-reply] FAIL model=${modelUsed} chat=${chatId} err=${chained}`);
+      return json({ ok: false, error: 'llm_error', detail: chained, model_used: modelUsed }, 200);
     }
     // STRIP marker DULU sebelum sanitize: JSON di akhir bisa panjang
     // (apalagi field "image") dan sanitize memotong di 90/220 char —

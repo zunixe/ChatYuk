@@ -34,6 +34,7 @@ import 'room_members_sheet.dart';
 import 'group_info_screen.dart';
 import 'group_media_screen.dart';
 import '../services/notification_prefs_service.dart';
+import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
@@ -2622,7 +2623,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                           : Colors.transparent,
                       child: CompositedTransformTarget(
                       link: _linkFor(m.id),
-                      child: GestureDetector(
+                      // AppGestureDetector: tahan 320ms (bukan 500ms).
+                      child: AppGestureDetector(
                         onLongPressStart: (d) => _onMessageLongPress(d, m, _linkFor(m.id)),
                         onTap: _inSelection ? () => _toggleSelect(m) : null,
                         child: SwipeToReply(

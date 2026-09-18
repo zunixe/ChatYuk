@@ -509,6 +509,11 @@ class S {
   String get notifNewMessage => isId ? 'Pesan baru' : 'New message';
   String get notifNewMessageBody =>
       isId ? 'Pesan baru masuk' : 'You have a new message';
+  String get notifActionMarkRead =>
+      isId ? 'Tandai dibaca' : 'Mark as read';
+  String notifSummary(int chats, int msgs) => isId
+      ? '$msgs pesan dari $chats chat'
+      : '$msgs messages from $chats chats';
   String get notifOnlineBody => isId ? 'sedang online' : 'is online';
   String get notifFollowBody =>
       isId ? 'mulai mengikuti kamu' : 'started following you';

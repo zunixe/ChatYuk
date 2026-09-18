@@ -824,3 +824,14 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   - `pg_proc.prosrc` ai_proactive_tick punya `ai_ai_off` gate + filter dummy-pair ✅
   - 0 pesan dummy dalam 2 menit terakhir ✅
 - **Tidak menyentuh** fungsi FROZEN / skema lain.
+
+## 2026-09-17 — ai-reply v178→v181: admin dikecualikan invisible_silent + parse SSE OpenAgentic + log err rantai
+
+- **Minta owner:** dummy invisible tetap diam ke user biasa, tapi WAJIB membalas kalau yang bertanya admin (zunixe@gmail.com). Lalu: model Kimi (OpenAgentic `kimi-k2.7-code`) dicoba chat tidak membalas.
+- **Temuan 1 (gate):** `profiles.status='invisible'` (mis. BinorMuda) → edge skip `invisible_silent` untuk SEMUA pengirim. Fix: cek `profiles.email` sender — admin lolos, user biasa tetap skip.
+- **Temuan 2 (Kimi diam):** OpenAgentic menempelkan terminator SSE (`...}data: [DONE]`) di body JSON biasa → `r.json()` SyntaxError → jatuh ke fallback `glm-5.3-flash` via b-ai yang 404/saldo habis (`balance=51 required=426`) → `llm_error`. Fix: `parseLlmBody` (kupas `data: [DONE]`/frame SSE + ambil objek JSON seimbang) dipakai di `llmCall` + `fbCall`.
+- **Observability:** log `ai_reply_log.detail` kini ikut menyimpan `err` rantai (`primary=... | fb=...`), bukan cuma model — diagnosa tak lagi buta.
+- **Deploy:** bundle esbuild lokal (`--external:https://esm.sh/*`) + Management API multipart → v178 (admin-exempt), v179 (log err), v180 (rantai primary), **v181 ACTIVE** (parse SSE).
+- **Verifikasi:** `ai_reply_log` → `replied` model `kimi-k2.7-code` ✅
+- **Sisa PR (belum disentu):** fallback luar `glm-5.3-flash` via b-ai mati (saldo habis) — hanya kepakai saat primer gagal total; ganti `fallback_model` bila perlu.
+- **Tidak menyentuh** fungsi FROZEN / skema DB.

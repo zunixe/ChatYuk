@@ -138,9 +138,17 @@ class SocialService {
   /// Hapus semua relasi sosial (follow, subscribe, friend request) milik
   /// user anon — dipanggil saat anon logout supaya counter user lain
   /// (followers/subscribers) ikut berkurang via trigger.
+  /// Hapus relasi sosial akun anon saat logout.
+  ///
+  /// WAJIB pakai timeout: RPC jaringan tanpa batas waktu membuat spinner
+  /// logout muter selamanya saat jaringan lambat/menggantung — user tidak
+  /// pernah sampai ke layar login. Kegagalan aman diabaikan (relasi sosial
+  /// anon boleh tersisa; yang penting user bisa keluar).
   Future<void> clearAnonSocial() async {
     try {
-      await _sb.rpc('clear_anon_social');
+      await _sb
+          .rpc('clear_anon_social')
+          .timeout(const Duration(seconds: 5));
     } catch (e) {
       dlog('[SocialService] clearAnonSocial error: $e');
     }

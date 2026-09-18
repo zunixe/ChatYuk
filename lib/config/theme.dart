@@ -387,6 +387,27 @@ class ChatTextScale {
   }
 }
 
+/// Waktu gesture global — dipakai lewat `GestureDetector` yang di-bungkus
+/// [AppGesture] di `lib/widgets/app_gesture.dart`.
+///
+/// Flutter default: long-press 500ms, tap di dalam scrollable menunggu
+/// ~tunggu double-tap. App ini tidak punya double-tap-to-zoom, jadi waktu
+/// itu murni membuat klik terasa lambat. User minta "klik cepet" & tahan
+/// pesan cepat memunculkan toolbar — nilai di bawah ini yang dipakai.
+class AppTiming {
+  AppTiming._();
+
+  /// Tahan pesan/chat → toolbar seleksi. Default Flutter 500ms → 320ms.
+  static const Duration longPress = Duration(milliseconds: 320);
+
+  /// Batas atas tunggu double-tap (tap di dalam list tidak usah menunggu
+  /// 300ms untuk tahu ini bukan double-tap). 0 → tap langsung tembak.
+  static const Duration doubleTap = Duration.zero;
+
+  /// Delay splash/ripple Material — percepat efek visual tombol.
+  static const Duration splash = Duration(milliseconds: 90);
+}
+
 /// Ukuran emoji & ikon dekoratif (bukan teks). Lihat AGENTS.md.
 class AppGlyph {
   AppGlyph._();
@@ -565,6 +586,13 @@ class AppTheme {
         centerTitle: true,
         titleTextStyle: AppText.title.copyWith(color: Colors.white),
         iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      // Tooltip langsung muncul saat tahan (default Flutter menunggu ~500ms)
+      // — sejalan dengan AppTiming.longPress supaya ikon/tombol terasa
+      // responsif, bukan "diam dulu baru muncul label".
+      tooltipTheme: const TooltipThemeData(
+        waitDuration: AppTiming.longPress,
+        showDuration: Duration(seconds: 2),
       ),
       textTheme: TextTheme(
         displaySmall: AppText.display,

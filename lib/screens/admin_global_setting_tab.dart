@@ -1463,9 +1463,11 @@ class _ProviderCardState extends State<_ProviderCard> {
   /// Dropdown model di tiap kartu (termasuk form tambah) difilter otomatis
   /// dari base URL kartu itu — tanpa dropdown provider terpisah.
   static const _modelsByBase = {
+    'integrate.api.nvidia.com': ['nim/nvidia/nemotron-3-ultra-550b-a55b'],
     'tokenharbor.ai': ['th/deepseek-v4.1-flash:free'],
     'openrouter.ai': [
       'nvidia/nemotron-3.5-lightning:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
       'nvidia/nemotron-3-ultra-550b-a55b:free',
       'inclusionai/ling-3.0-flash-fin:free',
     ],

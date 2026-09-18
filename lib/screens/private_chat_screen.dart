@@ -2747,6 +2747,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             iconSize: 24,
             icon: Icon(Icons.more_vert, color: Colors.white),
             color: AppTheme.bgCard,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
             onSelected: (val) {
               if (val == 'follow') {
                 final social = context.read<SocialProvider>();
@@ -2769,33 +2772,59 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 _showReportDialog();
               }
             },
-            itemBuilder: (_) => [
+            itemBuilder: (_) => <PopupMenuEntry<String>>[
               PopupMenuItem(
                 value: 'follow',
-                child: Text(
-                  s.menuFollow,
-                  style: TextStyle(color: AppTheme.textPrimary),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.person_add_rounded, size: 20),
+                  title: Text(s.menuFollow),
                 ),
               ),
+              const PopupMenuDivider(height: 1),
               PopupMenuItem(
                 value: 'friend',
-                child: Text(
-                  s.menuAddFriend,
-                  style: TextStyle(color: AppTheme.textPrimary),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading:
+                      const Icon(Icons.person_add_alt_rounded, size: 20),
+                  title: Text(s.menuAddFriend),
                 ),
               ),
+              const PopupMenuDivider(height: 1),
               PopupMenuItem(
                 value: 'block',
-                child: Text(
-                  s.btnBlock,
-                  style: const TextStyle(color: AppTheme.danger),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.block_rounded,
+                    size: 20,
+                    color: AppTheme.danger,
+                  ),
+                  title: Text(
+                    s.btnBlock,
+                    style: const TextStyle(color: AppTheme.danger),
+                  ),
                 ),
               ),
+              const PopupMenuDivider(height: 1),
               PopupMenuItem(
                 value: 'report',
-                child: Text(
-                  s.btnReport,
-                  style: const TextStyle(color: Colors.orange),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.flag_outlined,
+                    size: 20,
+                    color: Colors.orange,
+                  ),
+                  title: Text(
+                    s.btnReport,
+                    style: const TextStyle(color: Colors.orange),
+                  ),
                 ),
               ),
             ],
@@ -3355,6 +3384,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                       : (hasText
                                           ? GestureDetector(
                                               key: const ValueKey('send'),
+                                              // Getar singkat saat tombol
+                                              // kirim ditekan — feedback
+                                              // instan, ala WA.
+                                              onTapDown: (_) => HapticFeedback
+                                                  .lightImpact(),
                                               onTap: _send,
                                               child: Container(
                                                 width: 40,

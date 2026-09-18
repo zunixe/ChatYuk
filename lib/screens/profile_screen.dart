@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -2539,12 +2540,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _loggingOut = true);
     // Anon logout: hapus relasi sosialnya (follow/subscribe/friend request)
     // supaya followers/subscribers user lain berkurang sesuai data yang
-    // sebenarnya.
+    // sebenarnya. Dibatasi waktu (di service) + tidak boleh MENGGAGALKAN
+    // logout: relasi sosial boleh tersisa, tapi user harus tetap bisa keluar.
     if (auth.isAnonymous) {
-      await context.read<SocialProvider>().clearAnonSocial();
+      try {
+        await context
+            .read<SocialProvider>()
+            .clearAnonSocial()
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        dlog('[PROFILE] clearAnonSocial saat logout dilewati: $e',
+            tag: 'PROFILE');
+      }
     }
-    await auth.signOut();
-    chat.reset();
+    // Logout TIDAK boleh menggantung karena jaringan: signOut punya timeout
+    // sendiri, dan apa pun hasilnya user keluar (sesi lokal dibuang).
+    try {
+      await auth.signOut().timeout(const Duration(seconds: 8));
+    } catch (e) {
+      dlog('[PROFILE] signOut timeout/error, lanjut paksa keluar: $e',
+          tag: 'PROFILE');
+    } finally {
+      chat.reset();
+      if (mounted) setState(() => _loggingOut = false);
+    }
   }
 }
 
