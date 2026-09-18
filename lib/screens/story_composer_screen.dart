@@ -16,6 +16,22 @@ import '../providers/story_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../widgets/story_text_overlay.dart';
 import 'dart:convert';
+import 'dart:io';
+
+/// Hasil proses gambar — dipindah balik dari isolate dalam satu pesan.
+class _ProcessedStory {
+  final Uint8List bytes;
+  final String b64;
+  const _ProcessedStory(this.bytes, this.b64);
+}
+
+/// Baca file + kompres di SATU isolate (dulu read di main thread, lalu
+/// compute terpisah = 2 hop). File dibaca di isolate supaya bytes mentah
+/// tidak menyeberang ke main isolate lebih dari sekali.
+_ProcessedStory _readAndProcessStory(String path) {
+  final bytes = File(path).readAsBytesSync();
+  return _ProcessedStory(bytes, _processStoryImage(bytes));
+}
 
 /// Kompres foto story di isolate (pola post composer): resize 1080px,
 /// JPEG q85 — cukup tajam untuk fullscreen tanpa boros kuota.
@@ -138,18 +154,29 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   }
 
   Future<void> _loadImage() async {
-    final bytes = await widget.picked.readAsBytes();
-    if (!mounted) return;
-    setState(() => _bytes = bytes);
+    // readAsBytes + decode/encode di isolate dijalankan dalam SATU
+    // compute: dulu read di main thread lalu compute terpisah — dua hop
+    // dan bytes mentah (bisa 5-10 MB) sempat disalin ke main isolate.
     try {
-      final b64 = await compute(_processStoryImage, bytes);
+      final res = await compute(_readAndProcessStory, widget.picked.path);
       if (!mounted) return;
-      setState(() => _b64 = b64);
+      setState(() {
+        _bytes = res.bytes;
+        _b64 = res.b64;
+      });
     } catch (e) {
       dlog('[StoryComposer] process error: $e');
-      // Fallback: pakai bytes mentah — send tidak pernah mati permanen.
-      if (!mounted) return;
-      setState(() => _b64 = base64Encode(bytes));
+      // Fallback: read di main thread, kirim apa adanya.
+      try {
+        final bytes = await widget.picked.readAsBytes();
+        if (!mounted) return;
+        setState(() {
+          _bytes = bytes;
+          _b64 = base64Encode(bytes);
+        });
+      } catch (e2) {
+        dlog('[StoryComposer] fallback read error: $e2');
+      }
     }
   }
 

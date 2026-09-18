@@ -3,6 +3,40 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-18 — Optimasi performa story (`20260918120000_story_perf.sql`)
+
+Apply via Management API + recorded. Tidak menyentuh fungsi FROZEN.
+Snapshot diregenerasi (hanya berubah baris timestamp).
+
+| Objek | Isi |
+|---|---|
+| `idx_story_views_story_viewer` | Index `(story_id, viewer_id)` — percepat cek "sudah dilihat?" per slide saat `story_views` membesar |
+| `mark_story_seen_bulk(uuid[])` | RPC baru — tandai banyak slide dalam 1 round-trip; guard visibility/blocks sama seperti `mark_story_seen`; `on conflict do nothing` (idempoten) |
+
+### ⚠️ `story_tray` SENGAJA TIDAK diubah (rewrite JOIN = REGRESI)
+
+Rencana awal: ubah subquery per-baris (N+1) di `story_tray` jadi
+`LEFT JOIN profiles` + `DISTINCT ON` thumb terbaru. **Sudah diukur di DB
+live dan hasilnya LEBIH LAMBAT** — jadi di-revert ke bentuk asli:
+
+| Skenario | Subquery (asli) | JOIN (rewrite) |
+|---|---|---|
+| Data asli, 2 author | **0.082 ms** | 0.157 ms |
+| Simulasi 300 author / 1200 slide | **29.5 ms** | 51.0 ms |
+
+(per panggilan, rata-rata 100–300 iterasi)
+
+Hasil kedua versi **identik** (diverifikasi: 2 author, 0 baris beda di kedua
+arah) — jadi tidak ada alasan menanggung lambatnya. Planner PostgreSQL sudah
+menangani subquery skalar ini dengan baik; JOIN + DISTINCT ON menambah
+materialisasi yang tidak perlu.
+
+**Jangan "optimalkan" `story_tray` lagi tanpa mengukur dulu.**
+
+Verifikasi: index ada, RPC ada, `story_tray()` tetap 2 author.
+`run_sql_tests.sh` semua lolos. `check_migrations --all` FAIL pre-existing
+`ai_reply_enqueue`/`ai_always_online` (bukan dari migrasi ini).
+
 ## 2026-09-17 — Centang-2 di preview list Pesan (kolom `last_sender_id`)
 
 Migrasi `20260917180000_last_sender_id.sql` SUDAH APPLY via Management API + recorded

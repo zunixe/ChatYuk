@@ -39,7 +39,8 @@ class StoryViewerScreen extends StatefulWidget {
   State<StoryViewerScreen> createState() => _StoryViewerScreenState();
 }
 
-class _StoryViewerScreenState extends State<StoryViewerScreen> {
+class _StoryViewerScreenState extends State<StoryViewerScreen>
+    with WidgetsBindingObserver {
   late PageController _pageCtrl;
   late int _person;
   List<StorySlide> _slides = [];
@@ -52,11 +53,21 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
   final _replyFocus = FocusNode();
   bool _sendingReply = false;
 
+  // Slide yang benar-benar ditonton → dikirim SEKALI (bulk) saat keluar
+  // viewer / ganti author. Dulu 1 RPC per slide.
+  final List<String> _seenIds = [];
+  final Set<String> _seenDedup = {};
+  // Sisa waktu slide saat app di-background — opsi A: lanjut dari sisa,
+  // bukan mulai ulang 5 detik penuh.
+  Duration? _remainingOnResume;
+  DateTime? _slideStartedAt;
+
   static const _slideDuration = Duration(seconds: 5);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Nav bar Android opaque hitam selama viewer aktif — foto fullscreen
     // tidak tembus/transparan di area menu bawah.
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -78,15 +89,58 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       systemNavigationBarColor: Colors.transparent,
       systemNavigationBarIconBrightness: Brightness.light,
     ));
     _autoTimer?.cancel();
+    // Sisa slide yang belum terkirim (user keluar sebelum timer ganti
+    // author) → kirim sekarang supaya ring tray tetap akurat.
+    _flushSeen();
+    context.read<StoryProvider>().setViewingAuthor(null);
     _pageCtrl.dispose();
     _replyCtrl.dispose();
     _replyFocus.dispose();
     super.dispose();
+  }
+
+  /// App di-background → hentikan auto-advance (jangan tandai slide yang
+  /// tidak ditonton). Kembali → lanjut dari SISA waktu (opsi A).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final rem = _remainingOnResume;
+      _remainingOnResume = null;
+      if (rem != null && !_paused && _slides.isNotEmpty) {
+        _autoTimer?.cancel();
+        _autoTimer = Timer(rem, _next);
+      }
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      if (_autoTimer?.isActive == true) {
+        final elapsed = _slideStartedAt == null
+            ? _slideDuration
+            : DateTime.now().difference(_slideStartedAt!);
+        final rem = _slideDuration - elapsed;
+        _remainingOnResume =
+            rem.isNegative ? const Duration(milliseconds: 200) : rem;
+      }
+      _autoTimer?.cancel();
+    }
+  }
+
+  /// Kirim semua id slide yang ditonton dalam satu RPC, lalu reset.
+  void _flushSeen() {
+    if (_seenIds.isEmpty) return;
+    final ids = List<String>.of(_seenIds);
+    final author = _item.authorId;
+    _seenIds.clear();
+    _seenDedup.clear();
+    unawaited(
+      context.read<StoryProvider>().markSeenBulk(ids, author),
+    );
   }
 
   StoryTrayItem get _item => widget.items[_person];
@@ -95,6 +149,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
 
   Future<void> _loadPerson() async {
     _autoTimer?.cancel();
+    // Ganti author → kirim slide yang sudah ditonton author sebelumnya
+    // (bulk), lalu mulai kumpulan baru.
+    _flushSeen();
     _replyCtrl.clear();
     _sendingReply = false;
     setState(() {
@@ -102,6 +159,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
       _slide = 0;
     });
     final sp = context.read<StoryProvider>();
+    // Tandai author yang sedang dibuka — event realtime untuknya tidak
+    // memicu RPC tray penuh (ring sudah di-update lokal).
+    sp.setViewingAuthor(_item.authorId);
     final slides = await sp.slidesFor(_item.authorId);
     if (!mounted) return;
     setState(() {
@@ -175,10 +235,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     }
   }
 
-  void _startTimer() {
+  void _startTimer({Duration? duration}) {
     _autoTimer?.cancel();
     _paused = false;
-    _autoTimer = Timer(_slideDuration, _next);
+    _slideStartedAt = DateTime.now();
+    _autoTimer = Timer(duration ?? _slideDuration, _next);
   }
 
   void _pause() {
@@ -234,12 +295,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
     }
   }
 
+  /// Kumpulkan id slide yang ditonton (dedupe) — dikirim bulk saat ganti
+  /// author / keluar viewer. Update ring tray lokal sudah instan.
   void _markSeen() {
-    if (_slide < _slides.length) {
-      context
-          .read<StoryProvider>()
-          .markSeen(_slides[_slide].id, _item.authorId);
-    }
+    if (_slide >= _slides.length) return;
+    final id = _slides[_slide].id;
+    if (id.isEmpty || !_seenDedup.add(id)) return;
+    _seenIds.add(id);
   }
 
   Future<void> _deleteSlide() async {

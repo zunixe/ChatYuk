@@ -56,6 +56,15 @@ class StoryProvider extends ChangeNotifier {
     );
   }
 
+  /// Author yang SEDANG dibuka viewer — event realtime untuk author ini
+  /// tidak perlu memicu RPC tray penuh (ring-nya sudah di-update lokal oleh
+  /// markSeen). Menghindari 1 RPC tray tiap slide dilihat.
+  String? _viewingAuthorId;
+
+  void setViewingAuthor(String? authorId) {
+    _viewingAuthorId = authorId;
+  }
+
   void _scheduleRefresh() {
     _refreshDebounce?.cancel();
     _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
@@ -175,6 +184,21 @@ class StoryProvider extends ChangeNotifier {
 
   /// Tandai dilihat + update ring tray secara optimistic.
   Future<void> markSeen(String storyId, String authorId) async {
+    _markSeenLocal(authorId);
+    unawaited(_service.markSeen(storyId));
+  }
+
+  /// Tandai BANYAK slide sekaligus dalam SATU round-trip.
+  /// Dipakai viewer: kumpulkan id yang benar-benar ditonton, kirim sekali
+  /// saat keluar/ganti author — dulu 1 RPC per slide.
+  Future<void> markSeenBulk(List<String> storyIds, String authorId) async {
+    if (storyIds.isEmpty) return;
+    _markSeenLocal(authorId);
+    await _service.markSeenBulk(storyIds);
+  }
+
+  /// Update ring tray (hasUnseen=false) untuk satu author — sinkron, tanpa IO.
+  void _markSeenLocal(String authorId) {
     var changed = false;
     for (int i = 0; i < _tray.length; i++) {
       final t = _tray[i];
@@ -193,7 +217,6 @@ class StoryProvider extends ChangeNotifier {
       }
     }
     if (changed && !_disposed) notifyListeners();
-    unawaited(_service.markSeen(storyId));
   }
 
   @override

@@ -4,6 +4,7 @@ import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/story_model.dart';
+import 'perf_probe.dart';
 
 /// Service story: tray, slide, upload, seen, penonton, hapus, realtime.
 class StoryService {
@@ -16,7 +17,10 @@ class StoryService {
   /// Tray story untuk halaman pengguna online (agregat per author).
   Future<List<StoryTrayItem>> fetchTray() async {
     try {
-      final res = await _sb.rpc('story_tray');
+      final res = await PerfProbe.timed(
+        'story.tray',
+        () => _sb.rpc('story_tray'),
+      );
       if (res is List) {
         return res
             .map((e) =>
@@ -33,9 +37,12 @@ class StoryService {
   /// Semua slide aktif milik satu author (urut terlama → terbaru).
   Future<List<StorySlide>> fetchSlides(String authorId) async {
     try {
-      final res = await _sb
-          .rpc('story_slides', params: {'p_author': authorId}).timeout(
-        const Duration(seconds: 6),
+      final res = await PerfProbe.timed(
+        'story.slides',
+        () => _sb
+            .rpc('story_slides', params: {'p_author': authorId}).timeout(
+          const Duration(seconds: 6),
+        ),
       );
       if (res is List) {
         return res
@@ -88,6 +95,28 @@ class StoryService {
       await _sb.rpc('mark_story_seen', params: {'p_story_id': storyId});
     } catch (e) {
       dlog('[Story] markSeen error: $e');
+    }
+  }
+
+  /// Tandai BANYAK slide sekaligus dalam satu round-trip (idempoten).
+  /// Dipakai viewer: kumpulkan id slide yang benar-benar ditonton, kirim
+  /// sekali saat keluar viewer / ganti author — dulu 1 RPC per slide.
+  Future<void> markSeenBulk(List<String> storyIds) async {
+    if (storyIds.isEmpty) return;
+    PerfProbe.notifyCount('story.markSeenBulk');
+    try {
+      await _sb
+          .rpc('mark_story_seen_bulk', params: {'p_ids': storyIds})
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      dlog('[Story] markSeenBulk error: $e');
+      // Fallback: tandai satu-satu supaya ring tetap akurat walau RPC bulk
+      // belum ter-apply di server (deploy belum jalan).
+      for (final id in storyIds) {
+        try {
+          await _sb.rpc('mark_story_seen', params: {'p_story_id': id});
+        } catch (_) {}
+      }
     }
   }
 
