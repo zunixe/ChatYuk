@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/timeline_service.dart';
 import '../services/rt_resilient.dart';
 import '../services/message_cache.dart';
+import '../services/perf_probe.dart';
 
 /// Cache per-scope: posts + pagination state untuk tab Semua/Mengikuti/Postinganku.
 class _ScopeCache {
@@ -509,13 +510,19 @@ class TimelineProvider extends ChangeNotifier {
     final active = _scope == scope;
     try {
       // Timeout: socket stall tidak boleh bikin spinner selamanya.
-      final fetched = await _service
-          .listPosts(
-            scope,
-            cursor: refresh ? null : _cursor,
-            cursorBoosted: refresh ? false : _cursorBoosted,
-          )
-          .timeout(const Duration(seconds: 10));
+      // Nama metrik dibedakan refresh vs paginasi: refresh = fetch halaman
+      // pertama (jalur yang menahan kemunculan tab Timeline), paginasi =
+      // lanjutan saat scroll.
+      final fetched = await PerfProbe.timed(
+        refresh ? 'timeline.rpc' : 'timeline.rpcMore',
+        () => _service
+            .listPosts(
+              scope,
+              cursor: refresh ? null : _cursor,
+              cursorBoosted: refresh ? false : _cursorBoosted,
+            )
+            .timeout(const Duration(seconds: 10)),
+      );
       if (_disposed) return;
       final list = _excludeOwn(fetched, scope);
       if (list.isEmpty) {

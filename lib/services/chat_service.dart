@@ -732,6 +732,10 @@ class ChatService {
   // Snapshot terakhir per myUid — dikirim ke subscriber baru (mis. balik ke
   // sub-tab Pesan) supaya list langsung tampil tanpa spinner broadcast-miss.
   final Map<String, List<PrivateChatInfo>> _privateChatsLast = {};
+  // Fetch list chat yang SEDANG jalan per myUid — dedupe supaya 4 layar yang
+  // memanggil getMyPrivateChats bersamaan tidak menembak query yang sama
+  // berulang (terukur 8× fetch beruntun sebelum ini).
+  final Map<String, Future<void>> _chatListFetchInFlight = {};
   // Chat yang di-hide per myUid — dipakai pesan masuk untuk skip query.
   final Map<String, Set<String>> _privateChatsHidden = {};
   // Waktu reload terakhir per myUid — dipakai untuk skip refetch 500 row
@@ -1222,7 +1226,7 @@ class ChatService {
     final controller = StreamController<List<PrivateChatInfo>>.broadcast();
     _privateChatsStreams[myUid] = controller;
 
-    Future<void> reload() async {
+    Future<void> doReload() async {
       try {
         final rows = await PerfProbe.timed(
           'chat.listFetch',
@@ -1240,6 +1244,26 @@ class ChatService {
         }
       } catch (e) {
         dlog('[getMyPrivateChats] fetch error for $myUid: $e');
+      }
+    }
+
+    Future<void> reload() async {
+      // ── DEDUPE IN-FLIGHT (fix fetch beruntun) ──
+      // getMyPrivateChats dipanggil 4 layar (nav app, list Pesan, layar chat,
+      // sheet anggota room) + layar pengguna online. Tiap panggilan pertama
+      // membuat channel + reload. Tanpa dedupe, semuanya menembak
+      // `private_chats` BERSAMAAN → terukur 8 fetch beruntun 300-760ms
+      // (padahal 1 fetch cukup) + 8× beban DB.
+      // Sekarang: kalau fetch uid ini sedang jalan, panggilan lain menunggu
+      // future yang SAMA, bukan memulai query baru.
+      final running = _chatListFetchInFlight[myUid];
+      if (running != null) return running;
+      final fut = doReload();
+      _chatListFetchInFlight[myUid] = fut;
+      try {
+        await fut;
+      } finally {
+        _chatListFetchInFlight.remove(myUid);
       }
     }
 
@@ -1626,7 +1650,12 @@ class ChatService {
         bool usedRpc = false;
         try {
           dlog('[ONLINE-EMIT] calling RPC get_online_users');
-          final data = await _sb.rpc('get_online_users', params: {'p_limit': 200}).timeout(const Duration(seconds: 2));
+          final data = await PerfProbe.timed(
+            'online.rpc',
+            () => _sb
+                .rpc('get_online_users', params: {'p_limit': 200})
+                .timeout(const Duration(seconds: 2)),
+          );
           dlog('[ONLINE-EMIT] RPC done rows=${data is List ? data.length : 0}');
           if (data is List && data.isNotEmpty) {
             rpcRows = data;
@@ -1638,10 +1667,15 @@ class ChatService {
         try {
           final ownCountry = await _fetchOwnCountry();
           if (ownCountry != null && ownCountry.isNotEmpty) {
-            final local = await _sb.rpc('get_online_users', params: {
-              'p_country': ownCountry,
-              'p_limit': 100,
-            }).timeout(const Duration(seconds: 2));
+            final local = await PerfProbe.timed(
+              'online.rpcCountry',
+              () => _sb
+                  .rpc('get_online_users', params: {
+                    'p_country': ownCountry,
+                    'p_limit': 100,
+                  })
+                  .timeout(const Duration(seconds: 2)),
+            );
             if (local is List && local.isNotEmpty) {
               final ids = rpcRows.map((r) => '${r['id'] ?? ''}').toSet();
               for (final r in local) {

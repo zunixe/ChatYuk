@@ -1,32 +1,42 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/active_call_model.dart';
+import 'perf_probe.dart';
 
 class AdminService {
   final SupabaseClient _sb;
 
   AdminService(this._sb);
 
+  /// Bungkus `_sb.rpc` agar SEMUA RPC baca-tampil admin terukur otomatis
+  /// (metrik `admin.<nama_rpc>`) tanpa perlu menyentuh 30+ call-site satu
+  /// per satu. Saat `PERF_PROBE` tidak diset, ini no-op — nol overhead &
+  /// perilaku identik. Dipakai untuk mencari tab admin mana yang lambat.
+  Future<dynamic> _rpc(String fn, {Map<String, dynamic>? params}) {
+    if (!PerfProbe.measuring) return _sb.rpc(fn, params: params);
+    return PerfProbe.timed('admin.$fn', () => _sb.rpc(fn, params: params));
+  }
+
   Future<Map<String, dynamic>> getStats() async {
-    final res = await _sb.rpc('admin_stats');
+    final res = await _rpc('admin_stats');
     return res as Map<String, dynamic>;
   }
 
   /// Paksa server menghitung ulang statistik (pull-to-refresh).
   Future<Map<String, dynamic>> getStatsForce() async {
-    final res = await _sb.rpc('admin_stats_force');
+    final res = await _rpc('admin_stats_force');
     return res as Map<String, dynamic>;
   }
 
   /// Detail data per kategori untuk card Overview (list user/room).
   Future<Map<String, dynamic>> getStatsDetail() async {
-    final res = await _sb.rpc('admin_stats_detail');
+    final res = await _rpc('admin_stats_detail');
     return (res as Map<String, dynamic>?) ?? {};
   }
 
   /// Jumlah registrasi email per hari di bulan tertentu (bar chart Ringkasan).
   Future<Map<int, int>> fetchRegistrationsDaily(int year, int month) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_registrations_daily',
       params: {'p_year': year, 'p_month': month},
     );
@@ -38,17 +48,17 @@ class AdminService {
   }
 
   Future<Map<String, dynamic>> massBonus(int bonus) async {
-    final res = await _sb.rpc('admin_mass_bonus', params: {'bonus': bonus});
+    final res = await _rpc('admin_mass_bonus', params: {'bonus': bonus});
     return res as Map<String, dynamic>;
   }
 
   Future<int> resetAllPoints() async {
-    final res = await _sb.rpc('admin_reset_points');
+    final res = await _rpc('admin_reset_points');
     return (res as num).toInt();
   }
 
   Future<bool> togglePointsSystem(bool enabled) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_toggle_points',
       params: {'enabled': enabled},
     );
@@ -57,7 +67,7 @@ class AdminService {
 
   /// Ambil nominal pengaturan poin (untuk form admin).
   Future<Map<String, dynamic>> getPointSettings() async {
-    final res = await _sb.rpc('admin_get_point_settings');
+    final res = await _rpc('admin_get_point_settings');
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
@@ -65,7 +75,7 @@ class AdminService {
   Future<Map<String, dynamic>> updatePointSettings(
     Map<String, dynamic> p,
   ) async {
-    final res = await _sb.rpc('admin_update_point_settings', params: {'p': p});
+    final res = await _rpc('admin_update_point_settings', params: {'p': p});
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
@@ -79,7 +89,7 @@ class AdminService {
     int limit = 50,
     int offset = 0,
   }) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_list_chats_page',
       params: {'p_limit': limit, 'p_offset': offset},
     );
@@ -93,7 +103,7 @@ class AdminService {
     int limit = 100,
     int offset = 0,
   }) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_get_chat_messages_page',
       params: {'p_chat_id': chatId, 'p_limit': limit, 'p_offset': offset},
     );
@@ -105,7 +115,7 @@ class AdminService {
   /// monitor dengan chat asli. {} bila gagal.
   Future<Map<String, String>> getChatLastRead(String chatId) async {
     try {
-      final res = await _sb.rpc(
+      final res = await _rpc(
         'admin_get_chat_last_read',
         params: {'p_chat_id': chatId},
       );
@@ -119,7 +129,7 @@ class AdminService {
 
   /// Fetch image_data satu foto (untuk retry / view-once admin).
   Future<String> getMessageImage(int messageId) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_get_message_image',
       params: {'p_message_id': messageId},
     );
@@ -131,7 +141,7 @@ class AdminService {
     String chatId,
     List<String> deleteUserIds,
   ) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_delete_chat',
       params: {'p_chat_id': chatId, 'p_delete_user_ids': deleteUserIds},
     );
@@ -141,7 +151,7 @@ class AdminService {
   /// Daftar call 1:1 yang sedang aktif (audio/video) — untuk badge monitor
   /// dan fitur pantau call di admin panel.
   Future<List<ActiveCallInfo>> getActiveCalls() async {
-    final res = await _sb.rpc('admin_active_calls');
+    final res = await _rpc('admin_active_calls');
     final list = res is List ? res : <dynamic>[];
     return list
         .map(
@@ -153,7 +163,7 @@ class AdminService {
   /// Akhiri call zombie: ringing kadaluarsa & answered tanpa heartbeat.
   /// Return jumlah row yang diakhiri. Hanya admin.
   Future<int> sweepStaleCalls() async {
-    final res = await _sb.rpc('admin_sweep_calls');
+    final res = await _rpc('admin_sweep_calls');
     return (res as num?)?.toInt() ?? 0;
   }
 
@@ -162,7 +172,7 @@ class AdminService {
     int limit = 100,
     int offset = 0,
   }) async {
-    final res = await _sb.rpc('admin_list_devices', params: {
+    final res = await _rpc('admin_list_devices', params: {
       'p_limit': limit,
       'p_offset': offset,
     });
@@ -171,7 +181,7 @@ class AdminService {
 
   /// Detail lengkap satu user: profil + device + chat partners + lokasi.
   Future<Map<String, dynamic>> getUserDetail(String uid) async {
-    final res = await _sb.rpc('admin_user_detail', params: {'p_uid': uid});
+    final res = await _rpc('admin_user_detail', params: {'p_uid': uid});
     return (res as Map<String, dynamic>?) ?? {};
   }
 
@@ -180,7 +190,7 @@ class AdminService {
     int limit = 100,
     int offset = 0,
   }) async {
-    final res = await _sb.rpc('admin_list_deleted', params: {
+    final res = await _rpc('admin_list_deleted', params: {
       'p_limit': limit,
       'p_offset': offset,
     });
@@ -191,7 +201,7 @@ class AdminService {
   Future<List<Map<String, dynamic>>> getDeletedDeviceHistory(
     String nickname,
   ) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_deleted_device_history',
       params: {'p_nickname': nickname},
     );
@@ -205,7 +215,7 @@ class AdminService {
 
   /// Statistik penggunaan data Supabase (DB/storage/kuota + pertumbuhan).
   Future<Map<String, dynamic>> getStorageStats() async {
-    final res = await _sb.rpc('admin_storage_stats');
+    final res = await _rpc('admin_storage_stats');
     return (res as Map<String, dynamic>?) ?? {};
   }
 
@@ -214,7 +224,7 @@ class AdminService {
     int limit = 100,
     int offset = 0,
   }) async {
-    final res = await _sb.rpc('admin_registrations_list', params: {
+    final res = await _rpc('admin_registrations_list', params: {
       'p_limit': limit,
       'p_offset': offset,
     });
@@ -223,7 +233,7 @@ class AdminService {
 
   /// UID dummy + device-ter-exclude — untuk filter client-side (peta realtime).
   Future<Set<String>> fetchHiddenUids() async {
-    final res = await _sb.rpc('admin_hidden_uids');
+    final res = await _rpc('admin_hidden_uids');
     final m = res as Map<String, dynamic>?;
     if (m == null) return const {};
     final out = <String>{};
@@ -284,7 +294,7 @@ class AdminService {
     required String country,
     required String city,
   }) async {
-    await _sb.rpc(
+    await _rpc(
       'admin_update_dummy_profile',
       params: {
         'p_uid': uid,
@@ -313,7 +323,7 @@ class AdminService {
 
   /// List semua akun dummy: uid, email, password, nickname, status, last_seen.
   Future<List<Map<String, dynamic>>> listDummies() async {
-    final res = await _sb.rpc('admin_list_dummies');
+    final res = await _rpc('admin_list_dummies');
     final list = res is List ? res : <dynamic>[];
     return list.cast<Map<String, dynamic>>();
   }
@@ -324,7 +334,7 @@ class AdminService {
     int limit = 50,
     int offset = 0,
   }) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_list_dummies_page',
       params: {'p_limit': limit, 'p_offset': offset},
     );
@@ -338,7 +348,7 @@ class AdminService {
     String uid, {
     int days = 14,
   }) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_get_dummy_stories',
       params: {'p_uid': uid, 'p_days': days},
     );
@@ -347,7 +357,7 @@ class AdminService {
 
   /// Set status dummy: 'online' | 'idle' | 'offline' | 'invisible'.
   Future<void> setDummyStatus(String uid, String status) async {
-    await _sb.rpc(
+    await _rpc(
       'admin_set_dummy_status',
       params: {'p_uid': uid, 'p_status': status},
     );
@@ -356,7 +366,7 @@ class AdminService {
   /// Bangunkan dummy N menit (default 30): AI melek & membalas walau jam
   /// tidur, presence dipaksa online. Lewat masa → normal otomatis.
   Future<void> wakeDummy(String uid, {int minutes = 30}) async {
-    await _sb.rpc(
+    await _rpc(
       'admin_wake_dummy',
       params: {'p_uid': uid, 'p_minutes': minutes},
     );
@@ -379,7 +389,7 @@ class AdminService {
     // Toggle kirim foto: true = AI bisa kirim foto, false = ditolak.
     bool? photosEnabled,
   }) async {
-    await _sb.rpc('admin_set_dummy_ai', params: {
+    await _rpc('admin_set_dummy_ai', params: {
       'p_uid': uid,
       'p_enabled': enabled,
       'p_persona': persona,
@@ -399,14 +409,14 @@ class AdminService {
 
   /// Baca setting AI global (panggilan tanpa argumen = get).
   Future<Map<String, dynamic>> getAiSettings() async {
-    final res = await _sb.rpc('admin_ai_settings');
+    final res = await _rpc('admin_ai_settings');
     return (res as Map<String, dynamic>?) ?? const {};
   }
 
   /// Generate jadwal kehadiran AI otomatis dari kebiasaan jam aktif dummy
   /// (riwayat chat 14 hari). Return {'hours': [8,9,...]} jam WIB.
   Future<List<int>> autoScheduleAi(String uid) async {
-    final res = await _sb.rpc('admin_ai_autoschedule', params: {'p_uid': uid});
+    final res = await _rpc('admin_ai_autoschedule', params: {'p_uid': uid});
     final hours = (res as Map<String, dynamic>?)?['hours'];
     if (hours is List) {
       return hours.map((e) => (e as num).toInt()).toList()..sort();
@@ -436,7 +446,7 @@ class AdminService {
       if (defaultModel != null && defaultModel.isNotEmpty)
         'p_default_model': defaultModel,
     };
-    final res = await _sb.rpc('admin_ai_settings', params: params);
+    final res = await _rpc('admin_ai_settings', params: params);
     return (res as Map<String, dynamic>?) ?? const {};
   }
 
@@ -445,7 +455,7 @@ class AdminService {
   /// tidak aktif — itu system row yang di-seed ulang server, bukan provider
   /// sungguhan; menampilkannya hanya membingungkan (dihapus → muncul lagi).
   Future<List<Map<String, dynamic>>> getAiProviders() async {
-    final res = await _sb.rpc('admin_ai_provider_list');
+    final res = await _rpc('admin_ai_provider_list');
     if (res is List) {
       return res
           .map((e) => Map<String, dynamic>.from(e as Map))
@@ -469,7 +479,7 @@ class AdminService {
     String? storyModel,
     String? fallbackModel,
   }) async {
-    final res = await _sb.rpc('admin_ai_provider_save', params: {
+    final res = await _rpc('admin_ai_provider_save', params: {
       if (id != null) 'p_id': id,
       if (label != null) 'p_label': label,
       if (apiBase != null) 'p_api_base': apiBase,
@@ -485,17 +495,17 @@ class AdminService {
   /// pengganti (failover otomatis di RPC); UI sebaiknya failover dulu
   /// via activateAiProvider supaya UX satu klik.
   Future<void> deleteAiProvider(String id) async {
-    await _sb.rpc('admin_ai_provider_delete', params: {'p_id': id});
+    await _rpc('admin_ai_provider_delete', params: {'p_id': id});
   }
 
   /// Aktifkan provider (yang dipakai edge function).
   Future<void> activateAiProvider(String id) async {
-    await _sb.rpc('admin_ai_provider_activate', params: {'p_id': id});
+    await _rpc('admin_ai_provider_activate', params: {'p_id': id});
   }
 
   /// Hapus akun dummy + history chat-nya. Return {'ok': bool, 'chats_deleted': int}.
   Future<Map<String, dynamic>> deleteDummy(String uid) async {
-    final res = await _sb.rpc('admin_delete_dummy', params: {'p_uid': uid});
+    final res = await _rpc('admin_delete_dummy', params: {'p_uid': uid});
     return (res as Map<String, dynamic>?) ?? {};
   }
 
@@ -505,7 +515,7 @@ class AdminService {
     int limit = 50,
     int offset = 0,
   }) async {
-    final res = await _sb.rpc(
+    final res = await _rpc(
       'admin_contact_messages_page',
       params: {'p_limit': limit, 'p_offset': offset},
     );
@@ -514,7 +524,7 @@ class AdminService {
 
   /// Tandai pesan terbaca / belum terbaca.
   Future<void> setContactRead(String id, {bool read = true}) async {
-    await _sb.rpc(
+    await _rpc(
       'admin_contact_set_read',
       params: {'p_id': id, 'p_read': read},
     );
@@ -522,6 +532,6 @@ class AdminService {
 
   /// Hapus pesan kontak.
   Future<void> deleteContactMessage(String id) async {
-    await _sb.rpc('admin_contact_delete', params: {'p_id': id});
+    await _rpc('admin_contact_delete', params: {'p_id': id});
   }
 }
