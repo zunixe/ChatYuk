@@ -96,42 +96,25 @@ class OnlineUsersProvider extends ChangeNotifier {
           if (!seenNicks.add(nk)) continue;
           diskUsers.add(u);
         }
-        // Batch-load avatar base64 per-uid dari kv — _persistAvatars menulis
-        // tiap sesi TAPI tidak pernah dibaca balik saat cold start, sehingga
-        // _diskAvatars selalu kosong dan avatar selalu flash dari inisial.
-        // Dengan ini frame pertama langsung foto (tanpa placeholder huruf).
-        try {
-          final avatars = await Future.wait(
-            diskUsers.map((u) => u.uid.isEmpty
-                ? Future.value(<String>['', ''])
-                : MessageCache.instance
-                    .loadRawObj('avatar:${u.uid}')
-                    .then((m) => <String>[u.uid, '${m['a'] ?? ''}'],
-                        onError: (_) => <String>[u.uid, ''])),
-          );
-          for (final e in avatars) {
-            if (e[0].isNotEmpty && e[1].isNotEmpty) {
-              _diskAvatars[e[0]] = e[1];
-            }
-          }
-          diskUsers = diskUsers.map((u) {
-            final a = _diskAvatars[u.uid];
-            return (a != null && _isRenderableAvatar(a))
-                ? u.copyWith(avatar: a)
-                : u;
-          }).toList();
-        } catch (_) {}
+        // Batch-load avatar base64 per-uid dari kv sudah dipindah ke
+        // `_loadDiskAvatars` (dipanggil setelah list tampil — lihat bawah).
         if (_users.isEmpty) {
           // Saring baris basi (invisible/offline/last_seen basi) dari cache
           // lama — jangan tampilkan akun yang sudah tidak online.
           diskUsers = diskUsers
               .where((u) => ChatService.isVisibleOnline(u.status, u.lastSeen))
               .toList();
-          // Disk menang race → tampilkan langsung list disk (deduped di atas),
-          // tapi tetap lewat sort bucket supaya frame pertama sudah rapi
-          // (online di atas, paling lama offline di bawah).
-          // Avatar resolve via _AsyncAvatar (disk-first, keepProvider).
+          // ── TAMPILKAN LIST DULU, AVATAR MENYUSUL (fix #6) ──
+          // Dulu batch avatar di-`await` SEBELUM list dipasang, sehingga
+          // frame pertama menunggu N pembacaan kv (satu per uid). List tanpa
+          // foto masih jauh lebih baik daripada list yang belum muncul —
+          // `_AsyncAvatar` sudah resolve sendiri dari disk saat render.
+          // Jadi: pasang list sekarang, lalu isi avatar di latar.
           _users = _reorderStable([], diskUsers);
+          _loaded = true;
+          if (!_disposed) notifyListeners();
+          unawaited(_loadDiskAvatars(diskUsers));
+          return;
         } else {
           // Stream menang race → jangan buang hasil disk.
         }
@@ -140,6 +123,46 @@ class OnlineUsersProvider extends ChangeNotifier {
       // menggantung menunggu network).
       _loaded = true;
       if (!_disposed) notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Muat avatar base64 dari disk untuk [diskUsers] di LATAR (setelah list
+  /// tampil), lalu emit sekali bila ada yang berubah. Non-blocking: kegagalan
+  /// apa pun diabaikan karena `_AsyncAvatar` tetap punya fallback inisial.
+  Future<void> _loadDiskAvatars(List<UserModel> diskUsers) async {
+    try {
+      final avatars = await Future.wait(
+        diskUsers.map((u) => u.uid.isEmpty
+            ? Future.value(<String>['', ''])
+            : MessageCache.instance
+                .loadRawObj('avatar:${u.uid}')
+                .then((m) => <String>[u.uid, '${m['a'] ?? ''}'],
+                    onError: (_) => <String>[u.uid, ''])),
+      );
+      if (_disposed) return;
+      // Guard balapan: kalau stream sudah mengisi list (atau disk sudah
+      // tidak lagi jadi sumber), jangan sentuh `_users` — cukup simpan
+      // avatar ke `_diskAvatars` supaya merge berikutnya ikut memakainya.
+      final streamWon = _users.any((u) => !diskUsers.any((d) => d.uid == u.uid));
+      for (final e in avatars) {
+        if (e[0].isNotEmpty && e[1].isNotEmpty) {
+          _diskAvatars[e[0]] = e[1];
+        }
+      }
+      if (streamWon) return;
+      var changed = false;
+      final next = _users.map((u) {
+        final a = _diskAvatars[u.uid];
+        if (a != null && _isRenderableAvatar(a) && u.avatar != a) {
+          changed = true;
+          return u.copyWith(avatar: a);
+        }
+        return u;
+      }).toList();
+      if (changed) {
+        _users = next;
+        notifyListeners();
+      }
     } catch (_) {}
   }
 

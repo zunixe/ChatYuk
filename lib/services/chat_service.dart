@@ -1032,22 +1032,37 @@ class ChatService {
   /// Fetch rows private_chats untuk user — dipakai getMyPrivateChats dan
   /// refresh saat stream cached di-subscribe ulang.
   Future<List<PrivateChatInfo>> _fetchPrivateChatRows(String myUid) async {
-    final rows = await _sb
-        .from('private_chats')
-        .select()
-        .contains('participants', [myUid])
-        .order('last_message_at', ascending: false)
-        .limit(50);
-    Set<String> hiddenSet = {};
-    try {
-      hiddenSet = await getHiddenChats(myUid);
-    } catch (e) {
-      dlog('[ChatService] fetchHiddenChats error: $e');
-    }
+    // ── Kolom EKSPLISIT (dulu `select()` = semua kolom) ──
+    // `hidden_by`/`hidden_at` TIDAK diambil di sini: chat tersembunyi
+    // disaring lewat `getHiddenChats` (query terpisah, sudah ada) sehingga
+    // kolom itu tidak pernah dibaca dari hasil fetch. Membuangnya memangkas
+    // payload per baris × 50 baris — jalur ini terukur 505-788ms.
+    const cols =
+        'chat_id,participants,participant_names,participant_genders,'
+        'participant_locations,participant_ages,participant_registered,'
+        'last_message,last_message_at,last_sender_id,message_count,'
+        'unread_counts,last_read_at,pinned_by,pinned_at,muted_by,archived_by';
+    // Fetch rows + daftar hidden PARALEL: dulu berurutan (fetch → await
+    // hidden), jadi jalur kritis menanggung 2 RTT. Keduanya tidak saling
+    // bergantung → satu RTT.
+    final results = await Future.wait([
+      PerfProbe.timed(
+        'chat.listFetch',
+        () => _sb
+            .from('private_chats')
+            .select(cols)
+            .contains('participants', [myUid])
+            .order('last_message_at', ascending: false)
+            .limit(50),
+      ),
+      PerfProbe.timed('chat.hiddenFetch', () => getHiddenChats(myUid)),
+    ]);
+    final rows = results[0] as List<dynamic>;
+    final hiddenSet = results[1] as Set<String>;
     _privateChatsHidden[myUid] = hiddenSet;
     final list = rows
-        .where((row) => !hiddenSet.contains(row['chat_id']))
-        .map(_rowToPrivateChat)
+        .where((row) => !hiddenSet.contains((row as Map)['chat_id']))
+        .map((r) => _rowToPrivateChat(Map<String, dynamic>.from(r as Map)))
         .where((c) => c.messageCount > 0)
         .toList();
     list.sort((a, b) => _comparePinned(a, b, myUid));
@@ -1228,10 +1243,9 @@ class ChatService {
 
     Future<void> doReload() async {
       try {
-        final rows = await PerfProbe.timed(
-          'chat.listFetch',
-          () => _fetchPrivateChatRows(myUid),
-        );
+        // Pengukuran `chat.listFetch` ada DI DALAM _fetchPrivateChatRows
+        // (query + pembacaan hidden sudah paralel di sana).
+        final rows = await _fetchPrivateChatRows(myUid);
         _privateChatsLast[myUid] = rows;
         _lastChatReloadAt[myUid] = DateTime.now();
         dlog(
