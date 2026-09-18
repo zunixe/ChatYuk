@@ -1455,6 +1455,34 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
     DeviceOrientation.portraitUp,
   ]);
   runApp(const ChatYukApp());
-  // Token FCM lambat (5s) — lazy setelah UI tampil, tidak block TTI
+  // Token FCM lambat (5s) - lazy setelah UI tampil, tidak block TTI
   unawaited(_initFcmTokenLazy());
+  // Warm-up jalur RPC: panggilan Supabase PERTAMA selalu jauh lebih mahal
+  // (terukur 839ms vs 127-170ms setelahnya) karena TLS handshake + koneksi
+  // pool dingin. Bayar biaya itu SEKARANG saat user masih melihat layar
+  // pertama, supaya saat mereka membuka tab Pesan/Online jalurnya sudah
+  // hangat. Fire-and-forget: gagal = abaikan (bukan jalur kritis).
+  unawaited(_warmupRpcConnection());
+}
+
+/// Hangatkan koneksi RPC Supabase dengan satu panggilan paling ringan yang
+/// tersedia. Dijalankan setelah UI tampil (tidak menahan TTI) dan hasilnya
+/// sengaja diabaikan — tujuannya hanya memanaskan koneksi/TLS.
+Future<void> _warmupRpcConnection() async {
+  try {
+    // Beri jeda sangat singkat supaya frame pertama + warm-gate (cap 400ms)
+    // selesai dulu; warm-up tidak boleh berebut dengan render awal.
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null || uid.isEmpty) return;
+    await Supabase.instance.client
+        .from('app_settings')
+        .select('id')
+        .eq('id', 'global')
+        .maybeSingle()
+        .timeout(const Duration(seconds: 8));
+    dlog('[WARMUP] koneksi RPC siap');
+  } catch (e) {
+    dlog('[WARMUP] dilewati: $e');
+  }
 }

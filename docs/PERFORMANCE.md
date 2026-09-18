@@ -202,6 +202,54 @@ berjalan **bersamaan**, masing-masing ~375ms.
 > Angka 1136.8ms berasal dari PID lama & kondisi cold yang berkompetisi dengan
 > `online.rpc` (775ms) — **bukan** hasil perubahan ini. Selalu pisahkan per-PID.
 
+### 1h. Analisa cold start & warm-up RPC (2026-09-18, 15:24 & 15:46)
+
+**Cold start BERSIH** (tanpa kontaminasi installer/permission/Sign-In) sangat
+berbeda dari yang terkontaminasi:
+
+| | Terkontaminasi (install) | Bersih |
+|---|---|---|
+| Proses lahir → frame tampil | ~11 detik | **+600-783ms** |
+| `online.rpc` pertama | 775-1319ms | 839ms |
+| `chat.listFetch` pertama | 1136ms | 839ms |
+
+> **Android melaporkan `Displayed ... +600ms`** — UI SUDAH muncul cepat.
+> Yang telat adalah KONTENNYA (RPC pertama 839ms), bukan app-nya.
+
+**Diagnosis yang BENAR (setelah diukur):**
+
+1. ❌ ~~"4 RPC bertabrakan sehingga saling memperlambat"~~ — **DIBANTAH data.**
+   Setelah dihitung waktu MULAI tiap RPC (selesai − durasi), semuanya
+   **sudah berurutan**, bukan bersamaan:
+   `online.rpc` 42.974 → `rpcCountry` 43.967 → `timeline` 45.033 → dst.
+2. ✅ **Hanya RPC PERTAMA yang mahal (839ms)**; setelah itu semua normal
+   127-170ms. Penyebab: TLS handshake + koneksi pool Supabase yang masih
+   dingin. Ini sifat jaringan/inisialisasi, bukan query.
+3. ❌ ~~"Profil sendiri selalu fetch server, cache tidak dibaca"~~ — **SALAH.**
+   `_loadCachedProfile()` sudah dipakai di `_init()` (`auth_provider.dart:283`):
+   profil dari cache tampil lebih dulu, network menyusul.
+
+**Perbaikan yang dikerjakan: WARM-UP RPC** (`main.dart`, `_warmupRpcConnection`).
+Setelah `runApp` (UI sudah tampil), tunggu 600ms lalu panggil satu query
+paling ringan (`app_settings`) untuk membayar TLS handshake + memanaskan
+koneksi SEBELUM user membuka tab. Fire-and-forget, timeout 8s.
+
+**Hasil terukur:**
+
+| Jalur (panggilan pertama) | Sebelum warm-up | Sesudah warm-up |
+|---|---|---|
+| `online.rpc` | **839.0 ms** | **245.5 ms** (−71%) |
+| `chat.listFetch` | **839.3 ms** | **449.4 ms** (−46%) |
+| `online.rpcCountry` | 149.4 ms | 147.7 ms (setara) |
+| `timeline.rpc` | 169.6 ms | 168.1 ms (setara) |
+
+Jalur yang tadinya menanggung biaya koneksi dingin turun drastis; jalur yang
+memang sudah di belakangnya tidak terpengaruh (bagus — tidak ada regresi).
+
+> Catatan: `[WARMUP]` log tidak muncul di rilis karena memakai `dlog`
+> (di-gate `kDebugMode`). Efektivitasnya dibuktikan lewat angka `[PERF]`,
+> bukan lewat log itu.
+
 ### Cara mengukur ulang (WAJIB pakai jalur ini)
 
 ```bash
@@ -535,6 +583,7 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-18 | **#7/#8 ditolak** (fitur, bukan perf; plugin badge discontinued) & **#9 dibatalkan** (render 0% jank — tidak ada jeda untuk ditutup) | Tidak ada perubahan kode. Alasan lengkap di bagian 6 |
 | 2026-09-18 | **Pass 2** — tab admin dibuka 2× + jalur data diulang | Cold start hanya ~20-25% (bukan 40%); **admin panel tidak perlu optimasi** (semua <400ms, mayoritas 128-175ms). `chat.listFetch` tetap target tunggal (505-788ms) |
 | 2026-09-18 | **Fix `chat.listFetch`**: `select()`→17 kolom eksplisit (buang `hidden_by/at` yang tak dipakai) + fetch & hidden **paralel** (`Future.wait`) | **~750ms → ~380ms (hemat ~50%)**. Bukti: `hiddenFetch` 370.7ms vs `listFetch` 380.2ms, selisih timestamp 9ms = jalan bersamaan. Metrik baru: `chat.hiddenFetch` |
+| 2026-09-18 | **Warm-up RPC** (`main.dart`): setelah UI tampil, satu query ringan untuk membayar TLS handshake + memanaskan koneksi | `online.rpc` pertama **839→245ms (−71%)**; `chat.listFetch` pertama **839→449ms (−46%)**. Jalur lain tidak terpengaruh (tanpa regresi) |
 
 ### 8. Target tersisa
 
