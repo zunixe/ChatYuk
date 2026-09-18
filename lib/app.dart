@@ -581,6 +581,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final auth = context.read<AuthProvider>();
     if (state == AppLifecycleState.paused) {
+      // Ringkasan probe (p50/p90/max) dicetak saat app di-background — satu
+      // blok per sesi, tanpa perlu memanggil manual. No-op saat probe off.
+      PerfProbe.report('sesi berakhir (app di-background)');
       // App di-background → set idle, bukan offline.
       // User tetap tampil di menu online sebagai idle.
       auth.goIdle();

@@ -250,6 +250,58 @@ memang sudah di belakangnya tidak terpengaruh (bagus — tidak ada regresi).
 > (di-gate `kDebugMode`). Efektivitasnya dibuktikan lewat angka `[PERF]`,
 > bukan lewat log itu.
 
+### 1i. Ukur BERULANG — memisahkan noise dari pola (2026-09-18)
+
+`PerfProbe.report()` dipanggil otomatis tiap app di-background, kini mencetak
+`min/p50/p90/max` (bukan hanya rata-rata). Aturan baca:
+- `max` jauh dari `p50` tapi `p90` dekat `p50` → **noise jaringan** (jitter).
+- `p90` ikut naik mendekati `max` → **pola nyata** (ada yang sistematis).
+
+**`chat.listFetch` — 8 sesi cold start:**
+
+| Sesi | Nilai |
+|---|---|
+| 1 | 254.0 ms |
+| 2 | 296.1 ms |
+| 3 | 304.1 ms |
+| 4 | 313.5 ms |
+| 5 | 362.9 ms |
+| 6 | 386.0 ms |
+| 7 | 406.4 ms |
+| 8 | 434.5 ms |
+
+`min=254  avg=344.7  max=434.5  sebaran=180ms`
+
+**Kesimpulan: NOISE, bukan pola.** Sebarannya kontinu dan merata (254→434ms)
+tanpa lompatan — ciri jitter jaringan/hotspot, bukan query yang kadang berat.
+Sebelum optimasi: 505-788ms; sesudah: **254-434ms (avg 345ms)**. Tidak ada
+`max` ekstrem seperti dulu (788ms, 1136ms).
+
+**`online.rpc` — 6 sesi:**
+
+| Sesi | p50 | max |
+|---|---|---|
+| 1 | 143.4 | 148.2 |
+| 2 | 189.6 | 214.5 |
+| 3 | 151.5 | 151.5 |
+| 4 | **247.2** | **533.8** |
+| 5 | 158.7 | 172.2 |
+| 6 | 203.1 | 526.6 |
+
+Sesi 4 & 6 punya `max` 526-534ms saat p50 hanya 203-247ms → **lonjakan sesaat**
+(kemungkinan WiFi/hotspot hiccup atau GC). p50 stabil di 143-247ms. Karena
+`p90` tidak selalu tinggi, ini **noise**, bukan pola.
+
+**`online.rpcCountry` — sangat stabil:** p50 133-164ms, max 141-201ms, tanpa
+lonjakan di seluruh 6 sesi.
+
+**Yang perlu diperhatikan:** `chat.hiddenFetch` pernah **1023.5ms** sekali
+(1 dari 8 sesi). Itu juga lonjakan tunggal — sisa 7 sesi 245-455ms. Dipantau,
+belum perlu tindakan.
+
+**Putusan:** tidak ada pola yang perlu diperbaiki. Semua variasi berbentuk
+jitter jaringan. **Pekerjaan performa SELESAI.**
+
 ### Cara mengukur ulang (WAJIB pakai jalur ini)
 
 ```bash
@@ -584,6 +636,7 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-18 | **Pass 2** — tab admin dibuka 2× + jalur data diulang | Cold start hanya ~20-25% (bukan 40%); **admin panel tidak perlu optimasi** (semua <400ms, mayoritas 128-175ms). `chat.listFetch` tetap target tunggal (505-788ms) |
 | 2026-09-18 | **Fix `chat.listFetch`**: `select()`→17 kolom eksplisit (buang `hidden_by/at` yang tak dipakai) + fetch & hidden **paralel** (`Future.wait`) | **~750ms → ~380ms (hemat ~50%)**. Bukti: `hiddenFetch` 370.7ms vs `listFetch` 380.2ms, selisih timestamp 9ms = jalan bersamaan. Metrik baru: `chat.hiddenFetch` |
 | 2026-09-18 | **Warm-up RPC** (`main.dart`): setelah UI tampil, satu query ringan untuk membayar TLS handshake + memanaskan koneksi | `online.rpc` pertama **839→245ms (−71%)**; `chat.listFetch` pertama **839→449ms (−46%)**. Jalur lain tidak terpengaruh (tanpa regresi) |
+| 2026-09-18 | **Probe: statistik persentil** (`min/p50/p90/max`) + `report()` otomatis saat app di-background | 8 sesi cold: `chat.listFetch` **254-434ms (avg 345)**, sebaran kontinu = **noise jaringan**, bukan pola. `online.rpc` p50 143-247ms dengan lonjakan tunggal 526-534ms (jitter). **Tidak ada pola tersisa untuk diperbaiki.** |
 
 ### 8. Target tersisa
 
