@@ -407,7 +407,44 @@ Permintaan user: klik/tap harus sangat sensitif, dan tahan pesan jangan lama.
 tidak bisa diatur → kembali 500ms). Kalau butuh durasi berbeda, tambahkan
 field di `AppTiming`, jangan hardcode angka.
 
-### 2.10 Logout tidak boleh menggantung (fix spinner tak berujung)
+### 2.10 Story — galeri, tray, viewer (diukur 2026-09-18)
+
+- **Grid galeri**: `_thumbs` + `setState` global → `ValueNotifier<int>`
+  (`_thumbsTick`) + `ValueListenableBuilder` per tile. Dulu tiap thumbnail
+  selesai memicu `setState` → **seluruh grid rebuild** (100 foto = 100×
+  rebuild saat scroll). Sekarang hanya tile pemiliknya.
+- **Batasi decode paralel** thumbnail ke 4 (`_thumbConcurrency`) — dulu
+  semua sekaligus rebutan CPU.
+- **`RepaintBoundary`** per tile grid galeri & tile tray story.
+- **`_StoryTrayTile`**: guard `_thumb != null` (tidak decode ulang saat
+  widget di-recycle).
+- **`markSeen` → bulk**: viewer mengumpulkan id slide yang ditonton lalu
+  kirim **sekali** (RPC `mark_story_seen_bulk`) saat ganti author / keluar
+  viewer. Dulu 1 RPC per slide (lihat 10 slide = 10 RPC). Ada fallback
+  ke `mark_story_seen` satu-satu bila RPC bulk belum ada di server.
+- **Skip refresh tray** untuk author yang sedang dibuka
+  (`StoryProvider.setViewingAuthor`) — event realtime-nya tidak memicu RPC
+  tray penuh; ring sudah di-update lokal.
+- **Viewer lifecycle** (`WidgetsBindingObserver`): app di-background →
+  auto-advance berhenti (tidak menandai slide yang tak ditonton); kembali →
+  **lanjut dari sisa waktu** (opsi A), bukan mulai ulang 5 detik.
+- **Composer**: `readAsBytes` + proses gambar digabung jadi **satu
+  `compute`** (`_readAndProcessStory`) — dulu read di main thread lalu
+  compute terpisah (2 hop, bytes mentah sempat menyeberang).
+
+**Hasil ukur (perangkat 192.168.18.33):**
+
+| Metrik | Sebelum | Sesudah |
+|---|---|---|
+| `story.tray` (RPC) | 387 ms | **156 ms** |
+| `story.slides` (RPC) | — | 141–170 ms |
+
+> ⚠️ **`story_tray` JANGAN ditulis ulang jadi JOIN.** Sudah dicoba dan
+> terbukti LEBIH LAMBAT (2 author: 0.082→0.157ms; 300 author: 29.5→51.0ms).
+> Planner PostgreSQL sudah optimal dengan subquery skalar. Detail di
+> `docs/MIGRATION_LOG.md` (2026-09-18).
+
+### 2.11 Logout tidak boleh menggantung (fix spinner tak berujung)
 Masalah: spinner logout muter terus karena menunggu network tanpa timeout.
 - `services/social_service.dart` → `clearAnonSocial()`: `.timeout(5s)`.
 - `services/auth_service.dart` → `goOffline()`: `.timeout(3s)`.
@@ -625,6 +662,8 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-18 | TickerMode per tab, `select` ganti `watch`, recompute keluar `build()`, `RepaintBoundary`, prewarm tab idle, throttle `notifyActivity`, pil nav 500→260ms | p50 3.5ms / p99 6.6ms / **0% jank** |
 | 2026-09-18 | Long-press 500→320ms (`AppGestureDetector`), tooltip 320ms, haptic tombol kirim, timeout logout (5s/3s/8s) | Responsif (belum ada angka; perlu ukur tap→toolbar) |
 | 2026-09-18 | Instrumentasi `PerfProbe.timed` untuk `chat.listFetch` & `online.diskLoad` | `online.diskLoad` = 75.8ms (1 sampel) |
+| 2026-09-18 | Story: notifier thumbnail galeri, RepaintBoundary tray/grid, bulk `markSeen`, skip refresh author aktif, viewer lifecycle, composer 1-hop | `story.tray` 387→**156ms**; `markSeen` N slide→1 RPC |
+| 2026-09-18 | Index `story_views(story_id,viewer_id)` + RPC `mark_story_seen_bulk` | JOIN rewrite `story_tray` **dibatalkan** (terbukti regresi) |
 | 2026-09-18 | Probe 2-mode (`releaseMeasure` untuk rilis — Sign-In aman tanpa SHA-1 debug); tambah titik ukur `online.rpc`, `online.rpcCountry`, `timeline.rpc`, `timeline.rpcMore`, `onlineUsers` | Belum ada angka — build probe siap, menunggu pembacaan `adb logcat` |
 | 2026-09-18 | `OnlineUsersProvider`: 2 jalur notify → 1 `_scheduleCommit` (avatar-only 180ms / perubahan nyata 32ms) | Belum ada angka — pantau `notify onlineUsers` |
 | 2026-09-18 | **UKUR jalur data** (`PERF_PROBE=true` rilis): `online.rpc` 21-260ms, `online.rpcCountry` 136-163ms, `timeline.rpc` 142-169ms, `online.diskLoad` ~21ms, **`chat.listFetch` 291-755ms × 8 beruntun** | Menemukan bottleneck utama = `chat.listFetch` |

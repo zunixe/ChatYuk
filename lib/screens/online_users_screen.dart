@@ -2265,6 +2265,8 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     final p = widget.item.thumbPath;
     if (p.isEmpty) return;
     if (StoragePhotoService.instance.isAvatarPath(p)) return;
+    // Sudah punya thumbnail (didUpdateWidget / recycle) → tidak perlu ulang.
+    if (_thumb != null) return;
     // Kunci cache beda dari full image + mencakup dimensi (thumb lawas
     // 160px tanpa resize aspeknya hancur di server — jangan dipakai lagi).
     final key = '$p#thumb160x296';
@@ -2299,7 +2301,10 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     // Belum dilihat → ring gradient ungu-biru. Sudah dilihat → border
     // PUTIH 2px + shadow, sama seperti avatar di header.
     final seen = !it.hasUnseen;
-    return GestureDetector(
+    // RepaintBoundary: tile lain tidak ikut repaint saat satu thumbnail
+    // selesai dimuat (tray panjang = scroll lebih mulus).
+    return RepaintBoundary(
+      child: GestureDetector(
       onTap: widget.onTap,
       child: SizedBox(
         width: 64,
@@ -2410,6 +2415,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

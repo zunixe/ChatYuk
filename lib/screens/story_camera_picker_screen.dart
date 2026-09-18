@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/locale_provider.dart';
 import '../config/theme.dart';
+import '../services/perf_probe.dart';
 import 'story_camera_capture_screen.dart';
 
 /// Picker foto story — GRID:
@@ -26,8 +27,16 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
     with WidgetsBindingObserver {
   final ScrollController _scrollCtrl = ScrollController();
   final List<AssetEntity> _photos = [];
+  // Thumbnail lewat NOTIFIER, bukan setState: dulu tiap thumbnail selesai
+  // memicu setState → seluruh grid rebuild (100 foto = 100× rebuild saat
+  // scroll). Sekarang hanya tile pemilik thumbnail yang rebuild.
+  final ValueNotifier<int> _thumbsTick = ValueNotifier<int>(0);
   final Map<String, Uint8List?> _thumbs = {};
   final Set<String> _thumbKeys = {};
+  // Batasi decode paralel: thumbnailDataWithSize berat (CPU+IO) — 60
+  // sekaligus bikin frame drop saat scroll cepat.
+  static const int _thumbConcurrency = 4;
+  int _thumbInFlight = 0;
   bool _loading = true;
   bool _noPermission = false;
   // Akses SEBAGIAN (Android 14+ "Select photos"): grid hanya berisi foto
@@ -51,6 +60,7 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _scrollCtrl.dispose();
+    _thumbsTick.dispose();
     super.dispose();
   }
 
@@ -185,14 +195,12 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
           });
         }
       }
-      // Thumbnail paralel per batch kecil.
+      // Thumbnail: antre, dijalankan maks _thumbConcurrency sekaligus.
       for (final a in assets) {
         final key = a.id;
         if (_thumbKeys.contains(key)) continue;
         _thumbKeys.add(key);
-        a.thumbnailDataWithSize(const ThumbnailSize(300, 300)).then((b) {
-          if (mounted) setState(() => _thumbs[key] = b);
-        });
+        _enqueueThumb(key, a);
       }
     } catch (e) {
       dlog('[StoryGrid] gallery error: $e');
@@ -213,6 +221,32 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
       ),
     );
     if (f != null && mounted) Navigator.pop(context, f);
+  }
+
+  final List<AssetEntity> _thumbQueue = [];
+
+  /// Antre thumbnail; hanya [_thumbConcurrency] yang jalan bersamaan.
+  void _enqueueThumb(String key, AssetEntity a) {
+    _thumbQueue.add(a);
+    _pumpThumbQueue();
+  }
+
+  void _pumpThumbQueue() {
+    while (_thumbInFlight < _thumbConcurrency && _thumbQueue.isNotEmpty) {
+      final a = _thumbQueue.removeAt(0);
+      _thumbInFlight++;
+      a.thumbnailDataWithSize(const ThumbnailSize(300, 300)).then((b) {
+        if (mounted) {
+          _thumbs[a.id] = b;
+          // Notifier → hanya tile ini yang rebuild (bukan seluruh grid).
+          _thumbsTick.value++;
+          PerfProbe.buildCount('story.gridThumb');
+        }
+      }).whenComplete(() {
+        _thumbInFlight--;
+        if (mounted) _pumpThumbQueue();
+      });
+    }
   }
 
   Future<void> _pickPhoto(AssetEntity asset) async {
@@ -283,15 +317,28 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
                     // Kotak PERTAMA = kamera, sisanya foto recent langsung.
                     if (i == 0) return _cameraTile();
                     final a = _photos[i - 1];
-                    final thumb = _thumbs[a.id];
-                    return GestureDetector(
-                      onTap: () => _pickPhoto(a),
-                      child: Container(
-                        color: Colors.white10,
-                        child: thumb != null
-                            ? Image.memory(thumb,
-                                fit: BoxFit.cover, gaplessPlayback: true)
-                            : const SizedBox.shrink(),
+                    // RepaintBoundary per tile — thumbnail selesai tidak
+                    // memicu repaint seluruh grid.
+                    return RepaintBoundary(
+                      child: GestureDetector(
+                        onTap: () => _pickPhoto(a),
+                        // Hanya tile ini yang rebuild saat thumbnailnya
+                        // selesai (dulu: setState → seluruh grid).
+                        child: ValueListenableBuilder<int>(
+                          valueListenable: _thumbsTick,
+                          builder: (_, __, ___) {
+                            final thumb = _thumbs[a.id];
+                            return Container(
+                              color: Colors.white10,
+                              child: thumb != null
+                                  ? Image.memory(thumb,
+                                      fit: BoxFit.cover,
+                                      gaplessPlayback: true,
+                                      cacheWidth: 300)
+                                  : const SizedBox.shrink(),
+                            );
+                          },
+                        ),
                       ),
                     );
                   },

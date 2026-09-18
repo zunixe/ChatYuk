@@ -2595,6 +2595,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 name: widget.otherName,
                 size: 40,
                 borderRadius: 20,
+                // Border warna gender — samakan dengan kartu list Pesan:
+                // biru = laki-laki, merah muda = perempuan, aksen = lainnya.
+                borderColor: widget.otherGender == 'male'
+                    ? AppTheme.male
+                    : widget.otherGender == 'female'
+                    ? AppTheme.female
+                    : AppTheme.accent,
                 bgColor: Colors.white.withValues(alpha: 0.25),
                 textColor: Colors.white,
                 badge: Container(
