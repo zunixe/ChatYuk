@@ -63,7 +63,89 @@ jobs:
         run: flutter analyze --no-pub --no-fatal-infos
 
       - name: Test
-        run: flutter test --no-pub
+        run: flutter test --coverage --no-pub
+
+      - name: Coverage gate (ratchet anti-regresi)
+        # Baseline 2026-09-19: providers ~22%, services ~6%, models ~65%.
+        # Gate ini ANTI-REGRESI (bukan target akhir 60%): gagal hanya kalau
+        # coverage TURUN dari baseline. Naikkan ambang bertahap tiap ada
+        # PR yang menambah test (target akhir: 60% per direktori).
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          path = 'coverage/lcov.info'
+          if not os.path.exists(path):
+              print('coverage/lcov.info tidak ada'); sys.exit(1)
+          # Hitung DA (found/hit) per direktori target.
+          stats = {}
+          cur = None
+          for line in open(path, encoding='utf-8', errors='ignore'):
+              line = line.strip()
+              if line.startswith('SF:'):
+                  cur = line[3:]
+              elif line.startswith('DA:'):
+                  try:
+                      hit = int(line[3:].split(',')[1])
+                  except Exception:
+                      continue
+                  key = 'other'
+                  for d in ('lib/providers/', 'lib/services/', 'lib/models/'):
+                      if cur and cur.endswith('.dart') and d in cur.replace('\\', '/'):
+                          key = d; break
+                  f, h = stats.get(key, (0, 0))
+                  stats[key] = (f + 1, h + (1 if hit > 0 else 0))
+              elif line == 'end_of_record':
+                  cur = None
+          minimum = {
+              'lib/providers/': 20.0,
+              'lib/services/': 5.0,
+              'lib/models/': 60.0,
+          }
+          ok = True
+          for d, floor in minimum.items():
+              f, h = stats.get(d, (0, 0))
+              pct = (100.0 * h / f) if f else 100.0
+              print(f'{d}: {h}/{f} ({pct:.1f}%) vs min {floor}%')
+              if pct < floor:
+                  print(f'  -> REGRESI coverage di {d}'); ok = False
+          sys.exit(0 if ok else 1)
+          PY
+
+  supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # SCA ringan: OSV scan untuk pubspec.lock + outdated report.
+      - name: OSV scan (pubspec.lock)
+        uses: google/osv-scanner-action@v2
+        with:
+          scan-args: ./pubspec.lock
+        continue-on-error: true
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.2
+          cache: true
+
+      - name: Pub outdated (laporan, tidak menggagalkan)
+        run: flutter pub outdated || true
+
+  sql-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Hanya jalan bila secret tersedia (fork tanpa secret => skip lembut).
+    if: ${{ vars.SUPABASE_PROJECT_REF != '' && secrets.SUPABASE_ACCESS_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SQL tests via Management API (transaksional)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+        run: bash scripts/run_sql_tests.sh
 
   edge-tests:
     runs-on: ubuntu-latest
@@ -75,5 +157,5 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Deno test (helper edge murni)
-        run: deno test --allow-read supabase/functions/_shared/
+      - name: Deno test (helper edge murni + kontrak)
+        run: deno test --allow-read=supabase/functions supabase/functions/_shared/

@@ -7,10 +7,16 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 REF="${REF:-fohcucyyejdryryoxitm}"
+REF="${SUPABASE_PROJECT_REF:-$REF}"
 TESTS_DIR="$ROOT/supabase/tests"
 
-TOK="$(security find-generic-password -s "Supabase CLI" -a "supabase" -w 2>/dev/null | sed 's/^go-keyring-base64://' | base64 -d 2>/dev/null || true)"
-[ -z "$TOK" ] && { echo "token Management API tidak ada di keychain" >&2; exit 1; }
+# Token: utamakan env CI (SUPABASE_ACCESS_TOKEN), fallback keychain lokal (Mac).
+if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+  TOK="$SUPABASE_ACCESS_TOKEN"
+else
+  TOK="$(security find-generic-password -s "Supabase CLI" -a "supabase" -w 2>/dev/null | sed 's/^go-keyring-base64://' | base64 -d 2>/dev/null || true)"
+fi
+[ -z "$TOK" ] && { echo "token Management API tidak ada (env SUPABASE_ACCESS_TOKEN / keychain)" >&2; exit 1; }
 
 run_one() {
   local f="$1" name; name="$(basename "$f")"
