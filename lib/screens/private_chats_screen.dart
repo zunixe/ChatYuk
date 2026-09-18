@@ -872,7 +872,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                           ],
                                         ),
                                         SizedBox(height: 4),
-                                        Builder(builder: (_) {
+                                        // #5: baris preview (centang + unread) punya layer repaint sendiri -
+                                        // badge/centang berubah sering, tanpa ini seluruh kartu ikut repaint.
+                                        RepaintBoundary(
+                                        child: Builder(builder: (_) {
                                           final otherStatus = statusMap[otherUid] ?? 'offline';
                                           final isOnline = otherStatus == 'online';
                                           final profile = _chatSubtitle(chat, auth.uid!, s);
@@ -919,6 +922,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                             ],
                                           );
                                         }),
+                                        ),
                                       ],
                                     ),
                                   ),

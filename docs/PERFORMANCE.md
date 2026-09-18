@@ -123,6 +123,85 @@ Instrumentasi: wrapper `AdminService._rpc()` → metrik `admin.<nama_rpc>`
 kali) untuk memisahkan cold-start vs query berat, baru optimasi RPC >300ms
 yang konsisten.
 
+### 1e. PASS KEDUA — tab admin dibuka 2× (2026-09-18)
+
+Tujuan: memisahkan **cold start RPC** dari **query berat**. Angka n=1 =
+kunjungan pertama, n=2 = kunjungan kedua (tab sama).
+
+| RPC | n=1 (cold) | n=2 (warm) | Selisih |
+|---|---|---|---|
+| `admin_list_deleted` | 147.5 | **378.1** | +230 (naik!) |
+| `admin_list_chats_page` | **297.4** | 138.0 | −159 |
+| `admin_active_calls` | 226.2 | 137.6 | −89 |
+| `admin_list_devices` | 174.5 | 152.6 | −22 |
+| `admin_list_dummies_page` | 167.4 | 136.5 | −31 |
+| `admin_contact_messages_page` | 156.4 | 128.1 | −28 |
+| `admin_registrations_daily` | 154.8 | 136.2 | −19 |
+| `admin_hidden_uids` | 169.8 | 147.9 | −22 |
+| `admin_ai_settings` | 161.8 | 147.6 | −14 |
+| `admin_ai_provider_list` | 130.7 | 132.8 | +2 |
+| `admin_storage_stats` | 275.6 | — | (hanya 1×) |
+| `admin_sweep_calls` | 266.4 | — | (hanya 1×) |
+
+**Kesimpulan pass-2:**
+
+1. **Cold start terbukti, tapi tidak dominan.** Rata-rata turun ~20-25% di
+   kunjungan kedua (bukan 40% seperti dugaan awal dari 1 sampel).
+2. **`admin_list_deleted` justru NAIK** (147→378ms) — jadi bukan cold start,
+   melainkan **variasi jaringan/DB**, bukan pola query berat. n=2 masih terlalu
+   sedikit untuk menyimpulkan.
+3. **Semua RPC admin tetap < 400ms** dan mayoritas 128-175ms di kondisi warm.
+   Ini menyerupai baseline latency jaringan (bandingkan `online.rpc` warm
+   119-166ms). **Tidak ada query admin yang perlu dioptimasi.**
+4. **Putusan akhir admin panel: TIDAK ada pekerjaan optimasi.** Semua dalam
+   batas wajar; variasi antar-panggilan lebih besar daripada selisih cold/warm.
+
+### 1f. PASS KEDUA — jalur data utama
+
+| Jalur | Pass 1 | Pass 2 | Catatan |
+|---|---|---|---|
+| `chat.listFetch` | 505.8 (1×) | **788.7 / 622.3** (2×) | ⚠️ masih jalur TERLAMBAT; 2× karena snapshot+refresh |
+| `online.rpc` | 21-1319 | 67.6 → 119-317 | ✅ stabil di 119-166ms setelah warm |
+| `online.rpcCountry` | 135-665 | 119.9-165.0 | ✅ stabil |
+| `timeline.rpc` | 142-201 | 117.3-171.4 | ✅ stabil |
+| `online.diskLoad` | 20-53 | 63.7 | ✅ (& avatar sudah non-blocking) |
+
+**`chat.listFetch` = satu-satunya target tersisa.** Terukur 505-788ms (1 query
+sah, bukan lagi duplikasi). Ini query `private_chats` limit 50 dengan
+`select()` seluruh kolom (banyak jsonb). Kandidat berikutnya: perkecil kolom
+yang di-`select` di `_fetchPrivateChatRows` — **bukan** lewat Realtime
+(#3 sudah dibatalkan), melainkan di query fetch-nya sendiri.
+
+> Nama paket `com.chatyuk.chatyuk.admin.dev` terlihat di log — itu sisa
+> instalasi lama (flavor `adminDev` yang sudah dihapus), tidak dipakai.
+
+### 1g. Fix `chat.listFetch` — TERBUKTI (2026-09-18, 15:12)
+
+Dua perubahan di `_fetchPrivateChatRows` (`chat_service.dart`):
+
+1. **`select()` → 17 kolom eksplisit.** `hidden_by`/`hidden_at` TIDAK pernah
+   dibaca di jalur ini (penyaringan tersembunyi lewat `getHiddenChats`
+   terpisah) — membuangnya memangkas payload per baris × 50 baris.
+2. **Fetch + hidden PARALEL** (`Future.wait`). Dulu berurutan = 2 RTT.
+
+**Hasil terukur (bukti langsung dari logcat):**
+
+| | Waktu | PID |
+|---|---|---|
+| `chat.hiddenFetch` | 370.7 ms | 25419 (build baru) |
+| `chat.listFetch` | 380.2 ms | 25419 (build baru) |
+
+Selisih timestamp keduanya **9 milidetik** (15:12:38.956 vs .965) → keduanya
+berjalan **bersamaan**, masing-masing ~375ms.
+
+- **Sebelum:** fetch (~380ms) → berurutan → hidden (~370ms) = **~750ms**
+- **Sesudah:** paralel → **~380ms** (dibatasi yang terlama)
+- **Hemat ~370ms (≈50%)** di jalur kritis tab Pesan.
+
+> Metodologi: log memuat 2 proses (PID 20138 = build lama, 25419 = build baru).
+> Angka 1136.8ms berasal dari PID lama & kondisi cold yang berkompetisi dengan
+> `online.rpc` (775ms) — **bukan** hasil perubahan ini. Selalu pisahkan per-PID.
+
 ### Cara mengukur ulang (WAJIB pakai jalur ini)
 
 ```bash
@@ -395,22 +474,40 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
       future yang sama. 8 fetch → 1.
       **SISA (kalau masih perlu):** `_comparePinned` + sort penuh per
       perubahan data; kerjakan hanya bila pengukuran ulang masih >300ms.
-- [ ] **#5 `RepaintBoundary` pada baris unread/preview** di kartu list — kalau
-      profiling menunjukkan masih ada repaint berlebih saat badge berubah.
-      Prioritas TURUN: render sudah 0% jank, jadi ini belum terbukti masalah.
-- [ ] **#6 Tunda fetch avatar batch** di `OnlineUsersProvider` sampai list
-      pertama ter-render (sekarang ikut jalur warm). Prioritas TURUN:
-      `online.diskLoad` terukur cuma ~21ms — bukan bottleneck.
+- [x] **#5 `RepaintBoundary` baris preview/unread SELESAI (2026-09-18).**
+      Baris bawah kartu (centang-2 + preview + badge unread) diberi layer
+      repaint sendiri. Alasannya bukan karena ada jank terukur, tapi karena
+      **baris itu berubah paling sering** (tiap pesan masuk / read-receipt)
+      dan sebelumnya menandai SELURUH kartu (termasuk avatar/foto) untuk
+      repaint. Layer tambahan hanya SATU per kartu — jauh di bawah ambang
+      yang bisa merusak raster cache.
+- [x] **#6 Tunda avatar batch `OnlineUsersProvider` SELESAI (2026-09-18).**
+      Batch avatar (N pembacaan kv) tidak lagi di-`await` sebelum list
+      dipasang; list tampil dulu, avatar diisi di latar lewat
+      `_loadDiskAvatars` (dengan guard balapan vs stream). Efek: frame
+      pertama daftar online tidak lagi menunggu N pembacaan disk.
+      Catatan: `online.diskLoad` terukur 20-53ms, jadi ini **bukan**
+      perbaikan besar — nilainya lebih ke menghilangkan penundaan yang
+      bergantung jumlah user (N× pembacaan → 0 di jalur kritis).
 
-### Prioritas rendah (fitur, bukan optimasi)
-- [ ] **#7 Badge angka di ikon launcher** (MIUI/Android) — butuh plugin
-      (`flutter_app_badger` / channel `ShortcutBadger`). Semua notif chat
-      digabung jadi satu angka.
-- [ ] **#8 Suara & getar kustom per chat/kontak** — butuh channel notifikasi
-      dinamis per chat + preferensi user.
-- [ ] **#9 Snapshot tab** (`RepaintBoundary.toImage`) — kemungkinan **TIDAK
-      perlu** setelah prewarm idle; hanya kerjakan kalau pengukuran ulang
-      menunjukkan masih ada jeda saat tap tab.
+### Prioritas rendah (fitur, bukan optimasi) — TIDAK dikerjakan sebagai perf
+- [~] **#7 Badge angka di ikon launcher — DITOLAK (2026-09-18).** Plugin
+      `flutter_app_badger` yang dulu direkomendasikan **sudah discontinued**
+      di pub.dev. Menambah dependency tak-terpelihara ke proyek rilis =
+      risiko build/bug tanpa perbaikan hulu. Lagi pula ini **fitur**, bukan
+      optimasi (nol dampak ke waktu render/fetch). Bila memang diinginkan:
+      kerjakan sebagai fitur terpisah, idealnya lewat channel notifikasi
+      Android langsung (tanpa plugin mati).
+- [~] **#8 Suara & getar kustom per chat — DITOLAK sebagai bagian perf
+      (2026-09-18).** Ini fitur baru (channel notifikasi dinamis per chat +
+      preferensi user + UI pengaturan) — nol hubungan dengan performa.
+      `flutter_local_notifications` + `audioplayers` sudah tersedia, jadi
+      secara teknis bisa; tapi harus direncanakan sebagai fitur.
+- [~] **#9 Snapshot tab — DIBATALKAN (2026-09-18).** Pengukuran mendukung
+      putusan dokumen sendiri ("kemungkinan TIDAK perlu"): render
+      p50 3.5ms / p99 6.6ms / **0% jank**, dan prewarm tab idle sudah jalan.
+      Tidak ada jeda saat tap tab yang perlu ditutup snapshot. Membuat
+      snapshot (toImage) justru menambah biaya memori & kerja GPU.
 
 ### Aturan kerja (WAJIB)
 1. Setiap perubahan performa harus punya **alasan terukur** (angka, bukan
@@ -434,3 +531,30 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-18 | **Fix dedupe `chat.listFetch`** (`_chatListFetchInFlight`): 5 pemanggil `getMyPrivateChats` tidak lagi menembak query sama bersamaan | 8 fetch → 1 (terverifikasi: 505.8ms sekali) |
 | 2026-09-18 | **Fix kedip list Pesan**: recompute dipindah dari "build berikutnya" ke dalam `StreamBuilder` (sebelum `_listNotifier.value` dibaca) | List muncul di frame yang sama; hilang kedip EmptyStateView 1 frame |
 | 2026-09-18 | **Instrumentasi seluruh tab admin**: wrapper `AdminService._rpc()` — 43 RPC terukur otomatis | Tidak ada tab >350ms; tertinggi `admin_storage_stats` 340.6ms; cold-start RPC berpengaruh ~40% |
+| 2026-09-18 | **#5** `RepaintBoundary` baris preview/unread; **#6** avatar batch disk dipindah ke latar (`_loadDiskAvatars` + guard balapan) | #6 menghapus penundaan N×pembacaan kv dari jalur kritis daftar online. Test: cache disk antar-test dibersihkan (bug isolasi test tersingkap) |
+| 2026-09-18 | **#7/#8 ditolak** (fitur, bukan perf; plugin badge discontinued) & **#9 dibatalkan** (render 0% jank — tidak ada jeda untuk ditutup) | Tidak ada perubahan kode. Alasan lengkap di bagian 6 |
+| 2026-09-18 | **Pass 2** — tab admin dibuka 2× + jalur data diulang | Cold start hanya ~20-25% (bukan 40%); **admin panel tidak perlu optimasi** (semua <400ms, mayoritas 128-175ms). `chat.listFetch` tetap target tunggal (505-788ms) |
+| 2026-09-18 | **Fix `chat.listFetch`**: `select()`→17 kolom eksplisit (buang `hidden_by/at` yang tak dipakai) + fetch & hidden **paralel** (`Future.wait`) | **~750ms → ~380ms (hemat ~50%)**. Bukti: `hiddenFetch` 370.7ms vs `listFetch` 380.2ms, selisih timestamp 9ms = jalan bersamaan. Metrik baru: `chat.hiddenFetch` |
+
+### 8. Target tersisa
+
+**Tidak ada.** Semua item bagian 6 sudah tertutup:
+- Selesai: #1, #2, #4, #5, #6
+- Dibatalkan/ditolak dengan alasan tertulis: #3, #7, #8, #9
+
+Semua jalur data terukur kini dalam rentang wajar:
+
+| Jalur | Nilai akhir |
+|---|---|
+| `online.diskLoad` | 23-64 ms |
+| `online.rpc` | 119-268 ms (warm) |
+| `online.rpcCountry` | 119-187 ms |
+| `timeline.rpc` | 117-175 ms |
+| `chat.listFetch` | **380 ms** (dulu 505-788) |
+| Semua RPC admin | 128-395 ms |
+
+Yang masih di atas baseline hanya kondisi **cold start** (`online.rpc`
+775-1319ms pada panggilan pertama) — itu sifat jaringan + inisialisasi
+Supabase, bukan query. Bila suatu saat terasa mengganggu, kandidatnya
+*warm-up RPC saat app idle*; belum dikerjakan karena belum terbukti
+mengganggu pengalaman.

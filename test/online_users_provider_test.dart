@@ -7,6 +7,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/providers/online_users_provider.dart';
 import 'package:chatyuk/services/chat_service.dart';
+import 'package:chatyuk/services/message_cache.dart';
 
 import 'test_helper.dart';
 
@@ -44,7 +45,12 @@ void main() {
     await initSupabaseForTest();
   });
 
-  setUp(() {
+  setUp(() async {
+    // Provider menyimpan daftar ke cache disk ('online_users') tiap emit —
+    // tanpa dibersihkan, emit test SEBELUMNYA terbaca `_loadDisk` test
+    // berikutnya dan mencemari assertion (ketahuan saat `_loadDisk` jadi
+    // lebih cepat setelah avatar dipindah ke latar).
+    await MessageCache.instance.removeRawObj('online_users');
     service = MockChatService();
     stream = StreamController<List<UserModel>>.broadcast();
     when(() => service.getOnlineUsers()).thenAnswer((_) => stream.stream);
@@ -119,7 +125,8 @@ void main() {
       expect(provider.users.length, 2);
     });
 
-    test('grace 8 dtk tanpa emit isi → list basi dibersihkan', () {
+    test('grace 8 dtk tanpa emit isi → list basi dibersihkan', () async {
+      await MessageCache.instance.removeRawObj('online_users');
       FakeAsync().run((fake) {
         final svc = MockChatService();
         final ctl = StreamController<List<UserModel>>.broadcast();
@@ -143,6 +150,7 @@ void main() {
 
   group('hold-grace per user (anti kedip idle)', () {
     test('idle hilang sekilas ditahan + kembali tanpa duplikat', () async {
+      await MessageCache.instance.removeRawObj('online_users');
       await _emit([_u('a', 'online'), _u('idle1', 'idle')]);
       expect(provider.users.map((u) => u.uid).toSet(), {'a', 'idle1'});
       // Emission berikutnya tanpa idle1 (socket blip) → tetap tampil.
@@ -156,7 +164,8 @@ void main() {
       );
     });
 
-    test('hold dilepas setelah 90 dtk tanpa kembali', () {
+    test('hold dilepas setelah 90 dtk tanpa kembali', () async {
+      await MessageCache.instance.removeRawObj('online_users');
       FakeAsync().run((fake) {
         // FakeAsync tidak memalsukan DateTime.now → kendalikan jam hold
         // lewat seam holdNow (prinsip sama seperti jitterRandom).
