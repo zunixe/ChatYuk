@@ -13,7 +13,12 @@ class OfflineBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final online = context.watch<ConnectivityProvider>().online;
+    // select (bukan watch): banner hanya peduli field `online` — perubahan
+    // field lain di ConnectivityProvider tidak perlu mer-rebuild seluruh
+    // subtree aplikasi (banner membungkus semua halaman).
+    final online = context.select<ConnectivityProvider, bool>(
+      (c) => c.online,
+    );
     return Stack(
       children: [
         child,

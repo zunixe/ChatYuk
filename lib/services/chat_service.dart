@@ -12,6 +12,7 @@ import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
+import 'perf_probe.dart';
 import 'notification_prefs_service.dart';
 import 'chat_stream_session.dart';
 
@@ -1223,7 +1224,10 @@ class ChatService {
 
     Future<void> reload() async {
       try {
-        final rows = await _fetchPrivateChatRows(myUid);
+        final rows = await PerfProbe.timed(
+          'chat.listFetch',
+          () => _fetchPrivateChatRows(myUid),
+        );
         _privateChatsLast[myUid] = rows;
         _lastChatReloadAt[myUid] = DateTime.now();
         dlog(

@@ -24,6 +24,7 @@ import 'providers/timeline_provider.dart';
 import 'providers/story_provider.dart';
 import 'services/chat_service.dart';
 import 'services/boot_overlay.dart';
+import 'services/perf_probe.dart';
 import 'main.dart';
 import 'screens/entry_screen.dart';
 import 'screens/profile_screen.dart';
@@ -543,9 +544,31 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     // sudah terisi, tidak ada spinner RPC list_posts pertama.
     Timer(const Duration(seconds: 3), () {
       if (mounted) context.read<TimelineProvider>().prewarm();
-      // Prewarm juga daftar grup (tab Grup) — klik tab instan.
+      // Prewarm juga daftar grup (tab Grup) — klik tab instant.
       if (mounted) context.read<RoomProvider>().loadMyGroups(refresh: true);
     });
+    // Gaya Telegram: halaman tab lain dibangun diam-diam SAAT IDLE (bukan
+    // saat diklik) supaya tap pertama terasa instan. Bertahap 1 tab per
+    // 800ms supaya tidak ada lonjakan frame — tab aktif sudah ter-render
+    // penuh sebelum ini jalan.
+    _scheduleTabPrewarm();
+  }
+
+  /// Bangun halaman tab lain di belakang layar, satu per satu saat idle.
+  void _scheduleTabPrewarm() {
+    const order = [1, 2, 3]; // Pesan/Chat, Timeline, Profil
+    var step = 0;
+    void next() {
+      if (!mounted || step >= order.length) return;
+      final i = order[step++];
+      if (_visitedTabs.contains(i)) {
+        next();
+        return;
+      }
+      if (mounted) setState(() => _visitedTabs.add(i));
+      Future<void>.delayed(const Duration(milliseconds: 800), next);
+    }
+    Future<void>.delayed(const Duration(milliseconds: 1200), next);
   }
 
   @override
@@ -585,6 +608,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
         return;
       }
     }
+    PerfProbe.tabStart(i);
     context.read<NavProvider>().goTo(i);
   }
 
@@ -603,6 +627,13 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       _pagesDark = dark;
     }
     if (!_visitedTabs.contains(tab)) _visitedTabs.add(tab);
+    PerfProbe.buildCount('MainNav');
+    // Ukur "tap → frame pertama tab ini ter-render" (probe off = no-op).
+    if (PerfProbe.enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        PerfProbe.tabEnd(tab);
+      });
+    }
     final auth = context.watch<AuthProvider>();
     final s = context.read<LocaleProvider>().s;
     // Soft gate anon: banner tipis di atas konten saat fitur anon OFF.
@@ -674,7 +705,15 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
                   children: [
                     for (var i = 0; i < _pages!.length; i++)
                       _visitedTabs.contains(i)
-                          ? _pages![i]
+                          // TickerMode: animasi halaman yang TIDAK aktif
+                          // dimatikan. Sebelum ini _sharePulse di menu
+                          // Online (repeat selamanya) + animasi lain terus
+                          // minta frame walau tab tersembunyi → compositor
+                          // tidak pernah idle → semua tab terasa berat.
+                          ? TickerMode(
+                              enabled: tab == i,
+                              child: _pages![i],
+                            )
                           : const SizedBox.shrink(),
                   ],
                 ),
@@ -833,7 +872,9 @@ class _BottomNav extends StatelessWidget {
     }
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: selected ? 0 : 1, end: selected ? 1 : 0),
-      duration: Duration(milliseconds: selected ? 500 : 250),
+      // 500ms → 260ms: tap tab terasa langsung "mendarat" (ala Telegram),
+      // kurva easeOutExpo tetap membuat gerakannya lembut.
+      duration: Duration(milliseconds: selected ? 260 : 180),
       curve: selected ? Curves.linear : const Cubic(0.2, 0.0, 0.0, 1.0),
       builder: (context, t, child) {
         final w = t >= 1 ? 1.0 : 1 - math.pow(2, -10 * t).toDouble();

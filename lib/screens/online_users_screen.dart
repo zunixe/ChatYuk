@@ -39,6 +39,9 @@ import 'story_viewer_screen.dart';
 import '../providers/story_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/nav_provider.dart';
+import '../services/perf_probe.dart';
+import '../widgets/app_gesture.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
@@ -375,15 +378,32 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         context.read<StoryProvider>().refresh(silent: true);
       } catch (_) {}
     });
+    // Pulse tombol share: HANYA berputar saat tab Online terlihat.
+    // Dulu `..repeat()` jalan selamanya — walau tab tersembunyi, vsync
+    // tiap frame tetap diminta → compositor tidak pernah idle → tab lain
+    // terasa berat saat dibuka. Sekarang dipicu/dihentikan oleh NavProvider.
     _sharePulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
+    );
+    _syncSharePulse();
+    context.read<NavProvider>().addListener(_syncSharePulse);
     _shareScale = Tween<double>(
       begin: 1.0,
       end: 1.06,
     ).animate(CurvedAnimation(parent: _sharePulse, curve: Curves.easeInOut));
     _requestGpsOnce();
+  }
+
+  /// Hidupkan/matikan pulse tombol share sesuai tab yang sedang tampil.
+  void _syncSharePulse() {
+    if (!mounted) return;
+    final onTab = context.read<NavProvider>().tab == 0;
+    if (onTab) {
+      if (!_sharePulse.isAnimating) _sharePulse.repeat(reverse: true);
+    } else {
+      if (_sharePulse.isAnimating) _sharePulse.stop();
+    }
   }
 
   /// Minta izin GPS saat masuk menu pengguna online (dialog native muncul
@@ -646,6 +666,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
+    try {
+      context.read<NavProvider>().removeListener(_syncSharePulse);
+    } catch (_) {}
     _sharePulse.dispose();
     _unreadSub?.cancel();
     super.dispose();
@@ -687,7 +710,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
   /// Avatar + nama sendiri sebagai TILE PERTAMA tray (ikut scroll
   /// horizontal seperti IG — bukan nempel di luar list).
-  Widget _buildOwnAvatarTile(AuthProvider auth) {
+  Widget _buildOwnAvatarTile(
+    String myAvatar,
+    String myNickname,
+    bool myRegistered,
+  ) {
     // Tile avatar sendiri TETAP di tengah tray (vertikal) — Center
     // mengembalikan posisi tengah seperti semula.
     return Center(
@@ -701,9 +728,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             children: [
               GestureDetector(
                 onTap: () {
-                  final b64 = auth.profile?.avatar ?? '';
+                  final b64 = myAvatar;
                   final init =
-                      (auth.profile?.nickname ?? '?')[0].toUpperCase();
+                      (myNickname.isEmpty ? '?' : myNickname)[0].toUpperCase();
                   _showAvatarZoom(b64, AppTheme.primary, init);
                 },
                 child: Container(
@@ -719,7 +746,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     ],
                   ),
                   child: Builder(builder: (_) {
-                    final b64 = auth.profile?.avatar ?? '';
+                    final b64 = myAvatar;
                     final bytes = _resolveOwnAvatar(b64);
                     // Huruf inisial HANYA kalau memang tidak ada
                     // avatar (string kosong). Selama bytes belum
@@ -733,7 +760,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                           bytes != null ? MemoryImage(bytes) : null,
                       child: showInitial
                           ? Text(
-                              (auth.profile?.nickname ?? '?')[0]
+                              (myNickname.isEmpty ? '?' : myNickname)[0]
                                   .toUpperCase(),
                               style: TextStyle(
                                 color: Colors.white,
@@ -791,11 +818,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    auth.profile?.nickname ?? '-',
+                    myNickname,
                     style: AppText.bodyStrong
                         .copyWith(color: AppTheme.textPrimary),
                   ),
-                  if (auth.profile?.isRegistered == true) ...[
+                  if (myRegistered) ...[
                     const SizedBox(width: 2),
                     const Icon(
                       Icons.verified,
@@ -816,7 +843,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   /// Tray story horizontal — kotak portrait rounded + ring gradient
   /// (belum dilihat) / putih (sudah). Slot 0 = avatar sendiri (ikut
   /// scroll); lalu tile "+" kalau belum punya story; lalu tile story.
-  Widget _buildStoryTray(BuildContext ctx, AuthProvider auth) {
+  Widget _buildStoryTray(
+    BuildContext ctx,
+    String myAvatar,
+    String myNickname,
+    bool myRegistered,
+  ) {
     final sp = ctx.watch<StoryProvider>();
     // Hanya item berisi slide (slideCount>0) yang tampil & bisa dibuka.
     final items = sp.tray.where((t) => t.slideCount > 0).toList();
@@ -834,7 +866,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (_, i) {
           // Slot 0 = avatar sendiri (ikut scroll seperti IG).
-          if (i == 0) return _buildOwnAvatarTile(auth);
+          if (i == 0) {
+            return _buildOwnAvatarTile(myAvatar, myNickname, myRegistered);
+          }
           final j = i - 1;
           // Slot berikutnya = tile "+" kalau belum punya story sendiri.
           if (showAdd && j == 0) {
@@ -1107,9 +1141,33 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
   @override
   Widget build(BuildContext context) {
-    context.watch<ThemeProvider>();
+    PerfProbe.buildCount('Online');
+    // select (bukan watch): heartbeat presence AuthProvider berubah tiap
+    // beberapa detik — watch membuat SELURUH halaman (Scaffold + tray story
+    // + ListView) rebuild tiap kali walau tak ada yang terlihat berubah.
+    // Hanya field yang dipakai untuk render yang di-listen.
+    final dark = context.select<ThemeProvider, bool>((t) => t.isDark);
+    final authUid = context.select<AuthProvider, String?>((a) => a.uid);
+    final myAvatar = context.select<AuthProvider, String>(
+      (a) => a.profile?.avatar ?? '',
+    );
+    final myNickname = context.select<AuthProvider, String>(
+      (a) => a.profile?.nickname ?? '-',
+    );
+    final myRegistered = context.select<AuthProvider, bool>(
+      (a) => a.profile?.isRegistered ?? false,
+    );
+    final isRealAdmin = context.select<AuthProvider, bool>(
+      (a) => a.isRealAdmin,
+    );
+    final dummySession = context.select<AuthProvider, bool>(
+      (a) => a.dummySessionActive,
+    );
+    final anonymous = context.select<AuthProvider, bool>(
+      (a) => a.isAnonymous,
+    );
+    final isAdmin = isRealAdmin && !dummySession;
     super.build(context);
-    final auth = context.watch<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -1200,7 +1258,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     final seenN = <String>{};
                     final n = prov.users
                         .where((u) =>
-                            u.uid != auth.uid &&
+                            u.uid != authUid &&
                             u.uid.isNotEmpty &&
                             !chat.isBlocked(u.uid) &&
                             seenU.add(u.uid) &&
@@ -1231,7 +1289,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             // Atas 2 (rapat ke field cari di toolbar) — total
             // 2 + 132 + 4 = 138 ≤ 146, tidak overflow.
             padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-            child: _buildStoryTray(context, auth),
+            child: _buildStoryTray(context, myAvatar, myNickname, myRegistered),
           ),
         ),
         iconTheme: IconThemeData(color: AppTheme.textPrimary),
@@ -1243,9 +1301,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           Builder(builder: (_) {
             debugPrint(
               '[ADMINICON] panelBuilder=${AdminGate.panelBuilder != null} '
-              'isRealAdmin=${auth.isRealAdmin} '
-              'dummySession=${auth.dummySessionActive} '
-              'email=${auth.userEmail}',
+              'isRealAdmin=$isRealAdmin '
+              'dummySession=$dummySession '
+              '',
             );
             return const SizedBox.shrink();
           }),
@@ -1257,8 +1315,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                 // Jalan pintas Admin Panel — hanya untuk admin sungguhan
                 // (bukan sesi dummy). User biasa tidak melihat ikon ini.
                 if (AdminGate.panelBuilder != null &&
-                    auth.isRealAdmin &&
-                    !auth.dummySessionActive)
+                    isAdmin)
                   Tooltip(
                     message: 'Admin Panel',
                     child: GestureDetector(
@@ -1288,7 +1345,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     ),
                   ),
                 ),
-                if (!auth.isAnonymous)
+                if (!anonymous)
                   Tooltip(
                     message: s.nearbyTitle,
                     child: GestureDetector(
@@ -1315,7 +1372,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             builder: (_, provider, __) {
               final chat = context.read<ChatProvider>();
               final allUsers = provider.users
-                  .where((u) => u.uid != auth.uid && !chat.isBlocked(u.uid))
+                  .where((u) => u.uid != authUid && !chat.isBlocked(u.uid))
                   .toList();
 
               // Pertahanan tampilan: dedupe by uid (dan nickname) — jika ada
@@ -1494,7 +1551,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               }
                               return Builder(
                                 key: ValueKey('uc-${paged[i].uid}'),
-                                builder: (cardCtx) => _UserCard(
+                                // RepaintBoundary: kartu lain tidak ikut
+                                // repaint saat satu kartu berubah (badge,
+                                // status dot, avatar) — list panjang jadi
+                                // jauh lebih murah.
+                                builder: (cardCtx) => RepaintBoundary(
+                                  child: _UserCard(
                                   user: paged[i],
                                   onTap: () => _startChat(context, paged[i]),
                                   onAvatarTap: (c) =>
@@ -1503,6 +1565,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                       ? (d) => _showUnreadBubble(cardCtx, paged[i], unreadMap[paged[i].uid]!, d.globalPosition)
                                       : null,
                                   unreadCount: unreadMap[paged[i].uid] ?? 0,
+                                  ),
                                 ),
                               );
                             },
@@ -1934,11 +1997,12 @@ class _UserCard extends StatelessWidget {
         ? s.statusOffline
         : s.statusOnline;
 
-    return GestureDetector(
+    return AppGestureDetector(
       // SELURUH kartu bisa di-tap → buka chat (tadi area kosong tanpa
       // handler → "kadang bisa kadang nggak" tergantung posisi jempol).
       // Zona dalam (avatar/nama/subtitle/follow/chat) tetap menang di
       // area masing-masing (detector terdalam menang arena).
+      // AppGestureDetector: tahan 320ms (bukan 500ms).
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPressStart: onLongPressStart,
@@ -2088,70 +2152,71 @@ class _UserCard extends StatelessWidget {
                     Row(
                       children: [
                         // Tombol ikuti hanya untuk user yang ter-registrasi email.
+                        // Lingkaran belakang ikon transparan — ikon saja.
                         if (user.isRegistered)
                           Consumer<SocialProvider>(
                             builder: (_, sp, __) {
                               final following = sp.isFollowing(user.uid);
-                              return GestureDetector(
-                                onTap: () async {
-                                  final messenger = ScaffoldMessenger.of(
-                                    context,
-                                  );
-                                  final ok = following
-                                      ? await sp.unfollow(user.uid)
-                                      : await sp.follow(user.uid);
-                                  if (ok) {
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          following
-                                              ? s.btnUnfollow
-                                              : s.btnFollow,
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: Container(
-                                  width: 30,
-                                  height: 30,
-                                  decoration: BoxDecoration(
-                                    color: following
-                                        ? AppTheme.primary.withValues(
-                                            alpha: 0.12,
-                                          )
-                                        : AppTheme.textSecondary.withValues(
-                                            alpha: 0.10,
+                              return Tooltip(
+                                message: following
+                                    ? s.btnUnfollow
+                                    : s.btnFollow,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(16),
+                                    onTap: () async {
+                                      final messenger = ScaffoldMessenger.of(
+                                        context,
+                                      );
+                                      final ok = following
+                                          ? await sp.unfollow(user.uid)
+                                          : await sp.follow(user.uid);
+                                      if (ok) {
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              following
+                                                  ? s.btnUnfollow
+                                                  : s.btnFollow,
+                                            ),
                                           ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    following
-                                        ? Icons.person_remove
-                                        : Icons.person_add,
-                                    size: 17,
-                                    color: following
-                                        ? AppTheme.primary
-                                        : AppTheme.textSecondary,
+                                        );
+                                      }
+                                    },
+                                    child: SizedBox(
+                                      width: 32,
+                                      height: 32,
+                                      child: Icon(
+                                        following
+                                            ? Icons.person_remove_rounded
+                                            : Icons.person_add_alt_rounded,
+                                        size: 20,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               );
                             },
                           ),
-                        const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: onTap,
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.chat_bubble_outline,
-                              color: AppTheme.primary,
-                              size: 17,
+                        const SizedBox(width: 2),
+                        Tooltip(
+                          message: s.btnChatNow,
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: onTap,
+                              child: const SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
                             ),
                           ),
                         ),

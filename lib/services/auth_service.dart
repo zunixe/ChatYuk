@@ -996,6 +996,10 @@ class AuthService {
     } catch (_) {}
   }
 
+  /// Set status offline saat logout. Pakai timeout pendek — jalur logout
+  /// tidak boleh menunggu jaringan tanpa batas (spinner muter selamanya).
+  /// Best-effort: kalau gagal, server tetap menandai offline lewat idle
+  /// timeout / presence, jadi kegagalan aman.
   Future<void> goOffline() async {
     final id = uid;
     if (id == null) return;
@@ -1006,7 +1010,8 @@ class AuthService {
             'status': 'offline',
             'last_seen': DateTime.now().toUtc().toIso8601String(),
           })
-          .eq('id', id);
+          .eq('id', id)
+          .timeout(const Duration(seconds: 3));
     } catch (e) {
       dlog('[AUTH] goOffline error: $e');
     }

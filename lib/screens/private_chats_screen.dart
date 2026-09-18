@@ -16,6 +16,8 @@ import 'private_chat_screen.dart';
 import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/app_gesture.dart';
+import '../services/perf_probe.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
   final bool embedded;
@@ -34,6 +36,17 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   static const int _pageSize = 20;
   final ScrollController _scrollCtrl = ScrollController();
   int _lastTotal = 0;
+  // Notifier paginasi — scroll menambah halaman tanpa rebuild sehalaman.
+  final ValueNotifier<int> _pageNotifier = ValueNotifier<int>(1);
+  // List terlihat + jumlah arsip disiarkan lewat notifier: hanya bagian
+  // list yang rebuild, bukan seluruh halaman (AppBar/bar seleksi).
+  final ValueNotifier<List<PrivateChatInfo>> _listNotifier =
+      ValueNotifier<List<PrivateChatInfo>>(const []);
+  final ValueNotifier<int> _archivedNotifier = ValueNotifier<int>(0);
+  // Input terakhir yang dipakai menghitung _lastFiltered.
+  bool _recomputeDirty = true;
+  String _lastQueryUsed = '';
+  Map<String, String> _statusMap = const {};
   String _query = '';
   final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _selected = {};
@@ -206,7 +219,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   }
 
   /// Baris "Diarsipkan (n)" — ketuk untuk buka/tutup tampilan arsip.
-  Widget _archivedToggle(S s) {
+  Widget _archivedToggle(S s, int archivedCount) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () => setState(() {
@@ -231,7 +244,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
             ),
             const SizedBox(width: 10),
             Text(
-              s.labelArchived(_archivedCount),
+              s.labelArchived(archivedCount),
               style:
                   AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
             ),
@@ -295,15 +308,21 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
+    _pageNotifier.dispose();
+    _listNotifier.dispose();
+    _archivedNotifier.dispose();
     super.dispose();
   }
 
   /// Hangatkan cache pesan chat teratas di background — tap chat yang
   /// sudah panas langsung emit dari memori (ala WhatsApp), tanpa tunggu SQLite.
+  /// 6 → 2: prefetch = query DB per chat; 6 chat sekaligus di jalur frame
+  /// pertama tab Pesan terbukti menahan frame. 2 sudah cukup untuk chat
+  /// yang paling mungkin ditekan user pertama kali.
   void _warmTopChats(List<PrivateChatInfo> chats) {
     if (chats.isEmpty) return;
     final svc = ChatService();
-    for (final c in chats.take(6)) {
+    for (final c in chats.take(2)) {
       svc.prefetchPrivateChat(c.chatId);
     }
   }
@@ -316,15 +335,89 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
         _scrollCtrl.position.maxScrollExtent - 100) {
       _pageDebounce = true;
       _page++;
-      setState(() {});
+      // Scroll hanya menambah halaman — pakai notifier, bukan setState,
+      // supaya seluruh halaman (AppBar + bar seleksi + bar arsip) tidak
+      // ikut rebuild di tengah scroll.
+      _pageNotifier.value = _page;
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) _pageDebounce = false;
       });
     }
   }
 
+  bool _sameStatusMap(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      if (b[e.key] != e.value) return false;
+    }
+    return true;
+  }
+
+  /// Hitung ulang list terlihat (filter + urut + arsip). Dahulu ini hidup
+  /// di dalam build() → tiap rebuild (tema, presence, badge) mengurutkan
+  /// ulang 50 chat. Sekarang hanya dijalankan saat DATA berubah.
+  /// liveNameMap disuplai pemanggil (saat build) supaya nama live tetap
+  /// dipakai; recompute internal (perubahan data) memakai nama tersimpan.
+  void _recomputeFiltered({
+    required String myUid,
+    required String query,
+    Map<String, String>? liveNameMap,
+    Map<String, String>? pendingStatus,
+    bool notify = true,
+  }) {
+    if (pendingStatus != null) _statusMap = pendingStatus;
+    if (_lastChats.isEmpty) {
+      _lastFiltered = const [];
+      _archivedCount = 0;
+      return;
+    }
+    final live = liveNameMap ?? _statusMap;
+    final filtered = query.isEmpty
+        ? List<PrivateChatInfo>.of(_lastChats)
+        : _lastChats.where((c) {
+            final otherUid = c.participants.firstWhere(
+              (p) => p != myUid,
+              orElse: () => '',
+            );
+            final otherName =
+                live[otherUid] ?? c.participantNames[otherUid] ?? '';
+            return otherName.toLowerCase().contains(query);
+          }).toList();
+    // Urutkan: pinned paling atas (terbaru pinned dulu), baru chat
+    // TERBARU (lastMessageAt desc) — status online tidak menggeser
+    // urutan, chat paling aktif selalu di paling atas.
+    filtered.sort((a, b) {
+      final aPinned = a.isPinnedFor(myUid);
+      final bPinned = b.isPinnedFor(myUid);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      if (aPinned && bPinned) {
+        final aT = a.pinnedAtFor(myUid) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bT = b.pinnedAtFor(myUid) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final c = bT.compareTo(aT);
+        if (c != 0) return c;
+      }
+      return b.lastMessageAt.compareTo(a.lastMessageAt);
+    });
+    _archivedCount = _lastChats.where((c) => c.isArchivedFor(myUid)).length;
+    // Pengaman: arsip kosong tapi masih di tampilan arsip (mis. habis
+    // unarchive) → paksa kembali ke list utama agar halaman tak kosong.
+    if (_showArchived && _archivedCount == 0) _showArchived = false;
+    // Tampilan arsip: hanya chat terarsip. Normal: arsip disembunyikan.
+    _lastFiltered = _showArchived
+        ? filtered.where((c) => c.isArchivedFor(myUid)).toList()
+        : filtered.where((c) => !c.isArchivedFor(myUid)).toList();
+    if (notify) {
+      _listNotifier.value = _lastFiltered;
+      _archivedNotifier.value = _archivedCount;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('ChatList');
     context.watch<ThemeProvider>();
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
@@ -340,54 +433,24 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 
     // Map uid → status & nama live dari daftar online users
     final statusMap = <String, String>{};
-    final liveNameMap = <String, String>{};
     for (final u in onlineUsers) {
       statusMap[u.uid] = u.status;
-      liveNameMap[u.uid] = u.nickname;
     }
 
-    // ── Komputasi _lastFiltered di LEVEL BUILD (bukan di StreamBuilder) ──
-    // agar sibling AnimatedContainer (tombol Hapus Semua) selalu melihat
-    // data terbaru. StreamBuilder cuma simpan raw data ke _lastChats.
-    if (_lastChats.isNotEmpty) {
-      final filtered = effectiveQuery.isEmpty
-          ? _lastChats
-          : _lastChats.where((c) {
-              final otherUid = c.participants.firstWhere(
-                (p) => p != auth.uid,
-                orElse: () => '',
-              );
-              final otherName =
-                  liveNameMap[otherUid] ?? c.participantNames[otherUid] ?? '';
-              return otherName.toLowerCase().contains(effectiveQuery);
-            }).toList();
-      // Urutkan: pinned paling atas (terbaru pinned dulu), baru chat
-      // TERBARU (lastMessageAt desc) — status online tidak menggeser
-      // urutan, chat paling aktif selalu di paling atas.
-      filtered.sort((a, b) {
-        final aPinned = a.isPinnedFor(auth.uid ?? '');
-        final bPinned = b.isPinnedFor(auth.uid ?? '');
-        if (aPinned && !bPinned) return -1;
-        if (!aPinned && bPinned) return 1;
-        if (aPinned && bPinned) {
-          final aT = a.pinnedAtFor(auth.uid ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final bT = b.pinnedAtFor(auth.uid ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final c = bT.compareTo(aT);
-          if (c != 0) return c;
-        }
-        return b.lastMessageAt.compareTo(a.lastMessageAt);
-      });
-      _lastFiltered = filtered;
-      final myUid = auth.uid ?? '';
-      _archivedCount =
-          _lastChats.where((c) => c.isArchivedFor(myUid)).length;
-      // Pengaman: arsip kosong tapi masih di tampilan arsip (mis. habis
-      // unarchive) → paksa kembali ke list utama agar halaman tak kosong.
-      if (_showArchived && _archivedCount == 0) _showArchived = false;
-      // Tampilan arsip: hanya chat terarsip. Normal: arsip disembunyikan.
-      _lastFiltered = _showArchived
-          ? filtered.where((c) => c.isArchivedFor(myUid)).toList()
-          : filtered.where((c) => !c.isArchivedFor(myUid)).toList();
+    // Recompute hanya kalau input yang memengaruhi hasil berubah (data,
+    // query, tab arsip, atau peta nama live). Rebuild lain (tema dsb.)
+    // tidak lagi mengurutkan ulang list.
+    final queryChanged = effectiveQuery != _lastQueryUsed;
+    final liveChanged = !_sameStatusMap(statusMap, _statusMap);
+    if (_lastChats.isNotEmpty &&
+        (_recomputeDirty || queryChanged || liveChanged)) {
+      _recomputeDirty = false;
+      _lastQueryUsed = effectiveQuery;
+      _recomputeFiltered(
+        myUid: auth.uid ?? '',
+        query: effectiveQuery,
+        liveNameMap: statusMap,
+      );
     }
 
     return PopScope(
@@ -416,7 +479,12 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
           // Mode embedded (tab Chat): bar seleksi gaya WA di dalam body.
           if (_selectionMode && widget.embedded)
             _selectionBar(auth.uid!, s),
-          if (_archivedCount > 0) _archivedToggle(s),
+          // Baris arsip hanya rebuild saat jumlah arsip berubah.
+          ValueListenableBuilder<int>(
+            valueListenable: _archivedNotifier,
+            builder: (_, count, __) =>
+                count > 0 ? _archivedToggle(s, count) : const SizedBox.shrink(),
+          ),
           Expanded(
             child: StreamBuilder<List<PrivateChatInfo>>(
               stream: _stream,
@@ -437,25 +505,23 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                   );
                 }
                 final chats = (snap.data ?? []).toList();
-                // Simpan raw data ke field agar level build() bisa komputasi.
+                // Data berubah → tandai perlu recompute. Dulu ini memicu
+                // setState() post-frame (build KEDUA di frame pertama tab);
+                // sekarang cukup menandai dirty + recompute di build().
                 if (_lastChats.length != chats.length ||
                     (chats.isNotEmpty && _lastChats != chats)) {
                   _lastChats = chats;
+                  _recomputeDirty = true;
                   _warmTopChats(chats);
                   // Reset page jika data berubah total
                   if (chats.length != _lastTotal) {
                     _lastTotal = chats.length;
                     _page = 1;
+                    _pageNotifier.value = 1;
                   }
-                  // Trigger rebuild parent agar _lastFiltered (di level build())
-                  // dihitung ulang — termasuk tombol "Hapus Semua".
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() {});
-                  });
                 }
-                // _lastFiltered sudah dihitung di level build() —
-                // gunakan di sini untuk rendering list.
-                final filtered = _lastFiltered;
+                // List terlihat: hanya rebuild bagian ini saat data berganti.
+                final filtered = _listNotifier.value;
                 if (filtered.isEmpty) {
                   final searching = effectiveQuery.isNotEmpty;
                   return EmptyStateView(
@@ -468,8 +534,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                     hint: searching ? '' : s.noPrivateChatsHint,
                   );
                 }
-                // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus
-                final paged = filtered.take(_page * _pageSize).toList();
+                // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus.
+                // Paginasi lewat notifier: scroll tidak rebuild AppBar dkk.
+                final page = _pageNotifier.value;
+                final paged = filtered.take(page * _pageSize).toList();
                 final hasMore = paged.length < filtered.length;
                 return ListView.builder(
                   controller: _scrollCtrl,
@@ -497,14 +565,19 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                       (p) => p != auth.uid,
                       orElse: () => '',
                     );
-                    final otherName = liveNameMap[otherUid] ?? chat.participantNames[otherUid] ?? 'Anon';
+                    final otherName = statusMap[otherUid] ?? chat.participantNames[otherUid] ?? 'Anon';
                     final otherGender = chat.participantGenders[otherUid] ?? '';
                     final unread = chat.unreadCounts[auth.uid] ?? 0;
                     final isBlocked = blocked.contains(otherUid);
 
                     final isSelected = _selected.contains(chat.chatId);
                     final isPinned = chat.isPinnedFor(auth.uid ?? '');
-                    return GestureDetector(
+                    // RepaintBoundary per kartu — satu kartu berubah
+                    // (badge/centang) tidak repaint seluruh list.
+                    return RepaintBoundary(
+                      // AppGestureDetector: tahan 320ms langsung masuk mode
+                      // seleksi (bukan 500ms default Flutter).
+                      child: AppGestureDetector(
                       // Tahan = mulai seleksi (gaya WhatsApp), ketuk = tambah/kurangi.
                       onLongPress: () {
                         if (!_selectionMode) _toggleSelect(chat.chatId);
@@ -927,6 +1000,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         ),
                       ),
                       ),
+                      ),
                     );
                   },
                 );
@@ -1038,11 +1112,11 @@ class _FriendButtonState extends State<_FriendButton> {
                       color: AppTheme.primary,
                     ),
                   )
-                : Icon(
-                    icon,
-                    size: 20,
-                    color: done ? AppTheme.textSecondary : AppTheme.primary,
-                  ),
+              : Icon(
+                  icon,
+                  size: 20,
+                  color: Colors.white,
+                ),
           ),
         ),
       ),

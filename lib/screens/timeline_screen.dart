@@ -360,9 +360,13 @@ class _TimelineScreenState extends State<TimelineScreen>
                       ),
                     );
                   }
-                  return PostCard(
-                    key: ValueKey('${posts[i]['id']}'),
-                    post: posts[i],
+                  // RepaintBoundary: kartu post lain tidak ikut repaint
+                  // saat satu kartu berubah (like/komentar/avatar).
+                  return RepaintBoundary(
+                    child: PostCard(
+                      key: ValueKey('${posts[i]['id']}'),
+                      post: posts[i],
+                    ),
                   );
                 },
               ),

@@ -1218,6 +1218,11 @@ class AuthProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Waktu interaksi terakhir — dipakai throttle [notifyActivity] supaya
+  /// tiap pointer-down tidak membuat object Timer baru (perf: Listener
+  /// global di app.dart memanggil ini pada SETIAP sentuhan).
+  DateTime? _lastActivityAt;
+
   /// Call on any user interaction (tap, scroll, typing...).
   /// If user was idle, go back online. Resets the idle countdown.
   void notifyActivity() {
@@ -1225,12 +1230,23 @@ class AuthProvider extends ChangeNotifier {
     if (isProfileBanned) return; // banned → tetap offline, jangan online lagi
     if (dummySessionActive) return; // status dummy dikontrol admin panel
     if (_invisibleEnabled) return; // invisible → jangan pernah kembali online
+    // Throttle: idle→online tetap selalu diproses (penting), tapi reset
+    // timer dibatasi 1× per detik — idleTimeout jauh lebih besar dari itu
+    // sehingga presisinya tidak berubah.
+    final now = DateTime.now();
+    final last = _lastActivityAt;
+    final throttled = last != null &&
+        now.difference(last) < const Duration(seconds: 1);
     if (_isIdle) {
       _isIdle = false;
+      _lastActivityAt = now;
       _auth.goOnline();
       _profile = _profile?.copyWith(status: 'online');
       safeUnawaited(_updateLocationOnOnline());
       notifyListeners();
+    } else {
+      if (throttled) return;
+      _lastActivityAt = now;
     }
     _idleTimer?.cancel();
     _idleTimer = Timer(idleTimeout, _becomeIdle);

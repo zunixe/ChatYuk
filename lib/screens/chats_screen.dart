@@ -178,7 +178,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                         break;
                     }
                   },
-                  itemBuilder: (_) => [
+                  itemBuilder: (_) => <PopupMenuEntry<String>>[
                     PopupMenuItem(
                       value: 'new_group',
                       child: ListTile(
@@ -188,6 +188,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                         title: Text(s.menuNewGroup),
                       ),
                     ),
+                    const PopupMenuDivider(height: 1),
                     PopupMenuItem(
                       value: 'read_all',
                       child: ListTile(

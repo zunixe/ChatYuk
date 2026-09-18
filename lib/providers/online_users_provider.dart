@@ -6,6 +6,7 @@ import '../services/chat_service.dart';
 import '../services/rt_resilient.dart';
 import '../services/media_disk_cache.dart';
 import '../services/message_cache.dart';
+import '../services/perf_probe.dart';
 
 bool _usersEqual(List<UserModel> a, List<UserModel> b) {
   if (a.length != b.length) return false;
@@ -30,6 +31,18 @@ class OnlineUsersProvider extends ChangeNotifier {
   Timer? _debounce;
   // Grace emit kosong (anti list kedip hilang) — lihat _onUsers.
   Timer? _emptyGrace;
+  // Hold-grace per user (anti SATU user kedip hilang-muncul): emission
+  // fast-path presence-only / socket blip bisa menghilangkan user idle
+  // sekilas padahal last_seen masih segar (< 30 mnt). Uid → kapan mulai
+  // hilang dari emission. Sweep di bawah melepasnya bila lewat grace.
+  final Map<String, DateTime> _holdSince = {};
+  Timer? _holdSweep;
+  static const _holdGrace = Duration(seconds: 90);
+  // Jam hold-grace — non-final supaya test bisa memakai jam palsu
+  // (FakeAsync TIDAK memalsukan DateTime.now; prinsip sama seperti
+  // jitterRandom di rt_resilient.dart).
+  @visibleForTesting
+  static DateTime Function() holdNow = DateTime.now;
   Completer<void>? _warmCompleter;
 
   List<UserModel> get users => _users;
@@ -62,7 +75,10 @@ class OnlineUsersProvider extends ChangeNotifier {
       // SKIP avatar batch load di cold start — _AsyncAvatar resolve dari
       // disk sendiri, tidak perlu dimuat ke _diskAvatars dulu. Ini memotong
       // _loadDisk dari ~6s jadi ~1s di Xiaomi cold start.
-      final cached = await MessageCache.instance.loadRawList('online_users');
+      final cached = await PerfProbe.timed(
+        'online.diskLoad',
+        () => MessageCache.instance.loadRawList('online_users'),
+      );
       if (cached.isNotEmpty) {
         // Dedupe by uid + buang row tanpa uid — cache lama (sebelum fix
         // chat_service save tanpa 'uid') bisa berisi row uid='' yang membuat
@@ -270,6 +286,12 @@ class OnlineUsersProvider extends ChangeNotifier {
             .toList();
         // Baris invisible/offline/basi tidak boleh masuk daftar tayang
         // (maupun cache disk di bawah) — lapis pertahanan terakhir.
+        // Catat uid yang HADIR tapi gugur filter (offline eksplisit) agar
+        // hold-grace di bawah tidak menahannya (beda dengan hilang/blip).
+        final emittedBad = <String>{
+          for (final u in deduped)
+            if (!ChatService.isVisibleOnline(u.status, u.lastSeen)) u.uid,
+        };
         deduped = deduped
             .where((u) => ChatService.isVisibleOnline(u.status, u.lastSeen))
             .toList();
@@ -308,6 +330,34 @@ class OnlineUsersProvider extends ChangeNotifier {
               })
               .toList();
         }
+        // Tahan user yang hilang dari emission: status terakhir terlihat
+        // (online/idle) + last_seen segar + baru hilang < grace → sisipkan
+        // kembali (posisi & avatar lama ikut, tanpa rebuild bila tak berubah).
+        // Trade-off: yang benar-benar offline ikut tertahan s.d. grace.
+        final now = holdNow();
+        final incoming = {for (final u in deduped) u.uid};
+        _holdSince.removeWhere((uid, _) => incoming.contains(uid));
+        _holdSince.removeWhere(
+          (uid, since) => now.difference(since) >= _holdGrace,
+        );
+        for (final old in _users) {
+          if (incoming.contains(old.uid)) continue;
+          if (emittedBad.contains(old.uid)) {
+            _holdSince.remove(old.uid);
+            continue;
+          }
+          if (_holdSince.containsKey(old.uid)) {
+            deduped.add(old);
+            continue;
+          }
+          if (old.status != 'online' && old.status != 'idle') continue;
+          if (!ChatService.isVisibleOnline(old.status, old.lastSeen)) {
+            continue;
+          }
+          _holdSince[old.uid] = now;
+          deduped.add(old);
+        }
+        _armHoldSweep();
         if (_usersEqual(_users, deduped)) return;
         // Debounce avatar-only churn di cold start (fast 50→ slow 100→ avatar batch 20)
         // biar list tidak rebuild 3-4x beruntun yang terlihat kedip.
@@ -363,11 +413,52 @@ class OnlineUsersProvider extends ChangeNotifier {
     }
   }
 
+  /// Jadwalkan sapu hold-grace pada deadline terdekat (tanpa emission
+  /// baru pun user yang lewat grace tetap dilepas).
+  void _armHoldSweep() {
+    _holdSweep?.cancel();
+    if (_holdSince.isEmpty || _disposed) return;
+    final now = holdNow();
+    var wait = _holdGrace;
+    for (final since in _holdSince.values) {
+      final remain = _holdGrace - now.difference(since);
+      if (remain < wait) wait = remain;
+    }
+    if (wait <= Duration.zero) {
+      _sweepHolds();
+      return;
+    }
+    _holdSweep = Timer(wait, _sweepHolds);
+  }
+
+  void _sweepHolds() {
+    _holdSweep = null;
+    if (_disposed || _holdSince.isEmpty) return;
+    final now = holdNow();
+    final expired = <String>{};
+    _holdSince.removeWhere((uid, since) {
+      if (now.difference(since) >= _holdGrace) {
+        expired.add(uid);
+        return true;
+      }
+      return false;
+    });
+    if (expired.isEmpty) {
+      _armHoldSweep();
+      return;
+    }
+    final before = _users.length;
+    _users = _users.where((u) => !expired.contains(u.uid)).toList();
+    if (_users.length != before && !_disposed) notifyListeners();
+    _armHoldSweep();
+  }
+
   @override
   void dispose() {
     _disposed = true;
     _debounce?.cancel();
     _emptyGrace?.cancel();
+    _holdSweep?.cancel();
     _sub?.cancel();
     super.dispose();
   }

@@ -140,4 +140,50 @@ void main() {
       });
     });
   });
+
+  group('hold-grace per user (anti kedip idle)', () {
+    test('idle hilang sekilas ditahan + kembali tanpa duplikat', () async {
+      await _emit([_u('a', 'online'), _u('idle1', 'idle')]);
+      expect(provider.users.map((u) => u.uid).toSet(), {'a', 'idle1'});
+      // Emission berikutnya tanpa idle1 (socket blip) → tetap tampil.
+      await _emit([_u('a', 'online')]);
+      expect(provider.users.map((u) => u.uid).toSet(), {'a', 'idle1'});
+      // Kembali → tetap satu, tidak duplikat.
+      await _emit([_u('a', 'online'), _u('idle1', 'idle')]);
+      expect(
+        provider.users.where((u) => u.uid == 'idle1').length,
+        1,
+      );
+    });
+
+    test('hold dilepas setelah 90 dtk tanpa kembali', () {
+      FakeAsync().run((fake) {
+        // FakeAsync tidak memalsukan DateTime.now → kendalikan jam hold
+        // lewat seam holdNow (prinsip sama seperti jitterRandom).
+        var now = DateTime(2026, 9, 17, 12, 0, 0);
+        final prevClock = OnlineUsersProvider.holdNow;
+        OnlineUsersProvider.holdNow = () => now;
+        try {
+          final svc = MockChatService();
+          final ctl = StreamController<List<UserModel>>.broadcast();
+          when(() => svc.getOnlineUsers()).thenAnswer((_) => ctl.stream);
+          final p = OnlineUsersProvider(service: svc);
+          ctl.add([_u('a', 'online'), _u('idle1', 'idle')]);
+          fake.elapse(const Duration(milliseconds: 100));
+          expect(p.users.map((u) => u.uid).toSet(), {'a', 'idle1'});
+          ctl.add([_u('a', 'online')]);
+          fake.elapse(const Duration(milliseconds: 100));
+          expect(p.users.map((u) => u.uid).toSet(), {'a', 'idle1'});
+          // Grace habis tanpa kabar → dilepas (tidak nempel selamanya).
+          now = now.add(const Duration(seconds: 95));
+          fake.elapse(const Duration(seconds: 95));
+          expect(p.users.map((u) => u.uid).toList(), ['a']);
+          p.dispose();
+          ctl.close();
+        } finally {
+          OnlineUsersProvider.holdNow = prevClock;
+        }
+      });
+    });
+  });
 }

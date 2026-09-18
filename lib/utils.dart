@@ -171,6 +171,44 @@ Map<String, dynamic> snakeToCamel(Map<String, dynamic> map) {
   return map.map((k, v) => MapEntry(keyMap[k] ?? k, v));
 }
 
+/// Rapikan list/poin di bubble chat saat render — berlaku untuk pesan
+/// LAMA juga (server hanya merapikan balasan baru). Idempoten: baris yang
+/// sudah rapi tidak berubah (aturan ≥2 butir PER BARIS + butir di awal
+/// baris dihitung tapi tidak dipecah ulang). Isi blok kode ``` dilewati.
+String formatChatLists(String src) {
+  final out = <String>[];
+  var inCode = false;
+  final numCount = RegExp(r'(?:^|[^\S\n])\d{1,2}[.)]\s+(?=[A-Za-z])');
+  final numSplit = RegExp(r'([^\S\n])(\d{1,2}[.)])(\s+)(?=[A-Za-z])');
+  final parCount = RegExp(r'(?:^|[^\S\n])\([a-eA-E]\)\s+(?=[A-Za-z])');
+  final parSplit = RegExp(r'([^\S\n])(\([a-eA-E]\))(\s+)(?=[A-Za-z])');
+  final letCount = RegExp(r'(?:^|[^\S\n])[a-eA-E][.]\s+(?=[A-Za-z])');
+  final letSplit = RegExp(r'([^\S\n])([a-eA-E][.])(\s+)(?=[A-Za-z])');
+  for (final rawLine in src.split('\n')) {
+    if (rawLine.trimLeft().startsWith('```')) {
+      inCode = !inCode;
+      out.add(rawLine);
+      continue;
+    }
+    if (inCode) {
+      out.add(rawLine);
+      continue;
+    }
+    var cur = rawLine.replaceAll(RegExp(r'^\s*[•*]\s+'), '- ');
+    if (numCount.allMatches(cur).length >= 2) {
+      cur = cur.replaceAllMapped(numSplit, (m) => '\n\n${m[2]}${m[3]}');
+    }
+    if (parCount.allMatches(cur).length >= 2) {
+      cur = cur.replaceAllMapped(parSplit, (m) => '\n  ${m[2]}${m[3]}');
+    }
+    if (letCount.allMatches(cur).length >= 2) {
+      cur = cur.replaceAllMapped(letSplit, (m) => '\n  ${m[2]}${m[3]}');
+    }
+    out.add(cur);
+  }
+  return out.join('\n');
+}
+
 /// Format bytes ke bentuk mudah dibaca ("512 KB", "22.1 MB", "1.2 GB").
 String formatBytes(num bytes) {
   if (bytes < 1024) return '$bytes B';
