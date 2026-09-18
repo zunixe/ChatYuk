@@ -34,7 +34,7 @@ void safeUnawaited(Future<void> future) {
 }
 
 class AuthProvider extends ChangeNotifier {
-  final AuthService _auth = AuthService();
+  final AuthService _auth;
   final String instanceId =
       'AP-${DateTime.now().microsecondsSinceEpoch.toString().substring(8)}';
   UserModel? _profile;
@@ -126,7 +126,9 @@ class AuthProvider extends ChangeNotifier {
 
   bool get notificationsEnabled => _notificationsEnabled;
 
-  AuthProvider() {
+  AuthProvider({AuthService? authService, bool autoInit = true})
+      : _auth = authService ?? AuthService() {
+    if (!autoInit) return;
     dlog('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
     _listenAuthState();
     _init();

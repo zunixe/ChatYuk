@@ -13,8 +13,8 @@ import '../services/rt_resilient.dart';
 class RoomProvider extends ChangeNotifier {
   bool _disposed = false;
 
-  final RoomService _service = RoomService();
-  final ChatService _chat = ChatService();
+  final RoomService _service;
+  final ChatService _chat;
   List<RoomModel> _rooms = [];
   List<RoomModel> _privateRooms = [];
   Set<String> _memberRoomIds = {};
@@ -113,7 +113,11 @@ class RoomProvider extends ChangeNotifier {
     );
   }
 
-  RoomProvider() {
+  RoomProvider(
+      {RoomService? service, ChatService? chatService, bool autoInit = true})
+      : _service = service ?? RoomService(),
+        _chat = chatService ?? ChatService() {
+    if (!autoInit) return;
     // C2 audit: SATU konsep "online count room" tapi DUA sumber. Aturan:
     //   - DB (count_room_presence_by_country) = SUMBER KEBENARAN absolut.
     //   - Presence lokal = nilai OPTIMISTIK: hanya dipakai untuk NAIKKAN
