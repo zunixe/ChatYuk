@@ -168,13 +168,30 @@ class PerfProbe {
     final fetches = _fetchUs.entries.toList()
       ..sort((a, b) => b.value.length.compareTo(a.value.length));
     for (final e in fetches) {
-      _log('[PERF] fetch ${e.key} n=${e.value.length} '
-          'avg=${(_avg(e.value) / 1000).toStringAsFixed(1)}ms '
-          'max=${(e.value.reduce((a, b) => a > b ? a : b) / 1000).toStringAsFixed(1)}ms');
+      final v = List<int>.of(e.value)..sort();
+      _log('[PERF] fetch ${e.key} n=${v.length} '
+          'avg=${(_avg(v) / 1000).toStringAsFixed(1)}ms '
+          'min=${(v.first / 1000).toStringAsFixed(1)}ms '
+          'p50=${(_pct(v, 50) / 1000).toStringAsFixed(1)}ms '
+          'p90=${(_pct(v, 90) / 1000).toStringAsFixed(1)}ms '
+          'max=${(v.last / 1000).toStringAsFixed(1)}ms');
     }
     reset();
   }
 
   static double _avg(List<int> v) =>
       v.isEmpty ? 0 : v.reduce((a, b) => a + b) / v.length;
+
+  /// Persentil dari daftar yang SUDAH terurut (interpolasi linear).
+  /// Dipakai membedakan noise (max jauh dari p50) dari pola (p90 ikut naik).
+  static double _pct(List<int> sorted, int p) {
+    if (sorted.isEmpty) return 0;
+    if (sorted.length == 1) return sorted.first.toDouble();
+    final rank = (p / 100) * (sorted.length - 1);
+    final lo = rank.floor();
+    final hi = rank.ceil();
+    if (lo == hi) return sorted[lo].toDouble();
+    final frac = rank - lo;
+    return sorted[lo] * (1 - frac) + sorted[hi] * frac;
+  }
 }
