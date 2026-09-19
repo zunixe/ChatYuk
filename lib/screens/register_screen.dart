@@ -252,10 +252,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } on Exception catch (e) {
       if (!mounted) return;
       if (e is EmailAlreadyRegisteredException) {
-        // E1: email terdaftar tapi mungkin belum verified — kirim ulang verifikasi
+        // E1: email terdaftar tapi mungkin belum verified — kirim ulang
+        // verifikasi LALU tampilkan dialog kode. Dulu cuma snackbar
+        // "sudah terdaftar" tanpa jalan masuk kode → pengguna buntu
+        // (dianggap "kode tidak valid").
         try {
           await context.read<AuthProvider>().resendVerificationEmail(email);
           if (mounted) _snack(s.msgEmailAlreadyRegisteredResend);
+          if (!mounted) return;
+          final verified = await _showOtpDialog(
+            email,
+            nickname,
+            _gender,
+            _age,
+            _negara,
+            _kota,
+          );
+          if (!mounted) return;
+          if (verified) _goToMain();
         } catch (_) {
           if (mounted) _snack(s.errEmailAlreadyUsed);
         }
@@ -425,9 +439,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (ok) {
                       Navigator.pop(ctx, true);
                     } else {
+                      // Tampilkan sebab ASLI dari server (kedaluwarsa / sudah
+                      // dipakai / salah) — dulu selalu "kode tidak valid" generik
+                      // sehingga pengguna tak tahu harus kirim ulang kode.
+                      final raw =
+                          context.read<AuthProvider>().lastOtpError ?? '';
+                      final lower = raw.toLowerCase();
+                      final msg = lower.contains('expired') ||
+                              lower.contains('expir')
+                          ? s.errOtpExpired
+                          : (lower.contains('used') ||
+                                  lower.contains('already'))
+                              ? s.errOtpUsed
+                              : s.errInvalidCode;
                       ScaffoldMessenger.of(
                         ctx,
-                      ).showSnackBar(SnackBar(content: Text(s.errInvalidCode)));
+                      ).showSnackBar(SnackBar(content: Text(msg)));
                     }
                   },
                   child: Text(

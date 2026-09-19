@@ -880,6 +880,8 @@ class AuthProvider extends ChangeNotifier {
     required String city,
   }) async {
     final ok = await _auth.verifyEmailOtp(email, token);
+    // Simpan pesan error asli (kedaluwarsa/dipakai/salah) untuk UI.
+    lastOtpError = _auth.lastOtpError;
     if (!ok) return false;
     await registerProfile(
       nickname: nickname,
@@ -890,6 +892,9 @@ class AuthProvider extends ChangeNotifier {
     );
     return true;
   }
+
+  /// Pesan error asli verifikasi OTP terakhir (null bila sukses).
+  String? lastOtpError;
 
   /// Email user aktif sudah terverifikasi?
   bool get emailConfirmed => _auth.emailConfirmed;
