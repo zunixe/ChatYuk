@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Meta App "ChatYuk" — App ID 4699753480345190, Token Klien dari
+         Settings -> Advanced. Lihat docs/META_APP.md. -->
+    <string name="facebook_app_id">4699753480345190</string>
+    <string name="facebook_client_token">782f99654ddbf22be6b59900e08da2ab</string>
+</resources>
