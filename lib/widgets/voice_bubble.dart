@@ -113,6 +113,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
   }
 
   String _fmt(Duration d) {
+    // remainder(60): menit wrap di 60 (perilaku lama dipertahankan).
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s';

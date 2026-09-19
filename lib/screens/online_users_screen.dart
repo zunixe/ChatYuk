@@ -1299,7 +1299,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         // selalu memaksa 48px walau constraints 32 diberikan.
         actions: [
           Builder(builder: (_) {
-            debugPrint(
+            dlog(
               '[ADMINICON] panelBuilder=${AdminGate.panelBuilder != null} '
               'isRealAdmin=$isRealAdmin '
               'dummySession=$dummySession '
@@ -1962,11 +1962,7 @@ class _UserCard extends StatelessWidget {
     this.unreadCount = 0,
   });
 
-  Color _statusColor(String status) {
-    if (status == 'idle') return AppTheme.idle;
-    if (status == 'offline') return AppTheme.offline;
-    return AppTheme.online;
-  }
+  Color _statusColor(String status) => AppTheme.statusColor(status);
 
   String _idleDurationLabel(DateTime lastSeen) {
     final diff = DateTime.now().difference(lastSeen.toLocal());
