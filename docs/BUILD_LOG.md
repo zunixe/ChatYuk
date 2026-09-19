@@ -48,3 +48,5 @@ Probe (`PERF_PROBE=true`) hanya bicara di profil/debug → **jangan pasang ke HP
 kerja**. Untuk ukur render pakai app rilis + `SurfaceFlinger --latency`
 (lihat `docs/PERFORMANCE.md` bagian 1 & 3). Probe app `adminDev` pernah dicoba
 lalu **dihapus** (tetap butuh SHA-1 terdaftar sendiri).
+
+| 2026-09-19 17:50 | develop | adminProd + apkpureProd | Fix OTP "kode tidak valid" (tampilkan sebab asli + resend saat email belum-verified) + unit test 4 jalur login (anon/gmail/email) + pindah post_photo_cache ke core/cache | Success (33: admin+user stream install; 240: admin ok, user di-push ke /sdcard/Download/chatyuk.apk — MIUI INSTALL_FAILED_USER_RESTRICTED, install manual dari File Manager) |
