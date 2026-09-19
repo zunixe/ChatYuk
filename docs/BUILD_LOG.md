@@ -27,6 +27,8 @@ Format: tanggal | branch | flavor | isi | hasil install.
 | 2026-09-19 15:10 | develop | adminProd + apkpureProd | Fase 5-9 modularisasi lengkap: chat (send/photo/voice/outbox/selection/composer bersama), file besar dipecah, 11 helper→core/, 9 provider baru, BOUNDARY TEGAK 0 screen import services/ + gate CI | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
 | 2026-09-19 14:42 | develop | adminProd + apkpureProd | Fix composer private (background transparan, chip koin/hadiah ikut flag poin, Wrap anti-overflow) + timeline tab-switch tak selalu fetch (cache <30s + TTL visibility 60s) | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
 
+| 2026-09-19 16:20 | develop | adminProd + apkpureProd | Tombol panggilan private samakan gaya chip header grup (ChatHeaderActionChip bersama; audio+video terpisah, mekanisme 1:1) | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
+
 ## Catatan penting: build probe & the underlying provider Sign-In
 
 Build `--profile`/`--debug` **selalu** bikin the underlying provider Sign-In gagal (`DEVELOPER_ERROR`)
