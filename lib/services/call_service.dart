@@ -1032,16 +1032,17 @@ class CallSession extends ChangeNotifier {
   /// Caller membatalkan panggilan (masih ringing) atau mengakhiri.
   Future<void> end() async {
     if (_closed) return;
-    if (isCaller && _phase == CallPhase.ringing) {
-      _ringTimer?.cancel();
-      await _service.sendSignal(callId, 'bye');
-      await _service.updateStatus(callId, 'canceled');
-      _finish(CallEndReason.missed);
-      return;
-    }
-    await _service.sendSignal(callId, 'bye');
-    await _service.updateStatus(callId, 'ended');
-    _finish(CallEndReason.ended);
+    // OPTIMISTIK: tandai selesai SEKARANG (UI langsung hilang/berubah),
+    // lalu kirim signal + update status di belakang. Dulu await 2 round-trip
+    // network DULU → tombol "Akhiri" terasa tidak merespons di jaringan lambat.
+    final wasRinging = isCaller && _phase == CallPhase.ringing;
+    _finish(wasRinging ? CallEndReason.missed : CallEndReason.ended);
+    _ringTimer?.cancel();
+    // Fire-and-forget: kegagalan kirim tidak boleh menahan UI.
+    unawaited(_service.sendSignal(callId, 'bye'));
+    unawaited(
+      _service.updateStatus(callId, wasRinging ? 'canceled' : 'ended'),
+    );
   }
 
   void _finish(CallEndReason reason) {

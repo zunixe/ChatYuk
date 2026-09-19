@@ -247,7 +247,7 @@ class CallProvider extends ChangeNotifier {
 
   void _onActiveSession() {
     if (_activeSession?.phase == CallPhase.ended && _clearTimer == null) {
-      _clearTimer = Timer(const Duration(milliseconds: 2200), () {
+      _clearTimer = Timer(const Duration(milliseconds: 1000), () {
         _clearTimer = null;
         unawaited(clearSession());
       });

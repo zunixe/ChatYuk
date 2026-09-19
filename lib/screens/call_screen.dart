@@ -10,6 +10,7 @@ import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../utils.dart';
+import '../widgets/call_control_button.dart';
 import '../widgets/profile_avatar.dart';
 
 /// Layar panggilan 1:1 — dipakai caller (menelpon) dan callee (menerima).
@@ -139,7 +140,7 @@ class _CallScreenState extends State<CallScreen> {
       unawaited(context.read<CallProvider>().notifCancel());
     }
     if (_session.phase == CallPhase.ended && _autoClose == null) {
-      _autoClose = Timer(const Duration(milliseconds: 2200), () {
+      _autoClose = Timer(const Duration(milliseconds: 1000), () {
         if (mounted) Navigator.of(context).pop();
       });
     }
@@ -406,45 +407,41 @@ class _CallScreenState extends State<CallScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _ControlButton(
-                          icon: _session.micOn ? Icons.mic : Icons.mic_off,
-                          color: _session.micOn ? null : Colors.redAccent,
-                          tooltip: _session.micOn ? s.btnMute : s.btnUnmute,
+                        CallControlButton(
+                          icon: _session.micOn
+                              ? Icons.mic_rounded
+                              : Icons.mic_off_rounded,
+                          off: !_session.micOn,
                           onTap: _session.toggleMic,
                         ),
                         if (isVideo) ...[
-                          _ControlButton(
+                          CallControlButton(
                             icon: _session.cameraOn
-                                ? Icons.videocam
-                                : Icons.videocam_off,
-                            color: _session.cameraOn ? null : Colors.redAccent,
-                            tooltip: s.btnSwitchCamera,
+                                ? Icons.videocam_rounded
+                                : Icons.videocam_off_rounded,
+                            off: !_session.cameraOn,
                             onTap: _session.toggleCamera,
                           ),
-                          _ControlButton(
-                            icon: Icons.cameraswitch,
-                            tooltip: s.btnSwitchCamera,
+                          CallControlButton(
+                            icon: Icons.cameraswitch_rounded,
                             onTap: _session.switchCamera,
                           ),
-                          _ControlButton(
+                          CallControlButton(
                             icon: _session.speakerOn
-                                ? Icons.volume_up
-                                : Icons.volume_off,
-                            color: _session.speakerOn ? null : Colors.redAccent,
-                            tooltip: s.btnSpeaker,
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_off_rounded,
+                            off: !_session.speakerOn,
                             onTap: _session.toggleSpeaker,
                           ),
                           if (_minimizable)
-                            _ControlButton(
-                              icon: Icons.picture_in_picture_alt,
-                              tooltip: s.callMinimize,
+                            CallControlButton(
+                              icon: Icons.picture_in_picture_alt_rounded,
                               onTap: _minimize,
                             ),
                         ],
-                        _ControlButton(
-                          icon: Icons.call_end,
-                          color: Colors.redAccent,
-                          tooltip: s.btnEndCall,
+                        CallControlButton(
+                          icon: Icons.call_end_rounded,
+                          danger: true,
                           onTap: _session.end,
                         ),
                       ],
@@ -462,10 +459,9 @@ class _CallScreenState extends State<CallScreen> {
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 24, top: 12),
                     child: Center(
-                      child: _ControlButton(
-                        icon: Icons.call_end,
-                        color: Colors.redAccent,
-                        tooltip: s.btnEndCall,
+                      child: CallControlButton(
+                        icon: Icons.call_end_rounded,
+                        danger: true,
                         onTap: _session.end,
                       ),
                     ),
@@ -508,36 +504,3 @@ class _RemoteFallback extends StatelessWidget {
   }
 }
 
-class _ControlButton extends StatelessWidget {
-  final IconData icon;
-  final Color? color;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  const _ControlButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: color ?? Colors.white24,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            width: 50,
-            height: 50,
-            child: Icon(icon, color: Colors.white, size: 24),
-          ),
-        ),
-      ),
-    );
-  }
-}
