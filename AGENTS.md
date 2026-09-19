@@ -207,9 +207,17 @@ yang ditambahkan orang/migrasi lain. Kasus nyata: `ai_presence_tick` di-replace
 
 ## Struktur Project
 
-- `lib/screens/` — UI screen
-- `lib/providers/` — state management (ChangeNotifier)
-- `lib/services/` — Supabase API calls
+- `lib/screens/` — UI screen (dilarang import `services/` — lihat Modularitas)
+- `lib/providers/` — state management (ChangeNotifier) + pembungkus service
+- `lib/services/` — SERVICE saja: Supabase API/RPC, presence, realtime, call
+- `lib/core/` — helper murni non-service (bukan I/O bisnis):
+  - `core/cache/` — `message_cache`, `media_disk_cache`, `photo_cache`,
+    `post_photo_cache`, `offline_outbox`
+  - `core/media/` — `chat_photo_helper`, `forensic_watermark`, `chat_background`,
+    `link_preview_service`
+  - `core/perf/` — `perf_probe`
+  - `core/screen_secure_service.dart`, `core/admin_gate.dart`
+- `lib/mixins/` — modul bersama lintas screen (chat)
 - `lib/config/` — theme, strings, supabase config, regions
 - `lib/models/` — data models
 - `lib/screens/<screen>/widgets/` — widget privat milik screen itu (co-located)
@@ -227,27 +235,34 @@ Jangan balik: room yang menyesuaikan, bukan private.**
    - antrean offline → `lib/mixins/chat_outbox_mixin.dart` (`ChatOutboxMixin`)
    - seleksi/reaksi/edit/forward → `lib/mixins/chat_selection_mixin.dart`
      (`ChatSelectionMixin`)
-   - pemrosesan foto (resize/watermark) → `lib/services/chat_photo_helper.dart`
+   - alur kirim pesan (teks/foto/caption/poin) → `lib/mixins/chat_send_mixin.dart`
+   - pemrosesan foto (resize/watermark) → `lib/core/media/chat_photo_helper.dart`
    - perekam voice → `lib/mixins/voice_recorder_mixin.dart`
    - composer → `lib/widgets/chat_composer_input.dart` (`ChatComposerInput`)
    
    Butuh yang sama di dua screen? Pakai modul itu — JANGAN copy-paste.
-3. **Screen dilarang import `services/` langsung** — lewat providers/controllers.
-   (Tech debt lama masih ada; file BARU wajib patuh.)
+3. **BOUNDARY TEGAK — screen DILARANG import `services/` (0, tanpa pengecualian).**
+   Semua I/O bisnis lewat `lib/providers/`. Helper murni ada di `lib/core/`.
+   Gate: `bash scripts/check_screen_boundary.sh` (jalan di CI). Kalau butuh
+   service baru di screen: tambah method passthrough di provider terkait,
+   atau (helper murni) taruh di `lib/core/`.
 4. **`ChatService` SUDAH dipecah per domain** lewat `part` + mixin
-   (`chat_service_private/room/typing/presence/gift.dart`), dengan
-   `ChatBase` untuk state bersama. Jangan menaruh method baru di file
+   (`chat_service_private/private_chatlist/room/typing/presence/gift.dart`),
+   dengan `ChatBase` untuk state bersama. Jangan menaruh method baru di file
    monolit — taruh di mixin domain yang sesuai. Pemanggil tetap import
    `services/chat_service.dart` (satu entry). Jangan ubah pola `part`
    menjadi import biasa (field privat lintas-domain akan putus).
-5. Verifikasi tiap perubahan struktural: `flutter analyze` 0 error/0 warning +
+5. **Provider baru (Fase 9)** untuk service yang dipakai screen: Storage,
+   Location(+geo), DeviceInfo, Contact, Avatar, NotificationPrefs,
+   MessageReaction. Pakai ini — jangan bikin import services di screen.
+6. Verifikasi tiap perubahan struktural: `flutter analyze` 0 error/0 warning +
    `flutter test` 100% hijau.
-6. **Jangan hapus optimasi performa yang sudah ada** (lihat `docs/PERFORMANCE.md`).
+7. **Jangan hapus optimasi performa yang sudah ada** (lihat `docs/PERFORMANCE.md`).
 
 ### Checklist sebelum commit refactor
 - [ ] Tidak ada file baru > ~800 baris
 - [ ] Tidak ada kode yang diduplikat private ↔ room
-- [ ] `grep -rn "import.*services/" lib/screens/<file_baru>` → 0 hasil
+- [ ] `bash scripts/check_screen_boundary.sh` → OK (0 screen import services)
 - [ ] `flutter analyze` 0/0 + `flutter test` hijau
 
 ## Konvensi Code
