@@ -88,8 +88,10 @@ class PerfProbe {
   }
 
   /// Hitung sekali build untuk layar [key].
+  /// Aktif juga di build RILIS + PERF_PROBE (releaseMeasure) supaya jumlah
+  /// rebuild layar call bisa dibandingkan sebelum/sesudah di HP kerja.
   static void buildCount(String key) {
-    if (!enabled) return;
+    if (!measuring) return;
     _buildCounts[key] = (_buildCounts[key] ?? 0) + 1;
   }
 
@@ -134,6 +136,14 @@ class PerfProbe {
     w.stop();
     (_fetchUs[key] ??= []).add(w.elapsedMicroseconds);
     return r;
+  }
+
+  /// Catat satu durasi yang sudah diukur manual (ms) — dipakai jalur yang
+  /// tidak bisa dibungkus `timed` (mis. call init → fase inCall, offer →
+  /// answer) supaya ikut muncul di `report()`.
+  static void record(String key, Duration d) {
+    if (!measuring) return;
+    (_fetchUs[key] ??= []).add(d.inMicroseconds);
   }
 
   /// Reset semua hitungan (untuk membandingkan periode tertentu).

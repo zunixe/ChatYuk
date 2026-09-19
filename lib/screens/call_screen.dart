@@ -10,6 +10,8 @@ import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
 import '../services/call_notification.dart';
+import '../services/perf_probe.dart';
+import '../utils.dart';
 import '../widgets/profile_avatar.dart';
 
 /// Layar panggilan 1:1 — dipakai caller (menelpon) dan callee (menerima).
@@ -49,7 +51,12 @@ class _CallScreenState extends State<CallScreen> {
   late final CallSession _session;
   bool _ownsSession = true;
   Timer? _autoClose;
-  String _elapsed = '00:00';
+  /// Timer durasi call — hanya memperbarui `_elapsed` (ValueNotifier), jadi
+  /// tidak memicu rebuild seluruh layar tiap detik.
+  Timer? _elapsedTimer;
+  /// Durasi call via ValueNotifier — timer 1 dtk TIDAK memicu setState
+  /// seluruh layar (dulu rebuild 2× RTCVideoView + kontrol tiap detik).
+  final ValueNotifier<String> _elapsed = ValueNotifier<String>('00:00');
   Offset? _localPreviewPos;
   Size _localPreviewSize = const Size(100, 150);
 
@@ -94,6 +101,7 @@ class _CallScreenState extends State<CallScreen> {
       _ownsSession = true;
     }
     _session.addListener(_onSession);
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     if (_ownsSession) {
       unawaited(
         CallNotification.showActive(
@@ -116,6 +124,8 @@ class _CallScreenState extends State<CallScreen> {
     WakelockPlus.disable();
     _session.removeListener(_onSession);
     _autoClose?.cancel();
+    _elapsedTimer?.cancel();
+    _elapsed.dispose();
     if (_ownsSession) {
       unawaited(_session.close());
       unawaited(CallNotification.cancel());
@@ -159,19 +169,15 @@ class _CallScreenState extends State<CallScreen> {
             return s.msgCallEnded;
         }
       case CallPhase.inCall:
-        return _elapsed;
+        return _elapsed.value;
     }
   }
 
   void _tick() {
     final start = _session.connectedAt;
     if (start == null) return;
-    final d = DateTime.now().difference(start);
-    final m = d.inMinutes.toString().padLeft(2, '0');
-    final sec = (d.inSeconds % 60).toString().padLeft(2, '0');
-    if (mounted && _elapsed != '$m:$sec') {
-      setState(() => _elapsed = '$m:$sec');
-    }
+    final t = formatMmSs(DateTime.now().difference(start).inSeconds);
+    if (_elapsed.value != t) _elapsed.value = t;
   }
 
   /// Kecilkan video ke overlay dalam chat: pindahkan mode ke chat lalu
@@ -193,6 +199,7 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('CallScreen');
     final s = context.watch<LocaleProvider>().s;
     final isVideo = widget.callType == 'video';
     final inCall = _session.phase == CallPhase.inCall;
@@ -217,12 +224,16 @@ class _CallScreenState extends State<CallScreen> {
             // remote meski tak ada video track (panggilan audio, atau video
             // masih negosiasi). Tanpa view terpasang, audio remote diam.
             // Double tap di fullscreen → tukar dengan bubble kecil.
-            RTCVideoView(
-              _swapped && showRemoteVideo
-                  ? _session.localRenderer
-                  : _session.remoteRenderer,
-              mirror: _swapped && showRemoteVideo,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+            // RepaintBoundary: perubahan kontrol/teks (mis. toast, timer)
+            // tidak memaksa raster ulang permukaan video.
+            RepaintBoundary(
+              child: RTCVideoView(
+                _swapped && showRemoteVideo
+                    ? _session.localRenderer
+                    : _session.remoteRenderer,
+                mirror: _swapped && showRemoteVideo,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+              ),
             ),
             GestureDetector(
               behavior: HitTestBehavior.translucent,
@@ -323,13 +334,15 @@ class _CallScreenState extends State<CallScreen> {
                         child: Stack(
                           children: [
                             Positioned.fill(
-                              child: RTCVideoView(
-                                _swapped && showRemoteVideo
-                                    ? _session.remoteRenderer
-                                    : _session.localRenderer,
-                                mirror: !(_swapped && showRemoteVideo),
-                                objectFit: RTCVideoViewObjectFit
-                                    .RTCVideoViewObjectFitCover,
+                              child: RepaintBoundary(
+                                child: RTCVideoView(
+                                  _swapped && showRemoteVideo
+                                      ? _session.remoteRenderer
+                                      : _session.localRenderer,
+                                  mirror: !(_swapped && showRemoteVideo),
+                                  objectFit: RTCVideoViewObjectFit
+                                      .RTCVideoViewObjectFitCover,
+                                ),
                               ),
                             ),
                             // Handle resize di pojok kanan bawah.
@@ -364,9 +377,16 @@ class _CallScreenState extends State<CallScreen> {
                         style: AppText.headline.copyWith(color: Colors.white),
                       ),
                       const SizedBox(height: 6),
-                      Text(
-                        _phaseText(s),
-                        style: AppText.body.copyWith(color: Colors.white70),
+                      // Durasi ikut ValueNotifier → hanya Text ini yang
+                      // rebuild tiap detik, bukan seluruh layar.
+                      ValueListenableBuilder<String>(
+                        valueListenable: _elapsed,
+                        builder: (_, v, __) => Text(
+                          _session.phase == CallPhase.inCall
+                              ? v
+                              : _phaseText(s),
+                          style: AppText.body.copyWith(color: Colors.white70),
+                        ),
                       ),
                     ],
                   ),
@@ -382,9 +402,11 @@ class _CallScreenState extends State<CallScreen> {
                 right: 0,
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                    // spaceEvenly: tombol tersebar merata selebar layar
+                    // (dulu center → menumpuk di tengah di layar lebar).
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         _ControlButton(
                           icon: _session.micOn ? Icons.mic : Icons.mic_off,
@@ -393,7 +415,6 @@ class _CallScreenState extends State<CallScreen> {
                           onTap: _session.toggleMic,
                         ),
                         if (isVideo) ...[
-                          const SizedBox(width: 12),
                           _ControlButton(
                             icon: _session.cameraOn
                                 ? Icons.videocam
@@ -402,13 +423,11 @@ class _CallScreenState extends State<CallScreen> {
                             tooltip: s.btnSwitchCamera,
                             onTap: _session.toggleCamera,
                           ),
-                          const SizedBox(width: 12),
                           _ControlButton(
                             icon: Icons.cameraswitch,
                             tooltip: s.btnSwitchCamera,
                             onTap: _session.switchCamera,
                           ),
-                          const SizedBox(width: 12),
                           _ControlButton(
                             icon: _session.speakerOn
                                 ? Icons.volume_up
@@ -417,16 +436,13 @@ class _CallScreenState extends State<CallScreen> {
                             tooltip: s.btnSpeaker,
                             onTap: _session.toggleSpeaker,
                           ),
-                          if (_minimizable) ...[
-                            const SizedBox(width: 12),
+                          if (_minimizable)
                             _ControlButton(
                               icon: Icons.picture_in_picture_alt,
                               tooltip: s.callMinimize,
                               onTap: _minimize,
                             ),
-                          ],
                         ],
-                        const SizedBox(width: 12),
                         _ControlButton(
                           icon: Icons.call_end,
                           color: Colors.redAccent,
@@ -459,53 +475,12 @@ class _CallScreenState extends State<CallScreen> {
                 ),
               ),
 
-            // Timer saat in-call (di atas kontrol) — ikut SafeArea bottom
-            if (inCall)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 88),
-                    child: _ElapsedTimer(onTick: _tick),
-                  ),
-                ),
-              ),
+            // Timer saat in-call sudah dipindah ke atas (Positioned terpisah);
+            // `_ElapsedTimer` dihapus — dulu hanya wadah timer tanpa render.
           ],
         ),
       ),
     );
-  }
-}
-
-/// Timer durasi call — hanya jalan saat connectedAt sudah terisi.
-class _ElapsedTimer extends StatefulWidget {
-  final VoidCallback onTick;
-  const _ElapsedTimer({required this.onTick});
-
-  @override
-  State<_ElapsedTimer> createState() => _ElapsedTimerState();
-}
-
-class _ElapsedTimerState extends State<_ElapsedTimer> {
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => widget.onTick());
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox.shrink();
   }
 }
 

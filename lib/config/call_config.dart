@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'supabase_config.dart';
+import '../services/perf_probe.dart';
 
 /// Konfigurasi ICE untuk WebRTC call.
 /// TURN credentials di-fetch dari Supabase Edge Function (Cloudflare TURN).
@@ -28,11 +29,27 @@ class CallConfig {
     'sdpSemantics': 'unified-plan',
   };
 
+  /// Cache kredensial Cloudflare di memori. Cloudflare menerbitkan credential
+  /// dengan TTL 24 jam, tapi `_fetchCloudflare` dulu dipanggil SETIAP call dan
+  /// SETIAP watch PC → round-trip edge function berulang (terukur 1760ms cold,
+  /// 218ms warm). Cache 12 jam (setengah TTL server = margin aman) menghapus
+  /// round-trip itu untuk semua call berikutnya di sesi yang sama.
+  static Map<String, dynamic>? _cloudflareCache;
+  static DateTime? _cloudflareCachedAt;
+  static const Duration _cloudflareTtl = Duration(hours: 12);
+
   /// Fetch Cloudflare TURN credentials, return null kalau gagal.
   /// Kirim ACCESS TOKEN user (JWT) — function hanya melayani user login.
   /// Publishable key ditolak (bukan JWT user). Anon tanpa session → skip
   /// fetch, fallback openrelay (perilaku aman yang sudah ada).
   static Future<Map<String, dynamic>?> _fetchCloudflare() async {
+    final cached = _cloudflareCache;
+    final cachedAt = _cloudflareCachedAt;
+    if (cached != null &&
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) < _cloudflareTtl) {
+      return cached;
+    }
     try {
       final token = SupabaseConfig.client.auth.currentSession?.accessToken;
       if (token == null || token.isEmpty) return null;
@@ -52,6 +69,8 @@ class CallConfig {
         if (iceData != null &&
             iceData['urls'] != null &&
             iceData['username'] != null) {
+          _cloudflareCache = iceData;
+          _cloudflareCachedAt = DateTime.now();
           return iceData;
         }
       }
@@ -72,7 +91,10 @@ class CallConfig {
   /// semua tipe kandidat (host/srflx/relay) supaya P2P langsung tetap bisa
   /// connect — minimal di jaringan yang sama (WiFi/hotspot) tanpa TURN.
   static Future<Map<String, dynamic>> getPeerConfig() async {
-    final cloudflare = await _fetchCloudflare();
+    final cloudflare = await PerfProbe.timed(
+      'call.turnFetch',
+      _fetchCloudflare,
+    );
     final iceServers = <Map<String, dynamic>>[
       {'urls': 'stun:stun.l.google.com:19302'},
     ];
