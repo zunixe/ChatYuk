@@ -46,9 +46,12 @@ mixin ChatSendMixin<T extends StatefulWidget>
   /// - room: cek role private-room (bukan member → ajak join)
   Future<bool> sendPreCheck();
 
+  /// Batalkan mode edit (kosongkan state edit di layar).
+  void sendCancelEdit();
+
   /// Simpan perubahan pesan yang sedang diedit (private: editPrivateMessage,
-  /// room: editRoomMessage). Umpan balik ke user SENGAJA tidak ada (ikut private).
-  Future<void> sendEditPersist(MessageModel editing, String raw);
+  /// room: editRoomMessage). Return true bila server menerima.
+  Future<bool> sendEditPersist(MessageModel editing, String raw);
 
   /// Kirim pesan teks (private: sendPrivateMessage, room: sendRoomMessage).
   Future<void> sendDispatchText({
@@ -83,14 +86,27 @@ mixin ChatSendMixin<T extends StatefulWidget>
     if (!mounted) return;
 
     // Mode edit: kirim langsung mengubah pesan lama (bukan pesan baru).
-    // SENGAJA tidak set _isSending & tanpa snackbar (ikut private).
+    // Pakai versi ROOM (lebih aman): guard `_isSending` (anti double-tap) +
+    // snackbar hasil (user tahu edit berhasil/gagal).
     final editing = sendEditingMessage;
     if (editing != null && !hasPhoto) {
-      final original = editing.text;
+      if (raw.isEmpty || raw == editing.text) {
+        sendCancelEdit();
+        return;
+      }
       sendMsgCtrl.clear();
       setState(() => sendEditingMessage = null);
-      if (raw != original) {
-        await sendEditPersist(editing, raw);
+      sendIsSending = true;
+      try {
+        final ok = await sendEditPersist(editing, raw);
+        if (mounted) {
+          final s = context.read<LocaleProvider>().s;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(ok ? s.msgEdited : s.errSendFailed)),
+          );
+        }
+      } finally {
+        sendIsSending = false;
       }
       return;
     }
