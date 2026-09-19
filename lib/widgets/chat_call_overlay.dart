@@ -425,10 +425,15 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: RTCVideoView(
-                  effSwap ? sess.remoteRenderer : sess.localRenderer,
-                  mirror: !effSwap,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                // RepaintBoundary: texture video punya layer sendiri —
+                // gerakan bubble tidak memicu repaint isi video (lebih halus).
+                child: RepaintBoundary(
+                  child: RTCVideoView(
+                    effSwap ? sess.remoteRenderer : sess.localRenderer,
+                    mirror: !effSwap,
+                    objectFit: RTCVideoViewObjectFit
+                        .RTCVideoViewObjectFitCover,
+                  ),
                 ),
               ),
               const Align(
