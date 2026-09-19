@@ -13,6 +13,10 @@ import '../services/avatar_service.dart';
 import '../services/device_info_service.dart';
 import '../utils.dart';
 
+part 'auth_service_auth.dart';
+part 'auth_service_settings.dart';
+part 'auth_service_profile.dart';
+
 /// Dilempar saat email tidak terdaftar di Auth (cek via RPC sebelum kirim reset).
 class EmailNotRegisteredException implements Exception {
   @override
@@ -25,7 +29,127 @@ class EmailAlreadyRegisteredException implements Exception {
   String toString() => 'EmailAlreadyRegisteredException';
 }
 
-class AuthService {
+/// State instance BERSAMA lintas domain AuthService.
+abstract class AuthBase {
+  SupabaseClient get _sb => SupabaseConfig.client;
+  User? get currentUser => _sb.auth.currentUser;
+  String? get uid => _sb.auth.currentUser?.id;
+  bool get isSignedIn => _sb.auth.currentUser != null;
+  bool get isAnonymous => _sb.auth.currentUser?.isAnonymous ?? true;
+  String? get userEmail => _sb.auth.currentUser?.email;
+  bool get emailConfirmed => _sb.auth.currentUser?.emailConfirmedAt != null;
+  static const String googleWebClientIdDefault =
+      '599111437536-hg56bq0nc2m6kig6hg41lmrbtfel5n2c.apps.googleusercontent.com';
+  static String? googleWebClientIdOverride;
+  Future<({AuthResponse response, String? googleEmail})?>
+  signInWithGoogle() async {
+    final webClientId = googleWebClientIdOverride ?? googleWebClientIdDefault;
+    final googleSignIn = GoogleSignIn(serverClientId: webClientId);
+    try {
+      await googleSignIn.signOut();
+    } catch (_) {}
+    final googleUser = await googleSignIn.signIn();
+    if (googleUser == null) return null;
+    final googleEmail = googleUser.email;
+    final googleAuth = await googleUser.authentication;
+    final idToken = googleAuth.idToken;
+    final accessToken = googleAuth.accessToken;
+    if (idToken == null) throw Exception('Google idToken null');
+    dlog(
+      '[GOOGLE] idToken len=${idToken.length} accessToken len=${accessToken?.length ?? 0} webClientId=$webClientId',
+    );
+    try {
+      final parts = idToken.split('.');
+      if (parts.length == 3) {
+        final payload = String.fromCharCodes(
+          base64Url.decode(base64Url.normalize(parts[1])),
+        );
+        dlog(
+          '[GOOGLE] idToken payload aud check: ${payload.substring(0, payload.length > 500 ? 500 : payload.length)}',
+        );
+      }
+    } catch (_) {}
+    AuthResponse response;
+    try {
+      response = await _sb.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+    } catch (e, st) {
+      dlog('[GOOGLE] signInWithIdToken FAILED: $e');
+      dlog('[GOOGLE] stack: $st');
+      if (e is AuthApiException) {
+        dlog(
+          '[GOOGLE] AuthApiException statusCode=${e.statusCode} code=${e.code} message=${e.message}',
+        );
+      }
+      rethrow;
+    }
+    final id = _sb.auth.currentUser?.id;
+    if (id != null) {
+      try {
+        await _sb.from('profiles').update({'email': googleEmail}).eq('id', id);
+      } catch (e) {
+        dlog('[AUTH] signInWithGoogle email update error: $e');
+      }
+    }
+    return (response: response, googleEmail: googleEmail);
+  }
+  bool _cachedHasPassword = false;
+  bool _hasPasswordFetched = false;
+  bool get hasPassword {
+    if (_hasPasswordFetched) return _cachedHasPassword;
+    final user = currentUser;
+    if (user == null) return false;
+    final providers = user.appMetadata['providers'];
+    if (providers is List) return providers.contains('email');
+    final identities = user.identities;
+    if (identities != null) {
+      for (final id in identities) {
+        final p = (id as dynamic).provider as String?;
+        if (p == 'email') return true;
+        final map = (id as dynamic).toJson is Function
+            ? (id as dynamic).toJson() as Map
+            : null;
+        if (map != null && map['provider'] == 'email') return true;
+      }
+    }
+    return user.appMetadata['provider'] != 'google';
+  }
+  String? _dummyUid;
+  bool _dummySessionActive = false;
+  bool get dummySessionActive => _dummySessionActive;
+  String? get activeDummyUid => _dummyUid;
+  Stream<bool> get authState {
+    return _sb.auth.onAuthStateChange.map((data) {
+      final session = data.session;
+      return session != null;
+    });
+  }
+  Stream<AuthState> get authStateChanges => _sb.auth.onAuthStateChange;
+  /// Download foto galeri dengan DISK FIRST — b64 di-cache disk per path
+  /// (path unik per upload), buka profil berikutnya tanpa network.
+  Future<String> _galleryPhotoB64(String path) async {
+    final disk = await MediaDiskCache.instance.read(path);
+    if (disk != null && disk.isNotEmpty) return base64Encode(disk);
+    final b64 = await StoragePhotoService.instance.download(path) ?? '';
+    if (b64.isNotEmpty) {
+      try {
+        await MediaDiskCache.instance.write(
+          path,
+          Uint8List.fromList(base64Decode(b64)),
+        );
+      } catch (_) {}
+    }
+    return b64;
+  }
+}
+
+class AuthService extends AuthBase with AuthServiceAuthMx, AuthServiceSettingsMx, AuthServiceProfileMx {
+  static final AuthService instance = AuthService._();
+  factory AuthService() => instance;
+  AuthService._();
   // Getter (bukan field) — mereferensikan AuthService sebelum
   // Supabase.initialize (mis. set googleWebClientIdOverride di wireAdmin)
   // TIDAK boleh memaksa evaluasi Supabase.instance.client.
@@ -36,11 +160,8 @@ class AuthService {
   /// yang di-set modul admin selalu terlihat di seluruh app. Dulu
   /// `instance = this` di konstruktor membuat objek terakhir-dibuat
   /// "mencuri" instance dan flag dummy tidak pernah sampai ke provider.
-  static final AuthService instance = AuthService._();
 
-  factory AuthService() => instance;
 
-  AuthService._();
 
   User? get currentUser => _sb.auth.currentUser;
   String? get uid => _sb.auth.currentUser?.id;
@@ -134,504 +255,41 @@ class AuthService {
     return (response: response, googleEmail: googleEmail);
   }
 
-  /// Cek apakah email sudah terdaftar di akun lain.
-  Future<Map<String, dynamic>?> checkEmailExists(String email) async {
-    try {
-      final res = await _sb.rpc(
-        'check_email_exists',
-        params: {'p_email': email},
-      );
-      if (res == null) return null;
-      final map = Map<String, dynamic>.from(res as Map);
-      return map['exists'] == true ? map : null;
-    } catch (e) {
-      dlog('[AUTH] checkEmailExists error: $e');
-      return null;
-    }
-  }
 
-  /// Pindahkan profile dari akun lama ke akun Google baru.
-  /// Ini "partial linking" — profile lama (nickname, avatar, dll) dipindah ke uid Google.
-  Future<void> linkGoogleProfile(String oldProfileId) async {
-    final newId = uid;
-    if (newId == null) return;
-    try {
-      // Copy profile lama ke uid baru.
-      // Exclude ip_address & fcm_token — kolom ini di-revoke dari akses
-      // publik (hardening), dan tidak boleh ditimpa saat link akun.
-      const cols =
-          'id,nickname,gender,age,country,city,status,avatar,is_registered,hashtags,points';
-      final old = await _sb
-          .from('profiles')
-          .select(cols)
-          .eq('id', oldProfileId)
-          .maybeSingle();
-      if (old == null) return;
 
-      // Upsert profile lama ke uid baru
-      await _sb.from('profiles').upsert({
-        ...old,
-        'id': newId,
-        'email': _sb.auth.currentUser?.email,
-      });
 
-      dlog('[AUTH] linkGoogleProfile: linked $oldProfileId -> $newId');
-    } catch (e) {
-      dlog('[AUTH] linkGoogleProfile error: $e');
-    }
-  }
 
-  Future<void> signInAnonymously() async {
-    if (_sb.auth.currentUser != null) return;
-    final res = await _sb.auth.signInAnonymously();
-    dlog('[AUTH] signInAnonymously -> ${res.user?.id}');
-  }
 
-  /// Bersihkan akun anonymous stale (tidak aktif > 7 hari) di server.
-  /// Agar nickname mereka bebas dipakai dan tidak muncul sebagai
-  /// ghost "online". Fire-and-forget dari app saat start.
-  Future<void> cleanupStaleAnonymous({int minAgeDays = 7}) async {
-    try {
-      await _sb.rpc(
-        'cleanup_stale_anonymous',
-        params: {'min_age_days': minAgeDays},
-      );
-    } catch (e) {
-      dlog('[AUTH] cleanupStaleAnonymous error (abaikan): $e');
-    }
-  }
 
-  /// Bersihkan presence room yang basi (> 10 menit) di server — row yang
-  /// ditinggalkan app yang di-kill/force-stop tanpa sempat leaveRoom.
-  /// Fire-and-forget dari app saat start.
-  Future<void> cleanupStalePresence({int minAgeMinutes = 10}) async {
-    try {
-      await _sb.rpc(
-        'cleanup_stale_presence',
-        params: {'min_age_minutes': minAgeMinutes},
-      );
-    } catch (e) {
-      dlog('[AUTH] cleanupStalePresence error (abaikan): $e');
-    }
-  }
 
-  /// Ambil setting admin global: apakah screenshot aplikasi diizinkan.
-  /// Default true (bisa screenshot) jika gagal / belum ada data.
-  Future<bool> fetchScreenshotEnabled() async {
-    try {
-      final res = await _sb
-          .from('app_settings')
-          .select('screenshot_enabled')
-          .eq('id', 'global')
-          .maybeSingle();
-      return res?['screenshot_enabled'] == true;
-    } catch (e) {
-      dlog('[AUTH] fetchScreenshotEnabled error: $e');
-      return true;
-    }
-  }
 
-  /// Update setting admin global. RLS membatasi hanya email admin (zunixe@gmail.com).
-  Future<void> updateScreenshotEnabled(bool enabled) async {
-    await _sb.from('app_settings').upsert({
-      'id': 'global',
-      'screenshot_enabled': enabled,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'id');
-  }
 
-  /// Realtime row app_settings global — pola .stream(primaryKey) yang sama
-  /// dengan PointsService.watchEnabled() (terbukti realtime di device).
-  Stream<Map<String, dynamic>?> watchGlobalSettings() {
-    return _sb
-        .from('app_settings')
-        .stream(primaryKey: ['id'])
-        .eq('id', 'global')
-        .map((rows) => rows.isEmpty ? null : rows.first);
-  }
 
-  /// Satu query ambil SEMUA setting global (pengganti 7× fetch terpisah
-  /// saat boot — hemat 6 RPC per user). Return raw row (null bila gagal).
-  ///
-  /// Kolom EKSPLISIT (bukan `*`): `app_shared_secret` di-revoke dari anon/
-  /// authenticated (hardening) — `select('*')` akan gagal permission.
-  Future<Map<String, dynamic>?> fetchGlobalSettings() async {
-    try {
-      return await _sb
-          .from('app_settings')
-          .select(
-            'screenshot_enabled,watermark_enabled,call_all_enabled,'
-            'call_anon_enabled,reengage_enabled,require_registration,'
-            'app_font_family,invisible_enabled,invisible_admin_uid',
-          )
-          .eq('id', 'global')
-          .maybeSingle();
-    } catch (e) {
-      dlog('[AUTH] fetchGlobalSettings error: $e');
-      return null;
-    }
-  }
 
-  /// Setting admin: tombol call tampil ke SEMUA user (termasuk anon/guest).
-  /// Default false = hanya user terdaftar yang melihat tombol call.
-  Future<bool> fetchCallAllEnabled() async {
-    try {
-      final res = await _sb
-          .from('app_settings')
-          .select('call_all_enabled')
-          .eq('id', 'global')
-          .maybeSingle();
-      return res?['call_all_enabled'] == true;
-    } catch (e) {
-      dlog('[AUTH] fetchCallAllEnabled error: $e');
-      return false;
-    }
-  }
 
-  /// Update setting admin global: satu toggle call untuk semua user.
-  /// Menulis kedua kolom sekaligus supaya tombol tampil (call_all) dan
-  /// izin anon/dummy (call_anon, ditegakkan RLS calls_insert) selalu sinkron.
-  /// RLS membatasi hanya email admin (zunixe@gmail.com).
-  Future<void> updateCallEnabled(bool enabled) async {
-    await _sb.from('app_settings').upsert({
-      'id': 'global',
-      'call_all_enabled': enabled,
-      'call_anon_enabled': enabled,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'id');
-  }
 
-  /// Setting admin: anon & dummy boleh call. Default false = hanya
-  /// user terdaftar (+ admin) yang bisa menelepon (anti spam/griefing).
-  Future<bool> fetchCallAnonEnabled() async {
-    try {
-      final res = await _sb
-          .from('app_settings')
-          .select('call_anon_enabled')
-          .eq('id', 'global')
-          .maybeSingle();
-      return res?['call_anon_enabled'] == true;
-    } catch (e) {
-      dlog('[AUTH] fetchCallAnonEnabled error: $e');
-      return false;
-    }
-  }
 
-  /// Ambil setting admin global: apakah foto view-once di-watermark forensik.
-  /// Default false (kirim biasa) jika gagal / belum ada data.
-  Future<bool> fetchWatermarkEnabled() async {
-    try {
-      final res = await _sb
-          .from('app_settings')
-          .select('watermark_enabled')
-          .eq('id', 'global')
-          .maybeSingle();
-      return res?['watermark_enabled'] == true;
-    } catch (e) {
-      dlog('[AUTH] fetchWatermarkEnabled error: $e');
-      return false;
-    }
-  }
 
-  /// Update setting admin global. RLS membatasi hanya email admin (zunixe@gmail.com).
-  Future<void> updateWatermarkEnabled(bool enabled) async {
-    await _sb.from('app_settings').upsert({
-      'id': 'global',
-      'watermark_enabled': enabled,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'id');
-  }
 
-  /// Ambil setting admin: invisible (admin tidak muncul di daftar online).
-  /// Return Map {'enabled': bool, 'adminUid': String?}.
-  Future<Map<String, dynamic>> fetchInvisibleSetting() async {
-    try {
-      final res = await _sb
-          .from('app_settings')
-          .select('invisible_enabled,invisible_admin_uid')
-          .eq('id', 'global')
-          .maybeSingle();
-      return {
-        'enabled': res?['invisible_enabled'] == true,
-        'adminUid': res?['invisible_admin_uid'] as String?,
-      };
-    } catch (e) {
-      dlog('[AUTH] fetchInvisibleSetting error: $e');
-      return {'enabled': false, 'adminUid': null};
-    }
-  }
 
-  /// Update setting admin invisible. RLS membatasi hanya admin.
-  /// Saat enabled=true, simpan UID admin supaya trigger server bisa
-  /// memaksa status 'invisible' pada user itu.
-  Future<void> updateInvisibleEnabled(bool enabled) async {
-    final myUid = uid;
-    await _sb.from('app_settings').upsert({
-      'id': 'global',
-      'invisible_enabled': enabled,
-      'invisible_admin_uid': enabled ? myUid : null,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'id');
-  }
 
-  /// Ambil setting admin global: apakah wajib registrasi sebelum masuk.
-  /// Default false (bisa mulai chat tanpa daftar) jika gagal / belum ada data.
-  Future<bool> fetchRequireRegistration() async {
-    try {
-      final res = await _sb
-          .from('app_settings')
-          .select('require_registration')
-          .eq('id', 'global')
-          .maybeSingle();
-      return res?['require_registration'] == true;
-    } catch (e) {
-      dlog('[AUTH] fetchRequireRegistration error: $e');
-      return false;
-    }
-  }
 
-  /// Update setting admin global. RLS membatasi hanya admin.
-  Future<void> updateRequireRegistration(bool enabled) async {
-    await _sb.from('app_settings').upsert({
-      'id': 'global',
-      'require_registration': enabled,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'id');
-  }
 
-  /// Daftar install_id yang di-exclude dari ringkasan & daftar perangkat.
-  /// RPC admin — RLS guard zunixe@gmail.com.
-  Future<List<String>> fetchExcludedDevices() async {
-    try {
-      final res = await _sb.rpc('admin_get_excluded_devices');
-      if (res is List) {
-        return res.map((e) => '$e').where((s) => s.isNotEmpty).toList();
-      }
-      return [];
-    } catch (e) {
-      dlog('[AUTH] fetchExcludedDevices error: $e');
-      return [];
-    }
-  }
 
-  /// Simpan daftar install_id yang di-exclude. RPC menghapus cache stats
-  /// supaya ringkasan langsung segar.
-  Future<bool> updateExcludedDevices(List<String> installIds) async {
-    try {
-      final res = await _sb.rpc(
-        'admin_set_excluded_devices',
-        params: {'p_list': installIds},
-      );
-      return res is List;
-    } catch (e) {
-      dlog('[AUTH] updateExcludedDevices error: $e');
-      return false;
-    }
-  }
 
-  /// Ambil font global aplikasi (key katalog AppFonts). Default 'default'.
-  Future<String> fetchAppFontFamily() async {
-    try {
-      final res = await _sb
-          .from('app_settings')
-          .select('app_font_family')
-          .eq('id', 'global')
-          .maybeSingle();
-      final v = res?['app_font_family'] as String?;
-      return (v == null || v.isEmpty) ? 'default' : v;
-    } catch (e) {
-      dlog('[AUTH] fetchAppFontFamily error: $e');
-      return 'default';
-    }
-  }
 
-  /// Update font global aplikasi. RLS membatasi hanya admin.
-  Future<void> updateAppFontFamily(String key) async {
-    await _sb.from('app_settings').upsert({
-      'id': 'global',
-      'app_font_family': key,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'id');
-  }
 
-  /// Ambil toggle notifikasi pengingat harian (re-engagement) — admin global.
-  Future<bool> fetchReengageEnabled() async {
-    try {
-      final res = await _sb
-          .from('app_settings')
-          .select('reengage_enabled')
-          .eq('id', 'global')
-          .maybeSingle();
-      return res?['reengage_enabled'] != false;
-    } catch (e) {
-      dlog('[AUTH] fetchReengageEnabled error: $e');
-      return true;
-    }
-  }
 
-  /// Update toggle pengingat harian. RLS membatasi hanya admin.
-  Future<void> updateReengageEnabled(bool enabled) async {
-    await _sb.from('app_settings').upsert({
-      'id': 'global',
-      'reengage_enabled': enabled,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'id');
-  }
 
-  /// Stream perubahan setting app_settings (realtime) — dipakai AuthProvider
-  /// supaya toggle admin langsung berdampak di semua device tanpa polling.
-  Stream<Map<String, dynamic>> onAppSettingsUpdated() {
-    final channel = _sb.channel('auth-app-settings');
-    final controller = StreamController<Map<String, dynamic>>.broadcast();
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.update,
-      schema: 'public',
-      table: 'app_settings',
-      callback: (payload) {
-        controller.add(Map<String, dynamic>.from(payload.newRecord));
-      },
-    );
-    channel.subscribe();
-    controller.onCancel = () => _sb.removeChannel(channel);
-    return controller.stream;
-  }
 
-  /// Login dengan email + password.
-  /// Setelah ini, getProfile() akan mengembalikan profile user.
-  Future<void> signInWithEmail(String email, String password) async {
-    final res = await _sb.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
-    if (res.user == null) throw Exception('Login failed');
-  }
 
-  /// Upgrade anonymous account ke email account.
-  /// UID tidak berubah - semua data (chat, profile) dipertahankan.
-  Future<void> linkEmailToAccount(String email, String password) async {
-    await _sb.auth.updateUser(UserAttributes(email: email, password: password));
-  }
 
-  /// Tandai profile sebagai terdaftar (punya email).
-  /// GUARD: hanya bila sesi benar-benar punya email TERKONFIRMASI —
-  /// updateUser(email) bersifat pending di GoTrue (auth.email tetap null
-  /// sampai dikonfirmasi); tanpa ini akun anon bisa salah-mark registered.
-  Future<void> markRegistered() async {
-    final id = uid;
-    if (id == null) return;
-    final user = _sb.auth.currentUser;
-    final email = user?.email ?? '';
-    if (email.isEmpty ||
-        (user!.emailConfirmedAt == null && user.phoneConfirmedAt == null)) {
-      dlog('[AUTH] markRegistered skip: email belum terkonfirmasi');
-      return;
-    }
-    try {
-      await _sb
-          .from('profiles')
-          .update({'is_registered': true, 'email': email})
-          .eq('id', id);
-    } catch (e) {
-      dlog('[AUTH] markRegistered error: $e');
-    }
-  }
 
-  /// Cek apakah email sudah terdaftar di Auth (RPC security definer).
-  /// Kalau RPC belum dibuat di DB, fallback ke [fallback]
-  /// (reset: true = lanjut kirim seperti lama; signup: false = lanjut daftar).
-  Future<bool> checkEmailRegistered(
-    String email, {
-    bool fallback = true,
-  }) async {
-    try {
-      final res = await _sb.rpc(
-        'check_email_registered',
-        params: {'p_email': email},
-      );
-      return res == true;
-    } catch (e) {
-      dlog('[AUTH] checkEmailRegistered error, fallback=$fallback: $e');
-      return fallback;
-    }
-  }
 
-  /// Daftar akun baru dengan email + password.
-  /// Mengembalikan userId — caller harus panggil registerProfile() setelahnya.
-  /// Lempar [EmailAlreadyRegisteredException] jika email sudah terdaftar.
-  Future<String> signUpWithEmail(String email, String password) async {
-    if (await checkEmailRegistered(email, fallback: false)) {
-      throw EmailAlreadyRegisteredException();
-    }
-    final res = await _sb.auth.signUp(
-      email: email,
-      password: password,
-      emailRedirectTo: 'chatyuk://login-callback',
-    );
-    final user = res.user;
-    if (user == null) throw Exception('Sign up failed: no user returned');
-    return user.id;
-  }
 
-  /// Kirim ulang email verifikasi (untuk user yang sudah signup tapi belum verify).
-  Future<void> resendVerificationEmail(String email) async {
-    await _sb.auth.resend(type: OtpType.signup, email: email);
-  }
 
-  /// Kirim ulang kode verifikasi (OTP) ke email — untuk user belum terverifikasi.
-  Future<void> resendEmailOtp(String email) async {
-    await _sb.auth.resend(
-      type: OtpType.signup,
-      email: email,
-      emailRedirectTo: 'chatyuk://login-callback',
-    );
-  }
 
-  /// Verifikasi kode OTP 6 digit. Return true bila sukses.
-  Future<bool> verifyEmailOtp(String email, String token) async {
-    try {
-      // type harus SAMA dengan yang dipakai resend (OtpType.signup) —
-      // kalau beda (mis. 'email'), server menolak kode yang valid.
-      await _sb.auth.verifyOTP(
-        email: email,
-        token: token,
-        type: OtpType.signup,
-      );
-      return true;
-    } catch (e) {
-      dlog('[AUTH] verifyEmailOtp error: $e');
-      return false;
-    }
-  }
 
-  /// Ikat diri sendiri ke referrer (sekali). Return {ok}.
-  Future<bool> bindReferrer(String referrerUid) async {
-    try {
-      final res = await _sb.rpc(
-        'bind_referrer',
-        params: {'p_referrer': referrerUid},
-      );
-      return res is Map && res['ok'] == true;
-    } catch (e) {
-      dlog('[AUTH] bindReferrer error: $e');
-      return false;
-    }
-  }
-
-  /// Kirim email reset password.
-  Future<void> sendPasswordResetEmail(String email) async {
-    await _sb.auth.resetPasswordForEmail(
-      email,
-      redirectTo: 'chatyuk://login-callback',
-    );
-  }
-
-  /// Set password baru. Dipanggil dari screen reset password
-  /// setelah user membuka link recovery di email.
-  Future<void> resetPassword(String newPassword) async {
-    await _sb.auth.updateUser(UserAttributes(password: newPassword));
-    // Logout agar user login ulang dengan password baru
-    await _sb.auth.signOut();
-  }
 
   bool _cachedHasPassword = false;
   bool _hasPasswordFetched = false;
@@ -659,595 +317,32 @@ class AuthService {
     return user.appMetadata['provider'] != 'google';
   }
 
-  Future<bool> fetchHasPassword() async {
-    try {
-      final res = await _sb.rpc('has_password');
-      if (res is bool) {
-        _cachedHasPassword = res;
-        _hasPasswordFetched = true;
-        return res;
-      }
-    } catch (_) {}
-    final fallback = hasPassword;
-    _cachedHasPassword = fallback;
-    _hasPasswordFetched = true;
-    return fallback;
-  }
 
-  /// Set password baru (untuk akun Google yang belum punya password).
-  Future<void> setPassword(String newPassword) async {
-    await _sb.auth.updateUser(UserAttributes(password: newPassword));
-    _cachedHasPassword = true;
-    _hasPasswordFetched = true;
-  }
 
-  /// Ganti password: verifikasi password lama dulu, lalu update.
-  /// Lempar error bila password lama salah.
-  Future<void> changePassword(
-    String currentPassword,
-    String newPassword,
-  ) async {
-    final email = userEmail;
-    if (email == null || email.isEmpty) {
-      throw Exception('No email on account');
-    }
-    await _sb.auth.signInWithPassword(email: email, password: currentPassword);
-    await _sb.auth.updateUser(UserAttributes(password: newPassword));
-  }
 
-  /// Cek apakah nickname sudah dipakai oleh user lain.
-  /// Nickname terlarang dianggap "tidak tersedia" untuk non-admin.
-  Future<bool> isNicknameAvailable(String nickname) async {
-    if (isBannedNickname(nickname) && !AdminGate.isRealAdmin(userEmail)) {
-      return false;
-    }
-    final id = uid;
-    var query = _sb.from('profiles').select('id').eq('nickname', nickname);
-    if (id != null) query = query.neq('id', id);
-    final res = await query.maybeSingle();
-    return res == null; // null = tidak ada yang pakai
-  }
 
-  /// Ambil alih nickname milik akun anon yang tidak aktif > 7 hari
-  /// (dummy yang di-uninstall tidak terhapus di server).
-  Future<bool> claimNickname(String nickname) async {
-    // Nickname terlarang tidak bisa diklaim (kecuali admin).
-    if (isBannedNickname(nickname) && !AdminGate.isRealAdmin(userEmail)) {
-      return false;
-    }
-    final res = await _sb.rpc(
-      'claim_nickname',
-      params: {'p_nickname': nickname},
-    );
-    return res == true;
-  }
 
-  Future<UserModel> registerProfile({
-    required String nickname,
-    required String gender,
-    required int age,
-    required String country,
-    required String city,
-    String ipAddress =
-        '', // disimpan di server saja, tidak disimpan di aplikasi
-  }) async {
-    // Nickname terlarang ditolak sebelum tulis server (kecuali admin).
-    if (isBannedNickname(nickname)) {
-      final user = _sb.auth.currentUser;
-      if (!AdminGate.isRealAdmin(user?.email)) {
-        throw Exception('nickname_banned');
-      }
-    }
-    // Kalau session hilang (misal habis logout Google), buat session
-    // anonymous baru supaya user baru tetap bisa daftar.
-    var user = _sb.auth.currentUser;
-    if (user == null) {
-      dlog('[AUTH] registerProfile: no session, signInAnonymously first');
-      try {
-        final res = await _sb.auth.signInAnonymously();
-        user = res.user;
-      } catch (e) {
-        dlog('[AUTH] registerProfile: signInAnonymously error: $e');
-        throw Exception('registerProfile: no authenticated user');
-      }
-    }
-    if (user == null) throw Exception('registerProfile: no authenticated user');
-    final now = DateTime.now().toUtc();
-    final hasEmail = (user.email ?? '').isNotEmpty;
-    final profile = UserModel(
-      uid: user.id,
-      nickname: nickname,
-      gender: gender,
-      age: age,
-      country: country,
-      city: city,
-      ipAddress: '', // tidak disimpan di model lokal — hanya di server
-      status: 'online',
-      avatar: '',
-      isRegistered: hasEmail,
-      loginAt: now,
-      createdAt: now,
-      lastSeen: now,
-    );
 
-    await _sb.from('profiles').upsert({
-      'id': user.id,
-      'nickname': nickname,
-      'gender': gender,
-      'age': age,
-      'country': country,
-      'city': city,
-      // Email dari sesi auth — wajib tersinkron agar admin panel melihat
-      // email user terdaftar (bug lama: kolom ini tidak pernah diisi).
-      if (hasEmail) 'email': user.email,
-      // IP dicatat di server untuk keperluan keamanan/moderasi,
-      // tidak disimpan di perangkat aplikasi.
-      if (ipAddress.isNotEmpty) 'ip_address': ipAddress,
-      'status': 'online',
-      'avatar': '',
-      'fcm_token': '',
-      'is_registered': hasEmail,
-      'login_at': now.toUtc().toIso8601String(),
-      'created_at': now.toUtc().toIso8601String(),
-      'last_seen': now.toUtc().toIso8601String(),
-    }, onConflict: 'id');
 
-    return profile;
-  }
 
-  Future<UserModel?> getProfile({bool withAvatar = true}) async {
-    final id = uid;
-    if (id == null) return null;
-    // Exclude fcm_token dan ip_address — tidak dibutuhkan di model
-    const cols =
-        'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points,share_location,followers_count,following_count,subscriber_count,subscription_price,friends_count';
-    final res = await _sb
-        .from('profiles')
-        .select(cols)
-        .eq('id', id)
-        .maybeSingle();
-    if (res == null) return null;
-    final model = UserModel.fromMap(id, snakeToCamel(res));
-    if (!withAvatar || model.avatar.isEmpty) return model;
-    // avatar berupa PATH storage → download → isi base64 (UI tetap pakai
-    // base64). Pakai AvatarB64Service yang punya cache per path.
-    if (StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-      final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
-      return model.copyWith(avatar: b64);
-    }
-    return model;
-  }
 
-  /// Ambil profil user lain (untuk halaman info pengguna).
-  Future<UserModel?> getProfileById(String id) async {
-    if (id.isEmpty) return null;
-    const cols =
-        'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points,share_location,followers_count,following_count,subscriber_count,subscription_price,friends_count';
-    final res = await _sb
-        .from('profiles')
-        .select(cols)
-        .eq('id', id)
-        .maybeSingle();
-    if (res == null) return null;
-    final model = UserModel.fromMap(id, snakeToCamel(res));
-    if (model.avatar.isNotEmpty &&
-        StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-      final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
-      return model.copyWith(avatar: b64);
-    }
-    return model;
-  }
 
-  /// Stream realtime profil sendiri — poin, status, email terdaftar, dll.
-  /// Dipakai AuthProvider untuk update badge di seluruh app tanpa reload.
-  Stream<UserModel> onMyProfileUpdates() {
-    final id = uid;
-    if (id == null) return const Stream.empty();
-    final controller = StreamController<UserModel>.broadcast();
 
-    final channel = _sb.channel('my-profile-$id');
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.update,
-      schema: 'public',
-      table: 'profiles',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'id',
-        value: id,
-      ),
-      callback: (payload) async {
-        if (controller.isClosed) return;
-        try {
-          final row = payload.newRecord;
-          var model = UserModel.fromMap(id, snakeToCamel(row));
-          // avatar PATH storage → download → base64 (UI tetap pakai base64).
-          // Pakai cache supaya update profil tidak download avatar berulang.
-          if (model.avatar.isNotEmpty &&
-              StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-            final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
-            model = model.copyWith(avatar: b64);
-          }
-          controller.add(model);
-        } catch (e) {
-          dlog('[AuthService] onMyProfileUpdates ignored: $e');
-        }
-      },
-    );
-    channel.subscribe();
 
-    controller.onCancel = () {
-      _sb.removeChannel(channel);
-    };
-    return controller.stream;
-  }
 
-  Future<void> updateHashtags(List<String> hashtags) async {
-    final id = uid;
-    if (id == null) return;
-    await _sb.from('profiles').update({'hashtags': hashtags}).eq('id', id);
-  }
 
-  Future<void> updateProfile({
-    int? age,
-    String? country,
-    String? city,
-    String? nickname,
-  }) async {
-    final id = uid;
-    if (id == null) return;
-    // Nickname terlarang ditolak sebelum tulis server (kecuali admin).
-    if (nickname != null &&
-        isBannedNickname(nickname) &&
-        !AdminGate.isRealAdmin(userEmail)) {
-      throw Exception('nickname_banned');
-    }
-    final data = <String, dynamic>{
-      if (age != null) 'age': age,
-      if (country != null) 'country': country,
-      if (city != null) 'city': city,
-      if (nickname != null) 'nickname': nickname,
-    };
-    await _sb.from('profiles').update(data).eq('id', id);
-  }
 
-  /// Update IP address di server (keamanan/moderasi).
-  /// IP hanya disimpan di server, tidak disimpan di aplikasi.
-  Future<void> updateIpAddress(String ip) async {
-    final id = uid;
-    if (id == null || ip.isEmpty) return;
-    try {
-      await _sb.from('profiles').update({'ip_address': ip}).eq('id', id);
-    } catch (e) {
-      dlog('[AUTH] updateIpAddress error: $e');
-    }
-  }
 
-  /// Update avatar → server + TULIS KE DISK lokal. Return server path.
-  /// Disk = sumber lokal: buka app berikutnya load dari disk, bukan network.
-  Future<String> updateAvatar(String base64) async {
-    final id = uid;
-    if (id == null) return '';
-    // Validasi base64 adalah JPEG, PNG, atau WebP yang valid
-    if (base64.isNotEmpty && !isValidImageBase64(base64)) {
-      throw Exception('Invalid image format');
-    }
-    // Limit ukuran: max 512KB base64 (~384KB file)
-    if (base64.length > 524288) {
-      throw Exception('Image too large (max 384KB)');
-    }
-    // Upload ke Storage — DB hanya simpan path (hemat ruang).
-    // Path baru diberi timestamp (cache-buster) — hapus file avatar lama
-    // supaya Storage tidak menumpuk file versi lama.
-    final oldAvatar =
-        (await _sb
-                .from('profiles')
-                .select('avatar')
-                .eq('id', id)
-                .maybeSingle())?['avatar']
-            as String? ??
-        '';
-    final path = base64.isEmpty
-        ? ''
-        : await StoragePhotoService.instance.uploadAvatar(
-                uid: id,
-                base64: base64,
-              ) ??
-              '';
-    if (oldAvatar.isNotEmpty &&
-        StoragePhotoService.instance.isAvatarPath(oldAvatar) &&
-        oldAvatar != path) {
-      try {
-        await _sb.storage.from('chat-photos').remove([oldAvatar]);
-      } catch (_) {}
-    }
-    await _sb.from('profiles').update({'avatar': path}).eq('id', id);
-    // TULIS KE DISK — bytes WebP/JPEG asli, load berikutnya dari lokal.
-    if (path.isNotEmpty && base64.isNotEmpty) {
-      try {
-        await MediaDiskCache.instance.write(
-          path,
-          Uint8List.fromList(base64Decode(base64)),
-        );
-      } catch (_) {}
-    }
-    return path;
-  }
 
-  Future<void> removeAvatar() async {
-    final id = uid;
-    if (id == null) return;
-    await _sb.from('profiles').update({'avatar': ''}).eq('id', id);
-  }
 
-  Future<void> updateFcmToken(String? token) async {
-    final id = uid;
-    if (id == null) return;
-    final t = token ?? '';
-    // Satu jalur penulis: RPC update_device_fcm_token sudah menulis ke
-    // user_devices DAN profiles.fcm_token (kompatibilitas klien lama).
-    // Tulis profiles langsung di sini dihapus — duplikat penulis membuat
-    // race saat dua pemanggil (main.dart lazy + AuthProvider) jalan serentak.
-    try {
-      final installId = await DeviceInfoService.instance.installId();
-      await _sb.rpc(
-        'update_device_fcm_token',
-        params: {'p_install_id': installId, 'p_token': t},
-      );
-    } catch (_) {}
-  }
 
-  /// Set status offline saat logout. Pakai timeout pendek — jalur logout
-  /// tidak boleh menunggu jaringan tanpa batas (spinner muter selamanya).
-  /// Best-effort: kalau gagal, server tetap menandai offline lewat idle
-  /// timeout / presence, jadi kegagalan aman.
-  Future<void> goOffline() async {
-    final id = uid;
-    if (id == null) return;
-    try {
-      await _sb
-          .from('profiles')
-          .update({
-            'status': 'offline',
-            'last_seen': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', id)
-          .timeout(const Duration(seconds: 3));
-    } catch (e) {
-      dlog('[AUTH] goOffline error: $e');
-    }
-  }
 
-  /// Admin invisible — status khusus 'invisible' di DB. User lain melihatnya
-  /// offline (via effectiveStatusOf) & tidak muncul di daftar online.
-  Future<void> goInvisible() async {
-    final id = uid;
-    if (id == null) return;
-    try {
-      await _sb
-          .from('profiles')
-          .update({
-            'status': 'invisible',
-            'last_seen': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', id);
-    } catch (e) {
-      dlog('[AUTH] goInvisible error: $e');
-    }
-  }
 
-  Future<void> goIdle() async {
-    final id = uid;
-    if (id == null) return;
-    try {
-      await _sb
-          .from('profiles')
-          .update({
-            'status': 'idle',
-            'last_seen': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', id);
-    } catch (e) {
-      dlog('[AUTH] goIdle error: $e');
-    }
-  }
 
-  Future<void> goOnline() async {
-    final id = uid;
-    if (id == null) return;
-    try {
-      await _sb
-          .from('profiles')
-          .update({
-            'status': 'online',
-            'last_seen': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', id);
-    } catch (e) {
-      dlog('[AUTH] goOnline error: $e');
-    }
-  }
 
-  /// Heartbeat: update last_seen tanpa mengubah status.
-  /// Dipanggil berkala supaya kalau app di-kill, last_seen jadi basi
-  /// dan bisa dideteksi sebagai offline.
-  Future<void> updateLastSeen() async {
-    final id = uid;
-    if (id == null) return;
-    try {
-      await _sb
-          .from('profiles')
-          .update({'last_seen': DateTime.now().toUtc().toIso8601String()})
-          .eq('id', id);
-    } catch (e) {
-      dlog('[AUTH] updateLastSeen error: $e');
-    }
-  }
 
-  /// Download foto galeri dengan DISK FIRST — b64 di-cache disk per path
-  /// (path unik per upload), buka profil berikutnya tanpa network.
-  Future<String> _galleryPhotoB64(String path) async {
-    final disk = await MediaDiskCache.instance.read(path);
-    if (disk != null && disk.isNotEmpty) return base64Encode(disk);
-    final b64 = await StoragePhotoService.instance.download(path) ?? '';
-    if (b64.isNotEmpty) {
-      try {
-        await MediaDiskCache.instance.write(
-          path,
-          Uint8List.fromList(base64Decode(b64)),
-        );
-      } catch (_) {}
-    }
-    return b64;
-  }
 
-  /// Ambil semua foto galeri milik satu user.
-  Future<List<UserPhoto>> getPhotos(String userId) async {
-    if (userId.isEmpty) return [];
-    final rows = await _sb
-        .from('user_photos')
-        .select('id,user_id,photo,created_at')
-        .eq('user_id', userId)
-        .order('created_at', ascending: false);
-    final result = <UserPhoto>[];
-    for (final row in rows) {
-      var photo = row['photo'] as String? ?? '';
-      // photo bisa berupa PATH storage (foto baru) → download → base64.
-      if (photo.isNotEmpty &&
-          StoragePhotoService.instance.isGalleryPath(photo)) {
-        photo = await _galleryPhotoB64(photo);
-      }
-      result.add(
-        UserPhoto.fromMap('${row['id']}', {
-          'userId': row['user_id'],
-          'photo': photo,
-          'createdAt': row['created_at'],
-        }),
-      );
-    }
-    return result;
-  }
 
-  /// Ambil foto galeri user LAIN dengan kontrol akses paywall.
-  /// Index 0 gratis; sisanya terkunci (kirim preview blur) sampai dibuka.
-  /// Foto terbuka: field photo = path/base64 asli. Terkunci: photo = preview.
-  Future<List<UserPhoto>> getPhotosWithAccess(String userId) async {
-    if (userId.isEmpty) return [];
-    final res = await _sb.rpc(
-      'get_user_photos_access',
-      params: {'p_user_id': userId},
-    );
-    final list = res is List ? res : <dynamic>[];
-    final result = <UserPhoto>[];
-    for (final row in list) {
-      final m = Map<String, dynamic>.from(row as Map);
-      final unlocked = m['unlocked'] == true;
-      var photo = m['photo'] as String? ?? '';
-      // Foto terbuka bisa berupa PATH storage → download jadi base64.
-      // Foto terkunci = preview base64 (bukan path) → pakai apa adanya.
-      if (unlocked &&
-          photo.isNotEmpty &&
-          StoragePhotoService.instance.isGalleryPath(photo)) {
-        photo = await _galleryPhotoB64(photo);
-      }
-      result.add(
-        UserPhoto.fromMap('${m['id']}', {
-          'userId': userId,
-          'photo': photo,
-          'unlocked': unlocked,
-          'preview': m['preview'] ?? '',
-          'createdAt': m['created_at'],
-        }),
-      );
-    }
-    return result;
-  }
-
-  /// Upload foto galeri milik sendiri. Max 6 foto per user.
-  Future<void> uploadPhoto(String base64, {String? preview}) async {
-    final id = uid;
-    if (id == null) return;
-    if (base64.isNotEmpty && !isValidImageBase64(base64)) {
-      throw Exception('Invalid image format');
-    }
-    // Limit ukuran: max 1MB base64 (~768KB file)
-    if (base64.length > 1048576) {
-      throw Exception('Photo too large (max 768KB)');
-    }
-    // Batasi jumlah foto per user = 6
-    final rows = await _sb.from('user_photos').select('id').eq('user_id', id);
-    if (rows.length >= 6) {
-      throw Exception('Max 6 photos');
-    }
-    // Upload ke Storage — DB hanya simpan path (hemat ruang).
-    final path =
-        await StoragePhotoService.instance.uploadPhoto(
-          uid: id,
-          base64: base64,
-        ) ??
-        base64;
-    await _sb.from('user_photos').insert({
-      'user_id': id,
-      'photo': path,
-      if (preview != null && preview.isNotEmpty) 'photo_preview': preview,
-    });
-  }
-
-  /// Hapus foto galeri (hanya punya sendiri, RLS menjamin).
-  Future<void> deletePhoto(String photoId) async {
-    if (photoId.isEmpty) return;
-    try {
-      final row = await _sb
-          .from('user_photos')
-          .select('photo')
-          .eq('id', photoId)
-          .maybeSingle();
-      final photo = row?['photo'] as String? ?? '';
-      if (photo.isNotEmpty &&
-          StoragePhotoService.instance.isGalleryPath(photo)) {
-        await StoragePhotoService.instance.delete(photo);
-      }
-    } catch (_) {}
-    await _sb.from('user_photos').delete().eq('id', photoId);
-  }
-
-  /// Hapus akun sendiri (Google Play account deletion requirement).
-  /// RPC server-side: arsip ke deleted_users lalu purge profil + auth user.
-  /// Melempar exception dengan kode server: NOT_AUTHENTICATED,
-  /// ADMIN_DELETE_FORBIDDEN, PROFILE_NOT_FOUND.
-  Future<void> deleteMyAccount() async {
-    await _sb.rpc('delete_my_account');
-  }
-
-  Future<void> signOut() async {
-    // Logout saat sesi dummy = KEMBALI ke admin, bukan menghancurkan sesi
-    // dummy di server (signOut GoTrue akan me-revoke refresh token dummy
-    // sehingga swap berikutnya gagal selamanya).
-    if (_dummySessionActive) {
-      final back = AdminGate.backToAdminImpl;
-      if (back != null) {
-        final ok = await back();
-        if (ok) return;
-      }
-      // Kalau restore admin gagal (token admin mati), lanjut logout normal.
-    }
-    _dummySessionActive = false;
-    _dummyUid = null;
-    // Pembersihan token admin tersimpan ditangani modul admin
-    // (AdminGate.onSignOut) — di build rilis hook ini tidak pernah terisi.
-    try {
-      await AdminGate.onSignOut?.call();
-    } catch (_) {}
-    try {
-      // Teardown total realtime: cegah socket/channel lama nyangkut saat
-      // login ulang di proses yang sama (race disconnect/connect di
-      // realtime_client bisa bikin socket mati permanen).
-      await _sb.realtime.removeAllChannels();
-      await _sb.realtime.disconnect();
-    } catch (e) {
-      dlog('[AuthService] realtime teardown error: $e');
-    }
-    await _sb.auth.signOut();
-  }
 
   // ── State sesi dummy (isi diatur modul admin via setDummyState) ──
   String? _dummyUid;
@@ -1259,11 +354,6 @@ class AuthService {
   /// UID dummy yang sedang aktif (null jika bukan sesi dummy).
   String? get activeDummyUid => _dummyUid;
 
-  /// Update flag sesi dummy. Hanya dipanggil dari mekanisme swap dummy.
-  void markDummyState({required bool active, String? uid}) {
-    _dummySessionActive = active;
-    _dummyUid = active ? uid : null;
-  }
 
   Stream<bool> get authState {
     return _sb.auth.onAuthStateChange.map((data) {
