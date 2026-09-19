@@ -791,6 +791,10 @@ class S {
       : 'A new code was sent to your email.';
   String get errInvalidCode =>
       isId ? 'Kode tidak valid. Coba lagi.' : 'Invalid code. Please try again.';
+  String get errOtpExpired =>
+      isId ? 'Kode sudah kedaluwarsa. Kirim ulang kode.' : 'Code expired. Resend a new one.';
+  String get errOtpUsed =>
+      isId ? 'Kode sudah dipakai. Kirim ulang kode.' : 'Code already used. Resend a new one.';
   String get msgEmailVerified =>
       isId ? 'Email terverifikasi!' : 'Email verified!';
   String get labelEmailVerified =>

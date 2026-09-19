@@ -130,6 +130,19 @@ mixin AuthServiceAuthMx on AuthBase {
     );
     final user = res.user;
     if (user == null) throw Exception('Sign up failed: no user returned');
+    // GoTrue: bila email SUDAH ada tapi belum diverifikasi, signUp ulang
+    // mengembalikan user PALSU dengan `identities` kosong dan TIDAK
+    // mengirim OTP baru. Deteksi & kirim ulang kode verifikasi supaya
+    // pengguna tetap menerima kode (dulu: diam-diam gagal → "kode tidak
+    // valid" walau belum pernah menerima kode).
+    final identities = user.identities;
+    if (identities != null && identities.isEmpty) {
+      try {
+        await resendEmailOtp(email);
+      } catch (e) {
+        dlog('[AUTH] signUp ulang: resend OTP error: $e');
+      }
+    }
     return user.id;
   }
 
@@ -148,7 +161,12 @@ mixin AuthServiceAuthMx on AuthBase {
   }
 
   /// Verifikasi kode OTP 6 digit. Return true bila sukses.
+  /// Pesan error asli GoTrue disimpan di [lastOtpError] supaya UI bisa
+  /// menampilkan sebab sebenarnya (kedaluwarsa / sudah dipakai / salah) —
+  /// dulu ditelan dan UI selalu bilang "kode tidak valid".
+  String? lastOtpError;
   Future<bool> verifyEmailOtp(String email, String token) async {
+    lastOtpError = null;
     try {
       // type harus SAMA dengan yang dipakai resend (OtpType.signup) —
       // kalau beda (mis. 'email'), server menolak kode yang valid.
@@ -159,6 +177,7 @@ mixin AuthServiceAuthMx on AuthBase {
       );
       return true;
     } catch (e) {
+      lastOtpError = e.toString();
       dlog('[AUTH] verifyEmailOtp error: $e');
       return false;
     }
