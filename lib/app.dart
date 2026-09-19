@@ -612,6 +612,12 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // Sinkron profil lintas-device: selama sleep, event realtime profil
       // (ganti avatar dsb.) bisa terlewat → refresh dari server.
       auth.refreshProfile();
+      // Tap notifikasi "panggilan aktif" (foreground service) membuka app
+      // kembali tanpa payload — kalau ada call berjalan & layar call belum
+      // tampil, buka langsung (post-frame agar navigator siap).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ensureCallScreenRoute(navigatorKey.currentState);
+      });
     }
   }
 

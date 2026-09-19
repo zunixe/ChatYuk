@@ -207,6 +207,7 @@ class CallProvider extends ChangeNotifier {
     _activeCallId = callId;
   }
 
+
   /// Bersihkan saat call selesai / screen ditutup.
   void unregisterCall(String callId) {
     if (_activeCallId == callId) _activeCallId = null;
@@ -284,9 +285,15 @@ class CallProvider extends ChangeNotifier {
     _activeChatId = null;
     _activeCallId = null;
     sess.removeListener(_onActiveSession);
-    await CallNotification.cancel();
-    await sess.close();
+    // UI DULU: kosongkan state + notify SEKARANG (overlay/layar call langsung
+    // hilang), baru jalankan cleanup WebRTC/notif di belakang. Dulu notify
+    // di akhir setelah `await sess.close()` (tutup PC + renderer, lambat)
+    // → tombol "Akhiri" terasa lama/hang.
     if (!_disposed) notifyListeners();
+    await CallNotification.cancel();
+    try {
+      await sess.close();
+    } catch (_) {}
   }
 
   @override

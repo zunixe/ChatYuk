@@ -24,6 +24,7 @@ import 'providers/call_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/nav_provider.dart';
 import 'screens/incoming_call_screen.dart';
+import 'screens/call_screen.dart';
 import 'screens/private_chat_screen.dart';
 import 'screens/room_chat_screen.dart';
 import 'config/env.dart';
@@ -1060,6 +1061,33 @@ Future<bool> _waitForSession({
   return false;
 }
 
+/// Buka layar CallScreen fullscreen bila ada sesi call aktif & belum
+/// terbuka. Dipakai: (a) tap notifikasi "panggilan aktif" (foreground
+/// service tanpa payload), (b) app kembali ke foreground saat call jalan.
+/// Return true bila layar call aktif/dipaksa tampil.
+bool ensureCallScreenRoute(NavigatorState? navIn) {
+  if (navIn == null) return false;
+  final nav = navIn;
+  final sess = CallProvider.instance.activeSession;
+  if (sess == null) return false;
+  if (routeTracker.contains(kCallScreenRoute)) return true;
+  nav.push(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      settings: const RouteSettings(name: kCallScreenRoute),
+      builder: (_) => CallScreen(
+        callId: sess.callId,
+        remoteUid: sess.remoteUid,
+        remoteName: sess.remoteName,
+        callType: sess.callType,
+        isCaller: sess.isCaller,
+        session: sess,
+      ),
+    ),
+  );
+  return true;
+}
+
 void _openFromData(Map<String, dynamic> data) {
   final nav = navigatorKey.currentState;
   if (nav == null || data.isEmpty) return;
@@ -1081,16 +1109,16 @@ void _openFromData(Map<String, dynamic> data) {
     }
     return;
   }
-  // Panggilan aktif (tap notifikasi ongoing) → kembali ke chat yang sedang call.
+  // Panggilan aktif (tap notifikasi ongoing / buka app) → LAYAR call.
   if (data['type'] == 'active_call') {
+    if (ensureCallScreenRoute(navigatorKey.currentState)) return;
+    // Tidak ada sesi aktif (sudah berakhir) → fallback buka chat.
     final chatId = data['chatId'] ?? '';
     final otherUid = data['otherUid'] ?? '';
     final otherName = data['otherName'] ?? s.unknownUser;
     if (chatId.isNotEmpty) {
       final target = privateChatRoute(chatId);
       if (routeTracker.contains(target)) {
-        // Chat sudah terbuka di stack → cukup angkat ke depan, jangan buat
-        // instance duplikat (list kosong & kirim gagal RLS).
         nav.popUntil((r) => r.isFirst || r.settings.name == target);
       } else {
         nav.pushAndRemoveUntil(
