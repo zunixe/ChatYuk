@@ -1407,9 +1407,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
             PopupMenuButton(
               padding: EdgeInsets.zero,
               iconSize: 22,
-              // Rapatkan ke kanan: kurangi area sentuh bawaan PopupMenuButton
-              // (default ~48px) supaya jarak ke ikon more_vert tidak lebar.
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              // Rapat ke kanan: perkecil kotak tap IconButton bawaan (48dp)
+              // supaya ikon call dekat ke titik-3. `constraints` BUKAN untuk
+              // ini — field itu mengatur ukuran menu popup, bukan tombol.
+              style: IconButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(32, 44),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               icon: Icon(Icons.call, color: Colors.white, size: 22),
               color: AppTheme.bgCard,
               tooltip: s.callAudio,
@@ -1440,6 +1445,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           PopupMenuButton(
             padding: EdgeInsets.zero,
             iconSize: 24,
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(32, 44),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
             icon: Icon(Icons.more_vert, color: Colors.white),
             color: AppTheme.bgCard,
             shape: RoundedRectangleBorder(
