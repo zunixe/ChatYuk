@@ -20,7 +20,10 @@ import 'admin_devices_tab.dart';
 import 'admin_deleted_tab.dart';
 import 'admin_dummy_tab.dart';
 import 'admin_global_setting_tab.dart';
-import 'admin_panel/widgets/admin_panel_widgets.dart';
+import 'admin_panel/widgets/usermap_card.dart';
+import 'admin_panel/widgets/storageusage_card.dart';
+import 'admin_panel/widgets/registrationschart_card.dart';
+import 'admin_panel/widgets/avatar_circle.dart';
 import '../providers/theme_provider.dart';
 import '../main.dart' show localNotifications;
 

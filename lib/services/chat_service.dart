@@ -21,6 +21,7 @@ export 'chat_stream_session.dart';
 
 
 part 'chat_service_private.dart';
+part 'chat_service_private_chatlist.dart';
 part 'chat_service_room.dart';
 part 'chat_service_typing.dart';
 part 'chat_service_presence.dart';
@@ -119,9 +120,27 @@ abstract class ChatBase {
       prefetchVoiceBytes: ChatService.prefetchVoiceBytes,
     ).start();
   }
+  Future<void> unhideChat(String myUid, String chatId) async {
+    final row = await _sb
+        .from('private_chats')
+        .select('hidden_by')
+        .eq('chat_id', chatId)
+        .maybeSingle();
+    if (row == null) return;
+    final hidden = List<String>.from(
+      (row['hidden_by'] as List<dynamic>?) ?? [],
+    );
+    if (hidden.remove(myUid)) {
+      await _sb
+          .from('private_chats')
+          .update({'hidden_by': hidden})
+          .eq('chat_id', chatId);
+    }
+  }
+
 }
 
-class ChatService extends ChatBase with ChatServicePrivateMx, ChatServiceRoomMx, ChatServiceTypingMx, ChatServicePresenceMx, ChatServiceGiftMx {
+class ChatService extends ChatBase with ChatServicePrivateMx, ChatServicePrivateChatListMx, ChatServiceRoomMx, ChatServiceTypingMx, ChatServicePresenceMx, ChatServiceGiftMx {
   static final Map<String, String> _avatarCache = {};
   static const _avatarCacheMax = 100;
   @visibleForTesting
