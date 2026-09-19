@@ -28,7 +28,6 @@ import '../core/admin_gate.dart';
 import '../models/story_model.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
-import '../services/chat_service.dart';
 import '../utils/bounded_cache.dart';
 import '../models/message_model.dart';
 import 'private_chat_screen.dart';
@@ -929,7 +928,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final ids = [myUid, user.uid]..sort();
     final chatId = '${ids[0]}_${ids[1]}';
     // Prefetch pesan ke memori sebelum push → buka chat instant.
-    ChatService().prefetchPrivateChat(chatId);
+    context.read<ChatProvider>().prefetchPrivateChat(chatId);
     if (!context.mounted) return;
     Navigator.push(
       context,

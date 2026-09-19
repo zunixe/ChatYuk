@@ -13,7 +13,7 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/story_provider.dart';
-import '../services/storage_photo_service.dart';
+import '../providers/storage_provider.dart';
 import '../widgets/story_text_overlay.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -233,7 +233,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
           ? await _renderTransformed(_bytes!)
           : _bytes!;
       final b64 = await compute(_processStoryImage, transformed);
-      final path = await StoragePhotoService.instance
+      final path = await context.read<StorageProvider>()
           .uploadStoryImage(uid: uid, base64: b64);
       if (path == null || path.isEmpty) throw Exception('upload_failed');
       final ok = await context.read<StoryProvider>().publish(

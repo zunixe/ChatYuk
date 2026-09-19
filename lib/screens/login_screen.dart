@@ -8,7 +8,6 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
-import '../services/auth_service.dart';
 import 'register_screen.dart';
 import '../providers/theme_provider.dart';
 

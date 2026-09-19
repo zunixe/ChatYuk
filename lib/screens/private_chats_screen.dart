@@ -9,7 +9,6 @@ import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/social_provider.dart';
 import '../models/user_model.dart';
-import '../services/chat_service.dart';
 import '../utils.dart';
 import '../widgets/profile_avatar.dart';
 import 'private_chat_screen.dart';
@@ -322,7 +321,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   /// yang paling mungkin ditekan user pertama kali.
   void _warmTopChats(List<PrivateChatInfo> chats) {
     if (chats.isEmpty) return;
-    final svc = ChatService();
+    final svc = context.read<ChatProvider>();
     for (final c in chats.take(2)) {
       svc.prefetchPrivateChat(c.chatId);
     }
@@ -710,7 +709,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                             onTap: _selectionMode ? () => _toggleSelect(chat.chatId) : () {
                               // Prefetch pesan ke memori sebelum push →
                               // buka chat instant (tanpa loading pesan).
-                              ChatService().prefetchPrivateChat(chat.chatId);
+                              context.read<ChatProvider>().prefetchPrivateChat(chat.chatId);
                               Navigator.push(
                               context,
                               PageRouteBuilder(

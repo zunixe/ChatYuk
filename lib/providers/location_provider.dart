@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 import '../services/geo_service.dart';
+export '../services/geo_service.dart' show GeoInfo, GeoService;
 import '../services/location_service.dart';
+export '../services/location_service.dart' show LocationService;
 
 /// Provider lokasi + geolokasi (IP/GPS) — screen tidak import `services/`.
 class LocationProvider extends ChangeNotifier {

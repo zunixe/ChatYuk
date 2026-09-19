@@ -23,7 +23,6 @@ import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/timeline_provider.dart';
-import '../services/auth_service.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
 import 'notification_settings_screen.dart';
@@ -98,7 +97,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loggingOut = false;
   bool _deletingAccount = false;
 
-  final AuthService _authService = AuthService();
+  
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
 
@@ -194,7 +193,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final uid = context.read<AuthProvider>().uid;
     if (uid == null) return;
     try {
-      final photos = await _authService.getPhotos(uid);
+      final photos = await context.read<AuthProvider>().getPhotos(uid);
       if (mounted) setState(() => _photos = photos);
     } catch (_) {}
     if (mounted) setState(() => _loadingPhotos = false);
@@ -279,7 +278,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final slotIndex = _photos.length;
     setState(() => _uploading = true);
     try {
-      await _authService.uploadPhoto(
+      await context.read<AuthProvider>().uploadPhoto(
         processed['full']!,
         preview: processed['preview'],
       );
@@ -331,7 +330,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (ok != true || !mounted) return;
     try {
-      await _authService.deletePhoto(photo.id);
+      await context.read<AuthProvider>().deletePhoto(photo.id);
       // Hapus item saja dari list lokal (tanpa reload penuh getPhotos yang
       // me-download ulang semua foto). Grid max 6 item — murah.
       if (mounted) {
@@ -2466,7 +2465,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (auth.isAnonymous) {
         await context.read<SocialProvider>().clearAnonSocial();
       }
-      await _authService.deleteMyAccount();
+      await context.read<AuthProvider>().deleteMyAccount();
       await auth.signOut();
       chat.reset();
       if (mounted) {

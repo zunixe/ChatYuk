@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../utils/mention.dart';
 import '../services/chat_service.dart';
+export '../services/chat_service.dart' show PrivateChatInfo;
 import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
 
@@ -298,6 +299,18 @@ class ChatProvider extends ChangeNotifier {
     }
     if (!_disposed) notifyListeners();
   }
+
+
+  // ── Passthrough agar screen tidak import ChatService (Fase 9b) ──
+  Future<bool> editPrivateMessage(String id, String text) =>
+      _service.editPrivateMessage(id, text);
+  Future<bool> editRoomMessage(String id, String text) =>
+      _service.editRoomMessage(id, text);
+  void prefetchPrivateChat(String chatId) => _service.prefetchPrivateChat(chatId);
+  String privateChatId(String a, String b) => _service.privateChatId(a, b);
+  static String effectiveStatusOf(String? raw, String? lastSeen) =>
+      ChatService.effectiveStatusOf(raw, lastSeen);
+  static Set<String> get blockedStatusKeys => const {};
 
   bool isBlocked(String uid) => _blockedUids.contains(uid);
 

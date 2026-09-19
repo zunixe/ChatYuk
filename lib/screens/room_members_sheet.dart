@@ -7,7 +7,6 @@ import '../config/strings_admin.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../services/chat_service.dart';
 import '../services/room_service.dart';
 import '../services/private_room_service.dart';
 

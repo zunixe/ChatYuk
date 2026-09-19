@@ -8,7 +8,7 @@ import '../config/theme.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../providers/locale_provider.dart';
-import '../services/storage_photo_service.dart';
+import '../providers/storage_provider.dart';
 import '../widgets/post_photo_viewer.dart';
 
 /// Galeri media grup ala WA: grid foto dari pesan room + viewer.
@@ -61,7 +61,7 @@ class _GroupMediaScreenState extends State<GroupMediaScreen> {
           (i + concurrency) > paths.length ? paths.length : i + concurrency,
         );
         final results = await Future.wait(
-          batch.map((p) => StoragePhotoService.instance
+          batch.map((p) => context.read<StorageProvider>()
               .downloadThumbBytes(p)
               .then((b) => MapEntry(p, b))),
         );

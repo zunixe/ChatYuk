@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../providers/social_provider.dart';
-import '../services/social_service.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/theme_provider.dart';
 
@@ -15,7 +14,7 @@ class FriendRequestsScreen extends StatefulWidget {
 }
 
 class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
-  final SocialService _service = SocialService();
+  SocialProvider get _service => context.read<SocialProvider>();
   bool _loading = true;
   List<Map<String, dynamic>> _inbox = [];
   List<Map<String, dynamic>> _outbox = [];

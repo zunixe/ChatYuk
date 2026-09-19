@@ -219,6 +219,26 @@ class SocialProvider extends ChangeNotifier {
     }
   }
 
+
+  /// Status sosial (follow/friend/pending) terhadap [uid].
+
+  // ── Passthrough (Fase 9b) ──
+  String? get uid => _service.uid;
+  Future<Map<String, dynamic>> mySocialStatus(String otherUid) =>
+      _service.mySocialStatus(otherUid);
+  Future<List<Map<String, dynamic>>> socialList(String kind, String uid) =>
+      _service.socialList(kind, uid);
+  Future<Map<String, dynamic>> unsubscribeCreator(String uid) =>
+      _service.unsubscribeCreator(uid);
+  Future<Map<String, dynamic>> respondFriendRequest(int id, bool accept) =>
+      _service.respondFriendRequest(id, accept);
+  Future<List<Map<String, dynamic>>> friendRequestInbox({int limit = 50, int offset = 0}) =>
+      _service.friendRequestInbox(limit: limit, offset: offset);
+  Future<List<Map<String, dynamic>>> friendRequestOutbox({int limit = 50, int offset = 0}) =>
+      _service.friendRequestOutbox(limit: limit, offset: offset);
+  Future<List<Map<String, dynamic>>> mySubscriptions() =>
+      _service.mySubscriptions();
+
   Future<bool> follow(String targetUid) async {
     try {
       final res = await _service.followUser(targetUid);

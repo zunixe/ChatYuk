@@ -11,7 +11,6 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 
-import '../services/location_service.dart';
 import '../utils/bounded_cache.dart';
 import 'private_chat_screen.dart';
 import '../providers/theme_provider.dart';

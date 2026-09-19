@@ -9,7 +9,6 @@ import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
-import '../services/chat_service.dart';
 import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
@@ -143,7 +142,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         );
       } catch (_) {}
       if (chatId.isEmpty) {
-        chatId = ChatService().privateChatId(auth0.uid!, widget.callerUid);
+        chatId = context.read<ChatProvider>().privateChatId(auth0.uid!, widget.callerUid);
       }
       if (!mounted) {
         _busy = false;
