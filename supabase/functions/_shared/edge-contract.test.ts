@@ -23,6 +23,13 @@ Deno.test('send-push: tipe sosial bilingual tetap data-only', () => {
   }
 });
 
+Deno.test('send-push: mention data-only (notif terarah room/grup)', () => {
+  assert(
+    ([...SEND_PUSH_DATA_ONLY_TYPES] as string[]).includes('mention'),
+    'mention harus data-only — tanpa ini notif mention dobel (FCM + Flutter)',
+  );
+});
+
 Deno.test('fanout: topic terdokumentasi', () => {
   assertEquals(fanoutTopic('online', 'abc'), 'online-abc');
   assertEquals(fanoutTopic('timeline', 'x'), 'timeline-all');

@@ -15,6 +15,7 @@ export const SEND_PUSH_DATA_ONLY_TYPES = [
   'call_canceled',
   'message',
   'broadcast',
+  'mention',
 ] as const;
 
 /// Tipe fanout yang didukung + pola topic. Cermin fanout/index.ts.
