@@ -160,6 +160,39 @@ class CallProvider extends ChangeNotifier {
   Future<void> notifStopLive() => CallNotification.stopLive();
   Future<void> notifCancel() => CallNotification.cancel();
 
+  // ── Notif "panggilan aktif" (foreground service) ──
+  // Metadata disimpan di provider supaya bisa DIPASANG ULANG saat app
+  // dibuka kembali. Notif foreground service bisa hilang saat app keluar
+  // (di-swipe) atau service di-restart OS — dulu tidak ada yang memasang
+  // ulang sehingga tap-untuk-kembali-ke-panggilan lenyap padahal call masih
+  // hidup.
+  String? _notifBody;
+  String? _notifChannel;
+  String? _notifDesc;
+
+  /// Pasang ulang notif panggilan aktif bila sesi masih hidup tapi notif
+  /// hilang (mis. setelah app dibuka kembali dari recents). Idempoten:
+  /// kalau service masih jalan hanya memperbarui notif; kalau mati → start.
+  ///
+  /// Best-effort: kegagalan notif tidak boleh mengganggu alur panggilan.
+  Future<void> ensureActiveNotif() async {
+    if (_activeSession == null) return;
+    final body = _notifBody;
+    if (body == null) return;
+    try {
+      await CallNotification.ensureActive(
+        body: body,
+        channelName: _notifChannel ?? body,
+        channelDesc: _notifDesc ?? body,
+        chatId: _activeChatId ?? '',
+        otherUid: _activeSession!.remoteUid,
+        otherName: _activeSession!.remoteName,
+      );
+    } catch (e) {
+      dlog('[CallProvider] ensureActiveNotif error: $e');
+    }
+  }
+
   void setMode(CallMode mode) {
     if (_activeMode == mode) return;
     _activeMode = mode;
@@ -393,6 +426,9 @@ class CallProvider extends ChangeNotifier {
     _activeMode = mode;
     _activeChatId = chatId;
     _activeCallId = callId;
+    _notifBody = notifBody;
+    _notifChannel = notifChannel;
+    _notifDesc = notifDesc;
     session.addListener(_onActiveSession);
     unawaited(session.init());
     // UI sistem: pindah dari "ringing" ke "in-call" (durasi/tombol end).
@@ -431,6 +467,9 @@ class CallProvider extends ChangeNotifier {
     _activeMode = null;
     _activeChatId = null;
     _activeCallId = null;
+    _notifBody = null;
+    _notifChannel = null;
+    _notifDesc = null;
     sess.removeListener(_onActiveSession);
     // UI DULU: kosongkan state + notify SEKARANG (overlay/layar call langsung
     // hilang), baru jalankan cleanup WebRTC/notif di belakang. Dulu notify

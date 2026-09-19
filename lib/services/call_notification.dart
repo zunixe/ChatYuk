@@ -34,7 +34,44 @@ class CallNotification {
     required String otherUid,
     required String otherName,
   }) async {
+    // Idempoten: start bila mati, update bila sudah jalan — mencegah
+    // service di-restart (yang menghapus lalu memasang ulang notif).
+    await ensureActive(
+      body: body,
+      channelName: channelName,
+      channelDesc: channelDesc,
+      chatId: chatId,
+      otherUid: otherUid,
+      otherName: otherName,
+    );
+  }
+
+  /// Pastikan notif "panggilan aktif" ADA, tanpa memulai ulang service yang
+  /// sudah berjalan. Dipakai saat app dibuka kembali: kalau service masih
+  /// hidup → cukup perbarui teksnya; kalau sudah mati (OS membunuh saat app
+  /// keluar / di-swipe) → start lagi supaya tap-untuk-kembali-ke-panggilan
+  /// tidak hilang padahal panggilan masih berjalan.
+  static Future<void> ensureActive({
+    required String body,
+    required String channelName,
+    required String channelDesc,
+    required String chatId,
+    required String otherUid,
+    required String otherName,
+  }) async {
     await _ensureInit();
+    try {
+      final running = await FlutterForegroundTask.isRunningService;
+      if (running == true) {
+        await FlutterForegroundTask.updateService(
+          notificationTitle: 'ChatYuk',
+          notificationText: body,
+        );
+        return;
+      }
+    } catch (_) {
+      // isRunningService bisa gagal di beberapa ROM — lanjut start.
+    }
     await FlutterForegroundTask.startService(
       notificationTitle: 'ChatYuk',
       notificationText: body,

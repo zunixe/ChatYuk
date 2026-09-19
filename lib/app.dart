@@ -616,8 +616,13 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // kembali tanpa payload — kalau ada call berjalan & layar call belum
       // tampil, buka langsung (post-frame agar navigator siap).
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) ensureCallScreenRoute(navigatorKey.currentState);
+        if (!mounted) return;
+        ensureCallScreenRoute(navigatorKey.currentState);
       });
+      // Pasang ULANG notif "panggilan aktif" bila sesi masih hidup tapi
+      // notifnya hilang (app di-swipe/OS restart service saat keluar) —
+      // tanpa ini tap-untuk-kembali-ke-panggilan lenyap padahal call jalan.
+      unawaited(CallProvider.instance.ensureActiveNotif());
     }
   }
 
