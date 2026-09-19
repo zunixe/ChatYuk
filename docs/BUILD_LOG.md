@@ -20,6 +20,7 @@ Format: tanggal | branch | flavor | isi | hasil install.
 | 2026-09-18 18:35 | develop | adminProd | Story perf: notifier thumbnail galeri, RepaintBoundary, bulk markSeen, viewer lifecycle, composer 1-hop; index story_views + RPC mark_story_seen_bulk | Success (stream install 192.168.18.33:33121) |
 | 2026-09-19 05:26 | develop | adminProd | Header private chat: umur/gender fallback profil live (fix hilang-timbul) + verified pakai efektif; dot status samakan list (4CAF50/FFC107/9E9E9E, border putih 1.5); ai-reply diagram prompt fix (TERPISAH, deploy aktif) | Success (push 192.168.18.33:33121) |
 | 2026-09-19 06:41 | develop | playProd | Meta App Events: facebook_app_events 0.30.5 + manifest meta-data + MetaAnalytics.init (App ID 4699753480345190); FULL clean (plugin native baru); keystore v2 verified | Success (push chatyuk_play.apk 192.168.18.33:33121) + stream install 192.168.18.240:38199 |
+| 2026-09-19 11:20 | develop | adminProd | Fase 2 modular chat: ChatOutboxMixin/ChatSelectionMixin/VoiceRecorderMixin/chat_photo_helper/ChatComposerInput (buang duplikasi private↔room) | Success (stream install 192.168.18.240:38199 + push 192.168.18.33:33121) |
 
 ## Catatan penting: build probe & the underlying provider Sign-In
 
