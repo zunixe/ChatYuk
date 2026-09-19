@@ -9,6 +9,7 @@ import '../providers/locale_provider.dart';
 import '../screens/private_chat_screen.dart';
 import '../screens/call_screen.dart';
 import '../services/call_service.dart';
+import '../utils.dart';
 
 class CallBanner extends StatefulWidget {
   const CallBanner({super.key});
@@ -21,10 +22,17 @@ class _CallBannerState extends State<CallBanner> {
   Timer? _ticker;
   String _dur = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  /// Timer 1 dtk hanya hidup saat banner BENAR-BENAR tampil. Dulu selalu
+  /// menyala sejak initState (boros wakeup saat tak ada call / banner
+  /// tersembunyi).
+  void _syncTicker(bool show) {
+    if (show) {
+      _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    } else {
+      _ticker?.cancel();
+      _ticker = null;
+      if (_dur.isNotEmpty) _dur = '';
+    }
   }
 
   @override
@@ -36,14 +44,12 @@ class _CallBannerState extends State<CallBanner> {
   void _tick() {
     final sess = CallProvider.instance.activeSession;
     if (sess == null || sess.connectedAt == null) {
-      if (_dur.isNotEmpty) setState(() => _dur = '');
+      if (_dur.isNotEmpty && mounted) setState(() => _dur = '');
       return;
     }
     final sec = DateTime.now().difference(sess.connectedAt!).inSeconds;
-    final m = (sec ~/ 60).toString().padLeft(2, '0');
-    final s = (sec % 60).toString().padLeft(2, '0');
-    final t = '$m:$s';
-    if (t != _dur) setState(() => _dur = t);
+    final t = formatMmSs(sec);
+    if (t != _dur && mounted) setState(() => _dur = t);
   }
 
   bool _shouldShow(
@@ -119,6 +125,7 @@ class _CallBannerState extends State<CallBanner> {
       valueListenable: activeChatId,
       builder: (_, curChatId, __) {
         final show = _shouldShow(sess, mode, chatId, curChatId);
+        _syncTicker(show);
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 220),
           transitionBuilder: (c, a) => SlideTransition(

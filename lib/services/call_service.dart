@@ -5,6 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/call_config.dart';
 import '../config/supabase_config.dart';
+import 'perf_probe.dart';
 
 /// Fase panggilan.
 enum CallPhase { connecting, ringing, inCall, ended, error }
@@ -336,6 +337,9 @@ class CallSession extends ChangeNotifier {
   bool _remoteCameraOn = true;
   bool _speakerOn = true;
   DateTime? _connectedAt;
+  // Instrumentasi (PERF_PROBE): tonggak waktu untuk metrik connect.
+  DateTime? _initStartedAt;
+  DateTime? _offerSentAt;
 
   CallPhase get phase => _phase;
   CallEndReason get endReason => _endReason;
@@ -369,6 +373,7 @@ class CallSession extends ChangeNotifier {
       );
       return;
     }
+    _initStartedAt = DateTime.now();
     await localRenderer.initialize();
     await remoteRenderer.initialize();
 
@@ -399,7 +404,7 @@ class CallSession extends ChangeNotifier {
       }
     });
 
-    await _setupMediaAndPeer();
+    await PerfProbe.timed('call.setupMedia', _setupMediaAndPeer);
 
     // Callee: cek status terakhir — caller bisa sudah membatalkan sebelum
     // kita subscribe status (Realtime tidak replay event lama).
@@ -501,6 +506,7 @@ class CallSession extends ChangeNotifier {
           if (!_closed && _phase != CallPhase.inCall) {
             _phase = CallPhase.inCall;
             _connectedAt = DateTime.now();
+            _recordConnected('pcState');
             notifyListeners();
           }
         }
@@ -565,6 +571,7 @@ class CallSession extends ChangeNotifier {
             dlog('[ICE] iceConnected -> SET inCall');
             _phase = CallPhase.inCall;
             _connectedAt = _connectedAt ?? DateTime.now();
+            _recordConnected('iceState');
             notifyListeners();
           }
         }
@@ -604,6 +611,7 @@ class CallSession extends ChangeNotifier {
   Future<void> _createOffer() async {
     if (_closed || _pc == null || _offered) return;
     _offered = true;
+    _offerSentAt = DateTime.now();
     try {
       final offer = await _pc!.createOffer();
       await _pc!.setLocalDescription(offer);
@@ -615,6 +623,24 @@ class CallSession extends ChangeNotifier {
     } catch (e) {
       dlog('[CallSession] createOffer failed: $e');
     }
+  }
+
+  /// Catat metrik connect (sekali per sesi): init→connected dan offer→connected.
+  /// Dipakai `PerfProbe.report` untuk membandingkan sebelum/sesudah optimasi.
+  bool _connectedRecorded = false;
+  void _recordConnected(String source) {
+    if (_connectedRecorded) return;
+    _connectedRecorded = true;
+    final now = DateTime.now();
+    final start = _initStartedAt;
+    if (start != null) {
+      PerfProbe.record('call.initToConnected', now.difference(start));
+    }
+    final offerAt = _offerSentAt;
+    if (offerAt != null) {
+      PerfProbe.record('call.offerToConnected', now.difference(offerAt));
+    }
+    dlog('[PERF] call connected via $source');
   }
 
   Future<void> _onSignal(Map<String, dynamic> msg) async {
@@ -792,6 +818,7 @@ class CallSession extends ChangeNotifier {
       _watchPendingCands.remove(watcher);
       final pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _watchPcs[watcher] = pc;
+      PerfProbe.buildCount('call.watchPc');
       pc.onIceCandidate = (c) {
         _service.sendSignal(
           callId,
@@ -948,6 +975,7 @@ class CallSession extends ChangeNotifier {
       dlog('[ICE] sync safety-net -> SET inCall');
       _phase = CallPhase.inCall;
       _connectedAt = _connectedAt ?? DateTime.now();
+      _recordConnected('syncSafetyNet');
       notifyListeners();
     }
     try {

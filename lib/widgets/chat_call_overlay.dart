@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
+import '../services/perf_probe.dart';
 import 'profile_avatar.dart';
 import '../utils.dart';
 
@@ -99,6 +101,7 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('CallOverlay');
     final s = context.watch<LocaleProvider>().s;
     final sess = widget.session;
     final isVideo = sess.callType == 'video';
@@ -150,12 +153,14 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
     final showRemote = inCall && isVideo && sess.hasRemoteVideo;
     final effSwap = _swapped && showLocal && showRemote;
 
-    dlog(
-      '[OVERLAY] sess#${sess.hashCode} phase=${sess.phase} call=${sess.callType} cam=${sess.cameraOn} '
-      'showLocal=$showLocal showRemote=$inCall&&$isVideo&&${sess.hasRemoteVideo} '
-      'localSrc=${sess.localRenderer.srcObject != null} '
-      'remoteSrc=${sess.remoteRenderer.srcObject != null}',
-    );
+    if (kDebugMode) {
+      dlog(
+        '[OVERLAY] sess#${sess.hashCode} phase=${sess.phase} call=${sess.callType} cam=${sess.cameraOn} '
+        'showLocal=$showLocal showRemote=$inCall&&$isVideo&&${sess.hasRemoteVideo} '
+        'localSrc=${sess.localRenderer.srcObject != null} '
+        'remoteSrc=${sess.remoteRenderer.srcObject != null}',
+      );
+    }
 
     // SizedBox.expand memastikan Stack mendapat tight constraints dari parent
     // (Positioned top/left/right/bottom=0), mencegah RenderStack NEEDS-PAINT.
@@ -321,7 +326,13 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   }
 
   Widget _controls(S s, CallSession sess, bool isVideo) {
+    // crossAxisAlignment.start: tombol End call punya label (jadi lebih
+    // tinggi), tombol lain tidak. Dengan `center` (default), lingkaran
+    // tombol tanpa label turun ~8px sehingga terlihat tidak rata di
+    // layar density tinggi (Xiaomi 520dpi). Top-align → semua lingkaran
+    // berada di baris yang sama.
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         _CallControlButton(
