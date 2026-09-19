@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/location_provider.dart';
+import '../providers/device_info_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
@@ -7,9 +9,6 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
 import '../services/auth_service.dart';
-import '../services/geo_service.dart';
-import '../services/location_service.dart';
-import '../services/device_info_service.dart';
 import 'register_screen.dart';
 import '../providers/theme_provider.dart';
 
@@ -289,7 +288,7 @@ class _LoginScreenState extends State<LoginScreen> {
   // (misal default Afghanistan saat daftar, dikoreksi ke lokasi asli).
   Future<void> _recordIpToServer() async {
     try {
-      final geo = GeoService();
+      final geo = context.read<LocationProvider>().geo;
       final info = await geo.detect();
       if (info != null && info.ipAddress.isNotEmpty && mounted) {
         final auth = context.read<AuthProvider>();
@@ -304,12 +303,12 @@ class _LoginScreenState extends State<LoginScreen> {
       // Perbarui koordinat (minta izin GPS sekali kalau belum pernah;
       // ditolak → perkiraan IP). Jalan INDEPENDEN dari deteksi IP —
       // GPS jangan sampai terlewat gara-gara provider IP lagi down.
-      final loc = LocationService();
+      final loc = context.read<LocationProvider>().location;
       await loc.requestPermission();
       await loc.updateMyLocation();
       // Catat identitas perangkat (brand/model/OS) + install ID ke server
       // untuk pelacakan admin — pakai IP yang barusan terdeteksi.
-      await DeviceInfoService.instance
+      await context.read<DeviceInfoProvider>()
           .syncToServer(ipAddress: info?.ipAddress ?? '');
     } catch (_) {
       // gagal — abaikan, jangan ganggu alur login

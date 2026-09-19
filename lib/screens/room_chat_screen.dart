@@ -5,6 +5,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:provider/provider.dart';
+import '../providers/message_reaction_provider.dart';
+import '../providers/notification_prefs_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -13,12 +15,12 @@ import '../models/room_model.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../services/chat_service.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../services/storage_photo_service.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/room_service.dart';
 import '../utils.dart';
@@ -28,7 +30,6 @@ import '../services/room_broadcast_service.dart';
 import 'room_members_sheet.dart';
 import 'group_info_screen.dart';
 import 'group_media_screen.dart';
-import '../services/notification_prefs_service.dart';
 import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
@@ -46,7 +47,6 @@ import '../providers/theme_provider.dart';
 import '../services/call_notification.dart';
 import 'package:flutter/services.dart';
 import '../widgets/message_reaction_bar.dart';
-import '../services/message_reaction_service.dart';
 import '../mixins/chat_selection_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../mixins/chat_photo_send_mixin.dart';
@@ -378,19 +378,19 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Cache dulu (tampil instan), stream menimpa sesudahnya.
-      MessageReactionService.instance.loadCachedReactions(widget.room.id).then((
+      context.read<MessageReactionProvider>().loadCachedReactions(widget.room.id).then((
         cached,
       ) {
         if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
         setState(() => reactions = cached);
       });
-      _reactionsSub = MessageReactionService.instance
+      _reactionsSub = context.read<MessageReactionProvider>()
           .watchReactions(widget.room.id)
           .listen((m) {
         if (mounted) setState(() => reactions = m);
-        MessageReactionService.instance.saveCachedReactions(widget.room.id, m);
+        context.read<MessageReactionProvider>().saveCachedReactions(widget.room.id, m);
       });
-      _starredSub = MessageReactionService.instance
+      _starredSub = context.read<MessageReactionProvider>()
           .watchStarred(widget.room.id)
           .listen((m) {
         if (mounted) setState(() => starredIds = m);
@@ -451,7 +451,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       await _refreshLiveUid();
       try {
-        _muted = await NotificationPrefsService.isChatMuted(widget.room.id);
+        _muted = await context.read<NotificationPrefsProvider>().isChatMuted(widget.room.id);
       } catch (_) {}
       try {
         final granted = await PrivateRoomService.instance.myBroadcastGranted(widget.room.id);
@@ -1354,7 +1354,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         await queueVoiceOffline(bytes, f);
         return;
       }
-      final storagePath = await StoragePhotoService.instance.uploadVoice(
+      final storagePath = await context.read<StorageProvider>().uploadVoice(
         chatId: 'room_${widget.room.id}',
         bytes: bytes,
       );

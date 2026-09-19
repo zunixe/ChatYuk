@@ -7,10 +7,10 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../models/story_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/story_provider.dart';
-import '../services/storage_photo_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../utils.dart';
 import '../widgets/story_text_overlay.dart';
@@ -217,7 +217,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       // Disk dulu (repeat view instan) — baru network + simpan disk.
       var b = MediaDiskCache.instance.readSync(path);
       b ??= await MediaDiskCache.instance.read(path);
-      b ??= await StoragePhotoService.instance.downloadBytes(path);
+      b ??= await context.read<StorageProvider>().downloadBytes(path);
       if (b != null && b.isNotEmpty) {
         _slideBytesCache[path] = b;
         if (_slideBytesCache.length > 60) {
@@ -418,7 +418,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   Widget _viewerAvatar(String avatar, String nickname) {
     Uint8List? bytes;
     if (avatar.isNotEmpty &&
-        !StoragePhotoService.instance.isAvatarPath(avatar)) {
+        !context.read<StorageProvider>().isAvatarPath(avatar)) {
       try {
         bytes = base64Decode(avatar);
       } catch (_) {}

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/notification_prefs_provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../services/notification_prefs_service.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -23,12 +23,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   }
 
   Future<void> _load() async {
-    final m = await NotificationPrefsService.allPrefs();
+    final m = await context.read<NotificationPrefsProvider>().allPrefs();
     if (mounted) setState(() { _prefs = m; _loading = false; });
   }
 
   Future<void> _toggle(String type, bool v) async {
-    await NotificationPrefsService.setEnabled(type, v);
+    await context.read<NotificationPrefsProvider>().setEnabled(type, v);
     if (mounted) setState(() => _prefs[type] = v);
   }
 

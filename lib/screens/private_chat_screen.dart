@@ -5,10 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../providers/message_reaction_provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/storage_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connectivity_provider.dart';
@@ -20,7 +22,6 @@ import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/media/chat_background.dart';
 import '../services/call_service.dart';
-import '../services/storage_photo_service.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
 import '../utils/mention.dart';
@@ -32,7 +33,6 @@ import 'call_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
-import '../services/message_reaction_service.dart';
 import '../utils.dart';
 import '../mixins/chat_selection_mixin.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
@@ -467,19 +467,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       if (!mounted) return;
       if (auth.uid != null) chat.markAsRead(widget.chatId, auth.uid!);
       // Cache dulu (tampil instan), stream menimpa sesudahnya.
-      MessageReactionService.instance.loadCachedReactions(widget.chatId).then((
+      context.read<MessageReactionProvider>().loadCachedReactions(widget.chatId).then((
         cached,
       ) {
         if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
         setState(() => reactions = cached);
       });
-      _reactionsSub = MessageReactionService.instance
+      _reactionsSub = context.read<MessageReactionProvider>()
           .watchReactions(widget.chatId)
           .listen((m) {
         if (mounted) setState(() => reactions = m);
-        MessageReactionService.instance.saveCachedReactions(widget.chatId, m);
+        context.read<MessageReactionProvider>().saveCachedReactions(widget.chatId, m);
       });
-      _starredSub = MessageReactionService.instance
+      _starredSub = context.read<MessageReactionProvider>()
           .watchStarred(widget.chatId)
           .listen((m) {
         if (mounted) setState(() => starredIds = m);
@@ -968,7 +968,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       );
       return;
     }
-    final storagePath = await StoragePhotoService.instance.uploadVoice(chatId: chatId, bytes: bytes);
+    final storagePath = await context.read<StorageProvider>().uploadVoice(chatId: chatId, bytes: bytes);
     if (storagePath == null || storagePath.isEmpty) {
       if (!outboxIsOnline) {
         final optimisticOffline = MessageModel(
