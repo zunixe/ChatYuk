@@ -38,12 +38,16 @@ mixin AuthServiceAuthMx on AuthBase {
           .maybeSingle();
       if (old == null) return;
 
-      // Upsert profile lama ke uid baru
-      await _sb.from('profiles').upsert({
-        ...old,
-        'id': newId,
-        'email': _sb.auth.currentUser?.email,
-      });
+      // Upsert profile lama ke uid baru — HANYA kolom yang boleh di-SELECT
+      // (kolom sensitif di-revoke dari anon/authenticated; menulisnya di
+      // upsert memicu 42501). `old` sudah berisi kolom publik saja.
+      await _sb.from('profiles').upsert({...old, 'id': newId});
+
+      // Email & fcm via UPDATE terpisah (tidak butuh SELECT kolom tsb).
+      final email = _sb.auth.currentUser?.email;
+      await _sb.from('profiles').update({
+        if (email != null && email.isNotEmpty) 'email': email,
+      }).eq('id', newId);
 
       dlog('[AUTH] linkGoogleProfile: linked $oldProfileId -> $newId');
     } catch (e) {

@@ -52,6 +52,13 @@ mixin AuthServiceProfileMx on AuthBase {
       lastSeen: now,
     );
 
+    // Upsert HANYA kolom yang di-grant SELECT (lihat
+    // 20260915120000_security_hardening.sql). Kolom sensitif
+    // (email/ip_address/fcm_token/lat/lon) TIDAK boleh ikut di upsert:
+    // PostgREST `ON CONFLICT DO UPDATE` butuh SELECT pada kolom yang
+    // ditulis, dan kolom itu sengaja di-revoke → dulu seluruh registrasi
+    // gagal 42501. Setelah upsert, kolom sensitif ditulis lewat UPDATE
+    // terpisah (grant UPDATE penuh, RLS `profiles_update_own`).
     await _sb.from('profiles').upsert({
       'id': user.id,
       'nickname': nickname,
@@ -59,20 +66,25 @@ mixin AuthServiceProfileMx on AuthBase {
       'age': age,
       'country': country,
       'city': city,
+      'status': 'online',
+      'avatar': '',
+      'is_registered': hasEmail,
+      'login_at': now.toUtc().toIso8601String(),
+      'created_at': now.toUtc().toIso8601String(),
+      'last_seen': now.toUtc().toIso8601String(),
+    }, onConflict: 'id');
+
+    // Kolom sensitif via UPDATE (tidak butuh SELECT kolom tsb).
+    final sensitive = <String, dynamic>{
+      'fcm_token': '',
       // Email dari sesi auth — wajib tersinkron agar admin panel melihat
       // email user terdaftar (bug lama: kolom ini tidak pernah diisi).
       if (hasEmail) 'email': user.email,
       // IP dicatat di server untuk keperluan keamanan/moderasi,
       // tidak disimpan di perangkat aplikasi.
       if (ipAddress.isNotEmpty) 'ip_address': ipAddress,
-      'status': 'online',
-      'avatar': '',
-      'fcm_token': '',
-      'is_registered': hasEmail,
-      'login_at': now.toUtc().toIso8601String(),
-      'created_at': now.toUtc().toIso8601String(),
-      'last_seen': now.toUtc().toIso8601String(),
-    }, onConflict: 'id');
+    };
+    await _sb.from('profiles').update(sensitive).eq('id', user.id);
 
     return profile;
   }

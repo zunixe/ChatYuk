@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../utils.dart';
+import '../../utils.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
-import '../../services/storage_photo_service.dart';
 
 // Top-level untuk compute() — buat thumbnail JPEG (~1024px) dari bytes asli.
 // 512px terlihat blur saat foto single di-upscale selebar layar (1080px fisik).
@@ -30,9 +29,16 @@ Uint8List? _genPostThumb(Uint8List bytes) {
 /// - Scroll ulang feed = baca disk (instan), TIDAK download ulang dari
 ///   Storage. Hanya miss pertama yang download full-res sekali, lalu
 ///   thumbnail dibuat di isolate.
+/// Fungsi download bytes dari Storage — di-inject dari luar (main.dart)
+/// supaya `core/` tidak bergantung pada `services/` (aturan boundary).
+typedef PostPhotoDownloader = Future<Uint8List?> Function(String path);
+
 class PostPhotoCache {
   PostPhotoCache._();
   static final PostPhotoCache instance = PostPhotoCache._();
+
+  /// Wired di main.dart: `PostPhotoCache.downloader = StoragePhotoService.instance.downloadBytes`.
+  static PostPhotoDownloader? downloader;
 
   static const _folderName = 'post_photos_v2';
 
@@ -88,7 +94,7 @@ class PostPhotoCache {
         _memPut(path, bytes);
         return bytes;
       }
-      final full = await StoragePhotoService.instance.downloadBytes(path);
+      final full = await (downloader?.call(path) ?? Future<Uint8List?>.value());
       if (full == null) return null;
       final thumb = await compute(_genPostThumb, full);
       if (thumb != null) {
@@ -151,7 +157,7 @@ class PostPhotoCache {
           if (idx >= toFetch.length) return;
           final p = toFetch[idx];
           try {
-            final full = await StoragePhotoService.instance.downloadBytes(p);
+            final full = await (downloader?.call(p) ?? Future<Uint8List?>.value());
             if (full == null) continue;
             final thumb = await compute(_genPostThumb, full);
             if (thumb == null) continue;
@@ -187,7 +193,7 @@ class PostPhotoCache {
         final bytes = await f.readAsBytes();
         return base64Encode(bytes);
       }
-      final full = await StoragePhotoService.instance.downloadBytes(path);
+      final full = await (downloader?.call(path) ?? Future<Uint8List?>.value());
       if (full == null) return null;
       _writeFileAsync(folder, f, full);
       return base64Encode(full);
