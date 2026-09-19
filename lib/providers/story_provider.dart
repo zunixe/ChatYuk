@@ -56,15 +56,6 @@ class StoryProvider extends ChangeNotifier {
     );
   }
 
-  /// Author yang SEDANG dibuka viewer — event realtime untuk author ini
-  /// tidak perlu memicu RPC tray penuh (ring-nya sudah di-update lokal oleh
-  /// markSeen). Menghindari 1 RPC tray tiap slide dilihat.
-  String? _viewingAuthorId;
-
-  void setViewingAuthor(String? authorId) {
-    _viewingAuthorId = authorId;
-  }
-
   void _scheduleRefresh() {
     _refreshDebounce?.cancel();
     _refreshDebounce = Timer(const Duration(milliseconds: 500), () {

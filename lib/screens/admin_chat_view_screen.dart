@@ -510,7 +510,6 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     // JANGAN watch AdminProvider — notifyListeners (poll/tab lain) bikin
     // seluruh layar rebuild = kedip. Data pesan diambil via _applyMessages
     // (read), hasMore disimpan di state lokal.
-    final admin = context.read<AdminProvider>();
     final watchingVideo = _watch != null && _watch!.isVideo;
 
     return Scaffold(

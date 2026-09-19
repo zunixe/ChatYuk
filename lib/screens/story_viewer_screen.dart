@@ -98,7 +98,6 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     // Sisa slide yang belum terkirim (user keluar sebelum timer ganti
     // author) → kirim sekarang supaya ring tray tetap akurat.
     _flushSeen();
-    context.read<StoryProvider>().setViewingAuthor(null);
     _pageCtrl.dispose();
     _replyCtrl.dispose();
     _replyFocus.dispose();
@@ -159,9 +158,6 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       _slide = 0;
     });
     final sp = context.read<StoryProvider>();
-    // Tandai author yang sedang dibuka — event realtime untuknya tidak
-    // memicu RPC tray penuh (ring sudah di-update lokal).
-    sp.setViewingAuthor(_item.authorId);
     final slides = await sp.slidesFor(_item.authorId);
     if (!mounted) return;
     setState(() {

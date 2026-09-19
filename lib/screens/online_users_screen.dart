@@ -38,7 +38,6 @@ import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
 import '../providers/story_provider.dart';
 import '../providers/call_provider.dart';
-import '../providers/theme_provider.dart';
 import '../providers/nav_provider.dart';
 import '../services/perf_probe.dart';
 import '../widgets/app_gesture.dart';
@@ -1146,7 +1145,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     // beberapa detik — watch membuat SELURUH halaman (Scaffold + tray story
     // + ListView) rebuild tiap kali walau tak ada yang terlihat berubah.
     // Hanya field yang dipakai untuk render yang di-listen.
-    final dark = context.select<ThemeProvider, bool>((t) => t.isDark);
     final authUid = context.select<AuthProvider, String?>((a) => a.uid);
     final myAvatar = context.select<AuthProvider, String>(
       (a) => a.profile?.avatar ?? '',
