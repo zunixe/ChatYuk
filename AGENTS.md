@@ -222,12 +222,16 @@ Jangan balik: room yang menyesuaikan, bukan private.**
 1. **Batas ukuran:** file baru MAKS ~800 baris. Widget privat > 100 baris →
    pindah ke `lib/screens/<screen>/widgets/<nama>_widgets.dart`. Kelas publik
    (dipakai lintas file) TIDAK boleh diawali `_`.
-2. **Dilarang duplikasi** logika chat private ↔ room. Modul bersama terencana:
-   seleksi/reaksi → `lib/mixins/chat_selection_mixin.dart`, outbox →
-   `lib/services/chat_outbox_helper.dart`, foto → `lib/services/chat_photo_helper.dart`,
-   voice → `lib/mixins/voice_recorder_mixin.dart`, composer →
-   `lib/widgets/chat_composer_input.dart`. Butuh yang sama di dua screen?
-   Pakai/pindahkan ke modul itu — JANGAN copy-paste.
+2. **Dilarang duplikasi** logika chat private ↔ room. Modul bersama SUDAH ADA
+   (pakai ini, jangan copy-paste):
+   - antrean offline → `lib/mixins/chat_outbox_mixin.dart` (`ChatOutboxMixin`)
+   - seleksi/reaksi/edit/forward → `lib/mixins/chat_selection_mixin.dart`
+     (`ChatSelectionMixin`)
+   - pemrosesan foto (resize/watermark) → `lib/services/chat_photo_helper.dart`
+   - perekam voice → `lib/mixins/voice_recorder_mixin.dart`
+   - composer → `lib/widgets/chat_composer_input.dart` (`ChatComposerInput`)
+   
+   Butuh yang sama di dua screen? Pakai modul itu — JANGAN copy-paste.
 3. **Screen dilarang import `services/` langsung** — lewat providers/controllers.
    (Tech debt lama masih ada; file BARU wajib patuh.)
 4. **`ChatService` (2278 baris) sedang dipecah per domain** (private/room/typing/
