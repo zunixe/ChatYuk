@@ -94,8 +94,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  integration_test:
-    sdk: flutter
+  # integration_test SENGAJA TIDAK dipakai (lihat integration_test/README.md:
+  # tool memaksa build APK device & gagal tanpa emulator). Dev-dep ini hanya
+  # menghasilkan plugin `integration_test` di GeneratedPluginRegistrant.java
+  # build RELEASE, padahal Gradle release tidak menyertakannya →
+  # "package dev.flutter.plugins.integration_test does not exist".
   mocktail: ^1.0.0
   sqflite_common_ffi: ^2.4.0+3
   # Test memakai fake platform interface (bukan method channel) untuk
