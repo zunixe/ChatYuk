@@ -73,7 +73,8 @@ class _TimelineScreenState extends State<TimelineScreen>
           _appliedSearch = '';
         });
       }
-      _load(refresh: true);
+      // Ganti tab: tampilkan cache instan; RPC hanya bila cache basi.
+      _load(refresh: true, skipIfFresh: true);
       // Pulihkan posisi scroll scope baru setelah frame ter-render.
       final target = _scrollOffsets[_current];
       if (target != null && target > 0) {
@@ -104,10 +105,12 @@ class _TimelineScreenState extends State<TimelineScreen>
   String get _scope =>
       _current == 0 ? 'all' : (_current == 1 ? 'following' : 'mine');
 
-  Future<void> _load({bool refresh = false}) async {
+  Future<void> _load({bool refresh = false, bool skipIfFresh = false}) async {
     final auth = context.read<AuthProvider>();
     if (auth.uid == null) return;
-    await context.read<TimelineProvider>().load(_scope, refresh: refresh);
+    await context
+        .read<TimelineProvider>()
+        .load(_scope, refresh: refresh, skipIfFresh: skipIfFresh);
   }
 
   @override

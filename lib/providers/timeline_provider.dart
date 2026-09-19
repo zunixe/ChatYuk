@@ -49,6 +49,8 @@ class TimelineProvider extends ChangeNotifier {
   Set<String> _followedIds = {};
   Set<String> _subscribedIds = {};
   Set<String> _blockedIds = {};
+  DateTime? _visibilityAt;
+  static const _visibilityTtl = Duration(seconds: 60);
 
   // Cache per scope — emit instant saat tab switch, server menyusul.
   final Map<String, _ScopeCache> _scopeCache = {};
@@ -382,7 +384,12 @@ class TimelineProvider extends ChangeNotifier {
   /// Set subscriber + blokir user aktif — dipakai filter realtime supaya
   /// post ber-visibilitas `subscribers`/`followers` dan post dari user yang
   /// di-blokir TIDAK bocor ke feed (SQL list_posts memfilter, realtime tidak).
-  Future<void> _refreshVisibilitySets() async {
+  Future<void> _refreshVisibilitySets({bool force = false}) async {
+    if (!force &&
+        _visibilityAt != null &&
+        DateTime.now().difference(_visibilityAt!) < _visibilityTtl) {
+      return; // cache masih segar — jangan query tiap ganti tab
+    }
     try {
       final me = Supabase.instance.client.auth.currentUser?.id;
       if (me == null) return;
@@ -401,6 +408,7 @@ class TimelineProvider extends ChangeNotifier {
         final d = '${r['blocked_id']}';
         return b == me ? d : b;
       }).toSet();
+      _visibilityAt = DateTime.now();
     } catch (e) {
       dlog('[TimelineProvider] visibility sets error: $e');
     }
@@ -451,7 +459,7 @@ class TimelineProvider extends ChangeNotifier {
   /// Siapkan feed tampilan untuk scope: emit cache instan, atau bersihkan
   /// post tab lain + skeleton. Post tab lain TIDAK BOLEH terbawa ke tab
   /// baru (dulu jadi sumber konten salah & empty state palsu).
-  void _prepareVisible(String scope) {
+  bool _prepareVisible(String scope) {
     _scope = scope;
     _lastFetchFailed = false;
     _cursor = null;
@@ -472,7 +480,7 @@ class TimelineProvider extends ChangeNotifier {
       _hasMore = cached.hasMore;
       _invalidateView();
       if (!_disposed) notifyListeners();
-      return;
+      return true;
     }
     if (cached != null && cached.posts.isNotEmpty) {
       // Frame pertama instant dari cache — server menyusul update fresh.
@@ -497,6 +505,7 @@ class TimelineProvider extends ChangeNotifier {
       _refreshVisibilitySets();
     }
     if (!_disposed) notifyListeners();
+    return false;
   }
 
   /// Scope 'following' tidak menampilkan post sendiri (ada tab Postinganku).
@@ -510,8 +519,18 @@ class TimelineProvider extends ChangeNotifier {
     return posts.where((p) => '${p['authorId']}' != me).toList();
   }
 
-  Future<void> load(String scope, {bool refresh = false}) async {
-    if (refresh) _prepareVisible(scope);
+  /// [skipIfFresh] dipakai saat GANTI TAB: bila cache scope masih segar
+  /// (<30s) cukup tampilkan cache tanpa RPC. Refresh manual (pull) memakai
+  /// `skipIfFresh: false` → selalu fetch.
+  Future<void> load(
+    String scope, {
+    bool refresh = false,
+    bool skipIfFresh = false,
+  }) async {
+    if (refresh) {
+      final fresh = _prepareVisible(scope);
+      if (skipIfFresh && fresh) return;
+    }
     await _fetchScope(scope, refresh: refresh);
   }
 
