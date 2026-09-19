@@ -13,7 +13,7 @@ import 'profile_sections.dart';
 /// lib/main_admin.dart — build rilis tidak pernah meng-import file ini.
 void wireAdmin() {
   dlog('[WIRE] 1');
-  AuthService.googleWebClientIdOverride =
+  AuthBase.googleWebClientIdOverride =
       '599111437536-hg56bq0nc2m6kig6hg41lmrbtfel5n2c.apps.googleusercontent.com';
   dlog('[WIRE] 2');
   AdminGate.postInit = DummySession.installTokenPersistence;
