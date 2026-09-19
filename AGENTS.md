@@ -276,6 +276,30 @@ Jangan balik: room yang menyesuaikan, bukan private.**
 - Jangan import library yang tidak dipakai (cek `flutter analyze`)
 - Gunakan `copyWith` untuk update model parsial
 
+## Exclude Device Admin (WAJIB tahu sebelum mengubah)
+
+**`install_id` = `android-<ANDROID_ID>` — TIDAK STABIL antar build.** Android 8+
+meng-scope `ANDROID_ID` ke **(device + user profile + app signing key)**.
+Satu HP bisa punya >1 install_id (terbukti: `24129PN74G` punya
+`android-2f218335e9fd56d5` DAN `android-e2...`). Efeknya: device yang sudah
+di-exclude **muncul lagi** sebagai device baru — pernah jadi keluhan user.
+
+Karena itu exclude **wajib berbasis uid**, bukan hanya device:
+
+- `admin_exclude_device_cascade(p_install_id)` — tombol "Exclude perangkat
+  ini" memakai ini: menambah install_id **dan** semua uid yang pernah login
+  di device itu ke `excluded_uids`.
+- `admin_set_excluded_devices` — menyinkronkan `excluded_uids` saat
+  un-exclude (buang uid yang device-nya tidak lagi ter-exclude), TAPI
+  mempertahankan uid tanpa baris device (anon manual).
+- `admin_list_devices` memakai `admin_excluded_uids()` (device + uid manual);
+  jangan dikembalikan ke `excluded_devices` saja.
+- `admin_stats_detail` FROZEN — jangan disentuh; filter-nya sudah benar.
+
+Kalau mengubah fungsi exclude: jalankan
+`select public.admin_list_devices(1000,0)->>'total'` sebelum/sesudah dan
+pastikan uid ter-exclude tidak muncul.
+
 ## Build & Signing
 
 - **SATU-SATUNYA PROSEDUR BUILD TERVERIFIKASI — build dari tool/AI lain

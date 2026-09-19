@@ -1,5 +1,36 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-21 — INSIDEN: device ter-exclude "muncul lagi" (`20260921170000` + `20260921180000`)
+
+**Gejala:** admin exclude 1 HP, tapi device yang sama **muncul lagi** di tab
+Perangkat dengan install_id BERBEDA.
+
+**Akar masalah:** `install_id` = `android-<ANDROID_ID>`, dan Android 8+
+meng-scope `ANDROID_ID` ke **(device + user profile + app signing key)**.
+Terbukti di DB: model `24129PN74G` punya DUA install_id —
+`android-2f218335e9fd56d5` (1.2.16→1.2.43) dan `android-e29a2f7c3e9624c6`
+(hanya 1.2.40). Jadi exclude berbasis device **rapuh**.
+
+**Perbaikan dua arah:**
+1. `20260921170000_admin_exclude_cascade_uids.sql`:
+   - `admin_list_devices` kini memakai `admin_excluded_uids()` (device **dan**
+     uid manual) — sebelumnya hanya `excluded_devices`.
+   - RPC baru `admin_exclude_device_cascade(p_install_id)`: exclude device
+     **sekali** menambahkan semua uid yang pernah login di device itu ke
+     `excluded_uids` → exclude tahan walau install_id berubah.
+   - Backfill: uid dari device yang sudah ter-exclude dimasukkan (2 → 17 uid).
+2. `20260921180000_admin_unexclude_uid_sync.sql`:
+   - `admin_set_excluded_devices` menyinkronkan `excluded_uids`: uid yang
+     device-nya tidak lagi ter-exclude **dibuang**, tapi uid tanpa baris
+     device (anon manual) **dipertahankan**.
+
+**Verifikasi (live `fohcucyyejdryryoxitm`):** cascade 17→18 uid; un-exclude
+18→17 uid + device kembali 3; `admin_list_devices` total 44 baris → 29
+(15 milik uid ter-exclude disembunyikan).
+
+**Aturan:** `admin_stats_detail` FROZEN — tidak disentuh. Snapshot
+`functions.sql` tidak memuat `admin_list_devices`, jadi tidak perlu update.
+
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 

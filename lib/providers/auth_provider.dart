@@ -711,6 +711,20 @@ class AuthProvider extends ChangeNotifier {
     return ok;
   }
 
+  /// Exclude satu perangkat lewat RPC cascade (device + semua uid-nya).
+  /// Dipakai tombol "Exclude perangkat ini" supaya exclude tahan walau
+  /// `install_id` berubah (Android ID ter-scope ke signing key).
+  Future<bool> excludeDeviceCascade(String installId) async {
+    if (installId.isEmpty) return false;
+    final res = await _auth.excludeDeviceCascade(installId);
+    if (res == null) return false;
+    if (!_disposed) {
+      _excludedDevices = res.devices;
+      notifyListeners();
+    }
+    return true;
+  }
+
   /// Admin toggle wajib registrasi. Realtime: semua device ikut update
   /// lewat subscription app_settings (tidak perlu polling).
   Future<void> setRequireRegistration(bool enabled) async {
