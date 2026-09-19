@@ -11,7 +11,6 @@ import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/locale_provider.dart';
-import '../services/admin_call_watch_service.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/cache/message_cache.dart';
 import '../utils.dart';
@@ -93,7 +92,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     _watch = null;
     old?.removeListener(_onWatchChanged);
     await old?.stop();
-    final ws = WatchSession(call);
+    final ws = context.read<AdminProvider>().createWatchSession(call);
     ws.addListener(_onWatchChanged);
     try {
       await ws.start();

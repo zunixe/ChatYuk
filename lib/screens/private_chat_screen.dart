@@ -17,7 +17,6 @@ import '../providers/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
-import '../services/chat_service.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/media/chat_background.dart';
@@ -218,7 +217,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
   @override
   Future<bool> sendEditPersist(MessageModel editing, String raw) =>
-      ChatService().editPrivateMessage(editing.id, raw);
+      context.read<ChatProvider>().editPrivateMessage(editing.id, raw);
 
   @override
   Future<void> sendDispatchText({

@@ -8,11 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
-import '../config/supabase_config.dart';
 import '../providers/admin_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/locale_provider.dart';
-import '../services/admin_service.dart';
 import '../utils.dart';
 import 'admin_chat_list_screen.dart';
 import 'admin_contact_tab.dart';
@@ -192,7 +190,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   Future<void> _loadPointSettings() async {
     try {
-      final data = await AdminService(SupabaseConfig.client).getPointSettings();
+      final data = await context.read<AdminProvider>().getPointSettings();
       for (final f in _pointFields) {
         _pointCtrls[f.$1] = TextEditingController(text: '${data[f.$1] ?? ''}');
       }
@@ -211,7 +209,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         final v = int.tryParse(e.value.text.trim());
         if (v != null) payload[e.key] = v;
       }
-      await AdminService(SupabaseConfig.client).updatePointSettings(payload);
+      await context.read<AdminProvider>().updatePointSettings(payload);
       if (mounted) _toast(context.read<LocaleProvider>().s.adminPointSettingsSaved);
     } catch (e) {
       if (mounted) _toast(context.read<LocaleProvider>().s.adminSaveFailed('$e'));
