@@ -94,6 +94,24 @@ class CallProvider extends ChangeNotifier {
       _service.startCall(calleeUid, callType);
   Future<void> updateCallStatus(String callId, String status) =>
       _service.updateStatus(callId, status);
+
+  /// Akhiri panggilan dari UI dengan GARANSI bersih.
+  ///
+  /// `session.end()` bisa langsung no-op bila session sudah `_closed`
+  /// (mis. lawan menutup lebih dulu / phase sudah ended) — tombol "Akhiri"
+  /// lalu terasa "tidak jalan" karena overlay tetap tampil. Di sini selalu
+  /// panggil end() (untuk signaling bila masih hidup) LALU paksa clearSession
+  /// supaya UI pasti hilang, tanpa menunggu timer.
+  Future<void> hangup() async {
+    final sess = _activeSession;
+    if (sess != null) {
+      try {
+        await sess.end();
+      } catch (_) {}
+    }
+    await clearSession();
+  }
+
   Future<Map<String, dynamic>?> getCall(String callId) => _service.getCall(callId);
   Future<String?> getNickname(String uid) => _service.getNickname(uid);
   Stream<String> onCallStatus(String callId) => _service.onCallStatus(callId);
