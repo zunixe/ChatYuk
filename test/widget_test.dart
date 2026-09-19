@@ -94,4 +94,30 @@ void main() {
       expect(AdminGate.isRealAdmin(null), isFalse);
     });
   });
+
+  // Konsistensi indikator status — mencegah regresi ke 5 definisi _statusColor
+  // + belasan nilai inline yang berbeda antar layar (lihat theme.dart).
+  group('AppTheme.statusColor (satu sumber)', () {
+    test('online/idle/offline memakai token resmi', () {
+      expect(AppTheme.statusColor('online'), AppTheme.online);
+      expect(AppTheme.statusColor('idle'), AppTheme.idle);
+      expect(AppTheme.statusColor('offline'), AppTheme.offline);
+    });
+
+    test('null & status tak dikenal → offline (bukan crash)', () {
+      expect(AppTheme.statusColor(null), AppTheme.offline);
+      expect(AppTheme.statusColor('invisible'), AppTheme.offline);
+      expect(AppTheme.statusColor(''), AppTheme.offline);
+    });
+  });
+
+  group('avatarBg (opaque, konsisten antar permukaan)', () {
+    test('light & dark tidak transparan', () {
+      AppTheme.isDark = false;
+      expect(AppTheme.avatarBg.a, 1.0);
+      AppTheme.isDark = true;
+      expect(AppTheme.avatarBg.a, 1.0);
+      AppTheme.isDark = false;
+    });
+  });
 }

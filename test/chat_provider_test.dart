@@ -4,6 +4,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:chatyuk/providers/chat_provider.dart';
 import 'package:chatyuk/services/chat_service.dart'
     show ChatService, PrivateChatInfo;
+import 'package:chatyuk/utils/mention.dart';
 
 class MockChatService extends Mock implements ChatService {}
 
@@ -55,6 +56,90 @@ void main() {
       verify(() =>
               service.pinPrivateChat('c1', true, myUidParam: 'u1'))
           .called(1);
+    });
+  });
+
+  group('mentions passthrough', () {
+    test('sendRoomMessage teruskan mentions ke service', () async {
+      when(() => service.sendRoomMessage(
+            roomId: any(named: 'roomId'),
+            senderId: any(named: 'senderId'),
+            senderName: any(named: 'senderName'),
+            senderGender: any(named: 'senderGender'),
+            text: any(named: 'text'),
+            type: any(named: 'type'),
+            imageData: any(named: 'imageData'),
+            durationMs: any(named: 'durationMs'),
+            repliedToId: any(named: 'repliedToId'),
+            repliedToText: any(named: 'repliedToText'),
+            repliedToSenderName: any(named: 'repliedToSenderName'),
+            isForwarded: any(named: 'isForwarded'),
+            mentions: any(named: 'mentions'),
+          )).thenAnswer((_) async {});
+      await provider.sendRoomMessage(
+        roomId: 'r1',
+        senderId: 'u1',
+        senderName: 'A',
+        senderGender: 'other',
+        text: 'hai @Budi',
+        mentions: const [Mention(uid: 'u-budi', name: 'Budi')],
+      );
+      verify(() => service.sendRoomMessage(
+            roomId: 'r1',
+            senderId: 'u1',
+            senderName: 'A',
+            senderGender: 'other',
+            text: 'hai @Budi',
+            type: any(named: 'type'),
+            imageData: any(named: 'imageData'),
+            durationMs: any(named: 'durationMs'),
+            repliedToId: any(named: 'repliedToId'),
+            repliedToText: any(named: 'repliedToText'),
+            repliedToSenderName: any(named: 'repliedToSenderName'),
+            isForwarded: any(named: 'isForwarded'),
+            mentions: [const Mention(uid: 'u-budi', name: 'Budi')],
+          )).called(1);
+    });
+
+    test('sendPrivateMessage teruskan mentions ke service', () async {
+      when(() => service.sendPrivateMessage(
+            chatId: any(named: 'chatId'),
+            senderId: any(named: 'senderId'),
+            senderName: any(named: 'senderName'),
+            senderGender: any(named: 'senderGender'),
+            text: any(named: 'text'),
+            type: any(named: 'type'),
+            imageData: any(named: 'imageData'),
+            durationMs: any(named: 'durationMs'),
+            repliedToId: any(named: 'repliedToId'),
+            repliedToText: any(named: 'repliedToText'),
+            repliedToSenderName: any(named: 'repliedToSenderName'),
+            isForwarded: any(named: 'isForwarded'),
+            mentions: any(named: 'mentions'),
+          )).thenAnswer((_) async {});
+      await provider.sendPrivateMessage(
+        chatId: 'c1',
+        senderId: 'u1',
+        senderName: 'A',
+        senderGender: 'other',
+        text: 'hai @Sari',
+        mentions: const [Mention(uid: 'u-sari', name: 'Sari')],
+      );
+      verify(() => service.sendPrivateMessage(
+            chatId: 'c1',
+            senderId: 'u1',
+            senderName: 'A',
+            senderGender: 'other',
+            text: 'hai @Sari',
+            type: any(named: 'type'),
+            imageData: any(named: 'imageData'),
+            durationMs: any(named: 'durationMs'),
+            repliedToId: any(named: 'repliedToId'),
+            repliedToText: any(named: 'repliedToText'),
+            repliedToSenderName: any(named: 'repliedToSenderName'),
+            isForwarded: any(named: 'isForwarded'),
+            mentions: [const Mention(uid: 'u-sari', name: 'Sari')],
+          )).called(1);
     });
   });
 
