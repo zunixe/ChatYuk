@@ -510,14 +510,37 @@ class AppTheme {
       isDark ? _textSecondaryDark : _textSecondaryLight;
 
   // ── Status (konstan) ──
-  static const Color online = Color(0xFF4CAF50);
-  // Hijau tua untuk badge jumlah online — kontras di atas bgCard terang.
+  static const Color online = Color(0xFF4CAF50);  // Hijau tua untuk badge jumlah online — kontras di atas bgCard terang.
   static const Color onlineDark = Color(0xFF2E7D32);
   static const Color idle = Color(0xFFFFB300);
   static const Color offline = Color(0xFFBDBDBD);
   static const Color danger = Color(0xFFF44336);
   static const Color male = Color(0xFF2196F3);
   static const Color female = Color(0xFFE91E63);
+
+  /// Warna indikator status — SATU sumber untuk seluruh app.
+  /// Dulu ada 5 definisi `_statusColor` + belasan nilai inline yang berbeda
+  /// (idle `0xFFFFC107` vs `0xFFFFB300`, offline `0xFF9E9E9E` vs `0xFFBDBDBD`)
+  /// sehingga titik status terlihat beda antar layar untuk status yang sama.
+  /// Jangan hardcode warna status di screen — pakai helper ini.
+  static Color statusColor(String? status) => switch (status) {
+    'online' => online,
+    'idle' => idle,
+    _ => offline,
+  };
+
+  // ── Avatar fallback inisial (WAJIB OPAQUE) ──
+  // Dulu accent/textSecondary @15% yang translusen: di atas AppBar biru vs
+  // kartu putih hasilnya beda warna. Nilai solid = campuran 15% di atas
+  // bgCard mode masing-masing → tampil identik di permukaan apa pun.
+  // List Pesan & header private chat WAJIB pakai token ini (jangan alpha).
+  static const _avatarBgLight = Color(0xFFD9F5F9);
+  static const _avatarBgDark = Color(0xFF1A3639);
+  static Color get avatarBg => isDark ? _avatarBgDark : _avatarBgLight;
+  static const _avatarBgBlockedLight = Color(0xFFEAEAEA);
+  static const _avatarBgBlockedDark = Color(0xFF313131);
+  static Color get avatarBgBlocked =>
+      isDark ? _avatarBgBlockedDark : _avatarBgBlockedLight;
 
   /// Gradient header/AppBar — ikut mode (gelap di dark mode).
   static LinearGradient get headerGradient => LinearGradient(

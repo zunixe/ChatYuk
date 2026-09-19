@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
+import '../config/theme.dart';
+
 Uint8List? _decodeBase64(String b64) {
   try {
     return base64Decode(b64);
@@ -221,7 +223,7 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
       opacity: _fade,
       child: CircleAvatar(
         radius: widget.radius,
-        backgroundColor: widget.bgColor,
+        backgroundColor: widget.bgColor ?? AppTheme.avatarBg,
         backgroundImage: MemoryImage(b),
       ),
     );

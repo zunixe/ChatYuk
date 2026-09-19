@@ -14,12 +14,16 @@ Uint8List? _decodeAvatarB64(String b64) {
 
 /// Avatar profil user lain: foto (base64, decode async + cache) dengan
 /// fallback inisial. Lingkaran jika [borderRadius] = 0, atau kotak rounded.
+///
+/// [bgColor] null → `AppTheme.avatarBg` (solid, seragam dengan kartu list
+/// Pesan & header chat). Dulu default `AppTheme.accent` (cyan pekat) sehingga
+/// 15 dari 17 pemanggil yang tidak menyetel warna tampil beda dari daftar chat.
 class ProfileAvatar extends StatefulWidget {
   final String uid;
   final String name;
   final double size;
   final double borderRadius;
-  final Color bgColor;
+  final Color? bgColor;
   final Color? textColor;
   final Color? borderColor;
   final double borderWidth;
@@ -31,7 +35,7 @@ class ProfileAvatar extends StatefulWidget {
     required this.name,
     this.size = 44,
     this.borderRadius = 0,
-    this.bgColor = AppTheme.accent,
+    this.bgColor,
     this.textColor,
     this.borderColor,
     this.borderWidth = 1.5,
@@ -97,7 +101,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
         width: widget.size,
         height: widget.size,
         decoration: BoxDecoration(
-          color: widget.bgColor,
+          color: widget.bgColor ?? AppTheme.avatarBg,
           shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
           borderRadius: isCircle ? null : shape,
         ),
