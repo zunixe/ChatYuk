@@ -205,9 +205,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   @override
-  Future<void> sendEditPersist(MessageModel editing, String raw) async {
-    await ChatService().editRoomMessage(editing.id, raw);
-  }
+  void sendCancelEdit() => cancelEdit();
+
+  @override
+  Future<bool> sendEditPersist(MessageModel editing, String raw) =>
+      ChatService().editRoomMessage(editing.id, raw);
 
   @override
   Future<void> sendDispatchText({

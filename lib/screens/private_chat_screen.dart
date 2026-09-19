@@ -230,9 +230,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   }
 
   @override
-  Future<void> sendEditPersist(MessageModel editing, String raw) async {
-    await ChatService().editPrivateMessage(editing.id, raw);
-  }
+  void sendCancelEdit() => cancelEdit();
+
+  @override
+  Future<bool> sendEditPersist(MessageModel editing, String raw) =>
+      ChatService().editPrivateMessage(editing.id, raw);
 
   @override
   Future<void> sendDispatchText({
