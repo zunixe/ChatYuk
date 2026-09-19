@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'supabase_config.dart';
-import '../services/perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 
 /// Konfigurasi ICE untuk WebRTC call.
 /// TURN credentials di-fetch dari Supabase Edge Function (Cloudflare TURN).

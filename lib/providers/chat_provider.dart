@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../utils/mention.dart';
 import '../services/chat_service.dart';
-import '../services/message_cache.dart';
-import '../services/photo_cache.dart';
+import '../core/cache/message_cache.dart';
+import '../core/cache/photo_cache.dart';
 
 class ChatProvider extends ChangeNotifier {
   bool _disposed = false;

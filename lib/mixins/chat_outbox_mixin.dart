@@ -8,7 +8,7 @@ import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../services/offline_outbox.dart';
+import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
 import '../utils/mention.dart';
 

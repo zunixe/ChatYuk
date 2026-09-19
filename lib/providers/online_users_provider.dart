@@ -4,9 +4,9 @@ import '../utils.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/rt_resilient.dart';
-import '../services/media_disk_cache.dart';
-import '../services/message_cache.dart';
-import '../services/perf_probe.dart';
+import '../core/cache/media_disk_cache.dart';
+import '../core/cache/message_cache.dart';
+import '../core/perf/perf_probe.dart';
 
 bool _usersEqual(List<UserModel> a, List<UserModel> b) {
   if (a.length != b.length) return false;

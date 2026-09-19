@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
-import '../services/forensic_watermark.dart';
+import 'forensic_watermark.dart';
 
 /// Modul BERSAMA pemrosesan foto chat (private ↔ room).
 ///

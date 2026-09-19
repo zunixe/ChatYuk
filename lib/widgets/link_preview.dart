@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
-import '../services/link_preview_service.dart';
+import '../core/media/link_preview_service.dart';
 
 class LinkPreview extends StatefulWidget {
   final String text;

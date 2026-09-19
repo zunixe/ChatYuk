@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/locale_provider.dart';
 import '../config/theme.dart';
-import '../services/perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 import 'story_camera_capture_screen.dart';
 
 /// Picker foto story — GRID:

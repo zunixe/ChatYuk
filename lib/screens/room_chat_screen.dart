@@ -19,7 +19,7 @@ import '../services/chat_service.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/storage_photo_service.dart';
-import '../services/offline_outbox.dart';
+import '../core/cache/offline_outbox.dart';
 import '../services/room_service.dart';
 import '../utils.dart';
 import '../main.dart';

@@ -5,7 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/call_config.dart';
 import '../config/supabase_config.dart';
-import 'perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 
 /// Fase panggilan.
 enum CallPhase { connecting, ringing, inCall, ended, error }

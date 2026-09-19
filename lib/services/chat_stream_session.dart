@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
 import '../utils.dart';
-import 'message_cache.dart';
-import 'photo_cache.dart';
+import '../core/cache/message_cache.dart';
+import '../core/cache/photo_cache.dart';
 import 'storage_photo_service.dart';
 
 // Concurrency limiter: max N operasi paralel, sisanya antri.

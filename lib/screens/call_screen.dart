@@ -10,7 +10,7 @@ import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
 import '../services/call_notification.dart';
-import '../services/perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 import '../utils.dart';
 import '../widgets/profile_avatar.dart';
 

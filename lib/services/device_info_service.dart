@@ -6,7 +6,7 @@ import '../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
-import 'screen_secure_service.dart';
+import '../core/screen_secure_service.dart';
 
 /// Kumpulkan identitas perangkat (brand/model/OS/versi app) + install ID
 /// unik per-install, lalu sync ke server (RPC upsert_device).

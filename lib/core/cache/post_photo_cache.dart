@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../utils.dart';
+import '../../utils.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
-import 'storage_photo_service.dart';
+import '../../services/storage_photo_service.dart';
 
 // Top-level untuk compute() — buat thumbnail JPEG (~1024px) dari bytes asli.
 // 512px terlihat blur saat foto single di-upscale selebar layar (1080px fisik).

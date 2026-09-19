@@ -7,7 +7,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/providers/online_users_provider.dart';
 import 'package:chatyuk/services/chat_service.dart';
-import 'package:chatyuk/services/message_cache.dart';
+import 'package:chatyuk/core/cache/message_cache.dart';
 
 import 'test_helper.dart';
 

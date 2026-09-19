@@ -6,8 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/active_call_model.dart';
 import '../services/admin_service.dart';
-import '../services/message_cache.dart';
-import '../services/photo_cache.dart';
+import '../core/cache/message_cache.dart';
+import '../core/cache/photo_cache.dart';
 import '../services/storage_photo_service.dart';
 
 class AdminProvider extends ChangeNotifier {

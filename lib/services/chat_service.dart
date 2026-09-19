@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'media_disk_cache.dart';
+import '../core/cache/media_disk_cache.dart';
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/message_model.dart';
@@ -8,12 +8,12 @@ import '../models/user_model.dart';
 import '../config/supabase_config.dart';
 import 'realtime_hub.dart';
 import '../config/gifts.dart';
-import '../services/message_cache.dart';
-import '../services/photo_cache.dart';
+import '../core/cache/message_cache.dart';
+import '../core/cache/photo_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import '../utils/mention.dart';
-import 'perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 import 'notification_prefs_service.dart';
 import 'chat_stream_session.dart';
 

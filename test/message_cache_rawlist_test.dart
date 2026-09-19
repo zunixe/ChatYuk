@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chatyuk/services/message_cache.dart';
+import 'package:chatyuk/core/cache/message_cache.dart';
 
 /// Fokus: lapisan MEMORI list chat (centang-2 cepat).
 /// `saveRawList` menyimpan ke memori lebih dulu, lalu disk (yang gagal di
