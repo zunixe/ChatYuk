@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -25,7 +24,6 @@ import '../services/message_cache.dart';
 import '../services/offline_outbox.dart';
 import '../services/chat_background.dart';
 import '../services/call_service.dart';
-import '../services/forensic_watermark.dart';
 import '../services/storage_photo_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/private_chat_message.dart';
@@ -48,29 +46,7 @@ import '../widgets/forward_picker_sheet.dart';
 import '../widgets/reaction_detail_sheet.dart';
 import '../utils.dart';
 import '../mixins/chat_outbox_mixin.dart';
-
-// Top-level function untuk compute() isolate — resize 1024 + embed forensic watermark
-String? _processViewOnceImage((Uint8List, String) args) {
-  final (bytes, seed) = args;
-  return ForensicWatermark.embedToBase64(bytes, seed);
-}
-
-// Top-level function untuk compute() isolate — tanpa watermark: resize 1200px + JPEG
-// Kamera kirim foto besar (10-20MB) → decode gagal di penerima kalau tidak di-resize.
-String? _passthroughImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) return null;
-  final w = decoded.width;
-  final h = decoded.height;
-  final img.Image resized = (w <= 1200 && h <= 1200)
-      ? decoded
-      : img.copyResize(
-          decoded,
-          width: w > h ? 1200 : null,
-          height: h >= w ? 1200 : null,
-        );
-  return base64Encode(img.encodeJpg(resized, quality: 82));
-}
+import '../services/chat_photo_helper.dart';
 
 class PrivateChatScreen extends StatefulWidget {
   final String chatId;
@@ -1854,8 +1830,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     // Proses gambar DULU, baru potong poin — jangan paralel, supaya poin
     // tidak terpotong saat decode/resize gagal (koin hilang percuma).
     final base64 = await (auth.watermarkEnabled
-        ? compute(_processViewOnceImage, (bytes, widget.otherUid))
-        : compute(_passthroughImage, bytes));
+        ? compute(processViewOnceImage, (bytes, widget.otherUid))
+        : compute(processChatPhoto, bytes));
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'dart:async';
@@ -24,8 +23,8 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../services/offline_outbox.dart';
+import '../services/chat_photo_helper.dart';
 import '../services/room_service.dart';
-import '../services/forensic_watermark.dart';
 import '../utils.dart';
 import '../main.dart';
 import '../services/private_room_service.dart';
@@ -64,25 +63,6 @@ import '../widgets/reply_quote.dart';
 import '../mixins/chat_outbox_mixin.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
-String? _roomPassthroughImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) return null;
-  final w = decoded.width, h = decoded.height;
-  final img.Image resized = (w <= 1200 && h <= 1200)
-      ? decoded
-      : img.copyResize(
-          decoded,
-          width: w > h ? 1200 : null,
-          height: h >= w ? 1200 : null,
-        );
-  return base64Encode(img.encodeJpg(resized, quality: 82));
-}
-
-String? _roomViewOnceImage((Uint8List, String) args) {
-  final (bytes, seed) = args;
-  return ForensicWatermark.embedToBase64(bytes, seed);
-}
-
 class RoomChatScreen extends StatefulWidget {
   final RoomModel room;
   const RoomChatScreen({super.key, required this.room});
@@ -2032,8 +2012,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     // Proses gambar DULU, baru potong poin (jangan paralel) — mencegah
     // koin terpotong saat decode/resize gagal.
     final base64 = await (auth.watermarkEnabled
-        ? compute(_roomViewOnceImage, (bytes, widget.room.id))
-        : compute(_roomPassthroughImage, bytes));
+        ? compute(processViewOnceImage, (bytes, widget.room.id))
+        : compute(processChatPhoto, bytes));
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
