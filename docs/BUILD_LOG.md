@@ -31,6 +31,8 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | 2026-09-19 15:35 | develop | adminProd + apkpureProd | Tombol kontrol video call samakan gaya grup (CallControlButton bersama) + end call optimistik (paket hilang tanpa nunggu network) + auto-clear 1s | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
 
+| 2026-09-19 15:50 | develop | adminProd + apkpureProd | Tambah anggota grup: picker cari instan (snapshot memori) + realtime room_members (anggota baru langsung tahu) + onInvited refresh | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
+
 ## Catatan penting: build probe & the underlying provider Sign-In
 
 Build `--profile`/`--debug` **selalu** bikin the underlying provider Sign-In gagal (`DEVELOPER_ERROR`)
