@@ -35,6 +35,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     required String senderId,
     required String senderName,
     required String senderGender,
+    String text = '',
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
   });
 
   /// Folder upload storage (private: chatId; room: `room_<id>`).
@@ -126,10 +130,28 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     await _sendImageLike(base64: base64, kind: 'view_once', type: 'view_once');
   }
 
+  /// Kirim foto dari base64 yang sudah diproses (dipakai composer preview).
+  Future<void> sendPhotoBase64(
+    String base64, {
+    String text = '',
+    MessageModel? reply,
+  }) async {
+    if (!mounted) return;
+    await _sendImageLike(
+      base64: base64,
+      kind: 'image',
+      type: 'image',
+      text: text,
+      reply: reply,
+    );
+  }
+
   Future<void> _sendImageLike({
     required String base64,
     required String kind,
     required String type,
+    String text = '',
+    MessageModel? reply,
   }) async {
     final auth = context.read<AuthProvider>();
     final uid = auth.uid;
@@ -142,10 +164,13 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       senderName: profile.nickname,
       senderGender: profile.gender,
       isRegistered: profile.isRegistered,
-      text: '',
+      text: text,
       type: type,
       imageData: base64,
       timestamp: DateTime.now(),
+      repliedToId: reply?.id,
+      repliedToText: reply?.text,
+      repliedToSenderName: reply?.senderName,
     );
     setState(() => outboxPending.add(pendingPhoto));
     outboxScrollToBottom();
@@ -159,6 +184,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         imagePayload: base64,
         needsUpload: true,
         uploadKind: 'image',
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
       );
       return;
     }
@@ -204,6 +232,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         senderId: uid,
         senderName: profile.nickname,
         senderGender: profile.gender,
+        text: text,
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
       );
       if (kind == 'image') photoFirstBonus(pp);
       photoOnSent(kind);
@@ -218,6 +250,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
           imagePayload: base64,
           needsUpload: true,
           uploadKind: 'image',
+          repliedToId: reply?.id,
+          repliedToText: reply?.text,
+          repliedToSenderName: reply?.senderName,
         );
       } else {
         safeUnawaited(pp.refundChatPoint(kind));

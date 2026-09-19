@@ -46,7 +46,6 @@ import '../config/gifts.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
-import '../widgets/anon_prompt_dialog.dart';
 import '../services/call_notification.dart';
 import 'package:flutter/services.dart';
 import '../widgets/message_reaction_bar.dart';
@@ -55,6 +54,7 @@ import '../widgets/reply_quote.dart';
 import '../mixins/chat_selection_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../mixins/chat_photo_send_mixin.dart';
+import '../mixins/chat_send_mixin.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 class RoomChatScreen extends StatefulWidget {
@@ -70,7 +70,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         WidgetsBindingObserver,
         ChatOutboxMixin<RoomChatScreen>,
         ChatSelectionMixin<RoomChatScreen>,
-        ChatPhotoSendMixin<RoomChatScreen> {
+        ChatPhotoSendMixin<RoomChatScreen>,
+        ChatSendMixin<RoomChatScreen> {
   final _msgCtrl = TextEditingController();
 
   // ── Kontrak ChatSelectionMixin ──
@@ -113,15 +114,22 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     required String senderId,
     required String senderName,
     required String senderGender,
+    String text = '',
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
   }) async {
     await _chat.sendRoomMessage(
       roomId: widget.room.id,
       senderId: senderId,
       senderName: senderName,
       senderGender: senderGender,
-      text: '',
+      text: text,
       type: type,
       imageData: imageData,
+      repliedToId: repliedToId,
+      repliedToText: repliedToText,
+      repliedToSenderName: repliedToSenderName,
     );
   }
 
@@ -140,6 +148,108 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   @override
   void photoSetPreview(String base64) {
     setState(() => _pendingPhotoBase64 = base64);
+  }
+
+  // ── Kontrak ChatSendMixin ──
+  @override
+  TextEditingController get sendMsgCtrl => _msgCtrl;
+
+  @override
+  bool get sendIsSending => _isSending;
+
+  @override
+  set sendIsSending(bool v) => _isSending = v;
+
+  @override
+  MessageModel? get sendEditingMessage => editingMessage;
+
+  @override
+  set sendEditingMessage(MessageModel? v) => editingMessage = v;
+
+  @override
+  MessageModel? get sendReplyingTo => replyingTo;
+
+  @override
+  set sendReplyingTo(MessageModel? v) => replyingTo = v;
+
+  @override
+  String? get sendPendingPhotoBase64 => _pendingPhotoBase64;
+
+  @override
+  set sendPendingPhotoBase64(String? v) => _pendingPhotoBase64 = v;
+
+  @override
+  List<Mention> sendMentionCandidates() => _mentionCandidates;
+
+  @override
+  Future<bool> sendPreCheck() async {
+    // Private room: cek role SEBELUM kirim — komposer interaktif sejak
+    // awal (tanpa gerbang loading). Bukan member → snackbar ajak join.
+    if (isPrivateRoom && !_roleChecked) {
+      _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
+      _roleChecked = true;
+      if (!mounted) return false;
+      setState(() {});
+      if (_myRole == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.read<LocaleProvider>().s.privateRoomNeedApproval,
+            ),
+          ),
+        );
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
+  Future<void> sendEditPersist(MessageModel editing, String raw) async {
+    await ChatService().editRoomMessage(editing.id, raw);
+  }
+
+  @override
+  Future<void> sendDispatchText({
+    required String text,
+    required MessageModel? reply,
+    required List<Mention> mentions,
+  }) async {
+    await _chat.sendRoomMessage(
+      roomId: widget.room.id,
+      senderId: _auth.uid!,
+      senderName: _auth.profile!.nickname,
+      senderGender: _auth.profile!.gender,
+      text: text,
+      repliedToId: reply?.id,
+      repliedToText: reply?.text,
+      repliedToSenderName: reply?.senderName,
+      mentions: mentions,
+    );
+  }
+
+  @override
+  void sendOnSentText() {
+    final pp = context.read<PointsProvider>();
+    if (pp.enabled) {
+      pp.showPointsToast(
+        context,
+        context.read<LocaleProvider>().s.pointsDeduct(1),
+      );
+    }
+    _roomSendCount++;
+    if (_roomSendCount == 5) {
+      _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
+        if (earned && mounted) {
+          final s = context.read<LocaleProvider>().s;
+          _pointsProv?.showPointsToast(
+            context,
+            s.pointsGain(5, s.reasonRoomChat),
+          );
+        }
+      });
+    }
+    _scrollToBottom();
   }
   final _scrollCtrl = ScrollController();
   bool _showUsers = false;
@@ -236,13 +346,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       _mentionCandidates.take(100).toList();
 
   /// Resolusi teks → mention ber-uid. `@all` hanya di grup oleh owner/admin.
-  List<Mention> _computeMentions(String text) => parseMentions(
-        text,
-        candidates: _mentionCandidates,
-        allowAll: isPrivateRoom && canModerate,
-        allExpansion: _mentionAllExpansion(),
-      );
-
+  
   @override
   void initState() {
     super.initState();
@@ -1317,298 +1421,6 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   // LayerLink per pesan — anchor action bar (Balas / Hapus) tepat di atas bubble.
 
-  Future<void> _send() async {
-    final raw = _msgCtrl.text.trim();
-    // Kapitalkan huruf pertama saat kirim PESAN BARU (gaya WhatsApp).
-    // Mode edit pakai teks asli.
-    final text = capitalizeFirst(raw);
-    final hasPhoto = _pendingPhotoBase64 != null;
-    if (text.isEmpty && !hasPhoto) return;
-    if (_isSending) return;
-
-    // Soft gate anon: fitur anon OFF → tawarkan daftar, jangan kirim.
-    final anonAuth = context.read<AuthProvider>();
-    if (anonAuth.anonBlocked) {
-      if (!mounted) return;
-      showAnonPromptDialog(context);
-      return;
-    }
-
-    // Private room: cek role SEBELUM kirim — komposer interaktif sejak
-    // awal (tanpa gerbang loading). Bukan member → snackbar ajak join.
-    if (isPrivateRoom && !_roleChecked) {
-      _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
-      _roleChecked = true;
-      if (!mounted) return;
-      setState(() {});
-      if (_myRole == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.read<LocaleProvider>().s.privateRoomNeedApproval)),
-        );
-        return;
-      }
-    }
-
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-
-    // Mode edit pesan sendiri (text): simpan perubahan, tanpa koin/kirim baru.
-    final editing = editingMessage;
-    if (editing != null && !hasPhoto) {
-      if (raw.isEmpty || raw == editing.text) {
-        cancelEdit();
-        return;
-      }
-      _msgCtrl.clear();
-      setState(() => editingMessage = null);
-      _isSending = true;
-      try {
-        final ok = await ChatService().editRoomMessage(editing.id, raw);
-        if (mounted) {
-          final s = context.read<LocaleProvider>().s;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(ok ? s.msgEdited : s.errSendFailed),
-            ),
-          );
-        }
-      } finally {
-        _isSending = false;
-      }
-      return;
-    }
-
-    final replying = replyingTo;
-    if (hasPhoto) {
-      final photoB64 = _pendingPhotoBase64!;
-      _msgCtrl.clear();
-      setState(() {
-        _pendingPhotoBase64 = null;
-        replyingTo = null;
-      });
-
-      // Optimistic dulu: bubble langsung tampil (centang-1) walau offline.
-      final pendingPhoto = MessageModel(
-        id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        isRegistered: profile.isRegistered,
-        text: text,
-        type: 'image',
-        imageData: photoB64,
-        timestamp: DateTime.now(),
-        repliedToId: replying?.id,
-        repliedToText: replying?.text,
-        repliedToSenderName: replying?.senderName,
-      );
-      setState(() => _pending.add(pendingPhoto));
-      _scrollToBottom();
-      if (!outboxIsOnline) {
-        await queueOffline(
-          pending: pendingPhoto,
-          pointsKind: 'image',
-          pointsDeducted: false,
-          imagePayload: photoB64,
-          needsUpload: true,
-          uploadKind: 'image',
-          repliedToId: replying?.id,
-          repliedToText: replying?.text,
-          repliedToSenderName: replying?.senderName,
-        );
-        return;
-      }
-      _isSending = true;
-
-      final pp = context.read<PointsProvider>();
-      final rPhoto = await pp.deductBeforeSend('image');
-      if (rPhoto < 0) {
-        setState(() => _pending.remove(pendingPhoto));
-        _isSending = false;
-        if (!mounted) return;
-        if (rPhoto == -1) {
-          pp.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
-          );
-        }
-        return;
-      }
-      String? uploadedPath;
-      try {
-        final path = await StoragePhotoService.instance.upload(
-          chatId: 'room_${widget.room.id}',
-          base64: photoB64,
-        );
-        if (path == null || path.isEmpty) {
-          if (!outboxIsOnline) throw const SocketException('photo upload failed');
-          safeUnawaited(pp.refundChatPoint('image'));
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)));
-            setState(() => _pending.remove(pendingPhoto));
-          }
-          _isSending = false;
-          return;
-        }
-        uploadedPath = path;
-        await chat.sendRoomMessage(
-          roomId: widget.room.id,
-          senderId: uid,
-          senderName: profile.nickname,
-          senderGender: profile.gender,
-          text: text,
-          type: 'image',
-          imageData: path,
-          repliedToId: replying?.id,
-          repliedToText: replying?.text,
-          repliedToSenderName: replying?.senderName,
-        );
-        _scrollToBottom();
-      } catch (e) {
-        if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
-          await queueOffline(
-            pending: pendingPhoto,
-            pointsKind: 'image',
-            pointsDeducted: true,
-            imagePayload: uploadedPath ?? photoB64,
-            needsUpload: uploadedPath == null,
-            uploadKind: 'image',
-            repliedToId: replying?.id,
-            repliedToText: replying?.text,
-            repliedToSenderName: replying?.senderName,
-          );
-        } else {
-          safeUnawaited(pp.refundChatPoint('image'));
-          if (mounted) {
-            final s = context.read<LocaleProvider>().s;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(s.errSendPhoto)),
-            );
-            setState(() => _pending.remove(pendingPhoto));
-          }
-        }
-      } finally {
-        _isSending = false;
-      }
-      return;
-    }
-
-    final reply = replyingTo;
-    final mentions = _computeMentions(text);
-    _msgCtrl.clear();
-    setState(() => replyingTo = null);
-
-    // Optimistic: bubble langsung tampil (centang-1) walau offline —
-    // otomatis terkirim saat koneksi pulih (centang-2).
-    final pending = MessageModel(
-      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
-      senderId: uid,
-      senderName: profile.nickname,
-      senderGender: profile.gender,
-      isRegistered: profile.isRegistered,
-      text: text,
-      type: 'text',
-      imageData: '',
-      timestamp: DateTime.now(),
-      repliedToId: reply?.id,
-      repliedToText: reply?.text,
-      repliedToSenderName: reply?.senderName,
-      mentions: mentions,
-    );
-    setState(() => _pending.add(pending));
-    _scrollToBottom();
-    if (!outboxIsOnline) {
-      await queueOffline(
-        pending: pending,
-        pointsKind: 'text',
-        pointsDeducted: false,
-        repliedToId: reply?.id,
-        repliedToText: reply?.text,
-        repliedToSenderName: reply?.senderName,
-        mentions: mentions,
-      );
-      return;
-    }
-    _isSending = true;
-
-    final pp = context.read<PointsProvider>();
-    final remaining = await pp.deductBeforeSend('text');
-    if (remaining < 0) {
-      setState(() => _pending.remove(pending));
-      _isSending = false;
-      if (!mounted) return;
-      final ss = context.read<LocaleProvider>().s;
-      if (remaining == -1) {
-        pp.showOutOfPointsDialog(context, ss.isId);
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(ss.errSendFailed)));
-      }
-      return;
-    }
-    try {
-      await chat.sendRoomMessage(
-        roomId: widget.room.id,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: text,
-        repliedToId: reply?.id,
-        repliedToText: reply?.text,
-        repliedToSenderName: reply?.senderName,
-        mentions: mentions,
-      );
-      if (pp.enabled) {
-        pp.showPointsToast(
-          context,
-          context.read<LocaleProvider>().s.pointsDeduct(1),
-        );
-      }
-      _roomSendCount++;
-      if (_roomSendCount == 5) {
-        _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
-          if (earned && mounted) {
-            final s = context.read<LocaleProvider>().s;
-            _pointsProv?.showPointsToast(
-              context,
-              s.pointsGain(5, s.reasonRoomChat),
-            );
-          }
-        });
-      }
-      _scrollToBottom();
-    } catch (e) {
-      if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
-        // Jaringan putus di tengah kirim → antrekan (poin sudah dipotong,
-        // jangan refund — dipakai saat flush).
-        await queueOffline(
-          pending: pending,
-          pointsKind: 'text',
-          pointsDeducted: true,
-          repliedToId: reply?.id,
-          repliedToText: reply?.text,
-          repliedToSenderName: reply?.senderName,
-        );
-      } else {
-        // Kirim gagal → kembalikan koin yang sudah terpotong.
-        safeUnawaited(pp.refundChatPoint('text'));
-        if (mounted) {
-          final s = context.read<LocaleProvider>().s;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(s.errSendFailed)));
-          setState(() => _pending.remove(pending));
-        }
-      }
-    } finally {
-      _isSending = false;
-    }
-  }
 
   bool _showAttachRow = false;
 
@@ -1825,7 +1637,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         } else {
           final input = ChatComposerInput(
             controller: _msgCtrl,
-            onSend: _send,
+            onSend: sendMessage,
             showAttachRow: _showAttachRow,
             onToggleAttach: _toggleAttachRow,
             onTakePhoto: () {
