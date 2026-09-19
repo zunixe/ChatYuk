@@ -173,6 +173,17 @@ class ForensicWatermark {
     return y;
   }
 
+  /// Decode aman: `image` 4.x MELEMPAR (RangeError) untuk bytes terlalu
+  /// pendek/korup, bukan mengembalikan null. Semua jalur embed/detect harus
+  /// lewat sini agar file rusak tidak bikin crash.
+  static img.Image? _safeDecode(Uint8List bytes) {
+    try {
+      return img.decodeImage(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static double _blockVariance(Float64List block) {
     double mean = 0;
     for (final v in block) {
@@ -191,7 +202,7 @@ class ForensicWatermark {
   /// Decode → resize 1024 → embed watermark → encode JPEG → base64.
   /// `seed` = UID penerima (satu-satunya pihak yang akan melihat foto).
   static String? embedToBase64(Uint8List bytes, String seed) {
-    final decoded = img.decodeImage(bytes);
+    final decoded = _safeDecode(bytes);
     if (decoded == null) return null;
     // Resize proporsional: sisi terpanjang = size, rasio asli dipertahankan.
     final resized = _resizeMaxSide(decoded, size);
@@ -272,21 +283,22 @@ class ForensicWatermark {
     Uint8List bytes,
     List<String> candidates,
   ) {
-    final decoded = img.decodeImage(bytes);
+    final decoded = _safeDecode(bytes);
     if (decoded == null) return const [];
 
-    // Multi-skala: recapture mengubah ukuran tampil. Embed selalu membuat
-    // grid = size/blockSize = 16 blok pada sisi terpanjang. Saat ekstraksi,
-    // blockSize harus mengikuti ukuran gambar agar grid tetap 16 blok.
-    const gridBlocks = 16;
-    const scales = [1600, 1024, 768, 512, 448, 384, 320, 256, 224, 192];
+    // Multi-skala: recapture mengubah ukuran tampil. Embed mengecilkan sisi
+    // terpanjang ke [size] lalu menyematkan dengan blok [blockSize], jadi pada
+    // skala [size] ukuran blok harus kembali [blockSize]. Skala lain dipakai
+    // untuk tahan terhadap recapture/downscale (blok ikut terskala).
+    const scales = [size, 1600, 1024, 768, 512, 448, 384, 320, 256, 224, 192];
     const shifts = [0, -8, 8, -16, 16];
 
     // Kumpulkan SEMUA ekstraksi (tiap skala × shift) untuk evaluasi per seed.
     final means = <List<double>>[];
     for (final target in scales) {
       final resized = _resizeMaxSide(decoded, target);
-      final n = (target / gridBlocks).round();
+      // Blok piksel pada skala ini = blockSize diskalakan dari [size].
+      final n = (target * blockSize / size).round();
       final y = _luminance(resized);
       for (final dx in shifts) {
         for (final dy in shifts) {
