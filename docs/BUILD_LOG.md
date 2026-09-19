@@ -52,3 +52,5 @@ lalu **dihapus** (tetap butuh SHA-1 terdaftar sendiri).
 | 2026-09-19 17:50 | develop | adminProd + apkpureProd | Fix OTP "kode tidak valid" (tampilkan sebab asli + resend saat email belum-verified) + unit test 4 jalur login (anon/gmail/email) + pindah post_photo_cache ke core/cache | Success (33: admin+user stream install; 240: admin ok, user di-push ke /sdcard/Download/chatyuk.apk — MIUI INSTALL_FAILED_USER_RESTRICTED, install manual dari File Manager) |
 
 | 2026-09-19 18:40 | develop | adminProd + apkpureProd | Rebuild: fix watermark forensik detect (grid 16→skala size) + guard decode crash (image 4.x) + 46 unit test baru (watermark/geo/linkpreview/outbox/providers) | Success (33: admin+user stream install; 240: admin ok, user di-push ke /sdcard/Download/chatyuk.apk — MIUI USER_RESTRICTED, install manual dari File Manager) |
+
+| 2026-09-19 19:47 | develop | playProd (AAB) | Fix error Play "ID iklan": tambah izin AD_ID eksplisit di manifest + perbarui deklarasi ID Iklan (Ya + Analytics + Iklan/pemasaran). Bump 1.2.42+54 (53 sudah terpakai) | Success: AAB upload track alpha; Play "Perlu diperhatikan" kosong, ID Iklan "Siap dikirim untuk ditinjau" |
