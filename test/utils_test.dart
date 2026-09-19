@@ -98,6 +98,27 @@ void main() {
     });
   });
 
+  group('formatMmSs', () {
+    test('selalu dua digit menit & detik', () {
+      expect(utils.formatMmSs(0), '00:00');
+      expect(utils.formatMmSs(5), '00:05');
+      expect(utils.formatMmSs(59), '00:59');
+      expect(utils.formatMmSs(60), '01:00');
+      expect(utils.formatMmSs(61), '01:01');
+      expect(utils.formatMmSs(600), '10:00');
+      expect(utils.formatMmSs(3599), '59:59');
+    });
+
+    test('lewat 1 jam tetap menit berjalan (bukan wrap)', () {
+      expect(utils.formatMmSs(3600), '60:00');
+      expect(utils.formatMmSs(3661), '61:01');
+    });
+
+    test('negatif di-clamp ke 00:00', () {
+      expect(utils.formatMmSs(-5), '00:00');
+    });
+  });
+
   group('notifIdForKey', () {
     test('selalu non-negatif & deterministik', () {
       final a = utils.notifIdForKey('chat-abc');

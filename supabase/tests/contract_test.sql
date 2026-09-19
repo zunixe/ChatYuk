@@ -38,5 +38,11 @@ select supabase_tests.check('get_online_users() ada',
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='get_online_users'));
 
+-- Daftar online: dummy idle tanpa socket presence hanya tampil bila
+-- uid-nya dikenal (filterRpcOnlineRows). RPC dibaca semua role.
+select supabase_tests.check('dummy_uids() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='dummy_uids'));
+
 select supabase_tests.report() as result;
 rollback;

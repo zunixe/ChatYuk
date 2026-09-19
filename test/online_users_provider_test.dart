@@ -164,7 +164,7 @@ void main() {
       );
     });
 
-    test('hold dilepas setelah 90 dtk tanpa kembali', () async {
+    test('hold dilepas setelah 10 dtk tanpa kembali', () async {
       await MessageCache.instance.removeRawObj('online_users');
       FakeAsync().run((fake) {
         // FakeAsync tidak memalsukan DateTime.now → kendalikan jam hold
@@ -184,8 +184,8 @@ void main() {
           fake.elapse(const Duration(milliseconds: 100));
           expect(p.users.map((u) => u.uid).toSet(), {'a', 'idle1'});
           // Grace habis tanpa kabar → dilepas (tidak nempel selamanya).
-          now = now.add(const Duration(seconds: 95));
-          fake.elapse(const Duration(seconds: 95));
+          now = now.add(const Duration(seconds: 15));
+          fake.elapse(const Duration(seconds: 15));
           expect(p.users.map((u) => u.uid).toList(), ['a']);
           p.dispose();
           ctl.close();
