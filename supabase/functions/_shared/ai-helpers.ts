@@ -183,7 +183,7 @@ export function userWantsImage(text: string): boolean {
 // Cermin index.ts: ambil blok ```mermaid pertama (untuk render diagram).
 // Return null bila tidak ada / terlalu pendek (bukan diagram beneran).
 export function extractMermaid(text: string): string | null {
-  const m = String(text || '').match(/```mermaid\s*\n([\s\S]*?)```/i);
+  const m = String(text || '').match(/```mermaid\s+([\s\S]*?)```/i);
   if (!m) return null;
   const code = m[1].trim().slice(0, 2000);
   return code.length >= 10 ? code : null;
@@ -195,7 +195,7 @@ export function extractMermaid(text: string): string | null {
 const CHART_TYPES = ['pie', 'doughnut', 'bar', 'line', 'radar', 'polarArea'];
 
 export function extractChartJs(text: string): string | null {
-  const m = String(text || '').match(/```chartjs\s*\n([\s\S]*?)```/i);
+  const m = String(text || '').match(/```chartjs\s+([\s\S]*?)```/i);
   if (!m) return null;
   const raw = m[1].trim().slice(0, 4000);
   if (raw.length < 20) return null;
