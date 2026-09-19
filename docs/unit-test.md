@@ -76,6 +76,40 @@ WebRTC call, publish story. Jalur itu hanya divalidasi manual di HP.
 Kalau suatu saat butuh E2E: runner harus punya emulator + flavor `dev`
 memerlukan `google-services.json` sendiri (sekarang belum ada).
 
+## Functional test (`test/functional/`)
+
+Alur nyata dari sisi UI/provider — hermetic (tanpa network/plugin), jalan di CI.
+Mount widget PRODUKSI (bukan dummy tombol) lalu verifikasi perilaku.
+
+| File | Alur |
+|---|---|
+| `composer_send_flow_test.dart` | composer nyata: ketik → tombol kirim → `onSend` 1×; chip attach (foto/view-once/koin/gift) memanggil callback tepat; chip koin tersembunyi saat poin OFF |
+| `composer_mention_flow_test.dart` | ketik `@bud` → panel kandidat → pilih → teks `@Budi ` + caret; spasi menutup panel |
+| `bubble_swipe_reply_flow_test.dart` | bubble nyata: drag ≥48px → balas; <48px batal; pesan sendiri tanpa aksi |
+| `reaction_bar_flow_test.dart` | `ReactionBar`: tap emoji → `onReact(emoji)`; semua emoji bisa ditap; `⋯` → `onMore` |
+| `entry_form_flow_test.dart` | `ProfileFormCard`: ketik nickname, submit, tombol disabled saat loading |
+| `chat_send_mentions_io_test.dart` | `ChatProvider` → `ChatService` (HTTP palsu): payload `mentions` benar; tanpa mention kolom absen |
+
+## Regression test (`test/regression/`)
+
+Mengunci insiden NYATA yang pernah terjadi. Tiap test sudah diuji-negatif
+(di-`revert` bug-nya → test GAGAL), jadi bukan test hampa.
+
+| File | Regresi yang dikunci |
+|---|---|
+| `r_read_receipt_test.dart` | Read-receipt monoton maju (null/tua tidak mundur) + batas inklusif `<=` (dulu `isBefore` ketat → centang-2 telat) |
+| `r_swipe_reply_test.dart` | `SwipeToReply` wajib publik; `enabled=false` → `child` apa adanya; ambang 48px; hanya geser kanan |
+| `r_auth_sensitive_cols_test.dart` | `registerProfile` upsert TANPA email/fcm/ip (anti `42501`); kolom sensitif via `PATCH` terpisah |
+| `r_settings_no_stream_test.dart` | `watchGlobalSettings`/`watchEnabled` TIDAK pakai `.stream()` (`.stream()` selalu `SELECT *` → sentuh `app_shared_secret` → 42501 + retry tanpa henti) |
+| `r_stream_replay_test.dart` | `ChatStreamSession` me-replay snapshot ke listener yang datang belakangan (dulu: layar kosong dulu) |
+| `r_build_deps_test.dart` | `pubspec.yaml` tanpa dev-dep `integration_test` (dulu bikin build release gagal) |
+| `supabase/tests/regression_test.sql` | `fn_archive_deleted_user` `coalesce(is_registered)`; hardening profiles tanpa SELECT level-tabel; trigger mention; `ai_always_online` di presence tick |
+
+### Refactor pendukung (2a)
+`lib/core/chat/read_receipt.dart` — logika read-receipt dipindah dari screen
+ke helper MURNI agar bisa diuji. `private_chat_screen.dart` memakainya
+(perilaku identik).
+
 ## Test SQL (Lapis 3)
 
 Invariant DB di `supabase/tests/*.sql` (transaksional, `BEGIN`/`ROLLBACK` —
@@ -85,6 +119,7 @@ Dijalankan CI di job `sql-tests`.
 
 | File | Yang dikunci |
 |---|---|
+| `regression_test.sql` | insiden nyata: `fn_archive_deleted_user` null-fix, hardening profiles, trigger mention, `ai_always_online` |
 | `schema_sync_test.sql` | kolom/RPC anti-regresi (mute/archive, gift, room mute, dummy kind, reaksi) |
 | `notif_chat_test.sql` | `notify_private_message`/`call_push`/`handle_new_private_message` |
 | `contract_test.sql` | kontrak Edge↔DB (wallet, forward, AI, presence, `dummy_uids`) |
