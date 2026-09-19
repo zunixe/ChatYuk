@@ -58,6 +58,9 @@ class ChatService {
 
   // UID dummy (TTL 5 mnt) — dummy tak punya socket presence, jadi filter
   // presence cross-reference butuh daftar ini supaya dummy idle tetap tampil.
+  // Via RPC dummy_uids() (security definer, hanya kolom uid): tabel
+  // dummy_accounts RLS-nya admin-only sehingga select langsung dari HP
+  // selalu kosong → idle dummy gugur sebagai zombie (kasus Dhanu).
   Set<String>? _dummyUidCache;
   DateTime? _dummyUidFetchedAt;
   Future<Set<String>> _fetchDummyUids() async {
@@ -68,12 +71,9 @@ class ChatService {
       return _dummyUidCache!;
     }
     try {
-      final rows = await _sb
-          .from('dummy_accounts')
-          .select('uid')
-          .timeout(const Duration(seconds: 2));
+      final rows = await _sb.rpc('dummy_uids').timeout(const Duration(seconds: 2));
       _dummyUidCache = {
-        for (final r in rows as List) '${(r as Map)['uid'] ?? ''}',
+        for (final r in rows as List) '$r',
       }..remove('');
       _dummyUidFetchedAt = DateTime.now();
     } catch (_) {}
