@@ -5,10 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:record/record.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/gifts.dart';
@@ -44,6 +41,7 @@ import '../widgets/anon_prompt_dialog.dart';
 import '../services/message_reaction_service.dart';
 import '../utils.dart';
 import '../mixins/chat_selection_mixin.dart';
+import '../mixins/voice_recorder_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../services/chat_photo_helper.dart';
 
@@ -73,7 +71,10 @@ class PrivateChatScreen extends StatefulWidget {
 }
 
 class _PrivateChatScreenState extends State<PrivateChatScreen>
-    with ChatOutboxMixin<PrivateChatScreen>, ChatSelectionMixin<PrivateChatScreen> {
+    with
+        ChatOutboxMixin<PrivateChatScreen>,
+        ChatSelectionMixin<PrivateChatScreen>,
+        VoiceRecorderMixin<PrivateChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _imagePicker = ImagePicker();
@@ -112,6 +113,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   @override
   Map<String, String> get chatReactionKnownNames =>
       {widget.otherUid: widget.otherName};
+
+  // ── Kontrak VoiceRecorderMixin ──
+  @override
+  void voiceSendRecordingSignal() => _sendRecordingSignal();
+
+  @override
+  String voicePermissionMessage() => context.read<LocaleProvider>().s.errVoicePermission;
+
+  @override
+  String voiceTooShortMessage() => context.read<LocaleProvider>().s.errVoiceTooShort;
 
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<PrivateChatInfo>> _chatInfoStream;
@@ -472,14 +483,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _typingClearTimer?.cancel();
     // Voice recording: hentikan timer + native recorder — tanpa ini keluar
     // screen saat rekam = timer jalan terus + setState after dispose + leak.
-    _voiceTimer?.cancel();
-    _voiceTimer = null;
-    if (_isRecordingVoice) {
-      _isRecordingVoice = false;
-      try {
-        _record.cancel();
-      } catch (_) {}
-    }
+    disposeVoiceRecorder();
     // DEFER: dispose saat tree terkunci (unmount IndexedStack) — penulisan
     // notifier memicu markNeedsBuild pada CallBanner → glitch.
     final chatToClear = widget.chatId;
@@ -1095,84 +1099,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   }
 
 
-  // ── Voice message 60s (WA style) ──
-  final _record = AudioRecorder();
-  bool _isRecordingVoice = false;
-  Timer? _voiceTimer;
-  int _voiceSeconds = 0;
-  bool _isVoiceLocked = false;
-  bool _isVoicePaused = false;
-  // Bulatan lock sedang di-pick-up (ditekan + digeser) — menyembunyikan
-  // tombol pause di composer dan menampilkan kembali "geser untuk batal".
-  bool _voicePickUp = false;
+  // ── Voice message 60s (WA style) — state di VoiceRecorderMixin ──
 
-  void _lockVoiceRecord() {
-    if (mounted) setState(() => _isVoiceLocked = true);
-  }
-
-  void _startVoiceTimer() {
-    _voiceTimer?.cancel();
-    _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) return;
-      if (_voiceSeconds >= 59) { _stopVoiceRecord(send: true); return; }
-      _sendRecordingSignal();
-      setState(() => _voiceSeconds++);
-    });
-  }
-
-  Future<void> _pauseVoiceRecord() async {
-    try { await _record.pause(); } catch (_) {}
-    _voiceTimer?.cancel();
-    if (mounted) setState(() => _isVoicePaused = true);
-  }
-
-  Future<void> _resumeVoiceRecord() async {
-    try { await _record.resume(); } catch (_) {}
-    if (mounted) setState(() => _isVoicePaused = false);
-    _startVoiceTimer();
-  }
-
-  Future<void> _startVoiceRecord() async {
-    final hasPerm = await Permission.microphone.request();
-    if (!hasPerm.isGranted) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errVoicePermission)));
-      return;
-    }
-    try {
-      if (await _record.hasPermission()) {
-        final dir = await getTemporaryDirectory();
-        final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
-        await _record.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000), path: path);
-        setState(() {
-          _isRecordingVoice = true;
-          _voiceSeconds = 0;
-          _isVoiceLocked = false;
-          _isVoicePaused = false;
-          _voicePickUp = false;
-        });
-        _sendRecordingSignal();
-        _startVoiceTimer();
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _stopVoiceRecord({required bool send}) async {
-    _voiceTimer?.cancel();
-    if (!_isRecordingVoice) return;
-    _isVoiceLocked = false;
-    _isVoicePaused = false;
-    _voicePickUp = false;
-    final path = await _record.stop();
-    setState(() => _isRecordingVoice = false);
-    if (!send || path == null) return;
+  @override
+  Future<void> voiceFinishRecording(String path, int recordedMs) async {
     final f = File(path);
-    if (!await f.exists()) return;
     final bytes = await f.readAsBytes();
-    final recordedMs = _voiceSeconds * 1000;
-    if (bytes.length < 2000) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errVoiceTooShort)));
-      return;
-    }
     final chatId = widget.chatId;
     final auth = context.read<AuthProvider>();
     final uid = auth.uid; final profile = auth.profile;
@@ -1273,16 +1205,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     }
   }
 
-  void _cancelVoiceRecord() {
-    _voiceTimer?.cancel();
-    _record.cancel();
-    setState(() {
-      _isRecordingVoice = false;
-      _isVoiceLocked = false;
-      _isVoicePaused = false;
-      _voicePickUp = false;
-    });
-  }
+
 
   Future<void> _sendPhoto() async {
     final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
@@ -2805,7 +2728,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                 // Ukuran & posisi card 100% identik karena
                                 // container-nya yang sama. Tinggi 48 = tinggi
                                 // konten ketik (icon +/📷 48px).
-                                child: _isRecordingVoice
+                                child: voiceRecording
                                     ? SizedBox(
                                         height: 48,
                                         child: Row(
@@ -2814,13 +2737,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                             Icon(Icons.mic_rounded, color: Colors.red, size: 18),
                                             SizedBox(width: 8),
                                             Text(
-                                              _voiceSeconds < 60
-                                                  ? '${_voiceSeconds.toString().padLeft(2, '0')}s'
-                                                  : '${(_voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(_voiceSeconds % 60).toString().padLeft(2, '0')}',
+                                              voiceSeconds < 60
+                                                  ? '${voiceSeconds.toString().padLeft(2, '0')}s'
+                                                  : '${(voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(voiceSeconds % 60).toString().padLeft(2, '0')}',
                                               style: AppText.chatBodyStrong.copyWith(color: Colors.red),
                                             ),
                                             const Spacer(),
-                                            if (!_isVoiceLocked || _voicePickUp) ...[
+                                            if (!voiceLocked || voicePickUp) ...[
                                               Icon(
                                                 Icons.keyboard_arrow_left_rounded,
                                                 color: AppTheme.textSecondary,
@@ -2832,9 +2755,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                               ),
                                             ] else ...[
                                               GestureDetector(
-                                                onTap: () => _isVoicePaused
-                                                    ? _resumeVoiceRecord()
-                                                    : _pauseVoiceRecord(),
+                                                onTap: () => voicePaused
+                                                    ? resumeVoiceRecord()
+                                                    : pauseVoiceRecord(),
                                                 child: Container(
                                                   width: 30,
                                                   height: 30,
@@ -2843,7 +2766,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                                     shape: BoxShape.circle,
                                                   ),
                                                   child: Icon(
-                                                    _isVoicePaused
+                                                    voicePaused
                                                         ? Icons.play_arrow_rounded
                                                         : Icons.pause_rounded,
                                                     color: Colors.red,
@@ -2940,16 +2863,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                     opacity: anim,
                                     child: child,
                                   ),
-                                  child: _isRecordingVoice
+                                  child: voiceRecording
                                       ? MicRecordButton(
                                           isRecording: true,
-                                          isLocked: _isVoiceLocked,
-                                          onTap: () => _stopVoiceRecord(send: true),
-                                          onLongPressStart: _startVoiceRecord,
-                                          onLongPressCancel: _cancelVoiceRecord,
-                                          onLock: _lockVoiceRecord,
+                                          isLocked: voiceLocked,
+                                          onTap: () => stopVoiceRecord(send: true),
+                                          onLongPressStart: startVoiceRecord,
+                                          onLongPressCancel: cancelVoiceRecord,
+                                          onLock: lockVoiceRecord,
                                           onPickUpChanged: (v) =>
-                                              setState(() => _voicePickUp = v),
+                                              setState(() => voicePickUp = v),
                                           size: 40,
                                         )
                                       : (hasText
@@ -2984,13 +2907,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                             )
                                           : MicRecordButton(
                                               isRecording: false,
-                                              isLocked: _isVoiceLocked,
-                                              onTap: () => _stopVoiceRecord(send: true),
-                                              onLongPressStart: _startVoiceRecord,
-                                              onLongPressCancel: _cancelVoiceRecord,
-                                              onLock: _lockVoiceRecord,
+                                              isLocked: voiceLocked,
+                                              onTap: () => stopVoiceRecord(send: true),
+                                              onLongPressStart: startVoiceRecord,
+                                              onLongPressCancel: cancelVoiceRecord,
+                                              onLock: lockVoiceRecord,
                                               onPickUpChanged: (v) =>
-                                                  setState(() => _voicePickUp = v),
+                                                  setState(() => voicePickUp = v),
                                               size: 40,
                                             )),
                                 );
