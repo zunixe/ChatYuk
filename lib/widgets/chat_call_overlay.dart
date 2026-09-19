@@ -411,10 +411,8 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
           height: h,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.65),
-              width: 1.5,
-            ),
+            // Tanpa border: garis putih 1.5px bikin tepi keliling lengket
+            // / terlihat "putih-putih" saat video bergerak.
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.35),

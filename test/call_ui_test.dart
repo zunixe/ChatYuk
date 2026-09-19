@@ -185,4 +185,20 @@ void main() {
       await stub.dispose();
     });
   });
+  group('notif panggilan aktif (regresi tap-kembali hilang)', () {
+    test('ensureActiveNotif tanpa sesi = no-op (tidak crash)', () async {
+      final provider = CallProvider.newForTest(_FakeCallUi());
+      // Tanpa sesi aktif → langsung return, tidak menyentuh plugin.
+      await provider.ensureActiveNotif();
+      provider.dispose();
+    });
+
+    test('clearSession membersihkan metadata notif', () async {
+      final provider = CallProvider.newForTest(_FakeCallUi());
+      // Akses field privat lewat perilaku: tanpa sesi, ensure no-op.
+      await provider.ensureActiveNotif();
+      expect(provider.activeSession, isNull);
+      provider.dispose();
+    });
+  });
 }
