@@ -4,6 +4,8 @@ import '../config/supabase_config.dart';
 import '../main.dart';
 import '../screens/incoming_call_screen.dart';
 import '../services/call_service.dart';
+export '../services/call_service.dart'
+    show CallSession, CallPhase, CallEndReason;
 import '../services/call_notification.dart';
 import '../utils.dart';
 
@@ -85,6 +87,42 @@ class CallProvider extends ChangeNotifier {
 
   /// Ganti mode panggilan aktif (fullscreen ⇄ chat) — dipakai saat
   /// expand/minimize supaya overlay & banner ikut bereaksi.
+
+  // ── Passthrough (Fase 9b) — screen tidak import CallService ──
+  String? get callUid => _service.uid;
+  Future<String> startCall(String calleeUid, String callType) =>
+      _service.startCall(calleeUid, callType);
+  Future<void> updateCallStatus(String callId, String status) =>
+      _service.updateStatus(callId, status);
+  Future<Map<String, dynamic>?> getCall(String callId) => _service.getCall(callId);
+  Future<String?> getNickname(String uid) => _service.getNickname(uid);
+  Stream<String> onCallStatus(String callId) => _service.onCallStatus(callId);
+  void releaseCallStatus(String callId) => _service.releaseCallStatus(callId);
+  Future<void> sendCallSignal(String callId, String type, {Map<String, dynamic>? payload}) =>
+      _service.sendSignal(callId, type, payload: payload);
+
+  // CallNotification (notif foreground panggilan)
+  Future<void> notifShowActive({
+    required String body,
+    required String channelName,
+    required String channelDesc,
+    required String chatId,
+    required String otherUid,
+    required String otherName,
+  }) =>
+      CallNotification.showActive(
+        body: body,
+        channelName: channelName,
+        channelDesc: channelDesc,
+        chatId: chatId,
+        otherUid: otherUid,
+        otherName: otherName,
+      );
+  Future<void> notifStartLive({required String text}) =>
+      CallNotification.startLive(text: text);
+  Future<void> notifStopLive() => CallNotification.stopLive();
+  Future<void> notifCancel() => CallNotification.cancel();
+
   void setMode(CallMode mode) {
     if (_activeMode == mode) return;
     _activeMode = mode;

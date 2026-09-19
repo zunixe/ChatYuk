@@ -11,7 +11,6 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/call_service.dart';
 import '../widgets/async_photo.dart';
 import '../providers/theme_provider.dart';
 import 'call_screen.dart';
@@ -242,7 +241,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       );
       if (!mounted) return;
       final session = await CallProvider.instance.startSession(
-        callId: await CallService.instance.startCall(widget.userId, callType),
+        callId: await context.read<CallProvider>().startCall(widget.userId, callType),
         remoteUid: widget.userId,
         remoteName: name,
         callType: callType,

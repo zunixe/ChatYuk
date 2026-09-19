@@ -8,7 +8,6 @@ import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import '../services/call_service.dart';
 import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
@@ -36,7 +35,7 @@ class IncomingCallScreen extends StatefulWidget {
 }
 
 class _IncomingCallScreenState extends State<IncomingCallScreen> {
-  final CallService _service = CallService.instance;
+  CallProvider get _service => context.read<CallProvider>();
   StreamSubscription<String>? _statusSub;
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   String _callerName = '';
@@ -116,7 +115,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     dlog('[ACCEPT] tap mode=$mode callId=${widget.callId}');
     await _stopRingtone();
     try {
-      await _service.updateStatus(widget.callId, 'answered');
+      await _service.updateCallStatus(widget.callId, 'answered');
     } catch (_) {
       _busy = false;
       return;
@@ -213,8 +212,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     _busy = true;
     await _stopRingtone();
     try {
-      await _service.updateStatus(widget.callId, 'declined');
-      await _service.sendSignal(widget.callId, 'bye');
+      await _service.updateCallStatus(widget.callId, 'declined');
+      await _service.sendCallSignal(widget.callId, 'bye');
     } catch (_) {}
     _close();
   }
