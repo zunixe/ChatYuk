@@ -7,6 +7,7 @@ import '../services/call_service.dart';
 export '../services/call_service.dart'
     show CallSession, CallPhase, CallEndReason;
 import '../services/call_notification.dart';
+import '../services/call/call_ui_factory.dart';
 import '../utils.dart';
 
 enum CallMode { fullscreen, chat }
@@ -61,10 +62,28 @@ final RouteTracker routeTracker = RouteTracker();
 class CallProvider extends ChangeNotifier {
   bool _disposed = false;
 
-  static final CallProvider instance = CallProvider._();
-  CallProvider._();
+  static final CallProvider instance = CallProvider._internal(createCallUi());
 
   final CallService _service = CallService.instance;
+
+  /// UI panggilan SISTEM (ConnectionService Android; stub di iOS/web/test).
+  /// Di-inject supaya bisa di-mock di unit test.
+  final CallUi callUi;
+
+  CallProvider._internal(this.callUi) {
+    _bindCallUi();
+  }
+
+  /// Konstruktor untuk test: `CallProvider.newForTest(mockCallUi)`.
+  @visibleForTesting
+  factory CallProvider.newForTest(CallUi ui) => CallProvider._internal(ui);
+
+  void _bindCallUi() {
+    callUi.onAccept = (callId) => _onSystemAccept(callId);
+    callUi.onDecline = (callId) => _onSystemDecline(callId);
+    callUi.onEnd = (callId) => _onSystemEnd(callId);
+  }
+
   StreamSubscription<Map<String, dynamic>>? _incomingSub;
   StreamSubscription<dynamic>? _authSub;
   bool _listening = false;
@@ -189,6 +208,8 @@ class CallProvider extends ChangeNotifier {
     final nav = navigatorKey.currentState;
     if (nav == null) return;
     _activeCallId = callId;
+    // Layar Dart DULU (ring instan, tak menunggu network) — lalu lengkapi
+    // UI panggilan SISTEM dengan nama pemanggil (fetch nickname 1×).
     nav.push(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -200,6 +221,92 @@ class CallProvider extends ChangeNotifier {
         ),
       ),
     );
+    unawaited(
+      _showSystemIncoming(
+        callId: callId,
+        callerUid: callerUid,
+        callType: callType,
+      ),
+    );
+  }
+
+  Future<void> _showSystemIncoming({
+    required String callId,
+    required String callerUid,
+    required String callType,
+  }) async {
+    // Nama bisa datang dari payload push (killed state) — kalau kosong,
+    // ambil dari DB. Kegagalan fetch tidak menghalangi ring sistem.
+    var name = '';
+    try {
+      name = await _service.getNickname(callerUid) ?? '';
+    } catch (_) {}
+    await callUi.showIncoming(
+      callId: callId,
+      callerName: name.isEmpty ? 'ChatYuk' : name,
+      callType: callType,
+    );
+  }
+
+  /// Handler "terima" dari UI SISTEM (layar kunci/headset). Diteruskan ke
+  /// IncomingCallScreen bila sedang terbuka; bila tidak ada layar (mis. app
+  /// baru dibuka dari killed state), native sudah membuka MainActivity
+  /// dengan intent accept → ditangani `_openFromData` di main.dart.
+  Future<void> Function()? _screenAccept;
+  Future<void> Function()? _screenDecline;
+
+  /// Didaftarkan IncomingCallScreen selama layar itu hidup.
+  void bindIncomingScreen({
+    required String callId,
+    required Future<void> Function() onAccept,
+    required Future<void> Function() onDecline,
+  }) {
+    _screenCallId = callId;
+    _screenAccept = onAccept;
+    _screenDecline = onDecline;
+  }
+
+  void unbindIncomingScreen(String callId) {
+    if (_screenCallId == callId) {
+      _screenCallId = null;
+      _screenAccept = null;
+      _screenDecline = null;
+    }
+  }
+
+  String? _screenCallId;
+
+  Future<void> _onSystemAccept(String callId) async {
+    if (_screenCallId == callId && _screenAccept != null) {
+      await _screenAccept!();
+    } else {
+      dlog('[CallProvider] onAccept sistem tanpa layar utk $callId');
+    }
+  }
+
+  Future<void> _onSystemDecline(String callId) async {
+    if (_screenCallId == callId && _screenDecline != null) {
+      await _screenDecline!();
+      return;
+    }
+    // Tidak ada layar → tolak langsung ke DB + tutup UI sistem.
+    try {
+      await _service.updateStatus(callId, 'declined');
+    } catch (_) {}
+    await callUi.dismiss(callId);
+  }
+
+  /// Sistem mengakhiri call (tombol end di UI sistem / headset).
+  Future<void> _onSystemEnd(String callId) async {
+    if (_activeCallId == callId && _activeSession != null) {
+      await hangup();
+      return;
+    }
+    await callUi.dismiss(callId);
+    if (_activeCallId == callId) {
+      unregisterCall(callId);
+      if (!_disposed) notifyListeners();
+    }
   }
 
   /// Register call yang sedang terbuka di UI (CallScreen / Incoming).
@@ -250,6 +357,8 @@ class CallProvider extends ChangeNotifier {
     _activeCallId = callId;
     session.addListener(_onActiveSession);
     unawaited(session.init());
+    // UI sistem: pindah dari "ringing" ke "in-call" (durasi/tombol end).
+    unawaited(callUi.setConnected(callId));
     unawaited(
       CallNotification.showActive(
         body: notifBody,
@@ -291,6 +400,8 @@ class CallProvider extends ChangeNotifier {
     // → tombol "Akhiri" terasa lama/hang.
     if (!_disposed) notifyListeners();
     await CallNotification.cancel();
+    // Tutup UI panggilan sistem (bila ada) — ring/in-call banner hilang.
+    unawaited(callUi.dismiss(sess.callId));
     try {
       await sess.close();
     } catch (_) {}
