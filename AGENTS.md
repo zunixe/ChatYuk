@@ -234,8 +234,12 @@ Jangan balik: room yang menyesuaikan, bukan private.**
    Butuh yang sama di dua screen? Pakai modul itu — JANGAN copy-paste.
 3. **Screen dilarang import `services/` langsung** — lewat providers/controllers.
    (Tech debt lama masih ada; file BARU wajib patuh.)
-4. **`ChatService` (2278 baris) sedang dipecah per domain** (private/room/typing/
-   presence/gift). Jangan tambah method baru ke file monolit itu.
+4. **`ChatService` SUDAH dipecah per domain** lewat `part` + mixin
+   (`chat_service_private/room/typing/presence/gift.dart`), dengan
+   `ChatBase` untuk state bersama. Jangan menaruh method baru di file
+   monolit — taruh di mixin domain yang sesuai. Pemanggil tetap import
+   `services/chat_service.dart` (satu entry). Jangan ubah pola `part`
+   menjadi import biasa (field privat lintas-domain akan putus).
 5. Verifikasi tiap perubahan struktural: `flutter analyze` 0 error/0 warning +
    `flutter test` 100% hijau.
 6. **Jangan hapus optimasi performa yang sudah ada** (lihat `docs/PERFORMANCE.md`).
