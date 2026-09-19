@@ -9,7 +9,7 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/timeline_provider.dart';
-import '../core/cache/post_photo_cache.dart';
+import '../services/post_photo_cache.dart';
 import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../services/storage_photo_service.dart';

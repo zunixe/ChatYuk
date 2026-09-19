@@ -11,7 +11,7 @@ import '../providers/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/nav_provider.dart';
 import '../providers/timeline_provider.dart';
-import '../core/cache/post_photo_cache.dart';
+import '../services/post_photo_cache.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/theme_provider.dart';
