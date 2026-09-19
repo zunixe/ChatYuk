@@ -37,6 +37,7 @@ import '../widgets/private_chat_message.dart';
 import '../widgets/voice_bubble.dart';
 import '../widgets/chat_ui_shared.dart';
 import '../widgets/mention_spans.dart';
+import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../widgets/chat_composer_input.dart';
 import '../utils/mention.dart';
 import '../widgets/link_preview.dart';
@@ -2736,47 +2737,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   void _showReportDialog(String reportedId, String reportedName) {
-    String reason = '';
-    final s = context.read<LocaleProvider>().s;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        title: Text(
-          '${s.btnReport} $reportedName',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
-        content: TextField(
-          style: TextStyle(color: AppTheme.textPrimary),
-          decoration: InputDecoration(hintText: s.reportHint),
-          onChanged: (v) => reason = v,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(context.read<LocaleProvider>().s.btnCancel),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<ChatProvider>().reportUser(
-                reporterId: context.read<AuthProvider>().uid!,
-                reportedId: reportedId,
-                reason: reason,
-              );
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(s.reportSuccess)));
-            },
-            child: Text(
-              s.btnReport,
-              style: const TextStyle(color: AppTheme.danger),
-            ),
-          ),
-        ],
-      ),
+    showReportUserDialog(
+      context,
+      reportedId: reportedId,
+      reportedName: reportedName,
     );
   }
+
 }
 
 class _UserChip extends StatelessWidget {
