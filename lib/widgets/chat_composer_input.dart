@@ -38,6 +38,10 @@ class ChatComposerInput extends StatefulWidget {
   final List<Mention> mentionCandidates;
   final bool mentionAllowAll;
   final List<Mention> mentionAllExpansion;
+  /// Warna isi pill composer (dan bordernya). Default `bgCard` — cocok untuk
+  /// private chat yang punya background foto (scaffold transparan). Room/grup
+  /// memakai scaffold `bgCard`, jadi kirim `bgInput` supaya pill tetap kontras.
+  final Color? inputFillColor;
   const ChatComposerInput({
     required this.controller,
     this.focusNode,
@@ -57,6 +61,7 @@ class ChatComposerInput extends StatefulWidget {
     this.mentionCandidates = const [],
     this.mentionAllowAll = false,
     this.mentionAllExpansion = const [],
+    this.inputFillColor,
   });
 
   @override
@@ -224,9 +229,12 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                   child: Container(
                     constraints: BoxConstraints(maxHeight: 132),
                     decoration: BoxDecoration(
-                      color: AppTheme.bgCard,
+                      color: widget.inputFillColor ?? AppTheme.bgCard,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppTheme.bgCard, width: 1),
+                      border: Border.all(
+                        color: widget.inputFillColor ?? AppTheme.bgCard,
+                        width: 1,
+                      ),
                     ),
                     // Isi card di-swap: ketik pesan ↔ rekam voice.
                     // Ukuran & posisi card 100% identik karena
@@ -284,7 +292,9 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                             ),
                           )
                         : Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                            // Center: teks & ikon (+ / kamera) duduk di tengah
+                            // tinggi pill rounded — bukan menempel bawah.
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               SizedBox(width: 16),
                               Expanded(

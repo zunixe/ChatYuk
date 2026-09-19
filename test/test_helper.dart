@@ -7,7 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/core/cache/media_disk_cache.dart';
-import 'package:chatyuk/core/cache/post_photo_cache.dart';
+import 'package:chatyuk/services/post_photo_cache.dart';
 
 /// Setup bersama untuk test yang menyentuh Supabase.instance / plugin.
 /// Supabase di-init dengan URL+key dummy (tidak ada network yang dipakai

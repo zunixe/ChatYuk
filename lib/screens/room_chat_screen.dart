@@ -1662,6 +1662,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             mentionCandidates: _mentionCandidates,
             mentionAllowAll: isPrivateRoom && canModerate,
             mentionAllExpansion: _mentionAllExpansion(),
+            // Room/grup: scaffold = bgCard (putih) → pill wajib bgInput agar
+            // kontras. Private chat tidak mengirim ini (tetap bgCard di atas
+            // background foto).
+            inputFillColor: AppTheme.bgInput,
           );
           bottomBar = input;
         }

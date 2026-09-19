@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:chatyuk/models/message_model.dart';
-import 'package:chatyuk/services/message_store.dart';
+import 'package:chatyuk/core/cache/message_store.dart';
 
 MessageModel _msg(String id, DateTime ts, {String text = 'halo'}) =>
     MessageModel(
