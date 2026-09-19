@@ -212,6 +212,35 @@ yang ditambahkan orang/migrasi lain. Kasus nyata: `ai_presence_tick` di-replace
 - `lib/services/` — Supabase API calls
 - `lib/config/` — theme, strings, supabase config, regions
 - `lib/models/` — data models
+- `lib/screens/<screen>/widgets/` — widget privat milik screen itu (co-located)
+
+## Modularitas (WAJIB — untuk AI berikutnya)
+
+**Acuan modul bersama private ↔ room = `private_chat_screen.dart` (terbaru).
+Jangan balik: room yang menyesuaikan, bukan private.**
+
+1. **Batas ukuran:** file baru MAKS ~800 baris. Widget privat > 100 baris →
+   pindah ke `lib/screens/<screen>/widgets/<nama>_widgets.dart`. Kelas publik
+   (dipakai lintas file) TIDAK boleh diawali `_`.
+2. **Dilarang duplikasi** logika chat private ↔ room. Modul bersama terencana:
+   seleksi/reaksi → `lib/mixins/chat_selection_mixin.dart`, outbox →
+   `lib/services/chat_outbox_helper.dart`, foto → `lib/services/chat_photo_helper.dart`,
+   voice → `lib/mixins/voice_recorder_mixin.dart`, composer →
+   `lib/widgets/chat_composer_input.dart`. Butuh yang sama di dua screen?
+   Pakai/pindahkan ke modul itu — JANGAN copy-paste.
+3. **Screen dilarang import `services/` langsung** — lewat providers/controllers.
+   (Tech debt lama masih ada; file BARU wajib patuh.)
+4. **`ChatService` (2278 baris) sedang dipecah per domain** (private/room/typing/
+   presence/gift). Jangan tambah method baru ke file monolit itu.
+5. Verifikasi tiap perubahan struktural: `flutter analyze` 0 error/0 warning +
+   `flutter test` 100% hijau.
+6. **Jangan hapus optimasi performa yang sudah ada** (lihat `docs/PERFORMANCE.md`).
+
+### Checklist sebelum commit refactor
+- [ ] Tidak ada file baru > ~800 baris
+- [ ] Tidak ada kode yang diduplikat private ↔ room
+- [ ] `grep -rn "import.*services/" lib/screens/<file_baru>` → 0 hasil
+- [ ] `flutter analyze` 0/0 + `flutter test` hijau
 
 ## Konvensi Code
 
