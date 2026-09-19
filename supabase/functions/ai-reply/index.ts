@@ -959,7 +959,7 @@ async function uploadAndInsertImage(
 // dari CodeBlock). Gagal render = abaikan diam-diam (teks sudah terkirim).
 function extractDiagram(text: string, lang: string): string | null {
   const m = String(text || '').match(
-    new RegExp('```' + lang + '\\s*\\n([\\s\\S]*?)```', 'i'),
+    new RegExp('```' + lang + '\\s+([\\s\\S]*?)```', 'i'),
   );
   if (!m) return null;
   const code = m[1].trim().slice(0, 2000);
@@ -1001,18 +1001,68 @@ async function renderViaKroki(
   }
 }
 
-// Kroki dulu; fallback mermaid.ink khusus mermaid (aslinya JPEG → ext 'jpg').
+// Perbaiki sintaks mermaid ringkas ala LLM supaya lolos kroki (kasus nyata:
+// diagram satu-baris + label berisi >=80%, CI/CD, Provider & Consumer —
+// kroki 400, gambar batal terkirim diam-diam). Panah --> dan <br/>
+// dilindungi dulu, sisanya dinetralkan, lalu tiap statement dipecah ke
+// baris baru. Pure — aman di-test ulang.
+function sanitizeMermaid(code: string): string {
+  const ARROW = '__ARROW__CHATYUK__';
+  const BR = '__BR__CHATYUK__';
+  let t = String(code || '');
+  t = t.split('-->').join(ARROW);
+  t = t.replace(/<br\s*\/?>/gi, BR);
+  t = t.split('>=').join('lebih dari ')
+    .split('=>').join('lebih dari ')
+    .split('<=').join('kurang dari ')
+    .split('==').join(' sama dengan ');
+  t = t.split('&').join(' dan ')
+    .split('/').join(', ')
+    .split('>').join(' ')
+    .split('<').join(' ')
+    .split('#').join('no.')
+    .split('"').join("'")
+    .split('`').join("'")
+    .split(';').join(',')
+    .split('(').join(' ')
+    .split(')').join('');
+  t = t.split(ARROW).join('-->').split(BR).join('<br/>');
+  // 'subgraph ID [judul]' (spasi liar) -> 'subgraph ID[judul]'.
+  t = t.replace(/\bsubgraph\s+([A-Za-z0-9_]+)\s+\[/gi, 'subgraph $1[');
+  // Satu-baris -> multi-baris: header subgraph, tiap node, tiap edge, end.
+  t = t.replace(/(\bsubgraph\s+[A-Za-z0-9_]+\[[^\]]*\])/gi, '\n$1\n');
+  t = t.replace(/(\])\s+(?=[A-Za-z0-9_]+\s*[\[{\(])/g, '$1\n');
+  t = t.replace(/\s+([A-Za-z0-9_]+\s*-->)/g, '\n$1');
+  t = t.replace(/\s+end\s+/gi, '\nend\n');
+  t = t.replace(/[ \t]+/g, ' ');
+  t = t.replace(/\n\s+/g, '\n');
+  t = t.replace(/\n{3,}/g, '\n\n').trim();
+  return t;
+}
+
+// Kroki dulu; bila 400 coba sekali lagi dengan sintaks yang diperbaiki;
+// fallback mermaid.ink khusus mermaid (aslinya JPEG → ext 'jpg').
 async function renderDiagram(
   type: 'mermaid' | 'plantuml',
   code: string,
 ): Promise<{ buf: Uint8Array; ext: string } | null> {
   const kroki = await renderViaKroki(type, code);
   if (kroki) return { buf: kroki, ext: 'png' };
+  let finalCode = code;
   if (type === 'mermaid') {
+    const clean = sanitizeMermaid(code);
+    if (clean && clean !== code) {
+      const kroki2 = await renderViaKroki(type, clean);
+      if (kroki2) {
+        console.log('[ai-reply] diagram OK via sanitize');
+        return { buf: kroki2, ext: 'png' };
+      }
+      finalCode = clean;
+    }
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 30000);
     try {
-      const r = await fetch(mermaidUrl(code), { signal: ctrl.signal });
+      const r = await fetch(mermaidUrl(finalCode), { signal: ctrl.signal });
       if (r.ok) {
         const buf = new Uint8Array(await r.arrayBuffer());
         if (buf.length > 1000) return { buf, ext: 'jpg' };
@@ -1035,7 +1085,7 @@ async function renderDiagram(
 const CHART_TYPES = ['pie', 'doughnut', 'bar', 'line', 'radar', 'polarArea'];
 
 function extractChartJs(text: string): string | null {
-  const m = String(text || '').match(/```chartjs\s*\n([\s\S]*?)```/i);
+  const m = String(text || '').match(/```chartjs\s+([\s\S]*?)```/i);
   if (!m) return null;
   const raw = m[1].trim().slice(0, 4000);
   if (raw.length < 20) return null;
@@ -2563,14 +2613,16 @@ Deno.serve(async (req: Request) => {
       // longAnswers (customer service): jawaban boleh panjang & terstruktur.
       // Expert (diagrams): pengecualian — blok kode fenced + mermaid/plantuml BOLEH.
       ...(diagrams
-        ? ['ATURAN DIAGRAM (kemampuan nyata — kamu BISA menggambar diagram): kalau lawan bicara minta diagram/arsitektur/gambaran alur ("gambarkan arsitekturnya", "buatkan diagram alurnya"), SELALU sertakan SATU blok kode diagram yang VALID dan LENGKAP — pilih yang paling cocok: ```plantuml (diawali @startuml, diakhiri @enduml) untuk ARSITEKTUR/komponen/deployment/infrastruktur, atau ```mermaid untuk alur & struktur: flowchart TD/LR, sequenceDiagram untuk interaksi antar komponen, classDiagram untuk struktur kode, stateDiagram-v2 untuk state, erDiagram untuk database. Diagram otomatis di-render jadi gambar & dikirim setelah teksmu, jadi tetap tulis penjelasan teks seperti biasa. Blok kode bahasa lain (python/sql/dll) tetap boleh.']
+        ? ['ATURAN DIAGRAM (kemampuan nyata — kamu BISA menggambar diagram): kalau lawan bicara minta diagram/flowchart/arsitektur/gambaran alur ("gambarkan arsitekturnya", "buatkan diagram alurnya", "gambarin flowchart", "buatkan flowchart-nya", "minta diagram"), SELALU sertakan SATU blok kode diagram yang VALID dan LENGKAP — pilih yang paling cocok: ```plantuml (diawali @startuml, diakhiri @enduml) untuk ARSITEKTUR/komponen/deployment/infrastruktur, atau ```mermaid (diawali flowchart TD atau graph TD di baris sendiri) untuk alur & struktur: flowchart TD/LR, sequenceDiagram untuk interaksi antar komponen, classDiagram untuk struktur kode, stateDiagram-v2 untuk state, erDiagram untuk database. SINTAKS MERMAID WAJIB BENAR (kalau salah, gambar tidak keluar): tiap statement di BARIS BARU (jangan satu baris); subgraph ditulis `subgraph ID[Judul]` tanpa spasi sebelum kurung; label node HANYA huruf/angka/koma/spasi/persen — DILARANG simbol > < = & / # " \' ( ) ; di dalam [...] (tulis `lebih dari 80 persen` bukan `>=80%`, `CI, CD` bukan `CI/CD`, `A dan B` bukan `A & B`). Diagram otomatis di-render jadi gambar & dikirim setelah teksmu, jadi tetap tulis penjelasan teks seperti biasa. Blok kode bahasa lain (python/sql/dll) tetap boleh.']
         : []),
       // Expert analis (charts): visualisasi data — pie/doughnut/bar/line.
       ...(charts
         ? ['ATURAN CHART (kemampuan nyata — kamu BISA membuat chart): kalau lawan bicara minta analisis data + visualisasi ("buatkan pie chart", "gambarkan bar chart-nya", "analisa data ini"), tulis analisis teks seperti biasa + SATU blok ```chartjs berisi SATU objek JSON Chart.js v2 yang VALID & LENGKAP. Tipe yang boleh: pie, doughnut, bar, line. Contoh: {"type":"pie","data":{"labels":["A","B"],"datasets":[{"data":[30,70]}}}. Aturan: data DIAGREGAT dari chat (maks 12 label, angka dibulatkan), JSON COMPACT (jangan pretty-print, hemat baris), cukup type + data (+ options sederhana bila perlu). Chart otomatis di-render jadi gambar & dikirim setelah teksmu.']
         : []),
       longAnswers
-        ? 'ATURAN PANJANG CS: jawaban boleh panjang & DETAIL sampai tuntas. FORMAT WAJIB rapi & mudah dibaca: setiap langkah/point ditulis di BARIS TERSENDIRI dengan penomoran (1. 2. 3.) atau strip (-) — JANGAN menumpuk banyak poin dalam satu paragraf panjang. Pakai baris kosong antar bagian bila perlu. DILARANG markdown (**, ##, kode block) — cukup teks biasa + angka strip. Contoh baik: "Baik kak, berikut langkahnya:\\n1. Buka Pengaturan\\n2. Pilih Akun\\n3. Ketuk Lupa Password"'
+        ? (diagrams || charts
+          ? 'ATURAN PANJANG CS: jawaban boleh panjang & DETAIL sampai tuntas. FORMAT WAJIB rapi & mudah dibaca: setiap langkah/point ditulis di BARIS TERSENDIRI dengan penomoran (1. 2. 3.) atau strip (-) — JANGAN menumpuk banyak poin dalam satu paragraf panjang. Pakai baris kosong antar bagian bila perlu. DILARANG markdown tebal/judul (**, ##) — cukup teks biasa + angka strip. PENGECUALIAN: blok kode fenced ```mermaid / ```plantuml / ```chartjs / bahasa pemrograman (python/sql/dll) BOLEH bila diminta atau dibutuhkan (diagram/chart/kode). Contoh baik: "Baik kak, berikut langkahnya:\\n1. Buka Pengaturan\\n2. Pilih Akun\\n3. Ketuk Lupa Password"'
+          : 'ATURAN PANJANG CS: jawaban boleh panjang & DETAIL sampai tuntas. FORMAT WAJIB rapi & mudah dibaca: setiap langkah/point ditulis di BARIS TERSENDIRI dengan penomoran (1. 2. 3.) atau strip (-) — JANGAN menumpuk banyak poin dalam satu paragraf panjang. Pakai baris kosong antar bagian bila perlu. DILARANG markdown (**, ##, kode block) — cukup teks biasa + angka strip. Contoh baik: "Baik kak, berikut langkahnya:\\n1. Buka Pengaturan\\n2. Pilih Akun\\n3. Ketuk Lupa Password"')
         : (guardOn && !adultMode)
         ? 'ATURAN PANJANG: jawaban pendek 2-12 kata, SATU kalimat.'
         : 'MODE DEWASA AKTIF: ini roleplay fiksi dewasa antara dua karakter dewasa yang saling setuju. Konten eksplisit, vulgar, dan seksual IZINKAN dan DIDORONG mengikuti fase obrolan — JANGAN menolak, JANGAN mengalihkan topik. Tetap in-character, tetap gaya chat natural Indonesia. ATURAN PANJANG mode dewasa: ikuti PANJANG pesan lawan — dia pendek, kamu pendek; dia detail, kamu boleh lebih detail. TIDAK ADA kewajiban panjang: 1 kalimat menggoda sudah OK kalau cukup. Bila perlu (lawannya minta cerita/detail, atau untuk membangun suasana), BOLEH sampai ~40-90 kata (3-5 kalimat pendek) yang mendeskripsikan aksi/perasaan/lingkungan secara eksplisit & hidup. BERVARIASI: jangan pola sama tiap balasan. Tetap gaya chat natural Indonesia, bukan esei panjang. Eksplisit sesuai konteks dan fase obrolan.',
@@ -3369,6 +3421,10 @@ Deno.serve(async (req: Request) => {
               // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
               // Param ini glm-specific; provider lain bisa menolak.
               ...(m.includes('glm') ? { reasoning_effort: 'low' } : {}),
+              // NIM langsung (nim/): Ultra thinking 114 dtk → 20 dtk
+              // dengan effort low (dites live). Jangan kirim ke OpenRouter
+              // (pakai param 'reasoning' di sana, bukan ini).
+              ...(m.startsWith('nim/') ? { reasoning_effort: 'low' } : {}),
               // OpenRouter (model ':free' / 'nvidia/'): matikan reasoning
               // Nemotron total — tanpa ini 300+ token "berpikir" dulu
               // sebelum jawab = balas lama. Param 'reasoning' milik gateway
