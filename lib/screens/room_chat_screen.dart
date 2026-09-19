@@ -5,10 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -60,6 +57,7 @@ import '../widgets/message_reaction_bar.dart';
 import '../services/message_reaction_service.dart';
 import '../widgets/reply_quote.dart';
 import '../mixins/chat_selection_mixin.dart';
+import '../mixins/voice_recorder_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
@@ -3342,88 +3340,31 @@ class _ChatInput extends StatefulWidget {
   State<_ChatInput> createState() => _ChatInputState();
 }
 
-class _ChatInputState extends State<_ChatInput> {
+class _ChatInputState extends State<_ChatInput>
+    with VoiceRecorderMixin<_ChatInput> {
   Uint8List? _decodedPhoto;
-  final _record = AudioRecorder();
-  bool _isRecordingVoice = false;
-  Timer? _voiceTimer;
-  int _voiceSeconds = 0;
-  bool _isVoiceLocked = false;
-  bool _isVoicePaused = false;
-  // Bulatan lock sedang di-pick-up (ditekan + digeser) — menyembunyikan
-  // tombol pause di composer dan menampilkan kembali "geser untuk batal".
-  bool _voicePickUp = false;
 
-  void _lockVoiceRecord() {
-    if (mounted) setState(() => _isVoiceLocked = true);
+  // ── Kontrak VoiceRecorderMixin ──
+  @override
+  void voiceSendRecordingSignal() {}
+
+  @override
+  Future<void> voiceFinishRecording(String path, int durationMs) async {
+    widget.onSendVoice?.call(path, durationMs);
   }
 
-  void _startVoiceTimer() {
-    _voiceTimer?.cancel();
-    _voiceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_voiceSeconds >= 59) { _stopVoiceRecord(); return; }
-      setState(() => _voiceSeconds++);
-    });
-  }
+  @override
+  String voicePermissionMessage() => 'Izin mikrofon ditolak';
 
-  Future<void> _pauseVoiceRecord() async {
-    try { await _record.pause(); } catch (_) {}
-    _voiceTimer?.cancel();
-    if (mounted) setState(() => _isVoicePaused = true);
-  }
+  @override
+  String voiceTooShortMessage() => 'Rekaman terlalu pendek';
 
-  Future<void> _resumeVoiceRecord() async {
-    try { await _record.resume(); } catch (_) {}
-    if (mounted) setState(() => _isVoicePaused = false);
-    _startVoiceTimer();
-  }
 
-  Future<void> _startVoiceRecord() async {
-    final hasPerm = await Permission.microphone.request();
-    if (!hasPerm.isGranted) return;
-    try {
-      if (!await _record.hasPermission()) return;
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
-      await _record.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000), path: path);
-      setState(() {
-        _isRecordingVoice = true;
-        _voiceSeconds = 0;
-        _isVoiceLocked = false;
-        _isVoicePaused = false;
-        _voicePickUp = false;
-      });
-      _startVoiceTimer();
-    } catch (_) {}
-  }
 
-  Future<void> _stopVoiceRecord() async {
-    _voiceTimer?.cancel();
-    if (!_isRecordingVoice) return;
-    _isVoiceLocked = false;
-    _isVoicePaused = false;
-    _voicePickUp = false;
-    final path = await _record.stop();
-    setState(() => _isRecordingVoice = false);
-    if (path == null) return;
-    final f = File(path);
-    if (!await f.exists()) return;
-    final bytes = await f.readAsBytes();
-    if (bytes.length < 2000) return;
-    final ms = _voiceSeconds * 1000;
-    widget.onSendVoice?.call(path, ms);
-  }
 
-  void _cancelVoiceRecord() {
-    _voiceTimer?.cancel();
-    _record.cancel();
-    setState(() {
-      _isRecordingVoice = false;
-      _isVoiceLocked = false;
-      _isVoicePaused = false;
-      _voicePickUp = false;
-    });
-  }
+
+
+
 
   @override
   void initState() {
@@ -3441,8 +3382,7 @@ class _ChatInputState extends State<_ChatInput> {
   @override
   void dispose() {
     widget.controller.removeListener(_onChanged);
-    _voiceTimer?.cancel();
-    _record.dispose();
+    disposeVoiceRecorder();
     super.dispose();
   }
 
@@ -3521,7 +3461,7 @@ class _ChatInputState extends State<_ChatInput> {
                   ),
                 ),
               ),
-            if (!_isRecordingVoice)
+            if (!voiceRecording)
               MentionAutocomplete(
                 controller: widget.controller,
                 candidates: widget.mentionCandidates,
@@ -3557,7 +3497,7 @@ class _ChatInputState extends State<_ChatInput> {
                     // Ukuran & posisi card 100% identik karena
                     // container-nya yang sama. Tinggi 48 = tinggi
                     // konten ketik (icon +/📷 48px).
-                    child: _isRecordingVoice
+                    child: voiceRecording
                         ? SizedBox(
                             height: 48,
                             child: Row(
@@ -3566,13 +3506,13 @@ class _ChatInputState extends State<_ChatInput> {
                                 Icon(Icons.mic_rounded, color: Colors.red, size: 18),
                                 const SizedBox(width: 8),
                                 Text(
-                                  _voiceSeconds < 60
-                                      ? '${_voiceSeconds.toString().padLeft(2, '0')}s'
-                                      : '${(_voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(_voiceSeconds % 60).toString().padLeft(2, '0')}',
+                                  voiceSeconds < 60
+                                      ? '${voiceSeconds.toString().padLeft(2, '0')}s'
+                                      : '${(voiceSeconds ~/ 60).toString().padLeft(2, '0')}:${(voiceSeconds % 60).toString().padLeft(2, '0')}',
                                   style: AppText.chatBodyStrong.copyWith(color: Colors.red),
                                 ),
                                 const Spacer(),
-                                if (!_isVoiceLocked || _voicePickUp) ...[
+                                if (!voiceLocked || voicePickUp) ...[
                                   Icon(
                                     Icons.keyboard_arrow_left_rounded,
                                     color: AppTheme.textSecondary,
@@ -3584,9 +3524,9 @@ class _ChatInputState extends State<_ChatInput> {
                                   ),
                                 ] else ...[
                                   GestureDetector(
-                                    onTap: () => _isVoicePaused
-                                        ? _resumeVoiceRecord()
-                                        : _pauseVoiceRecord(),
+                                    onTap: () => voicePaused
+                                        ? resumeVoiceRecord()
+                                        : pauseVoiceRecord(),
                                     child: Container(
                                       width: 30,
                                       height: 30,
@@ -3595,7 +3535,7 @@ class _ChatInputState extends State<_ChatInput> {
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(
-                                        _isVoicePaused
+                                        voicePaused
                                             ? Icons.play_arrow_rounded
                                             : Icons.pause_rounded,
                                         color: Colors.red,
@@ -3693,28 +3633,28 @@ class _ChatInputState extends State<_ChatInput> {
                   // SATU instance MicRecordButton sepanjang gesture: swap
                   // cabang saat recording meng-unmount tombol yang di-hold
                   // → gesture putus → rekaman menggantung (hang).
-                  child: _isRecordingVoice
+                  child: voiceRecording
                       ? MicRecordButton(
                           isRecording: true,
-                          isLocked: _isVoiceLocked,
-                          onTap: _stopVoiceRecord,
-                          onLongPressStart: _startVoiceRecord,
-                          onLongPressCancel: _cancelVoiceRecord,
-                          onLock: _lockVoiceRecord,
+                          isLocked: voiceLocked,
+                          onTap: () => stopVoiceRecord(send: true),
+                          onLongPressStart: startVoiceRecord,
+                          onLongPressCancel: cancelVoiceRecord,
+                          onLock: lockVoiceRecord,
                           onPickUpChanged: (v) =>
-                              setState(() => _voicePickUp = v),
+                              setState(() => voicePickUp = v),
                           size: 40,
                         )
                       : (value.text.trim().isEmpty && _decodedPhoto == null
                       ? MicRecordButton(
                           isRecording: false,
-                          isLocked: _isVoiceLocked,
-                          onTap: _stopVoiceRecord,
-                          onLongPressStart: _startVoiceRecord,
-                          onLongPressCancel: _cancelVoiceRecord,
-                          onLock: _lockVoiceRecord,
+                          isLocked: voiceLocked,
+                          onTap: () => stopVoiceRecord(send: true),
+                          onLongPressStart: startVoiceRecord,
+                          onLongPressCancel: cancelVoiceRecord,
+                          onLock: lockVoiceRecord,
                           onPickUpChanged: (v) =>
-                              setState(() => _voicePickUp = v),
+                              setState(() => voicePickUp = v),
                           size: 40,
                         )
                           : GestureDetector(
