@@ -42,7 +42,9 @@ import '../widgets/voice_bubble.dart';
 import '../widgets/mic_record_button.dart';
 import '../widgets/composer_link_preview.dart';
 import '../widgets/chat_ui_shared.dart';
-import '../widgets/linkify_text.dart';
+import '../widgets/mention_spans.dart';
+import '../widgets/mention_autocomplete.dart';
+import '../utils/mention.dart';
 import '../widgets/link_preview.dart';
 import '../services/link_preview_service.dart';
 import '../widgets/gift_fly_overlay.dart';
@@ -58,6 +60,7 @@ import '../services/message_reaction_service.dart';
 import '../widgets/message_reaction_bar.dart';
 import '../widgets/forward_picker_sheet.dart';
 import '../widgets/reaction_detail_sheet.dart';
+import '../widgets/reply_quote.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 String? _roomPassthroughImage(Uint8List bytes) {
@@ -129,6 +132,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   ChatMessageStream? _msgsHandle;
   StreamSubscription<List<MessageModel>>? _msgsSub;
   List<MessageModel> _lastMsgs = const [];
+  StreamSubscription<List<UserModel>>? _usersSub;
   // Strip user online persisten: tahan list terakhir saat stream blip
   // kosong; teks "tidak ada yang online" hanya setelah kosong terkonfirmasi.
   List<UserModel> _lastRoomUsers = const [];
@@ -172,6 +176,41 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (mounted) setState(() {});
   }
 
+  // ── Mention @ ──
+  // Grup/private room → anggota (termasuk offline). Global room → user online.
+  List<Map<String, dynamic>> _roomMembers = const [];
+  List<Mention> get _mentionCandidates {
+    final myUid = _auth.uid;
+    final seen = <String>{};
+    final out = <Mention>[];
+    if (isPrivateRoom) {
+      for (final m in _roomMembers) {
+        final uid = '${m['user_id'] ?? ''}';
+        final name = '${m['nickname'] ?? ''}';
+        if (uid.isEmpty || uid == myUid || !seen.add(uid)) continue;
+        out.add(Mention(uid: uid, name: name));
+      }
+    } else {
+      for (final u in _lastRoomUsers) {
+        if (u.uid.isEmpty || u.uid == myUid || !seen.add(u.uid)) continue;
+        out.add(Mention(uid: u.uid, name: u.nickname));
+      }
+    }
+    return out;
+  }
+
+  /// Target `@all` (owner/admin) — dibatasi 100 uid agar payload aman.
+  List<Mention> _mentionAllExpansion() =>
+      _mentionCandidates.take(100).toList();
+
+  /// Resolusi teks → mention ber-uid. `@all` hanya di grup oleh owner/admin.
+  List<Mention> _computeMentions(String text) => parseMentions(
+        text,
+        candidates: _mentionCandidates,
+        allowAll: isPrivateRoom && canModerate,
+        allExpansion: _mentionAllExpansion(),
+      );
+
   @override
   void initState() {
     super.initState();
@@ -191,6 +230,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _usersStream = _chat.getOnlineUsersInRoom(widget.room.id);
     _pointsProv = context.read<PointsProvider>();
     _msgsSub = _msgsStream.listen(_onMessagesForGift);
+    // Kandidat mention room global butuh daftar user online walau strip
+    // horizontal sedang disembunyikan — simpan snapshot di _lastRoomUsers.
+    _usersSub = _usersStream.listen((users) {
+      if (users.isNotEmpty) _lastRoomUsers = users;
+    });
     if (isPrivateRoom) {
       unawaited(_initPrivate());
     }
@@ -259,6 +303,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     try {
       _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
       dlog('[BDBG] myRole=$_myRole isPrivate=${widget.room.isPrivate}');
+      // Anggota untuk kandidat mention grup (termasuk yang offline).
+      try {
+        _roomMembers =
+            await PrivateRoomService.instance.listMembers(widget.room.id);
+      } catch (_) {}
       if (canModerate) {
         try {
           final req = await PrivateRoomService.instance
@@ -1020,6 +1069,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _giftFly.dispose();
     unawaited(_msgsSub?.cancel());
     _msgsSub = null;
+    unawaited(_usersSub?.cancel());
+    _usersSub = null;
     try {
       final ch = _roomLiveChannel;
       _roomLiveChannel = null;
@@ -1095,6 +1146,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             repliedToText: e.repliedToText,
             repliedToSenderName: e.repliedToSenderName,
             isForwarded: e.isForwarded,
+            mentions: e.mentions,
           ),
         );
         _queuedIds.add(e.pendingId);
@@ -1117,6 +1169,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     String? repliedToText,
     String? repliedToSenderName,
     bool isForwarded = false,
+    List<Mention> mentions = const [],
   }) async {
     await OfflineOutbox.instance.enqueue(
       OutboxEntry(
@@ -1136,6 +1189,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         repliedToText: repliedToText,
         repliedToSenderName: repliedToSenderName,
         isForwarded: isForwarded,
+        mentions: mentions,
         createdAt: pending.timestamp,
         pointsDeducted: pointsDeducted,
         pointsKind: pointsKind,
@@ -1216,6 +1270,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             repliedToText: e.repliedToText,
             repliedToSenderName: e.repliedToSenderName,
             isForwarded: e.isForwarded,
+            mentions: e.mentions,
           );
           await OfflineOutbox.instance.remove(e.pendingId);
           sent++;
@@ -1463,13 +1518,28 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final msg = _singleSelected;
     _hideActionBar();
     if (msg == null) return;
-    final ok = await MessageReactionService.instance.toggleReaction(
+    final res = await MessageReactionService.instance.toggleReaction(
       chatType: 'room',
       chatId: widget.room.id,
       messageId: msg.id,
       emoji: emoji,
     );
-    if (!ok && mounted) {
+    if (!mounted) return;
+    setState(() {
+      final per = _reactions.putIfAbsent(msg.id, () => {});
+      if (res == ToggleResult.added) {
+        per[emoji] = (per[emoji] ?? 0) + 1;
+      } else {
+        final n = (per[emoji] ?? 1) - 1;
+        if (n <= 0) {
+          per.remove(emoji);
+        } else {
+          per[emoji] = n;
+        }
+        if (per.isEmpty) _reactions.remove(msg.id);
+      }
+    });
+    if (res == ToggleResult.failed && mounted) {
       final s = context.read<LocaleProvider>().s;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.msgReactionFailed)),
@@ -1480,19 +1550,35 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   Future<void> _starSelected() async {
     if (_selectedIds.isEmpty) return;
-    bool starred = false;
+    var res = ToggleResult.removed;
     for (final id in _selectedIds) {
-      final r = await MessageReactionService.instance.toggleStar(
+      res = await MessageReactionService.instance.toggleStar(
         chatType: 'room',
         chatId: widget.room.id,
         messageId: id,
       );
-      starred = r;
+      if (!mounted) return;
+      setState(() {
+        if (res == ToggleResult.added) {
+          _starredIds.add(id);
+        } else {
+          _starredIds.remove(id);
+        }
+      });
+      if (res == ToggleResult.failed) break;
     }
     if (!mounted) return;
     final s = context.read<LocaleProvider>().s;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(starred ? s.msgStarred : s.msgUnstarred)),
+      SnackBar(
+        content: Text(
+          res == ToggleResult.added
+              ? s.msgStarred
+              : res == ToggleResult.removed
+                  ? s.msgUnstarred
+                  : s.msgStarFailed,
+        ),
+      ),
     );
     _clearSelection();
   }
@@ -1854,6 +1940,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     }
 
     final reply = _replyingTo;
+    final mentions = _computeMentions(text);
     _msgCtrl.clear();
     setState(() => _replyingTo = null);
 
@@ -1872,6 +1959,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      mentions: mentions,
     );
     setState(() => _pending.add(pending));
     _scrollToBottom();
@@ -1883,6 +1971,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        mentions: mentions,
       );
       return;
     }
@@ -1914,6 +2003,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        mentions: mentions,
       );
       if (pp.enabled) {
         pp.showPointsToast(
@@ -2378,6 +2468,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             onCancelPhoto: _pendingPhotoBase64 != null
                 ? () => setState(() => _pendingPhotoBase64 = null)
                 : null,
+            mentionCandidates: _mentionCandidates,
+            mentionAllowAll: isPrivateRoom && canModerate,
+            mentionAllExpansion: _mentionAllExpansion(),
           );
           bottomBar = input;
         }
@@ -2688,6 +2781,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                                       roomId: widget.room.id,
                                       onTapUser: () => _onTapUser(m, auth),
                                       deletedIds: deletedIds,
+                                      highlightMentionAll:
+                                          isPrivateRoom && canModerate,
                                     ),
                                   ),
                                   if (starred)
@@ -3238,6 +3333,9 @@ class _MessageBubble extends StatelessWidget {
   /// Set pesan ( room) yang berstatus terhapus — dipakai untuk meredam
   /// quote reply yang menunjuk pesan terhapus (isi tidak boleh bocor).
   final Set<String> deletedIds;
+  /// Highlight `@all` — hanya private room/grup (owner/admin). Global room
+  /// selalu false.
+  final bool highlightMentionAll;
   const _MessageBubble({
     super.key,
     required this.msg,
@@ -3249,6 +3347,7 @@ class _MessageBubble extends StatelessWidget {
     required this.roomId,
     required this.onTapUser,
     this.deletedIds = const {},
+    this.highlightMentionAll = false,
   });
 
   // Warna teks bubble mengikuti tema (gelap di light mode, terang di dark mode)
@@ -3262,35 +3361,16 @@ class _MessageBubble extends StatelessWidget {
 
   // Konten bubble: foto / view-once / teks — dipakai untuk pesan sendiri & orang lain.
   Widget _replyQuote(BuildContext context) {
-    if (msg.repliedToText == null || msg.repliedToText!.isEmpty) return const SizedBox.shrink();
-    final s = context.read<LocaleProvider>().s;
-    // PRIVASI: target reply terhapus → quote tampil "Pesan dihapus".
-    final targetDeleted =
-        msg.repliedToId != null && deletedIds.contains(msg.repliedToId);
-    final quoteText = targetDeleted ? s.messageDeleted : msg.repliedToText!;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isMe ? Colors.white.withValues(alpha: 0.15) : AppTheme.bgScreen.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border(left: BorderSide(color: AppTheme.primary, width: 3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(msg.repliedToSenderName ?? '', style: AppText.chatName.copyWith(color: AppTheme.primary)),
-          Text(
-            quoteText,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppText.chatBodySmall.copyWith(
-              fontStyle: targetDeleted ? FontStyle.italic : FontStyle.normal,
-            ),
-          ),
-        ],
-      ),
-    );
+    return ReplyQuote.fromMessage(
+          context: context,
+          repliedToText: msg.repliedToText,
+          repliedToId: msg.repliedToId,
+          repliedToSenderName: msg.repliedToSenderName,
+          isMe: isMe,
+          deletedIds: deletedIds,
+          senderColor: AppTheme.primary,
+        ) ??
+        const SizedBox.shrink();
   }
 
   Widget _content(
@@ -3349,9 +3429,11 @@ class _MessageBubble extends StatelessWidget {
           if (msg.text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: LinkifyText(
+              child: MentionAwareText(
                 msg.text,
                 style: AppText.chatBody.copyWith(color: _textColor),
+                mentions: msg.mentions,
+                highlightAll: highlightMentionAll,
               ),
             ),
         ],
@@ -3458,6 +3540,8 @@ class _MessageBubble extends StatelessWidget {
             fontWeight: FontWeight.w400,
           ),
           alignRight: alignRight,
+          mentions: msg.mentions,
+          highlightMentionAll: highlightMentionAll,
         ),
       ],
     );
@@ -3707,6 +3791,9 @@ class _ChatInput extends StatefulWidget {
   final VoidCallback? onCancelPhoto;
   final VoidCallback? onOpenGiftPanel;
   final void Function(String filePath, int durationMs)? onSendVoice;
+  final List<Mention> mentionCandidates;
+  final bool mentionAllowAll;
+  final List<Mention> mentionAllExpansion;
   const _ChatInput({
     required this.controller,
     required this.onSend,
@@ -3719,6 +3806,9 @@ class _ChatInput extends StatefulWidget {
     this.onCancelPhoto,
     this.onOpenGiftPanel,
     this.onSendVoice,
+    this.mentionCandidates = const [],
+    this.mentionAllowAll = false,
+    this.mentionAllExpansion = const [],
   });
 
   @override
@@ -3903,6 +3993,13 @@ class _ChatInputState extends State<_ChatInput> {
                     ],
                   ),
                 ),
+              ),
+            if (!_isRecordingVoice)
+              MentionAutocomplete(
+                controller: widget.controller,
+                candidates: widget.mentionCandidates,
+                allowAll: widget.mentionAllowAll,
+                allExpansion: widget.mentionAllExpansion,
               ),
             ComposerLinkPreview(controller: widget.controller),
             Row(

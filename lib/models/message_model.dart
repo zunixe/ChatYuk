@@ -1,4 +1,5 @@
 import '../utils.dart';
+import '../utils/mention.dart';
 
 class MessageModel {
   final String id;
@@ -17,6 +18,7 @@ class MessageModel {
   final String? repliedToSenderName;
   final int? durationMs;
   final bool isForwarded;
+  final List<Mention> mentions;
 
   MessageModel({
     required this.id,
@@ -35,6 +37,7 @@ class MessageModel {
     this.repliedToSenderName,
     this.durationMs,
     this.isForwarded = false,
+    this.mentions = const [],
   });
 
   factory MessageModel.fromMap(String id, Map<String, dynamic> map) {
@@ -64,6 +67,7 @@ class MessageModel {
       repliedToSenderName: map['repliedToSenderName'],
       durationMs: (map['durationMs'] ?? map['duration_ms'] ?? map['duration']) is num ? (map['durationMs'] ?? map['duration_ms'] ?? map['duration'] as num).toInt() : null,
       isForwarded: map['isForwarded'] == true || map['is_forwarded'] == true,
+      mentions: deleted ? const [] : Mention.listFrom(map['mentions']),
     );
   }
 
@@ -93,6 +97,7 @@ class MessageModel {
       'repliedToSenderName': repliedToSenderName,
       'durationMs': durationMs,
       'isForwarded': isForwarded,
+      'mentions': isDeleted ? const [] : Mention.listTo(mentions),
     };
   }
 
@@ -107,6 +112,7 @@ class MessageModel {
     String? repliedToSenderName,
     int? durationMs,
     bool? isForwarded,
+    List<Mention>? mentions,
   }) {
     final newDeleted = isDeleted ?? this.isDeleted;
     // PRIVASI: begitu berstatus terhapus, konten dikosongkan — update
@@ -128,6 +134,7 @@ class MessageModel {
       repliedToSenderName: repliedToSenderName ?? this.repliedToSenderName,
       durationMs: durationMs ?? this.durationMs,
       isForwarded: isForwarded ?? this.isForwarded,
+      mentions: newDeleted ? const [] : (mentions ?? this.mentions),
     );
   }
 }

@@ -219,3 +219,13 @@ String formatBytes(num bytes) {
   final gb = mb / 1024;
   return '${gb.toStringAsFixed(2)} GB';
 }
+
+/// Format detik ke "mm:ss" (durasi call, voice note, timer banner).
+/// Satu helper untuk seluruh app — dulu pola `padLeft(2,'0')` disalin di
+/// 7+ tempat dengan varian yang tidak selalu konsisten.
+String formatMmSs(int totalSeconds) {
+  final s = totalSeconds < 0 ? 0 : totalSeconds;
+  final m = (s ~/ 60).toString().padLeft(2, '0');
+  final sec = (s % 60).toString().padLeft(2, '0');
+  return '$m:$sec';
+}

@@ -12,6 +12,7 @@ import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
+import '../utils/mention.dart';
 import 'perf_probe.dart';
 import 'notification_prefs_service.dart';
 import 'chat_stream_session.dart';
@@ -239,6 +240,7 @@ class ChatService {
     String? repliedToText,
     String? repliedToSenderName,
     bool isForwarded = false,
+    List<Mention> mentions = const [],
   }) async {
     // Validasi tipe pesan
     if (!['text', 'image', 'view_once', 'voice'].contains(type)) {
@@ -267,6 +269,7 @@ class ChatService {
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
       if (isForwarded) 'is_forwarded': true,
+      if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
     });
   }
 
@@ -449,6 +452,7 @@ class ChatService {
     String? repliedToText,
     String? repliedToSenderName,
     bool isForwarded = false,
+    List<Mention> mentions = const [],
   }) async {
     // Validasi tipe pesan
     if (!['text', 'image', 'view_once', 'call', 'voice'].contains(type)) {
@@ -492,6 +496,7 @@ class ChatService {
       if (repliedToSenderName != null)
         'replied_to_sender_name': repliedToSenderName,
       if (isForwarded) 'is_forwarded': true,
+      if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
     }).select('id').maybeSingle();
     // Pemicu AI LANGSUNG (tanpa nunggu antrean pg_net trigger yang lambat —
     // terbukti delay ~1 menit): panggil edge function fire-and-forget.
@@ -514,6 +519,7 @@ class ChatService {
         'image_data': type == 'voice' ? '' : imageData,
         'voice_path': type == 'voice' ? imageData : '',
         'duration_ms': durationMs ?? 0,
+        if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
       });
     } catch (_) {}
   }
@@ -894,17 +900,17 @@ class ChatService {
     final senderId = data['sender_id'] as String?;
     final myId = _sb.auth.currentUser?.id;
     if (senderId == null || senderId == myId) {
-      debugPrint('[TYPING] fanout drop chat=$chatId sender=$senderId me=$myId keys=${data.keys.toList()}');
+      dlog('[TYPING] fanout drop chat=$chatId sender=$senderId me=$myId keys=${data.keys.toList()}');
       return;
     }
     final ts = (data['ts'] as num?)?.toInt() ??
         DateTime.now().millisecondsSinceEpoch;
     final subs = _typingSubs[chatId];
     if (subs == null || subs.isEmpty) {
-      debugPrint('[TYPING] fanout no-subs chat=$chatId (bubble tak bisa tampil)');
+      dlog('[TYPING] fanout no-subs chat=$chatId (bubble tak bisa tampil)');
       return;
     }
-    debugPrint('[TYPING] fanout ok chat=$chatId subs=${subs.length}');
+    dlog('[TYPING] fanout ok chat=$chatId subs=${subs.length}');
     for (final c in subs.toList()) {
       if (!c.isClosed) c.add(((data['kind'] as String?) ?? 'typing', ts));
     }
@@ -928,12 +934,12 @@ class ChatService {
     c.onBroadcast(
       event: 'typing',
       callback: (raw) {
-        debugPrint('[TYPING] onBroadcast chat=$chatId raw=$raw');
+        dlog('[TYPING] onBroadcast chat=$chatId raw=$raw');
         _fanoutTyping(chatId, raw);
       },
     );
     c.subscribe((status, error) {
-      debugPrint('[TYPING] subscribe $chatId -> $status err=$error');
+      dlog('[TYPING] subscribe $chatId -> $status err=$error');
     });
     _typingChannels[chatId] = c;
     return c;
@@ -972,7 +978,7 @@ class ChatService {
   Stream<(String, int)> getTypingPulseStream(String chatId) {
     final controller = StreamController<(String, int)>.broadcast();
     _typingChannel(chatId);
-    debugPrint('[TYPING] subscriber registered for $chatId');
+    dlog('[TYPING] subscriber registered for $chatId');
     _typingSubs.putIfAbsent(chatId, () => {}).add(controller);
     controller.onCancel = () {
       _typingSubs[chatId]?.remove(controller);

@@ -35,9 +35,11 @@ class OnlineUsersProvider extends ChangeNotifier {
   // fast-path presence-only / socket blip bisa menghilangkan user idle
   // sekilas padahal last_seen masih segar (< 30 mnt). Uid → kapan mulai
   // hilang dari emission. Sweep di bawah melepasnya bila lewat grace.
+  // 10 dtk (dulu 90): cukup menjembatani blip socket, tapi user yang
+  // benar-benar offline hilang hampir secepat admin (tanpa penahanan lama).
   final Map<String, DateTime> _holdSince = {};
   Timer? _holdSweep;
-  static const _holdGrace = Duration(seconds: 90);
+  static const _holdGrace = Duration(seconds: 10);
   // Jam hold-grace — non-final supaya test bisa memakai jam palsu
   // (FakeAsync TIDAK memalsukan DateTime.now; prinsip sama seperti
   // jitterRandom di rt_resilient.dart).

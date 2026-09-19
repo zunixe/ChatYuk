@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
+import '../utils/mention.dart';
 import '../services/chat_service.dart';
 import '../services/message_cache.dart';
 import '../services/photo_cache.dart';
@@ -39,6 +40,7 @@ class ChatProvider extends ChangeNotifier {
     String? repliedToText,
     String? repliedToSenderName,
     bool isForwarded = false,
+    List<Mention> mentions = const [],
   }) async {
     await _service.sendRoomMessage(
       roomId: roomId,
@@ -53,6 +55,7 @@ class ChatProvider extends ChangeNotifier {
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
       isForwarded: isForwarded,
+      mentions: mentions,
     );
   }
 
@@ -159,6 +162,7 @@ class ChatProvider extends ChangeNotifier {
     String? repliedToText,
     String? repliedToSenderName,
     bool isForwarded = false,
+    List<Mention> mentions = const [],
   }) async {
     await _service.sendPrivateMessage(
       chatId: chatId,
@@ -173,6 +177,7 @@ class ChatProvider extends ChangeNotifier {
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
       isForwarded: isForwarded,
+      mentions: mentions,
     );
   }
 

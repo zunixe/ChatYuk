@@ -1,3 +1,4 @@
+import '../utils/mention.dart';
 import 'message_cache.dart';
 
 /// Satu pesan yang gagal terkirim karena jaringan dan menunggu dikirim ulang.
@@ -21,6 +22,7 @@ class OutboxEntry {
   final String? repliedToText;
   final String? repliedToSenderName;
   final bool isForwarded;
+  final List<Mention> mentions;
   final DateTime createdAt;
   final bool pointsDeducted;
   final String pointsKind;
@@ -42,6 +44,7 @@ class OutboxEntry {
     this.repliedToText,
     this.repliedToSenderName,
     this.isForwarded = false,
+    this.mentions = const [],
     required this.createdAt,
     this.pointsDeducted = false,
     this.pointsKind = 'text',
@@ -64,6 +67,7 @@ class OutboxEntry {
         'repliedToText': repliedToText,
         'repliedToSenderName': repliedToSenderName,
         'isForwarded': isForwarded,
+        'mentions': Mention.listTo(mentions),
         'createdAt': createdAt.toUtc().toIso8601String(),
         'pointsDeducted': pointsDeducted,
         'pointsKind': pointsKind,
@@ -86,6 +90,7 @@ class OutboxEntry {
         repliedToText: m['repliedToText'] as String?,
         repliedToSenderName: m['repliedToSenderName'] as String?,
         isForwarded: m['isForwarded'] == true,
+        mentions: Mention.listFrom(m['mentions']),
         createdAt: DateTime.tryParse('${m['createdAt'] ?? ''}') ?? DateTime.now(),
         pointsDeducted: m['pointsDeducted'] == true,
         pointsKind: '${m['pointsKind'] ?? 'text'}',
