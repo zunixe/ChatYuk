@@ -3,6 +3,79 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-21 — Fitur mention `@` (`20260921120000_mentions.sql`)
+
+Apply via Management API + recorded. **Tidak menyentuh fungsi FROZEN**;
+hanya menambah kolom dan satu fungsi/trigger baru.
+
+| Objek | Isi |
+|---|---|
+| `messages.mentions` | `jsonb not null default '[]'` — `[{"uid","name"}]` per pesan room/grup |
+| `private_messages.mentions` | idem untuk private 1:1 |
+| `notify_mention_room()` + trigger `notify_mention_room_trg` | `AFTER INSERT ON messages` — push TERARAH hanya ke uid yang di-mention (kecuali sender), token dari `user_devices` → fallback `profiles.fcm_token`, `type='mention'` + `toUid` |
+
+`@all` di-ekspansi di KLIEN menjadi daftar uid eksplisit (hanya private
+room/grup oleh owner/admin, cap 100 uid) — di global room `@all` dimatikan
+total. Private 1:1 sudah punya `notify_private_message` per pesan, jadi
+mention di sana hanya highlight (tanpa push tambahan).
+
+Verifikasi: `information_schema.columns` punya `mentions` di kedua tabel;
+`pg_trigger` punya `notify_mention_room_trg`; `schema_migrations` memuat
+`20260921120000`. Edge `send-push` dideploy ulang (`--use-api`) dengan
+`'mention'` ditambahkan ke `dataOnlyTypes`.
+`check_migrations --all` FAIL pre-existing lapis 5 (`ai_reply_enqueue`/
+`ai_always_online`) — bukan dari migrasi ini.
+
+## 2026-09-19 — Retensi call otomatis: cron `chatyuk-call-sweep` (`20260919094500_call_sweep_cron.sql`)
+
+Apply via Management API + recorded. **Tidak menyentuh fungsi FROZEN**
+(`admin_sweep_calls` bukan anggota `scripts/frozen_functions.txt`) dan tidak
+mengubah definisi fungsi/tabel/policy apa pun — hanya menjadwalkan.
+
+| Objek | Isi |
+|---|---|
+| Cron `chatyuk-call-sweep` | `*/5 * * * *` → `select public.admin_sweep_calls()` (idempotent: `unschedule` dulu bila ada) |
+
+**Masalah:** `admin_sweep_calls()` sudah benar (akhiri `ringing` >90 dtk,
+`answered` tanpa heartbeat >75 dtk, hapus `call_signals` call selesai >1 jam)
+tetapi hanya terpanggil saat admin membuka panel (`admin_service.dart`). Untuk
+user biasa: call zombie menggantung & `call_signals` menumpuk. Bukti DB saat
+review: 436 baris `calls`, 81 baris `call_signals` tapi **2.160 kB**.
+
+Verifikasi: `select jobname,schedule,active from cron.job where
+jobname='chatyuk-call-sweep'` → `*/5 * * * *`, `active=true`;
+`schema_migrations` memuat `20260919094500`.
+`check_migrations --all` FAIL pre-existing lapis 5 (`ai_reply_enqueue`/
+`ai_always_online`) — bukan dari migrasi ini.
+
+## 2026-09-19 — Dummy idle hilang di app: RPC `dummy_uids()` (`20260919082500_dummy_uids_rpc.sql`)
+
+Apply via Management API + recorded. Tidak menyentuh fungsi FROZEN, tabel,
+policy, atau grant yang ada (murni tambah 1 RPC + grant execute).
+
+| Objek | Isi |
+|---|---|
+| `dummy_uids()` | `SETOF uuid`, `SECURITY DEFINER`, `STABLE` — daftar `uid` dummy_accounts; `GRANT EXECUTE` ke `authenticated, anon` |
+
+**Masalah:** di app hanya Sarah (online) tampil, Dhanu (idle) hilang — padahal
+di admin keduanya ada, dan Dhanu sempat muncul lalu hilang lagi (flapping).
+Akar: `dummy_accounts` RLS admin-only (`dummy_admin_all`) → select langsung
+dari HP selalu 0 baris (RLS, bukan error) → `_fetchDummyUids()` = set kosong
+→ `filterRpcOnlineRows` menggugurkan Dhanu sebagai "idle zombie" (idle tanpa
+socket hanya lolos via daftar dummy). Online lolos tanpa syarat — makanya
+Sarah tidak pernah terpengaruh.
+
+**Client:** `_fetchDummyUids()` (`chat_service.dart`) kini `_sb.rpc('dummy_uids')`
+(PostgREST kembalikan array uuid → `'$r'` per elemen). Bentuk respons beda
+dari `.select()` (bukan Map) — jangan kembalikan ke `(r as Map)['uid']`.
+
+**Test:** assert baru di `supabase/tests/contract_test.sql` (`dummy_uids() ada`).
+
+Verifikasi: `select '44d9832a-...'::uuid in (select dummy_uids())` → true;
+`flutter analyze` 0 error/warning; `flutter test` 241/241 hijau.
+`check_migrations --all` FAIL pre-existing lapis 5 `ai_reply_enqueue`/
+`ai_always_online` (sudah gagal sebelum migrasi ini — bukan dari migrasi ini).
+
 ## 2026-09-18 — Optimasi performa story (`20260918120000_story_perf.sql`)
 
 Apply via Management API + recorded. Tidak menyentuh fungsi FROZEN.

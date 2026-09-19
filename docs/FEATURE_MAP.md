@@ -201,7 +201,8 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | Provider | `lib/providers/call_provider.dart` |
 | Service | `lib/services/call_service.dart`, `admin_call_watch_service.dart` |
 | Edge | `supabase/functions/turn-credentials/` |
-| SQL inti | `call_push()`, `notify_call_ended()`, monitor `calls` realtime |
+| SQL inti | `call_push()`, `notify_call_ended()`, monitor `calls` realtime, `admin_sweep_calls()` |
+| Cron | `chatyuk-call-sweep` (*/5m) — akhiri ringing/answered zombie + retensi `call_signals` >1 jam |
 | Test | `test/call_provider_test.dart`, `test/call_overlay_test.dart`, `supabase/tests/call_test.sql` |
 
 **Invariant:** 1 call aktif per user; notif missed 1×; `activeCallId` cocok.
@@ -233,6 +234,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | `ai_internal_config.callback_secret` | ai_reply_post, semua AI |
 | `profiles.points` | poin, gift, chat bonus, leaderboard, admin |
 | `private_messages.*` | chat, notif, AI enqueue, admin monitor |
+| `messages.mentions`, `private_messages.mentions` | highlight mention + push terarah mention (room/grup); `@all` hanya grup/private room (owner/admin), mati di global room |
 | `private_chats.last_read_at` (map uid→ts) | centang-2 di chat, unread badge, mark_chat_read, admin monitor |
 | `private_chats.last_message_at` | urutan list chat, pinned sort, cache warm |
 
