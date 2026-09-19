@@ -37,3 +37,22 @@ String? processChatPhoto(Uint8List bytes) {
         );
   return base64Encode(img.encodeJpg(resized, quality: 82));
 }
+
+/// Resize proporsional (sisi terpanjang 800) + JPEG q75, return base64.
+/// Dipakai foto chat biasa (jalur `chat_photo_send_mixin`). Harus top-level
+/// untuk `compute()` isolate. Pindah dari widgets/chat_ui_shared.dart
+/// (Fase 11): helper murni wajib di core/, bukan di folder widgets.
+String? processChatImage(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final w = decoded.width;
+  final h = decoded.height;
+  final img.Image resized = (w <= 800 && h <= 800)
+      ? decoded
+      : img.copyResize(
+          decoded,
+          width: w > h ? 800 : null,
+          height: h >= w ? 800 : null,
+        );
+  return base64Encode(img.encodeJpg(resized, quality: 75));
+}

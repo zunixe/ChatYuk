@@ -13,7 +13,6 @@ import '../providers/points_provider.dart';
 import '../core/media/chat_photo_helper.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
-import '../widgets/chat_ui_shared.dart' show processChatImage;
 import 'chat_outbox_mixin.dart';
 
 /// Modul BERSAMA kirim foto & view-once (private ↔ room).
