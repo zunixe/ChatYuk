@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.39+51
+version: 1.2.40+52
 
 environment:
   sdk: ^3.11.5
@@ -89,6 +89,7 @@ dependencies:
   photo_manager: ^3.12.0
   phosphor_icons: ^3.0.1
   connectivity_plus: ^7.3.1
+  facebook_app_events: ^0.30.5
 
 dev_dependencies:
   flutter_test:
@@ -97,6 +98,10 @@ dev_dependencies:
     sdk: flutter
   mocktail: ^1.0.0
   sqflite_common_ffi: ^2.4.0+3
+  # Test memakai fake platform interface (bukan method channel) untuk
+  # ConnectivityProvider — pin manual karena ini transitive dependency.
+  connectivity_plus_platform_interface: ^2.1.0
+  plugin_platform_interface: ^2.1.8
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

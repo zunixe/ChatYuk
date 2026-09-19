@@ -302,6 +302,62 @@ belum perlu tindakan.
 **Putusan:** tidak ada pola yang perlu diperbaiki. Semua variasi berbentuk
 jitter jaringan. **Pekerjaan performa SELESAI.**
 
+### 1j. Call & video call — instrumentasi + optimasi (2026-09-19)
+
+Diukur di **Xiaomi 24129PN74G** (1200×2670, 520dpi), build **RILIS** apkpure +
+`--dart-define=PERF_PROBE=true`, `adb logcat | grep '[PERF]'`. Protokol:
+2–3 video call berurutan, tiap call ±15–20 dtk (mic on/off, kamera on/off,
+swap video), lalu app di-background agar `PerfProbe.report` mencetak ringkasan.
+
+**Sebelum (baseline):**
+
+| Metrik | Nilai | Catatan |
+|---|---|---|
+| `call.turnFetch` | **1760 ms (cold)** / 218 ms (warm) | HTTP ke edge `turn-credentials` tiap call |
+| `call.setupMedia` | **5509 ms (cold)** / 255 ms | getUserMedia + createPeerConnection (termasuk turnFetch) |
+| `call.initToConnected` | 12735 / 18105 ms | didominasi waktu user menekan "terima" |
+| `call.offerToConnected` | 11668 / 11738 ms | idem — offer memang dikirim sebelum callee jawab |
+| `build CallScreen` | **26** untuk 2 call (≈13/call) | timer 1 dtk `setState` seluruh layar |
+
+**Sesudah (3 call):**
+
+| Metrik | Nilai | Perubahan |
+|---|---|---|
+| `call.turnFetch` | 436 ms (call 1, sesi baru) → **0.1 / 0.0 ms** | **−100%** (cache memori 12 jam) |
+| `call.setupMedia` | 804 → 344 → **40 ms** | **−85%** (call 3 vs cold) |
+| `call.initToConnected` | avg **5104 ms** (3656–6109) | turun dari 12735–18105 |
+| `call.offerToConnected` | avg **3880 ms** | turun dari ~11700 (sebagian karena user lebih cepat jawab) |
+| `build CallScreen` | 49 untuk 3 call (≈16/call) | naik relatif karena sesi lebih panjang + swap/resize; **timer tidak lagi memicu rebuild** |
+
+**Perbaikan yang diterapkan:**
+
+1. **Cache kredensial TURN** (`call_config.dart`) — Cloudflare TTL 24 jam, client
+   cache 12 jam. Round-trip edge hilang di call ke-2+ **dan** tiap watch PC.
+   Terbukti: `0.1ms` / `0.0ms` (hit cache).
+2. **Timer durasi terisolasi** (`call_screen.dart`) — `ValueNotifier<String>` +
+   `ValueListenableBuilder`; `build()` layar call tidak lagi jalan tiap detik.
+3. **`RepaintBoundary`** mengelilingi tiap `RTCVideoView` (fullscreen, bubble
+   kecil, panel overlay) — perubahan kontrol/teks tidak meraster ulang video.
+4. **`dlog` overlay di-gate `kDebugMode`** (`chat_call_overlay.dart`) — string
+   panjang tidak lagi disusun tiap rebuild di build rilis.
+5. **Timer `CallBanner`** hanya hidup saat banner terlihat (`_syncTicker`).
+6. **Tombol kontrol rata** (`call_screen.dart`, `chat_call_overlay.dart`) —
+   `spaceEvenly` (dulu `center` → menumpuk di tengah) + `crossAxisAlignment.start`
+   (lingkaran End call yang punya label dulu membuat tombol lain turun ~8px di
+   520dpi).
+
+**Aturan lanjutan:** jangan kembalikan `_fetchCloudflare` tanpa cache, jangan
+pakai `setState` untuk update durasi call, dan pertahankan `RepaintBoundary`
+di sekitar `RTCVideoView`.
+
+### 1k. Retensi call otomatis (server, 2026-09-19)
+
+`admin_sweep_calls()` (akhiri `ringing` basi >90 dtk, `answered` tanpa heartbeat
+>75 dtk, hapus `call_signals` call selesai >1 jam) dulu **hanya** terpanggil saat
+admin membuka panel → untuk user biasa call zombie menggantung & `call_signals`
+menumpuk (terukur 2.160 kB untuk 81 baris). Sekarang dijadwalkan cron
+`chatyuk-call-sweep` `*/5 * * * *`. Tidak mengubah isi fungsi (bukan FROZEN).
+
 ### Cara mengukur ulang (WAJIB pakai jalur ini)
 
 ```bash
@@ -488,6 +544,13 @@ Titik ukur terpasang:
 | `timeline.rpc` | `timeline_provider.dart` | RPC `list_posts` halaman PERTAMA (refresh) |
 | `timeline.rpcMore` | `timeline_provider.dart` | RPC `list_posts` paginasi (saat scroll) |
 | `onlineUsers` (notify) | `online_users_provider.dart` | jumlah `notifyListeners()` |
+| `call.turnFetch` | `call_config.dart` | fetch kredensial Cloudflare TURN |
+| `call.setupMedia` | `call_service.dart` | `getUserMedia` + `createPeerConnection` |
+| `call.initToConnected` | `call_service.dart` | `init()` → `CallPhase.inCall` (rekam) |
+| `call.offerToConnected` | `call_service.dart` | offer dikirim → connected (rekam) |
+| `CallScreen` (build) | `call_screen.dart` | jumlah rebuild layar call |
+| `CallOverlay` (build) | `chat_call_overlay.dart` | jumlah rebuild overlay video chat |
+| `call.watchPc` (build) | `call_service.dart` | jumlah PC watcher admin dibuat |
 
 > `timeline.rpc` dipisah dari `timeline.rpcMore` karena hanya halaman pertama
 > yang menahan kemunculan tab Timeline; paginasi terjadi saat user sudah
@@ -676,6 +739,8 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-18 | **Fix `chat.listFetch`**: `select()`→17 kolom eksplisit (buang `hidden_by/at` yang tak dipakai) + fetch & hidden **paralel** (`Future.wait`) | **~750ms → ~380ms (hemat ~50%)**. Bukti: `hiddenFetch` 370.7ms vs `listFetch` 380.2ms, selisih timestamp 9ms = jalan bersamaan. Metrik baru: `chat.hiddenFetch` |
 | 2026-09-18 | **Warm-up RPC** (`main.dart`): setelah UI tampil, satu query ringan untuk membayar TLS handshake + memanaskan koneksi | `online.rpc` pertama **839→245ms (−71%)**; `chat.listFetch` pertama **839→449ms (−46%)**. Jalur lain tidak terpengaruh (tanpa regresi) |
 | 2026-09-18 | **Probe: statistik persentil** (`min/p50/p90/max`) + `report()` otomatis saat app di-background | 8 sesi cold: `chat.listFetch` **254-434ms (avg 345)**, sebaran kontinu = **noise jaringan**, bukan pola. `online.rpc` p50 143-247ms dengan lonjakan tunggal 526-534ms (jitter). **Tidak ada pola tersisa untuk diperbaiki.** |
+| 2026-09-19 | **Call/video call — instrumentasi + optimasi** (`PerfProbe.record`/`buildCount` di rilis): cache TURN 12 jam, timer durasi `ValueNotifier`, `RepaintBoundary` video, gate `dlog` overlay, timer `CallBanner` on-demand, tombol kontrol rata | `call.turnFetch` **1760→0.1ms** (cache), `call.setupMedia` **5509→40ms**, `initToConnected` 12735–18105→**avg 5104ms**; `build CallScreen` berhenti dipicu timer |
+| 2026-09-19 | **Cron `chatyuk-call-sweep` */5m** — retensi call zombie + `call_signals` >1 jam (dulu hanya saat admin buka panel) | Mencegah `call_signals` membengkak (2.160 kB / 81 baris saat diukur) |
 
 ### 8. Target tersisa
 
