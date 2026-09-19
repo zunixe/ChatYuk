@@ -8,6 +8,7 @@ import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
 import '../core/perf/perf_probe.dart';
+import 'call_control_button.dart';
 import 'profile_avatar.dart';
 import '../utils.dart';
 
@@ -326,35 +327,37 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
   }
 
   Widget _controls(S s, CallSession sess, bool isVideo) {
-    // crossAxisAlignment.start: tombol End call punya label (jadi lebih
-    // tinggi), tombol lain tidak. Dengan `center` (default), lingkaran
-    // tombol tanpa label turun ~8px sehingga terlihat tidak rata di
-    // layar density tinggi (Xiaomi 520dpi). Top-align → semua lingkaran
-    // berada di baris yang sama.
+    // Gaya tombol sama dengan kontrol broadcast grup (CallControlButton):
+    // lingkaran filled-tonal + ikon rounded. Dulu lingkaran putih polos
+    // (white24) sehingga terlihat beda dari grup.
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _CallControlButton(
-          icon: sess.micOn ? Icons.mic : Icons.mic_off,
-          color: sess.micOn ? null : Colors.redAccent,
+        CallControlButton(
+          icon: sess.micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
+          off: !sess.micOn,
           onTap: sess.toggleMic,
         ),
         if (isVideo)
-          _CallControlButton(
-            icon: Icons.cameraswitch,
+          CallControlButton(
+            icon: Icons.cameraswitch_rounded,
             onTap: sess.switchCamera,
           ),
-        _CallControlButton(
-          icon: sess.speakerOn ? Icons.volume_up : Icons.volume_off,
-          color: sess.speakerOn ? null : Colors.redAccent,
+        CallControlButton(
+          icon: sess.speakerOn
+              ? Icons.volume_up_rounded
+              : Icons.volume_off_rounded,
+          off: !sess.speakerOn,
           onTap: sess.toggleSpeaker,
         ),
-        _CallControlButton(icon: Icons.aspect_ratio, onTap: widget.onExpand),
-        _CallControlButton(
-          icon: Icons.call_end,
-          color: Colors.redAccent,
-          label: s.btnEndCall,
+        CallControlButton(
+          icon: Icons.aspect_ratio_rounded,
+          onTap: widget.onExpand,
+        ),
+        CallControlButton(
+          icon: Icons.call_end_rounded,
+          danger: true,
           onTap: widget.onEnd,
         ),
       ],
@@ -450,47 +453,3 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
 }
 
 /// Tombol bulat transparan untuk kontrol call overlay.
-class _CallControlButton extends StatelessWidget {
-  final IconData icon;
-  final Color? color;
-  final String? label;
-  final VoidCallback onTap;
-
-  const _CallControlButton({
-    required this.icon,
-    this.color,
-    this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final btn = Material(
-      color: color ?? Colors.black54,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 38,
-          height: 38,
-          child: Icon(icon, color: Colors.white, size: 20),
-        ),
-      ),
-    );
-    if (label == null) return btn;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        btn,
-        const SizedBox(height: 2),
-        Text(
-          label!,
-          style: AppText.micro.copyWith(color: Colors.white),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
-    );
-  }
-}
