@@ -47,6 +47,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   bool _recomputeDirty = true;
   String _lastQueryUsed = '';
   Map<String, String> _statusMap = const {};
+  Map<String, String> _nameMap = const {};
   String _query = '';
   final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _selected = {};
@@ -431,25 +432,32 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
 
     final effectiveQuery = widget.externalQuery ?? _query;
 
-    // Map uid → status & nama live dari daftar online users
+    // Map uid → status (titik/subtitle) dan uid → nickname live
+    // (judul + cari) dari daftar online users. DIPISAH: status tidak
+    // boleh dipakai sebagai nama (bug: judul jadi "online"/"idle").
     final statusMap = <String, String>{};
+    final liveNameMap = <String, String>{};
     for (final u in onlineUsers) {
       statusMap[u.uid] = u.status;
+      if (u.nickname.isNotEmpty) liveNameMap[u.uid] = u.nickname;
     }
 
     // Recompute hanya kalau input yang memengaruhi hasil berubah (data,
     // query, tab arsip, atau peta nama live). Rebuild lain (tema dsb.)
     // tidak lagi mengurutkan ulang list.
     final queryChanged = effectiveQuery != _lastQueryUsed;
-    final liveChanged = !_sameStatusMap(statusMap, _statusMap);
+    final liveChanged = !_sameStatusMap(statusMap, _statusMap) ||
+        !_sameStatusMap(liveNameMap, _nameMap);
     if (_lastChats.isNotEmpty &&
         (_recomputeDirty || queryChanged || liveChanged)) {
       _recomputeDirty = false;
       _lastQueryUsed = effectiveQuery;
+      _statusMap = Map.of(statusMap);
+      _nameMap = Map.of(liveNameMap);
       _recomputeFiltered(
         myUid: auth.uid ?? '',
         query: effectiveQuery,
-        liveNameMap: statusMap,
+        liveNameMap: liveNameMap,
       );
     }
 
@@ -531,10 +539,12 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 if (_recomputeDirty) {
                   _recomputeDirty = false;
                   _lastQueryUsed = effectiveQuery;
+                  _statusMap = Map.of(statusMap);
+                  _nameMap = Map.of(liveNameMap);
                   _recomputeFiltered(
                     myUid: auth.uid ?? '',
                     query: effectiveQuery,
-                    liveNameMap: statusMap,
+                    liveNameMap: liveNameMap,
                   );
                 }
                 // List terlihat: hanya rebuild bagian ini saat data berganti.
@@ -582,7 +592,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                       (p) => p != auth.uid,
                       orElse: () => '',
                     );
-                    final otherName = statusMap[otherUid] ?? chat.participantNames[otherUid] ?? 'Anon';
+                    final otherName = liveNameMap[otherUid] ?? chat.participantNames[otherUid] ?? 'Anon';
                     final otherGender = chat.participantGenders[otherUid] ?? '';
                     final unread = chat.unreadCounts[auth.uid] ?? 0;
                     final isBlocked = blocked.contains(otherUid);
@@ -763,12 +773,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                 ? AppTheme.female
                                                 : AppTheme.accent),
                                     bgColor: isBlocked
-                                        ? AppTheme.textSecondary.withValues(
-                                            alpha: 0.15,
-                                          )
-                                        : AppTheme.accent.withValues(
-                                            alpha: 0.15,
-                                          ),
+                                        ? AppTheme.avatarBgBlocked
+                                        : AppTheme.avatarBg,
                                     textColor: isBlocked
                                         ? AppTheme.textSecondary
                                         : AppTheme.textPrimary,
@@ -790,16 +796,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                             width: 11,
                                             height: 11,
                                             decoration: BoxDecoration(
-                                              color:
-                                                  (statusMap[otherUid] ??
-                                                          'offline') ==
-                                                      'online'
-                                                  ? Color(0xFF4CAF50)
-                                                  : (statusMap[otherUid] ??
-                                                            'offline') ==
-                                                        'idle'
-                                                  ? Color(0xFFFFC107)
-                                                  : Color(0xFF9E9E9E),
+                                              color: AppTheme.statusColor(
+                                                statusMap[otherUid] ??
+                                                    'offline',
+                                              ),
                                               shape: BoxShape.circle,
                                               border: Border.all(
                                                 color: Colors.white,
@@ -892,7 +892,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                               if (isOnline || profile.isNotEmpty) ...[
                                                 Text(
                                                   isOnline ? s.chatOnlineSubtitle : profile,
-                                                  style: AppText.bodySmall.copyWith(color: isOnline ? const Color(0xFF4CAF50) : AppTheme.textSecondary, fontWeight: isOnline ? FontWeight.w600 : FontWeight.w400),
+                                                  style: AppText.bodySmall.copyWith(color: isOnline ? AppTheme.online : AppTheme.textSecondary, fontWeight: isOnline ? FontWeight.w600 : FontWeight.w400),
                                                   maxLines: 1, overflow: TextOverflow.ellipsis,
                                                 ),
                                                 const SizedBox(height: 4),

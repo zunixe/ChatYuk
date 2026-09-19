@@ -32,6 +32,8 @@ import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/mic_record_button.dart';
 import '../widgets/composer_link_preview.dart';
+import '../widgets/mention_autocomplete.dart';
+import '../utils/mention.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/chat_call_overlay.dart';
 import '../widgets/chat_ui_shared.dart';
@@ -143,6 +145,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   String _otherCountry = '';
   String _otherCity = '';
   bool _otherRegistered = false;
+  int _otherAgeLive = 0;
+  String _otherGenderLive = '';
   bool _wasBlocked = false;
 
   final List<MessageModel> _pending = [];
@@ -371,6 +375,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           // supaya chat yang dibuka lewat notifikasi ikut tahu status
           // terdaftar lawan (tombol call & icon verified).
           _otherRegistered = p.isRegistered;
+          // Fix umur/gender hilang-timbul: snapshot participantAges/
+          // participantGenders di baris chat bisa 0/kosong (chat lama
+          // belum ke-backfill). Lengkapi dari profil live.
+          _otherAgeLive = p.age;
+          _otherGenderLive = p.gender;
         });
       });
     });
@@ -657,7 +666,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   void _subscribeTyping() {
     _typingSub?.cancel();
-    debugPrint('[TYPING] screen subscribing for ${widget.chatId}');
+    dlog('[TYPING] screen subscribing for ${widget.chatId}');
     _typingSub = context
         .read<ChatProvider>()
         .getTypingPulseStream(widget.chatId)
@@ -671,10 +680,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           final lastMsg = _lastPartnerMsgTime;
           if (lastMsg != null &&
               ts < lastMsg.millisecondsSinceEpoch + 1000) {
-            debugPrint('[TYPING] skipped stale pulse');
+            dlog('[TYPING] skipped stale pulse');
             return;
           }
-          debugPrint('[TYPING] stream got kind=$kind -> bubble on');
+          dlog('[TYPING] stream got kind=$kind -> bubble on');
           if (!mounted) return;
           setState(() {
             if (kind == 'recording') {
@@ -733,6 +742,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _newChatBonusClaimed = true;
     context.read<PointsProvider>().newChatBonus(widget.otherUid);
   }
+
+  /// Kandidat mention private 1:1 — hanya lawan bicara. `@all` tidak pernah.
+  List<Mention> get _mentionCandidates => widget.otherUid.isEmpty
+      ? const []
+      : [Mention(uid: widget.otherUid, name: widget.otherName)];
+
+  List<Mention> _computeMentions(String text) =>
+      parseMentions(text, candidates: _mentionCandidates);
 
   Future<void> _send() async {
     final raw = _msgCtrl.text.trim();
@@ -916,6 +933,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     // Offline: bubble TETAP tampil (centang-1) + masuk antrean, otomatis
     // terkirim saat koneksi pulih (centang-2, biru bila dibaca).
     final reply = _replyingTo;
+    final mentions = _computeMentions(text);
     final pending = MessageModel(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
       senderId: uid,
@@ -929,6 +947,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
+      mentions: mentions,
     );
     setState(() {
       _pending.add(pending);
@@ -945,6 +964,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        mentions: mentions,
       );
       _isSending = false;
       return;
@@ -978,6 +998,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        mentions: mentions,
       );
       _maybeNewChatBonus();
       _schedulePendingConfirmFallback();
@@ -993,6 +1014,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           repliedToId: reply?.id,
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
+          mentions: mentions,
         );
       } else {
         // Kirim gagal → kembalikan koin yang sudah terpotong.
@@ -1067,6 +1089,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             repliedToText: e.repliedToText,
             repliedToSenderName: e.repliedToSenderName,
             isForwarded: e.isForwarded,
+            mentions: e.mentions,
           ),
         );
         _queuedIds.add(e.pendingId);
@@ -1089,6 +1112,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     String? repliedToText,
     String? repliedToSenderName,
     bool isForwarded = false,
+    List<Mention> mentions = const [],
   }) async {
     await OfflineOutbox.instance.enqueue(
       OutboxEntry(
@@ -1108,6 +1132,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         repliedToText: repliedToText,
         repliedToSenderName: repliedToSenderName,
         isForwarded: isForwarded,
+        mentions: mentions,
         createdAt: pending.timestamp,
         pointsDeducted: pointsDeducted,
         pointsKind: pointsKind,
@@ -1189,6 +1214,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             repliedToText: e.repliedToText,
             repliedToSenderName: e.repliedToSenderName,
             isForwarded: e.isForwarded,
+            mentions: e.mentions,
           );
           await OfflineOutbox.instance.remove(e.pendingId);
           sent++;
@@ -1508,13 +1534,29 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final msg = _singleSelected;
     _hideActionBar();
     if (msg == null) return;
-    final ok = await MessageReactionService.instance.toggleReaction(
+    final res = await MessageReactionService.instance.toggleReaction(
       chatType: 'private',
       chatId: widget.chatId,
       messageId: msg.id,
       emoji: emoji,
     );
-    if (!ok && mounted) {
+    if (!mounted) return;
+    // Update optimistis: UI langsung benar tanpa menunggu realtime.
+    setState(() {
+      final per = _reactions.putIfAbsent(msg.id, () => {});
+      if (res == ToggleResult.added) {
+        per[emoji] = (per[emoji] ?? 0) + 1;
+      } else {
+        final n = (per[emoji] ?? 1) - 1;
+        if (n <= 0) {
+          per.remove(emoji);
+        } else {
+          per[emoji] = n;
+        }
+        if (per.isEmpty) _reactions.remove(msg.id);
+      }
+    });
+    if (res == ToggleResult.failed && mounted) {
       final s = context.read<LocaleProvider>().s;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.msgReactionFailed)),
@@ -1525,19 +1567,36 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   Future<void> _starSelected() async {
     if (_selectedIds.isEmpty) return;
-    bool starred = false;
+    var res = ToggleResult.removed;
     for (final id in _selectedIds) {
-      final r = await MessageReactionService.instance.toggleStar(
+      res = await MessageReactionService.instance.toggleStar(
         chatType: 'private',
         chatId: widget.chatId,
         messageId: id,
       );
-      starred = r;
+      if (!mounted) return;
+      // Update optimistis: ikon bintang langsung benar tanpa realtime.
+      setState(() {
+        if (res == ToggleResult.added) {
+          _starredIds.add(id);
+        } else {
+          _starredIds.remove(id);
+        }
+      });
+      if (res == ToggleResult.failed) break;
     }
     if (!mounted) return;
     final s = context.read<LocaleProvider>().s;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(starred ? s.msgStarred : s.msgUnstarred)),
+      SnackBar(
+        content: Text(
+          res == ToggleResult.added
+              ? s.msgStarred
+              : res == ToggleResult.removed
+                  ? s.msgUnstarred
+                  : s.msgStarFailed,
+        ),
+      ),
     );
     _clearSelection();
   }
@@ -2527,12 +2586,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       _typingSub = null;
     }
     final displayStatus = isBlocked ? 'offline' : _otherStatus;
-    final genderEmoji = widget.otherGender == 'male'
+    // Efektif: param snapshot dulu, fallback profil live (chat lama
+    // snapshot-nya 0/kosong → umur/icon hilang-timbul).
+    final effGender = widget.otherGender.isNotEmpty
+        ? widget.otherGender
+        : _otherGenderLive;
+    final effAge = widget.otherAge > 0 ? widget.otherAge : _otherAgeLive;
+    final effRegistered = widget.otherRegistered || _otherRegistered;
+    final genderEmoji = effGender == 'male'
         ? '👨'
-        : widget.otherGender == 'female'
+        : effGender == 'female'
         ? '👩'
         : '';
-    final agePart = widget.otherAge > 0 ? '${widget.otherAge}' : '';
+    final agePart = effAge > 0 ? '$effAge' : '';
     final cityPart = _otherCity.isNotEmpty ? _otherCity : widget.otherCity;
     final countryPart = _otherCountry.isNotEmpty
         ? _otherCountry
@@ -2594,29 +2660,48 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 uid: widget.otherUid,
                 name: widget.otherName,
                 size: 40,
-                borderRadius: 20,
-                // Border warna gender — samakan dengan kartu list Pesan:
-                // biru = laki-laki, merah muda = perempuan, aksen = lainnya.
-                borderColor: widget.otherGender == 'male'
+                borderRadius: 0,
+                // Samakan dengan kartu list Pesan (beda ukuran saja):
+                // border warna gender, bg aksen 15%, teks primer, badge
+                // titik presence 11px (atau ikon blokir bila diblokir).
+                borderColor: isBlocked
+                    ? null
+                    : effGender == 'male'
                     ? AppTheme.male
-                    : widget.otherGender == 'female'
+                    : effGender == 'female'
                     ? AppTheme.female
                     : AppTheme.accent,
-                bgColor: Colors.white.withValues(alpha: 0.25),
-                textColor: Colors.white,
-                badge: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: displayStatus == 'online'
-                        ? Color(0xFF69F0AE)
-                        : displayStatus == 'idle'
-                        ? Color(0xFFFFD740)
-                        : Colors.white38,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.primary, width: 2),
-                  ),
-                ),
+                bgColor: isBlocked
+                    ? AppTheme.avatarBgBlocked
+                    : AppTheme.avatarBg,
+                textColor: isBlocked
+                    ? AppTheme.textSecondary
+                    : AppTheme.textPrimary,
+                badge: isBlocked
+                    ? Container(
+                        padding: EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.danger,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Icon(
+                          Icons.block,
+                          size: 10,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Container(
+                        width: 11,
+                        height: 11,
+                        decoration: BoxDecoration(
+                          color: AppTheme.statusColor(displayStatus),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
               ),
             ),
             SizedBox(width: 10),
@@ -2642,7 +2727,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (widget.otherRegistered) ...[
+                            if (effRegistered) ...[
                               SizedBox(width: 4),
                               Icon(
                                 Icons.verified,
@@ -2685,7 +2770,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                               Text(
                                 s.statusOnline,
                                 style: AppText.micro.copyWith(
-                                  color: const Color(0xFF69F0AE),
+                                  color: AppTheme.online,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -3202,6 +3287,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                               ),
                             ),
                           ),
+                        MentionAutocomplete(
+                          controller: _msgCtrl,
+                          candidates: _mentionCandidates,
+                        ),
                         ComposerLinkPreview(controller: _msgCtrl),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,

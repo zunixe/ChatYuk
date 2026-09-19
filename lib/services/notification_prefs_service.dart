@@ -69,6 +69,7 @@ class NotificationPrefsService {
       case 'active_call':
         return get('call');
       case 'message':
+      case 'mention':
         return get('chat');
       case 'online':
         return get('online');

@@ -4,11 +4,11 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../utils.dart';
-import 'package:flutter/gestures.dart';
+import '../utils/mention.dart';
+import 'mention_spans.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
@@ -18,9 +18,9 @@ import '../services/photo_cache.dart';
 import '../services/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
 import 'app_gesture.dart';
+import 'reply_quote.dart';
 import 'voice_bubble.dart';
 import 'link_preview.dart';
-import 'linkify_text.dart';
 import '../services/link_preview_service.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
@@ -395,6 +395,8 @@ class MessageTextWithTime extends StatelessWidget {
   final TextStyle timeStyle;
   final bool alignRight;
   final Widget? trailing;
+  final List<Mention> mentions;
+  final bool highlightMentionAll;
   const MessageTextWithTime({
     super.key,
     required this.text,
@@ -403,6 +405,8 @@ class MessageTextWithTime extends StatelessWidget {
     required this.timeStyle,
     required this.alignRight,
     this.trailing,
+    this.mentions = const [],
+    this.highlightMentionAll = false,
   });
 
   // Poin "1." / "(a)" / "a." di awal baris → baris lanjutan menjorok
@@ -586,29 +590,12 @@ class MessageTextWithTime extends StatelessWidget {
     );
   }
 
-  List<TextSpan> _linkifySpans(String t, TextStyle base) {
-    final spans = <TextSpan>[];
-    int last = 0;
-    for (final m in RegExp(r'https?:\/\/[^\s]+').allMatches(t)) {
-      if (m.start > last) spans.add(TextSpan(text: t.substring(last, m.start), style: base));
-      final url = m.group(0)!;
-      spans.add(TextSpan(
-        text: url,
-        style: base.copyWith(color: AppTheme.primary, decoration: TextDecoration.underline),
-        recognizer: TapGestureRecognizer()..onTap = () async {
-          final uri = Uri.tryParse(url);
-          if (uri != null) {
-            // ignore: avoid_dynamic_calls
-            try { await launchUrl(uri, mode: LaunchMode.externalApplication); } catch (_) {}
-          }
-        },
-      ));
-      last = m.end;
-    }
-    if (last < t.length) spans.add(TextSpan(text: t.substring(last), style: base));
-    if (spans.isEmpty) spans.add(TextSpan(text: t, style: base));
-    return spans;
-  }
+  List<TextSpan> _linkifySpans(String t, TextStyle base) => mentionAwareSpans(
+        t,
+        base,
+        mentions: mentions,
+        highlightAll: highlightMentionAll,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -819,6 +806,9 @@ class MessageBubble extends StatelessWidget {
   final bool starred;
   final VoidCallback? onTapSelect;
   final VoidCallback? onTapBadge;
+  /// Highlight `@all` — hanya private room/grup. Global room & private 1:1
+  /// selalu false (token `@all` tampil sebagai teks biasa).
+  final bool highlightMentionAll;
   const MessageBubble({
     super.key,
     required this.msg,
@@ -840,6 +830,7 @@ class MessageBubble extends StatelessWidget {
     this.starred = false,
     this.onTapSelect,
     this.onTapBadge,
+    this.highlightMentionAll = false,
   });
 
   @override
@@ -971,52 +962,14 @@ class MessageBubble extends StatelessWidget {
                         ),
                       if (msg.repliedToText != null &&
                           msg.repliedToText!.isNotEmpty)
-                        Builder(builder: (ctx) {
-                          final s = ctx.read<LocaleProvider>().s;
-                          // PRIVASI: target reply terhapus → "Pesan dihapus".
-                          final targetDeleted = msg.repliedToId != null &&
-                              deletedIds.contains(msg.repliedToId);
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isMe
-                                  ? Colors.white.withValues(alpha: 0.15)
-                                  : AppTheme.bgScreen.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border(
-                                left: BorderSide(
-                                  color: AppTheme.primary,
-                                  width: 3,
-                                ),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  msg.repliedToSenderName ?? '',
-                                  style: AppText.chatName,
-                                ),
-                                Text(
-                                  targetDeleted
-                                      ? s.messageDeleted
-                                      : msg.repliedToText!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppText.chatBodySmall.copyWith(
-                                    fontStyle: targetDeleted
-                                        ? FontStyle.italic
-                                        : FontStyle.normal,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
+                        ReplyQuote.fromMessage(
+                          context: context,
+                          repliedToText: msg.repliedToText,
+                          repliedToId: msg.repliedToId,
+                          repliedToSenderName: msg.repliedToSenderName,
+                          isMe: isMe,
+                          deletedIds: deletedIds,
+                        )!,
                       if (msg.type == 'voice' && msg.imageData.isNotEmpty)
                         VoiceBubble(
                           path: msg.imageData,
@@ -1093,9 +1046,11 @@ class MessageBubble extends StatelessWidget {
                             if (msg.text.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
-                                child: LinkifyText(
+                                child: MentionAwareText(
                                   msg.text,
                                   style: AppText.chatBody.copyWith(color: AppTheme.textPrimary),
+                                  mentions: msg.mentions,
+                                  highlightAll: highlightMentionAll,
                                 ),
                               ),
                           ],
@@ -1313,6 +1268,8 @@ class MessageBubble extends StatelessWidget {
                             fontWeight: FontWeight.w400,
                           ),
                           alignRight: isMe,
+                          mentions: msg.mentions,
+                          highlightMentionAll: highlightMentionAll,
                           trailing: isMe
                               ? Tooltip(
                                   message:

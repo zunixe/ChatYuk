@@ -89,7 +89,7 @@ const String _pendingNotifActionsKey = 'pending_notif_actions';
       canMarkRead: true,
     );
   }
-  if (type == 'room') {
+  if (type == 'room' || type == 'mention') {
     final roomId = '${data['roomId'] ?? ''}';
     if (roomId.isEmpty) return null;
     return (
@@ -536,7 +536,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Chat yang dibisukan → tidak ada notifikasi (background).
   final bgChatId = '${data['chatId'] ?? ''}';
   if (bgChatId.isNotEmpty &&
-      (type == 'message' || (type == null && data.containsKey('chatId'))) &&
+      (type == 'message' ||
+          type == 'mention' ||
+          (type == null && data.containsKey('chatId'))) &&
       await NotificationPrefsService.isChatMuted(bgChatId)) {
     return;
   }
@@ -612,16 +614,23 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       type == 'subscribe' ||
       type == 'broadcast' ||
       type == 'call' ||
-      type == 'message';
+      type == 'message' ||
+      type == 'mention';
   final isMessage = type == 'message' ||
       (type == null && data.containsKey('chatId'));
   final title = isDataOnly
-      ? data['otherName'] ?? data['fromName'] ?? s.unknownUser
+      ? (type == 'mention'
+            ? data['roomName'] ?? 'Room'
+            : data['otherName'] ?? data['fromName'] ?? s.unknownUser)
       : message.notification?.title ??
             (type == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
   final body = isDataOnly
       ? (type == 'call'
             ? s.notifCallingBody
+            : type == 'mention'
+            ? ((data['body'] as String?)?.isNotEmpty == true
+                  ? data['body'] as String
+                  : s.mentionHint(''))
             : type == 'message'
             // Urutan fallback: data['body'] (trigger baru) → data['message']
             // (payload lama) → s.notifNewMessage. Jangan tampilkan string kosong.
@@ -906,6 +915,7 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
   if (chatKey.isNotEmpty &&
       (_fcmType == 'message' ||
           _fcmType == 'room' ||
+          _fcmType == 'mention' ||
           (_fcmType == null && data.containsKey('chatId'))) &&
       await NotificationPrefsService.isChatMuted(chatKey)) {
     return;
@@ -920,10 +930,13 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       type == 'subscribe' ||
       type == 'broadcast' ||
       type == 'call' ||
-      type == 'message';
+      type == 'message' ||
+      type == 'mention';
   final isOnline = type == 'online';
   final title = isDataOnly
-      ? data['otherName'] ?? data['fromName'] ?? s.unknownUser
+      ? (type == 'mention'
+            ? data['roomName'] ?? 'Room'
+            : data['otherName'] ?? data['fromName'] ?? s.unknownUser)
       : message.notification?.title ??
             (type == 'room' ? data['roomName'] ?? 'Room' : s.notifNewMessage);
   final body = isDataOnly
@@ -931,6 +944,10 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
             ? (data['callType'] == 'video'
                 ? s.notifCallingVideoBody
                 : s.notifCallingVoiceBody)
+            : type == 'mention'
+            ? ((data['body'] as String?)?.isNotEmpty == true
+                  ? data['body'] as String
+                  : s.mentionHint(''))
             : type == 'message'
             // Sama seperti background handler: body → message → fallback.
             ? ((data['body'] as String?)?.isNotEmpty == true
@@ -1149,8 +1166,11 @@ void _openFromData(Map<String, dynamic> data) {
   }
   nav.pushAndRemoveUntil(
     MaterialPageRoute(
-      builder: (_) => data['type'] == 'room' || data['type'] == 'broadcast'
-          ? RoomChatScreen(
+      builder: (_) =>
+          data['type'] == 'room' ||
+                  data['type'] == 'broadcast' ||
+                  data['type'] == 'mention'
+              ? RoomChatScreen(
               room: RoomModel(
                 id: data['roomId'] ?? '',
                 name: data['roomName'] ?? 'Room',

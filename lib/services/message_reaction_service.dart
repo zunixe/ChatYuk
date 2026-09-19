@@ -4,19 +4,23 @@ import '../config/supabase_config.dart';
 import '../utils.dart';
 import 'message_cache.dart';
 
+enum ToggleResult { added, removed, failed }
+
 class MessageReactionService {
   MessageReactionService._();
   static final MessageReactionService instance = MessageReactionService._();
   SupabaseClient get _sb => SupabaseConfig.client;
 
-  Future<bool> toggleReaction({
+  Future<ToggleResult> toggleReaction({
     required String chatType,
     required String chatId,
     required String messageId,
     required String emoji,
   }) async {
     final me = _sb.auth.currentUser?.id;
-    if (me == null || messageId.startsWith('pending-')) return false;
+    if (me == null || messageId.startsWith('pending-')) {
+      return ToggleResult.failed;
+    }
     try {
       final existing = await _sb
           .from('message_reactions')
@@ -31,7 +35,7 @@ class MessageReactionService {
             .from('message_reactions')
             .delete()
             .eq('id', (existing as Map)['id']);
-        return false;
+        return ToggleResult.removed;
       }
       await _sb.from('message_reactions').insert({
         'chat_type': chatType,
@@ -40,10 +44,10 @@ class MessageReactionService {
         'user_id': me,
         'emoji': emoji,
       });
-      return true;
+      return ToggleResult.added;
     } catch (e) {
       dlog('[Reaction] toggle error: $e');
-      return false;
+      return ToggleResult.failed;
     }
   }
 
@@ -205,13 +209,15 @@ class MessageReactionService {
     }
   }
 
-  Future<bool> toggleStar({
+  Future<ToggleResult> toggleStar({
     required String chatType,
     required String chatId,
     required String messageId,
   }) async {
     final me = _sb.auth.currentUser?.id;
-    if (me == null || messageId.startsWith('pending-')) return false;
+    if (me == null || messageId.startsWith('pending-')) {
+      return ToggleResult.failed;
+    }
     try {
       final existing = await _sb
           .from('starred_messages')
@@ -225,7 +231,7 @@ class MessageReactionService {
             .from('starred_messages')
             .delete()
             .eq('id', (existing as Map)['id']);
-        return false;
+        return ToggleResult.removed;
       }
       await _sb.from('starred_messages').insert({
         'user_id': me,
@@ -233,10 +239,10 @@ class MessageReactionService {
         'chat_id': chatId,
         'message_id': messageId,
       });
-      return true;
+      return ToggleResult.added;
     } catch (e) {
       dlog('[Star] toggle error: $e');
-      return false;
+      return ToggleResult.failed;
     }
   }
 

@@ -447,6 +447,10 @@ class S {
       ? 'Hapus pesan ini? Pesan tidak bisa dipulihkan.'
       : 'Delete this message? It cannot be recovered.';
   String get replyingTo => isId ? 'Membalas' : 'Replying to';
+  // ── Mention @ ──
+  String get mentionAll => isId ? 'Semua orang' : 'Everyone';
+  String mentionHint(String q) =>
+      isId ? 'Sebut pengguna: @$q' : 'Mention someone: @$q';
   String get errProfileSave =>
       isId ? 'Gagal simpan profil: ' : 'Failed to save profile: ';
   String get msgProfileSaved =>
@@ -1472,6 +1476,8 @@ class S {
       isId ? 'Gagal memberi reaksi' : 'Failed to react';
   String get msgReactionRemoveFailed =>
       isId ? 'Gagal menghapus reaksi' : 'Failed to remove reaction';
+  String get msgStarFailed =>
+      isId ? 'Gagal mengubah bintang' : 'Failed to update star';
   String reactionsTitle(int n) =>
       isId ? '$n reaksi' : (n == 1 ? '1 reaction' : '$n reactions');
   String get msgTapToRemove =>
