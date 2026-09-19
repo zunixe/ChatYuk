@@ -607,16 +607,17 @@ class _DeviceDetailSheet extends StatelessWidget {
     );
   }
 
-  /// Exclude perangkat ini: tambah install_id ke daftar exclude, simpan
-  /// via RPC, lalu refresh daftar (item langsung hilang dari tab Perangkat).
+  /// Exclude perangkat ini: RPC cascade menambahkan install_id SEKALIGUS
+  /// semua uid yang pernah login di device ini (ke `excluded_uids`).
+  /// Cascade wajib karena `install_id` bisa berubah untuk HP yang sama
+  /// (Android ID ter-scope ke signing key) — tanpa itu device ter-exclude
+  /// "muncul lagi" sebagai device baru.
   Future<void> _excludeDevice(BuildContext context, String installId) async {
     if (installId.isEmpty) return;
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
-    final list = List.of(auth.excludedDevices);
-    if (list.contains(installId)) return;
-    list.add(installId);
-    final ok = await auth.setExcludedDevices(list);
+    if (auth.excludedDevices.contains(installId)) return;
+    final ok = await auth.excludeDeviceCascade(installId);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -629,6 +630,7 @@ class _DeviceDetailSheet extends StatelessWidget {
     if (ok) {
       // Tutup sheet + refresh daftar supaya item ter-exclude langsung hilang.
       Navigator.pop(context);
+      context.read<AdminProvider>().invalidateStatsDetail();
       await context.read<AdminProvider>().fetchDevices();
     }
   }

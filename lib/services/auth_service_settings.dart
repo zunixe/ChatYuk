@@ -254,6 +254,33 @@ mixin AuthServiceSettingsMx on AuthBase {
     }
   }
 
+  /// Exclude SATU perangkat + cascade: semua uid yang pernah login di device
+  /// itu ikut ditambahkan ke `excluded_uids`. Penting karena `install_id`
+  /// (ANDROID_ID) bisa BERUBAH untuk HP yang sama (Android 8+ meng-scope ke
+  /// user profile + signing key) — tanpa cascade, device ter-exclude
+  /// "muncul lagi" sebagai device baru. Return daftar terbaru
+  /// (device + uid) bila sukses, null bila gagal.
+  Future<({List<String> devices, List<String> uids})?> excludeDeviceCascade(
+    String installId,
+  ) async {
+    try {
+      final res = await _sb.rpc(
+        'admin_exclude_device_cascade',
+        params: {'p_install_id': installId},
+      );
+      if (res is! Map) return null;
+      List<String> strList(dynamic v) =>
+          v is List ? v.map((e) => '$e').where((s) => s.isNotEmpty).toList() : [];
+      return (
+        devices: strList(res['devices']),
+        uids: strList(res['uids']),
+      );
+    } catch (e) {
+      dlog('[AUTH] excludeDeviceCascade error: $e');
+      return null;
+    }
+  }
+
   /// Ambil font global aplikasi (key katalog AppFonts). Default 'default'.
   Future<String> fetchAppFontFamily() async {
     try {
