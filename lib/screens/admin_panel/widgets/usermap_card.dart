@@ -13,7 +13,6 @@ import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/locale_provider.dart';
-import '../../../services/geo_service.dart';
 import '../../../utils.dart';
 
 class AdminUserMapCard extends StatefulWidget {

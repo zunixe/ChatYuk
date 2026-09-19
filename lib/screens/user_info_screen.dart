@@ -11,10 +11,7 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/auth_service.dart';
 import '../services/call_service.dart';
-import '../services/chat_service.dart';
-import '../services/social_service.dart';
 import '../widgets/async_photo.dart';
 import '../providers/theme_provider.dart';
 import 'call_screen.dart';
@@ -69,7 +66,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   Future<void> _loadSocial() async {
     try {
-      final st = await SocialService()
+      final st = await context.read<SocialProvider>()
           .mySocialStatus(widget.userId)
           .timeout(_loadTimeout);
       if (!mounted) return;
@@ -365,7 +362,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     _statusSub?.cancel();
     final known = fresh == null
         ? null
-        : ChatService.effectiveStatusOf(
+        : ChatProvider.effectiveStatusOf(
             fresh.status,
             fresh.lastSeen.toIso8601String(),
           );
@@ -383,8 +380,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   Future<void> _load() async {
     UserModel? p;
     try {
-      p = await AuthService()
-          .getProfileById(widget.userId)
+      p = await context.read<AuthProvider>()
+          .getOtherProfile(widget.userId)
           .timeout(_loadTimeout);
     } catch (_) {}
     if (mounted) {
@@ -411,7 +408,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   Future<void> _loadPhotos() async {
     try {
-      final photos = await AuthService()
+      final photos = await context.read<AuthProvider>()
           .getPhotosWithAccess(widget.userId)
           .timeout(_loadTimeout);
       if (mounted) setState(() => _photos = photos);
@@ -500,7 +497,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             ).showSnackBar(SnackBar(content: Text(s.photoUnlockedToast)));
         } else {
           // Lihat sekali: ambil foto asli sementara & tampilkan viewer.
-          final full = await AuthService().getPhotos(widget.userId);
+          final full = await context.read<AuthProvider>().getPhotos(widget.userId);
           if (!mounted) return;
           final match = full.where((p) => p.id == photo.id).toList();
           if (match.isNotEmpty) {

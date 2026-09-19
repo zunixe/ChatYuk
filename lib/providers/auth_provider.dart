@@ -9,10 +9,13 @@ import '../main.dart';
 import '../config/theme.dart';
 import '../config/fonts.dart';
 import '../models/user_model.dart';
+import '../models/user_photo.dart';
 import '../providers/locale_provider.dart';
 import '../core/admin_gate.dart';
 import '../services/avatar_service.dart';
 import '../services/auth_service.dart';
+export '../services/auth_service.dart'
+    show EmailNotRegisteredException, EmailAlreadyRegisteredException;
 import '../services/chat_service.dart';
 import '../services/device_info_service.dart';
 import '../services/location_service.dart';
@@ -1064,6 +1067,16 @@ class AuthProvider extends ChangeNotifier {
     // Ikat referrer (bila ada) — sekali saja, setelah profil terdaftar.
     _bindAndClaimReferrer();
   }
+
+
+  // ── Passthrough agar screen tidak import AuthService (Fase 9b) ──
+  Future<List<UserPhoto>> getPhotos(String uid) => _auth.getPhotos(uid);
+  Future<List<UserPhoto>> getPhotosWithAccess(String uid) =>
+      _auth.getPhotosWithAccess(uid);
+  Future<void> uploadPhoto(String base64, {String? preview}) =>
+      _auth.uploadPhoto(base64, preview: preview);
+  Future<void> deletePhoto(String photoId) => _auth.deletePhoto(photoId);
+  Future<void> deleteMyAccount() => _auth.deleteMyAccount();
 
   Future<void> updateProfile({
     int? age,

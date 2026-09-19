@@ -4,7 +4,6 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../services/points_service.dart';
 import '../providers/theme_provider.dart';
 
 class MissionsScreen extends StatefulWidget {
@@ -16,7 +15,7 @@ class MissionsScreen extends StatefulWidget {
 
 class _MissionsScreenState extends State<MissionsScreen>
     with SingleTickerProviderStateMixin {
-  final PointsService _service = PointsService();
+  PointsProvider get _service => context.read<PointsProvider>();
   late final TabController _tab = TabController(length: 3, vsync: this);
   int get _tzOffset => DateTime.now().timeZoneOffset.inMinutes;
 

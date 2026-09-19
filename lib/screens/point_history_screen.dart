@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../providers/points_provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/locale_provider.dart';
-import '../services/points_service.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
 
@@ -16,7 +16,7 @@ class PointHistoryScreen extends StatefulWidget {
 }
 
 class _PointHistoryScreenState extends State<PointHistoryScreen> {
-  final PointsService _service = PointsService();
+  PointsProvider get _service => context.read<PointsProvider>();
   bool _loading = true;
   List<Map<String, dynamic>> _items = [];
 

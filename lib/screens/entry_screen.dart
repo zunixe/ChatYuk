@@ -9,7 +9,6 @@ import '../config/strings.dart';
 import '../config/regions.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
-import '../services/geo_service.dart';
 import '../utils.dart';
 import 'register_screen.dart';
 import 'login_screen.dart';

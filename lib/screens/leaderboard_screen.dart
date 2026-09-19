@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/points_provider.dart';
 import '../providers/avatar_provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
-import '../services/points_service.dart';
 import '../providers/theme_provider.dart';
 
 // Top-level untuk compute() — decode avatar base64 di background isolate
@@ -27,7 +27,7 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen>
     with SingleTickerProviderStateMixin {
-  final PointsService _service = PointsService();
+  PointsProvider get _service => context.read<PointsProvider>();
   late final TabController _tab = TabController(length: 2, vsync: this);
   String _scope = 'weekly';
   bool _loading = true;

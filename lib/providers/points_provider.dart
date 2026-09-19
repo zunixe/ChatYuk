@@ -114,6 +114,16 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+
+  // ── Passthrough (Fase 9b) ──
+  Future<Map<String, dynamic>> quests(int tz) => _service.quests(tz);
+  Future<Map<String, dynamic>> claimWeeklyQuest(String key, int tz) =>
+      _service.claimWeeklyQuest(key, tz);
+  Future<Map<String, dynamic>> leaderboard(String scope) =>
+      _service.leaderboard(scope);
+  Future<List<Map<String, dynamic>>> pointHistory({int limit = 100}) =>
+      _service.pointHistory(limit: limit);
+
   PointsProvider({PointsService? service})
       : _service = service ?? PointsService(Supabase.instance.client) {
     // Daftarkan observer + mulai sesi online SEKARANG. Tanpa ini,

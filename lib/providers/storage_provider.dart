@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart' show ResizeMode;
 import '../services/storage_photo_service.dart';
+export '../services/storage_photo_service.dart' show StoragePhotoService;
 
 /// Provider tipis untuk [StoragePhotoService] — agar screen tidak import
 /// `services/` langsung (aturan boundary AGENTS.md).
