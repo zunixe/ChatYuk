@@ -24,6 +24,7 @@ Format: tanggal | branch | flavor | isi | hasil install.
 | 2026-09-19 12:05 | develop | adminProd + apkpureProd | Room/grup: buang centang status (banner + bubble) + tombol emoji composer disamakan dengan private | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:33121) |
 | 2026-09-19 12:40 | develop | adminProd + apkpureProd | Fase 3a/3b modular: coin_gift_dialogs bersama (koin/gift/lapor) + room_widgets (UserChip/HeaderToggle/SheetIcon) | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
 | 2026-09-19 13:20 | develop | adminProd + apkpureProd | Fase 4: ChatService 2278→408 baris (ChatBase + mixin per domain via `part`); pola extension DITOLAK (putus interface/mock) | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
+| 2026-09-19 15:10 | develop | adminProd + apkpureProd | Fase 5-9 modularisasi lengkap: chat (send/photo/voice/outbox/selection/composer bersama), file besar dipecah, 11 helper→core/, 9 provider baru, BOUNDARY TEGAK 0 screen import services/ + gate CI | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
 
 ## Catatan penting: build probe & the underlying provider Sign-In
 
