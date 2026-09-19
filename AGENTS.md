@@ -582,6 +582,21 @@ Langkah:
     (BUKAN project lama `chatyuk-8470e`). Pernah salah pakai 8470e →
     `google_app_id` di AAB = 990163663226 → Sign-In Play gagal. Cek:
     `bash scripts/check_google_signin.sh` (menolak project selain 7c9e4).
+  - **DUA Android OAuth client WAJIB ada** (GCP hanya izinkan 1 SHA-1/client):
+    | Client ID (project `599111437536` / 7c9e4) | Package | SHA-1 | Dipakai oleh |
+    |---|---|---|---|
+    | `…r1rb2m8pfko85lh1nu8ufdesiinv4cso` | `com.chatyuk.chatyuk` | `8C:CC:42:E3:…` (upload key) | APK **apkpure** (HP/APKPure) |
+    | `…pc5vquunrmjoqvvq4hs5rpj2ec8tf26k` | `com.chatyuk.chatyuk` | `7A:19:AF:A5:…` (**Play App Signing**) | AAB **play** (Google Play) |
+    | `…hg56bq0nc2m6kig6hg41lmrbtfel5n2c` | — | — | **Web** client = `serverClientId`/`aud` (dipakai kode) |
+    - Nama di Console: `ChatYuk User Android` (upload) & `ChatYuk User Android (Play Signing)` (Play).
+    - Kalau ada SHA baru (keystore baru / Play re-sign), **buat client Android baru**
+      untuk SHA itu — jangan edit yang lama (bikin apkpure rusak).
+    - **`serverClientId` di kode = Web client `hg56bq0n…`** (SAMA untuk apkpure & play).
+    - Setelah tambah client baru → daftarkan juga di Supabase
+      (`external_google_client_id`, comma-separated) untuk validasi `azp`.
+  - **Client yang TIDAK dipakai (jangan dihidupkan):** `qsg6m4mr5mgakftvgn2apnb6r4u7bsq9`
+    (ChatYuk Dev Android) & `20n1hrbddb85ubhg10j8e1urqs2h2ma3` (Admin Debug/probe —
+    flavor `adminDev` sudah tidak pernah dibangun).
   - Kalau SHA & client sudah benar tapi device tetap `"10, null, null"`:
     cache Google Play Services di HP basi → hapus data Google Play Services
     (Setelan → Aplikasi → Google Play Services → Hapus data) lalu reboot HP.
