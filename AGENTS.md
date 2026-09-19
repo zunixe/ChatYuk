@@ -385,6 +385,32 @@ Catatan penting:
 - Track beta = "Pengujian tertutup - Alpha" (nama API-nya `alpha`, bukan `beta`).
 - Keystore dibaca dari `android/key.properties` (bukan dari Fastfile).
 
+### Guard Google Sign-In Play (WAJIB — insiden 2026-09-19)
+
+Google Sign-In **gagal di build Play** (walau `apkpure` normal) karena 2 sebab.
+Keduanya sekarang ada guard otomatis:
+
+1. **`android/app/src/play/google-services.json` wajib project `chatyuk-7c9e4`**
+   — pernah salah pakai project LAMA `chatyuk-8470e` → `google_app_id` di AAB
+   = 990163663226 → Sign-In gagal. File ini **gitignored** → buat ulang dengan:
+   ```bash
+   bash scripts/setup_play_google_services.sh
+   ```
+   **Guard Gradle** (`android/app/build.gradle.kts`) menghentikan build kalau
+   salah project (error `GUARD Firebase: ...`).
+
+2. **SHA Play App Signing wajib terdaftar di Firebase project `chatyuk-7c9e4`**
+   (AAB di-resign Google — SHA beda dari keystore upload). Lihat bagian
+   "Fitur Khusus → Google Sign-In" untuk nilai SHA + cara verifikasi.
+
+**Cek sebelum upload** (Fastfile `play`/`play_upload` menjalankannya otomatis):
+```bash
+bash scripts/check_google_signin.sh   # harus "SEMUA COCOK"
+```
+Skrip ini memverifikasi: SHA keystore cocok, **kedua** `google-services.json`
+(`main` & `play`) memakai 7c9e4, dan `serverClientId` kode sinkron. Kalau gagal,
+**JANGAN upload** — perbaiki dulu.
+
 ### Kebijakan versi — bump HANYA saat upload Google Play
 
 **Jangan bump `version:` di `pubspec.yaml` untuk build biasa (install ke HP / distribusi APKPure).**
