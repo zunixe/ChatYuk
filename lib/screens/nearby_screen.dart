@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/location_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
@@ -30,7 +31,7 @@ class NearbyScreen extends StatefulWidget {
 }
 
 class _NearbyScreenState extends State<NearbyScreen> {
-  final LocationService _loc = LocationService();
+  LocationService get _loc => context.read<LocationProvider>().location;
   double _radiusKm = 10;
   bool _loading = true;
   bool _shareOn = false;

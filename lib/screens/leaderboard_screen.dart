@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/avatar_provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
-import '../services/avatar_service.dart';
 import '../services/points_service.dart';
 import '../providers/theme_provider.dart';
 
@@ -66,7 +66,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       });
       // Prefetch avatar semua uid sekaligus (1 query) — cegah N+1 per kartu.
       unawaited(
-        AvatarB64Service.instance.prefetch(
+        context.read<AvatarProvider>().prefetch(
           _entries
               .map((e) => '${(e as Map)['uid'] ?? ''}')
               .where((u) => u.isNotEmpty)

@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../config/theme.dart';
-import '../../../services/avatar_service.dart';
+import '../../../providers/avatar_provider.dart';
 
 class AdminAvatarCircle extends StatefulWidget {
   final String uid;
@@ -33,7 +34,7 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
   Future<void> _load() async {
     if (widget.uid.isEmpty) return;
     try {
-      final b64 = await AvatarB64Service.instance.get(widget.uid);
+      final b64 = await context.read<AvatarProvider>().get(widget.uid);
       if (!mounted || b64.isEmpty) return;
       setState(() => _bytes = base64Decode(b64));
     } catch (_) {}

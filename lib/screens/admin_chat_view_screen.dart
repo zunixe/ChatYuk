@@ -9,11 +9,11 @@ import '../config/theme.dart';
 import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
+import '../providers/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/admin_call_watch_service.dart';
 import '../core/cache/photo_cache.dart';
 import '../core/cache/message_cache.dart';
-import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import '../widgets/admin_call_watch_overlay.dart';
 import '../widgets/date_chip.dart';
@@ -381,8 +381,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         final admin = context.read<AdminProvider>();
         var raw = await admin.fetchMessageImage(msgId);
         // image_data berupa PATH storage (foto baru) → download dari bucket.
-        if (raw.isNotEmpty && StoragePhotoService.instance.isPath(raw)) {
-          raw = await StoragePhotoService.instance.download(raw) ?? '';
+        if (raw.isNotEmpty && context.read<StorageProvider>().isPath(raw)) {
+          raw = await context.read<StorageProvider>().download(raw) ?? '';
         }
         data = raw;
         if (data.isNotEmpty) {

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/location_provider.dart';
+import '../providers/device_info_provider.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../utils.dart';
@@ -8,8 +10,6 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/auth_service.dart';
 import '../services/geo_service.dart';
-import '../services/location_service.dart';
-import '../services/device_info_service.dart';
 import '../main.dart';
 import 'login_screen.dart';
 import '../providers/theme_provider.dart';
@@ -37,7 +37,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
   final _nicknameCtrl = TextEditingController();
-  final _geo = GeoService();
+  GeoService get _geo => context.read<LocationProvider>().geo;
 
   String _gender = 'male';
   int _age = 18;
@@ -62,7 +62,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // 1. Coba GPS presisi (tanpa memicu dialog — hanya bila izin sudah ada).
     GeoInfo? info;
     try {
-      final gps = await LocationService().tryDevicePositionForRegister();
+      final gps = await context.read<LocationProvider>().tryDevicePositionForRegister();
       if (gps != null) {
         info = await _geo.detectByCoordinates(gps.$1, gps.$2);
       }
@@ -315,7 +315,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } finally {
       // Catat identitas perangkat + install ID untuk pelacakan admin.
       unawaited(
-        DeviceInfoService.instance.syncToServer(ipAddress: _ipAddress),
+        context.read<DeviceInfoProvider>().syncToServer(ipAddress: _ipAddress),
       );
       if (mounted) setState(() => _loading = false);
     }

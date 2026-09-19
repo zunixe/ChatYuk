@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/contact_provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/contact_service.dart';
 import '../utils.dart';
 
 class ContactScreen extends StatefulWidget {
@@ -36,7 +36,7 @@ class _ContactScreenState extends State<ContactScreen> {
     }
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ContactService().submitMessage(
+      await context.read<ContactProvider>().submitMessage(
         name: _nameCtrl.text,
         message: message,
         userId: context.read<AuthProvider>().uid,

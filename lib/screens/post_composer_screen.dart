@@ -7,11 +7,11 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/auth_provider.dart';
+import '../providers/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/nav_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
-import '../services/storage_photo_service.dart';
 import '../services/timeline_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
@@ -236,7 +236,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       final paths = <String>[];
       if (uid != null && _images.isNotEmpty) {
         final uploads = _images.map(
-          (b64) => StoragePhotoService.instance.uploadPostImage(
+          (b64) => context.read<StorageProvider>().uploadPostImage(
             uid: uid,
             base64: base64Encode(b64),
           ),
