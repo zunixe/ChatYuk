@@ -2,11 +2,11 @@
 import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
-import '../utils.dart';
+import '../../utils.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/message_model.dart';
-import 'message_store.dart';
+import '../../models/message_model.dart';
+import '../../services/message_store.dart';
 
 
 // Top-level function untuk compute() â€” decrypt string tunggal (foto) di background

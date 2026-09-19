@@ -4,8 +4,8 @@ import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/timeline_service.dart';
 import '../services/rt_resilient.dart';
-import '../services/message_cache.dart';
-import '../services/perf_probe.dart';
+import '../core/cache/message_cache.dart';
+import '../core/perf/perf_probe.dart';
 
 /// Cache per-scope: posts + pagination state untuk tab Semua/Mengikuti/Postinganku.
 class _ScopeCache {

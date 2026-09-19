@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/link_preview_service.dart';
+import '../core/media/link_preview_service.dart';
 import 'link_preview.dart';
 
 class ComposerLinkPreview extends StatefulWidget {

@@ -5,7 +5,7 @@ import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
-import '../services/offline_outbox.dart';
+import '../core/cache/offline_outbox.dart';
 import '../utils.dart' show capitalizeFirst;
 import '../utils/mention.dart';
 import '../widgets/anon_prompt_dialog.dart';

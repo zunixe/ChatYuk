@@ -14,14 +14,14 @@ import '../config/gifts.dart';
 import '../models/message_model.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
-import '../services/photo_cache.dart';
-import '../services/screen_secure_service.dart';
+import '../core/cache/photo_cache.dart';
+import '../core/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
 import 'app_gesture.dart';
 import 'reply_quote.dart';
 import 'voice_bubble.dart';
 import 'link_preview.dart';
-import '../services/link_preview_service.dart';
+import '../core/media/link_preview_service.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.

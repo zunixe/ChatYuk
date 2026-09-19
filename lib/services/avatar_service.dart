@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../config/supabase_config.dart';
 import '../utils.dart';
-import 'media_disk_cache.dart';
+import '../core/cache/media_disk_cache.dart';
 import 'storage_photo_service.dart';
 
 /// Avatar base64 by uid dengan cache — dipakai list chat & header chat

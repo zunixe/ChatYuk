@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../utils.dart';
-import 'message_cache.dart';
+import '../core/cache/message_cache.dart';
 
 enum ToggleResult { added, removed, failed }
 

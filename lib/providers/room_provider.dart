@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/room_model.dart';
 import '../services/room_service.dart';
 import '../services/chat_service.dart';
-import '../services/message_cache.dart';
+import '../core/cache/message_cache.dart';
 import '../services/private_room_service.dart';
 import '../services/realtime_hub.dart';
 import '../services/rt_resilient.dart';

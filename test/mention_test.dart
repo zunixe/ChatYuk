@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/models/message_model.dart';
-import 'package:chatyuk/services/offline_outbox.dart';
+import 'package:chatyuk/core/cache/offline_outbox.dart';
 import 'package:chatyuk/utils/mention.dart';
 
 void main() {

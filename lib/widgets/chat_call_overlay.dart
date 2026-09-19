@@ -7,7 +7,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
-import '../services/perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 import 'profile_avatar.dart';
 import '../utils.dart';
 

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chatyuk/services/link_preview_service.dart';
-import 'package:chatyuk/services/perf_probe.dart';
+import 'package:chatyuk/core/media/link_preview_service.dart';
+import 'package:chatyuk/core/perf/perf_probe.dart';
 
 void main() {
   group('LinkPreviewService.extractUrl', () {

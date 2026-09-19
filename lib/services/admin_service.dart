@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/active_call_model.dart';
-import 'perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 
 class AdminService {
   final SupabaseClient _sb;

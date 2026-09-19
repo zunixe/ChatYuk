@@ -10,7 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/nav_provider.dart';
 import '../providers/timeline_provider.dart';
-import '../services/post_photo_cache.dart';
+import '../core/cache/post_photo_cache.dart';
 import '../services/storage_photo_service.dart';
 import '../services/timeline_service.dart';
 import '../widgets/emoji_picker_sheet.dart';

@@ -4,7 +4,7 @@ import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/social_service.dart';
 import '../services/rt_resilient.dart';
-import '../services/message_cache.dart';
+import '../core/cache/message_cache.dart';
 
 /// State sosial user aktif: following set, friend request inbox count,
 /// dan helper aksi follow/friend/subscribe.

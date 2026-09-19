@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../providers/locale_provider.dart';
-import '../services/screen_secure_service.dart';
+import '../core/screen_secure_service.dart';
 import '../providers/theme_provider.dart';
 
 class DonateScreen extends StatefulWidget {

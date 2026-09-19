@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
-import '../services/post_photo_cache.dart';
+import '../core/cache/post_photo_cache.dart';
 import 'private_chat_message.dart';
 
 /// Viewer foto post — popup smooth (fade + scale), bukan halaman baru.

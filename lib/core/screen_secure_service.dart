@@ -1,5 +1,5 @@
 import 'package:flutter/services.dart';
-import '../core/admin_gate.dart';
+import 'admin_gate.dart';
 
 /// Anti-screenshot terpusat.
 ///

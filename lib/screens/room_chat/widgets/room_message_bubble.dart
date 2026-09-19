@@ -6,7 +6,7 @@ import '../../../utils.dart';
 import '../../../config/theme.dart';
 import '../../../models/message_model.dart';
 import '../../../providers/locale_provider.dart';
-import '../../../services/link_preview_service.dart';
+import '../../../core/media/link_preview_service.dart';
 import '../../../widgets/link_preview.dart';
 import '../../../widgets/mention_spans.dart';
 import '../../../widgets/private_chat_message.dart';

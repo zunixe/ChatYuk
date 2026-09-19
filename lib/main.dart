@@ -33,11 +33,11 @@ import 'config/theme.dart';
 import 'services/auth_service.dart';
 import 'services/chat_service.dart';
 import 'utils.dart';
-import 'services/message_cache.dart';
-import 'services/media_disk_cache.dart';
-import 'services/photo_cache.dart';
-import 'services/post_photo_cache.dart';
-import 'services/chat_background.dart';
+import 'core/cache/message_cache.dart';
+import 'core/cache/media_disk_cache.dart';
+import 'core/cache/photo_cache.dart';
+import 'core/cache/post_photo_cache.dart';
+import 'core/media/chat_background.dart';
 import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';
 

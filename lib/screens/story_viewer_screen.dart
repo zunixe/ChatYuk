@@ -11,7 +11,7 @@ import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/story_provider.dart';
 import '../services/storage_photo_service.dart';
-import '../services/media_disk_cache.dart';
+import '../core/cache/media_disk_cache.dart';
 import '../utils.dart';
 import '../widgets/story_text_overlay.dart';
 import 'private_chat_screen.dart';

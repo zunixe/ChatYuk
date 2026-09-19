@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/providers/social_provider.dart';
-import 'package:chatyuk/services/message_cache.dart';
+import 'package:chatyuk/core/cache/message_cache.dart';
 
 import 'test_helper.dart';
 

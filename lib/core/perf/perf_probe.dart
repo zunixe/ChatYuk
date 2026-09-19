@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../utils.dart';
+import '../../utils.dart';
 
 /// Alat ukur performa (HANYA aktif saat `--dart-define=PERF_PROBE=true`).
 ///

@@ -4,7 +4,7 @@ import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/story_model.dart';
-import 'perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 
 /// Service story: tray, slide, upload, seen, penonton, hapus, realtime.
 class StoryService {

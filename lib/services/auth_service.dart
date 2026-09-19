@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'media_disk_cache.dart';
+import '../core/cache/media_disk_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';

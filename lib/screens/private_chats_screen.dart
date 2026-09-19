@@ -17,7 +17,7 @@ import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/app_gesture.dart';
-import '../services/perf_probe.dart';
+import '../core/perf/perf_probe.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
   final bool embedded;
