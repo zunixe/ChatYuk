@@ -200,6 +200,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | UI | `lib/screens/call_screen.dart`, `incoming_call_screen.dart`, `lib/widgets/call_banner.dart`, `chat_call_overlay.dart` |
 | Provider | `lib/providers/call_provider.dart` |
 | Service | `lib/services/call_service.dart`, `admin_call_watch_service.dart` |
+| UI sistem | `lib/services/call/` (CallUi) + `android/.../call/` (ConnectionService) — lihat `docs/CALL_NATIVE.md` |
 | Edge | `supabase/functions/turn-credentials/` |
 | SQL inti | `call_push()`, `notify_call_ended()`, monitor `calls` realtime, `admin_sweep_calls()` |
 | Cron | `chatyuk-call-sweep` (*/5m) — akhiri ringing/answered zombie + retensi `call_signals` >1 jam |

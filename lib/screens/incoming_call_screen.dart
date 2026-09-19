@@ -22,12 +22,19 @@ class IncomingCallScreen extends StatefulWidget {
   final String callType; // 'audio' | 'video'
   final String chatId;
 
+  /// True bila dibuka karena pengguna menekan "terima" di UI panggilan
+  /// SISTEM saat app belum menampilkan layar ini (mis. app baru dibuka dari
+  /// kondisi mati). Layar langsung menerima memakai alur `_accept` yang
+  /// sama — tidak ada logika duplikat.
+  final bool autoAccept;
+
   const IncomingCallScreen({
     super.key,
     required this.callId,
     required this.callerUid,
     required this.callType,
     required this.chatId,
+    this.autoAccept = false,
   });
 
   @override
@@ -65,6 +72,11 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
           status == 'busy' ||
           status == 'missed') _close();
     });
+    if (widget.autoAccept) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _accept(mode: CallMode.fullscreen);
+      });
+    }
     // cek status awal — jika caller sudah membatalkan sebelum realtime
     // subscribe (race), langsung tutup agar tidak stuck di "calling".
     _service.getCall(widget.callId).then((row) {

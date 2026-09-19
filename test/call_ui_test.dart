@@ -85,6 +85,34 @@ void main() {
       expect(seen, ['accept:call-1', 'decline:call-1', 'end:call-1']);
       await ui.dispose();
     });
+
+    test('aksi native SEBELUM callback terpasang tidak hilang (buffer)', () async {
+      final ui = CallUiChannel.instance;
+      // Test sebelumnya memanggil dispose() (melepas handler) — pasang ulang.
+      ui.reattach();
+      ui.onAccept = null;
+      ui.onDecline = null;
+      ui.onEnd = null;
+
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const channel = MethodChannel('com.chatyuk.chatyuk/call_ui');
+
+      // Native mengirim onAccept saat belum ada callback (race cold start).
+      await messenger.handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec()
+            .encodeMethodCall(const MethodCall('onAccept', 'cold-1')),
+        (_) {},
+      );
+
+      // Callback baru terpasang setelah itu → harus diputar dari buffer.
+      final seen = <String>[];
+      ui.onAccept = (id) => seen.add('accept:$id');
+      expect(seen, ['accept:cold-1']);
+
+      await ui.dispose();
+    });
   });
 
   group('CallProvider integrasi CallUi', () {
