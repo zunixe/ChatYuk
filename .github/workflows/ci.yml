@@ -21,6 +21,11 @@ jobs:
       - name: Guard migrasi (timestamp unik, DROP/ALTER selamat)
         run: bash scripts/check_migrations.sh --all
 
+
+      # Boundary layar: screen DILARANG import services/ (pakai provider).
+      - name: Guard boundary screen (larangan import services/)
+        run: bash scripts/check_screen_boundary.sh
+
       # Lapis 4: larangan tipografi (AGENTS.md) — hanya ANGKA literal yang
       # dilarang; nilai dari token resmi (AppText/AppGlyph/StoryText) sah.
       - name: Guard tipografi (fontSize numerik + height manual di luar config)
