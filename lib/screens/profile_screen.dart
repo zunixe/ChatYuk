@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../config/theme.dart';
+import 'profile/widgets/profile_widgets.dart';
 import '../config/regions.dart';
 import '../config/strings.dart';
 import '../models/user_photo.dart';
@@ -1012,15 +1013,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         spacing: 6,
                         children: [
                           if (genderLabel.isNotEmpty)
-                            _HeaderChip(label: genderLabel),
+                            ProfileHeaderChip(label: genderLabel),
                           if ((profile?.age ?? 0) > 0)
-                            _HeaderChip(
+                            ProfileHeaderChip(
                               label: '${profile?.age} ${s.labelYears}',
                             ),
                           if ((profile?.country ?? '').isNotEmpty)
-                            _HeaderChip(label: profile!.country),
+                            ProfileHeaderChip(label: profile!.country),
                           if ((profile?.city ?? '').isNotEmpty)
-                            _HeaderChip(label: profile!.city),
+                            ProfileHeaderChip(label: profile!.city),
                         ],
                       ),
                     ],
@@ -1113,7 +1114,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   // Status + email section
                   if (!isAnon) ...[
-                    _SectionCard(
+                    ProfileSectionCard(
                       children: [
                         ListTile(
                           contentPadding: EdgeInsets.symmetric(horizontal: 4),
@@ -1169,9 +1170,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
 
                   // Status
-                  _SectionCard(
+                  ProfileSectionCard(
                     children: [
-                      _InfoTile(
+                      ProfileInfoTile(
                         icon: Icons.circle,
                         iconColor: _statusColor(profile?.status ?? 'offline'),
                         label: s.labelStatus,
@@ -1226,7 +1227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       Divider(height: 1, indent: 52),
-                      _InfoTile(
+                      ProfileInfoTile(
                         icon: Icons.badge_outlined,
                         iconColor: AppTheme.primary,
                         label: s.labelUserId,
@@ -1237,9 +1238,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(height: 12),
 
                   // Hashtag
-                  _SectionLabel(label: s.labelHashtags),
+                  ProfileSectionLabel(label: s.labelHashtags),
                   SizedBox(height: 6),
-                  _SectionCard(
+                  ProfileSectionCard(
                     children: [
                       Padding(
                         padding: EdgeInsets.all(4),
@@ -1331,9 +1332,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(height: 12),
 
                   // Galeri
-                  _SectionLabel(label: s.labelGallery),
+                  ProfileSectionLabel(label: s.labelGallery),
                   SizedBox(height: 6),
-                  _SectionCard(
+                  ProfileSectionCard(
                     children: [
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 4),
@@ -1431,7 +1432,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   onTap: () => Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => _PhotoViewerScreen(
+                                      builder: (_) => ProfilePhotoViewerScreen(
                                         photos: _photos,
                                         initialIndex: i,
                                       ),
@@ -1482,14 +1483,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // Sosial — angka fans/following + akses list
                   if (!isAnon) ...[
                     SizedBox(height: 12),
-                    _SectionLabel(label: s.socialFollowers),
+                    ProfileSectionLabel(label: s.socialFollowers),
                     SizedBox(height: 6),
-                    _SectionCard(
+                    ProfileSectionCard(
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _ProfileStat(
+                            ProfileStat(
                               label: s.socialFollowers,
                               value: profile?.followersCount ?? 0,
                               onTap: () => Navigator.push(
@@ -1500,7 +1501,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                             ),
-                            _ProfileStat(
+                            ProfileStat(
                               label: s.socialFollowing,
                               value: profile?.followingCount ?? 0,
                               onTap: () => Navigator.push(
@@ -1511,7 +1512,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                             ),
-                            _ProfileStat(
+                            ProfileStat(
                               label: s.socialFriends,
                               value: profile?.friendsCount ?? 0,
                               onTap: () => Navigator.push(
@@ -1623,9 +1624,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // Poin ChatYuk — diletakkan di antara My Photos dan Pengaturan
                   if (pp.enabled) ...[
                     SizedBox(height: 12),
-                    _SectionLabel(label: s.pointsTitle),
+                    ProfileSectionLabel(label: s.pointsTitle),
                     SizedBox(height: 6),
-                    _SectionCard(
+                    ProfileSectionCard(
                       children: [
                         // Header saldo — gradient amber dengan angka besar
                         Container(
@@ -1671,7 +1672,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                     ),
                                     Text(
-                                      _fmtPoints(pp.points),
+                                      formatPoints(pp.points),
                                       style: AppText.display.copyWith(
                                         color: Colors.white,
                                       ),
@@ -1722,10 +1723,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Divider(height: 1),
                         SizedBox(height: 4),
                         // Aksi cepat — grid ikon + label, rapi tanpa bubble
-                        _ActionGrid(
+                        ProfileActionGrid(
                           actions: [
                             if (isAnon && !dummyActive)
-                              _ActionItem(
+                              ProfileActionItem(
                                 icon: Icons.email_outlined,
                                 color: Colors.orange,
                                 label: s.pointsRegisterBonusLabel,
@@ -1736,7 +1737,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                 ),
                               ),
-                            _ActionItem(
+                            ProfileActionItem(
                               icon: Icons.leaderboard_outlined,
                               color: AppTheme.primary,
                               label: s.lbTitle,
@@ -1755,9 +1756,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(height: 12),
 
                   // Pengaturan
-                  _SectionLabel(label: s.titleSettings),
+                  ProfileSectionLabel(label: s.titleSettings),
                   SizedBox(height: 6),
-                  _SectionCard(
+                  ProfileSectionCard(
                     children: [
                       // Admin: tile buka panel — hanya ada di build admin
                       // (di-inject lewat AdminGate oleh entry lib/main_admin.dart).
@@ -1810,7 +1811,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Divider(height: 1, indent: 52),
                       // Ukuran font chat (slider) — hanya berlaku di bubble
                       // chat, tidak mengubah tipografi halaman lain.
-                      const _ChatFontTile(),
+                      const ProfileChatFontTile(),
                       Divider(height: 1, indent: 52),
                       // Admin: toggle screenshot/watermark/invisible —
                       // hanya ada di build admin (via AdminGate).
@@ -2555,394 +2556,5 @@ class _ProfileScreenState extends State<ProfileScreen> {
       chat.reset();
       if (mounted) setState(() => _loggingOut = false);
     }
-  }
-}
-
-class _HeaderChip extends StatelessWidget {
-  final String label;
-  const _HeaderChip({required this.label});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: AppText.label.copyWith(
-          color: Colors.white,
-          letterSpacing: 0,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileStat extends StatelessWidget {
-  final String label;
-  final int value;
-  final VoidCallback onTap;
-  const _ProfileStat({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        child: Column(
-          children: [
-            Text(
-              value < 0 ? '—' : '$value',
-              style: AppText.titleEmphasis.copyWith(color: AppTheme.primary),
-            ),
-            SizedBox(height: 2),
-            Text(
-              label,
-              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  const _SectionLabel({required this.label});
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: AppText.label.copyWith(color: AppTheme.textSecondary),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  final List<Widget> children;
-  const _SectionCard({required this.children});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: children,
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final String value;
-  const _InfoTile({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.value,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 18),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: AppText.caption.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                Text(value, style: AppText.bodyStrong),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PhotoViewerScreen extends StatefulWidget {
-  final List<UserPhoto> photos;
-  final int initialIndex;
-  const _PhotoViewerScreen({required this.photos, required this.initialIndex});
-
-  @override
-  State<_PhotoViewerScreen> createState() => _PhotoViewerScreenState();
-}
-
-class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
-  int _index = 0;
-  late PageController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _index = widget.initialIndex;
-    _controller = PageController(initialPage: _index);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text('${_index + 1}/${widget.photos.length}'),
-      ),
-      body: PageView.builder(
-        controller: _controller,
-        itemCount: widget.photos.length,
-        onPageChanged: (i) => setState(() => _index = i),
-        itemBuilder: (ctx, i) => Center(
-          child: InteractiveViewer(
-            maxScale: 4,
-            child: AsyncPhotoViewer(base64: widget.photos[i].photo),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Format angka dengan pemisah ribuan (1000 -> 1.000).
-String _fmtPoints(int n) {
-  final digits = n.toString();
-  final buf = StringBuffer();
-  for (var i = 0; i < digits.length; i++) {
-    buf.write(digits[i]);
-    final rem = digits.length - 1 - i;
-    if (rem > 0 && rem % 3 == 0) buf.write('.');
-  }
-  return buf.toString();
-}
-
-class _ActionItem {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final VoidCallback onTap;
-  const _ActionItem({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.onTap,
-  });
-}
-
-/// Grid aksi cepat — ikon bulat + label di bawahnya, rapi tanpa bubble.
-class _ActionGrid extends StatelessWidget {
-  final List<_ActionItem> actions;
-  const _ActionGrid({required this.actions});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final a in actions)
-          Expanded(
-            child: InkWell(
-              onTap: a.onTap,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: a.color.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(a.icon, size: 22, color: a.color),
-                    ),
-                    SizedBox(height: 6),
-                    Text(
-                      a.label,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.caption.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Tile setelan ukuran font chat (slider) — berlaku untuk bubble chat,
-/// nama pengirim, dan jam pesan. Tersimpan lokal (SharedPreferences) dan
-/// langsung terlihat di preview.
-class _ChatFontTile extends StatefulWidget {
-  const _ChatFontTile();
-
-  @override
-  State<_ChatFontTile> createState() => _ChatFontTileState();
-}
-
-class _ChatFontTileState extends State<_ChatFontTile> {
-  // Slider bekerja pada INDEX step (0..steps) → label berupa ANGKA ukuran
-  // font (pt), lebih rapat & intuitif daripada persen.
-  late int _step = ChatTextScale.stepIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<LocaleProvider>().s;
-    final mult = ChatTextScale.multOfStep(_step);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.format_size_rounded,
-                  color: AppTheme.primary,
-                  size: 20,
-                ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.labelChatFontSize,
-                      style: AppText.bodyStrong.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      s.descChatFontSize,
-                      style: AppText.bodySmall.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                ChatTextScale.labelOf(mult),
-                style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
-              ),
-            ],
-          ),
-          // Preview bubble mengikuti ukuran.
-          Container(
-            margin: const EdgeInsets.only(top: 8, left: 48, right: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.bgScreen,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.divider),
-            ),
-            child: Text(
-              s.chatFontPreview,
-              // Ukuran contoh mengikuti NILAI SLIDER saat ini (bukan current
-              // tersimpan) → tidak ada jeda/beda antara geser dan contoh.
-              style: AppText.chatBodyAt(
-                ChatTextScale.ptOf(mult),
-              ).copyWith(color: AppTheme.textPrimary),
-            ),
-          ),
-          Slider(
-            value: _step.toDouble(),
-            min: 0,
-            max: ChatTextScale.steps.toDouble(),
-            divisions: ChatTextScale.steps,
-            label: ChatTextScale.labelOf(mult),
-            activeColor: AppTheme.primary,
-            onChanged: (v) => setState(() => _step = v.round()),
-            onChangeEnd: (v) async {
-              await ChatTextScale.set(ChatTextScale.multOfStep(v.round()));
-              // Subtree chat rebuild via ChatTextScale.notifier (app.dart).
-            },
-          ),
-          // Skala angka rapat (semua tingkat) supaya user lihat pilihan.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                for (var i = 0; i <= ChatTextScale.steps; i++)
-                  Text(
-                    ChatTextScale.labelOf(ChatTextScale.multOfStep(i)),
-                    style: AppText.caption.copyWith(
-                      color: i == _step
-                          ? AppTheme.primary
-                          : AppTheme.textSecondary,
-                      fontWeight:
-                          i == _step ? FontWeight.w700 : FontWeight.w400,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
