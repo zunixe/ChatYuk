@@ -11,6 +11,32 @@ plugins {
 
 import java.util.Properties
 
+// ============================================================
+// GUARD: proyek Firebase WAJIB chatyuk-7c9e4.
+// Riwayat insiden: flavor `play` pernah memakai project LAMA `chatyuk-8470e`
+// (google_app_id 990163663226) → Google Sign-In di build Play GAGAL walau
+// build `apkpure` normal. Guard ini MENGHENTIKAN build sebelum APK/AAB
+// "salah project" sempat terbuat.
+// ============================================================
+val expectedFirebaseProject = "chatyuk-7c9e4"
+run {
+    val gsFiles = listOf(
+        file("google-services.json"),
+        file("src/play/google-services.json"),
+        file("src/admin/google-services.json"),
+    )
+    gsFiles.filter { it.exists() }.forEach { f ->
+        if (!f.readText().contains("\"$expectedFirebaseProject\"")) {
+            throw GradleException(
+                "GUARD Firebase: ${f.path} TIDAK memuat project " +
+                    "'$expectedFirebaseProject' (kemungkinan 'chatyuk-8470e' " +
+                    "= project lama → Google Sign-In GAGAL di build Play). " +
+                    "Perbaiki: bash scripts/setup_play_google_services.sh"
+            )
+        }
+    }
+}
+
 // Baca kredensial keystore dari key.properties (fallback ke env var).
 val keystoreProps = Properties()
 val keystorePropsFile = rootProject.file("key.properties")

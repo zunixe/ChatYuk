@@ -10,9 +10,19 @@
 default_platform(:android)
 
 platform :android do
+  # GUARD WAJIB sebelum upload apa pun: Google Sign-In di build Play pernah
+  # gagal karena (1) play/google-services.json memakai project LAMA
+  # chatyuk-8470e, (2) SHA Play App Signing belum terdaftar. Skrip ini
+  # memverifikasi keystore SHA cocok + SEMUA google-services pakai 7c9e4.
+  desc "Cek konfigurasi Google Sign-In (keystore + google-services project)"
+  lane :check_signin do
+    sh("bash scripts/check_google_signin.sh")
+  end
+
   desc "Build AAB flavor play (obfuscated) lalu upload ke track"
   lane :play do |options|
     track = options[:track] || "alpha"
+    check_signin
 
     gradle(
       task: "bundlePlayProdRelease",
@@ -34,6 +44,7 @@ platform :android do
   desc "Upload AAB yang sudah di-build flutter (obfuscated) TANPA rebuild gradle — gradle rebuild menghapus obfuscation Dart"
   lane :play_upload do |options|
     track = options[:track] || "alpha"
+    check_signin
 
     upload_to_play_store(
       package_name: "com.chatyuk.chatyuk",
