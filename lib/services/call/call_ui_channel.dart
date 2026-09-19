@@ -86,6 +86,9 @@ class CallUiChannel implements CallUi {
       _invoke('dismiss', {'callId': callId});
 
   @override
+  bool get usesSystemUi => true;
+
+  @override
   Future<void> dispose() async {
     _onAccept = null;
     _onDecline = null;

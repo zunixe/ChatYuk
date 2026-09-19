@@ -9,11 +9,17 @@ import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.chatyuk.chatyuk.call.CallConnection
+import com.chatyuk.chatyuk.call.CallUiBridge
+import android.content.Intent
 
 class MainActivity : FlutterActivity() {
     private val channel = "com.chatyuk.chatyuk/window"
+    private val callUiChannel = "com.chatyuk.chatyuk/call_ui"
     private var bootOverlay: FrameLayout? = null
     private var wasSecureAtPause = false
+    private var callUiBridge: CallUiBridge? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,5 +115,46 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // Jembatan UI panggilan sistem (ConnectionService) — Dart memanggil
+        // showIncoming/setConnected/dismiss; native memanggil kembali
+        // onAccept/onDecline/onEnd.
+        callUiBridge = CallUiBridge.create(
+            this,
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, callUiChannel),
+        )
+
+        handleCallIntent(intent)
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCallIntent(intent)
+    }
+
+    override fun onDestroy() {
+        callUiBridge?.detach()
+        callUiBridge = null
+        super.onDestroy()
+    }
+
+    /**
+     * Aksi dari system call UI saat app baru dibuka (killed state): teruskan
+     * ke Dart lewat channel call_ui supaya memakai jalur yang sama dengan
+     * app hidup. Intent extra dibaca sekali (di-clear agar tidak diproses
+     * ulang saat activity di-resume).
+     */
+    private fun handleCallIntent(intent: Intent?) {
+        val action = intent?.getStringExtra(CallConnection.EXTRA_CALL_ACTION) ?: return
+        val callId = intent.getStringExtra(CallConnection.EXTRA_CALL_ID) ?: ""
+        intent.removeExtra(CallConnection.EXTRA_CALL_ACTION)
+        intent.removeExtra(CallConnection.EXTRA_CALL_ID)
+        if (callId.isEmpty()) return
+        // Diproses Dart setelah engine siap.
+        mainHandler.postDelayed({
+            callUiBridge?.deliverToDart(action, callId)
+        }, 600)
+    }
+
 }

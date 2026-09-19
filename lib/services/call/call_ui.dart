@@ -28,6 +28,11 @@ abstract class CallUi {
   set onDecline(FutureOr<void> Function(String callId)? cb);
   set onEnd(FutureOr<void> Function(String callId)? cb);
 
+  /// True bila platform menampilkan ring-nya sendiri (Android
+  /// ConnectionService) — layar Dart TIDAK perlu memutar ringtone lagi
+  /// supaya tidak ada nada dering dobel.
+  bool get usesSystemUi;
+
   /// Lepas channel (dipanggil saat dispose/test).
   Future<void> dispose();
 }
@@ -47,6 +52,9 @@ class CallUiStub implements CallUi {
 
   @override
   Future<void> dismiss(String callId) async {}
+
+  @override
+  bool get usesSystemUi => false;
 
   @override
   set onAccept(FutureOr<void> Function(String callId)? cb) {}

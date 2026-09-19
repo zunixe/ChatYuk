@@ -165,4 +165,10 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // Firebase Messaging di classpath APLIKASI — dibutuhkan agar
+    // ChartyukMessagingService bisa extends FlutterFirebaseMessagingService
+    // (menangkap push type=call saat app MATI → UI panggilan sistem).
+    // Versi mengikuti BOM yang dipakai plugin firebase_core (33.16.0).
+    implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
+    implementation("com.google.firebase:firebase-messaging")
 }
