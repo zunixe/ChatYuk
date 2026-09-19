@@ -18,6 +18,7 @@ import 'emoji_picker_sheet.dart';
 
 class ChatComposerInput extends StatefulWidget {
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final VoidCallback onSend;
   final bool showAttachRow;
   final VoidCallback onToggleAttach;
@@ -28,11 +29,18 @@ class ChatComposerInput extends StatefulWidget {
   final VoidCallback? onCancelPhoto;
   final VoidCallback? onOpenGiftPanel;
   final void Function(String filePath, int durationMs)? onSendVoice;
+  /// Sinyal 'sedang merekam' (private pakai typing kind=recording).
+  final VoidCallback? onRecordingSignal;
+  /// Sinyal 'sedang mengetik' (private/room beda saluran).
+  final VoidCallback? onTyping;
+  /// Kirim koin (khusus chat 1:1). null = chip tidak tampil.
+  final VoidCallback? onSendCoin;
   final List<Mention> mentionCandidates;
   final bool mentionAllowAll;
   final List<Mention> mentionAllExpansion;
   const ChatComposerInput({
     required this.controller,
+    this.focusNode,
     required this.onSend,
     required this.showAttachRow,
     required this.onToggleAttach,
@@ -43,6 +51,9 @@ class ChatComposerInput extends StatefulWidget {
     this.onCancelPhoto,
     this.onOpenGiftPanel,
     this.onSendVoice,
+    this.onRecordingSignal,
+    this.onTyping,
+    this.onSendCoin,
     this.mentionCandidates = const [],
     this.mentionAllowAll = false,
     this.mentionAllExpansion = const [],
@@ -58,7 +69,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
 
   // ── Kontrak VoiceRecorderMixin ──
   @override
-  void voiceSendRecordingSignal() {}
+  void voiceSendRecordingSignal() => widget.onRecordingSignal?.call();
 
   @override
   Future<void> voiceFinishRecording(String path, int durationMs) async {
@@ -66,10 +77,12 @@ class _ChatComposerInputState extends State<ChatComposerInput>
   }
 
   @override
-  String voicePermissionMessage() => 'Izin mikrofon ditolak';
+  String voicePermissionMessage() =>
+      context.read<LocaleProvider>().s.errVoicePermission;
 
   @override
-  String voiceTooShortMessage() => 'Rekaman terlalu pendek';
+  String voiceTooShortMessage() =>
+      context.read<LocaleProvider>().s.errVoiceTooShort;
 
 
 
@@ -112,9 +125,9 @@ class _ChatComposerInputState extends State<ChatComposerInput>
   }
 
   void _onChanged() {
-    // NO-OP: kebutuhan rebuild dikendalikan ValueListenableBuilder pada
-    // tombol send/mic (dulu setState tiap keystroke — rebuild seluruh
-    // composer, boros CPU & bikin jank saat mengetik cepat).
+    // Rebuild ditangani ValueListenableBuilder (tombol send/mic) — di sini
+    // hanya sinyal typing ke lawan (throttle di sisi layar).
+    widget.onTyping?.call();
   }
 
   @override
@@ -275,6 +288,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                               Expanded(
                                 child: TextField(
                                   controller: widget.controller,
+                                  focusNode: widget.focusNode,
                                   style: AppText.chatBody,
                                   decoration: InputDecoration(
                                     hintText: s.hintTypeMessage,
@@ -290,6 +304,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                                     ),
                                   ),
                                   textInputAction: TextInputAction.newline,
+                                  onChanged: (_) => widget.onTyping?.call(),
                                   onSubmitted: (_) => widget.onSend(),
                                   minLines: 1,
                                   maxLines: null,
@@ -426,6 +441,24 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                             label: s.menuViewOnce,
                             onTap: widget.onSendViewOnce,
                           ),
+                          if (widget.onSendCoin != null) ...[
+                            const SizedBox(width: 12),
+                            ChatAttachChip(
+                              icon: Icons.monetization_on_rounded,
+                              color: const Color(0xFFFFB300),
+                              label: s.menuSendCoin,
+                              onTap: widget.onSendCoin!,
+                            ),
+                          ],
+                          if (widget.onOpenGiftPanel != null) ...[
+                            const SizedBox(width: 12),
+                            ChatAttachChip(
+                              icon: Icons.card_giftcard,
+                              color: Colors.pinkAccent,
+                              label: s.menuSendGift,
+                              onTap: widget.onOpenGiftPanel!,
+                            ),
+                          ],
                         ],
                       ),
                     )
