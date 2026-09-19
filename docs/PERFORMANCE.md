@@ -515,7 +515,7 @@ kegagalan jaringan tidak boleh menahan user keluar.
 
 ## 3. Alat ukur (opsional, untuk pengembangan)
 
-`lib/services/perf_probe.dart` — aktif HANYA dengan
+`lib/core/perf/perf_probe.dart` — aktif HANYA dengan
 `--dart-define=PERF_PROBE=true` + `kDebugMode || kProfileMode`.
 Saat off = no-op total (tanpa Stopwatch, tanpa alokasi, tanpa map entry).
 
