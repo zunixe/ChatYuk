@@ -3,6 +3,12 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- Advertising ID: dipakai Meta App Events (facebook_app_events) untuk
+         atribusi FB Ads App Install. Dulu hanya IKUT dari dependency transitif
+         (firebase-messaging/facebook-core); dicantumkan EKSPLISIT supaya
+         pernyataan "ID iklan = Ya" di Play Console cocok dengan manifest apa
+         adanya (Play menolak/menolkan ad ID bila izin tak terlihat). -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
     <!-- Call 1:1 audio/video (WebRTC) -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
