@@ -38,6 +38,7 @@ import 'services/media_disk_cache.dart';
 import 'services/photo_cache.dart';
 import 'services/post_photo_cache.dart';
 import 'services/chat_background.dart';
+import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -1434,6 +1435,8 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   } catch (_) {}
   // Fire-and-forget yang tidak block TTI
   unawaited(AdminGate.postInit?.call());
+  // Meta App Events (FB Ads): no-op selama App ID belum diisi.
+  unawaited(MetaAnalytics.init());
   unawaited(MessageCache.instance.clearLegacyV1Only());
   unawaited(PhotoCache.instance.cleanOldPhotos());
   unawaited(PostPhotoCache.instance.cleanOldPhotos());
