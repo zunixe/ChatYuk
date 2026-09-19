@@ -6,8 +6,7 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../providers/locale_provider.dart';
-import '../services/private_room_service.dart';
-import '../services/room_service.dart';
+import '../providers/room_provider.dart';
 import 'group_media_screen.dart';
 import 'room_members_sheet.dart';
 
@@ -38,10 +37,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   Future<void> _load() async {
     try {
       final members =
-          await PrivateRoomService.instance.listMembers(widget.room.id);
+          await context.read<RoomProvider>().listMembers(widget.room.id);
       String? token;
       if (_isOwner) {
-        final row = await RoomService().fetchRoomById(widget.room.id);
+        final row = await context.read<RoomProvider>().fetchRoomById(widget.room.id);
         token = '${row?['join_token'] ?? ''}';
       }
       if (!mounted) return;
