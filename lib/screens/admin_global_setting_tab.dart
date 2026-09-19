@@ -6,12 +6,10 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/fonts.dart';
 import '../config/strings_admin.dart';
-import '../config/supabase_config.dart';
 import '../providers/admin_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/admin_service.dart';
 import '../utils.dart';
 
 /// Admin panel — tab "Global Setting".
@@ -469,7 +467,7 @@ class _AiGlobalTile extends StatefulWidget {
 }
 
 class _AiGlobalTileState extends State<_AiGlobalTile> {
-  final AdminService _svc = AdminService(SupabaseConfig.client);
+  AdminProvider get _svc => context.read<AdminProvider>();
   bool _loading = true;
   bool _globalEnabled = true;
   int _maxReplies = 20;
@@ -1315,7 +1313,7 @@ class _ProviderListSection extends StatefulWidget {
 }
 
 class _ProviderListSectionState extends State<_ProviderListSection> {
-  final AdminService _svc = AdminService(SupabaseConfig.client);
+  AdminProvider get _svc => context.read<AdminProvider>();
   bool _loading = true;
   bool _failed = false;
   List<Map<String, dynamic>> _items = const [];
@@ -1450,7 +1448,7 @@ class _ProviderCard extends StatefulWidget {
 }
 
 class _ProviderCardState extends State<_ProviderCard> {
-  final AdminService _svc = AdminService(SupabaseConfig.client);
+  AdminProvider get _svc => context.read<AdminProvider>();
   late final TextEditingController _labelCtrl;
   late final TextEditingController _modelCtrl;
   late final TextEditingController _storyModelCtrl;

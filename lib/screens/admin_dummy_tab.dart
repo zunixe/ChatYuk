@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../providers/admin_provider.dart';
 import '../config/regions.dart';
 import '../config/supabase_config.dart';
 import '../config/theme.dart';
@@ -11,7 +12,6 @@ import '../core/admin_gate.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/profile_form_card.dart';
 import '../providers/locale_provider.dart';
-import '../services/admin_service.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
 
@@ -94,7 +94,7 @@ class AdminDummyTab extends StatefulWidget {
 
 class _AdminDummyTabState extends State<AdminDummyTab>
     with WidgetsBindingObserver {
-  final AdminService _svc = AdminService(SupabaseConfig.client);
+  AdminProvider get _svc => context.read<AdminProvider>();
   final _nickCtrl = TextEditingController();
   final _nicknameFocus = FocusNode();
   String? _nicknameError;
@@ -1516,7 +1516,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
   /// menampilkan angka default yang berlaku saat kolom dikosongkan.
   Future<void> _loadGlobalRate() async {
     try {
-      final res = await AdminService(SupabaseConfig.client).getAiSettings();
+      final res = await context.read<AdminProvider>().getAiSettings();
       if (!mounted) return;
       setState(() {
         _globalMax = (res['ai_max_replies_per_hour'] as num?)?.toInt();
@@ -1595,7 +1595,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     _applying = true;
     if (showResult) setState(() => _busy = true);
     try {
-      final svc = AdminService(SupabaseConfig.client);
+      final svc = context.read<AdminProvider>();
       final guardValue = _guardSel == 0 ? null : _guardSel == 1;
       await svc.setDummyAi(
         widget.item['uid'] as String,
@@ -2067,7 +2067,7 @@ class _DummyAiSheetState extends State<_DummyAiSheet> {
     }
     setState(() => _schedBusy = true);
     try {
-      final svc = AdminService(SupabaseConfig.client);
+      final svc = context.read<AdminProvider>();
       final hours = await svc.autoScheduleAi(widget.item['uid'] as String);
       if (!mounted) return;
       setState(() {

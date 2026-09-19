@@ -20,13 +20,11 @@ import '../providers/auth_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connectivity_provider.dart';
-import '../services/chat_service.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../utils.dart';
 import '../main.dart';
-import '../services/room_broadcast_service.dart';
 import 'room_members_sheet.dart';
 import 'group_info_screen.dart';
 import 'group_media_screen.dart';
@@ -204,7 +202,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   Future<bool> sendEditPersist(MessageModel editing, String raw) =>
-      ChatService().editRoomMessage(editing.id, raw);
+      context.read<ChatProvider>().editRoomMessage(editing.id, raw);
 
   @override
   Future<void> sendDispatchText({
@@ -717,7 +715,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     } catch (_) {}
     unawaited(_broadcastSession?.stop());
     _broadcastSession = null;
-    final session = RoomBroadcastSession(
+    final session = context.read<RoomProvider>().createBroadcastSession(
       roomId: widget.room.id,
       isBroadcaster: true,
       onEnded: () {
@@ -749,7 +747,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   Future<void> _startViewerSession() async {
     unawaited(_broadcastSession?.stop());
     _broadcastSession = null;
-    final session = RoomBroadcastSession(
+    final session = context.read<RoomProvider>().createBroadcastSession(
       roomId: widget.room.id,
       isBroadcaster: false,
       onEnded: () {

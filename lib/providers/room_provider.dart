@@ -4,6 +4,8 @@ import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/room_model.dart';
 import '../services/room_service.dart';
+import '../services/room_broadcast_service.dart';
+export '../services/room_broadcast_service.dart' show RoomBroadcastSession;
 import '../services/chat_service.dart';
 import '../core/cache/message_cache.dart';
 import '../services/private_room_service.dart';
@@ -158,6 +160,18 @@ class RoomProvider extends ChangeNotifier {
       {'groups': _myGroups.map((r) => r.toMap()).toList()},
     );
   }
+
+  /// Buat sesi broadcast room (dipakai screen, di-dispose screen).
+  RoomBroadcastSession createBroadcastSession({
+    required String roomId,
+    required bool isBroadcaster,
+    VoidCallback? onEnded,
+  }) =>
+      RoomBroadcastSession(
+        roomId: roomId,
+        isBroadcaster: isBroadcaster,
+        onEnded: onEnded,
+      );
 
   RoomProvider(
       {RoomService? service, ChatService? chatService, bool autoInit = true})

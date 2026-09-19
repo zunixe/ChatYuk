@@ -12,7 +12,6 @@ import '../providers/locale_provider.dart';
 import '../providers/nav_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
-import '../services/timeline_service.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/theme_provider.dart';
@@ -260,7 +259,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
           return;
         }
       }
-      await TimelineService().createPost(
+      await context.read<TimelineProvider>().createPost(
         text: text,
         imagePaths: paths,
         visibility: _visibility,

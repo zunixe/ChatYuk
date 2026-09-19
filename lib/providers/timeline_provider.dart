@@ -78,6 +78,15 @@ class TimelineProvider extends ChangeNotifier {
   /// Feed aktif gagal di-fetch (network/RPC error) — bukan kosong sungguhan.
   bool get fetchFailed => _lastFetchFailed && _scopeError == _scope;
 
+
+  // ── Passthrough (Fase 9b) ──
+  Future<Map<String, dynamic>> createPost({
+    required String text,
+    List<String> imagePaths = const [],
+    String visibility = 'public',
+  }) =>
+      _service.createPost(text: text, imagePaths: imagePaths, visibility: visibility);
+
   TimelineProvider({TimelineService? service})
       : _service = service ?? TimelineService(Supabase.instance.client) {
     _listenRealtime();
