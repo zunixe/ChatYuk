@@ -1,8 +1,5 @@
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
@@ -11,23 +8,6 @@ import '../providers/locale_provider.dart';
 // ── Shared chat UI: satu sumber untuk PrivateChatScreen & RoomChatScreen ──
 // Dulu: duplikat di kedua screen (76 cluster ≥5 baris identik/mirip) —
 // bug fix satu sisi tidak otomatis ke sisi lain. Unifikasi inkremental.
-
-/// Resize proporsional (sisi terpanjang 800) + JPEG q75, return base64.
-/// Harus top-level untuk `compute()` isolate.
-String? processChatImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) return null;
-  final w = decoded.width;
-  final h = decoded.height;
-  final img.Image resized = (w <= 800 && h <= 800)
-      ? decoded
-      : img.copyResize(
-          decoded,
-          width: w > h ? 800 : null,
-          height: h >= w ? 800 : null,
-        );
-  return base64Encode(img.encodeJpg(resized, quality: 75));
-}
 
 /// Tombol ikon bulat kecil di row composer (attach + / kamera).
 /// Satu widget menggantikan `_InputIconBtn` & `_RoomInputIconBtn`.
