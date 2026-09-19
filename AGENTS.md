@@ -489,6 +489,41 @@ Catatan:
 
 ## Upload ke Store (APKPure / Uptodown)
 
+### ATURAN VERSI & BUILD APKPure (WAJIB)
+
+**APKPure WAJIB merilis versi yang SAMA dengan versi yang sedang LIVE di
+Google Play production saat itu** (versionCode identik). Jangan upload versi
+lain/lebih tua/lebih baru untuk APKPure.
+
+**APKPure WAJIB obfuscated** (`--obfuscate --split-debug-info=build/app/symbols`).
+
+Langkah:
+1. Cek versi Play production (harus == `version:` di `pubspec.yaml`):
+   ```bash
+   # via Play API (fastlane service account)
+   ruby -e 'require "json";require "googleauth";require "google/apis/androidpublisher_v3";
+   k=JSON.parse(File.read("fastlane/google-play.json"));
+   a=Google::Auth::ServiceAccountCredentials.make_creds(json_key_io:StringIO.new(k.to_json),scope:"https://www.googleapis.com/auth/androidpublisher");
+   s=Google::Apis::AndroidpublisherV3::AndroidPublisherService.new;s.authorization=a;
+   e=s.insert_edit("com.chatyuk.chatyuk");t=s.get_edit_track("com.chatyuk.chatyuk",e.id,"production");
+   puts (t.releases||[]).select{|r|r.status=="completed"}.flat_map{|r|r.version_codes||[]}.max;s.delete_edit("com.chatyuk.chatyuk",e.id)'
+   ```
+   Kalau beda → samakan `pubspec.yaml` ke versi Play (jangan build versi lain).
+2. Build APK obfuscated:
+   ```bash
+   flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure \
+     --obfuscate --split-debug-info=build/app/symbols
+   ```
+3. **GATE WAJIB** sebelum upload (menolak kalau salah keystore / non-obfuscate /
+   versi beda dari Play / ada kode admin / salah flavor):
+   ```bash
+   ./scripts/check_release_apk.sh
+   ```
+   Harus "OK BERSIH". Kalau DITOLAK, JANGAN upload.
+
+- Nama file APK output: `build/app/outputs/flutter-apk/app-apkpureprod-release.apk`
+  (bukan `app-apkpure-release.apk`).
+
 **Saat menulis deskripsi / "what's new" / changelog untuk upload ke store, JANGAN berbau dating / jasa pertemanan / transaksi.** Uptodown pernah menolak & men-banned ChatYuk karena deskripsi yang terlalu berbau dating ("meet new people", "nearby people finder", "filter gender") dan fitur koin/gift.
 
 ### DILARANG (frasa yang memicu penolakan):
