@@ -679,27 +679,36 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         !_callExpanded;
   }
 
+  bool _expandingCall = false;
   Future<void> _expandCall() async {
+    // Guard anti tap-ganda: dua push beruntun membuat stack kacau &
+    // `_callExpanded` salah reset → tombol perbesar terasa "tidak jalan".
+    if (_expandingCall) return;
     final sess = CallProvider.instance.activeSession;
     if (sess == null) return;
+    _expandingCall = true;
     setState(() => _callExpanded = true);
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        settings: const RouteSettings(name: kCallScreenRoute),
-        builder: (_) => CallScreen(
-          callId: sess.callId,
-          remoteUid: sess.remoteUid,
-          remoteName: sess.remoteName,
-          callType: sess.callType,
-          isCaller: sess.isCaller,
-          pendingSignals: const [],
-          session: sess,
-          onMinimize: () => Navigator.of(context).pop(),
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          settings: const RouteSettings(name: kCallScreenRoute),
+          builder: (_) => CallScreen(
+            callId: sess.callId,
+            remoteUid: sess.remoteUid,
+            remoteName: sess.remoteName,
+            callType: sess.callType,
+            isCaller: sess.isCaller,
+            pendingSignals: const [],
+            session: sess,
+            onMinimize: () => Navigator.of(context).pop(),
+          ),
         ),
-      ),
-    );
-    if (mounted) setState(() => _callExpanded = false);
+      );
+    } finally {
+      _expandingCall = false;
+      if (mounted) setState(() => _callExpanded = false);
+    }
   }
 
   DateTime? _lastSeenFetchedAt;
@@ -1897,11 +1906,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
               child: ChatCallOverlay(
                 session: CallProvider.instance.activeSession!,
                 onExpand: _expandCall,
-                onEnd: () async {
-                  final sess = CallProvider.instance.activeSession;
-                  if (sess != null) await sess.end();
-                  unawaited(CallProvider.instance.clearSession());
-                },
+                onEnd: () =>
+                    unawaited(CallProvider.instance.hangup()),
               ),
             ),
         ],

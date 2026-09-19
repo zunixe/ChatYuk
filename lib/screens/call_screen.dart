@@ -146,6 +146,12 @@ class _CallScreenState extends State<CallScreen> {
     }
   }
 
+  /// Akhiri panggilan: paksa provider bersihkan session (UI pasti tutup)
+  /// walau session sudah closed — dulu tombol end kadang tak merespons.
+  void _endCall() {
+    unawaited(CallProvider.instance.hangup());
+  }
+
   String _phaseText(S s) {
     switch (_session.phase) {
       case CallPhase.ringing:
@@ -442,7 +448,7 @@ class _CallScreenState extends State<CallScreen> {
                         CallControlButton(
                           icon: Icons.call_end_rounded,
                           danger: true,
-                          onTap: _session.end,
+                          onTap: _endCall,
                         ),
                       ],
                     ),
@@ -462,7 +468,7 @@ class _CallScreenState extends State<CallScreen> {
                       child: CallControlButton(
                         icon: Icons.call_end_rounded,
                         danger: true,
-                        onTap: _session.end,
+                        onTap: _endCall,
                       ),
                     ),
                   ),

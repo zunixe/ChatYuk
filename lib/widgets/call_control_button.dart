@@ -27,12 +27,16 @@ class CallControlButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tombol "danger" (end call) = bulatan penuh warna danger + ikon PUTIH.
+    // Tombol off (mic/kamera/speaker mati) = bulatan tint danger + ikon danger.
+    // Dulu danger & off sama-sama pakai fg danger → ikon end call menyatu
+    // dengan latarnya (tak terlihat).
     final bg = danger
         ? AppTheme.danger
         : off
         ? AppTheme.danger.withValues(alpha: 0.22)
         : Colors.white.withValues(alpha: 0.18);
-    final fg = danger || off ? AppTheme.danger : Colors.white;
+    final fg = danger ? Colors.white : (off ? AppTheme.danger : Colors.white);
     return Material(
       color: bg,
       shape: const CircleBorder(),
