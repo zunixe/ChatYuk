@@ -6,7 +6,27 @@ import '../core/perf/perf_probe.dart';
 class AdminService {
   final SupabaseClient _sb;
 
-  AdminService(this._sb);
+  /// Client opsional supaya test bisa menyuntik client palsu (pola sama
+  /// dengan `PointsService`/`ChatProvider`). Produksi: tanpa argumen →
+  /// `Supabase.instance.client`.
+  AdminService([SupabaseClient? sb]) : _sb = sb ?? Supabase.instance.client;
+
+  /// Set UID device yang dikecualikan dari notifikasi device-baru.
+  /// Dipindah dari AdminProvider agar I/O lewat service (mudah di-mock).
+  Future<Set<String>> getExcludedDevices() async {
+    try {
+      final rows = await _sb
+          .from('app_settings')
+          .select('excluded_devices')
+          .eq('id', 'global')
+          .maybeSingle()
+          .timeout(const Duration(seconds: 2));
+      final list = rows?['excluded_devices'] as List?;
+      return {for (final e in list ?? const []) '$e'};
+    } catch (_) {
+      return const {};
+    }
+  }
 
   /// Bungkus `_sb.rpc` agar SEMUA RPC baca-tampil admin terukur otomatis
   /// (metrik `admin.<nama_rpc>`) tanpa perlu menyentuh 30+ call-site satu

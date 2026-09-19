@@ -57,14 +57,22 @@ mixin AuthServiceSettingsMx on AuthBase {
     }, onConflict: 'id');
   }
 
-  /// Realtime row app_settings global — pola .stream(primaryKey) yang sama
-  /// dengan PointsService.watchEnabled() (terbukti realtime di device).
-  Stream<Map<String, dynamic>?> watchGlobalSettings() {
-    return _sb
-        .from('app_settings')
-        .stream(primaryKey: ['id'])
-        .eq('id', 'global')
-        .map((rows) => rows.isEmpty ? null : rows.first);
+  /// Polling row app_settings global — TIDAK memakai `.stream()`.
+  ///
+  /// `.stream()` (supabase 2.16.x) selalu `SELECT *` (lihat
+  /// supabase_stream_builder.dart: `_queryBuilder.select()`), sementara
+  /// `app_shared_secret` sengaja di-revoke dari anon/authenticated
+  /// (20260915120000_security_hardening.sql). Akibatnya stream gagal
+  /// `42501` dan `listenResilient` retry tanpa henti. Polling kolom
+  /// eksplisit menghindari itu tanpa melonggarkan hardening.
+  ///
+  /// Interval 20 dtk: toggle admin tetap cepat sampai (dulu realtime
+  /// instan; 20 dtk kompromi yang jauh lebih murah dari retry error
+  /// terus-menerus).
+  Stream<Map<String, dynamic>?> watchGlobalSettings() async* {
+    yield await fetchGlobalSettings();
+    yield* Stream<void>.periodic(const Duration(seconds: 20))
+        .asyncMap((_) => fetchGlobalSettings());
   }
 
   /// Satu query ambil SEMUA setting global (pengganti 7× fetch terpisah

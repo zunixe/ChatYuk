@@ -31,7 +31,16 @@ class EmailAlreadyRegisteredException implements Exception {
 
 /// State instance BERSAMA lintas domain AuthService.
 abstract class AuthBase {
-  SupabaseClient get _sb => SupabaseConfig.client;
+  /// Client Supabase — disuntik lewat konstruktor supaya test bisa memakai
+  /// client palsu (pola sama dengan `AdminService`/`PointsService`).
+  /// LAZY: tanpa argumen, `SupabaseConfig.client` baru dibaca saat benar-benar
+  /// dipakai — konstruksi objek tidak menyentuh `Supabase.instance` (test
+  /// yang hanya membuat instance tidak perlu init Supabase).
+  final SupabaseClient? _injected;
+  AuthBase([SupabaseClient? sb]) : _injected = sb;
+
+  SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
+
   User? get currentUser => _sb.auth.currentUser;
   String? get uid => _sb.auth.currentUser?.id;
   bool get isSignedIn => _sb.auth.currentUser != null;
@@ -153,5 +162,9 @@ class AuthService extends AuthBase
   /// modul admin selalu terlihat di seluruh app.
   static final AuthService instance = AuthService._();
   factory AuthService() => instance;
-  AuthService._();
+  AuthService._([super.sb]);
+
+  /// Test-only: instance dengan client palsu (TIDAK mengganti singleton).
+  @visibleForTesting
+  factory AuthService.forTest(SupabaseClient sb) => AuthService._(sb);
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../utils.dart';
@@ -7,9 +8,24 @@ import '../core/cache/message_cache.dart';
 enum ToggleResult { added, removed, failed }
 
 class MessageReactionService {
-  MessageReactionService._();
-  static final MessageReactionService instance = MessageReactionService._();
-  SupabaseClient get _sb => SupabaseConfig.client;
+  /// Client opsional (LAZY) — test menyuntik client palsu tanpa
+  /// `Supabase.instance`. Produksi: `SupabaseConfig.client`.
+  final SupabaseClient? _injected;
+  MessageReactionService._([SupabaseClient? sb]) : _injected = sb;
+
+  static MessageReactionService instance = MessageReactionService._();
+
+  @visibleForTesting
+  factory MessageReactionService.forTest(SupabaseClient sb) =>
+      MessageReactionService._(sb);
+
+  @visibleForTesting
+  static void overrideInstance(MessageReactionService s) => instance = s;
+
+  @visibleForTesting
+  static void restoreInstance() => instance = MessageReactionService._();
+
+  SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
 
   Future<ToggleResult> toggleReaction({
     required String chatType,

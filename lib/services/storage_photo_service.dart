@@ -11,12 +11,25 @@ import '../config/supabase_config.dart';
 /// Kompatibilitas: helper ini hanya menangani PATH. Base64 lama (sebelum
 /// migrasi) tetap didukung — caller mengecek via [isPath].
 class StoragePhotoService {
-  StoragePhotoService._();
-  static final StoragePhotoService instance = StoragePhotoService._();
+  /// Client opsional (LAZY) — test menyuntik client palsu.
+  final SupabaseClient? _injected;
+  StoragePhotoService._([SupabaseClient? sb]) : _injected = sb;
+
+  static StoragePhotoService instance = StoragePhotoService._();
+
+  @visibleForTesting
+  factory StoragePhotoService.forTest(SupabaseClient sb) =>
+      StoragePhotoService._(sb);
+
+  @visibleForTesting
+  static void overrideInstance(StoragePhotoService s) => instance = s;
+
+  @visibleForTesting
+  static void restoreInstance() => instance = StoragePhotoService._();
 
   static const _bucket = 'chat-photos';
 
-  SupabaseClient get _sb => SupabaseConfig.client;
+  SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
 
   bool isPath(String value) =>
       (value.startsWith('chat/') ||

@@ -1,14 +1,27 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Hub terpusat untuk Presence + Broadcast ringan.
 /// Dipakai semua fan-out 1→N (online, timeline, room) supaya tidak
 /// duplikasi logic channel di tiap provider.
 class RealtimeHub {
-  RealtimeHub._();
-  static final RealtimeHub instance = RealtimeHub._();
+  final SupabaseClient _sb;
 
-  SupabaseClient get _sb => Supabase.instance.client;
+  /// Client opsional supaya test menyuntik client palsu (produksi: singleton).
+  RealtimeHub._([SupabaseClient? sb]) : _sb = sb ?? Supabase.instance.client;
+
+  static RealtimeHub instance = RealtimeHub._();
+
+  /// Test-only: bangun hub dengan client palsu / ganti singleton.
+  @visibleForTesting
+  factory RealtimeHub.forTest(SupabaseClient sb) => RealtimeHub._(sb);
+
+  @visibleForTesting
+  static void overrideInstance(RealtimeHub h) => instance = h;
+
+  @visibleForTesting
+  static void restoreInstance() => instance = RealtimeHub._();
 
   // ── Presence global online ───────────────────────────────────────────────
   RealtimeChannel? _onlineChannel;

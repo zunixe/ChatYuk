@@ -21,14 +21,18 @@ class RoomBroadcastSession extends ChangeNotifier {
     required this.roomId,
     required this.isBroadcaster,
     this.onEnded,
-  });
+    PrivateRoomService? privateRoomService,
+    SupabaseClient? sb,
+  })  : _prv = privateRoomService ?? PrivateRoomService.instance,
+        _injectedSb = sb;
 
   final String roomId;
   final bool isBroadcaster;
   final VoidCallback? onEnded;
 
-  final PrivateRoomService _prv = PrivateRoomService.instance;
-  SupabaseClient get _sb => SupabaseConfig.client;
+  final PrivateRoomService _prv;
+  final SupabaseClient? _injectedSb;
+  SupabaseClient get _sb => _injectedSb ?? SupabaseConfig.client;
 
   final Map<String, RTCPeerConnection> _peers = {}; // uid -> pc
   final Map<String, List<Map<String, dynamic>>> _pendingCands = {};

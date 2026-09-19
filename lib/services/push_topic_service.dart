@@ -1,18 +1,35 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Helper subscribe/unsubscribe FCM Topic untuk fan-out 1→N ringan.
 /// Dipakai online, timeline, room. Cache subs di prefs biar tidak re-subscribe.
 class PushTopicService {
-  PushTopicService._();
-  static final PushTopicService instance = PushTopicService._();
+  final SupabaseClient _sb;
+
+  /// Client opsional supaya test menyuntik client palsu (produksi: singleton).
+  PushTopicService._([SupabaseClient? sb])
+      : _sb = sb ?? Supabase.instance.client;
+
+  static PushTopicService instance = PushTopicService._();
+
+  /// Test-only: bangun service dengan client palsu / ganti singleton.
+  @visibleForTesting
+  factory PushTopicService.forTest(SupabaseClient sb) =>
+      PushTopicService._(sb);
+
+  @visibleForTesting
+  static void overrideInstance(PushTopicService s) => instance = s;
+
+  @visibleForTesting
+  static void restoreInstance() => instance = PushTopicService._();
 
   static const _prefPrefix = 'topic_sub_';
 
   Future<void> subscribe(String topic) async {
     // Jangan subscribe topic diri sendiri (mis. online-$myUid) — cegah self-notif
-    final myUid = Supabase.instance.client.auth.currentUser?.id;
+    final myUid = _sb.auth.currentUser?.id;
     if (myUid != null && topic == 'online-$myUid') return;
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('$_prefPrefix$topic') == true) return;

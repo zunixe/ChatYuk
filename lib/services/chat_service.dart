@@ -32,7 +32,15 @@ part 'chat_service_gift.dart';
 /// Mixin per-domain (file `part`) mengaksesnya — satu library via `part`,
 /// jadi sah, dan interface `ChatService` tidak berubah (mock test aman).
 abstract class ChatBase {
-  final SupabaseClient _sb = SupabaseConfig.client;
+  /// Client Supabase — disuntik lewat konstruktor supaya test bisa memakai
+  /// client palsu. LAZY: `SupabaseConfig.client` baru dibaca saat dipakai,
+  /// jadi membuat `ChatService()` tidak langsung menyentuh
+  /// `Supabase.instance` (test yang hanya mengonstruksi tidak perlu init).
+  final SupabaseClient? _injected;
+  ChatBase([SupabaseClient? sb]) : _injected = sb;
+
+  SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
+
   String? _ownCountryCache;
   String? _invisibleUidCache;
   DateTime? _invisibleFetchedAt;
@@ -141,6 +149,9 @@ abstract class ChatBase {
 }
 
 class ChatService extends ChatBase with ChatServicePrivateMx, ChatServicePrivateChatListMx, ChatServiceRoomMx, ChatServiceTypingMx, ChatServicePresenceMx, ChatServiceGiftMx {
+  /// Client opsional untuk test; produksi → `SupabaseConfig.client`.
+  ChatService([super.sb]);
+
   static final Map<String, String> _avatarCache = {};
   static const _avatarCacheMax = 100;
   @visibleForTesting

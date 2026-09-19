@@ -11,7 +11,10 @@ import '../core/cache/message_cache.dart';
 class SocialProvider extends ChangeNotifier {
   bool _disposed = false;
 
-  final SocialService _service = SocialService(Supabase.instance.client);
+  /// Service & client disuntik dari luar (default produksi). Test:
+  /// `SocialProvider(service: mock, sb: fakeClient)`.
+  final SocialService _service;
+  final SupabaseClient _sb;
 
   final Set<String> _following = {};
   final Set<String> _friends = {};
@@ -46,12 +49,15 @@ class SocialProvider extends ChangeNotifier {
       _pendingFriendRequests.contains(uid);
   bool isSubscribed(String uid) => _subscribed.contains(uid);
 
-  SocialProvider() {
+  SocialProvider({SocialService? service, SupabaseClient? sb, bool autoInit = true})
+      : _sb = sb ?? Supabase.instance.client,
+        _service = service ?? SocialService(sb ?? Supabase.instance.client) {
+    if (!autoInit) return;
     // Warm-up dari disk cache — status teman/pending tampil instan saat
     // cold start (network refresh menyusul, tanpa spinner di UI).
     unawaited(_loadDisk());
     _subscribe();
-    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+    _authSub = _sb.auth.onAuthStateChange.listen((state) {
       if (state.event == AuthChangeEvent.signedIn ||
           state.event == AuthChangeEvent.signedOut ||
           state.event == AuthChangeEvent.initialSession) {
@@ -106,7 +112,7 @@ class SocialProvider extends ChangeNotifier {
     _rtSub?.cancel();
     final uid = _service.uid;
     if (uid == null) return;
-    final sb = Supabase.instance.client;
+    final sb = _sb;
     final channel = sb.channel('social-rt-$uid');
     channel
         .onPostgresChanges(
@@ -343,7 +349,7 @@ class SocialProvider extends ChangeNotifier {
     _authSub?.cancel();
     _rtSub?.cancel();
     final ch = _rtChannel;
-    if (ch != null) Supabase.instance.client.removeChannel(ch);
+    if (ch != null) _sb.removeChannel(ch);
     super.dispose();
   }
 }

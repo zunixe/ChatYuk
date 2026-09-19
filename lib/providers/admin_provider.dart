@@ -13,7 +13,18 @@ import '../core/cache/photo_cache.dart';
 import '../services/storage_photo_service.dart';
 
 class AdminProvider extends ChangeNotifier {
-  final AdminService _service = AdminService(Supabase.instance.client);
+  /// Service disuntik dari luar (default produksi) — pola sama dengan
+  /// `ChatProvider`/`RoomProvider`. Test: `AdminProvider(service: mock)`.
+  final AdminService _service;
+
+  /// Client Supabase untuk realtime monitor (bisa disuntik di test).
+  /// LAZY: tidak menyentuh `Supabase.instance` saat konstruksi.
+  final SupabaseClient? _injectedSb;
+  SupabaseClient get _sb => _injectedSb ?? Supabase.instance.client;
+
+  AdminProvider({AdminService? service, SupabaseClient? sb})
+      : _service = service ?? AdminService(),
+        _injectedSb = sb;
 
   // ── Notifikasi admin (device baru / call video aktif) ──
   final StreamController<String> _notifCtrl =
@@ -426,14 +437,7 @@ Future<void> fetchDevices() async {
     if (!_seenDevicesLoaded || _disposed) return; // tunggu armNotifications
     var excluded = <String>{};
     try {
-      final rows = await Supabase.instance.client
-          .from('app_settings')
-          .select('excluded_devices')
-          .eq('id', 'global')
-          .maybeSingle()
-          .timeout(const Duration(seconds: 2));
-      final list = rows?['excluded_devices'] as List?;
-      excluded = {for (final e in list ?? const []) '$e'};
+      excluded = await _service.getExcludedDevices();
     } catch (_) {}
     for (final d in devices) {
       final installId = '${d['install_id'] ?? ''}';
@@ -724,7 +728,7 @@ Future<void> fetchDevices() async {
   /// menyegarkan daftar call aktif tanpa menunggu polling.
   void ensureCallRealtime() {
     if (_callChannel != null || _disposed) return;
-    final ch = Supabase.instance.client.channel('admin-calls-monitor');
+    final ch = _sb.channel('admin-calls-monitor');
     ch.onPostgresChanges(
       event: PostgresChangeEvent.all,
       schema: 'public',
@@ -957,7 +961,7 @@ Future<void> fetchDevices() async {
     _callRealtimeDebounce?.cancel();
     try {
       _callChannel?.unsubscribe();
-      Supabase.instance.client.removeChannel(_callChannel!);
+      _sb.removeChannel(_callChannel!);
     } catch (_) {}
     _callChannel = null;
     try {

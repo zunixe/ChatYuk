@@ -12,14 +12,15 @@ class PointsService {
     return res == true;
   }
 
-  Stream<bool> watchEnabled() {
-    // Catatan: Supabase `.stream()` (2.16.x) tidak mendukung pemilihan kolom
-    // sempit — `_getPostgrestData()` selalu `.select()` (semua kolom). Realtime
-    // tetap membawa row penuh app_settings.
-    return _sb.from('app_settings').stream(primaryKey: ['id']).map((rows) {
-      final matching = rows.where((r) => r['id'] == 'global').toList();
-      return matching.isEmpty ? true : matching.first['points_enabled'] == true;
-    });
+  Stream<bool> watchEnabled() async* {
+    // TIDAK memakai `.stream()`: ia selalu `SELECT *` (supabase 2.16.x),
+    // sementara `app_shared_secret` di-revoke dari anon/authenticated
+    // (20260915120000_security_hardening.sql) → stream gagal 42501 dan
+    // retry tanpa henti. Polling kolom eksplisit via RPC get_points_enabled
+    // (sudah ada) menghindari itu tanpa melonggarkan hardening.
+    yield await fetchEnabled();
+    yield* Stream<void>.periodic(const Duration(seconds: 20))
+        .asyncMap((_) => fetchEnabled());
   }
 
   /// Realtime saldo koin sendiri (profiles.points). Dipakai supaya saldo
