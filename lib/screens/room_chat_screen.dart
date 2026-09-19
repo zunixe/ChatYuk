@@ -805,7 +805,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             context: context,
             roomId: widget.room.id,
             excludeUids: memberIds,
-            onInvited: () {},
+            onInvited: () {
+              // Anggota baru → segarkan daftar grupku (biar langsung ada
+              // di tab Grup) + hitung ulang jumlah anggota tampilan.
+              context.read<RoomProvider>().loadMyGroups(refresh: true);
+              setState(() {});
+            },
           );
         }());
         break;

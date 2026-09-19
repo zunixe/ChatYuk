@@ -25,6 +25,7 @@ class RoomProvider extends ChangeNotifier {
   bool _seeded = false;
   StreamSubscription? _countsSub;
   StreamSubscription? _privateSub;
+  StreamSubscription? _membershipSub;
   StreamSubscription? _presenceSub;
   String? _error;
   Timer? _diskSaveTimer;
@@ -199,6 +200,7 @@ class RoomProvider extends ChangeNotifier {
     });
     _subscribeCounts();
     _subscribePrivateRooms();
+    _subscribeMembership();
     _loadDisk();
     reload();
   }
@@ -277,6 +279,7 @@ class RoomProvider extends ChangeNotifier {
   /// Saat ada room dibuat/dihapus di device manapun, list langsung sinkron.
   void _subscribePrivateRooms() {
     _privateSub?.cancel();
+    _membershipSub?.cancel();
     // Resilient: lihat _subscribeCounts (penyebab "room list freeze
     // sampai restart" saat channelError).
     _privateSub = listenResilient<List<RoomModel>>(
@@ -292,6 +295,29 @@ class RoomProvider extends ChangeNotifier {
       onError: (e) {
         dlog('[RoomProvider] private rooms stream error: $e');
       },
+    );
+  }
+
+  /// Dengarkan perubahan keanggotaan grup milikku (`room_members`).
+  ///
+  /// Tanpa ini: saat owner meng-invite aku ke grup, HP-ku tidak tahu
+  /// sampai `myGroups` di-refresh manual (TTL 30 dtk / buka tab Grup).
+  /// Sekarang begitu baris keanggotaanku berubah → refresh daftar grup.
+  void _subscribeMembership() {
+    _membershipSub?.cancel();
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    _membershipSub = listenResilient<List<Map<String, dynamic>>>(
+      () => Supabase.instance.client
+          .from('room_members')
+          .stream(primaryKey: ['room_id', 'user_id'])
+          .eq('user_id', uid),
+      (_) {
+        // Keanggotaanku berubah (di-add / dikick) → muat ulang daftar grup.
+        loadMyGroups(refresh: true);
+      },
+      isDisposed: () => _disposed,
+      onError: (e) => dlog('[RoomProvider] membership stream error: $e'),
     );
   }
 
@@ -448,6 +474,7 @@ class RoomProvider extends ChangeNotifier {
     _diskSaveTimer?.cancel();
     _countsSub?.cancel();
     _privateSub?.cancel();
+    _membershipSub?.cancel();
     _presenceSub?.cancel();
     _markWarm();
     super.dispose();
