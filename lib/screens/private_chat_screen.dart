@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
@@ -41,9 +40,9 @@ import '../services/message_reaction_service.dart';
 import '../utils.dart';
 import '../mixins/chat_selection_mixin.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
+import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/voice_recorder_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
-import '../services/chat_photo_helper.dart';
 
 class PrivateChatScreen extends StatefulWidget {
   final String chatId;
@@ -74,10 +73,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     with
         ChatOutboxMixin<PrivateChatScreen>,
         ChatSelectionMixin<PrivateChatScreen>,
-        VoiceRecorderMixin<PrivateChatScreen> {
+        VoiceRecorderMixin<PrivateChatScreen>,
+        ChatPhotoSendMixin<PrivateChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  final _imagePicker = ImagePicker();
   final _inputFocus = FocusNode();
   bool _showAttachRow = false;
 
@@ -123,6 +122,58 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
   @override
   String voiceTooShortMessage() => context.read<LocaleProvider>().s.errVoiceTooShort;
+
+  // ── Kontrak ChatPhotoSendMixin ──
+  @override
+  Future<void> photoDispatch({
+    required String imageData,
+    required String type,
+    required String senderId,
+    required String senderName,
+    required String senderGender,
+  }) async {
+    await context.read<ChatProvider>().sendPrivateMessage(
+      chatId: widget.chatId,
+      senderId: senderId,
+      senderName: senderName,
+      senderGender: senderGender,
+      text: '',
+      type: type,
+      imageData: imageData,
+    );
+  }
+
+  @override
+  String get photoUploadChatId => widget.chatId;
+
+  @override
+  String get photoSeed => widget.otherUid;
+
+  @override
+  void photoOnSent(String kind) {
+    _maybeNewChatBonus();
+    _schedulePendingConfirmFallback();
+  }
+
+  @override
+  void photoFirstBonus(PointsProvider pp) {
+    if (!pp.enabled) return;
+    pp.oneTimeBonus('first_photo', 10).then((earned) {
+      if (earned && mounted) {
+        final s = context.read<LocaleProvider>().s;
+        pp.showPointsToast(context, s.pointsGain(10, s.reasonFirstPhoto));
+      }
+    });
+  }
+
+  @override
+  void photoSetPreview(String base64) {
+    setState(() {
+      _pendingPhotoBase64 = base64;
+      _inputFocus.requestFocus();
+    });
+    _scrollToBottom();
+  }
 
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<PrivateChatInfo>> _chatInfoStream;
@@ -1207,303 +1258,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
 
 
-  Future<void> _sendPhoto() async {
-    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    await _sendImageBytes(bytes);
-  }
 
-  /// Buka kamera → tampilkan preview di composer (bukan langsung kirim).
-  Future<void> _takePhoto() async {
-    final picked = await _imagePicker.pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.rear,
-    );
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    if (bytes.length > 10 * 1024 * 1024) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.msgFileTooLarge)),
-        );
-      }
-      return;
-    }
-    final processed = await compute(processChatImage, bytes);
-    if (processed == null) return;
-    if (mounted) {
-      setState(() {
-        _pendingPhotoBase64 = processed;
-        _inputFocus.requestFocus();
-      });
-      _scrollToBottom();
-    }
-  }
 
-  /// Proses + kirim foto (dipakai gallery & kamera) — resize di isolate,
-  /// upload storage, insert pesan image.
-  Future<void> _sendImageBytes(Uint8List bytes) async {
-    // Tolak file > 10MB sebelum proses
-    if (bytes.length > 10 * 1024 * 1024) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.msgFileTooLarge)));
-      }
-      return;
-    }
-    // Decode + resize + encode di background isolate agar UI tidak freeze
-    final base64 = await compute(processChatImage, bytes);
-    if (base64 == null) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
-      }
-      return;
-    }
 
-    if (!mounted) return;
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    // Optimistic dulu: bubble langsung tampil (centang-1) walau offline.
-    final pendingPhoto = MessageModel(
-      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
-      senderId: uid,
-      senderName: profile.nickname,
-      senderGender: profile.gender,
-      isRegistered: profile.isRegistered,
-      text: '',
-      type: 'image',
-      imageData: base64,
-      timestamp: DateTime.now(),
-    );
-    setState(() => _pending.add(pendingPhoto));
-    _scrollToBottom();
-    if (!outboxIsOnline) {
-      await queueOffline(
-        pending: pendingPhoto,
-        pointsKind: 'image',
-        pointsDeducted: false,
-        imagePayload: base64,
-        needsUpload: true,
-        uploadKind: 'image',
-      );
-      return;
-    }
-    final ppPhoto = context.read<PointsProvider>();
-    final rPhoto = await ppPhoto.deductBeforeSend('image');
-    if (rPhoto < 0) {
-      setState(() => _pending.remove(pendingPhoto));
-      if (!mounted) return;
-      if (rPhoto == -1) {
-        ppPhoto.showOutOfPointsDialog(
-          context,
-          context.read<LocaleProvider>().s.isId,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.read<LocaleProvider>().s.errSendPhoto),
-          ),
-        );
-      }
-      return;
-    }
-    // Bubble sudah tampil di atas (optimistic) — lanjut upload + kirim.
-    try {
-      // Upload foto ke Storage — DB hanya simpan path (hemat ruang).
-      final path = await StoragePhotoService.instance.upload(
-        chatId: widget.chatId,
-        base64: base64,
-      );
-      if (path == null || path.isEmpty) {
-        if (!outboxIsOnline) throw const SocketException('photo upload failed');
-        safeUnawaited(ppPhoto.refundChatPoint('image'));
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
-          );
-          setState(() => _pending.removeWhere((m) => m.id == pendingPhoto.id));
-        }
-        return;
-      }
-      await chat.sendPrivateMessage(
-        chatId: widget.chatId,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: '',
-        type: 'image',
-        imageData: path,
-      );
-      _maybeNewChatBonus();
-      _schedulePendingConfirmFallback();
-      if (ppPhoto.enabled) {
-        ppPhoto.oneTimeBonus('first_photo', 10).then((earned) {
-          if (earned && mounted) {
-            ppPhoto.showPointsToast(
-              context,
-              context.read<LocaleProvider>().s.pointsGain(
-                10,
-                context.read<LocaleProvider>().s.reasonFirstPhoto,
-              ),
-            );
-          }
-        });
-      }
-      _scrollToBottom();
-    } catch (e) {
-      if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
-        await queueOffline(
-          pending: pendingPhoto,
-          pointsKind: 'image',
-          pointsDeducted: true,
-          imagePayload: base64,
-          needsUpload: true,
-          uploadKind: 'image',
-        );
-      } else {
-        // Upload/kirim gagal → kembalikan koin yang sudah terpotong.
-        safeUnawaited(ppPhoto.refundChatPoint('image'));
-        if (mounted) {
-          setState(() => _pending.remove(pendingPhoto));
-          final s = context.read<LocaleProvider>().s;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
-        }
-      }
-    }
-  }
-
-  Future<void> _sendViewOncePhoto() async {
-    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    final auth = context.read<AuthProvider>();
-    // Proses gambar DULU, baru potong poin — jangan paralel, supaya poin
-    // tidak terpotong saat decode/resize gagal (koin hilang percuma).
-    final base64 = await (auth.watermarkEnabled
-        ? compute(processViewOnceImage, (bytes, widget.otherUid))
-        : compute(processChatPhoto, bytes));
-    if (base64 == null) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
-      }
-      return;
-    }
-    if (!mounted) return;
-    final chat = context.read<ChatProvider>();
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    // Optimistic dulu: bubble langsung tampil (centang-1) walau offline.
-    final pending = MessageModel(
-      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
-      senderId: uid,
-      senderName: profile.nickname,
-      senderGender: profile.gender,
-      isRegistered: profile.isRegistered,
-      text: '',
-      type: 'view_once',
-      imageData: base64,
-      timestamp: DateTime.now(),
-    );
-    setState(() => _pending.add(pending));
-    _scrollToBottom();
-    if (!outboxIsOnline) {
-      await queueOffline(
-        pending: pending,
-        pointsKind: 'view_once',
-        pointsDeducted: false,
-        imagePayload: base64,
-        needsUpload: true,
-        uploadKind: 'image',
-      );
-      return;
-    }
-    final pp = context.read<PointsProvider>();
-    final rView = await pp.deductBeforeSend('view_once');
-    if (rView < 0) {
-      setState(() => _pending.remove(pending));
-      if (rView == -1) {
-        pp.showOutOfPointsDialog(
-          context,
-          context.read<LocaleProvider>().s.isId,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.read<LocaleProvider>().s.errSendPhoto),
-          ),
-        );
-      }
-      return;
-    }
-    // Bubble sudah tampil di atas (optimistic) — lanjut upload + kirim.
-    try {
-      // Upload ke Storage — DB hanya simpan path (hemat ruang).
-      final path = await StoragePhotoService.instance.upload(
-        chatId: widget.chatId,
-        base64: base64,
-      );
-      if (path == null || path.isEmpty) {
-        if (!outboxIsOnline) throw const SocketException('photo upload failed');
-        safeUnawaited(pp.refundChatPoint('view_once'));
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
-          );
-          setState(() => _pending.removeWhere((m) => m.id == pending.id));
-        }
-        return;
-      }
-      await chat.sendPrivateMessage(
-        chatId: widget.chatId,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: '',
-        type: 'view_once',
-        imageData: path,
-      );
-      _maybeNewChatBonus();
-      _schedulePendingConfirmFallback();
-      _scrollToBottom();
-    } catch (e) {
-      if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
-        await queueOffline(
-          pending: pending,
-          pointsKind: 'view_once',
-          pointsDeducted: true,
-          imagePayload: base64,
-          needsUpload: true,
-          uploadKind: 'image',
-        );
-      } else {
-        // Upload/kirim gagal → kembalikan koin yang sudah terpotong.
-        safeUnawaited(pp.refundChatPoint('view_once'));
-        if (mounted) {
-          setState(() => _pending.remove(pending));
-          final s = context.read<LocaleProvider>().s;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
-        }
-      }
-    }
-  }
 
   void _toggleAttachRow() {
     if (!_showAttachRow) {
@@ -2492,7 +2249,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                             open: false,
                                             onTap: () {
                                               setState(() => _showAttachRow = false);
-                                              _takePhoto();
+                                              photoTakeToPreview();
                                             },
                                             tooltip: s.menuTakePhoto,
                                           ),
@@ -2606,7 +2363,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                           setState(
                                             () => _showAttachRow = false,
                                           );
-                                          _sendPhoto();
+                                          photoPickFromGalleryAndSend();
                                         },
                                       ),
                                       const SizedBox(width: 8),
@@ -2618,7 +2375,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                           setState(
                                             () => _showAttachRow = false,
                                           );
-                                          _sendViewOncePhoto();
+                                          sendViewOnceFromPicker();
                                         },
                                       ),
                                       // Kirim koin — sembunyikan saat sistem poin OFF

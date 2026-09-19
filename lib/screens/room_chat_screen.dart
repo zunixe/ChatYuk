@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -21,7 +20,6 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../services/offline_outbox.dart';
-import '../services/chat_photo_helper.dart';
 import '../services/room_service.dart';
 import '../utils.dart';
 import '../main.dart';
@@ -35,7 +33,6 @@ import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/voice_bubble.dart';
-import '../widgets/chat_ui_shared.dart';
 import '../widgets/mention_spans.dart';
 import 'room_chat/widgets/room_widgets.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
@@ -57,6 +54,7 @@ import '../services/message_reaction_service.dart';
 import '../widgets/reply_quote.dart';
 import '../mixins/chat_selection_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
+import '../mixins/chat_photo_send_mixin.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 class RoomChatScreen extends StatefulWidget {
@@ -71,7 +69,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     with
         WidgetsBindingObserver,
         ChatOutboxMixin<RoomChatScreen>,
-        ChatSelectionMixin<RoomChatScreen> {
+        ChatSelectionMixin<RoomChatScreen>,
+        ChatPhotoSendMixin<RoomChatScreen> {
   final _msgCtrl = TextEditingController();
 
   // ── Kontrak ChatSelectionMixin ──
@@ -105,8 +104,44 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   Map<String, String> get chatReactionKnownNames => const {};
+
+  // ── Kontrak ChatPhotoSendMixin ──
+  @override
+  Future<void> photoDispatch({
+    required String imageData,
+    required String type,
+    required String senderId,
+    required String senderName,
+    required String senderGender,
+  }) async {
+    await _chat.sendRoomMessage(
+      roomId: widget.room.id,
+      senderId: senderId,
+      senderName: senderName,
+      senderGender: senderGender,
+      text: '',
+      type: type,
+      imageData: imageData,
+    );
+  }
+
+  @override
+  String get photoUploadChatId => 'room_${widget.room.id}';
+
+  @override
+  String get photoSeed => widget.room.id;
+
+  @override
+  void photoOnSent(String kind) {}
+
+  @override
+  void photoFirstBonus(PointsProvider pp) {}
+
+  @override
+  void photoSetPreview(String base64) {
+    setState(() => _pendingPhotoBase64 = base64);
+  }
   final _scrollCtrl = ScrollController();
-  final _imagePicker = ImagePicker();
   bool _showUsers = false;
   bool _sheetOpen = false;
   late AuthProvider _auth;
@@ -1582,182 +1617,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     setState(() => _showAttachRow = !_showAttachRow);
   }
 
-  Future<void> _takePhoto() async {
-    final picked = await _imagePicker.pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.rear,
-    );
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    if (bytes.length > 10 * 1024 * 1024) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.msgFileTooLarge)),
-        );
-      }
-      return;
-    }
-    final processed = await compute(processChatImage, bytes);
-    if (processed == null) return;
-    if (mounted) {
-      setState(() => _pendingPhotoBase64 = processed);
-    }
-  }
 
-  Future<void> _sendPhoto() async {
-    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    if (bytes.length > 10 * 1024 * 1024) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.msgFileTooLarge)));
-      }
-      return;
-    }
-    final base64 = await compute(processChatImage, bytes);
-    if (base64 == null) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
-      }
-      return;
-    }
-    if (!mounted) return;
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    final pp = context.read<PointsProvider>();
-    final r = await pp.deductBeforeSend('image');
-    if (r < 0) {
-      if (!mounted) return;
-      if (r == -1) {
-        pp.showOutOfPointsDialog(
-          context,
-          context.read<LocaleProvider>().s.isId,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.read<LocaleProvider>().s.errSendPhoto),
-          ),
-        );
-      }
-      return;
-    }
-    try {
-      final path = await StoragePhotoService.instance.upload(
-        chatId: 'room_${widget.room.id}',
-        base64: base64,
-      );
-      if (path == null || path.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)));
-        }
-        _isSending = false;
-        return;
-      }
-      await chat.sendRoomMessage(
-        roomId: widget.room.id,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: '',
-        type: 'image',
-        imageData: path,
-      );
-      _scrollToBottom();
-    } catch (e) {
-      safeUnawaited(pp.refundChatPoint('image'));
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
-      }
-    }
-  }
 
-  Future<void> _sendViewOncePhoto() async {
-    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    final auth = context.read<AuthProvider>();
-    // Proses gambar DULU, baru potong poin (jangan paralel) — mencegah
-    // koin terpotong saat decode/resize gagal.
-    final base64 = await (auth.watermarkEnabled
-        ? compute(processViewOnceImage, (bytes, widget.room.id))
-        : compute(processChatPhoto, bytes));
-    if (base64 == null) {
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
-      }
-      return;
-    }
-    if (!mounted) return;
-    final pp = context.read<PointsProvider>();
-    final rView = await pp.deductBeforeSend('view_once');
-    if (rView < 0) {
-      if (rView == -1) {
-        pp.showOutOfPointsDialog(
-          context,
-          context.read<LocaleProvider>().s.isId,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.read<LocaleProvider>().s.errSendPhoto),
-          ),
-        );
-      }
-      return;
-    }
-    final chat = context.read<ChatProvider>();
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    try {
-      final path = await StoragePhotoService.instance.upload(
-        chatId: 'room_${widget.room.id}',
-        base64: base64,
-      );
-      if (path == null || path.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)));
-        }
-        _isSending = false;
-        return;
-      }
-      await chat.sendRoomMessage(
-        roomId: widget.room.id,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: '',
-        type: 'view_once',
-        imageData: path,
-      );
-      _scrollToBottom();
-    } catch (e) {
-      safeUnawaited(pp.refundChatPoint('view_once'));
-      if (mounted) {
-        final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1969,15 +1830,15 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             onToggleAttach: _toggleAttachRow,
             onTakePhoto: () {
               setState(() => _showAttachRow = false);
-              _takePhoto();
+              photoTakeToPreview();
             },
             onSendPhoto: () {
               setState(() => _showAttachRow = false);
-              _sendPhoto();
+              photoPickFromGalleryAndSend();
             },
             onSendViewOnce: () {
               setState(() => _showAttachRow = false);
-              _sendViewOncePhoto();
+              sendViewOnceFromPicker();
             },
             onSendVoice: _sendVoiceMessage,
             // Gift (fitur koin) hanya bila sistem koin aktif — hilang
