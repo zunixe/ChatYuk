@@ -184,14 +184,22 @@ class _ChatComposerInputState extends State<ChatComposerInput>
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(
+                Container(
                   width: 40,
                   height: 40,
+                  decoration: BoxDecoration(
+                    color: AppTheme.isDark
+                        ? Colors.transparent
+                        : AppTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
                   child: IconButton(
-                    onPressed: () =>
-                      EmojiPickerSheet.show(context, widget.controller),
-                    icon: Icon(Icons.emoji_emotions_rounded, size: 22),
-                    color: AppTheme.textSecondary,
+                    onPressed: () => EmojiPickerSheet.show(
+                      context,
+                      widget.controller,
+                    ),
+                    icon: Icon(Icons.emoji_emotions_outlined, size: 20),
+                    color: AppTheme.isDark ? AppTheme.primary : Colors.white,
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
                   ),

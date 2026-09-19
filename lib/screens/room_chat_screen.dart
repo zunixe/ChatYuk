@@ -2386,12 +2386,6 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.done,
-                    size: 14,
-                    color: AppTheme.textSecondary,
-                  ),
-                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       s.msgQueuedCount(_queuedIds.length),
@@ -3126,34 +3120,17 @@ class _MessageBubble extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _content(context, timeStr, alignRight: true),
-                    if (isQueued || isPending)
+                    // Room & grup TANPA centang status (beda dari private 1:1):
+                    // hanya teks "menunggu koneksi" saat pesan terantre offline.
+                    if (isQueued)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Tooltip(
-                              message: isQueued
-                                  ? s.msgWaitingConnection
-                                  : '',
-                              child: Icon(
-                                Icons.done,
-                                size: 12,
-                                color: _textColor.withValues(alpha: 0.55),
-                              ),
-                            ),
-                            if (isQueued) ...[
-                              const SizedBox(width: 4),
-                              Text(
-                                s.msgWaitingConnection,
-                                style: AppText.chatTime.copyWith(
-                                  color:
-                                      _textColor.withValues(alpha: 0.55),
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ],
+                        child: Text(
+                          s.msgWaitingConnection,
+                          style: AppText.chatTime.copyWith(
+                            color: _textColor.withValues(alpha: 0.55),
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                       ),
                   ],
