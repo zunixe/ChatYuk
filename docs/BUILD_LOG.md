@@ -35,6 +35,8 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | 2026-09-19 16:30 | develop | adminProd + apkpureProd | Call: ikon end-call putih (dulu menyatu) + hangup() garansi bersih + guard expand anti tap-ganda | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
 
+| 2026-09-19 16:45 | develop | adminProd + apkpureProd | End-call: UI hilang dulu (notify sebelum cleanup WebRTC) + pop 250ms; tap notif panggilan aktif → langsung layar call (resume hook) | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
+
 ## Catatan penting: build probe & the underlying provider Sign-In
 
 Build `--profile`/`--debug` **selalu** bikin the underlying provider Sign-In gagal (`DEVELOPER_ERROR`)
