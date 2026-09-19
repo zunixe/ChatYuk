@@ -1869,8 +1869,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           onSendVoice: (path, ms) => voiceFinishRecording(path, ms),
                           onRecordingSignal: _sendRecordingSignal,
                           onTyping: _sendTypingSignal,
-                          onSendCoin: _showSendCoinDialog,
-                          onOpenGiftPanel: _showGiftPicker,
+                          // Koin & hadiah hanya bila sistem koin aktif —
+                          // hilang total saat dimatikan admin.
+                          onSendCoin: context.watch<PointsProvider>().enabled
+                              ? _showSendCoinDialog
+                              : null,
+                          onOpenGiftPanel: context.watch<PointsProvider>().enabled
+                              ? _showGiftPicker
+                              : null,
                           pendingPhotoBase64: _pendingPhotoBase64,
                           onCancelPhoto: _pendingPhotoBase64 != null
                               ? () => setState(() => _pendingPhotoBase64 = null)

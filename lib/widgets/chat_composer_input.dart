@@ -136,7 +136,9 @@ class _ChatComposerInputState extends State<ChatComposerInput>
     return Container(
       padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
       decoration: BoxDecoration(
-        color: AppTheme.bgScreen,
+        // Transparan: background chat (gambar/blur) tetap terlihat di
+        // belakang composer. Header card di dalam tetap bgCard.
+        color: Colors.transparent,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -425,8 +427,13 @@ class _ChatComposerInputState extends State<ChatComposerInput>
               curve: Curves.easeOut,
               child: widget.showAttachRow
                   ? Padding(
-                      padding: const EdgeInsets.only(top: 8, left: 4),
-                      child: Row(
+                      padding: const EdgeInsets.only(top: 8, left: 4, right: 4),
+                      // Wrap: bila chip banyak (4: foto/view-once/koin/hadiah)
+                      // tidak muat 1 baris di layar kecil, otomatis turun baris
+                      // — dulu Row sehingga overflow menimpa layar.
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
                         children: [
                           ChatAttachChip(
                             icon: Icons.image_rounded,
@@ -434,31 +441,26 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                             label: s.menuSendPhoto,
                             onTap: widget.onSendPhoto,
                           ),
-                          const SizedBox(width: 12),
                           ChatAttachChip(
                             icon: Icons.timer_rounded,
                             color: Colors.orange,
                             label: s.menuViewOnce,
                             onTap: widget.onSendViewOnce,
                           ),
-                          if (widget.onSendCoin != null) ...[
-                            const SizedBox(width: 12),
+                          if (widget.onSendCoin != null)
                             ChatAttachChip(
                               icon: Icons.monetization_on_rounded,
                               color: const Color(0xFFFFB300),
                               label: s.menuSendCoin,
                               onTap: widget.onSendCoin!,
                             ),
-                          ],
-                          if (widget.onOpenGiftPanel != null) ...[
-                            const SizedBox(width: 12),
+                          if (widget.onOpenGiftPanel != null)
                             ChatAttachChip(
                               icon: Icons.card_giftcard,
                               color: Colors.pinkAccent,
                               label: s.menuSendGift,
                               onTap: widget.onOpenGiftPanel!,
                             ),
-                          ],
                         ],
                       ),
                     )
