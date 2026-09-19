@@ -473,6 +473,13 @@ Future<void> showGroupInvitePicker({
 }) async {
   final s = context.read<LocaleProvider>().s;
   final myUid = context.read<RoomProvider>().prvUid;
+  // Snapshot chat yang sudah ada di memori — tampilkan daftar orang SEKETIKA
+  // saat sheet dibuka (dulu StreamBuilder menunggu fetch server 300-760ms →
+  // "cari" terasa lama). Stream server menyusul & mengoreksi.
+  final seed = (myUid != null && myUid.isNotEmpty)
+      ? context.read<ChatProvider>().lastPrivateChatsSnapshot(myUid)
+      : null;
+  if (!context.mounted) return;
   await showModalBottomSheet(
     context: context,
     backgroundColor: AppTheme.bgCard,
@@ -513,6 +520,7 @@ Future<void> showGroupInvitePicker({
                         .read<ChatProvider>()
                         .getMyPrivateChats(myUid)
                     : const Stream.empty(),
+                initialData: seed,
                 builder: (_, snap) {
                   final seen = <String>{};
                   final people = <Map<String, String>>[];
