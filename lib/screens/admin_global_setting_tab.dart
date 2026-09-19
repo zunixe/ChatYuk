@@ -12,6 +12,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/admin_service.dart';
+import '../utils.dart';
 
 /// Admin panel — tab "Global Setting".
 /// Berisi semua toggle pengaturan global aplikasi (screenshot, watermark,
@@ -1589,7 +1590,7 @@ class _ProviderCardState extends State<_ProviderCard> {
     // tetap jalan walau card sudah tidak mounted (bug "hapus tapi muncul lagi").
     final messenger = ScaffoldMessenger.of(context);
     final notifyChanged = widget.onChanged;
-    debugPrint('[DELPROV] open confirm id=${widget.data['id']}');
+    dlog('[DELPROV] open confirm id=${widget.data['id']}');
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1611,15 +1612,15 @@ class _ProviderCardState extends State<_ProviderCard> {
       ),
     );
     if (ok != true || !mounted) {
-      debugPrint('[DELPROV] abort ok=$ok mounted=$mounted');
+      dlog('[DELPROV] abort ok=$ok mounted=$mounted');
       return;
     }
-    debugPrint('[DELPROV] confirmed, starting');
+    dlog('[DELPROV] confirmed, starting');
     setState(() => _busy = true);
     try {
       final id = '${widget.data['id']}';
       final isActive = widget.data['is_active'] == true && !widget.isNew;
-      debugPrint('[DELPROV] id=$id isActive=$isActive isNew=${widget.isNew}');
+      dlog('[DELPROV] id=$id isActive=$isActive isNew=${widget.isNew}');
       if (isActive) {
         // Hapus provider AKTIF: pindahkan status aktif ke provider lain
         // dulu (failover) supaya RPC tidak menolak. Kalau ini satu-satunya
@@ -1635,19 +1636,19 @@ class _ProviderCardState extends State<_ProviderCard> {
           }
         }
         if (next == null) {
-          debugPrint('[DELPROV] last provider, blocked');
+          dlog('[DELPROV] last provider, blocked');
           messenger
             ..clearSnackBars()
             ..showSnackBar(SnackBar(content: Text(s.aiProviderDeleteLast)));
           return;
         }
-        debugPrint('[DELPROV] failover to ${next['id']}');
+        dlog('[DELPROV] failover to ${next['id']}');
         await _svc.activateAiProvider('${next['id']}');
-        debugPrint('[DELPROV] failover ok');
+        dlog('[DELPROV] failover ok');
       }
-      debugPrint('[DELPROV] calling delete RPC (mounted=$mounted)');
+      dlog('[DELPROV] calling delete RPC (mounted=$mounted)');
       await _svc.deleteAiProvider('${widget.data['id']}');
-      debugPrint('[DELPROV] delete RPC ok (mounted=$mounted)');
+      dlog('[DELPROV] delete RPC ok (mounted=$mounted)');
       // Sengaja TANPA cek mounted: messenger + onChanged milik ancestor
       // yang tetap hidup — user wajib dapat feedback + list refresh
       // meski card ini sudah ter-unmount.
@@ -1656,7 +1657,7 @@ class _ProviderCardState extends State<_ProviderCard> {
         ..showSnackBar(SnackBar(content: Text(s.aiProviderDeleted)));
       notifyChanged();
     } catch (e) {
-      debugPrint('[DELPROV] ERROR: $e (mounted=$mounted)');
+      dlog('[DELPROV] ERROR: $e (mounted=$mounted)');
       messenger
         ..clearSnackBars()
         ..showSnackBar(
