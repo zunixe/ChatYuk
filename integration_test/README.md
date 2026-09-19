@@ -1,5 +1,9 @@
 # Integration Test ChatYuk
 
+> **STATUS: TIDAK DIPAKAI.** Folder ini hanya berisi dokumen ini — tidak ada
+> file test. Dev-dependency `integration_test` sudah dihapus dari
+> `pubspec.yaml` karena merusak build rilis (lihat bagian bawah).
+
 ## Kenapa 3 alur kritis ada di `test/flow_*_test.dart`, bukan di sini?
 
 `flutter test integration_test/` di repo ini **memaksa build APK device**
@@ -28,6 +32,17 @@ Untuk uji device sungguhan (cold start, scroll 1000 chat, frame latency)
 pakai `scripts/stress/device.sh` + `docs/STRESS_TEST.md` Lapis 4 — bukan
 `flutter test integration_test/`.
 
-Kalau suatu saat runner CI punya emulator + flavor dev yang sah, pindahkan
-kembali 3 file flow ke sini dan tambah `integration_test/app_test.dart`
-sebagai entry driver.
+## Sebelum menghidupkan folder ini lagi
+
+Dev-dep `integration_test` **sudah dihapus** dari `pubspec.yaml`. Jangan
+tambahkan kembali tanpa memperbaiki dua hal dulu:
+
+1. **Flavor `dev` butuh `google-services.json` sendiri** — tanpa itu build
+   gagal `No matching client found for package name 'com.chatyuk.chatyuk.dev'`.
+2. **Plugin registrant rilis** — dev-dep ini menyuntikkan plugin
+   `dev.flutter.plugins.integration_test` ke `GeneratedPluginRegistrant.java`,
+   tapi Gradle release tidak menyertakannya →
+   `package dev.flutter.plugins.integration_test does not exist`.
+   Perlu flavor/varian khusus test, bukan dev-dep global.
+
+Selain itu runner CI harus punya emulator (sekarang `ubuntu-latest` tanpa KVM).
