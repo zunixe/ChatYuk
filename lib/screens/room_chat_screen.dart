@@ -32,6 +32,7 @@ import '../widgets/app_gesture.dart';
 import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
 import 'room_chat/widgets/room_widgets.dart';
+import '../widgets/chat_header_action_chip.dart';
 import 'room_chat/widgets/room_message_bubble.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../widgets/chat_composer_input.dart';
@@ -1458,38 +1459,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 onPressed: _raiseHand,
               ),
             if (((_liveUid == _auth.uid && !iAmBroadcasting) || (_liveUid == null && isGrantedBroadcast && !iAmBroadcasting)) || _broadcastStarting)
-              GestureDetector(
-                onTap: _broadcastStarting ? null : _onStartBroadcastTap,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: _broadcastStarting ? 0.25 : 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_broadcastStarting)
-                        const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        Icon(Icons.videocam_rounded, color: AppTheme.primary, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        _broadcastStarting
-                            ? (s.roomBroadcastConnecting)
-                            : s.privateRoomsStartBroadcast,
-                        style: AppText.label.copyWith(
-                          color: AppTheme.primary.withValues(alpha: _broadcastStarting ? 0.6 : 1),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              ChatHeaderActionChip(
+                icon: Icons.videocam_rounded,
+                label: _broadcastStarting
+                    ? s.roomBroadcastConnecting
+                    : s.privateRoomsStartBroadcast,
+                loading: _broadcastStarting,
+                onTap: _onStartBroadcastTap,
               ),
             if (iAmBroadcasting)
               IconButton(

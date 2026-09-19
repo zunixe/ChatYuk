@@ -37,6 +37,7 @@ import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
 import '../widgets/chat_composer_input.dart';
+import '../widgets/chat_header_action_chip.dart';
 import '../mixins/chat_outbox_mixin.dart';
 
 class PrivateChatScreen extends StatefulWidget {
@@ -1399,38 +1400,27 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           if (auth.callAllEnabled ||
               ((auth.profile?.isRegistered ?? false) &&
                   (_otherRegistered || widget.otherRegistered)))
-            PopupMenuButton(
-              padding: EdgeInsets.zero,
-              iconSize: 22,
-              // Rapatkan ke kanan: kurangi area sentuh bawaan PopupMenuButton
-              // (default ~48px) supaya jarak ke ikon more_vert tidak lebar.
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              icon: Icon(Icons.call, color: Colors.white, size: 22),
-              color: AppTheme.bgCard,
-              tooltip: s.callAudio,
-              onSelected: (val) {
-                if (val == 'audio') {
-                  _startCall(context, 'audio', CallMode.fullscreen);
-                } else if (val == 'video') {
-                  _startCall(context, 'video', CallMode.chat);
-                }
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'audio',
-                  child: Text(
-                    s.callAudio,
-                    style: TextStyle(color: AppTheme.textPrimary),
+            // Tombol panggilan gaya chip header grup (audio + video
+            // terpisah), mekanisme tetap telepon 1:1.
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ChatHeaderActionChip(
+                    icon: Icons.call,
+                    label: s.callAudio,
+                    onTap: () =>
+                        _startCall(context, 'audio', CallMode.fullscreen),
                   ),
-                ),
-                PopupMenuItem(
-                  value: 'video',
-                  child: Text(
-                    s.callVideo,
-                    style: TextStyle(color: AppTheme.textPrimary),
+                  const SizedBox(width: 6),
+                  ChatHeaderActionChip(
+                    icon: Icons.videocam_rounded,
+                    label: s.callVideo,
+                    onTap: () => _startCall(context, 'video', CallMode.chat),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           PopupMenuButton(
             padding: EdgeInsets.zero,
