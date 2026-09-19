@@ -19,6 +19,7 @@ import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
+import '../core/chat/read_receipt.dart';
 import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
@@ -453,11 +454,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       final read = info?.lastReadAt[widget.otherUid];
       // Monoton maju: yang sudah centang-2 tidak boleh balik centang-1
       // walau network/disk menyusul dengan nilai null atau lebih tua.
-      if (read != null &&
-          (_otherLastRead == null || read.isAfter(_otherLastRead!))) {
-        if (mounted) setState(() => _otherLastRead = read);
+      final merged = ReadReceipt.merge(_otherLastRead, read);
+      if (read != null && merged != _otherLastRead) {
+        if (mounted) setState(() => _otherLastRead = merged);
         // Persist untuk cold start berikutnya.
-        _persistRead(read);
+        if (merged != null) _persistRead(merged);
       }
     });
 
@@ -528,13 +529,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     try {
       final myUid = context.read<AuthProvider>().uid;
       if (myUid == null) return;
-      DateTime? best;
+      final candidates = <DateTime?>[];
       // 1) Snapshot live — paling fresh di sesi ini.
       final snap = context.read<ChatProvider>().lastPrivateChatsSnapshot(myUid);
       if (snap != null) {
         for (final c in snap) {
           if (c.chatId != widget.chatId) continue;
-          best = c.lastReadAt[widget.otherUid];
+          candidates.add(c.lastReadAt[widget.otherUid]);
           break;
         }
       }
@@ -543,13 +544,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       for (final row in rows) {
         if ('${row['chatId']}' != widget.chatId) continue;
         final raw = row['lastReadAt'];
-        if (raw is Map) {
-          final v = raw[widget.otherUid];
-          final t = v is DateTime ? v : DateTime.tryParse('$v');
-          if (t != null && (best == null || t.isAfter(best))) best = t;
-        }
+        if (raw is Map) candidates.add(ReadReceipt.parse(raw[widget.otherUid]));
         break;
       }
+      final best = ReadReceipt.best(candidates);
       if (best != null) _otherLastRead = best;
     } catch (_) {}
   }
@@ -561,12 +559,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     try {
       final obj = await MessageCache.instance
           .loadRawObj('read:${widget.chatId}');
-      final iso = obj[widget.otherUid] as String?;
-      final t = iso == null ? null : DateTime.tryParse(iso);
-      if (t != null &&
-          mounted &&
-          (_otherLastRead == null || t.isAfter(_otherLastRead!))) {
-        setState(() => _otherLastRead = t);
+      final t = ReadReceipt.parse(obj[widget.otherUid]);
+      final merged = ReadReceipt.merge(_otherLastRead, t);
+      if (t != null && mounted && merged != _otherLastRead) {
+        setState(() => _otherLastRead = merged);
       }
     } catch (_) {}
   }
@@ -1657,8 +1653,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                               final isRead =
                                   isMe &&
                                   !isPending &&
-                                  _otherLastRead != null &&
-                                  !msg.timestamp.isAfter(_otherLastRead!);
+                                  ReadReceipt.isRead(
+                                    msg.timestamp,
+                                    _otherLastRead,
+                                  );
                               // Image kosong & pesan lama (> 50 dari terbaru) → deferred (icon refresh)
                               final isImageDeferred =
                                   msg.type == 'image' &&

@@ -15,7 +15,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chatyuk/services/forensic_watermark.dart';
+import 'package:chatyuk/core/media/forensic_watermark.dart';
 
 Future<List<String>> fetchProfileUids() async {
   const url = 'https://fohcucyyejdryryoxitm.supabase.co';

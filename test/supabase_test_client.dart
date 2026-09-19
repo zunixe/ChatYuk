@@ -66,3 +66,27 @@ SupabaseClient fakeSupabaseClient({FakeSupabaseHandler? handler}) {
     httpClient: h.client(),
   );
 }
+
+/// Ambil request POST ke `/rest/v1/rpc/<fn>` — untuk test semi-integrasi yang
+/// memverifikasi nama RPC + params yang benar-benar dikirim ke PostgREST.
+http.Request rpcRequestOf(FakeSupabaseHandler handler, String fn) {
+  return handler.captured.firstWhere(
+    (r) =>
+        r.method == 'POST' &&
+        r.url.path.endsWith('/rest/v1/rpc/$fn'),
+    orElse: () => throw StateError(
+      'RPC "$fn" tidak terkirim. Request tercatat: '
+      '${handler.captured.map((r) => '${r.method} ${r.url.path}').toList()}',
+    ),
+  );
+}
+
+/// Params body dari RPC [fn] (sudah di-decode). RPC tanpa params mengirim
+/// body kosong/`null` → kembalikan map kosong, bukan error.
+Map<String, dynamic> rpcParamsOf(FakeSupabaseHandler handler, String fn) {
+  final body = rpcRequestOf(handler, fn).body;
+  if (body.isEmpty) return {};
+  final decoded = jsonDecode(body);
+  if (decoded is! Map) return {};
+  return decoded.cast<String, dynamic>();
+}

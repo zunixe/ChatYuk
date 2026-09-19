@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chatyuk/services/forensic_watermark.dart';
+import 'package:chatyuk/core/media/forensic_watermark.dart';
 import 'package:image/image.dart' as img;
 
 void main() {

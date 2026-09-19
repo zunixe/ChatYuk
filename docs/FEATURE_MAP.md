@@ -70,7 +70,7 @@ sebagai dummy.
 | Provider | `lib/providers/chat_provider.dart`, `room_provider.dart` |
 | Service | `lib/services/chat_service.dart`, `chat_stream_session.dart`, `message_cache.dart`, `room_service.dart`, `message_store.dart`, `private_room_service.dart` |
 | SQL inti | `create_private_room()`, `join_private_room()`, `extend_private_room()`, `deduct_chat_point()`, `new_chat_bonus()`, `notify_private_message()`, `handle_new_private_message()`, `mark_chat_read()` |
-| Test | `test/chat_provider_test.dart`, `test/message_store_test.dart`, `supabase/tests/chat_test.sql` |
+| Test | `test/chat_provider_test.dart`, `test/message_store_test.dart`, `test/chat_service_io_test.dart` (payload PostgREST via HTTP palsu), `test/economy_room_io_test.dart`, `supabase/tests/notif_chat_test.sql` |
 
 **Invariant:** titik poin terpotong 1× per pesan (idempoten); bonus chat baru
 hanya 1× per pasangan; notif hanya 1× per pesan (dedup).
@@ -156,7 +156,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | UI | `lib/main.dart` (background handler), `lib/services/call_notification.dart` |
 | Edge | `supabase/functions/send-push/`, `fanout/` (+ `_shared/fcm.ts`) |
 | SQL inti | `notify_private_message()`, `notify_call_ended()`, `call_push()` |
-| Test | `supabase/tests/notif_test.sql` |
+| Test | `test/notification_prefs_service_test.dart`, `supabase/tests/notif_chat_test.sql`, `supabase/tests/contract_test.sql` |
 
 **Invariant:** string notif bilingual (via prefs `isId`); 1 notif per event;
 `to_uid` benar (fix `...13130001`).
@@ -171,7 +171,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | Provider | `lib/providers/points_provider.dart` |
 | Service | `lib/services/points_service.dart` |
 | SQL inti | `one_time_bonus()`, `send_coins()`, `send_gift()`, `room_read_bonus()`, `daily_login_bonus()`, `claim_weekly_quest()`, `points_leaderboard()` |
-| Test | `test/points_provider_test.dart`, `supabase/tests/points_test.sql` |
+| Test | `test/points_provider_test.dart`, `test/points_service_io_test.dart` (payload RPC via HTTP palsu), `supabase/tests/points_test.sql` |
 
 **Invariant:** klaim bonus idempoten (tidak bisa dobel); milestone online
 5/30/60/120 mnt; saldo = cache ledger `profiles.points`.
@@ -186,7 +186,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | Provider | `lib/providers/timeline_provider.dart`, `story_provider.dart`, `social_provider.dart` |
 | SQL inti | `list_posts()`, `create_story()`, `story_slides()`, `follow_count_sync()`, `nearby_users()` |
 | Cron | `purge-stories` (17:00), `purge_inactive_90d` |
-| Test | `test/story_provider_test.dart`, `test/timeline_provider_test.dart`, `supabase/tests/feed_test.sql` |
+| Test | `test/story_provider_test.dart`, `test/timeline_provider_test.dart`, `test/story_social_io_test.dart` (payload RPC story/social via HTTP palsu) |
 
 **Invariant:** visibility story ikut follower; counter sosial konsisten
 (`follow_count_sync`); timeline hanya user terdaftar.
@@ -217,7 +217,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | UI | `lib/screens/admin_*.dart`, `lib/admin/` |
 | Provider | `lib/providers/admin_provider.dart` |
 | SQL inti | `admin_list_dummies()` (18× replace!), `admin_stats_detail()` (12×), `admin_set_dummy_ai()`, `admin_ai_settings()` |
-| Test | `supabase/tests/admin_test.sql` |
+| Test | `test/admin_provider_di_test.dart`, `supabase/tests/schema_sync_test.sql` (tabel/RPC admin anti-regresi) |
 
 **Invariant:** admin list tidak bocor ke build rilis (tree-shake lewat
 `admin_gate.dart`); fitur admin 24/7 (`ai_always_online`) tetap utuh.
