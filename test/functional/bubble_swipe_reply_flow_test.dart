@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
-import 'package:chatyuk/config/theme.dart';
 import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/widgets/private_chat_message.dart';

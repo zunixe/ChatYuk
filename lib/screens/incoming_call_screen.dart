@@ -47,6 +47,13 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     super.initState();
     WakelockPlus.enable();
     CallProvider.instance.registerCall(widget.callId);
+    // Tombol jawab/tolak dari UI panggilan SISTEM (layar kunci/headset/
+    // Bluetooth) diteruskan ke layar ini — satu jalur aksi, tidak dobel.
+    CallProvider.instance.bindIncomingScreen(
+      callId: widget.callId,
+      onAccept: () => _accept(mode: CallMode.fullscreen),
+      onDecline: _decline,
+    );
     _loadCaller();
     _startRingtone();
     _statusSub = _service.onCallStatus(widget.callId).listen((status) {
@@ -100,6 +107,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     // Jangan unregister bila call diterima — session sudah diambil alih
     // CallProvider (aktif), dan unregister di sini akan mematikan penanda busy.
     if (!_accepted) CallProvider.instance.unregisterCall(widget.callId);
+    CallProvider.instance.unbindIncomingScreen(widget.callId);
     _statusSub?.cancel();
     // Bersihkan channel status sharing bila tak ada sesi yang memakai
     // (decline/missed tanpa CallSession) — aman bila sesi aktif.

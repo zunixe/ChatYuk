@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
