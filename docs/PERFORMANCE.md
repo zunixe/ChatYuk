@@ -350,6 +350,21 @@ swap video), lalu app di-background agar `PerfProbe.report` mencetak ringkasan.
 pakai `setState` untuk update durasi call, dan pertahankan `RepaintBoundary`
 di sekitar `RTCVideoView`.
 
+### 1l. UI panggilan sistem — ConnectionService (2026-09-19)
+
+Panggilan masuk kini memakai UI panggilan SISTEM Android (Telecom
+ConnectionService SELF_MANAGED) — ring di layar kunci/headset/Bluetooth,
+gaya WhatsApp. Media TETAP WebRTC di Dart; native hanya ring + tombol
+jawab/tolak (`docs/CALL_NATIVE.md`).
+
+- Tidak ada tambahan beban render/data: `CallSession.init()` tetap dipanggil
+  hanya SETELAH pengguna menerima.
+- Ringtone Dart dimatikan saat `usesSystemUi` (Android) → tidak ada nada
+  dering dobel (satu audio focus, bukan dua).
+- Push `type=call` saat app mati kini ditangkap `ChartyukMessagingService`
+  (native) yang tetap memanggil `super.onMessageReceived` sehingga handler
+  notifikasi Dart tidak berubah.
+
 ### 1k. Retensi call otomatis (server, 2026-09-19)
 
 `admin_sweep_calls()` (akhiri `ringing` basi >90 dtk, `answered` tanpa heartbeat

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../utils.dart';
@@ -29,15 +30,52 @@ class CallUiChannel implements CallUi {
   FutureOr<void> Function(String callId)? _onDecline;
   FutureOr<void> Function(String callId)? _onEnd;
 
-  @override
-  set onAccept(FutureOr<void> Function(String callId)? cb) => _onAccept = cb;
+  /// Aksi yang datang SEBELUM callback terpasang (race saat cold start:
+  /// native kirim "accept" tak lama setelah engine hidup, sementara
+  /// CallProvider belum selesai bind). Disimpan lalu diputar saat callback
+  /// siap — tanpa ini, jawab dari system UI saat app mati bisa hilang.
+  final List<(String, String)> _pending = [];
+
+  void _dispatch(String method, String callId) {
+    final cb = switch (method) {
+      'onAccept' => _onAccept,
+      'onDecline' => _onDecline,
+      'onEnd' => _onEnd,
+      _ => null,
+    };
+    if (cb == null) {
+      _pending.add((method, callId));
+      return;
+    }
+    cb(callId);
+  }
+
+  void _flushPending() {
+    if (_pending.isEmpty) return;
+    final items = List.of(_pending);
+    _pending.clear();
+    for (final (method, callId) in items) {
+      _dispatch(method, callId);
+    }
+  }
 
   @override
-  set onDecline(FutureOr<void> Function(String callId)? cb) =>
-      _onDecline = cb;
+  set onAccept(FutureOr<void> Function(String callId)? cb) {
+    _onAccept = cb;
+    _flushPending();
+  }
 
   @override
-  set onEnd(FutureOr<void> Function(String callId)? cb) => _onEnd = cb;
+  set onDecline(FutureOr<void> Function(String callId)? cb) {
+    _onDecline = cb;
+    _flushPending();
+  }
+
+  @override
+  set onEnd(FutureOr<void> Function(String callId)? cb) {
+    _onEnd = cb;
+    _flushPending();
+  }
 
   /// Handler panggilan dari native. Dipakai juga oleh unit test lewat
   /// `TestDefaultBinaryMessenger` (invoke method `onAccept` dll).
@@ -45,11 +83,9 @@ class CallUiChannel implements CallUi {
     final callId = '${call.arguments ?? ''}';
     switch (call.method) {
       case 'onAccept':
-        await _onAccept?.call(callId);
       case 'onDecline':
-        await _onDecline?.call(callId);
       case 'onEnd':
-        await _onEnd?.call(callId);
+        _dispatch(call.method, callId);
     }
     return null;
   }
@@ -88,11 +124,20 @@ class CallUiChannel implements CallUi {
   @override
   bool get usesSystemUi => true;
 
+  /// Pasang ulang handler (test yang memanggil `dispose` lalu ingin
+  /// mengirim method lagi). Tidak dipakai di produksi.
+  @visibleForTesting
+  void reattach() {
+    _pending.clear();
+    _channel.setMethodCallHandler(_handleNative);
+  }
+
   @override
   Future<void> dispose() async {
     _onAccept = null;
     _onDecline = null;
     _onEnd = null;
+    _pending.clear();
     _channel.setMethodCallHandler(null);
   }
 }

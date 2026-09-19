@@ -279,9 +279,47 @@ class CallProvider extends ChangeNotifier {
   Future<void> _onSystemAccept(String callId) async {
     if (_screenCallId == callId && _screenAccept != null) {
       await _screenAccept!();
-    } else {
-      dlog('[CallProvider] onAccept sistem tanpa layar utk $callId');
+      return;
     }
+    // Tidak ada layar (app baru dibuka dari kondisi mati / notifikasi).
+    // Ambil detail call dari DB lalu buka IncomingCallScreen mode
+    // auto-accept — memakai alur terima yang sama, bukan duplikat.
+    Map<String, dynamic>? row;
+    try {
+      row = await _service.getCall(callId);
+    } catch (_) {}
+    if (row == null) {
+      dlog('[CallProvider] onAccept sistem: call $callId tidak ditemukan');
+      return;
+    }
+    if (_activeCallId != null && _activeCallId != callId) {
+      // Sudah ada call lain → tandai busy.
+      try {
+        await _service.updateStatus(callId, 'busy');
+      } catch (_) {}
+      return;
+    }
+    final status = row['status'] as String?;
+    if (status == null || status == 'ended' || status == 'canceled' ||
+        status == 'declined' || status == 'missed') {
+      await callUi.dismiss(callId);
+      return;
+    }
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+    _activeCallId = callId;
+    nav.push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => IncomingCallScreen(
+          callId: callId,
+          callerUid: row!['caller_id'] as String? ?? '',
+          callType: row['call_type'] as String? ?? 'video',
+          chatId: row['chat_id'] as String? ?? '',
+          autoAccept: true,
+        ),
+      ),
+    );
   }
 
   Future<void> _onSystemDecline(String callId) async {
