@@ -70,7 +70,7 @@ sebagai dummy.
 | Provider | `lib/providers/chat_provider.dart`, `room_provider.dart` |
 | Service | `lib/services/chat_service.dart`, `chat_stream_session.dart`, `message_cache.dart`, `room_service.dart`, `message_store.dart`, `private_room_service.dart` |
 | SQL inti | `create_private_room()`, `join_private_room()`, `extend_private_room()`, `deduct_chat_point()`, `new_chat_bonus()`, `notify_private_message()`, `handle_new_private_message()`, `mark_chat_read()` |
-| Test | `test/chat_provider_test.dart`, `test/message_store_test.dart`, `test/chat_service_io_test.dart` (payload PostgREST via HTTP palsu), `test/economy_room_io_test.dart`, `supabase/tests/notif_chat_test.sql` |
+| Test | `test/chat_provider_test.dart`, `test/message_store_test.dart`, `test/chat_service_io_test.dart` (payload PostgREST via HTTP palsu), `test/economy_room_io_test.dart`, `test/functional/` (composer/mention/bubble/reaction), `test/regression/r_read_receipt_test.dart`, `r_swipe_reply_test.dart`, `r_stream_replay_test.dart`, `supabase/tests/notif_chat_test.sql` |
 
 **Invariant:** titik poin terpotong 1× per pesan (idempoten); bonus chat baru
 hanya 1× per pasangan; notif hanya 1× per pesan (dedup).
