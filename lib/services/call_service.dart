@@ -17,10 +17,22 @@ enum CallEndReason { ended, declined, busy, canceled, missed, error }
 /// SDP/ICE TIDAK lewat DB — broadcast channel `call-signal-<callId>`
 /// (ephemeral, pola sama seperti typing indicator).
 class CallService {
-  static final CallService instance = CallService._();
-  CallService._();
+  /// Client opsional (LAZY) — test menyuntik client palsu.
+  final SupabaseClient? _injected;
+  CallService._([SupabaseClient? sb]) : _injected = sb;
 
-  final SupabaseClient _sb = SupabaseConfig.client;
+  static CallService instance = CallService._();
+
+  @visibleForTesting
+  factory CallService.forTest(SupabaseClient sb) => CallService._(sb);
+
+  @visibleForTesting
+  static void overrideInstance(CallService s) => instance = s;
+
+  @visibleForTesting
+  static void restoreInstance() => instance = CallService._();
+
+  SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
   final Map<String, RealtimeChannel> _signalChannels = {};
   final Map<String, StreamController<Map<String, dynamic>>> _signalStreams = {};
   final Set<String> _signalBound = {};

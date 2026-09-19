@@ -28,7 +28,11 @@ const List<Map<String, String>> roomCategories = [
 ];
 
 class RoomService {
-  final SupabaseClient _sb = SupabaseConfig.client;
+  /// Client opsional (LAZY) — test menyuntik client palsu.
+  final SupabaseClient? _injected;
+  RoomService([SupabaseClient? sb]) : _injected = sb;
+
+  SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
 
   // Sudah di-seed per negara dalam satu sesi app (session-lifetime).
   // Menghindari upsert berulang tiap kali room list dibuka.

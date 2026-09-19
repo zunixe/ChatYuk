@@ -1,0 +1,125 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:chatyuk/services/chat_service.dart';
+import 'package:chatyuk/utils/mention.dart';
+
+import 'supabase_test_client.dart';
+
+/// Test I/O service dengan `SupabaseClient` asli + HTTP palsu: membuktikan
+/// payload yang dikirim `ChatService` ke PostgREST benar (tanpa jaringan).
+void main() {
+  group('sendRoomMessage (I/O palsu)', () {
+    test('teks: insert ke tabel messages + kolom wajib', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/messages', (_) => []);
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      await svc.sendRoomMessage(
+        roomId: 'r1',
+        senderId: 'u1',
+        senderName: 'Budi',
+        senderGender: 'male',
+        text: 'halo dunia',
+      );
+
+      final insert = handler.captured.firstWhere(
+        (r) => r.method == 'POST' && r.url.path.contains('/rest/v1/messages'),
+      );
+      final body = jsonDecode(insert.body) as Map<String, dynamic>;
+      expect(body['room_id'], 'r1');
+      expect(body['sender_id'], 'u1');
+      expect(body['text'], 'halo dunia');
+      expect(body['type'], 'text');
+      // Tanpa mention → kolom mentions tidak dikirim.
+      expect(body.containsKey('mentions'), isFalse);
+    });
+
+    test('mention: kolom mentions terkirim', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/messages', (_) => []);
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      await svc.sendRoomMessage(
+        roomId: 'r1',
+        senderId: 'u1',
+        senderName: 'Budi',
+        senderGender: 'male',
+        text: 'hai @Sari',
+        mentions: const [Mention(uid: 'u-sari', name: 'Sari')],
+      );
+
+      final insert = handler.captured.firstWhere(
+        (r) => r.method == 'POST' && r.url.path.contains('/rest/v1/messages'),
+      );
+      final body = jsonDecode(insert.body) as Map<String, dynamic>;
+      expect(body['mentions'], [
+        {'uid': 'u-sari', 'name': 'Sari'},
+      ]);
+    });
+
+    test('tipe tidak valid → throw sebelum kirim', () async {
+      final handler = FakeSupabaseHandler();
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      await expectLater(
+        svc.sendRoomMessage(
+          roomId: 'r1',
+          senderId: 'u1',
+          senderName: 'Budi',
+          senderGender: 'male',
+          text: 'x',
+          type: 'tidak-valid',
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(handler.captured, isEmpty);
+    });
+
+    test('teks kosong → tidak mengirim apa pun', () async {
+      final handler = FakeSupabaseHandler();
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      await svc.sendRoomMessage(
+        roomId: 'r1',
+        senderId: 'u1',
+        senderName: 'Budi',
+        senderGender: 'male',
+        text: '',
+      );
+      expect(handler.captured, isEmpty);
+    });
+  });
+
+  group('deleteRoomMessage (I/O palsu)', () {
+    test('PATCH is_deleted=true ke messages', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/messages', (_) => []);
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      final ok = await svc.deleteRoomMessage('m1');
+
+      expect(ok, isTrue);
+      final patch = handler.captured.firstWhere((r) => r.method == 'PATCH');
+      expect(patch.body, contains('is_deleted'));
+      expect(patch.url.query, contains('id=eq.m1'));
+    });
+  });
+
+  group('editRoomMessage (I/O palsu)', () {
+    test('PATCH text + edited ke messages', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/messages', (_) => []);
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      final ok = await svc.editRoomMessage('m1', 'teks baru');
+
+      expect(ok, isTrue);
+      final patch = handler.captured.firstWhere((r) => r.method == 'PATCH');
+      final body = jsonDecode(patch.body) as Map<String, dynamic>;
+      expect(body['text'], 'teks baru');
+      expect(body['edited'], isTrue);
+    });
+  });
+}

@@ -15,13 +15,26 @@ import '../core/screen_secure_service.dart';
 /// selama app ter-install (beda dengan fcm_token yang bisa di-rotate).
 /// Dipakai admin untuk melacak device mana yang dipakai akun mana.
 class DeviceInfoService {
-  DeviceInfoService._();
-  static final DeviceInfoService instance = DeviceInfoService._();
+  /// Client opsional (LAZY) — test menyuntik client palsu.
+  final SupabaseClient? _injected;
+  DeviceInfoService._([SupabaseClient? sb]) : _injected = sb;
+
+  static DeviceInfoService instance = DeviceInfoService._();
+
+  @visibleForTesting
+  factory DeviceInfoService.forTest(SupabaseClient sb) =>
+      DeviceInfoService._(sb);
+
+  @visibleForTesting
+  static void overrideInstance(DeviceInfoService s) => instance = s;
+
+  @visibleForTesting
+  static void restoreInstance() => instance = DeviceInfoService._();
 
   static const _kInstallId = 'install_id';
   static const _storage = FlutterSecureStorage();
 
-  SupabaseClient get _sb => SupabaseConfig.client;
+  SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
 
   /// ID unik per HP fisik:
   ///  - Android → ANDROID_ID (Settings.Secure) via MethodChannel — unik per

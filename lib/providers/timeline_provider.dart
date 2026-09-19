@@ -89,8 +89,13 @@ class TimelineProvider extends ChangeNotifier {
   }) =>
       _service.createPost(text: text, imagePaths: imagePaths, visibility: visibility);
 
-  TimelineProvider({TimelineService? service})
-      : _service = service ?? TimelineService(Supabase.instance.client) {
+  /// Client Supabase — disuntik supaya test memakai client palsu.
+  final SupabaseClient _sb;
+
+  TimelineProvider({TimelineService? service, SupabaseClient? sb, bool autoInit = true})
+      : _sb = sb ?? Supabase.instance.client,
+        _service = service ?? TimelineService(sb ?? Supabase.instance.client) {
+    if (!autoInit) return;
     _listenRealtime();
     refreshPricing();
     // Disk cache SEMUA scope — cold start tab mana pun tampil instan.
@@ -99,7 +104,7 @@ class TimelineProvider extends ChangeNotifier {
     }
     // Supabase signOut men-teardown semua channel realtime — subscribe
     // ulang saat user baru login supaya live-update timeline tetap jalan.
-    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+    _authSub = _sb.auth.onAuthStateChange.listen((state) {
       if (state.event == AuthChangeEvent.signedIn) {
         _listenRealtime();
         _refreshVisibilitySets();
@@ -224,7 +229,7 @@ class TimelineProvider extends ChangeNotifier {
     // Filter scope: post yang TIDAK visible di scope aktif tidak boleh
     // masuk feed (realtime mengirim SEMUA insert di tabel posts).
     final authorId = row['author_id'];
-    final me = Supabase.instance.client.auth.currentUser?.id;
+    final me = _sb.auth.currentUser?.id;
     if (_scope == 'mine') {
       if (authorId != me) return;
     } else if (_scope == 'following') {
@@ -368,9 +373,9 @@ class TimelineProvider extends ChangeNotifier {
       return; // cache masih segar
     }
     try {
-      final me = Supabase.instance.client.auth.currentUser?.id;
+      final me = _sb.auth.currentUser?.id;
       if (me == null) return;
-      final rows = await Supabase.instance.client
+      final rows = await _sb
           .from('follows')
           .select('followee_id')
           .eq('follower_id', me);
@@ -391,15 +396,15 @@ class TimelineProvider extends ChangeNotifier {
       return; // cache masih segar — jangan query tiap ganti tab
     }
     try {
-      final me = Supabase.instance.client.auth.currentUser?.id;
+      final me = _sb.auth.currentUser?.id;
       if (me == null) return;
-      final subs = await Supabase.instance.client
+      final subs = await _sb
           .from('subscriptions')
           .select('creator_id')
           .eq('subscriber_id', me)
           .gt('expires_at', DateTime.now().toUtc().toIso8601String());
       _subscribedIds = subs.map((r) => '${r['creator_id']}').toSet();
-      final blocks = await Supabase.instance.client
+      final blocks = await _sb
           .from('blocks')
           .select('blocker_id,blocked_id')
           .or('blocker_id.eq.$me,blocked_id.eq.$me');
@@ -514,7 +519,7 @@ class TimelineProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _excludeOwn(
       List<Map<String, dynamic>> posts, String scope) {
     if (scope != 'following') return posts;
-    final me = Supabase.instance.client.auth.currentUser?.id;
+    final me = _sb.auth.currentUser?.id;
     if (me == null) return posts;
     return posts.where((p) => '${p['authorId']}' != me).toList();
   }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
@@ -8,10 +9,26 @@ import 'room_service.dart';
 /// Service private room v2: role, approval queue, live broadcast state,
 /// signaling WebRTC (mesh) via tabel room_signals.
 class PrivateRoomService {
-  PrivateRoomService._();
-  static final PrivateRoomService instance = PrivateRoomService._();
+  final SupabaseClient _sb;
 
-  SupabaseClient get _sb => SupabaseConfig.client;
+  /// Client opsional supaya test menyuntik client palsu. Produksi tetap
+  /// memakai `SupabaseConfig.client` (singleton `instance`).
+  PrivateRoomService._([SupabaseClient? sb]) : _sb = sb ?? SupabaseConfig.client;
+
+  static PrivateRoomService instance = PrivateRoomService._();
+
+  /// Test-only: bangun service dengan client palsu.
+  @visibleForTesting
+  factory PrivateRoomService.forTest(SupabaseClient sb) =>
+      PrivateRoomService._(sb);
+
+  /// Test-only: ganti singleton lalu pulihkan (`restoreInstance`).
+  @visibleForTesting
+  static void overrideInstance(PrivateRoomService s) => instance = s;
+
+  @visibleForTesting
+  static void restoreInstance() => instance = PrivateRoomService._();
+
   String? get uid => _sb.auth.currentUser?.id;
 
   // ── Query ──

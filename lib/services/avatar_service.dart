@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_config.dart';
 import '../utils.dart';
@@ -15,8 +16,23 @@ import 'storage_photo_service.dart';
 /// Setelah download dari network, bytes ditulis ke disk — buka app
 /// berikutnya avatar tampil instan tanpa network (anti-blink).
 class AvatarB64Service {
-  AvatarB64Service._();
-  static final instance = AvatarB64Service._();
+  /// Client opsional (LAZY) — test menyuntik client palsu.
+  final SupabaseClient? _injected;
+  AvatarB64Service._([SupabaseClient? sb]) : _injected = sb;
+
+  static AvatarB64Service instance = AvatarB64Service._();
+
+  @visibleForTesting
+  factory AvatarB64Service.forTest(SupabaseClient sb) =>
+      AvatarB64Service._(sb);
+
+  @visibleForTesting
+  static void overrideInstance(AvatarB64Service s) => instance = s;
+
+  @visibleForTesting
+  static void restoreInstance() => instance = AvatarB64Service._();
+
+  SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
 
   final Map<String, String> _cache = {};
   final Map<String, String> _pathCache = {};
@@ -61,7 +77,7 @@ class AvatarB64Service {
     if (_inflight.contains(uid)) return '';
     _inflight.add(uid);
     try {
-      final res = await SupabaseConfig.client
+      final res = await _sb
           .from('profiles')
           .select('avatar')
           .eq('id', uid)
@@ -97,7 +113,7 @@ class AvatarB64Service {
     if (_inflight.contains(uid)) return;
     _inflight.add(uid);
     try {
-      final res = await SupabaseConfig.client
+      final res = await _sb
           .from('profiles')
           .select('avatar')
           .eq('id', uid)
@@ -163,7 +179,7 @@ class AvatarB64Service {
         }
       }
       if (missing.isEmpty) return;
-      final res = await SupabaseConfig.client
+      final res = await _sb
           .from('profiles')
           .select('id,avatar')
           .inFilter('id', missing);
