@@ -1225,13 +1225,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   void _scrollToBottom() {
+    // Instan (acuan private): dulu room animateTo 250ms — scroll panjang
+    // saat buka chat terasa "meluncur". Sama seperti private = jumpTo(0).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
-        _scrollCtrl.animateTo(
-          0,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
-        );
+        _scrollCtrl.jumpTo(0);
       }
     });
   }
