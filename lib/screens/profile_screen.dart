@@ -2118,16 +2118,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'online':
-        return const Color(0xFF69F0AE);
-      case 'idle':
-        return const Color(0xFFFFD740);
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _statusColor(String status) => AppTheme.statusColor(status);
 
   String _statusLabel(String status, S s) {
     switch (status) {

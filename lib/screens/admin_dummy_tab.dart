@@ -585,12 +585,9 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     }
   }
 
-  Color _statusColor(String status) => switch (status) {
-    'online' => Color(0xFF2E7D32),
-    'idle' => Color(0xFFF9A825),
-    'invisible' => Color(0xFF7E57C2),
-    _ => AppTheme.textSecondary,
-  };
+  // Warna status dgn tambahan 'invisible' (khas admin — bukan status app).
+  Color _statusColor(String status) =>
+      status == 'invisible' ? const Color(0xFF7E57C2) : AppTheme.statusColor(status);
 
   String _genderLabel(S s, String? gender) =>
       gender == 'female' ? s.labelGenderFemale : s.labelGenderMale;

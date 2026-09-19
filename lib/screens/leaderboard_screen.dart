@@ -296,7 +296,7 @@ class _AvatarState extends State<_Avatar> {
     if (widget.base64.isEmpty || _bytes == null) {
       return CircleAvatar(
         radius: 18,
-        backgroundColor: AppTheme.accent.withValues(alpha: 0.2),
+        backgroundColor: AppTheme.avatarBg,
         child: Text(
           initial,
           style: const TextStyle(

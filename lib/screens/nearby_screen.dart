@@ -497,11 +497,7 @@ class _NearbyCard extends StatelessWidget {
   final VoidCallback onTap;
   const _NearbyCard({required this.data, required this.onTap});
 
-  Color _statusColor(String status) {
-    if (status == 'idle') return AppTheme.idle;
-    if (status == 'offline') return AppTheme.offline;
-    return AppTheme.online;
-  }
+  Color _statusColor(String status) => AppTheme.statusColor(status);
 
   String _distanceLabel(dynamic s, double km) {
     if (km < 1) return s.nearbyDistanceM((km * 1000).round());

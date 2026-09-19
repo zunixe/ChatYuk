@@ -560,11 +560,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         : status == 'idle'
         ? s.statusIdle
         : s.statusOffline;
-    final statusColor = status == 'online'
-        ? AppTheme.online
-        : status == 'idle'
-        ? AppTheme.idle
-        : AppTheme.textSecondary;
+    final statusColor = AppTheme.statusColor(status);
 
     return Scaffold(
       appBar: AppBar(
