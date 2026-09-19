@@ -41,6 +41,7 @@ import '../utils.dart';
 import '../mixins/chat_selection_mixin.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../mixins/chat_photo_send_mixin.dart';
+import '../mixins/chat_send_mixin.dart';
 import '../mixins/voice_recorder_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
 
@@ -74,7 +75,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         ChatOutboxMixin<PrivateChatScreen>,
         ChatSelectionMixin<PrivateChatScreen>,
         VoiceRecorderMixin<PrivateChatScreen>,
-        ChatPhotoSendMixin<PrivateChatScreen> {
+        ChatPhotoSendMixin<PrivateChatScreen>,
+        ChatSendMixin<PrivateChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _inputFocus = FocusNode();
@@ -131,15 +133,22 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     required String senderId,
     required String senderName,
     required String senderGender,
+    String text = '',
+    String? repliedToId,
+    String? repliedToText,
+    String? repliedToSenderName,
   }) async {
     await context.read<ChatProvider>().sendPrivateMessage(
       chatId: widget.chatId,
       senderId: senderId,
       senderName: senderName,
       senderGender: senderGender,
-      text: '',
+      text: text,
       type: type,
       imageData: imageData,
+      repliedToId: repliedToId,
+      repliedToText: repliedToText,
+      repliedToSenderName: repliedToSenderName,
     );
   }
 
@@ -173,6 +182,81 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       _inputFocus.requestFocus();
     });
     _scrollToBottom();
+  }
+
+  // ── Kontrak ChatSendMixin ──
+  @override
+  TextEditingController get sendMsgCtrl => _msgCtrl;
+
+  @override
+  bool get sendIsSending => _isSending;
+
+  @override
+  set sendIsSending(bool v) => _isSending = v;
+
+  @override
+  MessageModel? get sendEditingMessage => editingMessage;
+
+  @override
+  set sendEditingMessage(MessageModel? v) => editingMessage = v;
+
+  @override
+  MessageModel? get sendReplyingTo => replyingTo;
+
+  @override
+  set sendReplyingTo(MessageModel? v) => replyingTo = v;
+
+  @override
+  String? get sendPendingPhotoBase64 => _pendingPhotoBase64;
+
+  @override
+  set sendPendingPhotoBase64(String? v) => _pendingPhotoBase64 = v;
+
+  @override
+  List<Mention> sendMentionCandidates() => _mentionCandidates;
+
+  @override
+  Future<bool> sendPreCheck() async {
+    if (context.read<ChatProvider>().isBlocked(widget.otherUid)) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.msgBlocked)));
+      }
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  Future<void> sendEditPersist(MessageModel editing, String raw) async {
+    await ChatService().editPrivateMessage(editing.id, raw);
+  }
+
+  @override
+  Future<void> sendDispatchText({
+    required String text,
+    required MessageModel? reply,
+    required List<Mention> mentions,
+  }) async {
+    await context.read<ChatProvider>().sendPrivateMessage(
+      chatId: widget.chatId,
+      senderId: context.read<AuthProvider>().uid!,
+      senderName: context.read<AuthProvider>().profile!.nickname,
+      senderGender: context.read<AuthProvider>().profile!.gender,
+      text: text,
+      repliedToId: reply?.id,
+      repliedToText: reply?.text,
+      repliedToSenderName: reply?.senderName,
+      mentions: mentions,
+    );
+  }
+
+  @override
+  void sendOnSentText() {
+    _maybeNewChatBonus();
+    _schedulePendingConfirmFallback();
   }
 
   late Stream<List<MessageModel>> _msgsStream;
@@ -792,297 +876,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       ? const []
       : [Mention(uid: widget.otherUid, name: widget.otherName)];
 
-  List<Mention> _computeMentions(String text) =>
-      parseMentions(text, candidates: _mentionCandidates);
-
-  Future<void> _send() async {
-    final raw = _msgCtrl.text.trim();
-    // Kapitalkan huruf pertama saat kirim PESAN BARU (gaya WhatsApp).
-    // Mode edit pakai teks asli (user sengaja mengubah).
-    final text = capitalizeFirst(raw);
-    final hasPhoto = _pendingPhotoBase64 != null;
-    if (text.isEmpty && !hasPhoto) return;
-    if (_isSending) return;
-
-    // Soft gate anon: fitur anon OFF → tawarkan daftar, jangan kirim.
-    if (context.read<AuthProvider>().anonBlocked) {
-      if (!mounted) return;
-      showAnonPromptDialog(context);
-      return;
-    }
-
-    // Mode edit: kirim langsung mengubah pesan lama (bukan pesan baru).
-    if (editingMessage != null) {
-      final id = editingMessage!.id;
-      final original = editingMessage!.text;
-      _msgCtrl.clear();
-      setState(() => editingMessage = null);
-      if (raw != original) {
-        await ChatService().editPrivateMessage(id, raw);
-      }
-      return;
-    }
-
-    // Jika ada foto preview → kirim foto (+ opsional teks caption).
-    // Offline: bubble tetap tampil (centang-1) + antre, terkirim otomatis
-    // saat koneksi pulih.
-    if (hasPhoto) {
-      final photoB64 = _pendingPhotoBase64!;
-      _msgCtrl.clear();
-      setState(() => _pendingPhotoBase64 = null);
-
-      final auth = context.read<AuthProvider>();
-      final chat = context.read<ChatProvider>();
-      final uid = auth.uid;
-      final profile = auth.profile;
-      if (uid == null || profile == null) {
-        return;
-      }
-      final pendingPhoto = MessageModel(
-        id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        isRegistered: profile.isRegistered,
-        text: text,
-        type: 'image',
-        imageData: photoB64,
-        timestamp: DateTime.now(),
-      );
-      setState(() => _pending.add(pendingPhoto));
-      _scrollToBottom();
-      if (!outboxIsOnline) {
-        await queueOffline(
-          pending: pendingPhoto,
-          pointsKind: 'image',
-          pointsDeducted: false,
-          imagePayload: photoB64,
-          needsUpload: true,
-          uploadKind: 'image',
-        );
-        return;
-      }
-      _isSending = true;
-
-      final ppPhoto = context.read<PointsProvider>();
-      final rPhoto = await ppPhoto.deductBeforeSend('image');
-      if (rPhoto < 0) {
-        setState(() => _pending.remove(pendingPhoto));
-        _isSending = false;
-        if (!mounted) return;
-        if (rPhoto == -1) {
-          ppPhoto.showOutOfPointsDialog(context, context.read<LocaleProvider>().s.isId);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
-          );
-        }
-        return;
-      }
-
-      String? uploadedPath;
-      try {
-        final path = await StoragePhotoService.instance.upload(
-          chatId: widget.chatId,
-          base64: photoB64,
-        );
-        if (path == null || path.isEmpty) {
-          if (!outboxIsOnline) throw const SocketException('photo upload failed');
-          safeUnawaited(ppPhoto.refundChatPoint('image'));
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)),
-            );
-            setState(() => _pending.removeWhere((m) => m.id == pendingPhoto.id));
-          }
-          return;
-        }
-        uploadedPath = path;
-        await chat.sendPrivateMessage(
-          chatId: widget.chatId,
-          senderId: uid,
-          senderName: profile.nickname,
-          senderGender: profile.gender,
-          text: text,
-          type: 'image',
-          imageData: path,
-        );
-        _maybeNewChatBonus();
-        _schedulePendingConfirmFallback();
-        if (ppPhoto.enabled) {
-          ppPhoto.oneTimeBonus('first_photo', 10).then((earned) {
-            if (earned && mounted) {
-              ppPhoto.showPointsToast(
-                context,
-                context.read<LocaleProvider>().s.pointsGain(
-                  10,
-                  context.read<LocaleProvider>().s.reasonFirstPhoto,
-                ),
-              );
-            }
-          });
-        }
-        _scrollToBottom();
-      } catch (e) {
-        if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
-          // Upload/kirim gagal karena jaringan → antrekan (poin sudah
-          // dipotong, jangan refund — dipakai saat flush).
-          await queueOffline(
-            pending: pendingPhoto,
-            pointsKind: 'image',
-            pointsDeducted: true,
-            imagePayload: uploadedPath ?? photoB64,
-            needsUpload: uploadedPath == null,
-            uploadKind: 'image',
-          );
-        } else {
-          safeUnawaited(ppPhoto.refundChatPoint('image'));
-          if (mounted) {
-            setState(() => _pending.remove(pendingPhoto));
-            final s = context.read<LocaleProvider>().s;
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
-          }
-        }
-      } finally {
-        await Future.delayed(const Duration(milliseconds: 300));
-        _isSending = false;
-      }
-      return;
-    }
-
-    _msgCtrl.clear();
-    _isSending = true;
-
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
-    if (chat.isBlocked(widget.otherUid)) {
-      _isSending = false;
-      final s = context.read<LocaleProvider>().s;
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.msgBlocked)));
-      return;
-    }
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) {
-      _isSending = false;
-      return;
-    }
-
-    // Optimistic SEBELUM deduct: bubble langsung muncul instan tanpa
-    // menunggu round-trip RPC potong poin (yang bisa 1-2 detik di
-    // jaringan lambat). Gagal deduct → bubble dihapus lagi.
-    // Offline: bubble TETAP tampil (centang-1) + masuk antrean, otomatis
-    // terkirim saat koneksi pulih (centang-2, biru bila dibaca).
-    final reply = replyingTo;
-    final mentions = _computeMentions(text);
-    final pending = MessageModel(
-      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
-      senderId: uid,
-      senderName: profile.nickname,
-      senderGender: profile.gender,
-      isRegistered: profile.isRegistered,
-      text: text,
-      type: 'text',
-      imageData: '',
-      timestamp: DateTime.now(),
-      repliedToId: reply?.id,
-      repliedToText: reply?.text,
-      repliedToSenderName: reply?.senderName,
-      mentions: mentions,
-    );
-    setState(() {
-      _pending.add(pending);
-      replyingTo = null;
-    });
-    _scrollToBottom();
-
-    // Tanpa koneksi: antrekan dulu (poin dipotong saat benar-benar terkirim).
-    if (!outboxIsOnline) {
-      await queueOffline(
-        pending: pending,
-        pointsKind: 'text',
-        pointsDeducted: false,
-        repliedToId: reply?.id,
-        repliedToText: reply?.text,
-        repliedToSenderName: reply?.senderName,
-        mentions: mentions,
-      );
-      _isSending = false;
-      return;
-    }
-
-    // Deduct poin sebelum kirim
-    final pp = context.read<PointsProvider>();
-    final remaining = await pp.deductBeforeSend('text');
-    if (remaining < 0) {
-      setState(() => _pending.remove(pending));
-      _isSending = false;
-      if (!mounted) return;
-      final ss = context.read<LocaleProvider>().s;
-      if (remaining == -1) {
-        pp.showOutOfPointsDialog(context, ss.isId);
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(ss.errSendFailed)));
-      }
-      return;
-    }
-
-    try {
-      await chat.sendPrivateMessage(
-        chatId: widget.chatId,
-        senderId: uid,
-        senderName: profile.nickname,
-        senderGender: profile.gender,
-        text: text,
-        repliedToId: reply?.id,
-        repliedToText: reply?.text,
-        repliedToSenderName: reply?.senderName,
-        mentions: mentions,
-      );
-      _maybeNewChatBonus();
-      _schedulePendingConfirmFallback();
-    } catch (e) {
-      dlog('[send] gagal chat=${widget.chatId}: $e');
-      if (OfflineOutbox.isNetworkError(e)) {
-        // Jaringan putus di tengah kirim → antrekan (poin sudah dipotong,
-        // jangan refund — dipakai saat flush).
-        await queueOffline(
-          pending: pending,
-          pointsKind: 'text',
-          pointsDeducted: true,
-          repliedToId: reply?.id,
-          repliedToText: reply?.text,
-          repliedToSenderName: reply?.senderName,
-          mentions: mentions,
-        );
-      } else {
-        // Kirim gagal → kembalikan koin yang sudah terpotong.
-        safeUnawaited(pp.refundChatPoint('text'));
-        if (mounted) {
-          setState(() => _pending.remove(pending));
-          final s = context.read<LocaleProvider>().s;
-          final isBlockedByOther =
-              e.toString().contains('42501') ||
-              e.toString().toLowerCase().contains('insufficient_privilege') ||
-              e.toString().toLowerCase().contains('policy');
-          // Jangan expose detail error teknis ke user
-          final msg = isBlockedByOther ? s.msgBlockedByOther : s.errSendFailed;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(msg)));
-        }
-      }
-    } finally {
-      await Future.delayed(const Duration(milliseconds: 300));
-      _isSending = false;
-    }
-    _scrollToBottom();
-  }
+  
 
   /// Jaring pengaman konfirmasi pending: kalau 3 detik setelah insert sukses
   /// bubble masih belum terkonfirmasi (event Realtime miss / channel drop),
@@ -2227,7 +2021,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                               ),
                                               textInputAction:
                                                   TextInputAction.newline,
-                                              onSubmitted: (_) => _send(),
+                                              onSubmitted: (_) => sendMessage(),
                                               onChanged: (_) => _sendTypingSignal(),
                                               minLines: 1,
                                               maxLines: 4,
@@ -2306,7 +2100,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                               // instan, ala WA.
                                               onTapDown: (_) => HapticFeedback
                                                   .lightImpact(),
-                                              onTap: _send,
+                                              onTap: sendMessage,
                                               child: Container(
                                                 width: 40,
                                                 height: 40,
