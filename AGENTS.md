@@ -505,6 +505,22 @@ Catatan:
     Android `com.chatyuk.chatyuk` → **SHA certificate hashes** (bersama Web
     client `599111437536-hg56...` sebagai serverClientId). Kalau keystore baru,
     daftarkan SHA barunya sebelum upload/rilis.
+  - **SHA Play App Signing (PENTING untuk build `play`/AAB):** AAB yang
+    di-upload ke Play **ditandatangani ULANG oleh Google** — SHA-nya BUKAN
+    keystore upload kita. Kalau SHA Play ini tidak terdaftar di Firebase
+    project `chatyuk-7c9e4` untuk paket `com.chatyuk.chatyuk`, Google Sign-In
+    **gagal di versi Play** walau build `apkpure` (upload key) jalan normal.
+    - SHA-1 Play App Signing: `7A:19:AF:A5:22:11:E9:AA:61:F5:8E:16:54:28:04:E8:32:EE:3C:B1`
+    - SHA-256: `9778574b360e91f03c7e53b4a14dfdf4112d3b9a6c0b07d69886da60ac0d56ce`
+    - Cara dapat: install app dari **Play** di HP → `adb pull` `base.apk` →
+      `apksigner verify --print-certs base.apk | grep SHA-1`. Atau Play Console
+      → Rilis → Penyiapan → Penandatanganan aplikasi → sertifikat penandatanganan aplikasi.
+    - Daftarkan SHA-1 + SHA-256 ini di Firebase Console (project 7c9e4) →
+      Android `com.chatyuk.chatyuk` → SHA certificate hashes.
+  - **`google-services.json` flavor `play` WAJIB project `chatyuk-7c9e4`**
+    (BUKAN project lama `chatyuk-8470e`). Pernah salah pakai 8470e →
+    `google_app_id` di AAB = 990163663226 → Sign-In Play gagal. Cek:
+    `bash scripts/check_google_signin.sh` (menolak project selain 7c9e4).
   - Kalau SHA & client sudah benar tapi device tetap `"10, null, null"`:
     cache Google Play Services di HP basi → hapus data Google Play Services
     (Setelan → Aplikasi → Google Play Services → Hapus data) lalu reboot HP.
