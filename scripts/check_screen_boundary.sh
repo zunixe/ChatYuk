@@ -21,5 +21,18 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
+# Core = helper murni (non-I/O bisnis): DILARANG import services/.
+# Ketergantungan network/Storage di-inject dari luar (lihat main.dart).
+core_hits=$(grep -rn "import '\(\.\./\)\+services/" lib/core --include='*.dart' || true)
+
+if [ -n "$core_hits" ]; then
+  echo "DITOLAK: core/ dilarang import services/ (helper murni saja)."
+  echo "$core_hits" | head -20
+  echo
+  echo "Perbaikan: inject dependensi dari luar (mis. PostPhotoCache.downloader)"
+  echo "yang di-wire di lib/main.dart, atau pindahkan file ke lib/services/."
+  exit 1
+fi
+
 # Cari import core/<sub>/ yang tidak lewat prefix core (defensif).
-echo "OK: 0 screen import services/ (boundary layar bersih)."
+echo "OK: 0 screen & 0 core import services/ (boundary bersih)."

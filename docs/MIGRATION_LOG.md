@@ -3,6 +3,33 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-21 — INSIDEN: semua pendaftaran gagal (`42501 permission denied for table profiles`)
+
+**Gejala:** login/register anon, Google, & email semuanya gagal; Auth sign-in
+sendiri sukses (token terbit) tapi `registerProfile()` ditolak server.
+
+**Akar:** `20260915120000_security_hardening.sql` mencabut SELECT level-tabel
+`public.profiles` dan hanya memberi grant kolom publik — **tanpa**
+`email, ip_address, fcm_token, lat, lon`. PostgREST `upsert`
+(`ON CONFLICT DO UPDATE`) butuh SELECT pada KOLOM YANG DITULIS, sehingga upsert
+yang menyertakan kolom sensitif → `42501`. Ini pola regresi yang sama dengan
+insiden `20260812200000` (direvert oleh `20260812230000`).
+
+**Keputusan:** perbaiki di **KLIEN**, bukan melonggarkan grant (hardening tetap
+utuh — kolom sensitif tidak bisa di-SELECT publik):
+- `auth_service_profile.dart` `registerProfile()`: upsert **kolom publik saja**
+  + `update()` terpisah untuk `fcm_token`/`email`/`ip_address` (UPDATE tidak
+  butuh SELECT kolom tsb; RLS `profiles_update_own` tetap berlaku).
+- `auth_service_auth.dart` `linkGoogleProfile()`: idem (upsert `old` publik,
+  email via UPDATE terpisah).
+
+**Tidak ada migrasi DB** (murni klien). Verifikasi HTTP live: anon + email
+register → upsert 201/200, update sensitif 204 (sebelumnya 403).
+
+**Pelajaran:** setiap kali `grant select (kolom...)` dipersempit di `profiles`,
+WAJIB cek jalur `upsert` klien — upsert butuh SELECT semua kolom yang ditulis.
+Lihat `lib/services/auth_service_profile.dart` (komentar guard).
+
 ## 2026-09-21 — Fitur mention `@` (`20260921120000_mentions.sql`)
 
 Apply via Management API + recorded. **Tidak menyentuh fungsi FROZEN**;

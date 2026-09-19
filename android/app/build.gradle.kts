@@ -70,6 +70,13 @@ android {
                 "proguard-rules.pro"
             )
         }
+        // Build diagnosis: profile mode = `dlog` AKTIF (kProfileMode) tapi
+        // tetap di-sign keystore RELEASE supaya bisa menimpa install rilis
+        // (signature harus sama). BuildType `profile` sudah ada bawaan AGP —
+        // cukup konfigurasi signing-nya (jangan `create` lagi).
+        getByName("profile") {
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     // Flavor distribusi: apkpure (default) vs play (Google Play).

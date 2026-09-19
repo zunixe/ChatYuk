@@ -37,10 +37,11 @@ import 'utils.dart';
 import 'core/cache/message_cache.dart';
 import 'core/cache/media_disk_cache.dart';
 import 'core/cache/photo_cache.dart';
-import 'services/post_photo_cache.dart';
+import 'core/cache/post_photo_cache.dart';
 import 'core/media/chat_background.dart';
 import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';
+import 'services/storage_photo_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final LocaleProvider localeProvider = LocaleProvider();
@@ -1485,6 +1486,8 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   unawaited(AdminGate.postInit?.call());
   // Meta App Events (FB Ads): no-op selama App ID belum diisi.
   unawaited(MetaAnalytics.init());
+  // Wiring downloader foto post (core/ tidak boleh import services/).
+  PostPhotoCache.downloader = StoragePhotoService.instance.downloadBytes;
   unawaited(MessageCache.instance.clearLegacyV1Only());
   unawaited(PhotoCache.instance.cleanOldPhotos());
   unawaited(PostPhotoCache.instance.cleanOldPhotos());

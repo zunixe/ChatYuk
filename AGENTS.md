@@ -243,6 +243,9 @@ Jangan balik: room yang menyesuaikan, bukan private.**
    Butuh yang sama di dua screen? Pakai modul itu — JANGAN copy-paste.
 3. **BOUNDARY TEGAK — screen DILARANG import `services/` (0, tanpa pengecualian).**
    Semua I/O bisnis lewat `lib/providers/`. Helper murni ada di `lib/core/`.
+   **`lib/core/` juga DILARANG import `services/`** — kalau butuh I/O,
+   inject dari luar (mis. `PostPhotoCache.downloader` di-wire di
+   `lib/main.dart`) atau pindahkan file ke `lib/services/`.
    Gate: `bash scripts/check_screen_boundary.sh` (jalan di CI). Kalau butuh
    service baru di screen: tambah method passthrough di provider terkait,
    atau (helper murni) taruh di `lib/core/`.
