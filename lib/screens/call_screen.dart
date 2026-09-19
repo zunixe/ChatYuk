@@ -8,8 +8,6 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
-import '../services/call_service.dart';
-import '../services/call_notification.dart';
 import '../core/perf/perf_probe.dart';
 import '../utils.dart';
 import '../widgets/profile_avatar.dart';
@@ -104,7 +102,7 @@ class _CallScreenState extends State<CallScreen> {
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     if (_ownsSession) {
       unawaited(
-        CallNotification.showActive(
+        context.read<CallProvider>().notifShowActive(
           body: widget.callType == 'video'
               ? s.callNotifActiveVideo
               : s.callNotifActiveAudio,
@@ -128,7 +126,7 @@ class _CallScreenState extends State<CallScreen> {
     _elapsed.dispose();
     if (_ownsSession) {
       unawaited(_session.close());
-      unawaited(CallNotification.cancel());
+      unawaited(context.read<CallProvider>().notifCancel());
       CallProvider.instance.unregisterCall(widget.callId);
     }
     super.dispose();
@@ -138,7 +136,7 @@ class _CallScreenState extends State<CallScreen> {
     if (!mounted) return;
     setState(() {});
     if (_session.phase == CallPhase.ended) {
-      unawaited(CallNotification.cancel());
+      unawaited(context.read<CallProvider>().notifCancel());
     }
     if (_session.phase == CallPhase.ended && _autoClose == null) {
       _autoClose = Timer(const Duration(milliseconds: 2200), () {

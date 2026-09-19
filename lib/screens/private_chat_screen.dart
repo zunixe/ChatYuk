@@ -21,7 +21,6 @@ import '../services/chat_service.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/media/chat_background.dart';
-import '../services/call_service.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
 import '../utils/mention.dart';
@@ -1933,7 +1932,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       return;
     }
     try {
-      final callId = await CallService.instance.startCall(
+      final callId = await context.read<CallProvider>().startCall(
         widget.otherUid,
         callType,
       );

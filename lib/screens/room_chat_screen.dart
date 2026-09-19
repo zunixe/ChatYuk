@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:provider/provider.dart';
+import '../providers/call_provider.dart';
 import '../providers/message_reaction_provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/notification_prefs_provider.dart';
@@ -43,7 +44,6 @@ import '../config/gifts.dart';
 import 'private_chat_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
-import '../services/call_notification.dart';
 import 'package:flutter/services.dart';
 import '../widgets/message_reaction_bar.dart';
 import '../mixins/chat_selection_mixin.dart';
@@ -721,7 +721,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       roomId: widget.room.id,
       isBroadcaster: true,
       onEnded: () {
-        CallNotification.stopLive();
+        context.read<CallProvider>().notifStopLive();
         if (mounted) {
           setState(() {
             _broadcastSession = null;
@@ -735,7 +735,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       await session.start();
       if (!mounted) return;
       // Foreground service: broadcast tetap hidup saat app di-background
-      CallNotification.startLive(
+      context.read<CallProvider>().notifStartLive(
           text: context.read<LocaleProvider>().s.broadcastLiveNotif);
     } catch (e) {
       if (!mounted) return;
@@ -753,7 +753,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       roomId: widget.room.id,
       isBroadcaster: false,
       onEnded: () {
-        CallNotification.stopLive();
+        context.read<CallProvider>().notifStopLive();
         if (mounted) {
           setState(() => _broadcastSession = null);
         }
@@ -763,7 +763,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     await session.start();
     if (!mounted) return;
     // Foreground service: menonton broadcast tetap hidup di background
-    CallNotification.startLive(
+    context.read<CallProvider>().notifStartLive(
         text: context.read<LocaleProvider>().s.broadcastWatchingNotif);
     await session.requestStream();
     if (mounted) setState(() {});
