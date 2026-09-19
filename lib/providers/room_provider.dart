@@ -57,6 +57,52 @@ class RoomProvider extends ChangeNotifier {
   List<RoomModel> get myGroups => _myGroups;
   bool get myGroupsLoading => _myGroupsLoading;
 
+
+  // ── Passthrough (Fase 9b) — screen tidak import services/ ──
+  final PrivateRoomService _prv = PrivateRoomService.instance;
+  String? get prvUid => _prv.uid;
+  Future<String?> myRole(String roomId) => _prv.myRole(roomId);
+  Future<List<Map<String, dynamic>>> listMembers(String roomId) =>
+      _prv.listMembers(roomId);
+  Future<List<Map<String, dynamic>>> listMyRooms() => _prv.listMyRooms();
+  Future<List<Map<String, dynamic>>> listJoinRequests(String roomId) =>
+      _prv.listJoinRequests(roomId);
+  Future<void> invite(String roomId, String uid) => _prv.invite(roomId, uid);
+  Future<void> approveJoin(String roomId, String uid) =>
+      _prv.approveJoin(roomId, uid);
+  Future<void> rejectJoin(String roomId, String uid) =>
+      _prv.rejectJoin(roomId, uid);
+  Future<void> kick(String roomId, String uid) => _prv.kick(roomId, uid);
+  Future<void> setRole(String roomId, String uid, String role) =>
+      _prv.setRole(roomId, uid, role);
+  Future<void> leavePrivate(String roomId) => _prv.leave(roomId);
+  Future<void> rotateToken(String roomId) => _prv.rotateToken(roomId);
+  Future<void> grantBroadcast(String roomId, String uid) =>
+      _prv.grantBroadcast(roomId, uid);
+  Future<void> revokeBroadcast(String roomId, String uid) =>
+      _prv.revokeBroadcast(roomId, uid);
+  Future<bool> myBroadcastGranted(String roomId) =>
+      _prv.myBroadcastGranted(roomId);
+  Future<int> broadcastCount(String roomId) => _prv.broadcastCount(roomId);
+  Future<void> startBroadcast(String roomId) => _prv.startBroadcast(roomId);
+  Future<void> stopBroadcast(String roomId) => _prv.stopBroadcast(roomId);
+  Future<void> sendSignal(
+    String roomId, {
+    required String type,
+    String? toUid,
+    Map<String, dynamic> payload = const {},
+  }) =>
+      _prv.sendSignal(roomId, type: type, toUid: toUid, payload: payload);
+
+  Future<Set<String>> fetchMyMemberships(String uid) =>
+      _service.fetchMyMemberships(uid);
+  Future<List<Map<String, dynamic>>> fetchRoomsByIds(List<String> ids) =>
+      _service.fetchRoomsByIds(ids);
+  Future<Map<String, dynamic>?> fetchRoomById(String id) =>
+      _service.fetchRoomById(id);
+  Future<Map<String, dynamic>> resetRoomPassword(String id, String? pass) =>
+      _service.resetRoomPassword(id, pass);
+
   Future<void> loadMyGroups({bool refresh = false}) async {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return;

@@ -9,10 +9,9 @@ import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/room_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/private_room_service.dart';
-import '../services/room_service.dart';
 import 'room_chat_screen.dart';
 
 /// Daftar private room milik/diikuti + buat room baru (QR join).
@@ -25,7 +24,7 @@ class PrivateRoomsScreen extends StatefulWidget {
 }
 
 class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
-  final _prv = PrivateRoomService.instance;
+  RoomProvider get _prv => context.read<RoomProvider>();
   List<Map<String, dynamic>> _myRooms = [];
   bool _loading = true;
   Timer? _poll;
@@ -47,7 +46,7 @@ class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
 
   Future<void> _load() async {
     try {
-      final uid = _prv.uid;
+      final uid = _prv.prvUid;
       if (uid == null) return;
       // Batch: 1 RPC ganti N+1 fetchRoomById
       try {
@@ -61,10 +60,10 @@ class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
       } catch (_) {
         // fallback ke jalur lama
       }
-      final rows = await RoomService().fetchMyMemberships(uid);
+      final rows = await context.read<RoomProvider>().fetchMyMemberships(uid);
       final ids = rows.where((rid) => rid.startsWith('pr_')).toList();
       // Batch 1 query ganti N+1 fetchRoomById per room.
-      final all = await RoomService().fetchRoomsByIds(ids);
+      final all = await context.read<RoomProvider>().fetchRoomsByIds(ids);
       if (!mounted) return;
       setState(() {
         _myRooms = all;
@@ -272,12 +271,9 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
     if (name.length < 3 || mounted == false) return;
     setState(() => _creating = true);
     try {
-      final myCountry =
-          context.read<AuthProvider>().profile?.country ?? 'Indonesia';
-      final res = await RoomService().createPrivateRoom(
+      final res = await context.read<RoomProvider>().createPrivateRoom(
         name: name,
         icon: _icon,
-        country: myCountry,
       );
       if (!mounted) return;
       setState(() {
@@ -297,10 +293,10 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
 
   Future<void> _rotateToken() async {
     if (_createdId == null) return;
-    await PrivateRoomService.instance.rotateToken(_createdId!);
+    await context.read<RoomProvider>().rotateToken(_createdId!);
     // Refresh token dari server.
     try {
-      final row = await RoomService().fetchRoomById(_createdId!);
+      final row = await context.read<RoomProvider>().fetchRoomById(_createdId!);
       if (mounted && row != null) {
         setState(() => _joinToken = '${row['join_token'] ?? ''}');
       }
@@ -428,7 +424,7 @@ class _CreatePrivateRoomScreenState extends State<CreatePrivateRoomScreen> {
             label: Text(s.privateRoomsEnterRoom),
             onPressed: () async {
               // Buka chat room mode private.
-              final room = await RoomService().fetchRoomById(_createdId!);
+              final room = await context.read<RoomProvider>().fetchRoomById(_createdId!);
               if (!mounted) return;
               if (room != null) {
                 Navigator.of(context).pushReplacement(
@@ -481,7 +477,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
     // Validasi token vs rooms.join_token.
     try {
-      final row = await RoomService().fetchRoomById(roomId);
+      final row = await context.read<RoomProvider>().fetchRoomById(roomId);
       final serverToken = '${row?['join_token'] ?? ''}';
       if (serverToken.isEmpty || token != serverToken) {
         if (mounted) {
@@ -490,10 +486,10 @@ class _QrScanScreenState extends State<QrScanScreen> {
         return;
       }
       // Rotasi otomatis setelah dipakai — QR sekali pakai per share.
-      await PrivateRoomService.instance.rotateToken(roomId);
+      await context.read<RoomProvider>().rotateToken(roomId);
 
       final res =
-          await RoomService().joinPrivateRoom(roomId);
+          await context.read<RoomProvider>().joinPrivateRoom(roomId);
       final pending = res['pending'] == true;
       if (!mounted) return;
       final s = context.read<LocaleProvider>().s;

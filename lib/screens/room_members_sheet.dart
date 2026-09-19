@@ -5,10 +5,9 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../providers/chat_provider.dart';
+import '../providers/room_provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../services/room_service.dart';
-import '../services/private_room_service.dart';
 
 /// Bottom sheet anggota private room: role, kick, jadikan admin,
 /// izinkan broadcast, dan antrean approval (untuk admin).
@@ -49,13 +48,13 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
 
   Future<void> _load() async {
     try {
-      final members = await PrivateRoomService.instance.listMembers(widget.roomId);
+      final members = await context.read<RoomProvider>().listMembers(widget.roomId);
       final pending = canModerate
-          ? await PrivateRoomService.instance
+          ? await context.read<RoomProvider>()
               .listJoinRequests(widget.roomId)
               .then((rows) => rows) // RPC guard admin di server
           : <Map<String, dynamic>>[];
-      final room = await RoomService().fetchRoomById(widget.roomId);
+      final room = await context.read<RoomProvider>().fetchRoomById(widget.roomId);
       if (!mounted) return;
       setState(() {
         _members = members;
@@ -90,7 +89,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
   Future<void> _resetPw(bool remove) async {
     setState(() => _pwSaving = true);
     try {
-      await RoomService().resetRoomPassword(widget.roomId, remove ? null : _pwCtrl.text.trim());
+      await context.read<RoomProvider>().resetRoomPassword(widget.roomId, remove ? null : _pwCtrl.text.trim());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.msgPasswordReset)));
       _pwCtrl.clear();
@@ -142,7 +141,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
     );
   }
 
-  Future<void> _showQrDialog(BuildContext context) async {    final row = await RoomService().fetchRoomById(widget.roomId);
+  Future<void> _showQrDialog(BuildContext context) async {    final row = await context.read<RoomProvider>().fetchRoomById(widget.roomId);
     final token = '${row?['join_token'] ?? ''}';
     if (!context.mounted) return;
     await showDialog(
@@ -270,7 +269,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                               icon: Icon(Icons.check_circle_rounded,
                                   color: Colors.green, size: 20),
                               onPressed: () => _act(() =>
-                                  PrivateRoomService.instance.approveJoin(
+                                  context.read<RoomProvider>().approveJoin(
                                       widget.roomId, '${p['user_id']}')),
                             ),
                             IconButton(
@@ -278,7 +277,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
                               icon: Icon(Icons.cancel_rounded,
                                   color: AppTheme.danger, size: 20),
                               onPressed: () => _act(() =>
-                                  PrivateRoomService.instance.rejectJoin(
+                                  context.read<RoomProvider>().rejectJoin(
                                       widget.roomId, '${p['user_id']}')),
                             ),
                           ],
@@ -399,7 +398,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
 
   Widget? _memberActions(Map<String, dynamic> m) {
     final uid = '${m['user_id'] ?? ''}';
-    final myUid = PrivateRoomService.instance.uid;
+    final myUid = context.read<RoomProvider>().prvUid;
     final role = '${m['role'] ?? 'member'}';
 
     if (uid == myUid || uid.isEmpty) return null;
@@ -436,23 +435,23 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
       onSelected: (v) {
         switch (v) {
           case 'promote':
-            _act(() => PrivateRoomService.instance.setRole(
+            _act(() => context.read<RoomProvider>().setRole(
                 widget.roomId, uid, role == 'admin' ? 'member' : 'admin'));
             break;
           case 'kick':
             _confirm(
               s.roomKickConfirmTitle,
               s.roomKickConfirmBody,
-              () => PrivateRoomService.instance.kick(widget.roomId, uid),
+              () => context.read<RoomProvider>().kick(widget.roomId, uid),
             );
             break;
           case 'broadcast':
             final isCurrentlyGranted = uid == _liveUid || '${m['broadcast_granted']}' == 'true';
             _act(() async {
               if (isCurrentlyGranted) {
-                await PrivateRoomService.instance.revokeBroadcast(widget.roomId, uid);
+                await context.read<RoomProvider>().revokeBroadcast(widget.roomId, uid);
               } else {
-                await PrivateRoomService.instance.grantBroadcast(widget.roomId, uid);
+                await context.read<RoomProvider>().grantBroadcast(widget.roomId, uid);
               }
             });
             break;
@@ -473,7 +472,7 @@ Future<void> showGroupInvitePicker({
   required VoidCallback onInvited,
 }) async {
   final s = context.read<LocaleProvider>().s;
-  final myUid = PrivateRoomService.instance.uid;
+  final myUid = context.read<RoomProvider>().prvUid;
   await showModalBottomSheet(
     context: context,
     backgroundColor: AppTheme.bgCard,
@@ -565,7 +564,7 @@ Future<void> showGroupInvitePicker({
                         final targetName = people[i]['name']!;
                         Navigator.pop(ctx);
                         try {
-                          await PrivateRoomService.instance
+                          await context.read<RoomProvider>()
                               .invite(roomId, targetUid);
                           onInvited();
                           if (!context.mounted) return;

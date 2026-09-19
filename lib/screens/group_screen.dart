@@ -7,7 +7,6 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/room_provider.dart';
-import '../services/private_room_service.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/room_icon.dart';
@@ -60,7 +59,7 @@ class _GroupListState extends State<_GroupList> {
   }
 
   List<RoomModel> _visibleGroups(RoomProvider rp) {
-    final myUid = PrivateRoomService.instance.uid ?? '';
+    final myUid = context.read<RoomProvider>().prvUid ?? '';
     final now = DateTime.now();
     return rp.myGroups.where((m) {
       final expired = m.expiresAt != null && m.expiresAt!.isBefore(now);

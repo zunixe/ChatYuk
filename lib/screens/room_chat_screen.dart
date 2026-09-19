@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:provider/provider.dart';
 import '../providers/message_reaction_provider.dart';
+import '../providers/room_provider.dart';
 import '../providers/notification_prefs_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
@@ -22,10 +23,8 @@ import '../services/chat_service.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
-import '../services/room_service.dart';
 import '../utils.dart';
 import '../main.dart';
-import '../services/private_room_service.dart';
 import '../services/room_broadcast_service.dart';
 import 'room_members_sheet.dart';
 import 'group_info_screen.dart';
@@ -182,7 +181,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     // Private room: cek role SEBELUM kirim — komposer interaktif sejak
     // awal (tanpa gerbang loading). Bukan member → snackbar ajak join.
     if (isPrivateRoom && !_roleChecked) {
-      _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
+      _myRole = await context.read<RoomProvider>().myRole(widget.room.id);
       _roleChecked = true;
       if (!mounted) return false;
       setState(() {});
@@ -423,7 +422,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     setState(() => _broadcastStarting = true);
     try {
       if (_liveUid != _auth.uid) {
-        await PrivateRoomService.instance.startBroadcast(widget.room.id);
+        await context.read<RoomProvider>().startBroadcast(widget.room.id);
         await _refreshLiveUid();
       }
       await _startBroadcastSession();
@@ -435,16 +434,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   Future<void> _initPrivate() async {
     dlog('[BDBG] initPrivate start room=${widget.room.id} uid=${_auth.uid}');
     try {
-      _myRole = await PrivateRoomService.instance.myRole(widget.room.id);
+      _myRole = await context.read<RoomProvider>().myRole(widget.room.id);
       dlog('[BDBG] myRole=$_myRole isPrivate=${widget.room.isPrivate}');
       // Anggota untuk kandidat mention grup (termasuk yang offline).
       try {
         _roomMembers =
-            await PrivateRoomService.instance.listMembers(widget.room.id);
+            await context.read<RoomProvider>().listMembers(widget.room.id);
       } catch (_) {}
       if (canModerate) {
         try {
-          final req = await PrivateRoomService.instance
+          final req = await context.read<RoomProvider>()
               .listJoinRequests(widget.room.id);
           _pendingCount = req.length;
         } catch (_) {}
@@ -454,7 +453,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         _muted = await context.read<NotificationPrefsProvider>().isChatMuted(widget.room.id);
       } catch (_) {}
       try {
-        final granted = await PrivateRoomService.instance.myBroadcastGranted(widget.room.id);
+        final granted = await context.read<RoomProvider>().myBroadcastGranted(widget.room.id);
         _isGrantedBroadcast = granted || _liveUid == _auth.uid;
         dlog('[BDBG] init granted=$_isGrantedBroadcast live=$_liveUid');
       } catch (e) {
@@ -514,7 +513,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   Future<void> _refreshGrant() async {
     try {
-      final granted = await PrivateRoomService.instance.myBroadcastGranted(widget.room.id);
+      final granted = await context.read<RoomProvider>().myBroadcastGranted(widget.room.id);
       final g = granted || _liveUid == _auth.uid;
       dlog('[BDBG] refreshGrant granted=$granted live=$_liveUid uid=${_auth.uid} g=$g');
       if (mounted && g != _isGrantedBroadcast) setState(() => _isGrantedBroadcast = g);
@@ -665,7 +664,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (_liveUid == null || _liveUid == _auth.uid) return;
     if (_broadcastSession != null && !_broadcastSession!.isBroadcaster) return;
     try {
-      final cnt = await PrivateRoomService.instance.broadcastCount(widget.room.id);
+      final cnt = await context.read<RoomProvider>().broadcastCount(widget.room.id);
       if (!mounted) return;
       if (cnt == 0) return;
       unawaited(_startViewerSession());
@@ -673,7 +672,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
   Future<void> _refreshLiveUid() async {
-    final row = await RoomService().fetchRoomById(widget.room.id);
+    final row = await context.read<RoomProvider>().fetchRoomById(widget.room.id);
     final live = row?['live_uid']?.toString();
     dlog('[BDBG] refreshLiveUid fetched=$live current=$_liveUid');
     if (!mounted) return;
@@ -706,7 +705,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   Future<void> _startBroadcastSession() async {
     // cap 4
     try {
-      final cnt = await PrivateRoomService.instance.broadcastCount(widget.room.id);
+      final cnt = await context.read<RoomProvider>().broadcastCount(widget.room.id);
       if (cnt >= 4) {
         if (!mounted) return;
         final s = context.read<LocaleProvider>().s;
@@ -773,7 +772,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   /// Hand raise — kirim signal ke admin.
   Future<void> _raiseHand() async {
-    await PrivateRoomService.instance.sendSignal(
+    await context.read<RoomProvider>().sendSignal(
       widget.room.id,
       type: 'hand_raise',
       payload: {'nickname': _auth.profile?.nickname ?? ''},
@@ -797,7 +796,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           // tanpa ini member lama bisa muncul lagi di picker.
           final memberIds = <String>{};
           try {
-            final members = await PrivateRoomService.instance
+            final members = await context.read<RoomProvider>()
                 .listMembers(widget.room.id);
             for (final m in members) {
               memberIds.add('${m['user_id'] ?? ''}');
@@ -1076,7 +1075,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   Future<void> _exitGroup() async {
     try {
-      await PrivateRoomService.instance.leave(widget.room.id);
+      await context.read<RoomProvider>().leavePrivate(widget.room.id);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
@@ -1089,7 +1088,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   Future<void> _deleteGroup() async {
     try {
-      await RoomService().deleteRoom(widget.room.id);
+      await context.read<RoomProvider>().deleteRoom(widget.room.id);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
@@ -1114,7 +1113,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         onChanged: () async {
           if (canModerate) {
             try {
-              final req = await PrivateRoomService.instance
+              final req = await context.read<RoomProvider>()
                   .listJoinRequests(widget.room.id);
               _pendingCount = req.length;
             } catch (_) {}
@@ -1501,7 +1500,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 tooltip: s.privateRoomsStopBroadcast,
                 icon: Icon(Icons.cancel_rounded, color: AppTheme.danger),
                 onPressed: () async {
-                  await PrivateRoomService.instance.stopBroadcast(widget.room.id);
+                  await context.read<RoomProvider>().stopBroadcast(widget.room.id);
                   await _broadcastSession?.stop();
                   if (mounted) setState(() { _broadcastSession = null; });
                 },
@@ -2539,7 +2538,7 @@ class _BroadcastStage extends StatelessWidget {
                 IconButton.filledTonal(
                   visualDensity: VisualDensity.compact,
                   onPressed: () async {
-                    await PrivateRoomService.instance
+                    await context.read<RoomProvider>()
                         .stopBroadcast(session.roomId);
                     await session.stop();
                   },
