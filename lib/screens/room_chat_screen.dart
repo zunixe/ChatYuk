@@ -61,6 +61,7 @@ import '../widgets/message_reaction_bar.dart';
 import '../widgets/forward_picker_sheet.dart';
 import '../widgets/reaction_detail_sheet.dart';
 import '../widgets/reply_quote.dart';
+import '../mixins/chat_outbox_mixin.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 String? _roomPassthroughImage(Uint8List bytes) {
@@ -91,7 +92,7 @@ class RoomChatScreen extends StatefulWidget {
 }
 
 class _RoomChatScreenState extends State<RoomChatScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, ChatOutboxMixin<RoomChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _imagePicker = ImagePicker();
@@ -266,10 +267,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     // sesi lalu (app sempat ditutup saat offline).
     _connProv = context.read<ConnectivityProvider>();
     _connListener = () {
-      if (mounted && (_connProv?.online ?? false)) _flushOutbox();
+      if (mounted && (_connProv?.online ?? false)) flushOutbox();
     };
     _connProv!.addListener(_connListener!);
-    _loadQueuedForChat();
+    loadQueuedForChat();
   }
 
   // ── Private room v2 ──
@@ -1112,207 +1113,68 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   bool _isSending = false;
 
-  // ── Antrean offline: bubble tetap tampil (centang-1), terkirim otomatis
-  // saat koneksi pulih (centang-2) ──
-  bool get _isOnlineNow => _connProv?.online ?? true;
+  // ── Antrean offline: implementasi BERSAMA di ChatOutboxMixin ──
+  bool get outboxIsOnline => _connProv?.online ?? true;
 
-  /// Muat sisa antrean sesi lalu untuk room ini — bubble langsung tampil lagi.
-  Future<void> _loadQueuedForChat() async {
-    await OfflineOutbox.instance.load();
-    if (!mounted) return;
-    final entries = OfflineOutbox.instance.forChat('room', widget.room.id);
-    if (entries.isEmpty) return;
-    setState(() {
-      for (final e in entries) {
-        if (_pending.any((m) => m.id == e.pendingId)) {
-          _queuedIds.add(e.pendingId);
-          continue;
-        }
-        _pending.add(
-          MessageModel(
-            id: e.pendingId,
-            senderId: e.senderId.isNotEmpty ? e.senderId : (_auth.uid ?? ''),
-            senderName: e.senderName.isNotEmpty
-                ? e.senderName
-                : (_auth.profile?.nickname ?? ''),
-            senderGender: e.senderGender,
-            isRegistered: _auth.profile?.isRegistered ?? false,
-            text: e.text,
-            type: e.type,
-            imageData: e.imagePayload,
-            timestamp: e.createdAt,
-            durationMs: e.durationMs,
-            repliedToId: e.repliedToId,
-            repliedToText: e.repliedToText,
-            repliedToSenderName: e.repliedToSenderName,
-            isForwarded: e.isForwarded,
-            mentions: e.mentions,
-          ),
-        );
-        _queuedIds.add(e.pendingId);
-      }
-    });
-    _scrollToBottom();
-    _flushOutbox();
-  }
+  @override
+  String get outboxKind => 'room';
 
-  /// Simpan bubble pending ke antrean — bubble TETAP di layar (centang-1).
-  Future<void> _queueOffline({
-    required MessageModel pending,
-    required String pointsKind,
-    required bool pointsDeducted,
-    String? imagePayload,
-    bool needsUpload = false,
-    String uploadKind = '',
-    int? durationMs,
-    String? repliedToId,
-    String? repliedToText,
-    String? repliedToSenderName,
-    bool isForwarded = false,
-    List<Mention> mentions = const [],
-  }) async {
-    await OfflineOutbox.instance.enqueue(
-      OutboxEntry(
-        pendingId: pending.id,
-        kind: 'room',
-        chatId: widget.room.id,
-        senderId: pending.senderId,
-        senderName: pending.senderName,
-        senderGender: pending.senderGender,
-        text: pending.text,
-        type: pending.type,
-        imagePayload: imagePayload ?? pending.imageData,
-        needsUpload: needsUpload,
-        uploadKind: uploadKind,
-        durationMs: durationMs ?? pending.durationMs,
-        repliedToId: repliedToId,
-        repliedToText: repliedToText,
-        repliedToSenderName: repliedToSenderName,
-        isForwarded: isForwarded,
-        mentions: mentions,
-        createdAt: pending.timestamp,
-        pointsDeducted: pointsDeducted,
-        pointsKind: pointsKind,
-      ),
-    );
-    if (!mounted) return;
-    setState(() => _queuedIds.add(pending.id));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.read<LocaleProvider>().s.msgQueuedOffline)),
+  @override
+  String get outboxChatId => widget.room.id;
+
+  @override
+  String get outboxUploadChatId => 'room_${widget.room.id}';
+
+  @override
+  List<MessageModel> get outboxPending => _pending;
+
+  @override
+  Set<String> get outboxQueuedIds => _queuedIds;
+
+  @override
+  bool get outboxIsFlushing => _flushingOutbox;
+
+  @override
+  set outboxIsFlushing(bool v) => _flushingOutbox = v;
+
+  @override
+  void outboxScrollToBottom() => _scrollToBottom();
+
+  @override
+  Future<void> outboxSendEntry(OutboxEntry e, String imageData) async {
+    await _chat.sendRoomMessage(
+      roomId: widget.room.id,
+      senderId: e.senderId,
+      senderName: e.senderName,
+      senderGender: e.senderGender,
+      text: e.text,
+      type: e.type,
+      imageData: imageData,
+      durationMs: e.durationMs,
+      repliedToId: e.repliedToId,
+      repliedToText: e.repliedToText,
+      repliedToSenderName: e.repliedToSenderName,
+      isForwarded: e.isForwarded,
+      mentions: e.mentions,
     );
   }
 
-  /// Kirim semua antrean room ini (dipanggil saat koneksi pulih).
-  Future<void> _flushOutbox() async {
-    if (_flushingOutbox || !mounted) return;
-    if (!_isOnlineNow) return;
-    final entries = OfflineOutbox.instance.forChat('room', widget.room.id);
-    if (entries.isEmpty) return;
-    _flushingOutbox = true;
-    try {
-      final uploadChatId = 'room_${widget.room.id}';
-      final pp = context.read<PointsProvider>();
-      var sent = 0;
-      for (final e in entries) {
-        if (!mounted || !_isOnlineNow) break;
-        if (!e.pointsDeducted && e.pointsKind != 'none') {
-          final r = await pp.deductBeforeSend(e.pointsKind);
-          if (r == -1) {
-            await OfflineOutbox.instance.remove(e.pendingId);
-            if (!mounted) break;
-            setState(() {
-              _queuedIds.remove(e.pendingId);
-              _pending.removeWhere((m) => m.id == e.pendingId);
-            });
-            if (mounted) {
-              pp.showOutOfPointsDialog(
-                context,
-                context.read<LocaleProvider>().s.isId,
-              );
-            }
-            continue;
-          }
-          if (r < 0) break; // Error jaringan/transien → coba lagi nanti.
-        }
-        try {
-          var imageData = e.imagePayload;
-          if (e.needsUpload && imageData.isNotEmpty) {
-            if (e.uploadKind == 'voice') {
-              final path = await StoragePhotoService.instance.uploadVoice(
-                chatId: uploadChatId,
-                bytes: base64Decode(imageData),
-              );
-              if (path == null || path.isEmpty) {
-                throw const SocketException('voice upload failed');
-              }
-              imageData = path;
-            } else {
-              final path = await StoragePhotoService.instance.upload(
-                chatId: uploadChatId,
-                base64: imageData,
-              );
-              if (path == null || path.isEmpty) {
-                throw const SocketException('photo upload failed');
-              }
-              imageData = path;
-            }
-          }
-          await _chat.sendRoomMessage(
-            roomId: widget.room.id,
-            senderId: e.senderId,
-            senderName: e.senderName,
-            senderGender: e.senderGender,
-            text: e.text,
-            type: e.type,
-            imageData: imageData,
-            durationMs: e.durationMs,
-            repliedToId: e.repliedToId,
-            repliedToText: e.repliedToText,
-            repliedToSenderName: e.repliedToSenderName,
-            isForwarded: e.isForwarded,
-            mentions: e.mentions,
+  @override
+  void outboxOnSent() {
+    _roomSendCount++;
+    if (_roomSendCount == 5) {
+      _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
+        if (earned && mounted) {
+          final s = context.read<LocaleProvider>().s;
+          _pointsProv?.showPointsToast(
+            context,
+            s.pointsGain(5, s.reasonRoomChat),
           );
-          await OfflineOutbox.instance.remove(e.pendingId);
-          sent++;
-          if (mounted) setState(() => _queuedIds.remove(e.pendingId));
-          _roomSendCount++;
-          if (_roomSendCount == 5) {
-            _pointsProv?.oneTimeBonus('first_room_chat', 5).then((earned) {
-              if (earned && mounted) {
-                final s = context.read<LocaleProvider>().s;
-                _pointsProv?.showPointsToast(
-                  context,
-                  s.pointsGain(5, s.reasonRoomChat),
-                );
-              }
-            });
-          }
-        } catch (err) {
-          if (OfflineOutbox.isNetworkError(err)) break;
-          if (e.pointsDeducted && e.pointsKind != 'none') {
-            safeUnawaited(pp.refundChatPoint(e.pointsKind));
-          }
-          await OfflineOutbox.instance.remove(e.pendingId);
-          if (!mounted) break;
-          setState(() {
-            _queuedIds.remove(e.pendingId);
-            _pending.removeWhere((m) => m.id == e.pendingId);
-          });
         }
-      }
-      if (sent > 0 && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(context.read<LocaleProvider>().s.msgQueueSent(sent)),
-          ),
-        );
-        _scrollToBottom();
-      }
-    } finally {
-      _flushingOutbox = false;
+      });
     }
   }
+
 
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
     final auth = context.read<AuthProvider>();
@@ -1340,7 +1202,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       try {
         await f.delete();
       } catch (_) {}
-      await _queueOffline(
+      await queueOffline(
         pending: optimisticOffline,
         pointsKind: 'none',
         pointsDeducted: true,
@@ -1355,7 +1217,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       final f = File(filePath);
       if (!await f.exists()) return;
       final bytes = await f.readAsBytes();
-      if (!_isOnlineNow) {
+      if (!outboxIsOnline) {
         await queueVoiceOffline(bytes, f);
         return;
       }
@@ -1364,7 +1226,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         bytes: bytes,
       );
       if (storagePath == null || storagePath.isEmpty) {
-        if (!_isOnlineNow) {
+        if (!outboxIsOnline) {
           await queueVoiceOffline(bytes, f);
           return;
         }
@@ -1403,7 +1265,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       _scrollToBottom();
     } catch (e) {
       dlog('[RoomVoice] send error: $e');
-      if (OfflineOutbox.isNetworkError(e) || !_isOnlineNow) {
+      if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
         try {
           final f = File(filePath);
           if (await f.exists()) {
@@ -1849,8 +1711,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       );
       setState(() => _pending.add(pendingPhoto));
       _scrollToBottom();
-      if (!_isOnlineNow) {
-        await _queueOffline(
+      if (!outboxIsOnline) {
+        await queueOffline(
           pending: pendingPhoto,
           pointsKind: 'image',
           pointsDeducted: false,
@@ -1887,7 +1749,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           base64: photoB64,
         );
         if (path == null || path.isEmpty) {
-          if (!_isOnlineNow) throw const SocketException('photo upload failed');
+          if (!outboxIsOnline) throw const SocketException('photo upload failed');
           safeUnawaited(pp.refundChatPoint('image'));
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendPhoto)));
@@ -1911,8 +1773,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         );
         _scrollToBottom();
       } catch (e) {
-        if (OfflineOutbox.isNetworkError(e) || !_isOnlineNow) {
-          await _queueOffline(
+        if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
+          await queueOffline(
             pending: pendingPhoto,
             pointsKind: 'image',
             pointsDeducted: true,
@@ -1963,8 +1825,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     );
     setState(() => _pending.add(pending));
     _scrollToBottom();
-    if (!_isOnlineNow) {
-      await _queueOffline(
+    if (!outboxIsOnline) {
+      await queueOffline(
         pending: pending,
         pointsKind: 'text',
         pointsDeducted: false,
@@ -2025,10 +1887,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
       _scrollToBottom();
     } catch (e) {
-      if (OfflineOutbox.isNetworkError(e) || !_isOnlineNow) {
+      if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
         // Jaringan putus di tengah kirim → antrekan (poin sudah dipotong,
         // jangan refund — dipakai saat flush).
-        await _queueOffline(
+        await queueOffline(
           pending: pending,
           pointsKind: 'text',
           pointsDeducted: true,
