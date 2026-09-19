@@ -140,7 +140,7 @@ class _CallScreenState extends State<CallScreen> {
       unawaited(context.read<CallProvider>().notifCancel());
     }
     if (_session.phase == CallPhase.ended && _autoClose == null) {
-      _autoClose = Timer(const Duration(milliseconds: 1000), () {
+      _autoClose = Timer(const Duration(milliseconds: 400), () {
         if (mounted) Navigator.of(context).pop();
       });
     }
@@ -148,8 +148,14 @@ class _CallScreenState extends State<CallScreen> {
 
   /// Akhiri panggilan: paksa provider bersihkan session (UI pasti tutup)
   /// walau session sudah closed — dulu tombol end kadang tak merespons.
+  /// Layar ditutup SEGERA (jeda 250ms agar animasi tap terlihat), TIDAK
+  /// menunggu cleanup WebRTC yang lambat.
   void _endCall() {
     unawaited(CallProvider.instance.hangup());
+    _autoClose?.cancel();
+    _autoClose = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) Navigator.of(context).pop();
+    });
   }
 
   String _phaseText(S s) {
