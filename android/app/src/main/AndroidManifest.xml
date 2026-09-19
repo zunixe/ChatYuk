@@ -14,6 +14,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- Panggilan sistem (ConnectionService SELF_MANAGED): wajib agar app
+         boleh mendaftarkan panggilan sendiri ke Telecom (UI panggilan di
+         layar kunci/headset/Bluetooth, gaya WhatsApp). -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS"/>
     <!-- Lokasi: hanya FINE supaya dialog izin TIDAK menawarkan opsi
          "kira-kira" (approximate) — user langsung pilih presisi. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -119,6 +123,27 @@
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+        <!-- Panggilan sistem (ConnectionService SELF_MANAGED) — lihat
+             call/CallConnectionService.kt. Media tetap WebRTC di Dart. -->
+        <service
+            android:name=".call.CallConnectionService"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+        <!-- Push FCM saat app MATI: jika type=call → tampilkan panggilan
+             masuk sebagai UI sistem. Extends FlutterFirebaseMessagingService
+             (pola resmi) dan SELALU memanggil super agar notifikasi Dart
+             (chat/mention/dsb) tetap berjalan. -->
+        <service
+            android:name=".call.ChartyukMessagingService"
+            android:exported="false">
+            <intent-filter android:priority="1">
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

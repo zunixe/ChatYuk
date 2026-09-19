@@ -28,6 +28,9 @@ class _FakeCallUi implements CallUi {
   Future<void> dismiss(String callId) async => calls.add('dismiss:$callId');
 
   @override
+  bool get usesSystemUi => false;
+
+  @override
   set onAccept(FutureOr<void> Function(String)? cb) => _accept = cb;
 
   @override

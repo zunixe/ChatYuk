@@ -55,7 +55,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       onDecline: _decline,
     );
     _loadCaller();
-    _startRingtone();
+    // Android ConnectionService memutar ring sendiri (system call UI);
+    // memutar ringtone Dart juga = nada dering dobel.
+    if (!CallProvider.instance.callUi.usesSystemUi) _startRingtone();
     _statusSub = _service.onCallStatus(widget.callId).listen((status) {
       if (status == 'canceled' ||
           status == 'ended' ||
