@@ -3,6 +3,26 @@
 Setiap migrasi yang di-apply atau di-rename WAJIB dicatat di sini supaya AI/dev
 berikutnya tahu. Format: tanggal | versi | aksi | catatan.
 
+## 2026-09-21 — INSIDEN: `delete_my_account` gagal untuk user ber-koin (`20260921160000_delete_my_account_ledger_fix.sql`)
+
+**Gejala:** user dengan riwayat koin menekan "Hapus Akun" → error
+`coin_ledger is append-only`. Terdampak **177 user** (semua yang punya ledger).
+Melanggar syarat Google Play (akun harus bisa dihapus).
+
+**Akar:** `20260911000000_delete_my_account.sql` memanggil
+`delete from public.coin_ledger` tanpa menonaktifkan trigger append-only
+`coin_ledger_no_delete`. Fungsi sah lain (`admin_delete_chat`, hapus dummy,
+purge) memakai `set local session_replication_role = 'replica'` — pola TERLEWAT.
+
+**Fix:** bungkus hapus ledger+dummy-poin dengan toggle `session_replication_role`
+(replica → origin), persis pola `20260815040000_admin_delete_chat_coinledger_fix.sql`.
+Definisi diambil dari LIVE, hanya menambah blok itu.
+
+Verifikasi: `delete_my_account` memuat `session_replication_role` (true);
+simulasi hapus ledger user ber-koin → sukses (sebelumnya DITOLAK); migrasi
+tercatat di `schema_migrations`. `check_migrations --all` hanya FAIL
+pre-existing `ai_reply_enqueue` — bukan dari migrasi ini.
+
 ## 2026-09-21 — INSIDEN: semua pendaftaran gagal (`42501 permission denied for table profiles`)
 
 **Gejala:** login/register anon, Google, & email semuanya gagal; Auth sign-in
