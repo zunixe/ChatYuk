@@ -24,7 +24,13 @@ String? processViewOnceImage((Uint8List, String) args) {
 ///
 /// Kamera mengirim foto besar (10-20MB); tanpa resize penerima gagal decode.
 String? processChatPhoto(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
+  // image 4.x MELEMPAR untuk bytes korup/pendek — jangan biarkan crash.
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
   if (decoded == null) return null;
   final w = decoded.width;
   final h = decoded.height;
@@ -43,7 +49,13 @@ String? processChatPhoto(Uint8List bytes) {
 /// untuk `compute()` isolate. Pindah dari widgets/chat_ui_shared.dart
 /// (Fase 11): helper murni wajib di core/, bukan di folder widgets.
 String? processChatImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
+  // image 4.x MELEMPAR untuk bytes korup/pendek — jangan biarkan crash.
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
   if (decoded == null) return null;
   final w = decoded.width;
   final h = decoded.height;
