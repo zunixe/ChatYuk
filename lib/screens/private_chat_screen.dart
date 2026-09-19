@@ -10,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
@@ -41,10 +42,8 @@ import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../services/message_reaction_service.dart';
-import '../widgets/message_reaction_bar.dart';
-import '../widgets/forward_picker_sheet.dart';
-import '../widgets/reaction_detail_sheet.dart';
 import '../utils.dart';
+import '../mixins/chat_selection_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../services/chat_photo_helper.dart';
 
@@ -74,12 +73,45 @@ class PrivateChatScreen extends StatefulWidget {
 }
 
 class _PrivateChatScreenState extends State<PrivateChatScreen>
-    with ChatOutboxMixin<PrivateChatScreen> {
+    with ChatOutboxMixin<PrivateChatScreen>, ChatSelectionMixin<PrivateChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _imagePicker = ImagePicker();
   final _inputFocus = FocusNode();
   bool _showAttachRow = false;
+
+  // ── Kontrak ChatSelectionMixin ──
+  @override
+  String get chatKind => 'private';
+
+  @override
+  String get chatId => widget.chatId;
+
+  @override
+  AuthProvider get chatAuth => context.read<AuthProvider>();
+
+  @override
+  ChatProvider get chatProvider => context.read<ChatProvider>();
+
+  @override
+  TextEditingController get chatMsgCtrl => _msgCtrl;
+
+  @override
+  void chatFocusComposer() => _inputFocus.requestFocus();
+
+  @override
+  void chatScrollToBottom() => _scrollToBottom();
+
+  @override
+  Future<bool> chatDeleteMessage(String id) =>
+      context.read<ChatProvider>().deletePrivateMessage(id);
+
+  @override
+  String chatDeletedLabel(S s) => s.messageDeleted;
+
+  @override
+  Map<String, String> get chatReactionKnownNames =>
+      {widget.otherUid: widget.otherName};
 
   late Stream<List<MessageModel>> _msgsStream;
   late Stream<List<PrivateChatInfo>> _chatInfoStream;
@@ -137,28 +169,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // LayerLink per pesan — dipakai anchor bar reaksi ala WA tepat di atas
   // bubble. CompositedTransformFollower ikut mengikuti bubble saat list
   // di-scroll, jadi bar reaksi tidak "menempel" di layar.
-  final Map<String, LayerLink> _msgLinks = {};
-  OverlayEntry? _actionBar;
   // Mode seleksi ala WA: tahan pesan → header jadi toolbar
   // (balas/bintang/hapus/teruskan), bar emoji mengambang di atas bubble.
-  final Set<String> _selectedIds = {};
-  final Map<String, MessageModel> _selectedMsgs = {};
-  Map<String, Map<String, int>> _reactions = {};
-  Set<String> _starredIds = {};
   StreamSubscription<Map<String, Map<String, int>>>? _reactionsSub;
   StreamSubscription<Set<String>>? _starredSub;
 
   // Call video dalam chat: overlay panel draggable di atas layar chat.
   bool _callExpanded = false;
 
-  LayerLink _linkFor(String id) {
-    // Cap peta link — tanpa ini tumbuh tanpa batas di sesi panjang
-    // (LayerLink per pesan yang pernah dirender). Evict FIFO.
-    if (_msgLinks.length > 500 && !_msgLinks.containsKey(id)) {
-      _msgLinks.remove(_msgLinks.keys.first);
-    }
-    return _msgLinks.putIfAbsent(id, () => LayerLink());
-  }
   // Foto yang sudah dikonfirmasi server (id pesan server) — dipakai dedupe
   // FIFO karena imageData di stream berupa thumbnail, bukan base64 penuh.
   // Hanya foto dengan timestamp setelah screen dibuka yang diproses, supaya
@@ -319,19 +337,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       MessageReactionService.instance.loadCachedReactions(widget.chatId).then((
         cached,
       ) {
-        if (!mounted || cached.isEmpty || _reactions.isNotEmpty) return;
-        setState(() => _reactions = cached);
+        if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
+        setState(() => reactions = cached);
       });
       _reactionsSub = MessageReactionService.instance
           .watchReactions(widget.chatId)
           .listen((m) {
-        if (mounted) setState(() => _reactions = m);
+        if (mounted) setState(() => reactions = m);
         MessageReactionService.instance.saveCachedReactions(widget.chatId, m);
       });
       _starredSub = MessageReactionService.instance
           .watchStarred(widget.chatId)
           .listen((m) {
-        if (mounted) setState(() => _starredIds = m);
+        if (mounted) setState(() => starredIds = m);
       });
       // Subscribe status realtime lawan bicara
       // Kalau diblokir, tampilkan offline langsung tanpa fetch DB
@@ -369,11 +387,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     };
     _connProv!.addListener(_connListener!);
     loadQueuedForChat();
-  }
-
-  void _hideActionBar() {
-    _actionBar?.remove();
-    _actionBar = null;
   }
 
   /// Baca last-read lawan SECARA SINKRON sebelum frame pertama, dari DUA
@@ -438,7 +451,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
   @override
   void dispose() {
-    _hideActionBar();
+    hideActionBar();
     _reactionsSub?.cancel();
     _starredSub?.cancel();
     ChatTextScale.notifier.removeListener(_onFontScaleChanged);
@@ -628,8 +641,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
   bool _isSending = false;
   Timer? _pendingConfirmTimer;
-  MessageModel? _editingMessage;
-  MessageModel? _replyingTo;
   StreamSubscription<(String, int)>? _typingSub;
   Timer? _typingClearTimer;
   DateTime _lastTypingSent = DateTime(2000);
@@ -746,11 +757,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     }
 
     // Mode edit: kirim langsung mengubah pesan lama (bukan pesan baru).
-    if (_editingMessage != null) {
-      final id = _editingMessage!.id;
-      final original = _editingMessage!.text;
+    if (editingMessage != null) {
+      final id = editingMessage!.id;
+      final original = editingMessage!.text;
       _msgCtrl.clear();
-      setState(() => _editingMessage = null);
+      setState(() => editingMessage = null);
       if (raw != original) {
         await ChatService().editPrivateMessage(id, raw);
       }
@@ -910,7 +921,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     // jaringan lambat). Gagal deduct → bubble dihapus lagi.
     // Offline: bubble TETAP tampil (centang-1) + masuk antrean, otomatis
     // terkirim saat koneksi pulih (centang-2, biru bila dibaca).
-    final reply = _replyingTo;
+    final reply = replyingTo;
     final mentions = _computeMentions(text);
     final pending = MessageModel(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
@@ -929,7 +940,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     );
     setState(() {
       _pending.add(pending);
-      _replyingTo = null;
+      replyingTo = null;
     });
     _scrollToBottom();
 
@@ -1271,378 +1282,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       _isVoicePaused = false;
       _voicePickUp = false;
     });
-  }
-
-  /// Mulai edit pesan teks sendiri — teks dimasukkan ke composer bawah,
-  /// lalu kirim (tombol send) akan langsung mengubah pesan ini, bukan
-  /// membuat pesan baru.
-  void _editMessage(MessageModel msg) {
-    setState(() {
-      _editingMessage = msg;
-      _msgCtrl.text = msg.text;
-      _msgCtrl.selection = TextSelection.collapsed(offset: msg.text.length);
-    });
-    _inputFocus.requestFocus();
-  }
-
-  void _cancelEdit() {
-    setState(() {
-      _editingMessage = null;
-      _msgCtrl.clear();
-    });
-  }
-
-  bool get _inSelection => _selectedIds.isNotEmpty;
-  MessageModel? get _singleSelected =>
-      _selectedIds.length == 1 ? _selectedMsgs[_selectedIds.first] : null;
-
-  void _clearSelection() {
-    _hideActionBar();
-    if (_selectedIds.isEmpty) return;
-    setState(() {
-      _selectedIds.clear();
-      _selectedMsgs.clear();
-    });
-  }
-
-  void _toggleSelect(MessageModel msg) {
-    if (msg.isDeleted || msg.id.startsWith('pending-')) return;
-    setState(() {
-      if (_selectedIds.contains(msg.id)) {
-        _selectedIds.remove(msg.id);
-        _selectedMsgs.remove(msg.id);
-      } else {
-        _selectedIds.add(msg.id);
-        _selectedMsgs[msg.id] = msg;
-      }
-    });
-    _refreshReactionBar(msg);
-  }
-
-  /// Tahan pesan ala WA: header jadi toolbar seleksi + bar emoji mengambang
-  /// di atas bubble. Tap bubble lain = tambah seleksi (multi).
-  void _onMessageLongPress(
-    LongPressStartDetails details,
-    MessageModel msg,
-    LayerLink link,
-  ) {
-    if (msg.isDeleted || msg.id.startsWith('pending-')) return;
-    if (_selectedIds.contains(msg.id)) return;
-    setState(() {
-      _selectedIds.add(msg.id);
-      _selectedMsgs[msg.id] = msg;
-    });
-    _refreshReactionBar(msg);
-  }
-
-  void _refreshReactionBar(MessageModel anchor) {
-    _hideActionBar();
-    // Multi-seleksi: hanya toolbar atas, tanpa bar emoji (sama seperti WA).
-    if (_selectedIds.length != 1) return;
-    final link = _linkFor(anchor.id);
-    _actionBar = OverlayEntry(
-      builder: (_) => Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: _hideActionBar,
-              behavior: HitTestBehavior.translucent,
-              child: const SizedBox.expand(),
-            ),
-          ),
-          CompositedTransformFollower(
-            link: link,
-            showWhenUnlinked: false,
-            targetAnchor: Alignment.topCenter,
-            followerAnchor: Alignment.bottomCenter,
-            offset: const Offset(0, -10),
-            child: ReactionBar(
-              onReact: (emoji) => _reactToSelected(emoji),
-            ),
-          ),
-        ],
-      ),
-    );
-    Overlay.of(context).insert(_actionBar!);
-  }
-
-  Future<void> _reactToSelected(String emoji) async {
-    final msg = _singleSelected;
-    _hideActionBar();
-    if (msg == null) return;
-    final res = await MessageReactionService.instance.toggleReaction(
-      chatType: 'private',
-      chatId: widget.chatId,
-      messageId: msg.id,
-      emoji: emoji,
-    );
-    if (!mounted) return;
-    // Update optimistis: UI langsung benar tanpa menunggu realtime.
-    setState(() {
-      final per = _reactions.putIfAbsent(msg.id, () => {});
-      if (res == ToggleResult.added) {
-        per[emoji] = (per[emoji] ?? 0) + 1;
-      } else {
-        final n = (per[emoji] ?? 1) - 1;
-        if (n <= 0) {
-          per.remove(emoji);
-        } else {
-          per[emoji] = n;
-        }
-        if (per.isEmpty) _reactions.remove(msg.id);
-      }
-    });
-    if (res == ToggleResult.failed && mounted) {
-      final s = context.read<LocaleProvider>().s;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.msgReactionFailed)),
-      );
-    }
-    _clearSelection();
-  }
-
-  Future<void> _starSelected() async {
-    if (_selectedIds.isEmpty) return;
-    var res = ToggleResult.removed;
-    for (final id in _selectedIds) {
-      res = await MessageReactionService.instance.toggleStar(
-        chatType: 'private',
-        chatId: widget.chatId,
-        messageId: id,
-      );
-      if (!mounted) return;
-      // Update optimistis: ikon bintang langsung benar tanpa realtime.
-      setState(() {
-        if (res == ToggleResult.added) {
-          _starredIds.add(id);
-        } else {
-          _starredIds.remove(id);
-        }
-      });
-      if (res == ToggleResult.failed) break;
-    }
-    if (!mounted) return;
-    final s = context.read<LocaleProvider>().s;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          res == ToggleResult.added
-              ? s.msgStarred
-              : res == ToggleResult.removed
-                  ? s.msgUnstarred
-                  : s.msgStarFailed,
-        ),
-      ),
-    );
-    _clearSelection();
-  }
-
-  Future<void> _copySelected() async {
-    final msg = _singleSelected;
-    if (msg == null || msg.text.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: msg.text));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.read<LocaleProvider>().s.msgMessageCopied)),
-    );
-    _clearSelection();
-  }
-
-  Future<void> _deleteSelected() async {
-    if (_selectedIds.isEmpty) return;
-    final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
-    final mine = _selectedMsgs.values
-        .where((m) => m.senderId == auth.uid)
-        .toList();
-    if (mine.isEmpty) {
-      _clearSelection();
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.btnDelete),
-        content: Text(s.confirmDeleteMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s.btnCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s.btnDelete, style: TextStyle(color: AppTheme.danger)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    final chat = context.read<ChatProvider>();
-    for (final m in mine) {
-      await chat.deletePrivateMessage(m.id);
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.messageDeleted)),
-      );
-    }
-    _clearSelection();
-  }
-
-  Future<void> _forwardSelected() async {
-    if (_selectedIds.isEmpty) return;
-    final target = await showForwardSheet(context);
-    if (target == null || !mounted) return;
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
-    final uid = auth.uid;
-    final profile = auth.profile;
-    if (uid == null || profile == null) return;
-    final msgs = _selectedMsgs.values.toList();
-    for (final m in msgs) {
-      if (m.type == 'call' || m.type == 'coin' || m.type == 'gift') continue;
-      try {
-        if (target.chatType == 'private') {
-          await chat.sendPrivateMessage(
-            chatId: target.chatId,
-            senderId: uid,
-            senderName: profile.nickname,
-            senderGender: profile.gender,
-            text: m.text,
-            type: m.type == 'text' ? 'text' : m.type,
-            imageData: m.imageData,
-            durationMs: m.durationMs,
-            isForwarded: true,
-          );
-        } else {
-          await chat.sendRoomMessage(
-            roomId: target.chatId,
-            senderId: uid,
-            senderName: profile.nickname,
-            senderGender: profile.gender,
-            text: m.text,
-            type: m.type == 'text' ? 'text' : m.type,
-            imageData: m.imageData,
-            durationMs: m.durationMs,
-            isForwarded: true,
-          );
-        }
-      } catch (_) {}
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.read<LocaleProvider>().s.msgForwarded)),
-    );
-    _clearSelection();
-  }
-
-  void _openReactionDetail(MessageModel msg) {
-    if (_inSelection) return;
-    final auth = context.read<AuthProvider>();
-    showReactionDetailSheet(
-      context,
-      chatType: 'private',
-      messageId: msg.id,
-      myUid: auth.uid ?? '',
-      myName: auth.profile?.nickname ?? '',
-      knownNames: {widget.otherUid: widget.otherName},
-    );
-  }
-
-  PreferredSizeWidget _buildSelectionAppBar() {
-    final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
-    final single = _singleSelected;
-    final allMine = _selectedMsgs.values.isNotEmpty &&
-        _selectedMsgs.values.every((m) => m.senderId == auth.uid);
-    final singleStarred =
-        single != null && _starredIds.contains(single.id);
-    final canEdit = single != null &&
-        single.senderId == auth.uid &&
-        single.type == 'text' &&
-        !single.id.startsWith('pending-');
-    Widget act(IconData icon, String tip, VoidCallback fn) {
-      return IconButton(
-        icon: Icon(icon, size: 24, color: Colors.white),
-        tooltip: tip,
-        onPressed: fn,
-      );
-    }
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: _clearSelection,
-      ),
-      title: Text(
-        '${_selectedIds.length}',
-        style: AppText.titleEmphasis.copyWith(color: Colors.white),
-      ),
-      actions: [
-        if (single != null) act(Icons.reply, s.menuReply, () {
-          final m = single;
-          _clearSelection();
-          _replyMessage(m);
-        }),
-        if (single != null)
-          act(
-            singleStarred ? Icons.star : Icons.star_outline,
-            singleStarred ? s.menuUnstar : s.menuStar,
-            _starSelected,
-          ),
-        if (allMine) act(Icons.delete_outline, s.btnDelete, _deleteSelected),
-        act(Icons.forward, s.menuForward, _forwardSelected),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: Colors.white),
-          color: AppTheme.bgCard,
-          onSelected: (v) {
-            if (v == 'copy') {
-              _copySelected();
-            } else if (v == 'star') {
-              _starSelected();
-            } else if (v == 'edit' && single != null) {
-              final m = single;
-              _clearSelection();
-              _editMessage(m);
-            }
-          },
-          itemBuilder: (_) => [
-            if (single != null && single.text.isNotEmpty)
-              PopupMenuItem(
-                value: 'copy',
-                child: Text(
-                  s.menuCopy,
-                  style: TextStyle(color: AppTheme.textPrimary),
-                ),
-              ),
-            PopupMenuItem(
-              value: 'star',
-              child: Text(
-                singleStarred ? s.menuUnstar : s.menuStar,
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-            ),
-            if (canEdit)
-              PopupMenuItem(
-                value: 'edit',
-                child: Text(
-                  s.editMessageTitle,
-                  style: TextStyle(color: AppTheme.textPrimary),
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  void _replyMessage(MessageModel msg) {
-    setState(() => _replyingTo = msg);
-    _inputFocus.requestFocus();
-    _scrollToBottom();
-  }
-
-  void _cancelReply() {
-    setState(() => _replyingTo = null);
   }
 
   Future<void> _sendPhoto() async {
@@ -2466,9 +2105,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     final toolbarH = headerRows <= 2 ? 56.0 : 56.0 + (headerRows - 2) * 15.0;
 
     return PopScope(
-      canPop: !_inSelection,
+      canPop: !inSelection,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _inSelection) _clearSelection();
+        if (!didPop && inSelection) clearSelection();
       },
       child: Scaffold(
       extendBody: true,
@@ -2477,7 +2116,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       // (satu halaman tetap). List & composer mengatur inset sendiri
       // via viewInsets/MediaQuery — layout konten tidak meng-krem bg.
       resizeToAvoidBottomInset: false,
-      appBar: _inSelection ? _buildSelectionAppBar() : AppBar(
+      appBar: inSelection ? buildSelectionAppBar() : AppBar(
         toolbarHeight: toolbarH,
         titleSpacing: 0,
         title: Row(
@@ -2902,7 +2541,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                               };
                               return MessageBubble(
                                 key: ValueKey(msg.id),
-                                link: _linkFor(msg.id),
+                                link: linkFor(msg.id),
                                 msg: msg,
                                 chatKey: cacheKeyFor(widget.chatId),
                                 isMe: isMe,
@@ -2911,24 +2550,24 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                 isQueued: _queuedIds.contains(msg.id),
                                 isImageDeferred: isImageDeferred,
                                 onRetryImage: _msgsHandleFetchImage,
-                                onLongPressMenu: _onMessageLongPress,
+                                onLongPressMenu: onMessageLongPress,
                                 // Mode seleksi: tap = tambah/kurangi seleksi.
-                                onTapSelect: _inSelection
-                                    ? () => _toggleSelect(msg)
+                                onTapSelect: inSelection
+                                    ? () => toggleSelect(msg)
                                     : null,
-                                selected: _selectedIds.contains(msg.id),
-                                reactions: _reactions[msg.id],
-                                starred: _starredIds.contains(msg.id),
-                                onTapBadge: _reactions[msg.id]?.isNotEmpty == true
-                                    ? () => _openReactionDetail(msg)
+                                selected: selectedIds.contains(msg.id),
+                                reactions: reactions[msg.id],
+                                starred: starredIds.contains(msg.id),
+                                onTapBadge: reactions[msg.id]?.isNotEmpty == true
+                                    ? () => openReactionDetail(msg)
                                     : null,
                                 // Geser ke kanan = balas. Hanya pesan lawan
                                 // (gaya WhatsApp) — pesan sendiri tidak,
                                 // supaya tidak bentrok dengan swipe-back
                                 // sistem di iOS. Mati saat mode seleksi.
-                                onSwipeReply: _inSelection || isMe || msg.isDeleted
+                                onSwipeReply: inSelection || isMe || msg.isDeleted
                                     ? null
-                                    : () => _replyMessage(msg),
+                                    : () => replyMessage(msg),
                                 deletedIds: deletedIds,
                               );
                             },
@@ -3008,7 +2647,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                               ],
                             ),
                           ),
-                        if (_replyingTo != null)
+                        if (replyingTo != null)
                           Padding(
                             padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
                             child: Row(
@@ -3031,7 +2670,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                         ),
                                       ),
                                       Text(
-                                        _replyingTo!.text,
+                                        replyingTo!.text,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: AppText.chatBodySmall.copyWith(
@@ -3047,14 +2686,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                     size: 18,
                                     color: AppTheme.textSecondary,
                                   ),
-                                  onPressed: _cancelReply,
+                                  onPressed: cancelReply,
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
                                 ),
                               ],
                             ),
                           ),
-                        if (_editingMessage != null)
+                        if (editingMessage != null)
                           Padding(
                             padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
                             child: Row(
@@ -3079,7 +2718,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                     size: 18,
                                     color: AppTheme.textSecondary,
                                   ),
-                                  onPressed: _cancelEdit,
+                                  onPressed: cancelEdit,
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
                                 ),

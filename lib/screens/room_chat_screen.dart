@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
@@ -55,11 +56,10 @@ import '../providers/theme_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import '../services/call_notification.dart';
 import 'package:flutter/services.dart';
-import '../services/message_reaction_service.dart';
 import '../widgets/message_reaction_bar.dart';
-import '../widgets/forward_picker_sheet.dart';
-import '../widgets/reaction_detail_sheet.dart';
+import '../services/message_reaction_service.dart';
 import '../widgets/reply_quote.dart';
+import '../mixins/chat_selection_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
@@ -72,8 +72,43 @@ class RoomChatScreen extends StatefulWidget {
 }
 
 class _RoomChatScreenState extends State<RoomChatScreen>
-    with WidgetsBindingObserver, ChatOutboxMixin<RoomChatScreen> {
+    with
+        WidgetsBindingObserver,
+        ChatOutboxMixin<RoomChatScreen>,
+        ChatSelectionMixin<RoomChatScreen> {
   final _msgCtrl = TextEditingController();
+
+  // ── Kontrak ChatSelectionMixin ──
+  @override
+  String get chatKind => 'room';
+
+  @override
+  String get chatId => widget.room.id;
+
+  @override
+  AuthProvider get chatAuth => _auth;
+
+  @override
+  ChatProvider get chatProvider => _chat;
+
+  @override
+  TextEditingController get chatMsgCtrl => _msgCtrl;
+
+  @override
+  void chatFocusComposer() {}
+
+  @override
+  void chatScrollToBottom() => _scrollToBottom();
+
+  @override
+  Future<bool> chatDeleteMessage(String id) =>
+      _chat.deleteRoomMessage(id);
+
+  @override
+  String chatDeletedLabel(S s) => s.msgDeletedRoom;
+
+  @override
+  Map<String, String> get chatReactionKnownNames => const {};
   final _scrollCtrl = ScrollController();
   final _imagePicker = ImagePicker();
   bool _showUsers = false;
@@ -124,23 +159,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   RoomBroadcastSession? _broadcastSession;
   Timer? _livePoll;
   bool _isGrantedBroadcast = false;
-  final Set<String> _selectedIds = {};
-  final Map<String, MessageModel> _selectedMsgs = {};
-  Map<String, Map<String, int>> _reactions = {};
-  Set<String> _starredIds = {};
   StreamSubscription<Map<String, Map<String, int>>>? _reactionsSub;
   StreamSubscription<Set<String>>? _starredSub;
-  bool get _inSelection => _selectedIds.isNotEmpty;
-  MessageModel? get _singleSelected =>
-      _selectedIds.length == 1 ? _selectedMsgs[_selectedIds.first] : null;
-  void _clearSelection() {
-    _hideActionBar();
-    if (_selectedIds.isEmpty) return;
-    setState(() {
-      _selectedIds.clear();
-      _selectedMsgs.clear();
-    });
-  }
   bool get isPrivateRoom => widget.room.isPrivate == true;
   bool get canModerate =>
       isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
@@ -228,19 +248,19 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       MessageReactionService.instance.loadCachedReactions(widget.room.id).then((
         cached,
       ) {
-        if (!mounted || cached.isEmpty || _reactions.isNotEmpty) return;
-        setState(() => _reactions = cached);
+        if (!mounted || cached.isEmpty || reactions.isNotEmpty) return;
+        setState(() => reactions = cached);
       });
       _reactionsSub = MessageReactionService.instance
           .watchReactions(widget.room.id)
           .listen((m) {
-        if (mounted) setState(() => _reactions = m);
+        if (mounted) setState(() => reactions = m);
         MessageReactionService.instance.saveCachedReactions(widget.room.id, m);
       });
       _starredSub = MessageReactionService.instance
           .watchStarred(widget.room.id)
           .listen((m) {
-        if (mounted) setState(() => _starredIds = m);
+        if (mounted) setState(() => starredIds = m);
       });
     });
     // Antrean offline: koneksi pulih → kirim otomatis; muat sisa antrean
@@ -1033,7 +1053,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   void dispose() {
-    _hideActionBar();
+    hideActionBar();
     _reactionsSub?.cancel();
     _starredSub?.cancel();
     try {
@@ -1263,343 +1283,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     }
   }
 
-  MessageModel? _replyingTo;
-  MessageModel? _editingMessage;
-
-  void _editMessage(MessageModel msg) {
-    setState(() {
-      _editingMessage = msg;
-      _replyingTo = null;
-      _msgCtrl.text = msg.text;
-      _msgCtrl.selection =
-          TextSelection.collapsed(offset: _msgCtrl.text.length);
-    });
-  }
-
-  void _cancelEdit() => setState(() => _editingMessage = null);
-
-  void _replyMessage(MessageModel msg) {
-    setState(() {
-      _replyingTo = msg;
-      _editingMessage = null;
-    });
-  }
-
-  void _cancelReply() => setState(() => _replyingTo = null);
 
   // LayerLink per pesan — anchor action bar (Balas / Hapus) tepat di atas bubble.
-  final Map<String, LayerLink> _msgLinks = {};
-  OverlayEntry? _actionBar;
-
-  LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
-
-  void _hideActionBar() {
-    _actionBar?.remove();
-    _actionBar = null;
-  }
-
-  void _toggleSelect(MessageModel msg) {
-    if (msg.isDeleted || msg.id.startsWith('pending-')) return;
-    setState(() {
-      if (_selectedIds.contains(msg.id)) {
-        _selectedIds.remove(msg.id);
-        _selectedMsgs.remove(msg.id);
-      } else {
-        _selectedIds.add(msg.id);
-        _selectedMsgs[msg.id] = msg;
-      }
-    });
-    _refreshReactionBar(msg);
-  }
-
-  void _onMessageLongPress(
-    LongPressStartDetails details,
-    MessageModel msg,
-    LayerLink link,
-  ) {
-    if (msg.isDeleted || msg.id.startsWith('pending-')) return;
-    if (_selectedIds.contains(msg.id)) return;
-    setState(() {
-      _selectedIds.add(msg.id);
-      _selectedMsgs[msg.id] = msg;
-    });
-    _refreshReactionBar(msg);
-  }
-
-  void _refreshReactionBar(MessageModel anchor) {
-    _hideActionBar();
-    if (_selectedIds.length != 1) return;
-    final link = _linkFor(anchor.id);
-    _actionBar = OverlayEntry(
-      builder: (_) => Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: _hideActionBar,
-              behavior: HitTestBehavior.translucent,
-              child: const SizedBox.expand(),
-            ),
-          ),
-          CompositedTransformFollower(
-            link: link,
-            showWhenUnlinked: false,
-            targetAnchor: Alignment.topCenter,
-            followerAnchor: Alignment.bottomCenter,
-            offset: const Offset(0, -10),
-            child: ReactionBar(
-              onReact: (emoji) => _reactToSelected(emoji),
-            ),
-          ),
-        ],
-      ),
-    );
-    Overlay.of(context).insert(_actionBar!);
-  }
-
-  Future<void> _reactToSelected(String emoji) async {
-    final msg = _singleSelected;
-    _hideActionBar();
-    if (msg == null) return;
-    final res = await MessageReactionService.instance.toggleReaction(
-      chatType: 'room',
-      chatId: widget.room.id,
-      messageId: msg.id,
-      emoji: emoji,
-    );
-    if (!mounted) return;
-    setState(() {
-      final per = _reactions.putIfAbsent(msg.id, () => {});
-      if (res == ToggleResult.added) {
-        per[emoji] = (per[emoji] ?? 0) + 1;
-      } else {
-        final n = (per[emoji] ?? 1) - 1;
-        if (n <= 0) {
-          per.remove(emoji);
-        } else {
-          per[emoji] = n;
-        }
-        if (per.isEmpty) _reactions.remove(msg.id);
-      }
-    });
-    if (res == ToggleResult.failed && mounted) {
-      final s = context.read<LocaleProvider>().s;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.msgReactionFailed)),
-      );
-    }
-    _clearSelection();
-  }
-
-  Future<void> _starSelected() async {
-    if (_selectedIds.isEmpty) return;
-    var res = ToggleResult.removed;
-    for (final id in _selectedIds) {
-      res = await MessageReactionService.instance.toggleStar(
-        chatType: 'room',
-        chatId: widget.room.id,
-        messageId: id,
-      );
-      if (!mounted) return;
-      setState(() {
-        if (res == ToggleResult.added) {
-          _starredIds.add(id);
-        } else {
-          _starredIds.remove(id);
-        }
-      });
-      if (res == ToggleResult.failed) break;
-    }
-    if (!mounted) return;
-    final s = context.read<LocaleProvider>().s;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          res == ToggleResult.added
-              ? s.msgStarred
-              : res == ToggleResult.removed
-                  ? s.msgUnstarred
-                  : s.msgStarFailed,
-        ),
-      ),
-    );
-    _clearSelection();
-  }
-
-  Future<void> _copySelected() async {
-    final msg = _singleSelected;
-    if (msg == null || msg.text.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: msg.text));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.read<LocaleProvider>().s.msgMessageCopied)),
-    );
-    _clearSelection();
-  }
-
-  Future<void> _deleteSelected() async {
-    if (_selectedIds.isEmpty) return;
-    final s = context.read<LocaleProvider>().s;
-    final mine = _selectedMsgs.values
-        .where((m) => m.senderId == _auth.uid)
-        .toList();
-    if (mine.isEmpty) {
-      _clearSelection();
-      return;
-    }
-    final ok = await context.read<ChatProvider>().deleteRoomMessage(mine.first.id);
-    if (mine.length > 1) {
-      for (final m in mine.skip(1)) {
-        await context.read<ChatProvider>().deleteRoomMessage(m.id);
-      }
-    }
-    if (ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.msgDeletedRoom)),
-      );
-    }
-    _clearSelection();
-  }
-
-  Future<void> _forwardSelected() async {
-    if (_selectedIds.isEmpty) return;
-    final target = await showForwardSheet(context);
-    if (target == null || !mounted) return;
-    final uid = _auth.uid;
-    final profile = _auth.profile;
-    if (uid == null || profile == null) return;
-    final msgs = _selectedMsgs.values.toList();
-    for (final m in msgs) {
-      if (m.type == 'call' || m.type == 'coin' || m.type == 'gift') continue;
-      try {
-        if (target.chatType == 'private') {
-          await _chat.sendPrivateMessage(
-            chatId: target.chatId,
-            senderId: uid,
-            senderName: profile.nickname,
-            senderGender: profile.gender,
-            text: m.text,
-            type: m.type == 'text' ? 'text' : m.type,
-            imageData: m.imageData,
-            durationMs: m.durationMs,
-            isForwarded: true,
-          );
-        } else {
-          await _chat.sendRoomMessage(
-            roomId: target.chatId,
-            senderId: uid,
-            senderName: profile.nickname,
-            senderGender: profile.gender,
-            text: m.text,
-            type: m.type == 'text' ? 'text' : m.type,
-            imageData: m.imageData,
-            durationMs: m.durationMs,
-            isForwarded: true,
-          );
-        }
-      } catch (_) {}
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.read<LocaleProvider>().s.msgForwarded)),
-    );
-    _clearSelection();
-  }
-
-  void _openReactionDetail(MessageModel msg) {
-    if (_inSelection) return;
-    showReactionDetailSheet(
-      context,
-      chatType: 'room',
-      messageId: msg.id,
-      myUid: _auth.uid ?? '',
-      myName: _auth.profile?.nickname ?? '',
-    );
-  }
-
-  PreferredSizeWidget _buildSelectionAppBar() {
-    final s = context.read<LocaleProvider>().s;
-    final single = _singleSelected;
-    final allMine = _selectedMsgs.values.isNotEmpty &&
-        _selectedMsgs.values.every((m) => m.senderId == _auth.uid);
-    final singleStarred = single != null && _starredIds.contains(single.id);
-    final canEdit = single != null &&
-        single.senderId == _auth.uid &&
-        single.type == 'text' &&
-        !single.id.startsWith('pending-');
-    Widget act(IconData icon, String tip, VoidCallback fn) {
-      return IconButton(
-        icon: Icon(icon, size: 24, color: Colors.white),
-        tooltip: tip,
-        onPressed: fn,
-      );
-    }
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: _clearSelection,
-      ),
-      title: Text(
-        '${_selectedIds.length}',
-        style: AppText.titleEmphasis.copyWith(color: Colors.white),
-      ),
-      actions: [
-        if (single != null)
-          act(Icons.reply, s.menuReply, () {
-            final m = single;
-            _clearSelection();
-            _replyMessage(m);
-          }),
-        if (single != null)
-          act(
-            singleStarred ? Icons.star : Icons.star_outline,
-            singleStarred ? s.menuUnstar : s.menuStar,
-            _starSelected,
-          ),
-        if (allMine) act(Icons.delete_outline, s.btnDelete, _deleteSelected),
-        act(Icons.forward, s.menuForward, _forwardSelected),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: Colors.white),
-          color: AppTheme.bgCard,
-          onSelected: (v) {
-            if (v == 'copy') {
-              _copySelected();
-            } else if (v == 'star') {
-              _starSelected();
-            } else if (v == 'edit' && single != null) {
-              final m = single;
-              _clearSelection();
-              _editMessage(m);
-            }
-          },
-          itemBuilder: (_) => [
-            if (single != null && single.text.isNotEmpty)
-              PopupMenuItem(
-                value: 'copy',
-                child: Text(
-                  s.menuCopy,
-                  style: TextStyle(color: AppTheme.textPrimary),
-                ),
-              ),
-            PopupMenuItem(
-              value: 'star',
-              child: Text(
-                singleStarred ? s.menuUnstar : s.menuStar,
-                style: TextStyle(color: AppTheme.textPrimary),
-              ),
-            ),
-            if (canEdit)
-              PopupMenuItem(
-                value: 'edit',
-                child: Text(
-                  s.editMessageTitle,
-                  style: TextStyle(color: AppTheme.textPrimary),
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
 
   Future<void> _send() async {
     final raw = _msgCtrl.text.trim();
@@ -1640,14 +1325,14 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (uid == null || profile == null) return;
 
     // Mode edit pesan sendiri (text): simpan perubahan, tanpa koin/kirim baru.
-    final editing = _editingMessage;
+    final editing = editingMessage;
     if (editing != null && !hasPhoto) {
       if (raw.isEmpty || raw == editing.text) {
-        _cancelEdit();
+        cancelEdit();
         return;
       }
       _msgCtrl.clear();
-      setState(() => _editingMessage = null);
+      setState(() => editingMessage = null);
       _isSending = true;
       try {
         final ok = await ChatService().editRoomMessage(editing.id, raw);
@@ -1665,13 +1350,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       return;
     }
 
-    final replying = _replyingTo;
+    final replying = replyingTo;
     if (hasPhoto) {
       final photoB64 = _pendingPhotoBase64!;
       _msgCtrl.clear();
       setState(() {
         _pendingPhotoBase64 = null;
-        _replyingTo = null;
+        replyingTo = null;
       });
 
       // Optimistic dulu: bubble langsung tampil (centang-1) walau offline.
@@ -1781,10 +1466,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       return;
     }
 
-    final reply = _replyingTo;
+    final reply = replyingTo;
     final mentions = _computeMentions(text);
     _msgCtrl.clear();
-    setState(() => _replyingTo = null);
+    setState(() => replyingTo = null);
 
     // Optimistic: bubble langsung tampil (centang-1) walau offline —
     // otomatis terkirim saat koneksi pulih (centang-2).
@@ -2086,13 +1771,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final points = context.watch<PointsProvider>();
 
     return PopScope(
-      canPop: !_inSelection,
+      canPop: !inSelection,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _inSelection) _clearSelection();
+        if (!didPop && inSelection) clearSelection();
       },
       child: Scaffold(
       backgroundColor: AppTheme.bgCard,
-      appBar: _inSelection ? _buildSelectionAppBar() : AppBar(
+      appBar: inSelection ? buildSelectionAppBar() : AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2546,9 +2231,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     final m = item.msg!;
                     final isMe = m.senderId == auth.uid;
                     final mkey = _msgKeys.putIfAbsent(m.id, () => GlobalKey());
-                    final selected = _selectedIds.contains(m.id);
-                    final reacts = _reactions[m.id];
-                    final starred = _starredIds.contains(m.id);
+                    final selected = selectedIds.contains(m.id);
+                    final reacts = reactions[m.id];
+                    final starred = starredIds.contains(m.id);
                     return Container(
                       // Tanpa wash biru selebar baris (sama private chat —
                       // hanya border bubble). Wash tersisa hanya untuk flash
@@ -2557,18 +2242,18 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                           ? AppTheme.primary.withValues(alpha: 0.22)
                           : Colors.transparent,
                       child: CompositedTransformTarget(
-                      link: _linkFor(m.id),
+                      link: linkFor(m.id),
                       // AppGestureDetector: tahan 320ms (bukan 500ms).
                       child: AppGestureDetector(
-                        onLongPressStart: (d) => _onMessageLongPress(d, m, _linkFor(m.id)),
-                        onTap: _inSelection ? () => _toggleSelect(m) : null,
+                        onLongPressStart: (d) => onMessageLongPress(d, m, linkFor(m.id)),
+                        onTap: inSelection ? () => toggleSelect(m) : null,
                         child: SwipeToReply(
                           // Geser kanan = balas (grup & room). Pesan sendiri
                           // dikecualikan agar tidak bentrok swipe-back sistem.
-                          enabled: !_inSelection &&
+                          enabled: !inSelection &&
                               m.senderId != auth.uid &&
                               !m.isDeleted,
-                          onReply: () => _replyMessage(m),
+                          onReply: () => replyMessage(m),
                           child: Column(
                             crossAxisAlignment: isMe
                                 ? CrossAxisAlignment.end
@@ -2646,9 +2331,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                                       child: ReactionBadge(
                                         counts: reacts,
                                         isMe: isMe,
-                                        onTap: _inSelection
+                                        onTap: inSelection
                                             ? null
-                                            : () => _openReactionDetail(m),
+                                            : () => openReactionDetail(m),
                                       ),
                                     ),
                                 ],
@@ -2725,7 +2410,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 ],
               ),
             ),
-          if (_replyingTo != null)
+          if (replyingTo != null)
             Container(
               color: AppTheme.bgCard,
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
@@ -2737,16 +2422,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_replyingTo!.senderName, style: AppText.chatCaption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
-                        Text(_replyingTo!.text.isNotEmpty ? _replyingTo!.text : s.msgPhoto, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.chatBodySmall),
+                        Text(replyingTo!.senderName, style: AppText.chatCaption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
+                        Text(replyingTo!.text.isNotEmpty ? replyingTo!.text : s.msgPhoto, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.chatBodySmall),
                       ],
                     ),
                   ),
-                  IconButton(icon: const Icon(Icons.close, size: 18), onPressed: _cancelReply, color: AppTheme.textSecondary),
+                  IconButton(icon: const Icon(Icons.close, size: 18), onPressed: cancelReply, color: AppTheme.textSecondary),
                 ],
               ),
             ),
-          if (_editingMessage != null)
+          if (editingMessage != null)
             Container(
               color: AppTheme.bgCard,
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
@@ -2766,7 +2451,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 18),
-                    onPressed: _cancelEdit,
+                    onPressed: cancelEdit,
                     color: AppTheme.textSecondary,
                   ),
                 ],
