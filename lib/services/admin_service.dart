@@ -205,16 +205,28 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? {};
   }
 
-  /// Daftar arsip user yang sudah dihapus.
+  /// Daftar arsip user yang sudah dihapus. Bila [includePending] true,
+  /// sertakan juga user ANON yang BELUM dihapus (nickname masih terpakai)
+  /// sebagai item `pending` — admin bisa menghapusnya supaya nickname bebas.
   Future<Map<String, dynamic>> listDeleted({
     int limit = 100,
     int offset = 0,
+    bool includePending = true,
   }) async {
     final res = await _rpc('admin_list_deleted', params: {
       'p_limit': limit,
       'p_offset': offset,
+      'p_include_pending': includePending,
     });
     return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
+  }
+
+  /// Hapus user ANON (belum terdaftar) oleh admin — membebaskan nickname.
+  /// Return `{ok: true, nickname}` atau `{ok: false, error: 'REGISTERED'|
+  /// 'DUMMY'|'NOT_FOUND'}`.
+  Future<Map<String, dynamic>> deleteAnonUser(String uid) async {
+    final res = await _rpc('admin_delete_anon_user', params: {'p_uid': uid});
+    return (res as Map<String, dynamic>?) ?? {'ok': false};
   }
 
   /// Riwayat device milik user yang sudah dihapus (via nickname snapshot).
