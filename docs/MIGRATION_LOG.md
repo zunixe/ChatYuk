@@ -1,5 +1,32 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-21 — Lokasi: GPS dipisah dari IP + history diperbaiki (`20260921200000`)
+
+**Dua bug nyata (terukur di live DB):**
+1. `user_location_history` **0 baris** padahal 66 user ber-`loc_source='gps'`.
+   Sebab: migrasi `20260815150000` membuat OVERLOAD 4-arg `update_my_location`
+   TANPA logika `insert ... history`; client memanggil yang 4-arg → history
+   tidak pernah tercatat.
+2. **GPS tertimpa IP** — saat GPS gagal fix, fallback IP menulis ke
+   `profiles.lat/lon` yang sama → koordinat GPS terakhir hilang.
+
+**Perbaikan:**
+- Kolom terpisah `lat_gps/lon_gps/gps_updated_at` + `lat_ip/lon_ip/ip_updated_at`.
+  IP **tidak menimpa** GPS; `lat/lon/loc_source` (dibaca peta admin &
+  `nearby_users`) = GPS bila ada, else IP → kontrak pembaca tidak berubah.
+- Satu jalur RPC `update_my_location` (overload lama di-DROP) yang SELALU
+  mencatat history untuk gps & ip.
+- Backfill data lama ke kolom sesuai `loc_source`.
+- `admin_location_sources()` untuk ringkasan GPS/IP/history.
+- Client: pencatatan lokasi hanya saat **online** (`_isLocationEligible`) —
+  idle/invisible/dummy/banned tidak menulis → yang tersimpan adalah lokasi
+  terakhir saat benar-benar aktif.
+
+**Verifikasi live:** GPS (-6.2,106.8) lalu IP (-7.9999,110.9999) →
+`lat/lon` tetap GPS, `lat_ip/lon_ip` terisi, history 2 baris (gps+ip).
+
+`nearby_users` FROZEN — tidak disentuh.
+
 ## 2026-09-21 — `install_id` pindah ke MediaDrm (`20260921190000`)
 
 **Alasan:** `install_id` lama (`android-<ANDROID_ID>`) berubah saat signing key
