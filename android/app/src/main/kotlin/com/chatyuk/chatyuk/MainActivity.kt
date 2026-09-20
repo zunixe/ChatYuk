@@ -1,5 +1,6 @@
 package com.chatyuk.chatyuk
 
+import android.media.MediaDrm
 import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
@@ -112,6 +113,15 @@ class MainActivity : FlutterActivity() {
                     ) ?: ""
                     result.success(id)
                 }
+                "deviceUniqueId" -> {
+                    // MediaDrm (Widevine) deviceUniqueId — stabil untuk SATU
+                    // PERANGKAT FISIK tanpa bergantung app-signing key / user
+                    // profile. Menutup celah ANDROID_ID yang berubah saat
+                    // ganti keystore, Dual Apps, atau Second Space.
+                    // Gagal (perangkat tanpa Widevine) → kembalikan "" agar
+                    // Dart memakai fallback ANDROID_ID.
+                    result.success(mediaDrmDeviceId())
+                }
                 else -> result.notImplemented()
             }
         }
@@ -137,6 +147,34 @@ class MainActivity : FlutterActivity() {
         callUiBridge?.detach()
         callUiBridge = null
         super.onDestroy()
+    }
+
+    /**
+     * MediaDrm (Widevine) deviceUniqueId — ID perangkat FISIK.
+     *
+     * Stabil meski app di-reinstall / ganti signing key / dibuka dari user
+     * profile (Second Space, Dual Apps) — inilah yang membedakannya dari
+     * ANDROID_ID yang di-scope ke (device + user + signing key).
+     *
+     * Return "" bila Widevine tidak tersedia (sebagian HP murah) atau gagal
+     * — pemanggil memakai fallback ANDROID_ID.
+     */
+    private fun mediaDrmDeviceId(): String {
+        var drm: MediaDrm? = null
+        return try {
+            val widevine = java.util.UUID(-0x121074568629b532L, -0x5c37d8232ae2de13L)
+            drm = MediaDrm(widevine)
+            val bytes = drm.getPropertyByteArray(MediaDrm.PROPERTY_DEVICE_UNIQUE_ID)
+            // Byte array → hex (stabil & aman disimpan).
+            val hex = StringBuilder(bytes.size * 2)
+            for (b in bytes) hex.append(String.format("%02x", b))
+            hex.toString()
+        } catch (e: Exception) {
+            android.util.Log.w("ChatYukDevice", "mediaDrmDeviceId gagal: $e")
+            ""
+        } finally {
+            try { drm?.close() } catch (_: Exception) {}
+        }
     }
 
     /**

@@ -278,8 +278,12 @@ Jangan balik: room yang menyesuaikan, bukan private.**
 
 ## Exclude Device Admin (WAJIB tahu sebelum mengubah)
 
-**`install_id` = `android-<ANDROID_ID>` — TIDAK STABIL antar build.** Android 8+
-meng-scope `ANDROID_ID` ke **(device + user profile + app signing key)**.
+**`install_id` = `drm-<MediaDrm deviceUniqueId>` (sejak 2026-09-21)** — stabil
+per perangkat FISIK. Fallback `android-<ANDROID_ID>` bila Widevine tidak ada.
+
+RIWAYAT: dulu `install_id` = `android-<ANDROID_ID>` — TIDAK STABIL antar build.
+Android 8+ meng-scope `ANDROID_ID` ke **(device + user profile + app signing
+key)**.
 Satu HP bisa punya >1 install_id (terbukti: `24129PN74G` punya
 `android-2f218335e9fd56d5` DAN `android-e2...`). Efeknya: device yang sudah
 di-exclude **muncul lagi** sebagai device baru — pernah jadi keluhan user.
@@ -295,6 +299,10 @@ Karena itu exclude **wajib berbasis uid**, bukan hanya device:
 - `admin_list_devices` memakai `admin_excluded_uids()` (device + uid manual);
   jangan dikembalikan ke `excluded_devices` saja.
 - `admin_stats_detail` FROZEN — jangan disentuh; filter-nya sudah benar.
+- `upsert_device(p_legacy_install_id)` memigrasi baris device lama
+  (`android-*`) ke identifier baru in-place + membuang duplikat brand+model
+  yang sama → 1 HP fisik tetap 1 baris. Client mengirim `p_legacy_install_id`
+  = ANDROID_ID saat ini (lihat `DeviceInfoService._legacyAndroidId`).
 
 Kalau mengubah fungsi exclude: jalankan
 `select public.admin_list_devices(1000,0)->>'total'` sebelum/sesudah dan

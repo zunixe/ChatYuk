@@ -1,5 +1,24 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-21 — `install_id` pindah ke MediaDrm (`20260921190000`)
+
+**Alasan:** `install_id` lama (`android-<ANDROID_ID>`) berubah saat signing key
+/ user profile berbeda → device yang sama tampil sebagai device baru (device
+ter-exclude "muncul lagi"). MediaDrm (Widevine) `deviceUniqueId` stabil per
+perangkat FISIK: tahan reinstall, ganti keystore, Dual Apps/Second Space.
+
+**Implementasi:**
+- Kotlin `MainActivity.mediaDrmDeviceId()` → method channel `deviceUniqueId`.
+- Dart `ScreenSecureService.deviceUniqueId()`; `DeviceInfoService.installId()`
+  → `drm-<hex>`, fallback `android-<ANDROID_ID>` bila Widevine tak ada.
+- `upsert_device` (9-arg) menerima `p_legacy_install_id`: memigrasi baris lama
+  milik user yang sama **in-place** + membuang duplikat brand+model yang sama.
+  Signature lama (7-arg & 8-arg) di-DROP dulu agar tidak jadi overload.
+
+**Verifikasi live:** HP `24129PN74G` → baris `drm-e21f475d9d83113fb46e08f3547b60c5`
+(1.2.43-admin); baris `android-2f218335e9fd56d5` milik uid yang sama
+**digantikan**, bukan bertambah (tidak ada duplikat).
+
 ## 2026-09-21 — INSIDEN: device ter-exclude "muncul lagi" (`20260921170000` + `20260921180000`)
 
 **Gejala:** admin exclude 1 HP, tapi device yang sama **muncul lagi** di tab
