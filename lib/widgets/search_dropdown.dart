@@ -41,7 +41,8 @@ class SearchDropdown<T> extends StatefulWidget {
   State<SearchDropdown<T>> createState() => _SearchDropdownState<T>();
 }
 
-class _SearchDropdownState<T> extends State<SearchDropdown<T>> {
+class _SearchDropdownState<T> extends State<SearchDropdown<T>>
+    with WidgetsBindingObserver {
   final LayerLink _link = LayerLink();
   final OverlayPortalController _portal = OverlayPortalController();
   final TextEditingController _searchCtrl = TextEditingController();
@@ -50,8 +51,31 @@ class _SearchDropdownState<T> extends State<SearchDropdown<T>> {
   double _fieldLeft = 0;
   String _query = '';
 
+  /// Tinggi keyboard MENTAH. `MediaQuery.of(context).viewInsets.bottom` selalu
+  /// 0 di body Scaffold (di-mask `resizeToAvoidBottomInset`), jadi ambil dari
+  /// platform langsung supaya panel bisa menghindari keyboard.
+  double get _keyboardH => MediaQueryData.fromView(
+        WidgetsBinding.instance.platformDispatcher.views.first,
+      ).viewInsets.bottom;
+
+  @override
+  void initState() {
+    super.initState();
+    // Keyboard buka/tutup TIDAK memicu rebuild `OverlayPortal`
+    // (_OverlayPortalState.didChangeDependencies hanya menyetel flag, tanpa
+    // setState). Tanpa observer ini panel tertinggal di posisi lama dan
+    // tertutup keyboard — akar bug "dropdown ilang saat ketik".
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (_portal.isShowing && mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchCtrl.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -101,9 +125,32 @@ class _SearchDropdownState<T> extends State<SearchDropdown<T>> {
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: (overlayCtx) {
-        final screenW = MediaQuery.of(overlayCtx).size.width;
+        final mq = MediaQuery.of(overlayCtx);
+        final screenW = mq.size.width;
         final availW = screenW - _fieldLeft - 8;
         final panelW = _fieldSize.width.clamp(0.0, availW).toDouble();
+
+        // Panel hidup di Overlay (tidak ikut mengecil saat keyboard naik),
+        // jadi hitung sendiri area yang terlihat dan posisi field TERKINI.
+        final rb = context.findRenderObject() as RenderBox?;
+        double fieldTop = 0, fieldBottom = 0;
+        if (rb != null && rb.hasSize) {
+          fieldTop = rb.localToGlobal(Offset.zero).dy;
+          fieldBottom = fieldTop + rb.size.height;
+        }
+        final visibleBottom = mq.size.height - mq.padding.bottom - _keyboardH;
+        const gap = 4.0;
+        const minUseful = 150.0;
+        const maxPanel = 300.0;
+        final spaceBelow = visibleBottom - fieldBottom - gap;
+        final spaceAbove = fieldTop - mq.padding.top - gap;
+        // Ruang bawah tidak cukup → buka ke ATAS (di atas field, di atas
+        // keyboard). Ini yang membuat dropdown tetap terlihat saat keyboard
+        // terbuka (user: "pas keyboard keatas dropdownnya ga ilang").
+        final openAbove = spaceBelow < minUseful && spaceAbove > spaceBelow;
+        final panelMaxH =
+            (openAbove ? spaceAbove : spaceBelow).clamp(minUseful, maxPanel);
+
         return Stack(
           children: [
             Positioned.fill(
@@ -114,14 +161,17 @@ class _SearchDropdownState<T> extends State<SearchDropdown<T>> {
             ),
             CompositedTransformFollower(
               link: _link,
-              targetAnchor: Alignment.bottomLeft,
-              followerAnchor: Alignment.topLeft,
-              offset: const Offset(0, 4),
+              targetAnchor:
+                  openAbove ? Alignment.topLeft : Alignment.bottomLeft,
+              followerAnchor:
+                  openAbove ? Alignment.bottomLeft : Alignment.topLeft,
+              offset: Offset(0, openAbove ? -gap : gap),
               showWhenUnlinked: false,
               child: Material(
                 color: Colors.transparent,
                 child: Container(
                   width: panelW,
+                  constraints: BoxConstraints(maxHeight: panelMaxH),
                   decoration: BoxDecoration(
                     color: AppTheme.bgCard,
                     borderRadius: BorderRadius.circular(12),

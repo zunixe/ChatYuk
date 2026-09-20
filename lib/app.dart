@@ -665,9 +665,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     final auth = context.watch<AuthProvider>();
     final s = context.read<LocaleProvider>().s;
     // Soft gate anon: banner tipis di atas konten saat fitur anon OFF.
-    // Read tetap jalan (anon masih browsing), tulis dicegat di composer.
     final anonBanner = auth.anonBlocked;
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Column(
         children: [
           // Banner anon: cegah tertutup status bar pada edge-to-edge

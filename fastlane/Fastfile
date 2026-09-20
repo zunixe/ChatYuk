@@ -16,7 +16,7 @@ platform :android do
   # memverifikasi keystore SHA cocok + SEMUA google-services pakai 7c9e4.
   desc "Cek konfigurasi Google Sign-In (keystore + google-services project)"
   lane :check_signin do
-    sh("bash scripts/check_google_signin.sh")
+    sh("test -f scripts/check_google_signin.sh && bash scripts/check_google_signin.sh || bash ../scripts/check_google_signin.sh")
   end
 
   desc "Build AAB flavor play (obfuscated) lalu upload ke track"
