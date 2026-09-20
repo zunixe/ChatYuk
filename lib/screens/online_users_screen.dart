@@ -37,7 +37,6 @@ import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
 import '../providers/story_provider.dart';
 import '../providers/call_provider.dart';
-import '../providers/nav_provider.dart';
 import '../core/perf/perf_probe.dart';
 import '../widgets/app_gesture.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -294,7 +293,6 @@ class OnlineUsersScreen extends StatefulWidget {
 class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     with
         AutomaticKeepAliveClientMixin,
-        SingleTickerProviderStateMixin,
         WidgetsBindingObserver {
   // Multi-select negara: kosong = Semua. Persist via prefs (JSON list).
   List<String> _negaraSel = const [];
@@ -339,9 +337,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     return _ownAvatarBytes;
   }
 
-  late final AnimationController _sharePulse;
-  late final Animation<double> _shareScale;
-
   @override
   bool get wantKeepAlive => true;
 
@@ -376,33 +371,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         context.read<StoryProvider>().refresh(silent: true);
       } catch (_) {}
     });
-    // Pulse tombol share: HANYA berputar saat tab Online terlihat.
-    // Dulu `..repeat()` jalan selamanya — walau tab tersembunyi, vsync
-    // tiap frame tetap diminta → compositor tidak pernah idle → tab lain
-    // terasa berat saat dibuka. Sekarang dipicu/dihentikan oleh NavProvider.
-    _sharePulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
-    _syncSharePulse();
-    context.read<NavProvider>().addListener(_syncSharePulse);
-    _shareScale = Tween<double>(
-      begin: 1.0,
-      end: 1.06,
-    ).animate(CurvedAnimation(parent: _sharePulse, curve: Curves.easeInOut));
     _requestGpsOnce();
   }
 
-  /// Hidupkan/matikan pulse tombol share sesuai tab yang sedang tampil.
-  void _syncSharePulse() {
-    if (!mounted) return;
-    final onTab = context.read<NavProvider>().tab == 0;
-    if (onTab) {
-      if (!_sharePulse.isAnimating) _sharePulse.repeat(reverse: true);
-    } else {
-      if (_sharePulse.isAnimating) _sharePulse.stop();
-    }
-  }
 
   /// Minta izin GPS saat masuk menu pengguna online (dialog native muncul
   /// sekali; kalau ditolak, user tetap bisa aktifkan lewat "bagikan lokasi").
@@ -664,10 +635,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
-    try {
-      context.read<NavProvider>().removeListener(_syncSharePulse);
-    } catch (_) {}
-    _sharePulse.dispose();
     _unreadSub?.cancel();
     super.dispose();
   }
@@ -1167,6 +1134,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     super.build(context);
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
         backgroundColor: AppTheme.bgScreen,
@@ -1572,57 +1540,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               );
             },
           ),
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: ScaleTransition(
-              scale: _shareScale,
-              child: Tooltip(
-                message: s.shareTooltip,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(30),
-                    onTap: _shareApp,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.headerGradient,
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primary.withValues(alpha: 0.35),
-                            blurRadius: 14,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.ios_share,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            s.shareTooltip,
-                            style: AppText.bodyStrong.copyWith(
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -1686,7 +1603,8 @@ class _MultiSelectDropdown extends StatefulWidget {
   State<_MultiSelectDropdown> createState() => _MultiSelectDropdownState();
 }
 
-class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
+class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
+    with WidgetsBindingObserver {
   final LayerLink _link = LayerLink();
   final OverlayPortalController _portal = OverlayPortalController();
   final TextEditingController _searchCtrl = TextEditingController();
@@ -1695,8 +1613,31 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
   Size _fieldSize = Size.zero;
   double _fieldLeft = 0;
 
+  /// Tinggi keyboard MENTAH — `MediaQuery.of(context).viewInsets.bottom`
+  /// selalu 0 di body Scaffold (di-mask `resizeToAvoidBottomInset`).
+  double get _keyboardH => MediaQueryData.fromView(
+        WidgetsBinding.instance.platformDispatcher.views.first,
+      ).viewInsets.bottom;
+
+  @override
+  void initState() {
+    super.initState();
+    // Keyboard buka/tutup TIDAK memicu rebuild OverlayPortal
+    // (_OverlayPortalState.didChangeDependencies hanya set flag, tanpa
+    // setState) → panel tertinggal di posisi lama & tertutup keyboard.
+    // Observer ini yang memaksa panel reposisi. (User: "pas keyboard keatas
+    // dropdownnya ga ilang")
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (_portal.isShowing && mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -1747,8 +1688,7 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
         // Hitung sendiri ruang terlihat + posisi field TERBARU, lalu buka ke
         // ATAS bila ruang bawah tidak layak (bug "pilihan negara ilang saat
         // keyboard naik" di tab Online).
-        final keyboardH = mq.viewInsets.bottom;
-        final visibleBottom = mq.size.height - mq.padding.bottom - keyboardH;
+        final visibleBottom = mq.size.height - mq.padding.bottom - _keyboardH;
         final rb = context.findRenderObject() as RenderBox?;
         double fieldTop = 0, fieldBottom = 0, fieldLeft = _fieldLeft;
         if (rb != null && rb.hasSize) {
@@ -1761,13 +1701,12 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
         final panelW = (_fieldSize.width + 96).clamp(0.0, availW).toDouble();
 
         const gap = 4.0;
-        const minUseful = 160.0;
         const maxPanel = 340.0;
         final spaceBelow = visibleBottom - fieldBottom - gap;
-        final spaceAbove = fieldTop - mq.padding.top - gap;
-        final openAbove = spaceBelow < minUseful && spaceAbove > spaceBelow;
-        final panelMaxH =
-            (openAbove ? spaceAbove : spaceBelow).clamp(minUseful, maxPanel);
+        // Selalu buka ke BAWAH — field negara ada di atas layar, panel
+        // harus menempel di bawah field dan menyesuaikan tinggi terhadap
+        // ruang tersisa (keyboard buka → panel mengecil, bukan pindah).
+        final panelMaxH = spaceBelow.clamp(120.0, maxPanel);
 
         final filtered = [
           for (int i = 0; i < widget.items.length; i++)
@@ -1786,11 +1725,9 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
             ),
             CompositedTransformFollower(
               link: _link,
-              targetAnchor:
-                  openAbove ? Alignment.topLeft : Alignment.bottomLeft,
-              followerAnchor:
-                  openAbove ? Alignment.bottomLeft : Alignment.topLeft,
-              offset: Offset(0, openAbove ? -gap : gap),
+              targetAnchor: Alignment.bottomLeft,
+              followerAnchor: Alignment.topLeft,
+              offset: const Offset(0, gap),
               showWhenUnlinked: false,
               child: Material(
                 color: Colors.transparent,
@@ -1819,7 +1756,7 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
                           height: 40,
                           child: TextField(
                             controller: _searchCtrl,
-                            autofocus: true,
+                            autofocus: false,
                             style: AppText.bodySmall
                                 .copyWith(color: AppTheme.textPrimary),
                             decoration: InputDecoration(
