@@ -381,6 +381,16 @@ class S {
   String get msgUnmuted =>
       isId ? 'Notifikasi chat dinyalakan' : 'Chat notifications unmuted';
   String labelArchived(int n) => isId ? 'Diarsipkan ($n)' : 'Archived ($n)';
+
+  // ── Filter daftar chat (Semua / Belum dibaca / Anon / Terdaftar) ──
+  // `filterAll` sudah ada di atas (dipakai filter lain) — dipakai ulang.
+  String get filterUnread => isId ? 'Belum dibaca' : 'Unread';
+  String get filterAnon => isId ? 'Anon' : 'Anon';
+  String get filterRegistered => isId ? 'Terdaftar' : 'Registered';
+  String filterAllCount(int n) => '$filterAll ($n)';
+  String filterUnreadCount(int n) => '$filterUnread ($n)';
+  String filterAnonCount(int n) => '$filterAnon ($n)';
+  String filterRegisteredCount(int n) => '$filterRegistered ($n)';
   // ── Antrean offline (pesan menunggu koneksi) ──
   String get msgQueuedOffline => isId
       ? 'Disimpan — terkirim otomatis saat online'

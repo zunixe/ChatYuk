@@ -17,6 +17,7 @@ import '../providers/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/app_gesture.dart';
 import '../core/perf/perf_probe.dart';
+import '../core/chat/chat_filter.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
   final bool embedded;
@@ -54,6 +55,15 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   // Tampilan arsip (gaya WhatsApp): list hanya chat terarsip.
   bool _showArchived = false;
   int _archivedCount = 0;
+  /// Filter daftar chat (semua/belum dibaca/anon/terdaftar).
+  ChatFilter _chatFilter = ChatFilter.all;
+  /// Jumlah per filter — disiarkan lewat notifier supaya mengubah filter
+  /// hanya me-rebuild baris chip, bukan seluruh halaman.
+  final ValueNotifier<({int all, int unread, int anon, int registered})>
+      _countsNotifier = ValueNotifier<
+          ({int all, int unread, int anon, int registered})>(
+    (all: 0, unread: 0, anon: 0, registered: 0),
+  );
   List<PrivateChatInfo> _lastFiltered = [];
   List<PrivateChatInfo> _lastChats = [];
 
@@ -219,6 +229,78 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   }
 
   /// Baris "Diarsipkan (n)" — ketuk untuk buka/tutup tampilan arsip.
+  /// Baris chip filter daftar chat. Hanya baris ini yang rebuild saat
+  /// jumlah berubah (ValueListenable) — bukan seluruh halaman.
+  Widget _chatFilterBar(S s) {
+    return ValueListenableBuilder<
+        ({int all, int unread, int anon, int registered})>(
+      valueListenable: _countsNotifier,
+      builder: (_, counts, __) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
+          child: Row(
+            children: [
+              _filterChip(s.filterAllCount(counts.all), ChatFilter.all),
+              const SizedBox(width: 6),
+              _filterChip(
+                s.filterUnreadCount(counts.unread),
+                ChatFilter.unread,
+              ),
+              const SizedBox(width: 6),
+              _filterChip(s.filterAnonCount(counts.anon), ChatFilter.anon),
+              const SizedBox(width: 6),
+              _filterChip(
+                s.filterRegisteredCount(counts.registered),
+                ChatFilter.registered,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _filterChip(String label, ChatFilter value) {
+    final active = _chatFilter == value;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () {
+        if (_chatFilter == value) return;
+        setState(() {
+          _chatFilter = value;
+          _page = 1;
+          _selected.clear();
+        });
+        // Hitung ulang memakai data yang sudah ada (tanpa fetch).
+        _recomputeDirty = true;
+        _recomputeFiltered(
+          myUid: context.read<AuthProvider>().uid ?? '',
+          query: widget.externalQuery ?? _query,
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? AppTheme.primary.withValues(alpha: 0.18)
+              : AppTheme.bgInput,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active
+                ? AppTheme.primary.withValues(alpha: 0.7)
+                : AppTheme.divider,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppText.label.copyWith(
+            color: active ? AppTheme.primary : AppTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _archivedToggle(S s, int archivedCount) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -311,6 +393,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     _pageNotifier.dispose();
     _listNotifier.dispose();
     _archivedNotifier.dispose();
+    _countsNotifier.dispose();
     super.dispose();
   }
 
@@ -369,6 +452,11 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     if (_lastChats.isEmpty) {
       _lastFiltered = const [];
       _archivedCount = 0;
+      if (notify) {
+        _listNotifier.value = const [];
+        _countsNotifier.value =
+            (all: 0, unread: 0, anon: 0, registered: 0);
+      }
       return;
     }
     final live = liveNameMap ?? _statusMap;
@@ -406,12 +494,37 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     // unarchive) → paksa kembali ke list utama agar halaman tak kosong.
     if (_showArchived && _archivedCount == 0) _showArchived = false;
     // Tampilan arsip: hanya chat terarsip. Normal: arsip disembunyikan.
-    _lastFiltered = _showArchived
+    final visible = _showArchived
         ? filtered.where((c) => c.isArchivedFor(myUid)).toList()
         : filtered.where((c) => !c.isArchivedFor(myUid)).toList();
+
+    // Hitung jumlah per filter dari daftar yang SUDAH lolos arsip+query —
+    // supaya angka chip konsisten dengan isi yang benar-benar tampil.
+    int unreadOf(PrivateChatInfo c) => c.unreadCounts[myUid] ?? 0;
+    bool registeredOf(PrivateChatInfo c) {
+      final other = c.participants.firstWhere(
+        (p) => p != myUid,
+        orElse: () => '',
+      );
+      return c.participantRegistered[other] == true;
+    }
+
+    _lastFiltered = visible
+        .where((c) => ChatFilterLogic.matches(
+              _chatFilter,
+              unread: unreadOf(c),
+              otherRegistered: registeredOf(c),
+            ))
+        .toList();
     if (notify) {
       _listNotifier.value = _lastFiltered;
       _archivedNotifier.value = _archivedCount;
+      _countsNotifier.value = ChatFilterLogic.counts(
+        visible.map((c) => (
+          unread: unreadOf(c),
+          registered: registeredOf(c),
+        )),
+      );
     }
   }
 
@@ -492,6 +605,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
             builder: (_, count, __) =>
                 count > 0 ? _archivedToggle(s, count) : const SizedBox.shrink(),
           ),
+          // Filter daftar chat (Semua / Belum dibaca / Anon / Terdaftar) —
+          // hanya saat tab Pesan aktif & baris arsip tidak sedang dibuka.
+          if (!_showArchived) _chatFilterBar(s),
           Expanded(
             child: StreamBuilder<List<PrivateChatInfo>>(
               stream: _stream,
