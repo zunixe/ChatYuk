@@ -102,8 +102,9 @@ extension SAdminX on S {
 
   String get adminDeletedTab => isId ? 'Terhapus' : 'Deleted';
   String get adminDeletedTitle => isId ? 'User Terhapus' : 'Deleted Users';
-  String get adminDeletedSearch =>
-      isId ? 'Cari user terhapus...' : 'Search deleted users...';
+  String get adminDeletedSearch => isId
+      ? 'Cari user terhapus / anon...'
+      : 'Search deleted / anon users...';
   String get adminDeletedNoData =>
       isId ? 'Belum ada user terhapus' : 'No deleted users yet';
   String get adminDeletedNoResult =>
@@ -123,6 +124,34 @@ extension SAdminX on S {
   String get adminDeletedNoDevice =>
       isId ? 'Tidak ada device tercatat' : 'No devices recorded';
   String get adminDeletedUid => isId ? 'UID Asli' : 'Original UID';
+
+  // ── Anon belum terhapus (pending) di tab Terhapus ──
+  String get adminDeletedPending =>
+      isId ? 'Belum dihapus (anon)' : 'Not deleted (anon)';
+  String get adminDeletedPendingReason =>
+      isId ? 'Anon aktif' : 'Active anon';
+  String get adminDeletedStillUsed =>
+      isId ? 'Nickname masih dipakai' : 'Nickname still in use';
+  String get adminDeletedDeleteAction =>
+      isId ? 'Hapus user ini' : 'Delete this user';
+  String get adminDeletedDeleteTitle => isId
+      ? 'Hapus user anon ini?'
+      : 'Delete this anon user?';
+  String get adminDeletedDeleteBody => isId
+      ? 'Nickname akan bebas dipakai user lain. Tindakan ini tidak bisa dibatalkan.'
+      : 'The nickname will become available for others. This cannot be undone.';
+  String get adminDeletedDeleteDone =>
+      isId ? 'User anon dihapus, nickname bebas' : 'Anon user deleted, nickname free';
+  String get adminDeletedDeleteRegistered => isId
+      ? 'Akun terdaftar tidak bisa dihapus dari sini'
+      : 'Registered accounts cannot be deleted here';
+  String get adminDeletedDeleteDummy =>
+      isId ? 'Akun dummy — hapus dari tab Dummy' : 'Dummy account — delete from Dummy tab';
+  String get adminDeletedDeleteFailed =>
+      isId ? 'Gagal menghapus user' : 'Failed to delete user';
+  String get adminDeletedFilterAll => isId ? 'Semua' : 'All';
+  String get adminDeletedFilterDeleted => isId ? 'Terhapus' : 'Deleted';
+  String get adminDeletedFilterPending => isId ? 'Belum dihapus' : 'Not deleted';
 
   String get privateRoomsScanQr => isId ? 'Scan QR' : 'Scan QR';
   String get privateRoomsEmpty => isId

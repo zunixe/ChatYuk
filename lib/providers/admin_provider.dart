@@ -553,6 +553,16 @@ Future<void> fetchDevices() async {
     return _service.getDeletedDeviceHistory(nick);
   }
 
+  /// Hapus user ANON yang belum terdaftar (membebaskan nickname).
+  /// Return `{ok, error?}`. Refresh daftar setelah sukses.
+  Future<Map<String, dynamic>> deleteAnonUser(String uid) async {
+    final res = await _service.deleteAnonUser(uid);
+    if (res['ok'] == true) {
+      await fetchDeleted();
+    }
+    return res;
+  }
+
   // ── Statistik penggunaan data Supabase ──
   Map<String, dynamic>? _storageStats;
   bool _storageStatsLoading = false;

@@ -10,11 +10,18 @@ class DeletedCard extends StatelessWidget {
   final S s;
   final String reasonLabel;
   final VoidCallback onTap;
+
+  /// Bila true, entry = user anon yang BELUM dihapus (pending) → tampil
+  /// tanpa coretan + badge kuning, dan aksi hapus tersedia di detail.
+  final bool pending;
+
   const DeletedCard({
+    super.key,
     required this.entry,
     required this.s,
     required this.reasonLabel,
     required this.onTap,
+    this.pending = false,
   });
 
   @override
@@ -35,13 +42,22 @@ class DeletedCard extends StatelessWidget {
           )
         : '';
 
+    // Warna aksen: pending (anon aktif) = oranye, terhapus = merah/aksen.
+    final accentColor = pending
+        ? Colors.orange
+        : (registered ? AppTheme.primary : AppTheme.accent);
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
       color: AppTheme.bgCard,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: AppTheme.divider),
+        side: BorderSide(
+          color: pending
+              ? Colors.orange.withValues(alpha: 0.45)
+              : AppTheme.divider,
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -54,16 +70,13 @@ class DeletedCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: (registered ? AppTheme.primary : AppTheme.accent)
-                      .withValues(alpha: 0.12),
+                  color: accentColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
                   child: Text(
                     nick.isNotEmpty ? nick[0].toUpperCase() : '?',
-                    style: AppText.bodyStrong.copyWith(
-                      color: registered ? AppTheme.primary : AppTheme.accent,
-                    ),
+                    style: AppText.bodyStrong.copyWith(color: accentColor),
                   ),
                 ),
               ),
@@ -72,14 +85,42 @@ class DeletedCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      nick,
-                      style: AppText.bodyStrong.copyWith(
-                        decoration: TextDecoration.lineThrough,
-                        decorationColor: AppTheme.textSecondary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            nick,
+                            style: AppText.bodyStrong.copyWith(
+                              decoration: pending
+                                  ? null
+                                  : TextDecoration.lineThrough,
+                              decorationColor: AppTheme.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (pending) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              s.adminDeletedPending,
+                              style: AppText.micro.copyWith(
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     if (email.isNotEmpty)
                       Text(

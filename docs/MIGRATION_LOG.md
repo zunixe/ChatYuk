@@ -1,5 +1,34 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-21 — Tab Terhapus: tampilkan anon pending + hapus anon (`20260921210000`)
+
+**Kebutuhan:** di tab "Terhapus", tampilkan BERSAMAAN user terhapus (arsip)
+dan user anon yang belum terhapus, dan admin bisa menghapus anon itu supaya
+nickname-nya bebas dipakai.
+
+**Sebelumnya:** `admin_list_deleted` hanya membaca `deleted_users` (arsip).
+Menghapus anon hanya mungkin lewat `cleanup_stale_anonymous` (>7 hari) atau
+`claim_nickname` — nickname tertahan sampai 7 hari.
+
+**Perbaikan:**
+- `admin_delete_anon_user(p_uid)` — hapus 1 user anon: arsip dulu
+  (`fn_archive_deleted_user`, reason `admin_delete`), bersihkan
+  room_presence/blocks/reports/user_photos/devices/location/contact + chat
+  privat, lalu `profiles` & `auth.users`. Menolak REGISTERED & DUMMY
+  (cek DUMMY lebih dulu karena dummy ber-`is_registered=true`).
+  `coin_ledger` append-only → trigger `coin_ledger_no_delete` dimatikan
+  sementara (pola `admin_delete_dummy`).
+- `admin_list_deleted(p_limit,p_offset,p_include_pending)` — tambah item
+  `pending` (anon belum dihapus, `pending=true`, `deleted_at=null`),
+  diurut `last_seen`. Signature 2-arg di-DROP.
+- Client: service `deleteAnonUser` + `listDeleted(includePending)`,
+  provider `deleteAnonUser` (refresh otomatis), UI filter
+  Semua/Terhapus/Belum dihapus + badge oranye + tombol hapus di detail.
+
+**Verifikasi live (rollback):** anon `caritemen` → profil & auth terhapus,
+arsip 1 baris; user terdaftar → `REGISTERED`; dummy → `DUMMY`.
+List: 11 arsip + 84 anon pending = 95 total (sebelumnya 11).
+
 ## 2026-09-21 — Lokasi: GPS dipisah dari IP + history diperbaiki (`20260921200000`)
 
 **Dua bug nyata (terukur di live DB):**

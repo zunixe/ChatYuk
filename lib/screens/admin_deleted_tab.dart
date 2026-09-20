@@ -26,6 +26,8 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   String _query = '';
+  /// Filter: 'all' | 'deleted' | 'pending'.
+  String _filter = 'all';
   Timer? _refreshTimer;
 
   @override
@@ -84,14 +86,54 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
   }
 
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> rows) {
+    Iterable<Map<String, dynamic>> out = rows;
+    // Filter jenis: arsip terhapus vs anon pending.
+    if (_filter == 'deleted') {
+      out = out.where((r) => r['pending'] != true);
+    } else if (_filter == 'pending') {
+      out = out.where((r) => r['pending'] == true);
+    }
     final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return rows;
-    return rows.where((r) {
+    if (q.isEmpty) return out.toList();
+    return out.where((r) {
       final nick = '${r['nickname'] ?? ''}'.toLowerCase();
       final email = '${r['email'] ?? ''}'.toLowerCase();
       final uid = '${r['user_id'] ?? ''}'.toLowerCase();
       return nick.contains(q) || email.contains(q) || uid.contains(q);
     }).toList();
+  }
+
+  /// Chip filter kecil dengan jumlah item; aktif = warna primary/oranye.
+  Widget _filterChip(
+    String label,
+    String value,
+    int count, {
+    bool highlight = false,
+  }) {
+    final active = _filter == value;
+    final base = highlight ? Colors.orange : AppTheme.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => setState(() => _filter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: active
+              ? base.withValues(alpha: 0.18)
+              : AppTheme.bgInput,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? base.withValues(alpha: 0.7) : AppTheme.divider,
+          ),
+        ),
+        child: Text(
+          '$label ($count)',
+          style: AppText.label.copyWith(
+            color: active ? base : AppTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
   }
 
   String _reasonLabel(S s, String reason) {
@@ -104,6 +146,8 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
         return s.adminDeletedAdmin;
       case 'dummy_delete':
         return s.adminDeletedDummy;
+      case 'pending_anon':
+        return s.adminDeletedPendingReason;
       default:
         return reason;
     }
@@ -127,6 +171,33 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
               IconButton(
                 icon: Icon(Icons.refresh_rounded, color: AppTheme.primary),
                 onPressed: () => admin.fetchDeleted(),
+              ),
+            ],
+          ),
+        ),
+        // Filter: Semua / Terhapus / Belum dihapus (anon).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(
+            children: [
+              _filterChip(
+                s.adminDeletedFilterAll,
+                'all',
+                admin.deleted.where((r) => r['pending'] != true).length +
+                    admin.deleted.where((r) => r['pending'] == true).length,
+              ),
+              const SizedBox(width: 6),
+              _filterChip(
+                s.adminDeletedFilterDeleted,
+                'deleted',
+                admin.deleted.where((r) => r['pending'] != true).length,
+              ),
+              const SizedBox(width: 6),
+              _filterChip(
+                s.adminDeletedFilterPending,
+                'pending',
+                admin.deleted.where((r) => r['pending'] == true).length,
+                highlight: true,
               ),
             ],
           ),
@@ -233,9 +304,11 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                         );
                       }
                       final d = filtered[i];
+                      final isPending = d['pending'] == true;
                       return DeletedCard(
                         entry: d,
                         s: s,
+                        pending: isPending,
                         reasonLabel: _reasonLabel(s, '${d['reason'] ?? ''}'),
                         onTap: () => _showDetail(context, d),
                       );
@@ -273,7 +346,7 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
 }
 
 
-class _DeletedDetailSheet extends StatelessWidget {
+class _DeletedDetailSheet extends StatefulWidget {
   final Map<String, dynamic> entry;
   final List<Map<String, dynamic>> devices;
   final S s;
@@ -282,6 +355,65 @@ class _DeletedDetailSheet extends StatelessWidget {
     required this.devices,
     required this.s,
   });
+
+  @override
+  State<_DeletedDetailSheet> createState() => _DeletedDetailSheetState();
+}
+
+class _DeletedDetailSheetState extends State<_DeletedDetailSheet> {
+  bool _deleting = false;
+
+  Map<String, dynamic> get entry => widget.entry;
+  List<Map<String, dynamic>> get devices => widget.devices;
+  S get s => widget.s;
+
+  bool get _isPending => entry['pending'] == true;
+
+  /// Hapus user anon (pending) — membebaskan nickname. Konfirmasi dulu.
+  Future<void> _deleteAnon() async {
+    final uid = '${entry['user_id'] ?? ''}';
+    if (uid.isEmpty || _deleting) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: Text(s.adminDeletedDeleteTitle),
+        content: Text(s.adminDeletedDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(dctx, true),
+            child: Text(s.btnDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    final res = await context.read<AdminProvider>().deleteAnonUser(uid);
+    if (!mounted) return;
+    setState(() => _deleting = false);
+
+    final err = '${res['error'] ?? ''}';
+    final msg = res['ok'] == true
+        ? s.adminDeletedDeleteDone
+        : err == 'REGISTERED'
+        ? s.adminDeletedDeleteRegistered
+        : err == 'DUMMY'
+        ? s.adminDeletedDeleteDummy
+        : s.adminDeletedDeleteFailed;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: res['ok'] == true ? AppTheme.online : AppTheme.danger,
+      ),
+    );
+    if (res['ok'] == true) Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -361,16 +493,47 @@ class _DeletedDetailSheet extends StatelessWidget {
                         Text(
                           nick,
                           style: AppText.title.copyWith(
-                            decoration: TextDecoration.lineThrough,
+                            decoration: _isPending
+                                ? null
+                                : TextDecoration.lineThrough,
                             decorationColor: AppTheme.textSecondary,
                           ),
                         ),
-                        Text(
-                          reasonLabel,
-                          style: AppText.caption.copyWith(
-                            color: AppTheme.danger,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        Row(
+                          children: [
+                            if (_isPending) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  s.adminDeletedPending,
+                                  style: AppText.micro.copyWith(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Flexible(
+                              child: Text(
+                                reasonLabel,
+                                style: AppText.caption.copyWith(
+                                  color: _isPending
+                                      ? Colors.orange
+                                      : AppTheme.danger,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -395,6 +558,30 @@ class _DeletedDetailSheet extends StatelessWidget {
                 ],
               ),
             ),
+            if (_isPending)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.danger,
+                    ),
+                    onPressed: _deleting ? null : _deleteAnon,
+                    icon: _deleting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.person_remove_rounded, size: 18),
+                    label: Text(s.adminDeletedDeleteAction),
+                  ),
+                ),
+              ),
             Expanded(
               child: ListView(
                 controller: scrollCtrl,
