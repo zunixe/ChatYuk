@@ -302,41 +302,50 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   }
 
   Widget _archivedToggle(S s, int archivedCount) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => setState(() {
-        _showArchived = !_showArchived;
-        _selected.clear();
-        _page = 1;
-      }),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
+    // Jarak antar-kartu dipasang di LUAR InkWell. Dulu margin ada di dalam
+    // InkWell → area tap/ripple meluber ~10px keluar kartu yang terlihat
+    // (muncul "background" di luar form). Material memberi warna dasar
+    // supaya ripple terlihat & terpotong borderRadius.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      child: Material(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.divider),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              _showArchived ? Icons.unarchive : Icons.archive_outlined,
-              size: 20,
-              color: AppTheme.textSecondary,
+          onTap: () => setState(() {
+            _showArchived = !_showArchived;
+            _selected.clear();
+            _page = 1;
+          }),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.divider),
             ),
-            const SizedBox(width: 10),
-            Text(
-              s.labelArchived(archivedCount),
-              style:
-                  AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
+            child: Row(
+              children: [
+                Icon(
+                  _showArchived ? Icons.unarchive : Icons.archive_outlined,
+                  size: 20,
+                  color: AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  s.labelArchived(archivedCount),
+                  style:
+                      AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
+                ),
+                const Spacer(),
+                Icon(
+                  _showArchived ? Icons.expand_less : Icons.expand_more,
+                  size: 20,
+                  color: AppTheme.textSecondary,
+                ),
+              ],
             ),
-            const Spacer(),
-            Icon(
-              _showArchived ? Icons.expand_less : Icons.expand_more,
-              size: 20,
-              color: AppTheme.textSecondary,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -733,7 +742,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         margin: EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
                           color: AppTheme.primary,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -757,7 +766,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                         margin: EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
                           color: AppTheme.danger,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
