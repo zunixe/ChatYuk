@@ -1369,14 +1369,25 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
-  /// Update lokasi berkala (5 menit) saat app aktif — pin di peta admin
+  /// True bila sesi ini sedang ONLINE (bukan idle/invisible/dummy/banned).
+  /// Dipakai gate pencatatan lokasi: GPS & IP hanya dicatat saat online —
+  /// supaya yang tersimpan adalah lokasi terakhir saat benar-benar aktif,
+  /// bukan posisi acak saat app idle di belakang.
+  bool get _isLocationEligible {
+    if (_disposed || dummySessionActive) return false;
+    if (isProfileBanned) return false;
+    if (_invisibleEnabled) return false;
+    if (_isIdle) return false;
+    return true;
+  }
+
+  /// Update lokasi berkala (5 menit) HANYA saat online — pin di peta admin
   /// dan daftar orang sekitar selalu segar. GPS dipakai kalau izin sudah
   /// ada, else perkiraan IP. Gagal diam-diam (tidak mengganggu apapun).
   void _startLocationPing() {
     _locationTimer?.cancel();
     _locationTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      if (_disposed || dummySessionActive) return;
-      if (isProfileBanned) return; // banned → jangan update lokasi
+      if (!_isLocationEligible) return;
       safeUnawaited(LocationService().updateMyLocation());
     });
   }
