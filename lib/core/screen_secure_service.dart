@@ -80,4 +80,19 @@ class ScreenSecureService {
       return '';
     }
   }
+
+  /// MediaDrm (Widevine) deviceUniqueId — ID perangkat FISIK yang stabil.
+  ///
+  /// Berbeda dari [androidId] yang di-scope ke (device + user profile +
+  /// signing key): nilai ini tetap SAMA saat app di-reinstall, ganti
+  /// keystore, atau dibuka dari Second Space/Dual Apps. Return '' bila
+  /// Widevine tidak tersedia (pemanggil pakai fallback ANDROID_ID).
+  static Future<String> deviceUniqueId() async {
+    try {
+      final res = await _channel.invokeMethod<String>('deviceUniqueId');
+      return res ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
 }

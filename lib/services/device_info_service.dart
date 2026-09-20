@@ -36,21 +36,40 @@ class DeviceInfoService {
 
   SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
 
+  /// `android-<ANDROID_ID>` bila tersedia — dipakai sebagai
+  /// `p_legacy_install_id` supaya server memigrasi baris device lama
+  /// (pra-MediaDrm) ke identifier baru in-place, bukan bikin baris baru.
+  Future<String> _legacyAndroidId() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return '';
+    final aid = await ScreenSecureService.androidId();
+    return aid.trim().length >= 6 ? 'android-${aid.trim()}' : '';
+  }
+
   /// ID unik per HP fisik:
-  ///  - Android → ANDROID_ID (Settings.Secure) via MethodChannel — unik per
-  ///    perangkat + signing key, STABIL walau app di-reinstall (hanya berubah
-  ///    saat factory reset). Inilah yang dipakai admin agar 1 HP = 1 device.
+  ///  - Android → MediaDrm (Widevine) deviceUniqueId — stabil untuk SATU
+  ///    perangkat fisik: tetap sama walau app di-reinstall, ganti signing
+  ///    key, atau dibuka dari user profile lain (Second Space/Dual Apps).
+  ///    Fallback ke ANDROID_ID bila Widevine tidak tersedia.
   ///  - iOS → identifierForVendor.
   ///  - Fallback → UUID di secure storage (jarang terpakai).
   Future<String> installId() async {
-    // 1. Android ID (via MethodChannel) — sumber utama & stabil.
+    // 1. MediaDrm deviceUniqueId — paling stabil (tahan reinstall/keystore/
+    //    profil user). Menutup celah ANDROID_ID yang berubah saat signing
+    //    key berubah → dulu bikin device ter-exclude "muncul lagi".
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      final drmId = await ScreenSecureService.deviceUniqueId();
+      if (drmId.trim().length >= 16) {
+        return 'drm-${drmId.trim()}';
+      }
+    }
+    // 2. Android ID (via MethodChannel) — fallback bila Widevine tak ada.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       final aid = await ScreenSecureService.androidId();
       if (aid.isNotEmpty && aid.trim().length >= 6) {
         return 'android-${aid.trim()}';
       }
     }
-    // 2. iOS identifierForVendor.
+    // 3. iOS identifierForVendor.
     try {
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
         final i = await DeviceInfoPlugin().iosInfo;
@@ -58,7 +77,7 @@ class DeviceInfoService {
         if (idfv.isNotEmpty) return 'ios-$idfv';
       }
     } catch (_) {}
-    // 3. Fallback: UUID per-install di secure storage.
+    // 4. Fallback: UUID per-install di secure storage.
     try {
       final existing = await _storage.read(key: _kInstallId);
       if (existing != null && existing.isNotEmpty) return existing;
@@ -142,6 +161,7 @@ class DeviceInfoService {
   Future<void> syncToServer({String ipAddress = ''}) async {
     try {
       final id = await installId();
+      final legacy = await _legacyAndroidId();
       final info = await collectDeviceInfo();
       final user = _sb.auth.currentUser;
       // Snapshot nickname dipakai untuk melacak device milik user yang
@@ -166,6 +186,10 @@ class DeviceInfoService {
         'p_app_version': info.appVersion,
         'p_ip': ipAddress,
         'p_nickname': nickname,
+        // Baris device lama (`android-<id>`) dimigrasi in-place ke `id`
+        // sekarang bila berbeda (mis. baru pindah ke MediaDrm).
+        if (legacy.isNotEmpty && legacy != id)
+          'p_legacy_install_id': legacy,
       });
     } catch (e) {
       dlog('[DEVICE] syncToServer error: $e');
