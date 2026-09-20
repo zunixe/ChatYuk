@@ -1739,10 +1739,36 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: (overlayCtx) {
+        final mq = MediaQuery.of(overlayCtx);
         // Lebar: field + 96px ke kanan, clamp ke tepi layar (field kanan).
-        final screenW = MediaQuery.of(overlayCtx).size.width;
-        final availW = screenW - _fieldLeft - 8;
+        final screenW = mq.size.width;
+
+        // Panel hidup di Overlay → TIDAK ikut resize saat keyboard naik.
+        // Hitung sendiri ruang terlihat + posisi field TERBARU, lalu buka ke
+        // ATAS bila ruang bawah tidak layak (bug "pilihan negara ilang saat
+        // keyboard naik" di tab Online).
+        final keyboardH = mq.viewInsets.bottom;
+        final visibleBottom = mq.size.height - mq.padding.bottom - keyboardH;
+        final rb = context.findRenderObject() as RenderBox?;
+        double fieldTop = 0, fieldBottom = 0, fieldLeft = _fieldLeft;
+        if (rb != null && rb.hasSize) {
+          final origin = rb.localToGlobal(Offset.zero);
+          fieldTop = origin.dy;
+          fieldBottom = fieldTop + rb.size.height;
+          fieldLeft = origin.dx;
+        }
+        final availW = screenW - fieldLeft - 8;
         final panelW = (_fieldSize.width + 96).clamp(0.0, availW).toDouble();
+
+        const gap = 4.0;
+        const minUseful = 160.0;
+        const maxPanel = 340.0;
+        final spaceBelow = visibleBottom - fieldBottom - gap;
+        final spaceAbove = fieldTop - mq.padding.top - gap;
+        final openAbove = spaceBelow < minUseful && spaceAbove > spaceBelow;
+        final panelMaxH =
+            (openAbove ? spaceAbove : spaceBelow).clamp(minUseful, maxPanel);
+
         final filtered = [
           for (int i = 0; i < widget.items.length; i++)
             if (_query.isEmpty ||
@@ -1760,15 +1786,17 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown> {
             ),
             CompositedTransformFollower(
               link: _link,
-              targetAnchor: Alignment.bottomLeft,
-              followerAnchor: Alignment.topLeft,
-              offset: const Offset(0, 4),
+              targetAnchor:
+                  openAbove ? Alignment.topLeft : Alignment.bottomLeft,
+              followerAnchor:
+                  openAbove ? Alignment.bottomLeft : Alignment.topLeft,
+              offset: Offset(0, openAbove ? -gap : gap),
               showWhenUnlinked: false,
               child: Material(
                 color: Colors.transparent,
                 child: Container(
                   width: panelW,
-                  constraints: const BoxConstraints(maxHeight: 340),
+                  constraints: BoxConstraints(maxHeight: panelMaxH),
                   decoration: BoxDecoration(
                     color: AppTheme.bgCard,
                     borderRadius: BorderRadius.circular(12),
@@ -2144,46 +2172,59 @@ class _UserCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        // Tombol ikuti hanya untuk user yang ter-registrasi email.
+                        // Tombol TAMBAH TEMAN hanya untuk user ter-registrasi.
                         // Lingkaran belakang ikon transparan — ikon saja.
                         if (user.isRegistered)
                           Consumer<SocialProvider>(
                             builder: (_, sp, __) {
-                              final following = sp.isFollowing(user.uid);
+                              final isFriend = sp.isFriend(user.uid);
+                              final pending = sp.isPendingFriendRequest(
+                                user.uid,
+                              );
+                              final done = isFriend || pending;
+                              final tip = isFriend
+                                  ? s.btnFriends
+                                  : (pending
+                                        ? s.btnFriendRequested
+                                        : s.btnAddFriend);
                               return Tooltip(
-                                message: following
-                                    ? s.btnUnfollow
-                                    : s.btnFollow,
+                                message: tip,
                                 child: Material(
                                   color: Colors.transparent,
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(16),
-                                    onTap: () async {
-                                      final messenger = ScaffoldMessenger.of(
-                                        context,
-                                      );
-                                      final ok = following
-                                          ? await sp.unfollow(user.uid)
-                                          : await sp.follow(user.uid);
-                                      if (ok) {
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              following
-                                                  ? s.btnUnfollow
-                                                  : s.btnFollow,
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    },
+                                    // Sudah teman / permintaan terkirim → tidak
+                                    // bisa dikirim ulang (ikon jadi status).
+                                    onTap: done
+                                        ? null
+                                        : () async {
+                                            final messenger =
+                                                ScaffoldMessenger.of(context);
+                                            final res = await sp.sendFriendRequest(
+                                              user.uid,
+                                            );
+                                            // 'rejected' = gagal; selain itu
+                                            // (ok/pending) anggap terkirim.
+                                            if (res != 'rejected') {
+                                              messenger.showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    s.friendRequestSent,
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          },
                                     child: SizedBox(
                                       width: 32,
                                       height: 32,
                                       child: Icon(
-                                        following
-                                            ? Icons.person_remove_rounded
-                                            : Icons.person_add_alt_rounded,
+                                        isFriend
+                                            ? Icons.how_to_reg_rounded
+                                            : (pending
+                                                  ? Icons.schedule_rounded
+                                                  : Icons
+                                                        .person_add_alt_rounded),
                                         size: 20,
                                         color: Colors.white,
                                       ),
