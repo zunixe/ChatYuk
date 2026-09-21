@@ -96,22 +96,25 @@ class TimelineProvider extends ChangeNotifier {
   // ── Passthrough aksi post (dipakai PostCard — hindari instansiasi
   //    TimelineService inline di widget, biar DI & testable) ──
   Future<Map<String, dynamic>> toggleLike(String postId) =>
-      _service.toggleLike(postId);
+      PerfProbe.timed('timeline.like', () => _service.toggleLike(postId));
   Future<Map<String, dynamic>> addComment(String postId, String text) =>
-      _service.addComment(postId, text);
+      PerfProbe.timed('timeline.addComment', () => _service.addComment(postId, text));
   Future<Map<String, dynamic>> replyComment(
     String postId,
     int parentId,
     String text,
   ) =>
-      _service.replyComment(postId, parentId, text);
+      PerfProbe.timed(
+        'timeline.replyComment',
+        () => _service.replyComment(postId, parentId, text),
+      );
   Future<Map<String, dynamic>> sharePost(String postId) =>
-      _service.sharePost(postId);
+      PerfProbe.timed('timeline.share', () => _service.sharePost(postId));
   Future<Map<String, dynamic>> boostPost(String postId) =>
       _service.boostPost(postId);
   Future<void> deletePost(String postId) => _service.deletePost(postId);
   Future<List<Map<String, dynamic>>> comments(String postId) =>
-      _service.comments(postId);
+      PerfProbe.timed('timeline.comments', () => _service.comments(postId));
   Future<Map<String, dynamic>> toggleCommentLike(int commentId) =>
       _service.toggleCommentLike(commentId);
   Future<Map<String, dynamic>> shareComment(int commentId) =>
