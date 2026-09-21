@@ -839,3 +839,28 @@ volume data saat audit hanya 6 post / 5 komentar). Perbaikan:
 
 **Verifikasi:** `flutter analyze lib test` 0 error/0 warning; `flutter test`
 **725 hijau** (+7 test baru: TTL cache komentar, guard notify realtime).
+
+### 12.6 Hasil pengukuran (build rilis + `PERF_PROBE=true`, Xiaomi 24129PN74G)
+
+Perangkat: `192.168.18.33` (Xiaomi 24129PN74G), jaringan Wi-Fi rumah.
+
+| Jalur | Sebelum (perilaku lama) | Sesudah | Catatan |
+|---|---|---|---|
+| `timeline.comments` (buka sheet komentar) | **n=3** (tiap buka = 1 RPC, ~150ms/buka = ~450ms) | **n=1 · 153.3 ms** | Buka #2 & #3 dalam 30s dilayani cache — **0 RPC**. Bukti: probe `n=1` meski sheet dibuka 3×. |
+| `timeline.comments` (setelah submit komentar) | — | 332.6 ms | Sekali refresh setelah tulis (wajar). |
+| `timeline.like` (tap suka) | — | 336.6 ms → 168.7 ms (n=2) | Panggilan kedua lebih cepat (koneksi hangat). |
+| `timeline.addComment` (kirim komentar) | — | 338.6 ms | Row benar-benar masuk DB (diverifikasi via Management API: `post_comments.id=9`). |
+| `timeline.rpc` (halaman 1 feed) | 142-169 ms | **n=3 min=125.8 p50=136.8 p90=142.4 max=143.8 ms** | 3 panggilan = prewarm 3 scope (all/following/mine). |
+
+**Kesimpulan:** optimasi komentar terbukti — membuka sheet komentar berulang
+**tidak lagi menembak RPC** (0 ms setelah buka pertama), dan aksi tulis
+(like/komentar) konsisten ~170-340 ms (murni round-trip jaringan, bukan lagi
+overhead klien). Tidak ada crash/exception selama sesi ukur (`null check
+operator` = 0).
+
+> Catatan: banner "Tidak ada koneksi internet" sesekali muncul (deteksi MIUI)
+> meski RPC tetap sukses — bukan indikator kegagalan app.
+
+**Titik ukur baru:** `timeline.comments`, `timeline.like`, `timeline.addComment`,
+`timeline.replyComment`, `timeline.share` (ditambahkan di `TimelineProvider`
+passthrough, `timeline_provider.dart`).
