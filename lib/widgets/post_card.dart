@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
@@ -13,7 +14,6 @@ import '../core/cache/post_photo_cache.dart';
 import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../services/storage_photo_service.dart';
-import '../services/timeline_service.dart';
 import '../utils.dart';
 import 'post_photo_viewer.dart';
 import 'profile_avatar.dart';
@@ -47,6 +47,35 @@ class _PostCardState extends State<PostCard> {
     final paths = _imagePaths();
     _imageThumbs.addAll(List.filled(paths.length, null));
     if (paths.isNotEmpty) _loadImages(paths);
+  }
+
+  @override
+  void didUpdateWidget(PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Path foto berubah (mis. realtime update / placeholder → path asli) →
+    // muat ulang thumb. Dulu hanya di initState, jadi kartu tidak pernah
+    // memperbarui gambar saat data post-nya diganti.
+    final oldPaths = _pathsOf(oldWidget.post);
+    final newPaths = _imagePaths();
+    if (oldPaths.length != newPaths.length ||
+        !List.generate(newPaths.length, (i) => oldPaths[i] == newPaths[i])
+            .every((e) => e)) {
+      _imageThumbs
+        ..clear()
+        ..addAll(List.filled(newPaths.length, null));
+      _failedPaths.clear();
+      _page = 0;
+      if (newPaths.isNotEmpty) _loadImages(newPaths);
+    }
+  }
+
+  List<String> _pathsOf(Map<String, dynamic> post) {
+    final arr = post['images'];
+    if (arr is List && arr.isNotEmpty) {
+      return arr.map((e) => '$e').where((e) => e.isNotEmpty).toList();
+    }
+    final single = post['imagePath'] as String? ?? '';
+    return single.isNotEmpty ? [single] : [];
   }
 
   @override
@@ -88,7 +117,7 @@ class _PostCardState extends State<PostCard> {
     setState(() => _busy = true);
     final s = context.read<LocaleProvider>().s;
     try {
-      final res = await TimelineService().toggleLike(_id);
+      final res = await context.read<TimelineProvider>().toggleLike(_id);
       if (!mounted) return;
       final liked = res['liked'] == true;
       // Sumber kebenaran = server. RPC mengembalikan likeCount absolut
@@ -314,9 +343,9 @@ class _PostCardState extends State<PostCard> {
     try {
       final Map<String, dynamic> result;
       if (parentId != null && parentId > 0) {
-        result = await TimelineService().replyComment(_id, parentId, text);
+        result = await tp.replyComment(_id, parentId, text);
       } else {
-        result = await TimelineService().addComment(_id, text);
+        result = await tp.addComment(_id, text);
       }
       // Ganti optimistic dengan data server.
       tp.replaceCommentInCache(_id, optimisticId, result);
@@ -356,7 +385,7 @@ class _PostCardState extends State<PostCard> {
     );
     if (result.status != ShareResultStatus.success) return;
     try {
-      await TimelineService().sharePost(_id);
+      await context.read<TimelineProvider>().sharePost(_id);
       if (!mounted) return;
       final c = ((_p['shareCount'] as num?)?.toInt() ?? 0) + 1;
       context.read<TimelineProvider>().updatePost(_id, {'shareCount': c});
@@ -393,7 +422,7 @@ class _PostCardState extends State<PostCard> {
     );
     if (confirm != true || !mounted) return;
     try {
-      await TimelineService().boostPost(_id);
+      await context.read<TimelineProvider>().boostPost(_id);
       if (mounted) {
         context.read<TimelineProvider>().updatePost(_id, {'isBoosted': true});
         ScaffoldMessenger.of(
@@ -836,7 +865,7 @@ class _PostCardState extends State<PostCard> {
     );
     if (ok != true || !mounted) return;
     try {
-      await TimelineService().deletePost(_id);
+      await context.read<TimelineProvider>().deletePost(_id);
       if (!mounted) return;
       context.read<TimelineProvider>().removePost(_id);
       ScaffoldMessenger.of(
@@ -929,6 +958,7 @@ class _CommentsListState extends State<_CommentsList> {
   // true setelah fetch pertama selesai (atau cache ada) — sebelum itu
   // tampilkan skeleton, bukan kotak kosong.
   bool _loaded = false;
+  RealtimeChannel? _channel;
 
   @override
   void initState() {
@@ -941,13 +971,69 @@ class _CommentsListState extends State<_CommentsList> {
       _items = List.from(cached);
       _loaded = true;
     }
-    _load();
+    // RPC hanya bila cache tidak ada / basi (TTL 30 dtk) — buka-tutup-buka
+    // sheet tidak menembak server berulang.
+    final tp = context.read<TimelineProvider>();
+    if (!tp.isCommentsFresh(widget.postId)) _load();
+    _subscribeRealtime();
+  }
+
+  @override
+  void dispose() {
+    final ch = _channel;
+    _channel = null;
+    if (ch != null) {
+      try {
+        ch.unsubscribe();
+        Supabase.instance.client.removeChannel(ch);
+      } catch (_) {}
+    }
+    super.dispose();
+  }
+
+  /// Realtime komentar HANYA untuk post ini (filter post_id) — komentar baru
+  /// dari orang lain muncul live; unsubscribe saat sheet ditutup.
+  void _subscribeRealtime() {
+    try {
+      final sb = Supabase.instance.client;
+      final ch = sb.channel('post-comments-${widget.postId}');
+      final filter = PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'post_id',
+        value: widget.postId,
+      );
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'post_comments',
+        filter: filter,
+        callback: (_) {
+          if (mounted) _load();
+        },
+      );
+      ch.subscribe();
+      _channel = ch;
+    } catch (_) {}
   }
 
   Future<void> _load() async {
-    final list = await TimelineService().comments(widget.postId);
+    final list = await context.read<TimelineProvider>().comments(widget.postId);
     if (!mounted) return;
     context.read<TimelineProvider>().cacheComments(widget.postId, list);
+    // Jangan timpa optimistic user yang belum terkonfirmasi server: bila
+    // item lokal punya id negatif (optimistic), pertahankan.
+    final local = _items;
+    if (local != null && local.any((c) => ((c['id'] as num?)?.toInt() ?? 0) < 0)) {
+      final merged = <Map<String, dynamic>>[
+        ...list,
+        ...local.where((c) => ((c['id'] as num?)?.toInt() ?? 0) < 0),
+      ];
+      setState(() {
+        _items = merged;
+        _loaded = true;
+      });
+      return;
+    }
     setState(() {
       _items = list;
       _loaded = true;
@@ -981,7 +1067,7 @@ class _CommentsListState extends State<_CommentsList> {
     _busy = true;
     final id = (c['id'] as num?)?.toInt() ?? 0;
     try {
-    final res = await TimelineService().toggleCommentLike(id);
+    final res = await context.read<TimelineProvider>().toggleCommentLike(id);
     if (!mounted) return;
     final liked = res['liked'] == true;
     // Sumber kebenaran = server (likeCount absolut), bukan hitung lokal.
@@ -1009,7 +1095,7 @@ class _CommentsListState extends State<_CommentsList> {
     final result = await Share.share(content, subject: author);
     if (result.status != ShareResultStatus.success) return;
     try {
-      final res = await TimelineService().shareComment(id);
+      final res = await context.read<TimelineProvider>().shareComment(id);
       final count = (res['share_count'] as num?)?.toInt();
       if (!mounted) return;
       if (count != null) {
@@ -1028,9 +1114,14 @@ class _CommentsListState extends State<_CommentsList> {
     if (items.isEmpty) {
       return const SizedBox(height: 80);
     }
+    // Flexible di parent sudah memberi tinggi BOUNDED → tidak perlu
+    // shrinkWrap (dulu shrinkWrap:true membangun SEMUA baris sekaligus,
+    // boros untuk post dengan banyak komentar). ListView biasa hanya
+    // membangun baris yang terlihat.
     return ListView.builder(
-      shrinkWrap: true,
       padding: const EdgeInsets.symmetric(horizontal: 16),
+      addAutomaticKeepAlives: false,
+      addRepaintBoundaries: true,
       itemCount: items.length,
       itemBuilder: (_, i) {
         final c = items[i];

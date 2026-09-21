@@ -792,3 +792,50 @@ Yang masih di atas baseline hanya kondisi **cold start** (`online.rpc`
 Supabase, bukan query. Bila suatu saat terasa mengganggu, kandidatnya
 *warm-up RPC saat app idle*; belum dikerjakan karena belum terbukti
 mengganggu pengalaman.
+
+---
+
+## 12. Timeline — optimasi foto/komentar/respons (2026-09-20)
+
+Keluhan: timeline terasa berat saat scroll, buka komentar, dan berinteraksi
+(like/share). Audit menemukan 4 pola klien yang boros (bukan masalah query DB —
+volume data saat audit hanya 6 post / 5 komentar). Perbaikan:
+
+### 12.1 Comment sheet — cache + TTL + realtime terfilter
+- **Dulu:** `_CommentsList._load()` SELALU memanggil `list_post_comments` tiap
+  sheet dibuka (walau cache baru diisi). Buka-tutup-buka = 3× RPC.
+- **Sekarang:** `TimelineProvider.isCommentsFresh(postId)` (TTL 30 dtk) —
+  cache segar → tampil instan tanpa RPC. Timestamp cache baru
+  (`_commentCacheAt`) diisi di `cacheComments()` + prefetch.
+- **Realtime komentar:** channel `post-comments-<postId>` dengan filter
+  `post_id=eq.<id>` — komentar baru dari orang lain muncul live; unsubscribe +
+  `removeChannel` saat sheet ditutup (tidak menumpuk channel).
+- **`shrinkWrap: true` dihapus** — parent `Flexible` sudah memberi tinggi
+  bounded; shrinkWrap dulu membangun SEMUA baris komentar sekaligus.
+
+### 12.2 Realtime `posts` — guard notify
+- **Dulu:** event UPDATE dari user mana pun (like/view/komentar di post yang
+  TIDAK ada di feed aktif) tetap memicu `notifyListeners()` → seluruh layar
+  Timeline rebuild percuma (subscribe `posts` tanpa filter).
+- **Sekarang:** update hanya diproses bila post ADA di `_posts` DAN nilainya
+  benar-benar berubah (like/comment/share/boost). Selain itu → return tanpa notify.
+
+### 12.3 Prefetch komentar saat feed load
+- **Dulu:** 5 `list_post_comments` ditembak BERSAMAAN tiap refresh/paginasi.
+- **Sekarang:** turun ke **2**, ditunda **500 ms idle** (timer dibatalkan bila
+  scope berganti / fetch baru) — tidak lagi bersaing dengan render feed.
+
+### 12.4 Search filter di-cache
+- **Dulu:** `postsRaw.where(...)` jalan tiap `build()` saat search aktif.
+- **Sekarang:** hasil filter di-cache; recompute hanya saat `posts` atau
+  `_appliedSearch` berubah (identitas list + string dibandingkan).
+
+### 12.5 Housekeeping
+- Semua instansiasi `TimelineService()` inline di `post_card.dart` → lewat
+  `TimelineProvider` (DI, testable).
+- `PostCard.didUpdateWidget`: reload thumbnail bila `images`/`imagePath`
+  berubah (dulu hanya `initState` → gambar tidak pernah update saat data
+  post diganti realtime).
+
+**Verifikasi:** `flutter analyze lib test` 0 error/0 warning; `flutter test`
+**725 hijau** (+7 test baru: TTL cache komentar, guard notify realtime).
