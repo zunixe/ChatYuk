@@ -1,3 +1,20 @@
+## 0. ⛔ LARANGAN — jangan pakai akun user asli untuk test
+
+**JANGAN pernah mengirim/menyisipkan pesan dengan `sender_id` milik user
+asli** (SQL, Management API, `net.http_post`, atau skrip) untuk memicu balasan
+AI. Pesan itu muncul seolah dari user asli → **disangka scam / akun dibajak**.
+
+Cara benar memicu balasan AI saat debug:
+1. Pakai uid **dummy** sebagai `sender_id` (dummy→dummy), ATAU
+2. Pakai akun test khusus milik dev yang terdaftar sebagai dummy.
+3. Butuh `always_reply=true` untuk uji deterministik? Pakai dummy biasa yang
+   memang untuk test — **jangan** pakai uid user asli, dan **jangan** mengubah
+   flag dummy milik user (kembalikan setelah selesai).
+4. Bersihkan tuntas: `private_messages`, `ai_reply_log`, `ai_reply_claims`,
+   kembalikan `private_chats.last_message`/`last_message_at` ke pesan asli.
+5. Cache lokal HP (`chatyuk_messages_v1.db`) **TIDAK** ikut terhapus saat baris
+   server dihapus — history user masih menampilkan pesan tsb.
+
 # Runbook: Dummy AI Tidak Membalas
 
 Sumber kebenaran: `supabase/functions/ai-reply/index.ts`,

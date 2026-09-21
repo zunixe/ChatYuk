@@ -2,6 +2,42 @@
 
 Aturan ini dibaca otomatis oleh AI coding tools. Patuhi selalu.
 
+## ⛔ LARANGAN KERAS — JANGAN PAKAI AKUN USER ASLI UNTUK TEST (WAJIB)
+
+**DILARANG menyisipkan/mengirim/memodifikasi pesan apa pun dengan
+`sender_id` (atau identitas) MILIK USER ASLI — baik lewat SQL langsung,
+Management API, `net.http_post`, maupun skrip apa pun. Termasuk mengaku
+sebagai user asli di chat.**
+
+Kenapa: pesan yang muncul seolah dari user asli membuat user terlihat
+mengirim hal yang tidak pernah dia kirim → **disangka scam / akun dibajak**.
+Ini merusak kepercayaan user & tidak bisa dibatalkan dari sisi persepsi
+(meski baris DB dihapus).
+
+### Yang WAJIB dilakukan untuk test:
+
+1. **Kirim pesan test HANYA dari akun dummy** (`dummy_accounts.uid`) —
+   jangan pernah pakai uid user asli sebagai `sender_id`.
+2. Untuk test AI reply: pakai **akun dummy pengirim** (dummy→dummy) atau
+   **akun test khusus milik dev** yang memang terdaftar sebagai dummy.
+   Jangan pakai uid yang bukan milik dev.
+3. Kalau terpaksa butuh chat 1:1 dengan user asli, **JANGAN** insert pesan
+   atas nama dia. Cukup baca (read-only) data yang sudah ada.
+4. Setiap data test WAJIB diberi penanda (mis. prefix teks `[TEST]`), dan
+   **dibersihkan tuntas** setelah selesai — termasuk:
+   - `private_messages` (baris pesan)
+   - `ai_reply_log`, `ai_reply_claims` (log/klaim)
+   - `private_chats.last_message` + `last_message_at` (kembalikan ke pesan asli)
+   - cache lokal HP (`chatyuk_messages_v1.db`) — ingat cache TIDAK ikut terhapus
+     saat baris server dihapus.
+
+### Checklist sebelum kirim test:
+
+- [ ] `sender_id` = uid **dummy** (bukan user asli) ✅
+- [ ] Teks diberi penanda `[TEST]` ✅
+- [ ] Sudah siap skrip bersih-bersih (DB + log + `last_message`) ✅
+- [ ] Sadar: cache lokal HP yang sudah menerima pesan TIDAK ikut terhapus ✅
+
 ## Bahasa / Internasionalisasi (WAJIB)
 
 **Semua teks yang tampil ke pengguna WAJIB bilingual (Indonesia + English) — TIDAK BOLEH hardcode bahasa Indonesia.**
