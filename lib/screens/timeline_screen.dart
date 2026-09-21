@@ -36,6 +36,33 @@ class _TimelineScreenState extends State<TimelineScreen>
   Timer? _scrollDebounce;
   bool _isSearching = false;
 
+  // Hasil filter di-cache: recompute HANYA saat posts / appliedSearch
+  // berubah — bukan tiap build (dulu `.where()` jalan tiap frame).
+  List<Map<String, dynamic>> _filteredCache = const [];
+  List<Map<String, dynamic>>? _lastPostsRaw;
+  String _lastSearch = '\u0000';
+
+  List<Map<String, dynamic>> _computeFiltered(
+    List<Map<String, dynamic>> postsRaw,
+  ) {
+    if (identical(postsRaw, _lastPostsRaw) && _appliedSearch == _lastSearch) {
+      return _filteredCache;
+    }
+    _lastPostsRaw = postsRaw;
+    _lastSearch = _appliedSearch;
+    if (_appliedSearch.isEmpty) {
+      _filteredCache = postsRaw;
+    } else {
+      final q = _appliedSearch.toLowerCase();
+      _filteredCache = postsRaw.where((p) {
+        final text = (p['text'] as String? ?? '').toLowerCase();
+        final name = (p['authorName'] as String? ?? '').toLowerCase();
+        return text.contains(q) || name.contains(q);
+      }).toList();
+    }
+    return _filteredCache;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -131,15 +158,9 @@ class _TimelineScreenState extends State<TimelineScreen>
     final scope = _scope;
     // Debounce search: filter pakai _appliedSearch (di-update 250ms
     // setelah keystroke terakhir) — tiap huruf tidak rebuild seluruh list.
+    // Hasil filter di-cache → tidak hitung ulang tiap build.
     final effectiveSearch = _appliedSearch;
-    final posts = effectiveSearch.isEmpty
-        ? postsRaw
-        : postsRaw.where((p) {
-            final q = effectiveSearch.toLowerCase();
-            final text = (p['text'] as String? ?? '').toLowerCase();
-            final name = (p['authorName'] as String? ?? '').toLowerCase();
-            return text.contains(q) || name.contains(q);
-          }).toList();
+    final posts = _computeFiltered(postsRaw);
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,

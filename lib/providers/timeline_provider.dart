@@ -60,6 +60,10 @@ class TimelineProvider extends ChangeNotifier {
   final Map<String, DateTime> _lastLoadedAt = {};
   // Cache komentar per postId — buka comment instant, server menyusul.
   final Map<String, List<Map<String, dynamic>>> _commentCache = {};
+  // Waktu cache komentar diisi — dipakai TTL supaya buka-tutup-buka sheet
+  // TIDAK menembak RPC berulang (dulu selalu fetch walau cache masih segar).
+  final Map<String, DateTime> _commentCacheAt = {};
+  static const _commentTtl = Duration(seconds: 30);
 
   int _boostPaid = 50;
   int _boostBonus = 150;
@@ -88,6 +92,30 @@ class TimelineProvider extends ChangeNotifier {
     String visibility = 'public',
   }) =>
       _service.createPost(text: text, imagePaths: imagePaths, visibility: visibility);
+
+  // ── Passthrough aksi post (dipakai PostCard — hindari instansiasi
+  //    TimelineService inline di widget, biar DI & testable) ──
+  Future<Map<String, dynamic>> toggleLike(String postId) =>
+      _service.toggleLike(postId);
+  Future<Map<String, dynamic>> addComment(String postId, String text) =>
+      _service.addComment(postId, text);
+  Future<Map<String, dynamic>> replyComment(
+    String postId,
+    int parentId,
+    String text,
+  ) =>
+      _service.replyComment(postId, parentId, text);
+  Future<Map<String, dynamic>> sharePost(String postId) =>
+      _service.sharePost(postId);
+  Future<Map<String, dynamic>> boostPost(String postId) =>
+      _service.boostPost(postId);
+  Future<void> deletePost(String postId) => _service.deletePost(postId);
+  Future<List<Map<String, dynamic>>> comments(String postId) =>
+      _service.comments(postId);
+  Future<Map<String, dynamic>> toggleCommentLike(int commentId) =>
+      _service.toggleCommentLike(commentId);
+  Future<Map<String, dynamic>> shareComment(int commentId) =>
+      _service.shareComment(commentId);
 
   /// Client Supabase — disuntik supaya test memakai client palsu.
   final SupabaseClient _sb;
@@ -194,6 +222,10 @@ class TimelineProvider extends ChangeNotifier {
     );
   }
 
+  /// Expose untuk test — memanggil jalur realtime tanpa Supabase.
+  @visibleForTesting
+  void debugOnNewPost(Map<String, dynamic> msg) => _onNewPost(msg);
+
   void _onNewPost(Map<String, dynamic> msg) {
     final event = msg['event'] as String? ?? 'insert';
     final row = msg['row'] as Map<String, dynamic>?;
@@ -207,19 +239,30 @@ class TimelineProvider extends ChangeNotifier {
     if (id == null) return;
     final existingIdx = _posts.indexWhere((p) => p['id'] == id);
     if (event == 'update') {
-      if (existingIdx >= 0) {
-        // Update counter (like/comment/share) + isBoosted dari row terbaru.
-        final cur = _posts[existingIdx];
-        _posts[existingIdx] = {
-          ...cur,
-          'likeCount': row['like_count'] ?? cur['likeCount'],
-          'commentCount': row['comment_count'] ?? cur['commentCount'],
-          'shareCount': row['share_count'] ?? cur['shareCount'],
-          'isBoosted': row['is_boosted'] ?? cur['isBoosted'],
-        };
-        _invalidateView();
-        if (!_disposed) notifyListeners();
+      // Realtime posts TIDAK terfilter — update dari user mana pun (like,
+      // view, komentar) memicu event ini. Kalau post ini TIDAK ada di feed
+      // yang sedang dilihat, jangan notify (dulu notify global tiap update
+      // → seluruh layar Timeline rebuild percuma).
+      if (existingIdx < 0) return;
+      final cur = _posts[existingIdx];
+      final next = {
+        ...cur,
+        'likeCount': row['like_count'] ?? cur['likeCount'],
+        'commentCount': row['comment_count'] ?? cur['commentCount'],
+        'shareCount': row['share_count'] ?? cur['shareCount'],
+        'isBoosted': row['is_boosted'] ?? cur['isBoosted'],
+      };
+      // Tidak ada perubahan nilai → jangan notify (hindari rebuild no-op).
+      if (next['likeCount'] == cur['likeCount'] &&
+          next['commentCount'] == cur['commentCount'] &&
+          next['shareCount'] == cur['shareCount'] &&
+          next['isBoosted'] == cur['isBoosted']) {
+        return;
       }
+      _posts[existingIdx] = next;
+      _invalidateView();
+      _syncScopeCache();
+      if (!_disposed) notifyListeners();
       return;
     }
     if (_posts.any((p) => p['id'] == id)) return;
@@ -306,9 +349,21 @@ class TimelineProvider extends ChangeNotifier {
   List<Map<String, dynamic>>? getCachedComments(String postId) =>
       _commentCache[postId];
 
+  /// True bila cache komentar postId masih segar (< TTL) — pemanggil boleh
+  /// tampilkan cache tanpa RPC.
+  bool isCommentsFresh(String postId) {
+    final at = _commentCacheAt[postId];
+    if (at == null) return false;
+    return DateTime.now().difference(at) < _commentTtl;
+  }
+
+  /// True bila ada cache (segar atau tidak) untuk postId.
+  bool hasCommentsCache(String postId) => _commentCache.containsKey(postId);
+
   /// Simpan hasil fetch komentar ke cache.
   void cacheComments(String postId, List<Map<String, dynamic>> comments) {
     _commentCache[postId] = List.from(comments);
+    _commentCacheAt[postId] = DateTime.now();
   }
 
   /// Tambah satu komentar baru ke cache (setelah submit berhasil).
@@ -350,6 +405,7 @@ class TimelineProvider extends ChangeNotifier {
     _inFlight.clear();
     _scopeCache.clear();
     _commentCache.clear();
+    _commentCacheAt.clear();
     _posts.clear();
     _postsView = const [];
     _cursor = null;
@@ -629,19 +685,26 @@ class TimelineProvider extends ChangeNotifier {
   }
 
   /// Prefetch komentar post teratas yang ada komentarnya — sheet comment
-  /// dibuka instan dari cache (jaringan tethering lambat). Fire-and-forget:
-  /// tidak menunda render feed, skip yang sudah ada di cache.
+  /// dibuka instan dari cache (jaringan tethering lambat). Fire-and-forget
+  /// SETELAH jeda idle 500ms (supaya tidak bersaing dengan render feed +
+  /// RPC halaman feed): kalau scope berganti / ada fetch baru, timer dibatal.
+  /// Maks 2 post (dulu 5) — hemat kuota & tidak membanjiri koneksi.
+  Timer? _prefetchTimer;
   void _prefetchComments() {
     if (_disposed) return;
-    var n = 0;
-    for (final p in _posts) {
-      if (n >= 5) break;
-      final id = '${p['id'] ?? ''}';
-      final cc = (p['commentCount'] as num?)?.toInt() ?? 0;
-      if (id.isEmpty || cc <= 0 || _commentCache.containsKey(id)) continue;
-      n++;
-      unawaited(_fetchCommentsBg(id));
-    }
+    _prefetchTimer?.cancel();
+    _prefetchTimer = Timer(const Duration(milliseconds: 500), () {
+      if (_disposed || _scope.isEmpty) return;
+      var n = 0;
+      for (final p in _posts) {
+        if (n >= 2) break;
+        final id = '${p['id'] ?? ''}';
+        final cc = (p['commentCount'] as num?)?.toInt() ?? 0;
+        if (id.isEmpty || cc <= 0 || _commentCache.containsKey(id)) continue;
+        n++;
+        unawaited(_fetchCommentsBg(id));
+      }
+    });
   }
 
   Future<void> _fetchCommentsBg(String postId) async {
@@ -651,7 +714,10 @@ class TimelineProvider extends ChangeNotifier {
           .timeout(const Duration(seconds: 10));
       if (_disposed) return;
       // Hanya isi bila masih kosong — jangan timpa optimistic user.
-      _commentCache.putIfAbsent(postId, () => list);
+      if (!_commentCache.containsKey(postId)) {
+        _commentCache[postId] = list;
+        _commentCacheAt[postId] = DateTime.now();
+      }
     } catch (_) {}
   }
 
@@ -709,6 +775,8 @@ class TimelineProvider extends ChangeNotifier {
     _disposed = true;
     _rtSub?.cancel();
     _authSub?.cancel();
+    _prefetchTimer?.cancel();
+    _diskSaveTimer?.cancel();
     super.dispose();
   }
 }
