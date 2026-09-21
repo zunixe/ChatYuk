@@ -153,6 +153,7 @@ class _ViewerBodyState extends State<_ViewerBody> {
                             child: Image.memory(
                               widget.thumbs[i],
                               fit: BoxFit.cover,
+                              cacheWidth: 128,
                               gaplessPlayback: true,
                             ),
                           ),

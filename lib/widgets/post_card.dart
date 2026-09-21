@@ -91,10 +91,15 @@ class _PostCardState extends State<PostCard> {
       final res = await TimelineService().toggleLike(_id);
       if (!mounted) return;
       final liked = res['liked'] == true;
+      // Sumber kebenaran = server. RPC mengembalikan likeCount absolut
+      // (migration 20260922000000). Hindari hitung `cur ± 1` yang bisa
+      // dobel saat realtime UPDATE balapan menimpa nilai lokal.
+      final serverCount = (res['likeCount'] as num?)?.toInt();
       final cur = (_p['likeCount'] as num?)?.toInt() ?? 0;
+      final nextCount = serverCount ?? (liked ? cur + 1 : (cur - 1).clamp(0, 1 << 31));
       context.read<TimelineProvider>().updatePost(_id, {
         'isLiked': liked,
-        'likeCount': liked ? cur + 1 : (cur - 1).clamp(0, 1 << 31),
+        'likeCount': nextCount,
       });
     } catch (_) {
       if (mounted) {
@@ -590,6 +595,9 @@ class _PostCardState extends State<PostCard> {
         child: Image.memory(
           loaded[0].$1,
           fit: BoxFit.cover,
+          // Feed lebar ~layar; cap ~1080 cukup tajam, hemat RAM utk
+          // scroll banyak post.
+          cacheWidth: 1080,
           gaplessPlayback: true,
         ),
       ),
@@ -606,6 +614,7 @@ class _PostCardState extends State<PostCard> {
               child: Image.memory(
                 loaded[i].$1,
                 fit: BoxFit.cover,
+                cacheWidth: 1080,
                 gaplessPlayback: true,
               ),
             ),
@@ -663,6 +672,7 @@ class _PostCardState extends State<PostCard> {
                   child: Image.memory(
                     loaded[i].$1,
                     fit: BoxFit.cover,
+                    cacheWidth: 128,
                     gaplessPlayback: true,
                   ),
                 ),
@@ -971,14 +981,17 @@ class _CommentsListState extends State<_CommentsList> {
     _busy = true;
     final id = (c['id'] as num?)?.toInt() ?? 0;
     try {
-      final res = await TimelineService().toggleCommentLike(id);
-      if (!mounted) return;
-      final liked = res['liked'] == true;
-      final count = ((c['likeCount'] as num?)?.toInt() ?? 0) + (liked ? 1 : -1);
-      setState(() {
-        c['isLiked'] = liked;
-        c['likeCount'] = count < 0 ? 0 : count;
-      });
+    final res = await TimelineService().toggleCommentLike(id);
+    if (!mounted) return;
+    final liked = res['liked'] == true;
+    // Sumber kebenaran = server (likeCount absolut), bukan hitung lokal.
+    final serverCount = (res['likeCount'] as num?)?.toInt();
+    final count = serverCount ??
+        (((c['likeCount'] as num?)?.toInt() ?? 0) + (liked ? 1 : -1));
+    setState(() {
+      c['isLiked'] = liked;
+      c['likeCount'] = count < 0 ? 0 : count;
+    });
     } catch (_) {}
     _busy = false;
   }
@@ -1344,6 +1357,7 @@ class _AuthorAvatarState extends State<_AuthorAvatar> {
         width: widget.size,
         height: widget.size,
         fit: BoxFit.cover,
+        cacheWidth: (widget.size * 2).round(),
         gaplessPlayback: true,
       ),
     );

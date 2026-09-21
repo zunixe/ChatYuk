@@ -105,7 +105,7 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: _bytes != null
-              ? Image.memory(_bytes!, fit: BoxFit.cover)
+              ? Image.memory(_bytes!, fit: BoxFit.cover, cacheWidth: 96)
               : Center(
                   child: Text(
                     widget.name.isNotEmpty

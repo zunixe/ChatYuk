@@ -168,6 +168,9 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                         width: double.infinity,
                         height: 150,
                         fit: BoxFit.cover,
+                        // Preview tinggi 150px — cap decode agar tidak
+                        // raster foto asli (bisa 4000px) utk preview mungil.
+                        cacheHeight: 450,
                         gaplessPlayback: true,
                       ),
                       Positioned(

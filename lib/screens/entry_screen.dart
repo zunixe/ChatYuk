@@ -410,6 +410,8 @@ class _EntryScreenState extends State<EntryScreen> {
                                     'https://www.google.com/favicon.ico',
                                     width: 20,
                                     height: 20,
+                                    cacheWidth: 40,
+                                    cacheHeight: 40,
                                     errorBuilder: (_, __, ___) => Icon(
                                       Icons.g_mobiledata,
                                       size: 22,

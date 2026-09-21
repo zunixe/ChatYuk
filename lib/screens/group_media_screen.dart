@@ -148,7 +148,11 @@ class _GroupMediaScreenState extends State<GroupMediaScreen> {
                         clipBehavior: Clip.antiAlias,
                         child: t != null && t.isNotEmpty
                             ? Image.memory(t,
-                                fit: BoxFit.cover, gaplessPlayback: true)
+                                fit: BoxFit.cover,
+                                // Tile grid 3 kolom — cap decode (thumb
+                                // server hasil ~256px) agar hemat RAM.
+                                cacheWidth: 256,
+                                gaplessPlayback: true)
                             : const SizedBox.shrink(),
                       ),
                     );

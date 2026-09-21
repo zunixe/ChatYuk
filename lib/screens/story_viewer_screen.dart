@@ -21,7 +21,12 @@ import '../../../widgets/story_text_overlay.dart';
 
 /// Cache RAM bytes slide (path → image) — bertahan antar slide/penonton
 /// selama sesi viewer supaya mundur/maju tidak download ulang.
+///
+/// PERF: dibatasi kecil (bukan 60) karena tiap byte slide bisa ~5MB
+/// (960x1440). 8 entri cukup untuk window maju/mundur tanpa membanjiri
+/// RAM (8 x ~5MB ≈ 40MB). Cap lama 60 ≈ 300MB → risiko OOM di HP low-end.
 final Map<String, Uint8List> _slideBytesCache = {};
+const int _kSlideBytesCacheMax = 8;
 
 /// Viewer story fullscreen (gaya IG):
 /// - Progress segmented atas (1 segmen per slide), auto-advance 5 detik.
@@ -188,34 +193,51 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _preload(slides);
   }
 
+  /// PERF: hanya preload slide di sekitar slide aktif (window ±N), bukan
+  /// SEMUA slide sekaligus. Dulu Future.wait untuk seluruh list → semua byte
+  /// story (bisa ~5MB/slide) masuk RAM bareng → risiko OOM di HP low-end.
+  /// Sekarang memuat [aktif-1 .. aktif+2] saja; sisanya dimuat saat navigasi.
+  static const int _preloadAhead = 2;
+
+  /// Diindex di mana (dalam list slide) sebagai offset dari slide aktif.
+  List<int> _windowIndices() {
+    final n = _slides.length;
+    if (n == 0) return const [];
+    final start = (_slide - 1).clamp(0, n - 1);
+    final end = (_slide + _preloadAhead).clamp(0, n - 1);
+    return [for (var i = start; i <= end; i++) i];
+  }
+
   void _preload(List<StorySlide> slides) async {
-    // Paralel (dulu sequential await — slide ke-N nunggu slide ke-1).
-    await Future.wait(
-      slides.where((sl) => !_localImg.containsKey(sl.imagePath)).map((
-        sl,
-      ) async {
-        _localImg[sl.imagePath] = await _bytes(sl.imagePath);
-        if (mounted) setState(() {});
-      }),
-    );
+    await _preloadWindow();
     // Retry sekali untuk slide yang gagal (network blip) — tanpa ini
-    // slide gagal tampil HITAM permanen selama viewer dibuka.
+    // slide gagal tampil HITAM permanen selama viewer dibuka. Hanya
+    // untuk window aktif (bukan semua slide) agar tetap hemat.
     Future.delayed(const Duration(seconds: 3), () async {
       if (!mounted) return;
-      final missing = _slides
-          .where((sl) => _localImg[sl.imagePath] == null)
-          .toList();
-      if (missing.isEmpty) return;
-      await Future.wait(
-        missing.map((sl) async {
-          final b = await _bytes(sl.imagePath);
-          if (b != null && b.isNotEmpty) {
-            _localImg[sl.imagePath] = b;
-            if (mounted) setState(() {});
-          }
-        }),
-      );
+      await _preloadWindow();
     });
+  }
+
+  /// Muat byte untuk slide di window aktif yang belum ada. Paralel agar
+  /// slide berikutnya siap tanpa nunggu sequential, tapi terbatas pada
+  /// window (bukan seluruh list).
+  Future<void> _preloadWindow() async {
+    if (_slides.isEmpty) return;
+    final idxs = _windowIndices()
+        .where((i) => !_localImg.containsKey(_slides[i].imagePath))
+        .toList();
+    if (idxs.isEmpty) return;
+    await Future.wait(
+      idxs.map((i) async {
+        final sl = _slides[i];
+        final b = await _bytes(sl.imagePath);
+        if (b != null && b.isNotEmpty) {
+          _localImg[sl.imagePath] = b;
+          if (mounted) setState(() {});
+        }
+      }),
+    );
   }
 
   /// Muat ulang foto slide aktif bila masih kosong (dipanggil saat
@@ -241,7 +263,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       b ??= await context.read<StorageProvider>().downloadBytes(path);
       if (b != null && b.isNotEmpty) {
         _slideBytesCache[path] = b;
-        if (_slideBytesCache.length > 60) {
+        if (_slideBytesCache.length > _kSlideBytesCacheMax) {
           _slideBytesCache.remove(_slideBytesCache.keys.first);
         }
         unawaited(MediaDiskCache.instance.write(path, b));
@@ -284,6 +306,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       _markSeen();
       _startTimer();
       _reloadCurrentIfMissing();
+      _preloadWindow();
     } else {
       _nextPerson();
     }
@@ -294,6 +317,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       setState(() => _slide--);
       _startTimer();
       _reloadCurrentIfMissing();
+      _preloadWindow();
     } else {
       _prevPerson();
     }
@@ -459,7 +483,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     return CircleAvatar(
       radius: 16,
       backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
-      backgroundImage: bytes != null ? MemoryImage(bytes) : null,
+      // Avatar mungil (radius 16) — cap decode.
+      backgroundImage:
+          bytes != null ? ResizeImage(MemoryImage(bytes), width: 64) : null,
       child: bytes != null
           ? null
           : Text(
@@ -945,7 +971,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       fit: StackFit.expand,
       children: [
         if (bytes != null)
-          Image.memory(bytes, fit: BoxFit.cover)
+          // PERF: decode dikurangi sesuai lebar layar (story umumnya
+          // 960-1440px). Cap 1080 → hemat memori bitmap besar tanpa
+          // terlihat buram di HP.
+          Image.memory(bytes, fit: BoxFit.cover, cacheWidth: 1080)
         else
           Container(color: Colors.white10),
         StoryTextOverlay(

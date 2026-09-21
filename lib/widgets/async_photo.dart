@@ -106,6 +106,9 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
       width: widget.width,
       height: widget.height,
       fit: widget.fit,
+      // Thumb sudah di-resize 256px; cap decode agar tak raster lebih
+      // besar dari tile (mis. grid 3 kolom di HP lebar).
+      cacheWidth: 256,
       gaplessPlayback: true,
     );
   }
@@ -224,7 +227,13 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
       child: CircleAvatar(
         radius: widget.radius,
         backgroundColor: widget.bgColor ?? AppTheme.avatarBg,
-        backgroundImage: MemoryImage(b),
+        // Avatar kecil — decode di-cap (radius x2 utk density retina)
+        // agar tidak raster gambar penuh untuk lingkaran mungil.
+        backgroundImage: ResizeImage(
+          MemoryImage(b),
+          width: (widget.radius * 2 * 2).round(),
+          allowUpscaling: false,
+        ),
       ),
     );
   }

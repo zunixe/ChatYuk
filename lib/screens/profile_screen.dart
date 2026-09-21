@@ -952,7 +952,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 radius: 46,
                                 backgroundColor: avatarColor,
                                 backgroundImage: avatarBytes != null
-                                    ? MemoryImage(avatarBytes)
+                                    // Header profil radius 46 — cap decode.
+                                    ? ResizeImage(MemoryImage(avatarBytes),
+                                        width: 184)
                                     : null,
                                 child: (profile?.avatar ?? '').isEmpty
                                     ? Text(

@@ -692,7 +692,8 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.memory(_images[idx], fit: BoxFit.cover),
+                child: Image.memory(_images[idx], fit: BoxFit.cover,
+                    cacheWidth: 400),
               ),
               Positioned(
                 top: 4,

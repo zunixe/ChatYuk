@@ -60,7 +60,9 @@ class _LinkPreviewState extends State<LinkPreview> {
             if (d.image.isNotEmpty)
               ClipRRect(
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
-                child: Image.network(d.image, width: double.infinity, height: 140, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                // Batasi ukuran decode (preview tinggi 140px, x~3 density) —
+                // hemat memori & CPU raster, hindari decode gambar full-res.
+                child: Image.network(d.image, width: double.infinity, height: 140, fit: BoxFit.cover, cacheWidth: 480, cacheHeight: 420, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
               ),
             Padding(
               padding: const EdgeInsets.all(8),
