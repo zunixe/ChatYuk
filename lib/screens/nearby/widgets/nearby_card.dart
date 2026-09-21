@@ -90,7 +90,10 @@ class NearbyCard extends StatelessWidget {
                         border: Border.all(color: color, width: 1.5),
                         image: hasAvatar
                             ? DecorationImage(
-                                image: MemoryImage(avatarBytes!),
+                                // Kartu 44px — cap decode biar tidak
+                                // raster avatar penuh.
+                                image: ResizeImage(MemoryImage(avatarBytes!),
+                                    width: 96),
                                 fit: BoxFit.cover,
                               )
                             : null,

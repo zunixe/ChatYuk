@@ -308,7 +308,9 @@ class _AvatarState extends State<_Avatar> {
     }
     return CircleAvatar(
       radius: 18,
-      backgroundImage: MemoryImage(_bytes!),
+      // Avatar mungil (radius 18) — cap decode (x2 density x2) agar
+      // tidak raster gambar penuh.
+      backgroundImage: ResizeImage(MemoryImage(_bytes!), width: 72),
     );
   }
 }

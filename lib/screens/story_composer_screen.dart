@@ -48,6 +48,29 @@ String _processStoryImage(Uint8List bytes) {
   return base64Encode(jpg);
 }
 
+/// Payload rectangle untuk encode JPEG di isolate (top-level agar compute-safe).
+class _RawJpg {
+  final Uint8List rgba;
+  final int width;
+  final int height;
+  const _RawJpg(this.rgba, this.width, this.height);
+}
+
+/// rawRgba (dari ui.Image.toByteData) → JPEG bytes. Top-level supaya bisa
+/// dijalankan via compute() di isolate terpisah (tidak blocking UI thread).
+Uint8List _encodeRawRgbaToJpg(_RawJpg p) {
+  // numChannels 4 + order rgba: cocok dgn output
+  // ui.ImageByteFormat.rawRgba (R,G,B,A per pixel).
+  final image = img.Image.fromBytes(
+    width: p.width,
+    height: p.height,
+    bytes: p.rgba.buffer,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
+  return img.encodeJpg(image, quality: 90);
+}
+
 /// Halaman buat story: preview foto 9:16 + teks overlay (drag bebas,
 /// warna/ukuran/latar) + pilih visibility. Anon tidak sampai ke sini
 /// (tombol + tersembunyi; RLS server juga menolak).
@@ -180,10 +203,13 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     }
   }
 
-  /// Render foto dgn transformasi jadi PNG bytes (untuk dibake ke final).
+  /// Render foto dgn transformasi jadi bytes JPEG (untuk dibake ke final).
+  ///
+  /// PERF: dulu `toByteData(png)` — PNG encode besar & lambat. Sekarang ambil
+  /// pixel mentah (rawRgba, tanpa kompresi), lalu encode JPEG di isolate
+  /// terpisah (`compute`) supaya tidak jank UI dan hasil jauh lebih kecil.
   Future<Uint8List> _renderTransformed(Uint8List src) async {
-    final codec =
-        await ui.instantiateImageCodec(src, targetWidth: 1080);
+    final codec = await ui.instantiateImageCodec(src, targetWidth: 1080);
     final frame = await codec.getNextFrame();
     final image = frame.image;
     final recorder = ui.PictureRecorder();
@@ -196,13 +222,15 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
         -image.height / 2 + _imgOffset.dy);
     canvas.drawImage(image, Offset.zero, Paint());
     final picture = recorder.endRecording();
-    final rendered = await picture.toImage(
-        image.width, image.height);
-    final data = await rendered.toByteData(
-        format: ui.ImageByteFormat.png);
+    final rendered = await picture.toImage(image.width, image.height);
+    final w = rendered.width;
+    final h = rendered.height;
+    final data = await rendered.toByteData(format: ui.ImageByteFormat.rawRgba);
     image.dispose();
     rendered.dispose();
-    return data!.buffer.asUint8List();
+    final raw = data!.buffer.asUint8List();
+    // Encode JPEG di isolate (rawRgba → img.Image → encodeJpg q90).
+    return compute(_encodeRawRgbaToJpg, _RawJpg(raw, w, h));
   }
 
   @override
@@ -497,7 +525,9 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                               // persis seperti tampil di viewer nanti
                               // (WYSIWYG). Kelebihan zoom ter-clip rapi,
                               // tidak transparan.
-                              fit: BoxFit.cover),
+                              // PERF: cap decode ~lebar preview (1080)
+                              // agar tidak raster full-res berulang.
+                              fit: BoxFit.cover, cacheWidth: 1080),
                         ),
                       ),
                     ),

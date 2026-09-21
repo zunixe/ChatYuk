@@ -91,6 +91,9 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
         width: widget.size,
         height: widget.size,
         fit: BoxFit.cover,
+        // Avatar kecil (size x density ~2) — cap decode supaya tidak
+        // raster gambar profil penuh untuk kotak mungil di daftar.
+        cacheWidth: (widget.size * 2).round(),
         gaplessPlayback: true,
       );
       child = isCircle
