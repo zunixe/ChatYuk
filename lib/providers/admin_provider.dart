@@ -714,7 +714,14 @@ Future<void> fetchDevices() async {
   /// Refresh daftar chat tanpa loading spinner (untuk polling berkala).
   Future<void> refreshChats() async {
     try {
-      final res = await _service.listChats(limit: chatPageSize, offset: 0);
+      // PERTAHANKAN kedalaman pagination. Dulu selalu `limit: chatPageSize`
+      // (50) → kalau admin sudah scroll dan memuat 150 chat, poll 30 dtk
+      // memangkas balik jadi 50: chat ke-51+ HILANG lalu muncul lagi saat
+      // di-scroll ulang (gejala "kadang muncul kadang ilang" di monitor).
+      // Ambil minimal sebanyak yang sudah dimuat; kalau belum scroll, tetap
+      // chatPageSize.
+      final want = _chats.length > chatPageSize ? _chats.length : chatPageSize;
+      final res = await _service.listChats(limit: want, offset: 0);
       _chats = List<Map<String, dynamic>>.from(res['items'] ?? const []);
       _chatsTotal = (res['total'] as num?)?.toInt() ?? 0;
       _chatsHasMore = _chats.length < _chatsTotal;

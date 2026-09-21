@@ -313,6 +313,11 @@ class PrivateChatInfo {
   final List<String> mutedBy;
   final List<String> archivedBy;
 
+  /// UID lawan bicara yang akunnya SUDAH DIHAPUS. Baris ini hanya ada di
+  /// perangkat lokal (server sudah menghapus chat-nya demi privasi) — dipakai
+  /// menampilkan label "Akun dihapus" + mengunci kirim pesan. Kosong = normal.
+  final String deletedOtherUid;
+
   PrivateChatInfo({
     required this.chatId,
     required this.participants,
@@ -331,7 +336,12 @@ class PrivateChatInfo {
     this.pinnedAt = const {},
     this.mutedBy = const [],
     this.archivedBy = const [],
+    this.deletedOtherUid = '',
   });
+
+  /// Akun lawan sudah dihapus (penanda lokal) → UI tampilkan label khusus,
+  /// kirim pesan dikunci, dan user boleh menghapus chat ini.
+  bool get otherDeleted => deletedOtherUid.isNotEmpty;
 
   bool isPinnedFor(String uid) => pinnedBy.contains(uid);
   DateTime? pinnedAtFor(String uid) => pinnedAt[uid];
@@ -356,6 +366,7 @@ class PrivateChatInfo {
     'pinnedAt': pinnedAt.map((k, v) => MapEntry(k, v.toIso8601String())),
     'mutedBy': mutedBy,
     'archivedBy': archivedBy,
+    'deletedOtherUid': deletedOtherUid,
   };
 
   static Map<String, String> _strMap(dynamic v) =>
@@ -393,6 +404,7 @@ class PrivateChatInfo {
       ),
       mutedBy: List<String>.from(d['mutedBy'] ?? const []),
       archivedBy: List<String>.from(d['archivedBy'] ?? const []),
+      deletedOtherUid: '${d['deletedOtherUid'] ?? ''}',
     );
   }
 
@@ -414,6 +426,7 @@ class PrivateChatInfo {
     Map<String, DateTime>? pinnedAt,
     List<String>? mutedBy,
     List<String>? archivedBy,
+    String? deletedOtherUid,
   }) {
     return PrivateChatInfo(
       chatId: chatId ?? this.chatId,
@@ -434,6 +447,7 @@ class PrivateChatInfo {
       pinnedAt: pinnedAt ?? this.pinnedAt,
       mutedBy: mutedBy ?? this.mutedBy,
       archivedBy: archivedBy ?? this.archivedBy,
+      deletedOtherUid: deletedOtherUid ?? this.deletedOtherUid,
     );
   }
 }

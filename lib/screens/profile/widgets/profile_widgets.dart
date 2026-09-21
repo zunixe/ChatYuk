@@ -113,17 +113,36 @@ class ProfileSectionCard extends StatelessWidget {
 }
 
 /// Baris info ikon + label + nilai.
+///
+/// Satu-satunya bentuk baris info di kartu Profil. SEMUA baris (Status,
+/// Username, User ID, About) WAJIB memakai widget ini supaya padding,
+/// ukuran ikon, jarak, dan gaya teks konsisten — dulu Username & About
+/// dibuat manual dengan padding berbeda sehingga ikon/teksnya tidak
+/// sejajar dengan baris lain dan tingginya tidak sama.
 class ProfileInfoTile extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String label;
   final String value;
+
+  /// Widget di ujung kanan (mis. tombol edit). Null = tidak ada.
+  final Widget? trailing;
+
+  /// Override gaya nilai (mis. placeholder abu saat teks kosong).
+  final TextStyle? valueStyle;
+
+  /// Batas baris nilai. Null = bebas (teks panjang seperti About).
+  final int? valueMaxLines;
+
   const ProfileInfoTile({
     super.key,
     required this.icon,
     required this.iconColor,
     required this.label,
     required this.value,
+    this.trailing,
+    this.valueStyle,
+    this.valueMaxLines,
   });
 
   @override
@@ -131,6 +150,7 @@ class ProfileInfoTile extends StatelessWidget {
     return Padding(
       // Sama untuk SEMUA baris di kartu profil/settings: horizontal 4 +
       // vertical 6, sehingga ikon, teks, dan divider (indent 52) sejajar.
+      // Ikon 36 + jarak 12 + padding 4 = 52 = indent divider.
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       child: Row(
         children: [
@@ -154,10 +174,17 @@ class ProfileInfoTile extends StatelessWidget {
                     color: AppTheme.textSecondary,
                   ),
                 ),
-                Text(value, style: AppText.bodyStrong),
+                Text(
+                  value,
+                  style: valueStyle ?? AppText.bodyStrong,
+                  maxLines: valueMaxLines,
+                  overflow:
+                      valueMaxLines != null ? TextOverflow.ellipsis : null,
+                ),
               ],
             ),
           ),
+          if (trailing != null) trailing!,
         ],
       ),
     );
