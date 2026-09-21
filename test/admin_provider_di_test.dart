@@ -178,4 +178,106 @@ void main() {
           )).called(1);
     });
   });
+
+  group('refreshChats — anti "kadang muncul kadang ilang"', () {
+    Map<String, dynamic> chat(String id, {int count = 1}) => {
+          'chat_id': id,
+          'message_count': count,
+          'participants': ['u1', 'u2'],
+        };
+
+    test('server return SUBSET → item lama tetap ada (tidak terpangkas)',
+        () async {
+      // fetch awal: 3 chat.
+      when(() => service.listChats(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          )).thenAnswer((_) async => {
+            'items': [chat('a'), chat('b'), chat('c')],
+            'total': 3,
+          });
+      await provider.fetchChats();
+      expect(provider.chats.length, 3);
+
+      // poll berikutnya server cuma balikin 1 (race/filter) — dulu list
+      // terpangkas jadi 1 → "ilang", lalu muncul lagi saat scroll.
+      when(() => service.listChats(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          )).thenAnswer((_) async => {
+            'items': [chat('a')],
+            'total': 3,
+          });
+      await provider.refreshChats();
+
+      expect(provider.chats.length, 3);
+      expect(provider.chats.map((c) => c['chat_id']), containsAll(['a', 'b', 'c']));
+    });
+
+    test('chat baru dari server ditambahkan di depan tanpa duplikat', () async {
+      when(() => service.listChats(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          )).thenAnswer((_) async => {
+            'items': [chat('a'), chat('b')],
+            'total': 3,
+          });
+      await provider.fetchChats();
+
+      when(() => service.listChats(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          )).thenAnswer((_) async => {
+            'items': [chat('new'), chat('a'), chat('b')],
+            'total': 3,
+          });
+      await provider.refreshChats();
+
+      expect(provider.chats.length, 3);
+      expect(provider.chats.first['chat_id'], 'new');
+      // tidak ada id ganda.
+      final ids = provider.chats.map((c) => c['chat_id']).toList();
+      expect(ids.toSet().length, ids.length);
+    });
+
+    test('konten item yang berubah di-update in-place (posisi tetap)', () async {
+      when(() => service.listChats(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          )).thenAnswer((_) async => {
+            'items': [chat('a', count: 1), chat('b', count: 5)],
+            'total': 2,
+          });
+      await provider.fetchChats();
+
+      when(() => service.listChats(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          )).thenAnswer((_) async => {
+            'items': [chat('a', count: 9), chat('b', count: 5)],
+            'total': 2,
+          });
+      await provider.refreshChats();
+
+      expect(provider.chats.length, 2);
+      expect(provider.chats.first['chat_id'], 'a');
+      expect(provider.chats.first['message_count'], 9);
+    });
+
+    test('limit refresh = kedalaman yang sudah dimuat (> chatPageSize)',
+        () async {
+      final many = List.generate(60, (i) => chat('c$i'));
+      when(() => service.listChats(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          )).thenAnswer((_) async => {'items': many, 'total': 60});
+      await provider.fetchChats();
+      expect(provider.chats.length, 60);
+
+      await provider.refreshChats();
+
+      // Kedalaman 60 dipertahankan (bukan dipangkas ke 50).
+      verify(() => service.listChats(limit: 60, offset: 0)).called(1);
+    });
+  });
 }

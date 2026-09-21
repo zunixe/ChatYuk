@@ -712,19 +712,32 @@ Future<void> fetchDevices() async {
   }
 
   /// Refresh daftar chat tanpa loading spinner (untuk polling berkala).
+  /// MERGE dengan list existing: server bisa return subset (race/filter),
+  /// jangan memangkas balik → gejala "kadang muncul kadang ilang".
   Future<void> refreshChats() async {
     try {
-      // PERTAHANKAN kedalaman pagination. Dulu selalu `limit: chatPageSize`
-      // (50) → kalau admin sudah scroll dan memuat 150 chat, poll 30 dtk
-      // memangkas balik jadi 50: chat ke-51+ HILANG lalu muncul lagi saat
-      // di-scroll ulang (gejala "kadang muncul kadang ilang" di monitor).
-      // Ambil minimal sebanyak yang sudah dimuat; kalau belum scroll, tetap
-      // chatPageSize.
       final want = _chats.length > chatPageSize ? _chats.length : chatPageSize;
       final res = await _service.listChats(limit: want, offset: 0);
-      _chats = List<Map<String, dynamic>>.from(res['items'] ?? const []);
-      _chatsTotal = (res['total'] as num?)?.toInt() ?? 0;
-      _chatsHasMore = _chats.length < _chatsTotal;
+      final fresh =
+          List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      final merged = List<Map<String, dynamic>>.from(_chats);
+      // Update existing / add new
+      for (final f in fresh) {
+        final id = '${f['chat_id']}';
+        final idx = merged.indexWhere((c) => '${c['chat_id']}' == id);
+        if (idx >= 0) {
+          merged[idx] = f;
+        } else {
+          merged.insert(0, f); // terbaru di depan
+        }
+      }
+      // JANGAN hapus item yang tidak ada di fresh (bisa filter/race).
+      // Hanya jika server return LEBIH BANYAK → refresh total/hasMore.
+      if (fresh.length > _chats.length) {
+        _chatsTotal = (res['total'] as num?)?.toInt() ?? _chatsTotal;
+        _chatsHasMore = merged.length < _chatsTotal;
+      }
+      _chats = merged;
       _adminUids = (res['admin_uids'] as List<dynamic>? ?? const [])
           .map((e) => '$e')
           .toList();
