@@ -3,6 +3,23 @@
 Test **end-to-end UI** di HP/emulator nyata — lapisan yang tidak tercakup
 62 file unit/widget test.
 
+## ⛔ LARANGAN — jangan pakai akun user asli untuk test
+
+**JANGAN pernah mengirim/menyisipkan pesan dengan `sender_id` milik user
+asli** (lewat SQL, Management API, `net.http_post`, Maestro, atau skrip).
+Pesan yang muncul seolah dari user asli = **disangka scam / akun dibajak**.
+
+Aturan:
+1. Test kirim pesan HANYA dari akun **dummy** (`dummy_accounts`) atau akun
+   test khusus milik dev.
+2. Untuk chat 1:1 dengan user asli → **read-only** (jangan insert atas
+   namanya).
+3. Tandai data test (`[TEST]`) dan bersihkan tuntas setelahnya:
+   `private_messages`, `ai_reply_log`, `ai_reply_claims`, lalu kembalikan
+   `private_chats.last_message`/`last_message_at` ke pesan asli.
+4. Ingat: hapus baris server **TIDAK** menghapus cache lokal HP
+   (`chatyuk_messages_v1.db`) — pesan masih terlihat di history user.
+
 ## Kenapa Maestro, bukan `integration_test`
 
 Repo ini pernah **gagal build rilis** karena dev-dep `integration_test`:
