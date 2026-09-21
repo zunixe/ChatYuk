@@ -7,6 +7,47 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { checkAppSecret, unauthorized } from '../_shared/auth.ts';
 
+// Fungsi murni di _shared/ai-helpers.ts — dulu DISALIN di sini dan sempat
+// divergen (sanitize produksi 95 baris vs 40 di salinan → 59 test Deno
+// menguji kode yang BUKAN produksi). Sekarang satu sumber, diimpor.
+import {
+  EXPLICIT_TERMS,
+  FACE_DEFAULTS,
+  INSULT_TERMS,
+  MAX_REPLY_CHARS,
+  applySleepToSchedule,
+  asleepAt,
+  bannedEmojisFromHistory,
+  browseTopicKey,
+  bulan,
+  capEmoji,
+  capLines,
+  capSentences,
+  chartUrl,
+  contentText,
+  extractChartJs,
+  extractEmojis,
+  faceDescriptor,
+  fluxFree,
+  fridayPrayerAt,
+  hashInt,
+  hasWord,
+  historyTimeLabel,
+  isExplicit,
+  isInsult,
+  needsFreshInfo,
+  parseImagePrompt,
+  sanitize,
+  sleepHours,
+  stableSeed,
+  stripBannedEmojis,
+  stripMoodMarker,
+  stripTimeLabel,
+  summarizeNewsRss,
+  userWantsImage,
+  wibParts,
+} from '../_shared/ai-helpers.ts';
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': '*',
@@ -28,53 +69,21 @@ const DEFAULT_TONE =
   'ngobrol kayak orang Indonesia asli: pendek 2-12 kata, lowercase sering, singkatan (yg, gpp, bgt, klo, ntar, wkwk), typo ringan sesekali. JANGAN selalu nanya balik — cukup 1 dari 3 balasan yang ada pertanyaannya';
 
 // Cap panjang balasan — chat asli tidak pernah menulis paragraf.
-const MAX_REPLY_CHARS = 90;
 
 // ── Content safety: blocklist NSFW (input & output) ──
 // Dummy AI TIDAK PERNAH melanjutkan topik seksual/NSFW walau dipaksa
 // prompt injection. Tiga lapis: cek pesan masuk, klausa system prompt,
 // cek balasan sebelum dikirim.
-const EXPLICIT_TERMS = [
-  // ID
-  'seks', 'sex', 'ngentot', 'jilat', 'sange', 'horny', 'telanjang', 'bugil',
-  'nude', 'paha dalem', 'dada', 'payudara', 'toket', 'memek', 'kontol',
-  'penis', 'vagina', 'bokep', 'porn', 'masto', 'orgasme', 'ritual ranjang',
-  'ranjang', 'bikin anak', 'kencan malam', 'besar dan keras', 'dobel',
-  // EN
-  'naked', 'nudes', 'fuck', 'sex chat', 'sexy time', 'blowjob', 'handjob',
-  'horny', ' dildo', 'escort', 'onlyfans', 'nsfw',
-];
 
 // Cocokkan term sebagai KATA utuh (bukan substring): 'kasur'/'masuk' tidak
 // boleh kena term 'asu', 'menggunakan' tidak kena 'guna', 'mendadak' tidak
 // kena 'dada'. Tetangga bukan-huruf (spasi, angka, emoji, tanda baca) OK.
-function hasWord(text: string, term: string): boolean {
-  const esc = term
-    .toLowerCase()
-    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // \p{L} = huruf Unicode apa pun (aksen dsb ikut jadi pembatas kata).
-  return new RegExp(`(^|[^\\p{L}])${esc}([^\\p{L}]|$)`, 'iu').test(text);
-}
 
-function isExplicit(text: string): boolean {
-  return EXPLICIT_TERMS.some((w) => hasWord(text, w));
-}
 
 // KATA HINAAN (insult) — pemicu emosi marah & ngambek offline.
 // Terpisah dari EXPLICIT_TERMS (NSFW) karena hinaan biasa juga
 // menyakiti perasaan — justru yang paling sering bikin dummy kesal.
-const INSULT_TERMS = [
-  'bego', 'goblok', 'bodoh', 'tolol', 'idiot', 'otak ayam', 'otak udang',
-  'bangsat', 'brengsek', 'bajingan', 'tai kucing', 'sialan', 'asu',
-  'anjing lo', 'anjing kamu', 'dasar', 'tidak berguna', 'ga berguna',
-  'gak berguna', 'tak berguna', 'guna', 'jelek banget', 'buruk banget',
-  'benci kamu', 'benci sama kamu', 'payah', 'kacau', 'menyebalkan',
-  'stupid', 'idiot', 'useless', 'hate you', 'moron', 'dumb',
-];
 
-function isInsult(text: string): boolean {
-  return INSULT_TERMS.some((w) => hasWord(text, w));
-}
 
 const DEFLECTIONS = [
   'Haha nggak ah, ngobrol yang wajar aja deh',
@@ -105,241 +114,28 @@ function pick(arr: string[], seed: string): string {
 // Tidur 20–23, bangun 4–6 — hash(uid|tanggal) supaya konsisten seharian
 // di semua chat, ganti tiap hari. Gender: laki-laki jumatan, perempuan
 // tidak. WIB dihitung manual (+7 jam) agar tidak tergantung TZ runtime.
-function hashInt(seed: string): number {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-function sleepHours(
-  uid: string,
-  dateWib: string,
-): { sleepHour: number; wakeHour: number } {
-  const h = hashInt(`${uid}|${dateWib}|sleep`);
-  return { sleepHour: 20 + (h % 4), wakeHour: 4 + (Math.floor(h / 4) % 3) };
-}
-function wibParts(
-  ms: number,
-): { date: string; hour: number; minute: number; weekday: number } {
-  const d = new Date(ms + 7 * 3600 * 1000);
-  return {
-    date: d.toISOString().slice(0, 10),
-    hour: d.getUTCHours(),
-    minute: d.getUTCMinutes(),
-    weekday: d.getUTCDay(), // 0=Minggu … 5=Jumat
-  };
-}
-function asleepAt(
-  uid: string,
-  ms: number,
-  activeHours?: number[] | null,
-): boolean {
-  const w = wibParts(ms);
-  // ai_active_hours = override EKSPLISIT dari admin: jam yang tercantum =
-  // dianggap BANGUN (menang atas jam tidur acak). Panel admin memakai
-  // aturan yang sama, jadi keduanya konsisten.
-  if (activeHours && activeHours.length > 0 && activeHours.includes(w.hour)) {
-    return false;
-  }
-  const sw = sleepHours(uid, w.date);
-  return w.hour >= sw.sleepHour || w.hour < sw.wakeHour;
-}
 // Buang jam tidur dari jadwal aktif (konsisten dengan gate asleepAt di
 // atas): tick presence meng-offline-kan dummy saat jam tidur, bukan
 // menampilkannya online padahal bungkam. Cermin di ai-helpers + tests.
-function applySleepToSchedule(hours: number[], sleepHour: number): number[] {
-  const kept = [...new Set(hours)]
-    .map((e) => Number(e))
-    .filter((e) => Number.isInteger(e) && e >= 0 && e < sleepHour)
-    .sort((a, b) => a - b);
-  if (kept.length >= 6) return kept;
-  const fallback: number[] = [];
-  for (let h = 7; h < sleepHour && fallback.length < 12; h++) fallback.push(h);
-  return fallback.length >= 6 ? fallback : kept;
-}
-function fridayPrayerAt(
-  gender: string | null | undefined,
-  ms: number,
-): boolean {
-  if (gender !== 'male') return false;
-  const w = wibParts(ms);
-  if (w.weekday !== 5) return false;
-  const mins = w.hour * 60 + w.minute;
-  return mins >= 690 && mins < 780; // 11:30–13:00 WIB
-}
 
-function sanitize(
-  text: string,
-  maxChars: number | null = MAX_REPLY_CHARS,
-  keepLines = false,
-): string {
-  let t = (text || '').trim();
-  // Buang prefix JSON bocor (fitur status dummy sesi lain nempel di
-  // pesan history — model meniru polanya): {"mood":..., ...}
-  t = t.replace(/^\s*\{[^{}]*\}/, '').trim();
-  t = t.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
-  if (keepLines) {
-    // CS/expert: PERTAHANKAN baris supaya poin/angka bernomor rapi (tidak
-    // numpuk satu baris). Normalisasi: spasi dalam baris dirapatkan,
-    // TAPI indentasi awal baris DIPERTAHANKAN (tab → 2 spasi) supaya blok
-    // kode tetap rapi seperti codingan beneran, bukan rata kiri semua.
-    // Maksimal 1 baris kosong antar paragraf.
-    // RAPIKAN LIST: model kadang menulis "1. ... 2. ... 3. ..." sebaris —
-    // pecah jadi satu baris per nomor. Hanya bila terdeteksi ≥2 penomoran
-    // (hindari tanggal/kalimat biasa kepecah) + wajib huruf setelah nomor
-    // (hindari desimal "3.5", jam "14.00", harga "50.000"). Isi blok kode
-    // ``` dilewati (diagram/kode jangan rusak).
-    const splitLists = (src: string): string => {
-      const parts = src.split('```');
-      for (let i = 0; i < parts.length; i += 2) {
-        let p = parts[i];
-        // Poin ANGKA: "1. ... 2. ..." sebaris → pisah + baris kosong
-        // (= satu paragraf per poin). Syarat ≥2 penomoran + huruf
-        // sesudahnya (aman dari desimal "3.5", jam "14.00", "Rp 50.000").
-        const numHits = p.match(/\s\d{1,2}[.)]\s+(?=[A-Za-z])/g);
-        if (numHits && numHits.length >= 2) {
-          p = p.replace(/(\s)(\d{1,2}[.)])(\s+)(?=[A-Za-z])/g, '\n\n$2$3');
-        }
-        // Sub-poin HURUF kurung: "(a) ... (b) ..." → baris sendiri
-        // menjorok 2 spasi (tab). Bentuk kurung nyaris tanpa false
-        // positive, jadi boleh longgar (tengah kalimat pun dipecah).
-        const parHits = p.match(/\([a-eA-E]\)\s+(?=[A-Za-z])/g);
-        if (parHits && parHits.length >= 2) {
-          p = p.replace(
-            /(\([a-eA-E]\))(\s+)(?=[A-Za-z])/g,
-            '\n  $1$2',
-          );
-        }
-        // Sub-poin HURUF telanjang: "a. ... b. ..." → baris sendiri
-        // menjorok. Syarat ≥2 butir (lolos dari "Ia. Dia" tunggal).
-        const letHits = p.match(/\s[a-eA-E][.]\s+(?=[A-Za-z])/g);
-        if (letHits && letHits.length >= 2) {
-          p = p.replace(/(\s)([a-eA-E][.])(\s+)(?=[A-Za-z])/g, '\n  $2$3');
-        }
-        p = p.replace(/^\s*[•*]\s+/gm, '- ');
-        parts[i] = p;
-      }
-      return parts.join('```');
-    };
-    t = splitLists(t);
-    t = t
-      .split(/\r?\n/)
-      .map((line) => {
-        const m = line.match(/^([ \t]*)([\s\S]*)$/);
-        const indent = (m?.[1] ?? '')
-          .replace(/\t/g, '  ')
-          .slice(0, 24);
-        const rest = (m?.[2] ?? '').replace(/[ \t]+/g, ' ').trim();
-        return rest ? indent + rest : '';
-      })
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    if (maxChars != null && t.length > maxChars) t = t.slice(0, maxChars).trim();
-    // Kapitalkan huruf pertama jawaban CS/expert (kecuali baris mulai kode).
-    if (t && t[0] >= 'a' && t[0] <= 'z') t = t[0].toUpperCase() + t.slice(1);
-    return t;
-  }
-  t = t.replace(/\n+/g, ' ');
-  // Potong di batas kalimat bila lewat — guard on: balasan multi-kalimat
-  // dilarang; guard off (mode dewasa): TANPA cap (max_chars null) — batas
-  // alami hanya max_tokens model.
-  if (maxChars != null && t.length > maxChars) {
-    const cut = t.slice(0, maxChars);
-    const lastStop = Math.max(
-      cut.lastIndexOf('. '),
-      cut.lastIndexOf('! '),
-      cut.lastIndexOf('? '),
-      cut.lastIndexOf(','), // jangan potong di tengah frasa — komanya terakhir
-    );
-    t = (lastStop > 30 ? cut.slice(0, lastStop + 1) : cut).trim();
-    t = t.replace(/[,;:]$/, '');
-    if (!/[.!?]$/.test(t)) t += '...';
-  }
-  // Kapitalkan huruf pertama (gaya chat WhatsApp) — hanya jika karakter
-  // pertama huruf kecil; emoji/simbol/angka dibiarkan apa adanya.
-  if (t && t[0] >= 'a' && t[0] <= 'z') {
-    t = t[0].toUpperCase() + t.slice(1);
-  }
-  return t;
-}
 
 // Potong emoji berlebih: simpan max 1 (yang terakhir — biasanya punchline).
 // Model kadang menumpuk 3+ emoji walau sudah dilarang di prompt.
-function capEmoji(text: string): string {
-  const matches = [...text.matchAll(/\p{Extended_Pictographic}/gu)];
-  if (matches.length <= 1) return text;
-  const keepAt = matches[matches.length - 1].index ?? -1;
-  return text.replace(
-    /\p{Extended_Pictographic}/gu,
-    (m, offset) => (offset === keepAt ? m : ''),
-  );
-}
 
 // Potong kalimat berlebih (mode dewasa): maksimal `max` kalimat.
-function capSentences(text: string, max: number): string {
-  const parts = text.split(/(?<=[.!?…])\s+/).filter(Boolean);
-  if (parts.length <= max) return text;
-  return parts.slice(0, max).join(' ');
-}
 
 // ── ANTI-REPEAT EMOJI lintas pesan ──
 // capEmoji hanya batasi maks 1 per pesan — tidak mencegah model memakai
 // emoji YANG SAMA di tiap balasan (kasus BinorMuda: 15x 😈 beruntun).
 // Dua helper ini: baca emoji dari 2 balasan assistant terakhir → jadikan
 // daftar larangan di prompt + strip paksa bila model tetap melanggar.
-function extractEmojis(text: string): string[] {
-  return [...String(text || '').matchAll(/\p{Extended_Pictographic}/gu)].map(
-    (m) => m[0],
-  );
-}
 
-function bannedEmojisFromHistory(
-  history: Array<{ role: string; content: unknown }>,
-  take = 2,
-): string[] {
-  const banned: string[] = [];
-  const maxBanned = take * 2;
-  let scanned = 0;
-  for (let i = history.length - 1; i >= 0 && scanned < take; i--) {
-    const m = history[i];
-    if (m.role !== 'assistant') continue;
-    scanned++;
-    for (const e of extractEmojis(contentText(m.content))) {
-      if (!banned.includes(e)) banned.push(e);
-      if (banned.length >= maxBanned) break;
-    }
-  }
-  return banned;
-}
 
-function stripBannedEmojis(text: string, banned: string[]): string {
-  if (!banned.length) return text;
-  const set = new Set(banned);
-  const out = text.replace(/\p{Extended_Pictographic}/gu, (m) =>
-    set.has(m) ? '' : m,
-  );
-  return out.replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
-}
 
 // Potong baris berlebih (CS): maksimal `max` baris, TANPA meratakan
 // newline (capSentences men-join spasi = poin-poin numpuk lagi).
-function capLines(text: string, max: number): string {
-  const lines = text.split('\n');
-  if (lines.length <= max) return text;
-  return lines.slice(0, max).join('\n').trim();
-}
 
 // Ambil teks dari content (string atau parts array OpenAI-style).
-function contentText(c: any): string {
-  if (typeof c === 'string') return c;
-  if (Array.isArray(c)) {
-    return c
-      .filter((p) => p && p.type === 'text')
-      .map((p) => String(p.text || ''))
-      .join(' ');
-  }
-  return String(c ?? '');
-}
 
 // ── Konsistensi waktu di riwayat chat ──
 // Riwayat yang dikirim ke LLM tadinya tanpa timestamp → saat ditanya
@@ -347,43 +143,9 @@ function contentText(c: any): string {
 // "tadi/hari ini". Format label: [kemarin 14.05], [hari ini 09.12] —
 // pendek, deterministik, WIB (konsisten dgn sisa kode yg hitung WIB
 // manual +7 jam).
-function historyTimeLabel(at: unknown): string {
-  const t = new Date(String(at ?? '')).getTime();
-  if (isNaN(t)) return '';
-  const wib = new Date(t + 7 * 3600 * 1000);
-  const nowWib = new Date(Date.now() + 7 * 3600 * 1000);
-  const day = wib.toISOString().slice(0, 10);
-  const today = nowWib.toISOString().slice(0, 10);
-  // Kemarin dihitung dari waktu SEKARANG (bukan waktu pesan) — bandingkan
-  // tanggal kalender WIB. WIB tanpa DST jadi selisih 24 jam deterministik.
-  const yesterday = new Date(nowWib.getTime() - 86400e3)
-    .toISOString()
-    .slice(0, 10);
-  const hhmm = `${String(wib.getUTCHours()).padStart(2, '0')}.${String(
-    wib.getUTCMinutes(),
-  ).padStart(2, '0')}`;
-  if (day === today) return `[hari ini ${hhmm}]`;
-  if (day === yesterday) return `[kemarin ${hhmm}]`;
-  return `[${wib.getUTCDate()} ${bulan(wib.getUTCMonth())} ${hhmm}]`;
-}
-function bulan(m: number): string {
-  return [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
-  ][m] ?? '';
-}
 // Buang label waktu yang bocor ditiru model di balasan ("[hari ini
 // 14.05]..."). Frasa wajar seperti "kemarin jam 21.30" TIDAK kena
 // (ditengahi kata "jam").
-function stripTimeLabel(t: string): string {
-  return t
-    .replace(
-      /\[?(hari ini|kemarin|\d{1,2} (?:Jan|Feb|Mar|Apr|Mei|Jun|Jul|Agu|Sep|Okt|Nov|Des))\s+\d{1,2}[.:]\d{2}\]?/gi,
-      '',
-    )
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
 
 // ── IMAGE SENDING: user minta foto/gambar → AI bisa kirim gambar ──
 // LLM menandai niat kirim gambar lewat field "image" di JSON mood
@@ -393,71 +155,26 @@ function stripTimeLabel(t: string): string {
 const IMAGE_REQUEST_RE =
   /(kirim|minta|bagi|bagiin|kirimin|kasih|kasi|lihat|liat|show|send|mau|dong|dongg|please|pls).{0,20}(foto|gambar|photo|pic|poto|selfie|pap|wajah|muka|body|badan)|^(foto|gambar|photo|pic|poto|selfie|pap).{0,30}(dong|dulu|lagi|ya|kamu|mu|kirim|minta)|kirim.*(seksi|sexy|nakal|hot|bikini|tanktop)/i;
 
-function parseImagePrompt(text: string): string | null {
-  try {
-    const mj = text.match(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i);
-    if (!mj) return null;
-    const o = JSON.parse(mj[0]);
-    const img = typeof o?.image === 'string' ? o.image.trim() : '';
-    return img ? img.slice(0, 300) : null;
-  } catch (_) {
-    return null;
-  }
-}
 
 // Strip marker mood JSON dari akhir teks SEBELUM sanitize: JSON di akhir bisa panjang
 // (apalagi field "image") dan sanitize memotong di 90/220 char —
 // JSON terpenggal = tidak match regex = bocor utuh ke chat user.
 // Fallback kedua: sisa "{" tanpa penutup di akhir (terpenggal max_tokens)
 // juga dibuang.
-function stripMoodMarker(text: string): string {
-  let t = String(text || '').replace(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i, '').trim();
-  t = t.replace(/\s*\{[^}]*$/g, '').trim();
-  t = t.replace(/\s*\{[\s\S]*"image"[\s\S]*$/i, '').trim();
-  return t;
-}
 
-function userWantsImage(text: string): boolean {
-  return IMAGE_REQUEST_RE.test(text || '');
-}
 
 // Seed STABIL per dummy (hash uid) → wajah flux konsisten lintas permintaan.
-function stableSeed(uid: string): number {
-  let h = 0;
-  for (let i = 0; i < uid.length; i++) h = (h * 131 + uid.charCodeAt(i)) | 0;
-  return Math.abs(h) % 999999;
-}
 
 // Ciri wajah tetap per dummy — dipakai lagi & lagi supaya muka tidak
 // ganti-ganti. Default deterministik dari uid; bisa dioverride lewat
 // ai_persona.appearance (deskripsi fisik Inggris yang detail & spesifik).
-const FACE_DEFAULTS = [
-  'long straight black hair, oval face, warm brown almond eyes, light brown skin, soft natural smile, petite',
-  'shoulder-length black hair, round face, dark brown eyes, tan skin, gentle smile, medium build',
-  'short bob black hair, heart-shaped face, big brown eyes, fair skin, bright smile, slim',
-  'wavy black hair, diamond face, hazel eyes, medium brown skin, subtle smile, curvy',
-  'straight black hair with bangs, oblong face, dark eyes, olive skin, calm smile, athletic',
-  'braided black hair, square face, warm brown eyes, deep tan skin, wide smile, fuller figure',
-];
 
-function faceDescriptor(persona: any, uid: string): string {
-  const custom = String(persona?.appearance || '').trim();
-  if (custom) return custom;
-  let h = 0;
-  for (let i = 0; i < uid.length; i++) h = (h * 31 + uid.charCodeAt(i)) | 0;
-  return FACE_DEFAULTS[Math.abs(h) % FACE_DEFAULTS.length];
-}
 
 const FREE_POLL = 'https://image.pollinations.ai/prompt';
 const GEN_POLL = 'https://gen.pollinations.ai/image';
 const KONTEXT_MODEL = 'black-forest-labs%2Fflux.1-kontext-pro';
 
 // Free tier (keyless, NSFW-longgar): flux text-to-image deterministik.
-function fluxFree(prompt: string, seed: number, w: number, h: number): string {
-  return `${FREE_POLL}/${encodeURIComponent(
-    prompt,
-  )}?width=${w}&height=${h}&nologo=true&seed=${seed}&enhance=false&model=flux`;
-}
 
 // Tier gen.pollinations.ai (butuh key). Ref dibuat self-auth (?key=) supaya
 // server kontext bisa mengambilnya saat face-lock.
@@ -524,51 +241,12 @@ async function fetchBytes(
 
 // Intent butuh FAKTA TERBARU. Presisi diutamakan: minta foto/selfie
 // dikecualikan (minta gambar ≠ berita) supaya tidak buang lookup sia-sia.
-function needsFreshInfo(t: string): boolean {
-  if (!t || t.length < 3) return false;
-  if (/foto|gambar|pap\b|selfie|wajahmu|muka/i.test(t)) return false;
-  // Berita/olahraga/sembako (lama) + topik TEKNIS (baru): dokumentasi,
-  // changelog, versi, CVE, benchmark, spesifikasi — supaya diskusi expert
-  // berdasar data terkini, bukan cuma memori training.
-  return /skor|hasil (pertandingan|laga|match)|berapa[- ]berapa|juara|klasemen|berita|kabar terbaru|terkini|breaking|viral|cuaca|harga (emas|bitcoin|btc|eth|dollar|usd|rupiah|bensin|bbm|beras|cabai)|kurs|gempa|transfer pemain|jadwal (main|tanding|pertandingan|konser|bioskop|film)|kapan (main|tanding|rilis|tayang)|episode (terbaru|terakhir)|siapa (menang|juara|presiden)|hasil (pemilu|pilkada)|menang.*(tadi|kemarin|semalam|tadi malam)|kalah.*(tadi|kemarin|semalam|tadi malam)|dokumentasi|docs\b|changelog|release notes|versi (terbaru|baru|terkini)|rilis (terbaru|baru)|update terbaru|CVE|vulnerab|keamanan siber|benchmark|spesifikasi|spec\b|datasheet|whitepaper|arxiv|RFC|API reference|migration guide|best practice|perbandingan (teknologi|framework|chip|prosesor|gpu)|roadmap (teknologi|produk)|transistor|nanometer|\b\d+\s?nm\b|arsitektur (chip|prosesor|cpu|gpu|arm|x86|risc)/i
-    .test(t);
-}
 
 // Normalisasi pertanyaan jadi kunci cache (huruf kecil, tanpa tanda
 // baca, 120 char): "SKOR Madrid vs Barca?!" = "skor madrid vs barca".
-function browseTopicKey(t: string): string {
-  return t
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 120);
-}
 
 // Ringkas RSS Google News jadi fakta + media + tanggal (maks 500 char).
 // Pure — cermin di _shared/ai-helpers.ts + deno tests.
-function summarizeNewsRss(xml: string): string {
-  const parts: string[] = [];
-  const items = String(xml || '').match(/<item>[\s\S]*?<\/item>/g) || [];
-  for (const it of items.slice(0, 3)) {
-    const mT = it.match(/<title>([\s\S]*?)<\/title>/);
-    const mP = it.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
-    const raw = (mT ? mT[1] : '').trim().replace(/<!\[CDATA\[|\]\]>/g, '');
-    if (!raw) continue;
-    // Judul RSS = "Headline - NamaMedia".
-    const idx = raw.lastIndexOf(' - ');
-    const head = idx > 0 ? raw.slice(0, idx).trim() : raw;
-    const media = idx > 0 ? raw.slice(idx + 3).trim() : '';
-    // "Sat, 12 Sep 2026 ..." → "12 Sep".
-    const dm = (mP ? mP[1] : '').match(/\d{1,2} \w{3}/);
-    parts.push(
-      dm && media ? `${head} (${media}, ${dm[0]})`
-      : media ? `${head} (${media})`
-      : head,
-    );
-  }
-  return parts.join(' | ').slice(0, 500);
-}
 
 const FRESH_PREFIX =
   'INFO TERKINI (kamu tahu dari timeline/temanmu — JANGAN sebut browsing/internet/AI, jawab natural kayak orang yang update): ';
@@ -1084,28 +762,7 @@ async function renderDiagram(
 // terkirim). Pola sama seperti diagram di atas.
 const CHART_TYPES = ['pie', 'doughnut', 'bar', 'line', 'radar', 'polarArea'];
 
-function extractChartJs(text: string): string | null {
-  const m = String(text || '').match(/```chartjs\s+([\s\S]*?)```/i);
-  if (!m) return null;
-  const raw = m[1].trim().slice(0, 4000);
-  if (raw.length < 20) return null;
-  try {
-    const cfg = JSON.parse(raw);
-    if (!cfg || typeof cfg !== 'object') return null;
-    if (!CHART_TYPES.includes(String(cfg.type || '').trim())) return null;
-    const data = (cfg as any).data;
-    if (!data || typeof data !== 'object') return null;
-    const sets = (data as any).datasets;
-    if (!Array.isArray(sets) || sets.length < 1) return null;
-    return JSON.stringify(cfg).slice(0, 4000);
-  } catch (_) {
-    return null;
-  }
-}
 
-function chartUrl(configJson: string): string {
-  return `https://quickchart.io/chart?c=${encodeURIComponent(configJson)}&w=800&h=500&format=png&backgroundColor=white`;
-}
 
 // QuickChart: GET config → PNG (tanpa key). Satu-satunya dependensi luar
 // untuk chart; gagal / bukan gambar = null (jangan ganggu chat).

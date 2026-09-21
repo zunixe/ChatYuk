@@ -1,0 +1,63 @@
+# E2E-05 — Alur CALL: audio call & video call (mulai → layar call → akhiri)
+#
+# Menguji jalur kritis WebRTC: tombol panggilan di header chat (PopupMenu
+# `Panggilan Audio` / `Panggilan Video`), layar call terbuka, lalu "Akhiri"
+# menutupnya.
+#
+# TIDAK menguji tersambungnya media (butuh 2 device + lawan yang menerima).
+# Yang dikunci di sini: tombol ada, menu terbuka, layar call muncul, dan
+# tombol akhiri berfungsi — regresi di 4 titik ini sudah pernah bikin call
+# tidak bisa dimulai sama sekali.
+appId: com.chatyuk.chatyuk
+tags:
+  - call
+---
+- launchApp
+
+- extendedWaitUntil:
+    visible: "Online"
+    timeout: 60000
+
+- tapOn: "Online"
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 30000
+
+# Buka chat (sama seperti flow pesan). Skip bila tidak ada user online.
+- tapOn:
+    id: ".*"
+    text: "Chat"
+    index: 0
+
+- runFlow:
+    when:
+      notVisible: "Ketik pesan\\.\\.\\."
+    commands:
+      - takeScreenshot: e2e-skip-call-tidak-ada-user-online
+      - stopFlow
+
+# ── Audio call ──
+- tapOn: "Panggilan Audio"
+- extendedWaitUntil:
+    visible: "Menunggu jawaban\\.\\.\\.|Menghubungkan\\.\\.\\."
+    timeout: 30000
+- assertVisible: "Akhiri"
+- tapOn: "Akhiri"
+# Kembali ke chat setelah call diakhiri.
+- extendedWaitUntil:
+    visible: "Ketik pesan..."
+    timeout: 30000
+
+# ── Video call ──
+- tapOn: "Panggilan Audio"          # buka popup menu (ikon call di header)
+- extendedWaitUntil:
+    visible: "Panggilan Video"
+    timeout: 15000
+- tapOn: "Panggilan Video"
+- extendedWaitUntil:
+    visible: "Akhiri"
+    timeout: 30000
+- tapOn: "Akhiri"
+- extendedWaitUntil:
+    visible: "Ketik pesan..."
+    timeout: 30000

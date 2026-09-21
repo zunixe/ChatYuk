@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-18T11:21:45Z
+-- Timestamp: 2026-09-20T22:54:46Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -136,7 +136,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: ai_reply_enqueue @ 20260915090000_ai_ai_chat_toggle.sql
+-- snapshot-fn: ai_reply_enqueue @ 20260920120002_ai_reply_enqueue_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_reply_enqueue()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -159,31 +159,32 @@ declare
   v_last_dummy_out timestamptz;
   v_ai_ai_1h int;
 begin
-  -- Only plain text messages
   if coalesce(new.type, 'text') != 'text' then
-    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, null, false, 'enqueue', 'skipped:non_text', '{}');
+    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, null,
+      false, 'enqueue', 'skipped:non_text', '{}');
     return new;
   end if;
 
   select x into v_other
-  from unnest(
-    (select pc.participants from public.private_chats pc where pc.chat_id = new.chat_id)
-  ) as x
+  from unnest((select pc.participants
+               from public.private_chats pc
+               where pc.chat_id = new.chat_id)) as x
   where x <> new.sender_id
   limit 1;
   if v_other is null then
-    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, null, false, 'enqueue', 'skipped:no_other', '{}');
+    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, null,
+      false, 'enqueue', 'skipped:no_other', '{}');
     return new;
   end if;
 
-  -- Recipient must be an AI-enabled dummy (ambil config sekalian).
-  -- PENTING: pakai IF NOT FOUND (bukan cek null!) Î“Ã‡Ã¶ kolom flag boleh null.
-  select d.ai_no_rate_limit, d.ai_always_reply, d.ai_max_replies, d.ai_min_interval
+  select d.ai_no_rate_limit, d.ai_always_reply, d.ai_max_replies,
+         d.ai_min_interval
     into v_no_rate, v_always_reply, v_max, v_min
   from public.dummy_accounts d
   where d.uid = v_other and d.ai_enabled = true;
   if not found then
-    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other, false, 'enqueue', 'skipped:dummy_disabled', '{}');
+    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other,
+      false, 'enqueue', 'skipped:dummy_disabled', '{}');
     return new;
   end if;
 
@@ -191,24 +192,25 @@ begin
     select 1 from public.dummy_accounts d where d.uid = new.sender_id
   );
 
-  select s.ai_global_enabled, s.ai_max_replies_per_hour, s.ai_min_interval_sec,
-         coalesce(s.ai_ai_chat_enabled, true)
+  select s.ai_global_enabled, s.ai_max_replies_per_hour,
+         s.ai_min_interval_sec, coalesce(s.ai_ai_chat_enabled, true)
     into v_global, v_gmax, v_gmin, v_ai_ai_on
   from public.app_settings s where s.id = 'global';
   if v_global is distinct from true then
-    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other, false, 'enqueue', 'skipped:global_off', '{}');
+    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other,
+      false, 'enqueue', 'skipped:global_off', '{}');
     return new;
   end if;
 
-  -- ── TOGGLE AI↔AI: sender dummy & tombol off → dummy tidak dibalas. ──
   if v_sender_is_dummy and not coalesce(v_ai_ai_on, true) then
-    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other, false, 'enqueue', 'skipped:ai_ai_off', '{}');
+    perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other,
+      false, 'enqueue', 'skipped:ai_ai_off', '{}');
     return new;
   end if;
 
-  -- Î“Ã¶Ã‡Î“Ã¶Ã‡ always_reply (expert/CS): LEWATI semua cap & rate. Pesan selalu enqueue.
   if coalesce(v_always_reply, false) then
-    perform public.ai_reply_post(new.chat_id, new.id, new.sender_id, v_other, false);
+    perform public.ai_reply_post(new.chat_id, new.id, new.sender_id,
+      v_other, false);
     return new;
   end if;
 
@@ -216,8 +218,6 @@ begin
   v_min := coalesce(v_min, v_gmin, 5);
 
   if v_sender_is_dummy then
-    -- Î“Ã¶Ã‡Î“Ã¶Ã‡ AIÎ“Ã¥Ã¶AI: cap KERAS gabungan 40 pesan/jam Î“Ã‡Ã¶ KECUALI kedua dummy
-    -- eksplisit no_rate_limit (unlimited by design, mis. Expertâ”œÃ¹Expert).
     select coalesce(d.ai_no_rate_limit, false) into v_sender_no_rate
     from public.dummy_accounts d where d.uid = new.sender_id;
     if not (coalesce(v_no_rate, false) and coalesce(v_sender_no_rate, false)) then
@@ -227,12 +227,12 @@ begin
         and m.sender_id in (v_other, new.sender_id)
         and m.created_at > now() - interval '1 hour';
       if v_ai_ai_1h >= 40 then
-        perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other, false, 'enqueue', 'skipped:ai_ai_cap', '{}');
+        perform public.ai_log_reply(new.chat_id, new.id, new.sender_id,
+          v_other, false, 'enqueue', 'skipped:ai_ai_cap', '{}');
         return new;
       end if;
     end if;
   else
-    -- Î“Ã¶Ã‡Î“Ã¶Ã‡ Sender manusia: rate limit (per-dummy override Î“Ã¥Ã† global)
     if not coalesce(v_no_rate, false) then
       select count(*) into v_dummy_out_1h
       from public.private_messages m
@@ -240,49 +240,44 @@ begin
         and m.sender_id = v_other
         and m.created_at > now() - interval '1 hour';
       if v_dummy_out_1h >= v_max then
-        -- Kuota habis Î“Ã¥Ã† tampil idle (downgrade onlineÎ“Ã¥Ã†idle saja).
-        -- Exception-safe: kolom ai_always_online mungkin belum ada di DB
-        -- lama; kegagalan presence TIDAK BOLEH menggagalkan insert pesan.
+        -- Always-online dummy tidak boleh diturunkan ke idle.
         begin
           begin
             perform 1 from public.dummy_accounts
-              where uid = v_other and coalesce(ai_always_online, false) = true;
-            if found then
-              null; -- always_online: jangan sentuh presence.
-            else
+            where uid = v_other and coalesce(ai_always_online, false) = true;
+            if not found then
               update public.profiles
-                 set status = 'idle', last_seen = now()
-               where id = v_other and status = 'online';
+              set status = 'idle', last_seen = now()
+              where id = v_other and status = 'online';
             end if;
           exception when undefined_column then
             update public.profiles
-               set status = 'idle', last_seen = now()
-             where id = v_other and status = 'online';
+            set status = 'idle', last_seen = now()
+            where id = v_other and status = 'online';
           end;
         exception when others then
           null;
         end;
-        perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other, false, 'enqueue', 'skipped:rate_max', jsonb_build_object('out_1h', v_dummy_out_1h, 'max', v_max));
+        perform public.ai_log_reply(new.chat_id, new.id, new.sender_id,
+          v_other, false, 'enqueue', 'skipped:rate_max',
+          jsonb_build_object('out_1h', v_dummy_out_1h, 'max', v_max));
         return new;
       end if;
 
       select max(m.created_at) into v_last_dummy_out
       from public.private_messages m
-      where m.chat_id = new.chat_id
-        and m.sender_id = v_other;
+      where m.chat_id = new.chat_id and m.sender_id = v_other;
       if v_last_dummy_out is not null
          and v_last_dummy_out > now() - make_interval(secs => v_min) then
-        perform public.ai_log_reply(new.chat_id, new.id, new.sender_id, v_other, false, 'enqueue', 'skipped:rate_min_interval', '{}');
+        perform public.ai_log_reply(new.chat_id, new.id, new.sender_id,
+          v_other, false, 'enqueue', 'skipped:rate_min_interval', '{}');
         return new;
       end if;
     end if;
   end if;
 
-  -- Enqueue via helper terpusat (auth header + URL dari config + log).
-  perform public.ai_reply_post(
-    new.chat_id, new.id, new.sender_id, v_other, false
-  );
-
+  perform public.ai_reply_post(new.chat_id, new.id, new.sender_id,
+    v_other, false);
   return new;
 end;
 $function$
@@ -1579,44 +1574,34 @@ begin
 end;
 $function$
 
--- snapshot-fn: story_slides @ 20260910000003_story_slides_visibility.sql
+-- snapshot-fn: story_slides @ 20260920130000_profile_privacy.sql
 CREATE OR REPLACE FUNCTION public.story_slides(p_author uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare
-  result jsonb;
+declare result jsonb;
 begin
   select coalesce(jsonb_agg(jsonb_build_object(
-    'id', s.id,
-    'image_path', s.image_path,
-    'text_overlay', s.text_overlay,
-    'text_x', s.text_x,
-    'text_y', s.text_y,
-    'text_color', s.text_color,
-    'text_size', s.text_size,
-    'text_bg', s.text_bg,
+    'id', s.id, 'image_path', s.image_path, 'text_overlay', s.text_overlay,
+    'text_x', s.text_x, 'text_y', s.text_y, 'text_color', s.text_color,
+    'text_size', s.text_size, 'text_scale', s.text_scale,
+    'text_rotation', s.text_rotation, 'text_bg', s.text_bg,
     'visibility', s.visibility,
+    'like_count', (select count(*) from public.story_likes l where l.story_id = s.id),
+    'liked', exists (select 1 from public.story_likes l where l.story_id = s.id and l.user_id = auth.uid()),
     'created_at', s.created_at
-  ) order by s.created_at asc), '[]'::jsonb)
-  into result
+  ) order by s.created_at asc), '[]'::jsonb) into result
   from public.stories s
-  where s.author_id = p_author
-    and s.expires_at > now()
+  where s.author_id = p_author and s.expires_at > now()
+    and public.privacy_can_view(s.author_id, 'story', auth.uid())
     and (
       s.author_id = auth.uid()
-      or (
-        (s.visibility = 'everyone')
-        or (s.visibility = 'registered' and public._viewer_is_registered())
-        or (s.visibility = 'friends' and public._are_friends(auth.uid(), s.author_id))
-      )
-      and not exists (
-        select 1 from public.blocks b
-        where (b.blocker_id = auth.uid() and b.blocked_id = s.author_id)
-           or (b.blocker_id = s.author_id and b.blocked_id = auth.uid())
-      )
+      or ((s.visibility = 'everyone')
+        or (s.visibility = 'followers' and exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followee_id = s.author_id))
+        or (s.visibility = 'friends' and public._are_friends(auth.uid(), s.author_id)))
+      and not exists (select 1 from public.blocks b where (b.blocker_id = auth.uid() and b.blocked_id = s.author_id) or (b.blocker_id = s.author_id and b.blocked_id = auth.uid()))
     );
   return result;
 end;
@@ -1701,7 +1686,7 @@ begin
   return null; -- AFTER trigger, return value diabaikan
 end; $function$
 
--- snapshot-fn: nearby_users @ 20260903090000_admin_exclude_devices.sql
+-- snapshot-fn: nearby_users @ 20260920130001_profile_privacy_fixes.sql
 CREATE OR REPLACE FUNCTION public.nearby_users(p_radius_km double precision DEFAULT 10)
  RETURNS TABLE(uid uuid, nickname text, gender text, age integer, country text, city text, status text, avatar text, is_registered boolean, last_seen timestamp with time zone, distance_km double precision)
  LANGUAGE plpgsql
@@ -1737,9 +1722,9 @@ begin
     p.country,
     p.city,
     p.status,
-    p.avatar,
+    case when public.privacy_can_view(p.id, 'profile_photo', me) then p.avatar else '' end,
     p.is_registered,
-    p.last_seen,
+    case when public.privacy_can_view(p.id, 'last_seen', me) then p.last_seen else null end,
     (earth_distance(ll_to_earth(my_lat, my_lon), ll_to_earth(p.lat, p.lon)) / 1000.0) as distance_km
   from public.profiles p
   where p.id <> me
@@ -1748,10 +1733,11 @@ begin
     and coalesce(p.share_location, false) = true
     and p.status in ('online', 'idle')
     and p.last_seen >= now() - interval '30 minutes'
+    and public.privacy_can_view(p.id, 'presence', me)
     and not (p.id = any(v_excl))
     and earth_box(ll_to_earth(my_lat, my_lon), radius_m) @> ll_to_earth(p.lat, p.lon)
     and earth_distance(ll_to_earth(my_lat, my_lon), ll_to_earth(p.lat, p.lon)) <= radius_m
-  order by distance_km asc
+  order by 11 asc
   limit 100;
 end;
 $function$

@@ -4,8 +4,7 @@ import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/models/room_model.dart';
 import 'package:chatyuk/models/story_model.dart';
 import 'package:chatyuk/models/user_model.dart';
-import 'package:chatyuk/services/chat_service.dart'
-    show PrivateChatInfo;
+import 'package:chatyuk/services/chat_service.dart' show PrivateChatInfo;
 
 MessageModel _msg({
   String id = 'm1',
@@ -13,19 +12,18 @@ MessageModel _msg({
   String type = 'text',
   String imageData = '',
   bool isDeleted = false,
-}) =>
-    MessageModel(
-      id: id,
-      senderId: 'u1',
-      senderName: 'Andi',
-      senderGender: 'male',
-      isRegistered: true,
-      text: text,
-      type: type,
-      imageData: imageData,
-      timestamp: DateTime.utc(2026, 1, 2, 3, 4, 5),
-      isDeleted: isDeleted,
-    );
+}) => MessageModel(
+  id: id,
+  senderId: 'u1',
+  senderName: 'Andi',
+  senderGender: 'male',
+  isRegistered: true,
+  text: text,
+  type: type,
+  imageData: imageData,
+  timestamp: DateTime.utc(2026, 1, 2, 3, 4, 5),
+  isDeleted: isDeleted,
+);
 
 void main() {
   group('MessageModel privasi hapus', () {
@@ -44,8 +42,11 @@ void main() {
     });
 
     test('toMap pesan terhapus tidak membawa isi ke cache', () {
-      final map = _msg(text: 'rahasia', imageData: 'b64', isDeleted: true)
-          .toMap();
+      final map = _msg(
+        text: 'rahasia',
+        imageData: 'b64',
+        isDeleted: true,
+      ).toMap();
       expect(map['text'], isEmpty);
       expect(map['imageData'], isEmpty);
       expect(map['type'], 'text');
@@ -53,8 +54,10 @@ void main() {
     });
 
     test('copyWith(isDeleted: true) mengosongkan konten di memori', () {
-      final m = _msg(text: 'rahasia', imageData: 'b64')
-          .copyWith(isDeleted: true);
+      final m = _msg(
+        text: 'rahasia',
+        imageData: 'b64',
+      ).copyWith(isDeleted: true);
       expect(m.isDeleted, isTrue);
       expect(m.text, isEmpty);
       expect(m.imageData, isEmpty);
@@ -83,8 +86,7 @@ void main() {
 
     test('durationMs parse dari 3 varian key', () {
       expect(MessageModel.fromMap('m', {'durationMs': 1500}).durationMs, 1500);
-      expect(
-          MessageModel.fromMap('m', {'duration_ms': 1500}).durationMs, 1500);
+      expect(MessageModel.fromMap('m', {'duration_ms': 1500}).durationMs, 1500);
       expect(MessageModel.fromMap('m', {}).durationMs, isNull);
     });
   });
@@ -103,6 +105,21 @@ void main() {
     test('status fallback dari flag online lawas', () {
       final u = UserModel.fromMap('u1', {'online': true});
       expect(u.status, 'online');
+    });
+
+    test('about default kosong + terbaca dari map', () {
+      expect(UserModel.fromMap('u1', {}).about, '');
+      expect(
+        UserModel.fromMap('u1', {'about': 'Halo, saya Budi'}).about,
+        'Halo, saya Budi',
+      );
+    });
+
+    test('copyWith about tidak menghapus nilai lain', () {
+      final u = UserModel.fromMap('u1', {'nickname': 'Budi', 'about': 'lama'});
+      final updated = u.copyWith(about: 'baru');
+      expect(updated.about, 'baru');
+      expect(updated.nickname, 'Budi');
     });
   });
 
@@ -136,16 +153,16 @@ void main() {
 
   group('PrivateChatInfo', () {
     PrivateChatInfo info() => PrivateChatInfo(
-          chatId: 'c1',
-          participants: const ['u1', 'u2'],
-          participantNames: const {'u1': 'A', 'u2': 'B'},
-          lastMessage: 'hi',
-          lastMessageAt: DateTime.utc(2026, 1, 1),
-          unreadCounts: const {'u1': 3},
-          pinnedBy: const ['u1'],
-          mutedBy: const ['u2'],
-          archivedBy: const [],
-        );
+      chatId: 'c1',
+      participants: const ['u1', 'u2'],
+      participantNames: const {'u1': 'A', 'u2': 'B'},
+      lastMessage: 'hi',
+      lastMessageAt: DateTime.utc(2026, 1, 1),
+      unreadCounts: const {'u1': 3},
+      pinnedBy: const ['u1'],
+      mutedBy: const ['u2'],
+      archivedBy: const [],
+    );
 
     test('helper pin/mute/archive per uid', () {
       final c = info();

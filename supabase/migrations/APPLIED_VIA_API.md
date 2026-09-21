@@ -835,3 +835,12 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
 - **Verifikasi:** `ai_reply_log` → `replied` model `kimi-k2.7-code` ✅
 - **Sisa PR (belum disentu):** fallback luar `glm-5.3-flash` via b-ai mati (saldo habis) — hanya kepakai saat primer gagal total; ganti `fallback_model` bila perlu.
 - **Tidak menyentuh** fungsi FROZEN / skema DB.
+
+## 2026-09-21 — 20260921220000_fix_friend_request_guard.sql (APPLY)
+
+- **Bug:** trigger `social_guard_friend_requests` memanggil `_social_registered_guard()` yang membaca `new.follower_id`/`new.followee_id` (kolom `follows`), padahal `friend_requests` kolomnya `from_id`/`to_id` → SETIAP insert/update `friend_requests` gagal `42703 record "new" has no field "follower_id"` (ditemukan lewat `supabase/tests/privacy_test.sql`).
+- **Dampak:** `send_friend_request`/`respond_friend_request` rusak; `_are_friends()` selalu false → privacy `'friends'` mati; `privacy_friends()` kosong.
+- **Fix:** guard baca kolom via `TG_TABLE_NAME`. Bukan fungsi FROZEN.
+- **Apply:** via Management API (`POST /v1/projects/fohcucyyejdryryoxitm/database/query`) + `insert into supabase_migrations.schema_migrations (version) values ('20260921220000') on conflict do nothing`.
+- **Verifikasi live:** `pg_get_functiondef('_social_registered_guard')` memuat `from_id` DAN `follower_id` ✅; insert teman antar-registered sukses ✅; antar-anon → `SOCIAL_REGISTERED_ONLY` (bukan 42703) ✅.
+- **Test:** `supabase/tests/privacy_test.sql` 23/23; suite SQL penuh hijau.

@@ -1,7 +1,13 @@
-// Pure helper murni ai-reply — bisa diuji via Deno tanpa edge runtime.
-// Cermin supabase/functions/ai-reply/index.ts — kalau mengubah salah satu,
-// sinkronkan pasangannya (sumber kebenaran tunggal = index.ts).
-
+// Pure helper murni AI — SATU SUMBER, diimpor `ai-reply/index.ts`.
+//
+// SEJARAH (jangan diulang): dulu file ini adalah SALINAN MANUAL dari
+// `ai-reply/index.ts` dan harus disinkronkan tangan. Sinkronisasi itu GAGAL
+// (terbukti 2026-09-20: `sanitize` produksi 95 baris vs 40 di salinan, fitur
+// fenced-code/mermaid/kapitalisasi hanya ada di produksi) sehingga 59 test
+// Deno menguji kode yang BUKAN produksi — rasa aman palsu.
+//
+// Aturan sekarang: fungsi murni ditulis DI SINI, lalu `ai-reply` mengimpor.
+// JANGAN menyalin ulang ke index.ts.
 export const MAX_REPLY_CHARS = 90;
 
 export const EXPLICIT_TERMS = [
@@ -138,9 +144,40 @@ export function sanitize(
   keepLines = false,
 ): string {
   let t = (text || '').trim();
+  // Buang prefix JSON bocor (fitur status dummy sesi lain nempel di
+  // pesan history — model meniru polanya): {"mood":..., ...}
   t = t.replace(/^\s*\{[^{}]*\}/, '').trim();
   t = t.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
   if (keepLines) {
+    // CS/expert: PERTAHANKAN baris supaya poin/angka bernomor rapi. Normalisasi:
+    // spasi dalam baris dirapatkan, TAPI indentasi awal DIPERTAHANKAN (tab → 2
+    // spasi) supaya blok kode tetap rapi. Maksimal 1 baris kosong antar paragraf.
+    // RAPIKAN LIST: model kadang menulis "1. ... 2. ... 3. ..." sebaris — pecah
+    // jadi satu baris per nomor (hanya bila ≥2 penomoran + wajib huruf
+    // sesudahnya, aman dari desimal "3.5"/jam "14.00"/harga "50.000"). Isi blok
+    // kode ``` dilewati (diagram/kode jangan rusak).
+    const splitLists = (src: string): string => {
+      const parts = src.split('```');
+      for (let i = 0; i < parts.length; i += 2) {
+        let p = parts[i];
+        const numHits = p.match(/\s\d{1,2}[.)]\s+(?=[A-Za-z])/g);
+        if (numHits && numHits.length >= 2) {
+          p = p.replace(/(\s)(\d{1,2}[.)])(\s+)(?=[A-Za-z])/g, '\n\n$2$3');
+        }
+        const parHits = p.match(/\([a-eA-E]\)\s+(?=[A-Za-z])/g);
+        if (parHits && parHits.length >= 2) {
+          p = p.replace(/(\([a-eA-E]\))(\s+)(?=[A-Za-z])/g, '\n  $1$2');
+        }
+        const letHits = p.match(/\s[a-eA-E][.]\s+(?=[A-Za-z])/g);
+        if (letHits && letHits.length >= 2) {
+          p = p.replace(/(\s)([a-eA-E][.])(\s+)(?=[A-Za-z])/g, '\n  $2$3');
+        }
+        p = p.replace(/^\s*[•*]\s+/gm, '- ');
+        parts[i] = p;
+      }
+      return parts.join('```');
+    };
+    t = splitLists(t);
     t = t
       .split(/\r?\n/)
       .map((line) => {
@@ -155,9 +192,13 @@ export function sanitize(
       .replace(/\n{3,}/g, '\n\n')
       .trim();
     if (maxChars != null && t.length > maxChars) t = t.slice(0, maxChars).trim();
+    // Kapitalkan huruf pertama jawaban CS/expert (kecuali baris mulai kode).
+    if (t && t[0] >= 'a' && t[0] <= 'z') t = t[0].toUpperCase() + t.slice(1);
     return t;
   }
   t = t.replace(/\n+/g, ' ');
+  // Potong di batas kalimat bila lewat — guard on: balasan multi-kalimat
+  // dilarang; guard off (mode dewasa): TANPA cap (max_chars null).
   if (maxChars != null && t.length > maxChars) {
     const cut = t.slice(0, maxChars);
     const lastStop = Math.max(
@@ -170,7 +211,164 @@ export function sanitize(
     t = t.replace(/[,;:]$/, '');
     if (!/[.!?]$/.test(t)) t += '...';
   }
+  // Kapitalkan huruf pertama (gaya chat WhatsApp) — hanya jika karakter
+  // pertama huruf kecil; emoji/simbol/angka dibiarkan apa adanya.
+  if (t && t[0] >= 'a' && t[0] <= 'z') {
+    t = t[0].toUpperCase() + t.slice(1);
+  }
   return t;
+}
+
+// ── Pembersih/batas balasan (cermin index.ts) ──
+
+/** Sisakan maksimal 1 emoji (yang terakhir) — anti menumpuk. */
+export function capEmoji(text: string): string {
+  const matches = [...text.matchAll(/\p{Extended_Pictographic}/gu)];
+  if (matches.length <= 1) return text;
+  const keepAt = matches[matches.length - 1].index ?? -1;
+  return text.replace(
+    /\p{Extended_Pictographic}/gu,
+    (m, offset) => (offset === keepAt ? m : ''),
+  );
+}
+
+/** Batasi jumlah kalimat (mode dewasa) — sisakan `max` pertama. */
+export function capSentences(text: string, max: number): string {
+  const parts = text.split(/(?<=[.!?…])\s+/).filter(Boolean);
+  if (parts.length <= max) return text;
+  return parts.slice(0, max).join(' ');
+}
+
+/** Semua emoji dalam teks (urut kemunculan). */
+export function extractEmojis(text: string): string[] {
+  return [...String(text || '').matchAll(/\p{Extended_Pictographic}/gu)].map(
+    (m) => m[0],
+  );
+}
+
+/** Teks dari content pesan LLM (string | array part | lain-lain). */
+export function contentText(c: unknown): string {
+  if (typeof c === 'string') return c;
+  if (Array.isArray(c)) {
+    return c
+      .filter((p) => p && p.type === 'text')
+      .map((p) => String(p.text || ''))
+      .join(' ');
+  }
+  return String(c ?? '');
+}
+
+/** Emoji yang baru dipakai assistant — jangan diulang (variasi). */
+export function bannedEmojisFromHistory(
+  history: Array<{ role: string; content: unknown }>,
+  take = 2,
+): string[] {
+  const banned: string[] = [];
+  const maxBanned = take * 2;
+  let scanned = 0;
+  for (let i = history.length - 1; i >= 0 && scanned < take; i--) {
+    const m = history[i];
+    if (m.role !== 'assistant') continue;
+    scanned++;
+    for (const e of extractEmojis(contentText(m.content))) {
+      if (!banned.includes(e)) banned.push(e);
+      if (banned.length >= maxBanned) break;
+    }
+  }
+  return banned;
+}
+
+/** Buang emoji terlarang + rapikan spasi ganda / spasi sebelum tanda baca. */
+export function stripBannedEmojis(text: string, banned: string[]): string {
+  if (!banned.length) return text;
+  const set = new Set(banned);
+  const out = text.replace(/\p{Extended_Pictographic}/gu, (m) =>
+    set.has(m) ? '' : m,
+  );
+  return out.replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
+}
+
+/** Batasi jumlah baris (balasan panjang CS/expert). */
+export function capLines(text: string, max: number): string {
+  const lines = text.split('\n');
+  if (lines.length <= max) return text;
+  return lines.slice(0, max).join('\n').trim();
+}
+
+const BULAN_ID = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+];
+
+export function bulan(m: number): string {
+  return BULAN_ID[m] ?? '';
+}
+
+/** Label waktu WIB untuk history ("[hari ini 14.30]"/"[kemarin ...]"/"[3 Sep ...]"). */
+export function historyTimeLabel(at: unknown): string {
+  const t = new Date(String(at ?? '')).getTime();
+  if (isNaN(t)) return '';
+  const wib = new Date(t + 7 * 3600 * 1000);
+  const nowWib = new Date(Date.now() + 7 * 3600 * 1000);
+  const day = wib.toISOString().slice(0, 10);
+  const today = nowWib.toISOString().slice(0, 10);
+  // Kemarin dihitung dari waktu SEKARANG (bukan waktu pesan) — bandingkan
+  // tanggal kalender WIB. WIB tanpa DST jadi selisih 24 jam deterministik.
+  const yesterday = new Date(nowWib.getTime() - 86400e3)
+    .toISOString()
+    .slice(0, 10);
+  const hhmm = `${String(wib.getUTCHours()).padStart(2, '0')}.${String(
+    wib.getUTCMinutes(),
+  ).padStart(2, '0')}`;
+  if (day === today) return `[hari ini ${hhmm}]`;
+  if (day === yesterday) return `[kemarin ${hhmm}]`;
+  return `[${wib.getUTCDate()} ${bulan(wib.getUTCMonth())} ${hhmm}]`;
+}
+
+/** Buang label waktu dari teks history (biar tidak ikut dikirim ke LLM). */
+export function stripTimeLabel(t: string): string {
+  return t
+    .replace(
+      /\[?(hari ini|kemarin|\d{1,2} (?:Jan|Feb|Mar|Apr|Mei|Jun|Jul|Agu|Sep|Okt|Nov|Des))\s+\d{1,2}[.:]\d{2}\]?/gi,
+      '',
+    )
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/** Ambil prompt gambar dari marker JSON {"mood":...,"image":"..."} di akhir. */
+export function parseImagePrompt(text: string): string | null {
+  try {
+    const mj = text.match(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i);
+    if (!mj) return null;
+    const o = JSON.parse(mj[0]);
+    const img = typeof o?.image === 'string' ? o.image.trim() : '';
+    return img ? img.slice(0, 300) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Buang marker JSON (mood/image) dari balasan yang tampil ke user. */
+export function stripMoodMarker(text: string): string {
+  let t = String(text || '').replace(/\{[\s\S]*"mood"[\s\S]*\}\s*$/i, '').trim();
+  t = t.replace(/\s*\{[^}]*$/g, '').trim();
+  t = t.replace(/\s*\{[\s\S]*"image"[\s\S]*$/i, '').trim();
+  return t;
+}
+
+const FREE_POLL = 'https://image.pollinations.ai/prompt';
+
+/** URL gambar gratis (pollinations) dengan seed + ukuran. */
+export function fluxFree(
+  prompt: string,
+  seed: number,
+  w: number,
+  h: number,
+): string {
+  return `${FREE_POLL}/${encodeURIComponent(
+    prompt,
+  )}?width=${w}&height=${h}&nologo=true&seed=${seed}&enhance=false&model=flux`;
 }
 
 export const IMAGE_REQUEST_RE =

@@ -100,7 +100,8 @@ class AppFonts {
 
   /// Nama family untuk key (null bila default / tak ada override).
   /// Tanpa argumen → pakai [current] (font aktif).
-  static String? family([String? key]) => catalog[resolve(key ?? current)]?.family;
+  static String? family([String? key]) =>
+      catalog[resolve(key ?? current)]?.family;
 
   /// Label tampil untuk key. Tanpa argumen → pakai [current].
   static String label([String? key]) =>
@@ -110,6 +111,25 @@ class AppFonts {
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     current = resolve(prefs.getString(prefKey));
+  }
+
+  /// Muat font aktif sebelum frame pertama agar teks tidak berganti dari
+  /// fallback platform ke font Google setelah halaman login tampil.
+  static Future<void> preloadActive() async {
+    final selected = family();
+    final fontFamily = selected ?? (isDefault() ? 'Poppins' : null);
+    if (fontFamily == null) return;
+
+    for (final weight in const [
+      FontWeight.w300,
+      FontWeight.w400,
+      FontWeight.w500,
+      FontWeight.w700,
+      FontWeight.w800,
+    ]) {
+      GoogleFonts.getFont(fontFamily, fontWeight: weight);
+    }
+    await GoogleFonts.pendingFonts();
   }
 
   /// Terapkan font (set static + persist). Tidak notify; pemanggil

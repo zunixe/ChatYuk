@@ -198,12 +198,8 @@ class AppText {
 
   /// chatBody pada ukuran pt eksplisit — dipakai PREVIEW slider ukuran font
   /// agar contoh persis mengikuti nilai slider (bukan `current` tersimpan).
-  static TextStyle chatBodyAt(double pt) => _chatPlain(
-    pt,
-    FontWeight.w300,
-    height: 1.4,
-    color: AppTheme.textPrimary,
-  );
+  static TextStyle chatBodyAt(double pt) =>
+      _chatPlain(pt, FontWeight.w300, height: 1.4, color: AppTheme.textPrimary);
 
   static TextStyle get chatName => _chatPlain(
     ChatTextScale.scale(13),
@@ -317,8 +313,9 @@ class ChatTextScale {
 
   /// Notifier untuk rebuild subtree chat saat nilai berubah (tanpa
   /// me-restart navigasi). Di-listen di app.dart.
-  static final ValueNotifier<double> notifier =
-      ValueNotifier<double>(defaultMult);
+  static final ValueNotifier<double> notifier = ValueNotifier<double>(
+    defaultMult,
+  );
 
   /// Ukuran font efektif (pt) untuk nilai saat ini — kelipatan 0.5
   /// (mis. 14, 14.5, 16, 18).
@@ -353,8 +350,7 @@ class ChatTextScale {
   }
 
   /// Terapkan multiplier aman (clamp ke [min,max]).
-  static double scale(double base) =>
-      base * current.clamp(min, max);
+  static double scale(double base) => base * current.clamp(min, max);
 
   /// Normalisasi nilai (bulatkan, clamp). Presisi 5 desimal agar tick
   /// 0.5pt (kelipatan 0.03125) tidak rusak pembulatan.
@@ -472,6 +468,7 @@ class AppTheme {
     ChatTextScale.initSync(prefs);
     // Font global tersimpan — frame pertama langsung pakai font yang benar.
     await AppFonts.init();
+    await AppFonts.preloadActive();
   }
 
   // ── Brand (konstan di kedua mode) ──
@@ -510,7 +507,9 @@ class AppTheme {
       isDark ? _textSecondaryDark : _textSecondaryLight;
 
   // ── Status (konstan) ──
-  static const Color online = Color(0xFF4CAF50);  // Hijau tua untuk badge jumlah online — kontras di atas bgCard terang.
+  static const Color online = Color(
+    0xFF4CAF50,
+  ); // Hijau tua untuk badge jumlah online — kontras di atas bgCard terang.
   static const Color onlineDark = Color(0xFF2E7D32);
   static const Color idle = Color(0xFFFFB300);
   static const Color offline = Color(0xFFBDBDBD);

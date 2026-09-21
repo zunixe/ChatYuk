@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/points_service.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
 import '../utils.dart';
 
 class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
@@ -114,7 +115,6 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-
   // ── Passthrough (Fase 9b) ──
   Future<Map<String, dynamic>> quests(int tz) => _service.quests(tz);
   Future<Map<String, dynamic>> claimWeeklyQuest(String key, int tz) =>
@@ -125,7 +125,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _service.pointHistory(limit: limit);
 
   PointsProvider({PointsService? service})
-      : _service = service ?? PointsService(Supabase.instance.client) {
+    : _service = service ?? PointsService(Supabase.instance.client) {
     // Daftarkan observer + mulai sesi online SEKARANG. Tanpa ini,
     // didChangeAppLifecycleState tidak pernah terpanggil (observer tak
     // terdaftar) sehingga bonus online tidak pernah jalan, dan sesi
@@ -461,26 +461,28 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   String? _lastToastMsg;
 
+  static const Map<String, int> _onlineBonusPoints = {
+    'online_5min': 5,
+    'online_30min': 10,
+    'online_60min': 15,
+    'online_120min': 15,
+  };
+
   void checkAndShowOnlineToast(BuildContext context, bool isId) {
     if (_lastToastMsg == null) return;
+    final s = S(isId: isId);
     final labels = {
-      'online_5min': isId ? 'Online 5 menit' : 'Online 5 min',
-      'online_30min': isId ? 'Online 30 menit' : 'Online 30 min',
-      'online_60min': isId ? 'Online 60 menit' : 'Online 60 min',
-      'online_120min': isId ? 'Online 120 menit' : 'Online 120 min',
+      'online_5min': s.onlineMilestone(5),
+      'online_30min': s.onlineMilestone(30),
+      'online_60min': s.onlineMilestone(60),
+      'online_120min': s.onlineMilestone(120),
     };
     final msg = _lastToastMsg;
     _lastToastMsg = null;
     if (msg == null) return;
     final label = labels[msg] ?? '';
     if (label.isNotEmpty) {
-      final pts = {
-        'online_5min': 5,
-        'online_30min': 5,
-        'online_60min': 5,
-        'online_120min': 5,
-      };
-      final p = pts[msg] ?? 0;
+      final p = _onlineBonusPoints[msg] ?? 0;
       showPointsToast(
         context,
         isId ? '+$p Poin — $label' : '+$p Points — $label',
@@ -688,6 +690,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
           dlog('[PointsProvider] showPointsToast ignored: $e');
         }
       }
+
       entry = OverlayEntry(
         builder: (_) => _PointsToast(
           message: message,
@@ -710,7 +713,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2E),
         title: Text(
-          isId ? '😢 Poin Habis!' : '😢 Out of Points!',
+        S(isId: isId).outOfPointsTitle,
           style: const TextStyle(color: Colors.white),
         ),
         content: SingleChildScrollView(

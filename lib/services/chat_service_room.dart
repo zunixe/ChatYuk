@@ -34,7 +34,10 @@ mixin ChatServiceRoomMx on ChatBase {
         !StoragePhotoService.instance.isVoicePath(imageData)) {
       throw Exception('Invalid image data');
     }
-    if (type == 'text' && (text.isEmpty || text.length > 2000)) return;
+    if (type == 'text' && text.isEmpty) return;
+    if (text.length > 2000) {
+      throw Exception('Message too long (max 2000 chars)');
+    }
     await _sb.from('messages').insert({
       'room_id': roomId,
       'sender_id': senderId,

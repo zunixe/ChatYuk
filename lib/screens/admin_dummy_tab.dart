@@ -870,7 +870,7 @@ class _AdminDummyTabState extends State<AdminDummyTab>
                                   ),
                                 )
                               : _storyList(
-                                  snap.data ?? const {}, s, scrollCtrl),
+                                   snap.data ?? const {}, s, scrollCtrl, item),
                     ),
                   ],
                 );
@@ -882,10 +882,49 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     );
   }
 
+  Future<void> _generateDummyStory(
+    Map<String, dynamic> item,
+    S s,
+    String storyDate,
+  ) async {
+    final uid = item['uid'] as String? ?? '';
+    if (uid.isEmpty) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(s.dummyStoryGenerating)),
+    );
+    try {
+      final result = await _svc.generateDummyStory(
+        uid,
+        storyDate: storyDate,
+      );
+      if (!mounted) return;
+      final generated = (result['generated'] as List?)?.contains(uid) == true;
+      final skipped = (result['skipped'] as List?)?.contains(uid) == true;
+      final failed = (result['failed'] as List?)?.contains(uid) == true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            (generated || skipped) && !failed
+                ? s.dummyStoryGenerated
+                : s.dummyStoryGenerateFail,
+          ),
+        ),
+      );
+      if (generated || skipped) _showDummyStories(item, s);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.dummyStoryGenerateFail)),
+      );
+      dlog('[ADMIN] generate dummy story error: $e');
+    }
+  }
+
   Widget _storyList(
     Map<String, dynamic> data,
     S s,
     ScrollController scrollCtrl,
+    Map<String, dynamic> item,
   ) {
     final days = (data['days'] as List?) ?? const [];
     if (days.isEmpty) {
@@ -940,9 +979,20 @@ class _AdminDummyTabState extends State<AdminDummyTab>
                     color: has ? AppTheme.primary : AppTheme.danger,
                   ),
                   const SizedBox(width: 8),
-                  Text('${d['date']}', style: AppText.bodyStrong),
-                  const Spacer(),
-                  Container(
+                   Text('${d['date']}', style: AppText.bodyStrong),
+                   const Spacer(),
+                   if (!has)
+                     IconButton(
+                       icon: Icon(
+                         Icons.auto_awesome,
+                         size: 18,
+                         color: AppTheme.primary,
+                       ),
+                       tooltip: s.dummyStoryGenerate,
+                       onPressed: () =>
+                           _generateDummyStory(item, s, '${d['date']}'),
+                     ),
+                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(

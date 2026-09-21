@@ -92,16 +92,12 @@ mixin AuthServiceProfileMx on AuthBase {
   Future<UserModel?> getProfile({bool withAvatar = true}) async {
     final id = uid;
     if (id == null) return null;
-    // Exclude fcm_token dan ip_address — tidak dibutuhkan di model
-    const cols =
-        'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points,share_location,followers_count,following_count,subscriber_count,subscription_price,friends_count';
-    final res = await _sb
-        .from('profiles')
-        .select(cols)
-        .eq('id', id)
-        .maybeSingle();
-    if (res == null) return null;
-    final model = UserModel.fromMap(id, snakeToCamel(res));
+    final raw = await _sb.rpc('profile_public', params: {'p_user': id});
+    if (raw is! Map || raw.isEmpty) return null;
+    final model = UserModel.fromMap(
+      id,
+      snakeToCamel(Map<String, dynamic>.from(raw)),
+    );
     if (!withAvatar || model.avatar.isEmpty) return model;
     // avatar berupa PATH storage → download → isi base64 (UI tetap pakai
     // base64). Pakai AvatarB64Service yang punya cache per path.
@@ -115,15 +111,12 @@ mixin AuthServiceProfileMx on AuthBase {
   /// Ambil profil user lain (untuk halaman info pengguna).
   Future<UserModel?> getProfileById(String id) async {
     if (id.isEmpty) return null;
-    const cols =
-        'id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen,hashtags,points,share_location,followers_count,following_count,subscriber_count,subscription_price,friends_count';
-    final res = await _sb
-        .from('profiles')
-        .select(cols)
-        .eq('id', id)
-        .maybeSingle();
-    if (res == null) return null;
-    final model = UserModel.fromMap(id, snakeToCamel(res));
+    final raw = await _sb.rpc('profile_public', params: {'p_user': id});
+    if (raw is! Map || raw.isEmpty) return null;
+    final model = UserModel.fromMap(
+      id,
+      snakeToCamel(Map<String, dynamic>.from(raw)),
+    );
     if (model.avatar.isNotEmpty &&
         StoragePhotoService.instance.isAvatarPath(model.avatar)) {
       final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
@@ -186,6 +179,7 @@ mixin AuthServiceProfileMx on AuthBase {
     String? country,
     String? city,
     String? nickname,
+    String? about,
   }) async {
     final id = uid;
     if (id == null) return;
@@ -195,12 +189,20 @@ mixin AuthServiceProfileMx on AuthBase {
         !AdminGate.isRealAdmin(userEmail)) {
       throw Exception('nickname_banned');
     }
+    // About dibatasi 150 karakter (clamp, bukan error) supaya kolom tidak
+    // membengkak dan tidak ada pesan gagal yang membingungkan user.
+    final aboutText = about?.trim();
     final data = <String, dynamic>{
       if (age != null) 'age': age,
       if (country != null) 'country': country,
       if (city != null) 'city': city,
       if (nickname != null) 'nickname': nickname,
+      if (aboutText != null)
+        'about': aboutText.length > 150
+            ? aboutText.substring(0, 150)
+            : aboutText,
     };
+    if (data.isEmpty) return;
     await _sb.from('profiles').update(data).eq('id', id);
   }
 

@@ -129,7 +129,9 @@ class ProfileInfoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      // Sama untuk SEMUA baris di kartu profil/settings: horizontal 4 +
+      // vertical 6, sehingga ikon, teks, dan divider (indent 52) sejajar.
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       child: Row(
         children: [
           Container(

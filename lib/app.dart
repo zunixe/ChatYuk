@@ -29,6 +29,7 @@ import 'providers/nav_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
 import 'providers/story_provider.dart';
+import 'providers/privacy_provider.dart';
 import 'services/chat_service.dart';
 import 'services/boot_overlay.dart';
 import 'core/perf/perf_probe.dart';
@@ -93,6 +94,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
         // OnlineUsersScreen.initState) — RPC story_tray + subscribe
         // realtime jangan berebut CPU/network dengan frame pertama.
         ChangeNotifierProvider(create: (_) => StoryProvider()),
+        ChangeNotifierProvider(create: (_) => PrivacyProvider()),
         ...AdminGate.extraProviders,
         ChangeNotifierProvider.value(value: _roomProvider),
         ChangeNotifierProvider.value(value: _onlineUsersProvider),
@@ -582,6 +584,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       if (mounted) setState(() => _visitedTabs.add(i));
       Future<void>.delayed(const Duration(milliseconds: 800), next);
     }
+
     Future<void>.delayed(const Duration(milliseconds: 1200), next);
   }
 
@@ -738,10 +741,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
                           // Online (repeat selamanya) + animasi lain terus
                           // minta frame walau tab tersembunyi → compositor
                           // tidak pernah idle → semua tab terasa berat.
-                          ? TickerMode(
-                              enabled: tab == i,
-                              child: _pages![i],
-                            )
+                          ? TickerMode(enabled: tab == i, child: _pages![i])
                           : const SizedBox.shrink(),
                   ],
                 ),

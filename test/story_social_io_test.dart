@@ -88,6 +88,23 @@ void main() {
 
       expect(rpcParamsOf(handler, 'mark_story_seen')['p_story_id'], 'story-2');
     });
+
+    test('toggleLike: story id terkirim + hasil like diparsing', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on(
+        '/rest/v1/rpc/toggle_story_like',
+        (_) => {'ok': true, 'liked': true, 'count': 4},
+      );
+      final svc = StoryService(fakeSupabaseClient(handler: handler));
+
+      final result = await svc.toggleLike('story-3');
+
+      expect(result, (true, 4));
+      expect(
+        rpcParamsOf(handler, 'toggle_story_like')['p_story_id'],
+        'story-3',
+      );
+    });
   });
 
   group('SocialService (I/O palsu)', () {
@@ -104,7 +121,10 @@ void main() {
 
     test('sendFriendRequest: p_to terkirim', () async {
       final handler = FakeSupabaseHandler();
-      handler.on('/rest/v1/rpc/send_friend_request', (_) => {'status': 'pending'});
+      handler.on(
+        '/rest/v1/rpc/send_friend_request',
+        (_) => {'status': 'pending'},
+      );
       final svc = SocialService(fakeSupabaseClient(handler: handler));
 
       final res = await svc.sendFriendRequest('u-3');

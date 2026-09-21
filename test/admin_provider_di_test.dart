@@ -148,5 +148,34 @@ void main() {
 
       expect(res['error'], 'DUMMY');
     });
+
+    test('deleteBatchUsers menghapus arsip dan anon serta refresh daftar', () async {
+      when(() => service.deleteArchivedUsers(['u1', 'u2']))
+          .thenAnswer((_) async {});
+      when(() => service.deleteAnonUser('a1'))
+          .thenAnswer((_) async => {'ok': true});
+      when(() => service.listDeleted(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            includePending: any(named: 'includePending'),
+          )).thenAnswer((_) async => {'items': [], 'total': 0});
+
+      final items = [
+        {'user_id': 'u1', 'pending': false},
+        {'user_id': 'a1', 'pending': true},
+        {'user_id': 'u2', 'pending': false},
+      ];
+
+      final count = await provider.deleteBatchUsers(items);
+
+      expect(count, 3);
+      verify(() => service.deleteArchivedUsers(['u1', 'u2'])).called(1);
+      verify(() => service.deleteAnonUser('a1')).called(1);
+      verify(() => service.listDeleted(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            includePending: any(named: 'includePending'),
+          )).called(1);
+    });
   });
 }

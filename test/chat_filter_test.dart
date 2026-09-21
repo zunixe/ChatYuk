@@ -7,6 +7,7 @@ void main() {
     test('key valid dipetakan', () {
       expect(ChatFilter.fromKey('all'), ChatFilter.all);
       expect(ChatFilter.fromKey('unread'), ChatFilter.unread);
+      expect(ChatFilter.fromKey('friends'), ChatFilter.friends);
       expect(ChatFilter.fromKey('anon'), ChatFilter.anon);
       expect(ChatFilter.fromKey('registered'), ChatFilter.registered);
     });
@@ -19,42 +20,142 @@ void main() {
 
   group('ChatFilterLogic.matches', () {
     test('all selalu cocok', () {
-      expect(ChatFilterLogic.matches(ChatFilter.all, unread: 0, otherRegistered: false), isTrue);
-      expect(ChatFilterLogic.matches(ChatFilter.all, unread: 5, otherRegistered: true), isTrue);
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.all,
+          unread: 0,
+          otherRegistered: false,
+        ),
+        isTrue,
+      );
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.all,
+          unread: 5,
+          otherRegistered: true,
+        ),
+        isTrue,
+      );
     });
 
     test('unread hanya bila ada pesan belum dibaca', () {
-      expect(ChatFilterLogic.matches(ChatFilter.unread, unread: 1, otherRegistered: true), isTrue);
-      expect(ChatFilterLogic.matches(ChatFilter.unread, unread: 0, otherRegistered: true), isFalse);
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.unread,
+          unread: 1,
+          otherRegistered: true,
+        ),
+        isTrue,
+      );
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.unread,
+          unread: 0,
+          otherRegistered: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('friends hanya bila lawan sudah menjadi teman', () {
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.friends,
+          unread: 0,
+          otherRegistered: true,
+          otherFriend: true,
+        ),
+        isTrue,
+      );
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.friends,
+          unread: 0,
+          otherRegistered: true,
+          otherFriend: false,
+        ),
+        isFalse,
+      );
     });
 
     test('anon = lawan belum terdaftar', () {
-      expect(ChatFilterLogic.matches(ChatFilter.anon, unread: 0, otherRegistered: false), isTrue);
-      expect(ChatFilterLogic.matches(ChatFilter.anon, unread: 0, otherRegistered: true), isFalse);
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.anon,
+          unread: 0,
+          otherRegistered: false,
+        ),
+        isTrue,
+      );
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.anon,
+          unread: 0,
+          otherRegistered: true,
+        ),
+        isFalse,
+      );
     });
 
     test('registered = lawan sudah terdaftar', () {
-      expect(ChatFilterLogic.matches(ChatFilter.registered, unread: 0, otherRegistered: true), isTrue);
-      expect(ChatFilterLogic.matches(ChatFilter.registered, unread: 0, otherRegistered: false), isFalse);
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.registered,
+          unread: 0,
+          otherRegistered: true,
+        ),
+        isTrue,
+      );
+      expect(
+        ChatFilterLogic.matches(
+          ChatFilter.registered,
+          unread: 0,
+          otherRegistered: false,
+        ),
+        isFalse,
+      );
     });
 
-    test('anon + registered saling eksklusif (semua chat masuk tepat satu)', () {
-      for (final reg in [true, false]) {
-        final inAnon = ChatFilterLogic.matches(ChatFilter.anon, unread: 0, otherRegistered: reg);
-        final inReg = ChatFilterLogic.matches(ChatFilter.registered, unread: 0, otherRegistered: reg);
-        expect(inAnon ^ inReg, isTrue, reason: 'registered=$reg');
-      }
-    });
+    test(
+      'anon + registered saling eksklusif (semua chat masuk tepat satu)',
+      () {
+        for (final reg in [true, false]) {
+          final inAnon = ChatFilterLogic.matches(
+            ChatFilter.anon,
+            unread: 0,
+            otherRegistered: reg,
+          );
+          final inReg = ChatFilterLogic.matches(
+            ChatFilter.registered,
+            unread: 0,
+            otherRegistered: reg,
+          );
+          expect(inAnon ^ inReg, isTrue, reason: 'registered=$reg');
+        }
+      },
+    );
   });
 
   group('ChatFilterLogic.counts', () {
+    test('countsWithFriends menghitung teman terpisah', () {
+      final c = ChatFilterLogic.countsWithFriends([
+        (unread: 1, registered: true, friend: true),
+        (unread: 0, registered: true, friend: false),
+        (unread: 0, registered: false, friend: false),
+      ]);
+      expect(c.all, 3);
+      expect(c.friends, 1);
+      expect(c.anon, 1);
+      expect(c.registered, 2);
+    });
+
     test('menghitung tiap kategori dari data nyata', () {
       final items = <({int unread, bool registered})>[
-        (unread: 2, registered: true),   // unread + registered
-        (unread: 0, registered: true),   // registered
-        (unread: 3, registered: false),  // unread + anon
-        (unread: 0, registered: false),  // anon
-        (unread: 1, registered: false),  // unread + anon
+        (unread: 2, registered: true), // unread + registered
+        (unread: 0, registered: true), // registered
+        (unread: 3, registered: false), // unread + anon
+        (unread: 0, registered: false), // anon
+        (unread: 1, registered: false), // unread + anon
       ];
       final c = ChatFilterLogic.counts(items);
       expect(c.all, 5);

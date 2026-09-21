@@ -17,14 +17,10 @@ class S {
       isId ? 'Pilih nickname kamu...' : 'Choose your nickname...';
   String get labelAge => isId ? 'Umur' : 'Age';
   String get labelCountry => isId ? 'Negara' : 'Country';
-  String get searchCountry =>
-      isId ? 'Cari negara...' : 'Search country...';
-  String get searchCity =>
-      isId ? 'Cari kota...' : 'Search city...';
-  String selCountriesCount(int n) =>
-      isId ? '$n negara' : '$n countries';
-  String selGendersCount(int n) =>
-      isId ? '$n dipilih' : '$n selected';
+  String get searchCountry => isId ? 'Cari negara...' : 'Search country...';
+  String get searchCity => isId ? 'Cari kota...' : 'Search city...';
+  String selCountriesCount(int n) => isId ? '$n negara' : '$n countries';
+  String selGendersCount(int n) => isId ? '$n dipilih' : '$n selected';
   String get filterReset => isId ? 'Reset' : 'Reset';
   String get filterApply => isId ? 'Terapkan' : 'Apply';
   String get labelCity => isId ? 'Kota' : 'City';
@@ -62,15 +58,13 @@ class S {
   // ── Private Rooms ──
   String get tabGlobalRoom => isId ? 'Room Global' : 'Global Room';
   String get tabPrivateRoom => isId ? 'Room Private' : 'Private Room';
-  String get noGroups =>
-      isId ? 'Belum ada grup' : 'No groups yet';
+  String get noGroups => isId ? 'Belum ada grup' : 'No groups yet';
   String get noGroupsHint =>
       isId ? 'Buat grup-mu sendiri' : 'Create your own group';
   String get btnCreateGroup => isId ? 'Buat Grup' : 'Create Group';
   String get roomShowMembers => isId ? 'Lihat anggota' : 'View members';
   String get roomShowChat => isId ? 'Kembali ke chat' : 'Back to chat';
-  String get createGroupTitle =>
-      isId ? 'Buat Grup' : 'Create Group';
+  String get createGroupTitle => isId ? 'Buat Grup' : 'Create Group';
   // Layar QR private room (admin build) — tetap "Room", bukan "Grup".
   String get createPrivateRoomTitle =>
       isId ? 'Buat Room Private' : 'Create Private Room';
@@ -81,18 +75,15 @@ class S {
   String get roomIconLabel => isId ? 'Ikon' : 'Icon';
   String get roomPasswordHint =>
       isId ? 'Minimal 4 karakter' : 'At least 4 characters';
-  String get createGroupSubtitle => isId
-      ? 'Ruang chat untuk komunitasmu'
-      : 'A chat space for your community';
+  String get createGroupSubtitle =>
+      isId ? 'Ruang chat untuk komunitasmu' : 'A chat space for your community';
   String get groupAccessLabel => isId ? 'Akses grup' : 'Group access';
   String get groupNoPwTitle => isId ? 'Tanpa password' : 'No password';
-  String get groupNoPwDesc => isId
-      ? 'Permanen · tidak kedaluwarsa'
-      : 'Permanent · never expires';
+  String get groupNoPwDesc =>
+      isId ? 'Permanen · tidak kedaluwarsa' : 'Permanent · never expires';
   String get groupPwTitle => isId ? 'Dengan password' : 'With password';
-  String get groupPwDesc => isId
-      ? 'Berlaku 7 hari · bisa diperpanjang'
-      : 'Valid 7 days · extendable';
+  String get groupPwDesc =>
+      isId ? 'Berlaku 7 hari · bisa diperpanjang' : 'Valid 7 days · extendable';
   String get errPasswordRequired =>
       isId ? 'Isi password grup dulu' : 'Enter a group password first';
   String get labelYourCoins => isId ? 'Koin kamu' : 'Your coins';
@@ -111,9 +102,11 @@ class S {
   String get btnJoin => isId ? 'Masuk' : 'Join';
   String get resetPasswordTitle =>
       isId ? 'Atur Ulang Password Room' : 'Reset Room Password';
-  String get resetPasswordHint =>
-      isId ? 'Password baru 4-30 karakter (kosongkan untuk hapus)' : 'New password 4-30 chars (empty to remove)';
-  String get msgPasswordReset => isId ? 'Password diperbarui' : 'Password updated';
+  String get resetPasswordHint => isId
+      ? 'Password baru 4-30 karakter (kosongkan untuk hapus)'
+      : 'New password 4-30 chars (empty to remove)';
+  String get msgPasswordReset =>
+      isId ? 'Password diperbarui' : 'Password updated';
   String get btnResetPassword => isId ? 'Reset Password' : 'Reset Password';
   String get btnRemovePassword => isId ? 'Hapus Password' : 'Remove Password';
   String get roomByOwner => isId ? 'oleh' : 'by';
@@ -303,7 +296,8 @@ class S {
   String get labelYesterday => isId ? 'Kemarin' : 'Yesterday';
   String get btnPin => isId ? 'Sematkan' : 'Pin';
   String get btnUnpin => isId ? 'Lepas Sematan' : 'Unpin';
-  String get msgPinned => isId ? 'Chat disematkan di atas' : 'Chat pinned to top';
+  String get msgPinned =>
+      isId ? 'Chat disematkan di atas' : 'Chat pinned to top';
   String get msgUnpinned => isId ? 'Sematan dilepas' : 'Chat unpinned';
 
   // ── Chat Screen (private & room) ──
@@ -315,11 +309,14 @@ class S {
       isId ? 'Gagal kirim foto: ' : 'Failed to send photo: ';
   String get errVoiceUploadFailed =>
       isId ? 'Gagal upload voice note' : 'Voice note upload failed';
-  String get errVoicePermission => isId ? 'Izin mikrofon ditolak' : 'Microphone permission denied';
-  String get errVoiceTooShort => isId ? 'Rekaman terlalu pendek' : 'Recording too short';
+  String get errVoicePermission =>
+      isId ? 'Izin mikrofon ditolak' : 'Microphone permission denied';
+  String get errVoiceTooShort =>
+      isId ? 'Rekaman terlalu pendek' : 'Recording too short';
   String get msgVoice => isId ? '[Voice]' : '[Voice]';
   String get hintHoldToRecord => isId ? 'Tahan untuk rekam' : 'Hold to record';
-  String get hintSlideToCancel => isId ? 'Geser untuk batal' : 'Slide to cancel';
+  String get hintSlideToCancel =>
+      isId ? 'Geser untuk batal' : 'Slide to cancel';
   String get msgPhoto => isId ? '[Foto]' : '[Photo]';
   String get msgViewOnce => isId ? '[Foto Sekali Lihat]' : '[View Once Photo]';
   String get viewOnceTap =>
@@ -363,12 +360,15 @@ class S {
   String deleteSelectedConfirm(int n) => isId
       ? 'Hapus $n percakapan terpilih?'
       : 'Delete $n selected conversations?';
-  String get deleteAllSuccess => isId ? 'Semua chat dihapus' : 'All chats deleted';
+  String get deleteAllSuccess =>
+      isId ? 'Semua chat dihapus' : 'All chats deleted';
   String deleteSelectedSuccess(int n) =>
       isId ? '$n chat dihapus' : '$n chats deleted';
   String selectedCount(int n) => isId ? '$n terpilih' : '$n selected';
+
   /// Badge jumlah pesan baru pada mini-preview (mis. "3 baru").
   String newCount(int n) => isId ? '$n baru' : '$n new';
+
   /// Label jumlah penonton siaran langsung (mis. "4 peers").
   String viewerCount(int n) => isId ? '$n penonton' : '$n viewers';
   String get btnArchive => isId ? 'Arsipkan' : 'Archive';
@@ -382,13 +382,15 @@ class S {
       isId ? 'Notifikasi chat dinyalakan' : 'Chat notifications unmuted';
   String labelArchived(int n) => isId ? 'Diarsipkan ($n)' : 'Archived ($n)';
 
-  // ── Filter daftar chat (Semua / Belum dibaca / Anon / Terdaftar) ──
+  // ── Filter daftar chat (Semua / Belum dibaca / Teman / Anon / Terdaftar) ──
   // `filterAll` sudah ada di atas (dipakai filter lain) — dipakai ulang.
   String get filterUnread => isId ? 'Belum dibaca' : 'Unread';
+  String get filterFriends => isId ? 'Teman' : 'Friends';
   String get filterAnon => isId ? 'Anon' : 'Anon';
   String get filterRegistered => isId ? 'Terdaftar' : 'Registered';
   String filterAllCount(int n) => '$filterAll ($n)';
   String filterUnreadCount(int n) => '$filterUnread ($n)';
+  String filterFriendsCount(int n) => '$filterFriends ($n)';
   String filterAnonCount(int n) => '$filterAnon ($n)';
   String filterRegisteredCount(int n) => '$filterRegistered ($n)';
   // ── Antrean offline (pesan menunggu koneksi) ──
@@ -400,8 +402,7 @@ class S {
   String msgQueuedCount(int n) => isId
       ? '$n menunggu koneksi — terkirim otomatis'
       : '$n waiting for connection — will send automatically';
-  String msgQueueSent(int n) =>
-      isId ? '$n pesan terkirim' : '$n messages sent';
+  String msgQueueSent(int n) => isId ? '$n pesan terkirim' : '$n messages sent';
 
   // ── Profile ──
   String get titleProfile => isId ? 'Profil' : 'Profile';
@@ -421,9 +422,8 @@ class S {
   String get labelYears => isId ? 'tahun' : 'years';
   String get btnLogout => isId ? 'Keluar' : 'Logout';
   String get btnOk => isId ? 'OK' : 'OK';
-  String get offlineBanner => isId
-      ? 'Tidak ada koneksi internet'
-      : 'No internet connection';
+  String get offlineBanner =>
+      isId ? 'Tidak ada koneksi internet' : 'No internet connection';
   String get confirmLogoutBody => isId
       ? 'Yakin ingin keluar dari akun ini?'
       : 'Are you sure you want to log out?';
@@ -433,8 +433,9 @@ class S {
       : 'Your account, messages, stories, and all your data will be permanently deleted. This cannot be undone.';
   String get labelDeleteAccountConfirm =>
       isId ? 'Ketik HAPUS untuk konfirmasi' : 'Type DELETE to confirm';
-  String get errDeleteAccount =>
-      isId ? 'Gagal menghapus akun. Coba lagi.' : 'Failed to delete account. Try again.';
+  String get errDeleteAccount => isId
+      ? 'Gagal menghapus akun. Coba lagi.'
+      : 'Failed to delete account. Try again.';
   String get errDeleteAccountForbidden => isId
       ? 'Akun admin tidak bisa dihapus dari app.'
       : 'Admin accounts cannot be deleted from the app.';
@@ -447,8 +448,7 @@ class S {
   String get btnSave => isId ? 'Simpan' : 'Save';
   String get msgEdited => isId ? '(diedit)' : '(edited)';
   String get editMessageTitle => isId ? 'Edit Pesan' : 'Edit Message';
-  String get msgDeletedRoom =>
-      isId ? 'Pesan dihapus' : 'Message deleted';
+  String get msgDeletedRoom => isId ? 'Pesan dihapus' : 'Message deleted';
   String get editingMessage =>
       isId ? 'Sedang mengedit pesan' : 'Editing message';
   String get menuReply => isId ? 'Balas' : 'Reply';
@@ -505,7 +505,54 @@ class S {
       : 'Let\'s chat on ChatYuk! Download now on Google Play: https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
 
   // ── Settings ──
+  String get labelAbout => isId ? 'Tentang' : 'About';
+  String get hintAbout =>
+      isId ? 'Tulis sesuatu tentang kamu…' : 'Write something about you…';
+  String get aboutEmpty => isId ? 'Belum ada tentang kamu' : 'No about yet';
+  String get aboutPrivacyHint => isId
+      ? 'Siapa yang melihat diatur di Pengaturan › Privasi'
+      : 'Who can see this is set in Settings › Privacy';
   String get titleSettings => isId ? 'Pengaturan' : 'Settings';
+  String get privacyTitle => isId ? 'Privasi' : 'Privacy';
+  String get privacyHint => isId
+      ? 'Atur siapa yang dapat melihat aktivitas dan informasi profil kamu.'
+      : 'Choose who can see your activity and profile information.';
+  String get privacyEveryone => isId ? 'Semua orang' : 'Everyone';
+  String get privacyEveryoneExcept =>
+      isId ? 'Semua orang kecuali...' : 'Everyone except...';
+  String get privacyFriends => isId ? 'Teman saya' : 'My friends';
+  String get privacyFriendsExcept =>
+      isId ? 'Teman saya kecuali...' : 'My friends except...';
+  String get privacyNobody => isId ? 'Tidak ada' : 'Nobody';
+  String get privacyPresence => isId ? 'Status online' : 'Online status';
+  String get privacyLastSeen => isId ? 'Terakhir dilihat' : 'Last seen';
+  String get privacyProfilePhoto => isId ? 'Foto profil' : 'Profile photo';
+  String get privacyAbout => isId ? 'About' : 'About';
+  String get privacyStory => isId ? 'Story' : 'Story';
+  String get privacyReadReceipts => isId ? 'Laporan dibaca' : 'Read receipts';
+  String get privacyReadReceiptsDesc => isId
+      ? 'Pesan tetap terkirim, tetapi pengirim tidak melihat centang biru.'
+      : 'Messages still send, but senders will not see blue read checks.';
+  String get privacyExceptTitle =>
+      isId ? 'Yang dikecualikan' : 'Excluded';
+  String get privacyExceptDesc => isId
+      ? 'Orang yang dipilih di sini TIDAK bisa melihat bagian ini.'
+      : 'People picked here CANNOT see this.';
+  String get privacyNoFriends =>
+      isId ? 'Belum ada yang bisa dipilih' : 'Nobody to pick yet';
+  String get privacyNoFriendsHint => isId
+      ? 'Tambahkan teman atau mulai chat supaya bisa memakai opsi ini.'
+      : 'Add friends or start a chat to use this option.';
+  String privacyEveryoneExceptCount(int n) =>
+      isId ? '$privacyEveryoneExcept ($n)' : '$privacyEveryoneExcept ($n)';
+  String privacyFriendsExceptCount(int n) =>
+      isId ? '$privacyFriendsExcept ($n)' : '$privacyFriendsExcept ($n)';
+  String get privacyBadgeFriend => isId ? 'Teman' : 'Friend';
+  String get privacyBadgeAnon => isId ? 'Anon' : 'Anon';
+  String get privacySaveFailed =>
+      isId ? 'Gagal menyimpan privasi' : 'Failed to save privacy';
+  String get privacyReadReceiptsTitle =>
+      isId ? 'Laporan dibaca' : 'Read receipts';
   String get labelLanguage => isId ? 'Bahasa / Language' : 'Language / Bahasa';
   String get labelTheme => isId ? 'Mode Gelap' : 'Dark Mode';
   String get descTheme => isId
@@ -523,8 +570,7 @@ class S {
   String get notifNewMessage => isId ? 'Pesan baru' : 'New message';
   String get notifNewMessageBody =>
       isId ? 'Pesan baru masuk' : 'You have a new message';
-  String get notifActionMarkRead =>
-      isId ? 'Tandai dibaca' : 'Mark as read';
+  String get notifActionMarkRead => isId ? 'Tandai dibaca' : 'Mark as read';
   String notifSummary(int chats, int msgs) => isId
       ? '$msgs pesan dari $chats chat'
       : '$msgs messages from $chats chats';
@@ -547,8 +593,7 @@ class S {
       isId ? 'membuat postingan baru' : 'created a new post';
   String get notifMissedCallBody =>
       isId ? 'panggilan tak terjawab' : 'missed call';
-  String get notifCallEndedBody =>
-      isId ? 'Panggilan berakhir' : 'Call ended';
+  String get notifCallEndedBody => isId ? 'Panggilan berakhir' : 'Call ended';
   // ── Notifikasi Detail (per-jenis toggle) ──
   String get notifDetailTitle =>
       isId ? 'Pengaturan Notifikasi' : 'Notification Settings';
@@ -565,8 +610,9 @@ class S {
   String get notifTypeOnlineDesc =>
       isId ? 'Teman chat sedang online' : 'Chat contact is online';
   String get notifTypeBroadcast => isId ? 'Live Broadcast' : 'Live Broadcast';
-  String get notifTypeBroadcastDesc =>
-      isId ? 'Ada yang mulai broadcast di room' : 'Someone starts broadcasting in a room';
+  String get notifTypeBroadcastDesc => isId
+      ? 'Ada yang mulai broadcast di room'
+      : 'Someone starts broadcasting in a room';
   String get notifTypeTimeline => isId ? 'Timeline' : 'Timeline';
   String get notifTypeTimelineDesc =>
       isId ? 'Postingan baru di timeline' : 'New timeline posts';
@@ -574,28 +620,26 @@ class S {
   String get notifTypeFollowerDesc =>
       isId ? 'Seseorang mengikuti kamu' : 'Someone followed you';
   String get notifTypeFollowing => isId ? 'Mengikuti' : 'Following';
-  String get notifTypeFollowingDesc =>
-      isId ? 'Langganan & update mengikuti' : 'Subscriptions & following updates';
+  String get notifTypeFollowingDesc => isId
+      ? 'Langganan & update mengikuti'
+      : 'Subscriptions & following updates';
   String get notifTypeFriend => isId ? 'Teman' : 'Friends';
   String get notifTypeFriendDesc =>
       isId ? 'Permintaan & update teman' : 'Friend requests & updates';
   String get chatOnlineBadge => isId ? 'Online' : 'Online';
-  String get chatOnlineSubtitle =>
-      isId ? '● Online sekarang' : '● Online now';
+  String get chatOnlineSubtitle => isId ? '● Online sekarang' : '● Online now';
   String get labelNotifications => isId ? 'Notifikasi' : 'Notifications';
   String get notifEnabledDesc => isId
       ? 'Terima notifikasi pesan baru'
       : 'Receive new message notifications';
 
   // ── Ukuran font chat (slider di profil) ──
-  String get labelChatFontSize =>
-      isId ? 'Ukuran font chat' : 'Chat font size';
+  String get labelChatFontSize => isId ? 'Ukuran font chat' : 'Chat font size';
   String get descChatFontSize => isId
       ? 'Atur besar teks di pesan chat'
       : 'Adjust text size in chat messages';
-  String get chatFontPreview => isId
-      ? 'Contoh: Halo, apa kabar? 👋'
-      : 'Preview: Hi, how are you? 👋';
+  String get chatFontPreview =>
+      isId ? 'Contoh: Halo, apa kabar? 👋' : 'Preview: Hi, how are you? 👋';
 
   // ── Call 1:1 (audio/video) ──
   String get callAudio => isId ? 'Panggilan Audio' : 'Audio Call';
@@ -653,38 +697,50 @@ class S {
 
   // ── Errors / Generic ──
   String get btnCancel => isId ? 'Batal' : 'Cancel';
-  String get privateRoomsStopBroadcast => isId ? 'Hentikan broadcast' : 'Stop broadcast';
+  String get privateRoomsStopBroadcast =>
+      isId ? 'Hentikan broadcast' : 'Stop broadcast';
   String get roomBroadcastConnecting => isId ? 'Menyiapkan…' : 'Starting…';
-  String get broadcastLiveNotif =>
-      isId ? 'Broadcast aktif — ketuk untuk kembali' : 'Broadcast live — tap to return';
-  String get broadcastWatchingNotif =>
-      isId ? 'Menonton broadcast — ketuk untuk kembali' : 'Watching broadcast — tap to return';
-  String get privateRoomsStartBroadcast => isId ? 'Mulai broadcast' : 'Start broadcast';
+  String get broadcastLiveNotif => isId
+      ? 'Broadcast aktif — ketuk untuk kembali'
+      : 'Broadcast live — tap to return';
+  String get broadcastWatchingNotif => isId
+      ? 'Menonton broadcast — ketuk untuk kembali'
+      : 'Watching broadcast — tap to return';
+  String get privateRoomsStartBroadcast =>
+      isId ? 'Mulai broadcast' : 'Start broadcast';
   String get privateRoomsLiveNow => isId ? 'LIVE' : 'LIVE';
 
   String get roomActionHandRaise => isId ? 'Angkat tangan' : 'Raise hand';
 
-  String get roomHandRaised => isId ? 'Tangan diangkat — tunggu admin mengizinkan' : 'Hand raised — waiting for admin approval';
+  String get roomHandRaised => isId
+      ? 'Tangan diangkat — tunggu admin mengizinkan'
+      : 'Hand raised — waiting for admin approval';
 
-  String get privateRoomsLiveConnecting => isId ? 'Menyambungkan...' : 'Connecting...';
+  String get privateRoomsLiveConnecting =>
+      isId ? 'Menyambungkan...' : 'Connecting...';
 
   String get privateRoomsMembersTitle => isId ? 'Anggota' : 'Members';
 
-  String get privateRoomsPendingQueue => isId ? 'Menunggu Persetujuan' : 'Pending Approvals';
+  String get privateRoomsPendingQueue =>
+      isId ? 'Menunggu Persetujuan' : 'Pending Approvals';
 
   String get privateRoomsTitle => isId ? 'Room Privat' : 'Private Rooms';
-  String get privateRoomNeedApproval => isId ? 'Menunggu persetujuan admin untuk mengirim pesan' : 'Waiting for admin approval to send messages';
+  String get privateRoomNeedApproval => isId
+      ? 'Menunggu persetujuan admin untuk mengirim pesan'
+      : 'Waiting for admin approval to send messages';
   String get roomBroadcastFull =>
       isId ? 'Sudah 4 broadcaster (maksimal)' : 'Broadcast full (4/4)';
-  String get roomBroadcastCapHint =>
-      isId ? 'Tunggu giliran atau angkat tangan' : 'Wait your turn or raise hand';
+  String get roomBroadcastCapHint => isId
+      ? 'Tunggu giliran atau angkat tangan'
+      : 'Wait your turn or raise hand';
 
   String get btnClose => isId ? 'Tutup' : 'Close';
   String get btnZoomIn => isId ? 'Perbesar' : 'Zoom in';
   String get btnZoomOut => isId ? 'Perkecil' : 'Zoom out';
   String get btnZoomReset => isId ? 'Atur ulang zoom' : 'Reset zoom';
-  String get viewerZoomHint =>
-      isId ? 'Cubit 2 jari / ketuk 2x untuk zoom' : 'Pinch or double-tap to zoom';
+  String get viewerZoomHint => isId
+      ? 'Cubit 2 jari / ketuk 2x untuk zoom'
+      : 'Pinch or double-tap to zoom';
   String get errGeneric => isId ? 'Gagal: ' : 'Failed: ';
   String get errUserNotFound =>
       isId ? 'Pengguna tidak ditemukan' : 'User not found';
@@ -801,10 +857,12 @@ class S {
       : 'A new code was sent to your email.';
   String get errInvalidCode =>
       isId ? 'Kode tidak valid. Coba lagi.' : 'Invalid code. Please try again.';
-  String get errOtpExpired =>
-      isId ? 'Kode sudah kedaluwarsa. Kirim ulang kode.' : 'Code expired. Resend a new one.';
-  String get errOtpUsed =>
-      isId ? 'Kode sudah dipakai. Kirim ulang kode.' : 'Code already used. Resend a new one.';
+  String get errOtpExpired => isId
+      ? 'Kode sudah kedaluwarsa. Kirim ulang kode.'
+      : 'Code expired. Resend a new one.';
+  String get errOtpUsed => isId
+      ? 'Kode sudah dipakai. Kirim ulang kode.'
+      : 'Code already used. Resend a new one.';
   String get msgEmailVerified =>
       isId ? 'Email terverifikasi!' : 'Email verified!';
   String get labelEmailVerified =>
@@ -939,15 +997,13 @@ class S {
   String get anonGateBanner => isId
       ? 'Fitur akun anon sedang dinonaktifkan — daftar untuk lanjut chat & posting'
       : 'Anonymous accounts are temporarily disabled — register to continue chatting & posting';
-  String get anonGateBannerCta =>
-      isId ? 'Daftar' : 'Register';
+  String get anonGateBannerCta => isId ? 'Daftar' : 'Register';
   String get anonGateBlocked => isId
       ? 'Akun anon sedang dinonaktifkan. Daftar dengan email atau Google untuk lanjut chat — data kamu tetap tersimpan.'
       : 'Anonymous accounts are currently disabled. Register with email or Google to continue chatting — your data stays intact.';
 
   // ── Notifikasi pengingat harian (admin) ──
-  String get labelReengageNotif =>
-      isId ? 'Pengingat Harian' : 'Daily Reminder';
+  String get labelReengageNotif => isId ? 'Pengingat Harian' : 'Daily Reminder';
   String get descReengageNotif => isId
       ? 'Push pengingat tiap 19:00 ke user offline 1-8 hari (stop setelah 7 hari)'
       : 'Push daily reminder at 19:00 to users offline 1-8 days (stops after 7 days)';
@@ -955,6 +1011,9 @@ class S {
   // ── Points ──
   String get pointsTitle => isId ? 'Poin ChatYuk' : 'ChatYuk Points';
   String get pointsBalance => isId ? 'Poin' : 'Points';
+  String onlineMilestone(int minutes) =>
+      isId ? 'Online $minutes menit' : 'Online $minutes min';
+  String get outOfPointsTitle => isId ? '😢 Poin Habis!' : '😢 Out of Points!';
   String get pointsSafe => isId ? '✅ Aman selamanya' : '✅ Safe forever';
   String get pointsAnonymousLose => isId
       ? 'Poin akan hilang kalau kamu logout atau ganti HP'
@@ -991,23 +1050,17 @@ class S {
   String get storyAddTooltip => isId ? 'Buat Story' : 'Create Story';
   String get storyComposerTitle => isId ? 'Story Baru' : 'New Story';
   String get storyAddTextHint => isId ? 'Tulis sesuatu…' : 'Say something…';
-  String get storyVisibilityLabel => isId
-      ? 'Siapa yang bisa melihat story ini?'
-      : 'Who can see this story?';
-  String get storyVisibilityEveryone =>
-      isId ? 'Semua orang' : 'Everyone';
-  String get storyVisibilityEveryoneDesc => isId
-      ? 'Termasuk pengguna anonim'
-      : 'Includes anonymous users';
-  String get storyVisibilityFollowers =>
-      isId ? 'Pengikut' : 'Followers';
-  String get storyVisibilityFollowersDesc => isId
-      ? 'Hanya yang mengikuti kamu'
-      : 'Only people who follow you';
+  String get storyVisibilityLabel =>
+      isId ? 'Siapa yang bisa melihat story ini?' : 'Who can see this story?';
+  String get storyVisibilityEveryone => isId ? 'Semua orang' : 'Everyone';
+  String get storyVisibilityEveryoneDesc =>
+      isId ? 'Termasuk pengguna anonim' : 'Includes anonymous users';
+  String get storyVisibilityFollowers => isId ? 'Pengikut' : 'Followers';
+  String get storyVisibilityFollowersDesc =>
+      isId ? 'Hanya yang mengikuti kamu' : 'Only people who follow you';
   String get storyVisibilityFriends => isId ? 'Teman' : 'Friends';
-  String get storyVisibilityFriendsDesc => isId
-      ? 'Hanya teman dua arah'
-      : 'Mutual friends only';
+  String get storyVisibilityFriendsDesc =>
+      isId ? 'Hanya teman dua arah' : 'Mutual friends only';
   String get storyBtnPublish => isId ? 'Bagikan ke Story' : 'Share to Story';
   String get storyMine => isId ? 'Story Saya' : 'My Story';
   String get storyEmptyTray => isId ? 'Belum ada story' : 'No stories yet';
@@ -1018,16 +1071,14 @@ class S {
   String get storyDeleted => isId ? 'Story dihapus' : 'Story deleted';
   String get storyVideoSoon =>
       isId ? 'Story video segera hadir' : 'Video stories coming soon';
-  String get storyCamera =>
-      isId ? 'Kamera' : 'Camera';
+  String get storyCamera => isId ? 'Kamera' : 'Camera';
   String get storyPartialTitle =>
       isId ? 'Akses foto terbatas' : 'Limited photo access';
-  String get storyPartialDesc =>
-      isId ? 'Hanya sebagian foto yang terlihat. Pilih foto lain atau izinkan semua di Pengaturan.' : 'Only some photos are visible. Select more photos or allow all in Settings.';
-  String get storyPartialAdd =>
-      isId ? 'Pilih foto' : 'Select photos';
-  String get storyPartialAllowAll =>
-      isId ? 'Izinkan semua' : 'Allow all';
+  String get storyPartialDesc => isId
+      ? 'Hanya sebagian foto yang terlihat. Pilih foto lain atau izinkan semua di Pengaturan.'
+      : 'Only some photos are visible. Select more photos or allow all in Settings.';
+  String get storyPartialAdd => isId ? 'Pilih foto' : 'Select photos';
+  String get storyPartialAllowAll => isId ? 'Izinkan semua' : 'Allow all';
   String get storyDeleteFail =>
       isId ? 'Gagal menghapus story' : 'Failed to delete story';
   String get storyDeleteSlideTitle =>
@@ -1035,27 +1086,29 @@ class S {
   String get storyDeleteSlideMsg => isId
       ? 'Slide akan dihapus permanen dari story kamu.'
       : 'This slide will be permanently removed from your story.';
-  String get storyViewersTitle =>
-      isId ? 'Penonton Story' : 'Story Viewers';
+  String get storyViewersTitle => isId ? 'Penonton Story' : 'Story Viewers';
   String get storyViewersEmpty =>
       isId ? 'Belum ada yang melihat' : 'No views yet';
   String get storyOwnBadge => isId ? 'Kamu' : 'You';
-  String get storyTextPaletteTooltip =>
-      isId ? 'Warna teks' : 'Text color';
+  String get storyTextPaletteTooltip => isId ? 'Warna teks' : 'Text color';
   String get storyTextSizeTooltip => isId ? 'Ukuran teks' : 'Text size';
-  String get storyTextBgTooltip =>
-      isId ? 'Latar teks' : 'Text background';
+  String get storyTextBgTooltip => isId ? 'Latar teks' : 'Text background';
   String get storyAnonBlocked => isId
       ? 'Story hanya untuk pengguna terdaftar'
       : 'Stories are for registered users only';
-  String get storySlideLimit => isId
-      ? 'Batas 10 story per 24 jam'
-      : 'Limit is 10 stories per 24 hours';
+  String get storySlideLimit =>
+      isId ? 'Batas 10 story per 24 jam' : 'Limit is 10 stories per 24 hours';
   String get storyTapLeftRightHint => isId
       ? 'Tap sisi kanan/kiri untuk pindah'
       : 'Tap right/left side to navigate';
   String storyReplyHint(String name) =>
       isId ? 'Balas $name...' : 'Reply to $name...';
+  String get storyReplySent => isId ? 'Balasan terkirim' : 'Reply sent';
+  String storyLikeCount(int n) =>
+      isId ? '$n suka' : '$n like${n == 1 ? '' : 's'}';
+  String storyShareMsg(String name) => isId
+      ? 'Lihat story $name di ChatYuk!\nhttps://play.google.com/store/apps/details?id=com.chatyuk.chatyuk'
+      : 'Check out $name\'s story on ChatYuk!\nhttps://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
   String get storyDiscardTitle => isId ? 'Buang story?' : 'Discard story?';
   String get storyDiscardMsg => isId
       ? 'Foto dan teks yang belum dibagikan akan hilang.'
@@ -1196,8 +1249,7 @@ class S {
       : 'Pick from people you have chatted with (friends or not)';
   String get roomInvitedOk =>
       isId ? 'Berhasil diundang ke grup' : 'Invited to group';
-  String get roomInviteFull =>
-      isId ? 'Grup penuh' : 'Group is full';
+  String get roomInviteFull => isId ? 'Grup penuh' : 'Group is full';
   String get mFirstPhoto => isId ? 'Kirim foto pertama' : 'Send first photo';
   String get mFirstRoomChat => isId ? 'Chat room pertama' : 'First room chat';
   String get btnRetry => isId ? 'Coba Lagi' : 'Retry';
@@ -1235,6 +1287,7 @@ class S {
   String get labelVerified => isId ? 'Terverifikasi' : 'Verified';
   String get lobbyCountryHint => isId ? 'Negara / Country' : 'Country / Negara';
   String get donateCopyAddress => isId ? 'Salin Alamat ' : 'Copy Address ';
+  String liveViewerCount(int count) => 'LIVE · $count';
   String get googleSignInFailed =>
       isId ? 'Google sign in gagal: ' : 'Google sign in failed: ';
 
@@ -1292,8 +1345,11 @@ class S {
   String get btnFollow => isId ? 'Ikuti' : 'Follow';
   String get btnUnfollow => isId ? 'Berhenti Ikuti' : 'Unfollow';
   String get btnChatNow => isId ? 'Chat' : 'Chat';
-  String get msgRegisterToFollow => isId ? 'Daftar dulu untuk mengikuti' : 'Register to follow';
-  String get msgTargetNotRegistered => isId ? 'Akun ini belum terdaftar, tidak bisa diikuti' : 'This account is not registered and cannot be followed';
+  String get msgRegisterToFollow =>
+      isId ? 'Daftar dulu untuk mengikuti' : 'Register to follow';
+  String get msgTargetNotRegistered => isId
+      ? 'Akun ini belum terdaftar, tidak bisa diikuti'
+      : 'This account is not registered and cannot be followed';
   String get btnAddFriend => isId ? 'Tambah Teman' : 'Add Friend';
   String get btnFriendRequested => isId ? 'Terkirim' : 'Sent';
   String get btnFriendPending => isId ? 'Terima Permintaan' : 'Accept Request';
@@ -1366,8 +1422,7 @@ class S {
   String get tabMine => isId ? 'Postinganku' : 'My Posts';
   String get tabMessages => isId ? 'Pesan' : 'Messages';
   String get menuNewGroup => isId ? 'Grup Baru' : 'New group';
-  String get menuReadAll =>
-      isId ? 'Tandai semua dibaca' : 'Mark all as read';
+  String get menuReadAll => isId ? 'Tandai semua dibaca' : 'Mark all as read';
   String get tabGroups => isId ? 'Grup' : 'Groups';
   String get tabRooms => isId ? 'Global Room' : 'Global Room';
   String get titleTimeline => isId ? 'Timeline' : 'Timeline';
@@ -1375,8 +1430,7 @@ class S {
       isId ? 'Tulis sesuatu...' : "Share what's on your mind...";
   String get btnPost => isId ? 'Posting' : 'Post';
   // ── Composer (posting) — judul, tip, aksi ──
-  String get composerTitle =>
-      isId ? 'Buat Postingan' : 'Create Post';
+  String get composerTitle => isId ? 'Buat Postingan' : 'Create Post';
   String get composerIntroHeadline =>
       isId ? 'Apa yang ingin kamu bagikan?' : 'What do you want to share?';
   String get composerIntroSub => isId
@@ -1389,9 +1443,8 @@ class S {
       isId ? 'Tambahkan foto biar makin menarik' : 'Add photos to stand out';
   String get composerTipsTitle =>
       isId ? 'Tips biar dilihat banyak orang' : 'Tips to get more views';
-  String get composerTip1 => isId
-      ? 'Pakai foto yang jelas & menarik'
-      : 'Use clear, engaging photos';
+  String get composerTip1 =>
+      isId ? 'Pakai foto yang jelas & menarik' : 'Use clear, engaging photos';
   String get composerTip2 => isId
       ? 'Tambahkan #hashtag biar mudah ditemukan'
       : 'Add #hashtags so people can find you';
@@ -1472,7 +1525,8 @@ class S {
   String get badgeBoosted => isId ? 'Boost' : 'Boost';
   String get badgeFriend => isId ? 'Teman' : 'Friend';
   String get badgeSubscriber => isId ? 'Subscriber' : 'Subscriber';
-  String get noResults => isId ? 'Tidak ada hasil ditemukan' : 'No results found';
+  String get noResults =>
+      isId ? 'Tidak ada hasil ditemukan' : 'No results found';
 
   // ── Long-press pesan ala WA (reaksi + toolbar seleksi) ──
   String get menuForward => isId ? 'Teruskan' : 'Forward';
@@ -1494,8 +1548,7 @@ class S {
       isId ? 'Gagal mengubah bintang' : 'Failed to update star';
   String reactionsTitle(int n) =>
       isId ? '$n reaksi' : (n == 1 ? '1 reaction' : '$n reactions');
-  String get msgTapToRemove =>
-      isId ? 'Ketuk untuk menghapus' : 'Tap to remove';
+  String get msgTapToRemove => isId ? 'Ketuk untuk menghapus' : 'Tap to remove';
 }
 
 const _privacyId = <LegalSection>[

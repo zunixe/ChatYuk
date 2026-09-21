@@ -1,0 +1,5 @@
+# Konfigurasi workspace Maestro untuk E2E ChatYuk.
+# Jalankan: maestro test e2e/flows --udid <device>  (atau scripts/e2e/run.sh)
+appId: com.chatyuk.chatyuk
+---
+name: config

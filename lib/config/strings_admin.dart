@@ -152,6 +152,17 @@ extension SAdminX on S {
   String get adminDeletedFilterAll => isId ? 'Semua' : 'All';
   String get adminDeletedFilterDeleted => isId ? 'Terhapus' : 'Deleted';
   String get adminDeletedFilterPending => isId ? 'Belum dihapus' : 'Not deleted';
+  String adminDeletedSelected(int n) => isId ? '$n dipilih' : '$n selected';
+  String get adminDeletedSelectAll => isId ? 'Pilih Semua' : 'Select All';
+  String adminDeletedBatchDeleteTitle(int n) =>
+      isId ? 'Hapus $n user terpilih?' : 'Delete $n selected users?';
+  String get adminDeletedBatchDeleteBody => isId
+      ? 'User yang dipilih akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.'
+      : 'Selected users will be permanently deleted. This cannot be undone.';
+  String adminDeletedBatchDeleteDone(int n) =>
+      isId ? '$n user berhasil dihapus' : '$n users successfully deleted';
+  String get adminDeletedBatchDeleting =>
+      isId ? 'Menghapus user...' : 'Deleting users...';
 
   String get privateRoomsScanQr => isId ? 'Scan QR' : 'Scan QR';
   String get privateRoomsEmpty => isId
@@ -642,6 +653,14 @@ extension SAdminX on S {
 
   String get dummyStoryLoadFail =>
       isId ? 'Gagal memuat story' : 'Failed to load stories';
+  String get dummyStoryGenerate =>
+      isId ? 'Generate story hari ini' : 'Generate today\'s story';
+  String get dummyStoryGenerating =>
+      isId ? 'Sedang membuat story…' : 'Generating story…';
+  String get dummyStoryGenerated =>
+      isId ? 'Story hari ini berhasil dibuat' : 'Today\'s story generated';
+  String get dummyStoryGenerateFail =>
+      isId ? 'Gagal membuat story hari ini' : 'Failed to generate today\'s story';
 
   String get dummyAiScheduleDesc => isId
       ? 'AI online/idle/offline mengikuti jam aktif. Offline = AI tidak membalas sama sekali.'

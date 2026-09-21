@@ -130,7 +130,7 @@ class AuthProvider extends ChangeNotifier {
   bool get notificationsEnabled => _notificationsEnabled;
 
   AuthProvider({AuthService? authService, bool autoInit = true})
-      : _auth = authService ?? AuthService() {
+    : _auth = authService ?? AuthService() {
     if (!autoInit) return;
     dlog('[AUTH-PROVIDER] CONSTRUCTED $instanceId');
     _listenAuthState();
@@ -1087,7 +1087,6 @@ class AuthProvider extends ChangeNotifier {
     _bindAndClaimReferrer();
   }
 
-
   // ── Passthrough agar screen tidak import AuthService (Fase 9b) ──
   Future<List<UserPhoto>> getPhotos(String uid) => _auth.getPhotos(uid);
   Future<List<UserPhoto>> getPhotosWithAccess(String uid) =>
@@ -1102,18 +1101,24 @@ class AuthProvider extends ChangeNotifier {
     String? country,
     String? city,
     String? nickname,
+    String? about,
   }) async {
     await _auth.updateProfile(
       age: age,
       country: country,
       city: city,
       nickname: nickname,
+      about: about,
     );
+    final aboutText = about?.trim();
     _profile = _profile?.copyWith(
       age: age ?? _profile?.age,
       country: country ?? _profile?.country,
       city: city ?? _profile?.city,
       nickname: nickname ?? _profile?.nickname,
+      about: aboutText == null
+          ? null
+          : (aboutText.length > 150 ? aboutText.substring(0, 150) : aboutText),
     );
     if (!_disposed) notifyListeners();
   }
@@ -1269,8 +1274,8 @@ class AuthProvider extends ChangeNotifier {
     // sehingga presisinya tidak berubah.
     final now = DateTime.now();
     final last = _lastActivityAt;
-    final throttled = last != null &&
-        now.difference(last) < const Duration(seconds: 1);
+    final throttled =
+        last != null && now.difference(last) < const Duration(seconds: 1);
     if (_isIdle) {
       _isIdle = false;
       _lastActivityAt = now;

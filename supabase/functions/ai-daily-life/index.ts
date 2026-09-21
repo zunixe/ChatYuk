@@ -58,16 +58,43 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return json({ error: 'method_not_allowed' }, 405);
   }
-  if (!checkAppSecret(req)) return unauthorized();
   try {
+    const body = await req.json().catch(() => ({}));
+    const manualUid = typeof body?.dummy_uid === 'string'
+      ? body.dummy_uid.trim()
+      : '';
+    const requestedDate = typeof body?.story_date === 'string'
+      ? body.story_date.trim()
+      : '';
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+    // Cron memakai app secret. Tombol admin memakai JWT user dan diverifikasi
+    // ulang ke Auth API; jangan percaya email yang hanya didecode lokal.
+    let authorized = checkAppSecret(req);
+    if (!authorized && manualUid) {
+      const token = (req.headers.get('Authorization') ?? '')
+        .replace(/^Bearer\s+/i, '');
+      if (token) {
+        const authClient = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_ANON_KEY')!,
+          { global: { headers: { Authorization: `Bearer ${token}` } } },
+        );
+        const { data } = await authClient.auth.getUser(token);
+        authorized = data.user?.email?.toLowerCase() === 'zunixe@gmail.com';
+      }
+    }
+    if (!authorized) return unauthorized();
     const nowMs = Date.now();
-    const todayWib = new Date(nowMs + 7 * 3600 * 1000)
+    const currentWib = new Date(nowMs + 7 * 3600 * 1000)
       .toISOString()
       .slice(0, 10);
+    const storyDate = requestedDate || currentWib;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(storyDate)) {
+      return json({ ok: false, error: 'invalid_story_date' }, 400);
+    }
 
     // Provider aktif (sama seperti ai-reply) — story SELALU pakai glm.
     let provCfg: any = null;
@@ -117,11 +144,14 @@ Deno.serve(async (req: Request) => {
     // HANYA dummy biasa (kind='regular') yang punya story harian — akun
     // expert (CS/Admin Chatyuk) tidak perlu story. Kolom `kind` ada sejak
     // migrasi 20260914110000; fallback 'regular' bila null.
-    const { data: dummies } = await admin
+    const dummiesQuery = admin
       .from('dummy_accounts')
       .select('uid, ai_model, kind')
       .eq('ai_enabled', true)
       .eq('kind', 'regular');
+    const { data: dummies } = manualUid
+      ? await dummiesQuery.eq('uid', manualUid)
+      : await dummiesQuery;
     const generated: string[] = [];
     const skipped: string[] = [];
     const failed: string[] = [];
@@ -141,7 +171,7 @@ Deno.serve(async (req: Request) => {
           .from('ai_daily_story')
           .select('story_date')
           .eq('dummy_uid', uid)
-          .eq('story_date', todayWib)
+           .eq('story_date', storyDate)
           .maybeSingle(),
         admin
           .from('profiles')
@@ -152,7 +182,7 @@ Deno.serve(async (req: Request) => {
           .from('ai_daily_story')
           .select('story, story_date')
           .eq('dummy_uid', uid)
-          .lt('story_date', todayWib)
+           .lt('story_date', storyDate)
           .order('story_date', { ascending: false })
           .limit(1),
         admin
@@ -368,12 +398,24 @@ Deno.serve(async (req: Request) => {
         },
       };
       await admin.from('ai_daily_story').upsert(
-        { dummy_uid: uid, story_date: todayWib, story },
+         { dummy_uid: uid, story_date: storyDate, story },
         { onConflict: 'dummy_uid,story_date' },
       );
       generated.push(uid);
       delete failWhy[uid];
     };
+
+    if (manualUid) {
+      if (!dummies?.length) {
+        return json({ ok: false, error: 'dummy_not_found_or_not_regular' }, 404);
+      }
+      try {
+        await processDummy(manualUid);
+      } catch (_) {
+        failed.push(manualUid);
+      }
+      return json({ ok: true, manual: true, date: storyDate, generated, skipped, failed, failedWhy: failWhy });
+    }
 
     // Worker pool paralel terbatas (5 concurrent) — hindari membuka ratusan
     // koneksi LLM sekaligus tapi tetap jauh lebih cepat dari serial.
@@ -404,7 +446,7 @@ Deno.serve(async (req: Request) => {
     }
     failed.push(...pending);
 
-    return json({ ok: true, date: todayWib, generated, skipped, failed, failedWhy: failWhy });
+    return json({ ok: true, date: currentWib, generated, skipped, failed, failedWhy: failWhy });
   } catch (e) {
     return json({ ok: false, error: String(e) }, 500);
   }

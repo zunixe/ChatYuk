@@ -90,6 +90,80 @@ void main() {
       );
       expect(handler.captured, isEmpty);
     });
+
+    test('room text lebih dari 2000 karakter → error, bukan silent drop',
+        () async {
+      final handler = FakeSupabaseHandler();
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      await expectLater(
+        svc.sendRoomMessage(
+          roomId: 'r1',
+          senderId: 'u1',
+          senderName: 'Budi',
+          senderGender: 'male',
+          text: 'x' * 2001,
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(handler.captured, isEmpty);
+    });
+  });
+
+  group('sendPrivateMessage validasi (I/O palsu)', () {
+    test('tipe tidak valid tidak mengirim request', () async {
+      final handler = FakeSupabaseHandler();
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      await expectLater(
+        svc.sendPrivateMessage(
+          chatId: 'u1_u2',
+          senderId: 'u1',
+          senderName: 'Budi',
+          senderGender: 'male',
+          text: 'x',
+          type: 'invalid',
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(handler.captured, isEmpty);
+    });
+
+    test('teks lebih dari 2000 karakter tidak mengirim request', () async {
+      final handler = FakeSupabaseHandler();
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      await expectLater(
+        svc.sendPrivateMessage(
+          chatId: 'u1_u2',
+          senderId: 'u1',
+          senderName: 'Budi',
+          senderGender: 'male',
+          text: 'x' * 2001,
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(handler.captured, isEmpty);
+    });
+
+    test('image data invalid tidak mengirim request', () async {
+      final handler = FakeSupabaseHandler();
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      await expectLater(
+        svc.sendPrivateMessage(
+          chatId: 'u1_u2',
+          senderId: 'u1',
+          senderName: 'Budi',
+          senderGender: 'male',
+          text: '',
+          type: 'image',
+          imageData: 'not-base64-or-storage-path',
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(handler.captured, isEmpty);
+    });
   });
 
   group('deleteRoomMessage (I/O palsu)', () {

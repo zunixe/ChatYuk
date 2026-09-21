@@ -26,8 +26,14 @@ flutter analyze                           # 0 error, 0 warning
 
 | File | Yang dikunci |
 |---|---|
+| `mixins/chat_selection_logic_test.dart` | seleksi pesan: toggle/long-press (tolak terhapus & pending), clear, single, edit↔balas eksklusif, cancel |
+| `mixins/chat_outbox_flow_test.dart` | antrean offline: simpan ke disk, guard flush ganda, offline skip, error permanen dibuang |
+| `mixins/voice_recorder_logic_test.dart` | state machine voice: timer naik + sinyal, auto-stop 59s, lock, cancel reset, stop saat tak merekam = no-op |
+| `call_watch_service_test.dart` | `WatchSession` peserta (caller+callee), `WatchParticipant` default, `ActiveCallInfo` elapsed clamp |
+| `widgets_session_changes_test.dart` | `ProfileAvatar` (default `avatarBg`, inisial, badge), `AsyncCircleAvatar` fallback, `ReplyQuote` privasi terhapus |
+| `config_core_test.dart` | `SecureSessionStorage` kontrak, `ScreenSecureService` prioritas (viewOnce>donasi>admin), `CallConfig` fallback ICE |
 | `strings_test.dart` | bilingual `strings.dart`, tanpa hardcode ID di `Text`/`tooltip`, tanpa `fontSize`/`height` manual di luar `lib/config` |
-| `widget_test.dart` | token `AppText`/`AppGlyph`/`StoryText`, `AdminGate.isRealAdmin` |
+| `widget_test.dart` | token `AppText`/`AppGlyph`/`StoryText`, `AdminGate.isRealAdmin`, `AppTheme.statusColor`, `avatarBg` opaque |
 | `providers_test.dart` | `NavProvider`, `LocaleProvider`, `ThemeProvider` |
 | `models_test.dart` | privasi hapus `MessageModel`, default `User/Room/Story`, `PrivateChatInfo` |
 | `mention_test.dart` | parsing mention (token aktif, filter kandidat, `@all` gating, boundary nama berspasi), `MessageModel.mentions` + `OutboxEntry.mentions` round-trip & privasi hapus |
@@ -52,6 +58,8 @@ flutter analyze                           # 0 error, 0 warning
 | `points_service_io_test.dart` | `PointsService` — nama RPC + params (`one_time_bonus`, `claim_weekly_quest`, `unlock_photo`, `points_leaderboard` incl. paginasi) |
 | `story_social_io_test.dart` | `StoryService` (`create_story`, `mark_story_seen_bulk`) + `SocialService` (`follow_user`, `respond_friend_request`, `clear_anon_social`) |
 | `economy_room_io_test.dart` | `send_coins`/`send_gift`, `mark_chat_read`, `pin`/`mute_private_chat`, `create`/`join_private_room` |
+| `privacy_service_io_test.dart` | `PrivacyService` — nama RPC + params (`my_privacy_settings`, `update_privacy_settings` 6 param snake_case, `replace_privacy_exclusions` `p_uids` List, `privacy_friends` + guard tanpa sesi/error) |
+| `privacy_widget_test.dart` | `PrivacySettingsScreen` — `load()` 1×, sheet 4 opsi visibility, pilih value → `update()`, alur `except` → picker teman → `updateExclusions()`, empty state, switch read-receipts |
 
 ## Integration / E2E — BELUM ADA (dan alasannya)
 
@@ -103,7 +111,7 @@ Mengunci insiden NYATA yang pernah terjadi. Tiap test sudah diuji-negatif
 | `r_settings_no_stream_test.dart` | `watchGlobalSettings`/`watchEnabled` TIDAK pakai `.stream()` (`.stream()` selalu `SELECT *` → sentuh `app_shared_secret` → 42501 + retry tanpa henti) |
 | `r_stream_replay_test.dart` | `ChatStreamSession` me-replay snapshot ke listener yang datang belakangan (dulu: layar kosong dulu) |
 | `r_build_deps_test.dart` | `pubspec.yaml` tanpa dev-dep `integration_test` (dulu bikin build release gagal) |
-| `supabase/tests/regression_test.sql` | `fn_archive_deleted_user` `coalesce(is_registered)`; hardening profiles tanpa SELECT level-tabel; trigger mention; `ai_always_online` di presence tick |
+| `supabase/tests/regression_test.sql` | `fn_archive_deleted_user` `coalesce(is_registered)`; hardening profiles tanpa SELECT level-tabel; trigger mention; `ai_always_online` di presence tick; `_social_registered_guard` menangani `friend_requests` (`from_id`/`to_id`) |
 
 ### Refactor pendukung (2a)
 `lib/core/chat/read_receipt.dart` — logika read-receipt dipindah dari screen
@@ -119,12 +127,13 @@ Dijalankan CI di job `sql-tests`.
 
 | File | Yang dikunci |
 |---|---|
-| `regression_test.sql` | insiden nyata: `fn_archive_deleted_user` null-fix, hardening profiles, trigger mention, `ai_always_online` |
+| `regression_test.sql` | insiden nyata: `fn_archive_deleted_user` null-fix, hardening profiles, trigger mention, `ai_always_online`, guard `friend_requests` |
 | `schema_sync_test.sql` | kolom/RPC anti-regresi (mute/archive, gift, room mute, dummy kind, reaksi) |
 | `notif_chat_test.sql` | `notify_private_message`/`call_push`/`handle_new_private_message` |
 | `contract_test.sql` | kontrak Edge↔DB (wallet, forward, AI, presence, `dummy_uids`) |
 | `mention_test.sql` | kolom `mentions` (jsonb, default `[]`) + `notify_mention_room()` & trigger `type=mention`/`toUid` |
 | `call_test.sql` | `calls`/`call_signals` + kolom heartbeat/notif, index, RPC call, RLS, cron `chatyuk-call-sweep`, perilaku `admin_sweep_calls()` |
+| `privacy_test.sql` | perilaku `_are_friends()` & `privacy_can_view()` per visibility (`everyone`/`friends`/`except`/`nobody`, owner=viewer, viewer null, field tak dikenal); masking `profile_public()`; RPC `auth.uid()` via `set_config('request.jwt.claims')`; kontrak `mark_chat_read`/`get_online_users` + grant role |
 
 > Job CI `sql-contract` hanya berjalan bila repo punya secret
 > `SUPABASE_ACCESS_TOKEN` + variable `SUPABASE_PROJECT_REF`. Kalau belum
@@ -134,6 +143,23 @@ Kontrak Edge murni (`send-push`/`fanout`) dikunci `deno test
 supabase/functions/_shared/` — termasuk `SEND_PUSH_DATA_ONLY_TYPES` yang wajib
 memuat `mention`, `call`, `call_ended`, dst.
 
+## Edge function — `_shared/` (Deno)
+
+```bash
+deno test --allow-read --allow-env supabase/functions/_shared/
+```
+
+| File | Yang dikunci |
+|---|---|
+| `ai-helpers.test.ts` | 36+ fungsi AI murni: sanitize (kapitalisasi/fenced-code), cap emoji/kalimat/baris, hasWord boundary, isExplicit/isInsult, tidur/WIB, mermaid/chart, mood/image marker, flux URL |
+| `auth.test.ts` | gerbang keamanan semua endpoint: `checkAppSecret` (fail-closed saat env kosong), `isServiceRoleJwt` (role benar/salah/token rusak), `unauthorized` 401 |
+| `edge-contract.test.ts` | sinkron `dataOnlyTypes` send-push + topic fanout |
+
+> **PENTING (anti-drift):** helper AI adalah **satu sumber** di
+> `_shared/ai-helpers.ts` yang **diimpor** `ai-reply/index.ts`. JANGAN menyalin
+> balik ke index.ts — dulu salinan manual itu tertinggal (sanitize 40 vs 95
+> baris) sehingga test menguji kode yang bukan produksi. Lihat header file.
+
 ## Batasan
 
 `AuthProvider`/`RoomProvider` sudah DI-ready (`{authService/service/chatService,
@@ -141,6 +167,16 @@ autoInit}`) dan dikunci `auth_room_di_test.dart` untuk konstruksi + state
 awal. Logika dalam `_init`/`_listenAuthState`/subscription realtime belum
 di-unit-test — butuh fake stream + `fake_async` sebelum bisa dikunci penuh.
 `PointsProvider` sudah DI (`{service}`) + `points_provider_test.dart`.
+
+**Pelajaran harness (2026-09-20):** `testWidgets` memakai FakeAsync — **file I/O
+nyata (SQLite) TIDAK akan selesai** dan test menggantung. Untuk jalur I/O pakai
+`test()` biasa (lihat `message_store_test.dart` / `mixins/chat_outbox_flow_test.dart`).
+Timer di provider yang dibuat di dalam `testWidgets` juga bikin "did not
+complete" — buat provider di `create:` agar Provider men-dispose-nya.
+
+**Coverage gate CI (ratchet, 2026-09-20):** providers 25% · services 15% ·
+models 75% · mixins 14%. Terukur saat penetapan: 26.3 / 16.3 / 78.2 / 15.5.
+`screens/` masih 0.2% (13.780 baris) — target terbesar berikutnya.
 
 Belum ada test (butuh refactor ringan agar testable — service memakai `http.get`
 top-level / plugin native secara langsung):

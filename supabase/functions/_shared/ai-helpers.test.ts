@@ -18,6 +18,20 @@ import {
   sleepHours,
   stableSeed,
   wibParts,
+  // Diekstrak dari index.ts (2026-09-20) — sekarang SATU sumber produksi.
+  capEmoji,
+  capSentences,
+  capLines,
+  extractEmojis,
+  bannedEmojisFromHistory,
+  stripBannedEmojis,
+  contentText,
+  historyTimeLabel,
+  stripTimeLabel,
+  bulan,
+  parseImagePrompt,
+  stripMoodMarker,
+  fluxFree,
 } from '../_shared/ai-helpers.ts';
 
 // ── hashInt ──
@@ -292,20 +306,24 @@ Deno.test('browseTopicKey: caps at 120 chars', () => {
   assertEquals(browseTopicKey(long).length, 120);
 });
 
-// ── sanitize (cermin index.ts) ──
-Deno.test('sanitize: trims + caps length', () => {
+// ── sanitize (kini = sumber produksi setelah drift disatukan) ──
+// CATATAN: sejak `_shared/ai-helpers.ts` menjadi SATU-SUMBER (dulu salinan
+// manual dari index.ts dan tertinggal), perilaku sanitize = produksi:
+// huruf pertama dikapitalkan (gaya chat WhatsApp).
+Deno.test('sanitize: trims + kapitalkan huruf pertama', () => {
   const s = sanitize('  halo  ');
-  assertEquals(s, 'halo');
+  assertEquals(s, 'Halo');
 });
 
 Deno.test('sanitize: keepLines pertahankan indentasi kode', () => {
   const s = sanitize('def f():\n    return 1\n      dalam', 3000, true);
-  assertEquals(s, 'def f():\n    return 1\n      dalam');
+  // Huruf pertama dikapitalkan; indentasi baris lain UTUH.
+  assertEquals(s, 'Def f():\n    return 1\n      dalam');
 });
 
 Deno.test('sanitize: non-keepLines gabung baris + potong di koma', () => {
   const s = sanitize('halo dunia, apa kabar semuanya baik saja kan', 20);
-  assertEquals(s.startsWith('halo dunia'), true);
+  assertEquals(s.startsWith('Halo dunia'), true);
 });
 
 // ── hasWord (word-boundary, bukan substring) ──
@@ -353,4 +371,154 @@ Deno.test('needsFreshInfo: "spesifikasi RTX 5090" → true', () => {
 
 Deno.test('needsFreshInfo: "benchmark M4 vs Ryzen" → true', () => {
   assertEquals(needsFreshInfo('benchmark M4 vs Ryzen'), true);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Fungsi yang diekstrak dari ai-reply/index.ts (2026-09-20).
+// Sebelumnya hanya ada di index.ts tanpa test; kini satu sumber + teruji.
+// ─────────────────────────────────────────────────────────────
+
+// ── capEmoji ──
+Deno.test('capEmoji: tanpa emoji → teks apa adanya', () => {
+  assertEquals(capEmoji('halo dunia'), 'halo dunia');
+});
+Deno.test('capEmoji: satu emoji dibiarkan', () => {
+  assertEquals(capEmoji('halo 😊'), 'halo 😊');
+});
+Deno.test('capEmoji: banyak emoji → sisakan yang TERAKHIR', () => {
+  const s = capEmoji('a 😀 b 😢 c ❤️');
+  assertEquals(s.includes('❤️'), true);
+  assertEquals(s.includes('😀'), false);
+  assertEquals(s.includes('😢'), false);
+});
+
+// ── capSentences ──
+Deno.test('capSentences: <= max kalimat → utuh', () => {
+  const t = 'Satu. Dua.';
+  assertEquals(capSentences(t, 3), t);
+});
+Deno.test('capSentences: lebih dari max → dipotong', () => {
+  const t = 'Satu. Dua. Tiga. Empat.';
+  assertEquals(capSentences(t, 2), 'Satu. Dua.');
+});
+
+// ── capLines ──
+Deno.test('capLines: <= max baris → utuh', () => {
+  assertEquals(capLines('a\nb', 3), 'a\nb');
+});
+Deno.test('capLines: lebih dari max → dipotong + trim', () => {
+  assertEquals(capLines('a\nb\nc\nd', 2), 'a\nb');
+});
+
+// ── extractEmojis ──
+Deno.test('extractEmojis: urut kemunculan', () => {
+  // Catatan: `\p{Extended_Pictographic}` mengembalikan basis emoji TANPA
+  // variation selector U+FE0F — '❤️' (U+2764 U+FE0F) terbaca '❤'. Ini
+  // perilaku produksi (dipakai untuk variasi emoji), bukan bug.
+  assertEquals(extractEmojis('a 😀 b ❤️'), ['😀', '❤']);
+});
+Deno.test('extractEmojis: kosong/null aman', () => {
+  assertEquals(extractEmojis(''), []);
+  assertEquals(extractEmojis(null as unknown as string), []);
+});
+
+// ── contentText ──
+Deno.test('contentText: string langsung', () => {
+  assertEquals(contentText('halo'), 'halo');
+});
+Deno.test('contentText: array part → gabung teks saja', () => {
+  assertEquals(
+    contentText([
+      { type: 'text', text: 'a' },
+      { type: 'image_url', image_url: 'x' },
+      { type: 'text', text: 'b' },
+    ]),
+    'a b',
+  );
+});
+Deno.test('contentText: null → string kosong', () => {
+  assertEquals(contentText(null), '');
+});
+
+// ── bannedEmojisFromHistory ──
+Deno.test('bannedEmojisFromHistory: ambil emoji balasan assistant terbaru', () => {
+  const hist = [
+    { role: 'user', content: 'halo 😀' },
+    { role: 'assistant', content: 'hai 😢' },
+    { role: 'user', content: 'apa kabar' },
+    { role: 'assistant', content: 'baik ❤️' },
+  ];
+  const banned = bannedEmojisFromHistory(hist, 2);
+  assertEquals(banned.includes('❤'), true, 'basis emoji tanpa U+FE0F');
+  assertEquals(banned.includes('😢'), true);
+  assertEquals(banned.includes('😀'), false, 'emoji user tidak dilarang');
+});
+Deno.test('bannedEmojisFromHistory: tanpa assistant → kosong', () => {
+  assertEquals(
+    bannedEmojisFromHistory([{ role: 'user', content: '😀' }]),
+    [],
+  );
+});
+
+// ── stripBannedEmojis ──
+Deno.test('stripBannedEmojis: buang emoji terlarang + rapikan', () => {
+  const s = stripBannedEmojis('halo 😢 dunia ❤️', ['😢']);
+  assertEquals(s.includes('😢'), false);
+  assertEquals(s.includes('❤️'), true);
+  assertEquals(s.includes('  '), false, 'spasi ganda dirapikan');
+});
+Deno.test('stripBannedEmojis: daftar kosong → tidak berubah', () => {
+  const t = 'halo 😢';
+  assertEquals(stripBannedEmojis(t, []), t);
+});
+
+// ── historyTimeLabel / bulan / stripTimeLabel ──
+Deno.test('bulan: indeks WIB valid + di luar rentang → kosong', () => {
+  assertEquals(bulan(0), 'Jan');
+  assertEquals(bulan(8), 'Sep');
+  assertEquals(bulan(11), 'Des');
+  assertEquals(bulan(99), '');
+});
+Deno.test('historyTimeLabel: tanggal invalid → kosong', () => {
+  assertEquals(historyTimeLabel('bukan-tanggal'), '');
+});
+Deno.test('historyTimeLabel: hari ini → prefix [hari ini', () => {
+  const now = new Date(Date.now() + 7 * 3600 * 1000);
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(now.getUTCDate()).padStart(2, '0');
+  const label = historyTimeLabel(`${y}-${m}-${d}T03:00:00.000Z`);
+  assertEquals(label.startsWith('[hari ini'), true);
+});
+Deno.test('stripTimeLabel: buang label, sisakan isi', () => {
+  assertEquals(stripTimeLabel('[hari ini 14.30] halo'), 'halo');
+  assertEquals(stripTimeLabel('[3 Sep 09.15] hai'), 'hai');
+});
+
+// ── parseImagePrompt / stripMoodMarker ──
+Deno.test('parseImagePrompt: ambil prompt image dari marker mood', () => {
+  const t = 'oke siap {"mood":"senang","image":"kucing di taman"}';
+  assertEquals(parseImagePrompt(t), 'kucing di taman');
+});
+Deno.test('parseImagePrompt: tanpa marker → null', () => {
+  assertEquals(parseImagePrompt('halo biasa'), null);
+});
+Deno.test('parseImagePrompt: JSON rusak → null (tidak throw)', () => {
+  assertEquals(parseImagePrompt('{"mood": rusak'), null);
+});
+Deno.test('stripMoodMarker: buang marker dari balasan tampil', () => {
+  assertEquals(stripMoodMarker('halo {"mood":"senang","image":"x"}'), 'halo');
+});
+Deno.test('stripMoodMarker: tidak merusak teks normal', () => {
+  assertEquals(stripMoodMarker('halo dunia'), 'halo dunia');
+});
+
+// ── fluxFree ──
+Deno.test('fluxFree: URL + prompt ter-encode + dimensi', () => {
+  const u = fluxFree('kucing lucu', 42, 512, 768);
+  assertEquals(u.startsWith('https://image.pollinations.ai/prompt/'), true);
+  assertEquals(u.includes('kucing%20lucu'), true);
+  assertEquals(u.includes('width=512'), true);
+  assertEquals(u.includes('height=768'), true);
+  assertEquals(u.includes('seed=42'), true);
 });

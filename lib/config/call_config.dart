@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'supabase_config.dart';
 import '../core/perf/perf_probe.dart';
 
@@ -38,6 +39,20 @@ class CallConfig {
   static DateTime? _cloudflareCachedAt;
   static const Duration _cloudflareTtl = Duration(hours: 12);
 
+  @visibleForTesting
+  static String? accessTokenOverride;
+
+  @visibleForTesting
+  static http.Client? httpClientOverride;
+
+  @visibleForTesting
+  static void clearCloudflareCache() {
+    _cloudflareCache = null;
+    _cloudflareCachedAt = null;
+    accessTokenOverride = null;
+    httpClientOverride = null;
+  }
+
   /// Fetch Cloudflare TURN credentials, return null kalau gagal.
   /// Kirim ACCESS TOKEN user (JWT) — function hanya melayani user login.
   /// Publishable key ditolak (bukan JWT user). Anon tanpa session → skip
@@ -51,16 +66,22 @@ class CallConfig {
       return cached;
     }
     try {
-      final token = SupabaseConfig.client.auth.currentSession?.accessToken;
+      final token =
+          accessTokenOverride ??
+          SupabaseConfig.client.auth.currentSession?.accessToken;
       if (token == null || token.isEmpty) return null;
-      final resp = await http
-          .get(
-            Uri.parse(_turnFunctionUrl),
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-          )
-          .timeout(const Duration(seconds: 5));
+      final client = httpClientOverride;
+      final resp =
+          await (client != null
+                  ? client.get(
+                      Uri.parse(_turnFunctionUrl),
+                      headers: {'Authorization': 'Bearer $token'},
+                    )
+                  : http.get(
+                      Uri.parse(_turnFunctionUrl),
+                      headers: {'Authorization': 'Bearer $token'},
+                    ))
+              .timeout(const Duration(seconds: 5));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         // Function proxy jawaban Cloudflare apa adanya — kalau key invalid,

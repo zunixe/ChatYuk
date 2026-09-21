@@ -44,5 +44,13 @@ select supabase_tests.check('dummy_uids() ada',
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='dummy_uids'));
 
+-- ── FROZEN: private room (ekonomi — potong poin saat join/perpanjang) ──
+select supabase_tests.check('join_private_room() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='join_private_room'));
+select supabase_tests.check('extend_private_room() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='extend_private_room'));
+
 select supabase_tests.report() as result;
 rollback;

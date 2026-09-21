@@ -44,8 +44,6 @@ abstract class ChatBase {
   String? _ownCountryCache;
   String? _invisibleUidCache;
   DateTime? _invisibleFetchedAt;
-  Set<String>? _dummyUidCache;
-  DateTime? _dummyUidFetchedAt;
   final Map<String, RealtimeChannel> _privateBroadcastChannels = {};
   final Map<String, int> _privateBroadcastRefs = {};
   final Map<String, String> _onlinePathByUid = {};
@@ -262,34 +260,37 @@ class ChatService extends ChatBase with ChatServicePrivateMx, ChatServicePrivate
     );
     return !stale;
   }
-  /// Filter hasil RPC daftar online terhadap presence WebSocket.
-  /// - Ada di presence → WebSocket hidup, tampil apa pun statusnya.
-  /// - Status 'online' tapi belum di-presence → baru connect, tampil
-  ///   (presence butuh ~1 detik untuk track).
-  /// - Dummy (tanpa socket presence, status dikelola cron/tick) → selalu
-  ///   tampil sesuai status DB (idle dummy tetap tampil).
-  /// - Status selain 'online' tanpa presence dan bukan dummy (mis. 'idle'
-  ///   zombie karena app di-kill) → buang.
-  /// Safety net: kalau filter membuang semua, kembalikan RPC asli
-  /// (kemungkinan presence belum sync — cold start).
+  /// Filter hasil RPC daftar online.
+  ///
+  /// Sumber kebenaran = RPC server `get_online_users`, yang sudah menyaring
+  /// `status in ('online','idle')` DAN `last_seen >= now() - 30 minutes`.
+  /// Jadi RPC sudah persis memenuhi aturan tampil: online/idle aktif ≤ 30 mnt.
+  ///
+  /// Filter di sini HANYA membuang `offline`/`invisible` — status yang secara
+  /// eksplisit berarti "jangan tampil" (invisible manual harus menang walau
+  /// socket presence hidup).
+  ///
+  /// RIWAYAT BUG: dulu row `idle` TANPA socket presence ikut dibuang (alasan
+  /// "zombie app di-kill"). Akibatnya user yang nganggur >4 mnt (di-set `idle`
+  /// oleh cron `presence_idle_tick`) dan socket-nya lepas saat app di-background
+  /// ikut hilang dari daftar — padahal `last_seen` masih < 30 mnt. Gejala:
+  /// "kadang muncul kadang ilang". Sekarang idle SELALU tampil selama RPC
+  /// mengembalikannya (yaitu `last_seen` masih ≤ 30 mnt); setelah 30 mnt RPC
+  /// yang tidak mengirim lagi.
+  ///
+  /// `presenceUids`/`dummyUids` dipertahankan di signature agar pemanggil &
+  /// test lama tetap kompatibel, tapi tidak lagi dipakai untuk menyaring.
   static List<dynamic> filterRpcOnlineRows(
     List<dynamic> rpcRows,
     Set<String> presenceUids, {
     Set<String> dummyUids = const {},
   }) {
-    final filtered = rpcRows.where((r) {
+    return rpcRows.where((r) {
       final m = r as Map;
-      final id = '${m['id'] ?? ''}';
       final st = '${m['status'] ?? ''}';
-      // Offline/invisible selalu gugur — walau socket presence-nya hidup
-      // (invisible manual harus menang).
-      if (!isVisibleOnlineStatus(st)) return false;
-      if (presenceUids.contains(id)) return true;
-      if (st == 'online') return true;
-      if (dummyUids.contains(id)) return true;
-      return false;
+      // Hanya offline/invisible yang gugur. `online` & `idle` tampil.
+      return isVisibleOnlineStatus(st);
     }).toList();
-    return filtered.isEmpty ? rpcRows : filtered;
   }
 }
 

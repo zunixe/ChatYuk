@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
@@ -10,6 +9,9 @@ class DeletedCard extends StatelessWidget {
   final S s;
   final String reasonLabel;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool selected;
+  final bool isSelectionMode;
 
   /// Bila true, entry = user anon yang BELUM dihapus (pending) → tampil
   /// tanpa coretan + badge kuning, dan aksi hapus tersedia di detail.
@@ -21,6 +23,9 @@ class DeletedCard extends StatelessWidget {
     required this.s,
     required this.reasonLabel,
     required this.onTap,
+    this.onLongPress,
+    this.selected = false,
+    this.isSelectionMode = false,
     this.pending = false,
   });
 
@@ -47,25 +52,46 @@ class DeletedCard extends StatelessWidget {
         ? Colors.orange
         : (registered ? AppTheme.primary : AppTheme.accent);
 
+    final cardBorder = selected
+        ? BorderSide(color: AppTheme.primary, width: 1.6)
+        : BorderSide(
+            color: pending
+                ? Colors.orange.withValues(alpha: 0.45)
+                : AppTheme.divider,
+          );
+
+    final cardBg = selected
+        ? AppTheme.primary.withValues(alpha: 0.08)
+        : AppTheme.bgCard;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-      color: AppTheme.bgCard,
+      color: cardBg,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: pending
-              ? Colors.orange.withValues(alpha: 0.45)
-              : AppTheme.divider,
-        ),
+        side: cardBorder,
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
+              if (isSelectionMode) ...[
+                Icon(
+                  selected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 22,
+                  color: selected
+                      ? AppTheme.primary
+                      : AppTheme.textSecondary.withValues(alpha: 0.6),
+                ),
+                const SizedBox(width: 8),
+              ],
               Container(
                 width: 40,
                 height: 40,
@@ -158,11 +184,12 @@ class DeletedCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  Icon(
-                    Icons.chevron_right,
-                    size: 18,
-                    color: AppTheme.textSecondary,
-                  ),
+                  if (!isSelectionMode)
+                    Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: AppTheme.textSecondary,
+                    ),
                 ],
               ),
             ],
