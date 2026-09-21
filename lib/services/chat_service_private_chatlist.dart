@@ -66,7 +66,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
   /// Terapkan row private_chats dari payload realtime ke snapshot lokal —
   /// tanpa query tambahan. Row dikirim lengkap oleh Supabase Realtime.
   void _applyChatEvent(String myUid, Map<String, dynamic> row) {
-    final chat = _rowToPrivateChat(row);
+    final chat = _rowToPrivateChat(row, myUid: myUid);
     final hiddenBy = List<String>.from(
       (row['hidden_by'] as List<dynamic>?) ?? [],
     );
@@ -149,7 +149,8 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         'chat_id,participants,participant_names,participant_genders,'
         'participant_locations,participant_ages,participant_registered,'
         'last_message,last_message_at,last_sender_id,message_count,'
-        'unread_counts,last_read_at,pinned_by,pinned_at,muted_by,archived_by';
+        'unread_counts,last_read_at,pinned_by,pinned_at,muted_by,archived_by,'
+        'deleted_participants';
     // Fetch rows + daftar hidden PARALEL: dulu berurutan (fetch → await
     // hidden), jadi jalur kritis menanggung 2 RTT. Keduanya tidak saling
     // bergantung → satu RTT.
@@ -170,14 +171,14 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     _privateChatsHidden[myUid] = hiddenSet;
     final list = rows
         .where((row) => !hiddenSet.contains((row as Map)['chat_id']))
-        .map((r) => _rowToPrivateChat(Map<String, dynamic>.from(r as Map)))
+        .map((r) => _rowToPrivateChat(Map<String, dynamic>.from(r as Map), myUid: myUid))
         .where((c) => c.messageCount > 0)
         .toList();
     list.sort((a, b) => ChatService._comparePinned(a, b, myUid));
     return list;
   }
 
-  PrivateChatInfo _rowToPrivateChat(Map<String, dynamic> row) {
+  PrivateChatInfo _rowToPrivateChat(Map<String, dynamic> row, {String? myUid}) {
     final d = snakeToCamel(row);
     return PrivateChatInfo(
       chatId: d['chatId'] ?? '',
@@ -211,7 +212,23 @@ mixin ChatServicePrivateChatListMx on ChatBase {
       ),
       mutedBy: List<String>.from(d['mutedBy'] ?? const []),
       archivedBy: List<String>.from(d['archivedBy'] ?? const []),
+      // Penanda dari SERVER: peserta yang sudah menghapus akun. Diisi saat
+      // akun dihapus (helper mark_chats_user_deleted) — baris chat sengaja
+      // dipertahankan supaya lawan tahu alasannya.
+      deletedOtherUid: _deletedOtherFromRow(d, myUid),
     );
+  }
+
+  /// Ambil uid lawan (bukan diri sendiri) yang ada di `deleted_participants`.
+  static String _deletedOtherFromRow(Map<String, dynamic> d, String? myUid) {
+    final raw = d['deletedParticipants'];
+    if (raw is! List || raw.isEmpty) return '';
+    final me = myUid ?? '';
+    for (final e in raw) {
+      final uid = '$e';
+      if (uid.isNotEmpty && uid != me) return uid;
+    }
+    return '';
   }
 
   Future<void> pinPrivateChat(String chatId, bool pin, {String? myUidParam}) async {

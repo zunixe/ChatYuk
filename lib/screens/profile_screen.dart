@@ -1198,51 +1198,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         value: _statusLabel(profile?.status ?? 'offline', s),
                       ),
                       Divider(height: 1, indent: 52),
-                      Padding(
-                        padding: EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppTheme.accent.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.badge_outlined,
-                                color: AppTheme.accent,
-                                size: 18,
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.labelUsername,
-                                    style: AppText.caption.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                  Text(
-                                    profile?.nickname ?? '-',
-                                    style: AppText.bodyStrong,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.edit_outlined,
-                                size: 18,
-                                color: AppTheme.primary,
-                              ),
-                              tooltip: s.btnEditProfile,
-                              onPressed: _editProfile,
-                            ),
-                          ],
+                      ProfileInfoTile(
+                        icon: Icons.badge_outlined,
+                        iconColor: AppTheme.accent,
+                        label: s.labelUsername,
+                        value: profile?.nickname ?? '-',
+                        trailing: IconButton(
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: AppTheme.primary,
+                          ),
+                          tooltip: s.btnEditProfile,
+                          onPressed: _editProfile,
                         ),
                       ),
                       Divider(height: 1, indent: 52),
@@ -1255,59 +1223,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Divider(height: 1, indent: 52),
                       // About — teks bebas 150 karakter. Visibilitas diatur
                       // di Pengaturan > Privasi (about_visibility).
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primary.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.info_outline,
-                                color: AppTheme.primary,
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.labelAbout,
-                                    style: AppText.caption.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    (profile?.about ?? '').isEmpty
-                                        ? s.aboutEmpty
-                                        : profile!.about,
-                                    style: (profile?.about ?? '').isEmpty
-                                        ? AppText.bodySmall.copyWith(
-                                            color: AppTheme.textSecondary,
-                                          )
-                                        : AppText.bodyStrong,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.edit_outlined,
-                                size: 18,
-                                color: AppTheme.primary,
-                              ),
-                              tooltip: s.btnEditProfile,
-                              onPressed: _editProfile,
-                            ),
-                          ],
+                      ProfileInfoTile(
+                        icon: Icons.info_outline,
+                        iconColor: AppTheme.primary,
+                        label: s.labelAbout,
+                        value: (profile?.about ?? '').isEmpty
+                            ? s.aboutEmpty
+                            : profile!.about,
+                        valueStyle: (profile?.about ?? '').isEmpty
+                            ? AppText.bodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                              )
+                            : AppText.bodyStrong,
+                        trailing: IconButton(
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: AppTheme.primary,
+                          ),
+                          tooltip: s.btnEditProfile,
+                          onPressed: _editProfile,
                         ),
                       ),
                     ],

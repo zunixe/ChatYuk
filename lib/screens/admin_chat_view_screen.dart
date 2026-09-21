@@ -251,14 +251,21 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   /// Sisi kiri = peserta pertama sesuai urutan judul (mis. judul
   /// "A & B" → bubble A di kiri, B di kanan). Konsisten, tidak tergantung
-  /// siapa yang terakhir kirim pesan. Fallback ke chatId (di-sort) bila
-  /// urutan peserta tidak tersedia.
+  /// siapa yang terakhir kirim pesan.
+  ///
+  /// PENTING (fix "lawan kadang muncul kadang ilang"): fallback WAJIB
+  /// deterministik. Dulu cadangan terakhir `senders.first` = pengirim pesan
+  /// TERBARU — jadi tiap lawan mengirim pesan, `_leftUid` berubah → SEMUA
+  /// bubble berpindah sisi (yang tadinya di kiri pindah ke kanan), terlihat
+  /// seperti lawan "hilang" lalu muncul lagi. Sekarang daftar sender
+  /// di-sort dulu supaya hasilnya stabil walau pesan baru masuk.
   String? _computeLeftUid(List<String> senders) {
     if (widget.participantOrder.length >= 2)
       return widget.participantOrder.first;
     final parts = widget.chatId.split('_');
     if (parts.length == 2) return parts.first;
-    return senders.isNotEmpty ? senders.first : null;
+    if (senders.isNotEmpty) return (List<String>.of(senders)..sort()).first;
+    return null;
   }
 
   /// Samakan last-read dari server (dasar centang-2 per pesan).

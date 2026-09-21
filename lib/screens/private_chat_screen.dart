@@ -301,6 +301,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
   DateTime? _otherLastRead;
   DateTime? _lastIncomingSeen;
+  /// Lawan sudah menghapus akunnya (penanda lokal) — label khusus, kirim
+  /// dikunci, centang-2 diabaikan.
+  bool _otherDeleted = false;
   StreamSubscription<List<PrivateChatInfo>>? _chatInfoSub;
   StreamSubscription<List<MessageModel>>? _msgsSub;
   StreamSubscription<String>? _statusSub;
@@ -473,6 +476,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         (c) => c?.chatId == widget.chatId,
         orElse: () => null,
       );
+      // Lawan sudah menghapus akunnya → tandai + buang centang-2 "hantu".
+      // Tanpa ini, lastReadAt lama yang tersimpan di cache membuat pesan
+      // kita tetap terlihat centang-2 padahal tidak ada perangkat lawan
+      // yang pernah menerimanya.
+      final gone = info?.otherDeleted ?? false;
+      if (gone != _otherDeleted) {
+        if (mounted) {
+          setState(() {
+            _otherDeleted = gone;
+            if (gone) _otherLastRead = null;
+          });
+        }
+      }
+      if (gone) return;
       final read = info?.lastReadAt[widget.otherUid];
       // Monoton maju: yang sudah centang-2 tidak boleh balik centang-1
       // walau network/disk menyusul dengan nilai null atau lebih tua.
@@ -1787,6 +1804,32 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // Lawan sudah hapus akun → ganti composer dengan
+                        // banner info. Tidak bisa kirim apa pun lagi.
+                        if (_otherDeleted)
+                          Padding(
+                            padding:
+                                const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.person_off_outlined,
+                                  size: 18,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    s.accountDeletedHint,
+                                    style: AppText.bodySmall.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else ...[
                         if (_queuedIds.isNotEmpty)
                           Padding(
                             padding:
@@ -1925,6 +1968,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           mentionCandidates: _mentionCandidates,
                           mentionAllowAll: false,
                         )
+                        ],
                        ],
                      ),
                    ),

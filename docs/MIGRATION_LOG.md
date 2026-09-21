@@ -1,5 +1,40 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-21 - Penanda "peserta sudah dihapus" (20260921230000)
+
+**Masalah:** saat akun dihapus (self-delete / admin hapus anon / hapus dummy /
+purge), baris private_chats ikut DIHAPUS. Lawan bicara hanya melihat chat itu
+hilang mendadak tanpa penjelasan. Lebih buruk: bila pengirim masih menyimpan
+last_read_at lawan di cache lokal, pesan barunya tetap tampak **centang-2**
+padahal tidak ada perangkat lawan yang menerimanya (read-receipt hantu).
+
+**Solusi:** baris chat DIPERTAHANKAN + kolom penanda
+private_chats.deleted_participants uuid[]. ISI PESAN DIHAPUS (privasi: isi
+percakapan tidak tinggal di server atas nama user yang sudah pergi; sesuai
+keputusan pemilik produk). Klien menampilkan label "Akun dihapus", mengunci
+kirim, mengabaikan centang-2, dan user boleh menghapus chat itu sendiri.
+
+**Yang ditambahkan:**
+- Kolom private_chats.deleted_participants uuid[] not null default '{}'.
+- Helper terpusat mark_chats_user_deleted(p_uid uuid) - idempoten
+  (array_agg(distinct ...)): hapus seluruh isi percakapan di chat yang
+  melibatkan uid, lalu pasang penanda + kosongkan metadata preview.
+  **message_count SENGAJA tidak dinolkan** - klien menyaring messageCount > 0;
+  kalau dinolkan, baris justru terbuang dari daftar dan label tidak pernah
+  muncul (membatalkan tujuan fitur).
+- Fungsi yang diubah agar memakai helper: delete_my_account,
+  admin_delete_anon_user, admin_delete_dummy, purge_inactive_accounts.
+
+**Tidak diubah:** admin_delete_chat (tombol hapus chat di monitor admin) -
+itu penghapusan chat eksplisit, bukan penghapusan akun.
+
+- Apply: Management API (bukan db push - hang di mesin ini), tercatat di
+  schema_migrations (20260921230000). Lihat APPLIED_VIA_API.md.
+- Verifikasi live: deleted_participants ada (col_ok=1),
+  mark_chats_user_deleted ada (fn_ok=1), dan keempat fungsi penghapus
+  akun memanggil helper (pakai_helper=true).
+
+
 ## 2026-09-21 — Fix guard `friend_requests` (`20260921220000`)
 
 **Bug (severity tinggi, ditemukan saat menulis `supabase/tests/privacy_test.sql`):**

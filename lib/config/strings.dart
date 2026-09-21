@@ -291,6 +291,12 @@ class S {
       ? 'Klik user di chat room untuk mulai'
       : 'Tap a user in a chat room to start';
   String get noMessages => isId ? 'Belum ada pesan' : 'No messages yet';
+  // Lawan bicara sudah menghapus akunnya (penanda lokal — server sudah
+  // menghapus chat-nya demi privasi).
+  String get accountDeleted => isId ? 'Akun dihapus' : 'Account deleted';
+  String get accountDeletedHint => isId
+      ? 'Pengguna ini telah menghapus akunnya. Kamu tidak bisa mengirim pesan lagi.'
+      : 'This user has deleted their account. You can no longer send messages.';
   String get timeJustNow => isId ? 'Baru' : 'Now';
   String get labelToday => isId ? 'Hari ini' : 'Today';
   String get labelYesterday => isId ? 'Kemarin' : 'Yesterday';

@@ -1175,14 +1175,20 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                     final otherStatus =
                                                         statusMap[otherUid] ??
                                                         'offline';
+                                                    // Lawan hapus akun → status
+                                                    // tidak relevan; label
+                                                    // khusus menggantikannya.
                                                     final isOnline =
+                                                        !chat.otherDeleted &&
                                                         otherStatus == 'online';
-                                                    final profile =
-                                                        _chatSubtitle(
-                                                          chat,
-                                                          auth.uid!,
-                                                          s,
-                                                        );
+                                                    final profile = chat
+                                                            .otherDeleted
+                                                        ? ''
+                                                        : _chatSubtitle(
+                                                            chat,
+                                                            auth.uid!,
+                                                            s,
+                                                          );
                                                     final hasMessage = chat
                                                         .lastMessage
                                                         .isNotEmpty;
@@ -1202,7 +1208,11 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                             .isNotEmpty &&
                                                         chat.lastSenderId ==
                                                             myUid;
+                                                    // Centang-2 diabaikan bila
+                                                    // lawan sudah terhapus —
+                                                    // lastReadAt lamanya hantu.
                                                     final isLastRead =
+                                                        !chat.otherDeleted &&
                                                         isLastFromMe &&
                                                         otherRead != null &&
                                                         !chat.lastMessageAt
@@ -1212,7 +1222,28 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                           CrossAxisAlignment
                                                               .start,
                                                       children: [
-                                                        if (isOnline ||
+                                                        if (chat
+                                                            .otherDeleted) ...[
+                                                          Text(
+                                                            s.accountDeleted,
+                                                            style: AppText
+                                                                .bodySmall
+                                                                .copyWith(
+                                                                  color: AppTheme
+                                                                      .danger,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                ),
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                          const SizedBox(
+                                                            height: 4,
+                                                          ),
+                                                        ] else if (isOnline ||
                                                             profile
                                                                 .isNotEmpty) ...[
                                                           Text(
