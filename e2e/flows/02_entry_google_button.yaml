@@ -1,0 +1,36 @@
+# E2E-02 — Jalur masuk Google (tombol → account picker)
+#
+# Menguji tombol "Lanjutkan dengan Google" MUNCUL & bisa ditekan, lalu
+# account picker Google (native) terbuka. Kita TIDAK memilih akun (butuh
+# kredensial nyata) — cukup membuktikan tombol + intent native bekerja.
+#
+# Ini penjaga regresi penting: insiden 2026-09-19 (Google Sign-In gagal
+# `12500,null,null` karena APK tidak di-sign keystore v2 / SHA tidak
+# terdaftar) hanya ketahuan saat user menekan tombol ini.
+appId: com.chatyuk.chatyuk
+tags:
+  - entry
+  - google
+---
+- launchApp:
+    clearState: true
+
+- extendedWaitUntil:
+    visible: "MULAI CHAT SEKARANG"
+    timeout: 60000
+
+- assertVisible: "Lanjutkan dengan Google"
+- tapOn: "Lanjutkan dengan Google"
+
+# Account picker Google = activity lain (com.google.android.gms).
+# Tunggu salah satu teks khas picker; kalau ROM berbeda, minimal paket
+# Google Play Services tampil sebagai window teratas.
+- extendedWaitUntil:
+    visible: ".*(?i)(google|pilih akun|choose an account|add another account).*"
+    timeout: 30000
+
+# Kembalikan ke app tanpa memilih akun (batalkan).
+- back
+- extendedWaitUntil:
+    visible: "MULAI CHAT SEKARANG"
+    timeout: 20000

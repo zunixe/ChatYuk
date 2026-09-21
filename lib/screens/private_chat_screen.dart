@@ -258,22 +258,44 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // Guard: in-flight (jangan dobel) + cooldown 10s per id (emit berikut
   // tidak spam retry kalau fetch gagal; tap manual tetap bisa kapan pun).
   final Set<String> _imgInFlight = {};
+  final List<String> _imgQueue = [];
+  final Set<String> _imgQueued = {};
   final Map<String, DateTime> _imgLastAttempt = {};
+  static const int _maxImageFetches = 3;
   void _autoLoadMissingImages(List<MessageModel> msgs) {
     final now = DateTime.now();
     for (final m in msgs) {
       if (m.type != 'image' || m.imageData.isNotEmpty) continue;
       if (m.isDeleted) continue;
-      if (_imgInFlight.contains(m.id)) continue;
+      if (_imgInFlight.contains(m.id) || _imgQueued.contains(m.id)) continue;
       final last = _imgLastAttempt[m.id];
       if (last != null && now.difference(last) < const Duration(seconds: 10)) {
         continue;
       }
-      _imgInFlight.add(m.id);
       _imgLastAttempt[m.id] = now;
-      _msgsHandleFetchImage(m.id).whenComplete(() {
-        _imgInFlight.remove(m.id);
-      });
+      _imgQueue.add(m.id);
+      _imgQueued.add(m.id);
+    }
+    _drainImageQueue();
+  }
+
+  void _drainImageQueue() {
+    while (_imgInFlight.length < _maxImageFetches && _imgQueue.isNotEmpty) {
+      final id = _imgQueue.removeAt(0);
+      _imgQueued.remove(id);
+      if (!_imgInFlight.add(id)) continue;
+      _fetchImageQueued(id);
+    }
+  }
+
+  Future<void> _fetchImageQueued(String id) async {
+    try {
+      await _msgsHandleFetchImage(id);
+    } catch (_) {
+      // Gagal memuat satu foto tidak boleh menghentikan antrean foto lain.
+    } finally {
+      _imgInFlight.remove(id);
+      _drainImageQueue();
     }
   }
 
@@ -597,6 +619,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _statusSub?.cancel();
     _typingSub?.cancel();
     _typingClearTimer?.cancel();
+    _imgQueue.clear();
+    _imgQueued.clear();
     // Voice recording: hentikan timer + native recorder — tanpa ini keluar
     // screen saat rekam = timer jalan terus + setState after dispose + leak.
     // DEFER: dispose saat tree terkunci (unmount IndexedStack) — penulisan
@@ -1611,6 +1635,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           // Auto-load image deferred (di luar window 50) —
                           // fire-and-forget, hasil masuk via stream emit.
                           _autoLoadMissingImages(all);
+                          // Hitung sekali per emission, bukan sekali per
+                          // bubble. Ini mencegah scan O(N) berulang menjadi
+                          // O(N²) saat chat panjang direbuild.
+                          final deletedIds = {
+                            for (final m in all)
+                              if (m.isDeleted) m.id,
+                          };
                           // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
                           // pola WhatsApp — item list berisi pesan + separator tanggal.
                           final items = <ChatItem>[];
@@ -1672,13 +1703,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                   msg.type == 'image' &&
                                   msg.imageData.isEmpty &&
                                   di >= 50;
-                              // PRIVASI: kumpulan id pesan terhapus — quote
-                              // reply yang menunjuk pesan ini dirender
-                              // "Pesan dihapus", bukan isinya.
-                              final deletedIds = {
-                                for (final m in all)
-                                  if (m.isDeleted) m.id,
-                              };
                               return MessageBubble(
                                 key: ValueKey(msg.id),
                                 link: linkFor(msg.id),

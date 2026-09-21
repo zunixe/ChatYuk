@@ -28,5 +28,23 @@ select supabase_tests.check('tabel coin_ledger ada',
   exists(select 1 from information_schema.tables
          where table_schema='public' and table_name='coin_ledger'));
 
+-- ── FROZEN: ekonomi chat/room (potong poin — salah = koin hilang/berlebih) ──
+select supabase_tests.check('deduct_chat_point() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='deduct_chat_point'));
+select supabase_tests.check('daily_login_bonus() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='daily_login_bonus'));
+select supabase_tests.check('claim_weekly_quest() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='claim_weekly_quest'));
+select supabase_tests.check('kolom profiles.bonus/earned_balance ada (cache wallet)',
+  exists(select 1 from information_schema.columns
+         where table_schema='public' and table_name='profiles'
+           and column_name='bonus_balance')
+  and exists(select 1 from information_schema.columns
+         where table_schema='public' and table_name='profiles'
+           and column_name='earned_balance'));
+
 select supabase_tests.report() as result;
 rollback;

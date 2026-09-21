@@ -15,6 +15,8 @@ class StorySlide {
   final double textRotation;
   final bool textBg;
   final String visibility;
+  final int likeCount;
+  final bool liked;
   final DateTime createdAt;
 
   const StorySlide({
@@ -31,6 +33,8 @@ class StorySlide {
     this.textRotation = 0,
     this.textBg = false,
     this.visibility = 'registered',
+    this.likeCount = 0,
+    this.liked = false,
     required this.createdAt,
   });
 
@@ -49,7 +53,31 @@ class StorySlide {
       textRotation: _toRotation(m['text_rotation']),
       textBg: m['text_bg'] == true,
       visibility: '${m['visibility'] ?? 'registered'}',
+      likeCount: _toInt(m['like_count'], 0),
+      liked: m['liked'] == true,
       createdAt: parseDate(m['created_at']),
+    );
+  }
+
+  /// Salinan dengan status like diubah (optimistic di viewer/provider).
+  StorySlide copyWith({int? likeCount, bool? liked}) {
+    return StorySlide(
+      id: id,
+      authorId: authorId,
+      authorName: authorName,
+      imagePath: imagePath,
+      textOverlay: textOverlay,
+      textX: textX,
+      textY: textY,
+      textColorIndex: textColorIndex,
+      textSizeIndex: textSizeIndex,
+      textScale: textScale,
+      textRotation: textRotation,
+      textBg: textBg,
+      visibility: visibility,
+      likeCount: likeCount ?? this.likeCount,
+      liked: liked ?? this.liked,
+      createdAt: createdAt,
     );
   }
 
@@ -125,12 +153,14 @@ class StoryViewer {
   final String nickname;
   final String avatar;
   final DateTime viewedAt;
+  final bool liked;
 
   const StoryViewer({
     required this.viewerId,
     required this.nickname,
     this.avatar = '',
     required this.viewedAt,
+    this.liked = false,
   });
 
   factory StoryViewer.fromMap(Map<String, dynamic> m) {
@@ -139,6 +169,7 @@ class StoryViewer {
       nickname: '${m['nickname'] ?? '?'}',
       avatar: '${m['avatar'] ?? ''}',
       viewedAt: parseDate(m['viewed_at']),
+      liked: m['liked'] == true,
     );
   }
 }

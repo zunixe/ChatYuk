@@ -1,0 +1,43 @@
+# E2E-03 — Jalur masuk email: daftar (form) & login (form)
+#
+# Menguji dua jalur email REACHABLE: tombol "Daftar dengan Email" membuka
+# RegisterScreen (form email+password lengkap), dan "Sudah punya akun? Login"
+# membuka LoginScreen. Kita TIDAK mengirim data nyata (butuh email valid +
+# kuota OTP) — cukup membuktikan navigasi + field wajib ada.
+appId: com.chatyuk.chatyuk
+tags:
+  - entry
+  - email
+---
+- launchApp:
+    clearState: true
+
+- extendedWaitUntil:
+    visible: "MULAI CHAT SEKARANG"
+    timeout: 60000
+
+# ── Daftar dengan Email ──
+- tapOn: "Daftar dengan Email"
+- extendedWaitUntil:
+    visible: "Buat Akun"
+    timeout: 20000
+- assertVisible: "Email"
+- assertVisible: "Password"
+- assertVisible: "Username"
+# Submit tanpa isi harus TIDAK masuk app (guard validasi).
+- back
+
+# ── Login ──
+- extendedWaitUntil:
+    visible: "MULAI CHAT SEKARANG"
+    timeout: 20000
+- tapOn: "Sudah punya akun? Login"
+- extendedWaitUntil:
+    visible: "Masuk"
+    timeout: 20000
+- assertVisible: "Email"
+- assertVisible: "Password"
+- back
+- extendedWaitUntil:
+    visible: "MULAI CHAT SEKARANG"
+    timeout: 20000

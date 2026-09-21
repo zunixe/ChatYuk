@@ -25,16 +25,21 @@ class PointsService {
 
   /// Realtime saldo koin sendiri (profiles.points). Dipakai supaya saldo
   /// langsung update ketika ada koin masuk/keluar tanpa harus reload app.
-  Stream<int> watchOwnPoints() {
+  Stream<int> watchOwnPoints() async* {
     final id = uid;
-    if (id == null) return const Stream.empty();
-    return _sb.from('profiles').stream(primaryKey: ['id']).eq('id', id).map((
-      rows,
-    ) {
-      final mine = rows.where((r) => r['id'] == id).toList();
-      if (mine.isEmpty) return 0;
-      return ((mine.first['points'] as num?) ?? 0).toInt();
-    });
+    if (id == null) return;
+    // stream() versi ini selalu SELECT *, tetapi profiles membatasi kolom.
+    // Polling kolom points eksplisit mencegah 42501 pada security hardening.
+    Future<int> fetch() async {
+      final row = await _sb
+          .from('profiles')
+          .select('points')
+          .eq('id', id)
+          .maybeSingle();
+      return ((row?['points'] as num?) ?? 0).toInt();
+    }
+    yield await fetch();
+    yield* Stream<void>.periodic(const Duration(seconds: 20)).asyncMap((_) => fetch());
   }
 
   String? get uid => _sb.auth.currentUser?.id;

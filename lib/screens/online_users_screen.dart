@@ -10,9 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/location_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config/supabase_config.dart';
 import '../config/theme.dart';
 import '../config/regions.dart';
 import '../models/user_model.dart';
@@ -637,15 +635,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     _searchCtrl.dispose();
     _unreadSub?.cancel();
     super.dispose();
-  }
-
-  Future<void> _shareApp() async {
-    final auth = context.read<AuthProvider>();
-    final s = context.read<LocaleProvider>().s;
-    final uid = auth.uid;
-    if (uid == null) return;
-    final link = SupabaseConfig.shareLink;
-    await Share.share(s.shareInviteMsg(link));
   }
 
   // ── Story: buka komposer (kamera + galeri satu halaman → composer) ──

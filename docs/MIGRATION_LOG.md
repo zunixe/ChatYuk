@@ -1,5 +1,116 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-21 — Fix guard `friend_requests` (`20260921220000`)
+
+**Bug (severity tinggi, ditemukan saat menulis `supabase/tests/privacy_test.sql`):**
+`_social_registered_guard()` ditulis untuk tabel `follows`
+(`new.follower_id`/`new.followee_id`), tetapi trigger
+`social_guard_friend_requests` memasang fungsi yang sama di `friend_requests`
+(kolomnya `from_id`/`to_id`). Akibatnya **setiap** `INSERT`/`UPDATE`
+`friend_requests` gagal `42703 record "new" has no field "follower_id"`.
+
+Dampak nyata:
+- `send_friend_request()` & `respond_friend_request()` selalu gagal.
+- `_are_friends()` selalu `false` → visibility privacy `'friends'` mati.
+- `privacy_friends()` selalu kosong → picker "Teman kecuali" selalu empty.
+
+**Fix:** guard membaca kolom sesuai `TG_TABLE_NAME` (`friend_requests` →
+`from_id`/`to_id`; selain itu → `follower_id`/`followee_id`). Logika guard
+tidak berubah: tetap menolak akun `is_registered = false` (kecuali dummy).
+
+- Apply: Management API (bukan `db push`), tercatat di `schema_migrations`
+  (`20260921220000`). Lihat `supabase/migrations/APPLIED_VIA_API.md`.
+- Verifikasi live: insert teman antar-registered → sukses; antar-anon →
+  `SOCIAL_REGISTERED_ONLY` (perilaku benar, bukan lagi 42703).
+- Test: `supabase/tests/privacy_test.sql` (23 assert, termasuk seed
+  `friend_requests` accepted) + tripwire di `regression_test.sql`.
+- `bash scripts/check_migrations.sh --all` → OK bersih.
+
+## 2026-09-20 — Privacy: 5 opsi + "kecuali" teman/anon (`20260920130002`–`0004`)
+
+Uji coba di HP menemukan 3 bug pada privasi:
+
+1. **Daftar "kecuali" kosong walau punya teman.** Enforcement memakai
+   `_are_friends` (friend_requests accepted) sementara aplikasi memakai
+   mutual follow → tidak sinkron. Ditambah `privacy_friends()` (`0002`),
+   lalu disamakan ke mutual follow lewat `_privacy_are_friends()` (`0003`).
+2. **Semantik "kecuali" salah.** Dulu `except` = "SEMUA orang kecuali
+   daftar" sehingga non-teman ikut melihat. Dipisah tegas (`0004`):
+   `everyone_except` (semua, kecuali daftar) vs `friends_except` (teman,
+   kecuali daftar). Nilai lama `except` dimigrasi ke `friends_except`.
+3. **Daftar kecuali hanya teman.** `privacy_excludable_users()` kini
+   mengembalikan **teman + anon yang pernah chat** (badge "Anon"), dan
+   kedua opsi "kecuali..." bisa memilih keduanya.
+
+- `privacy_can_view()` diperluas jadi 5 cabang; `get_online_users()`
+  memakai perhitungan set-based agar listing online tidak lambat.
+- Hasil uji live: `privacy_friends()` = 1 (SimpleMe),
+  `privacy_excludable_users()` = 37 kandidat.
+- Test: `supabase/tests/privacy_test.sql` (17 assert) + 23 test Flutter
+  (`test/privacy_*_test.dart`) lulus; `flutter analyze` 0 error.
+
+## 2026-09-20 — Privacy fixes (`20260920130001`)
+
+Hasil cek ulang menemukan 4 regresi yang lalu diperbaiki:
+
+1. `nearby_users` memakai `order by 12` padahal hanya 11 kolom → error saat
+   dipanggil. Dikembalikan ke `order by 11 asc`.
+2. `get_online_users` terlanjur mencabut akses `anon` (perilaku lama:
+   `authenticated, anon`). Dipulihkan, dan filter privacy di-INLINE (bukan
+   fungsi per baris) supaya listing online tidak melambat.
+3. `profile_public` kehilangan `share_location` + `points` milik sendiri —
+   berdampak ke toggle "bagikan lokasi" di Nearby dan fallback bonus login.
+   Dikembalikan khusus untuk pemilik (`about` tetap kosong bagi non-pemilik).
+4. `mark_chat_read` saat read-receipt OFF tidak menolkan `unread_counts`
+   penerima → badge tidak pernah hilang. Sekarang badge SELALU dinolkan;
+   hanya `last_read_at` yang tidak ditulis sehingga centang biru tetap aman.
+
+- Helper `privacy_can_view` dan seluruh RPC privacy tetap dipakai.
+- Test: `schema_sync_test.sql` (26 assert) + `test/privacy_provider_test.dart`
+  dan `test/privacy_settings_test.dart` lulus.
+- `bash scripts/check_migrations.sh --all` → OK bersih.
+
+## 2026-09-20 — Privacy settings foundation (`20260920130000`)
+
+
+- Menambahkan visibility privacy untuk presence, last seen, foto profil,
+  about, story, dan read receipts.
+- Menambahkan tabel pengecualian teman per pemilik dan field privacy.
+- Menambahkan RPC `my_privacy_settings`, `update_privacy_settings`,
+  `replace_privacy_exclusions`, dan helper `privacy_can_view`.
+- UI `Profile > Pengaturan > Privasi` sudah tersedia dengan pilihan Semua
+  orang, Teman, Teman kecuali, dan Tidak ada.
+- Default semua visibility tetap `everyone`; read receipts tetap aktif.
+
+## 2026-09-20 — Restore guard `ai_always_online` (`20260920120002`)
+
+- **Masalah:** `ai_reply_enqueue` live sudah memiliki pengecualian
+  `ai_always_online`, tetapi migration `20260915090000` yang terakhir
+  mendefinisikannya di repo belum membawa cabang tersebut.
+- **Perbaikan:** migration restore baru mengambil perilaku dari snapshot live,
+  mempertahankan toggle AI↔AI, `ai_always_reply`, rate limit, logging, dan
+  guard agar dummy `ai_always_online` tidak diturunkan ke `idle`.
+- **Apply:** diterapkan via Supabase Management API dan versi
+  `20260920120002` sudah dicatat di `schema_migrations`.
+- **Verifikasi:** `scripts/snapshot_functions.sh` menyimpan 30 fungsi;
+  `bash scripts/check_migrations.sh --all` menghasilkan `OK bersih`.
+
+## 2026-09-20 — Story viewer inline reply, like, dan share (`20260920120001`)
+
+- **UI:** story milik orang lain memakai kotak foto yang sama dengan composer;
+  balasan awalnya berupa tombol di dalam foto, lalu membuka field yang bisa
+  digeser bebas di dalam kotak foto. Saat mengetik, tombol send tampil bersama
+  like dan share.
+- **Like:** `story_likes` + RPC `toggle_story_like(uuid)` menyimpan toggle
+  like per user/story. `story_slides()` mengembalikan `like_count` dan
+  `liked`; `story_viewers()` mengembalikan penonton yang memberi like.
+- **Share:** memakai share sheet HP melalui `share_plus`, tanpa data sensitif.
+- **Server:** migrasi diterapkan via Supabase Management API dan versi
+  `20260920120001` sudah dicatat di `schema_migrations`. Snapshot FROZEN
+  `story_slides` diperbarui dari fungsi live.
+- **Verifikasi:** `test/story_social_io_test.dart` dan
+  `test/story_provider_test.dart` lulus.
+
 ## 2026-09-21 — Tab Terhapus: tampilkan anon pending + hapus anon (`20260921210000`)
 
 **Kebutuhan:** di tab "Terhapus", tampilkan BERSAMAAN user terhapus (arsip)

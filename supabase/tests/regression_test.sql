@@ -33,6 +33,18 @@ select supabase_tests.check('trigger notify_mention_room_trg terpasang',
       and t.tgname = 'notify_mention_room_trg' and not t.tgisinternal
   ));
 
+-- ── 2026-09-21: trigger guard sosial dipasang di DUA tabel dengan kolom
+--    berbeda (follows: follower_id/followee_id; friend_requests: from_id/to_id).
+--    Versi lama hanya baca follower_id → SEMUA insert/update friend_requests
+--    error 42703, membuat _are_friends() selalu false (privacy 'friends' mati).
+select supabase_tests.check('_social_registered_guard menangani friend_requests',
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = '_social_registered_guard'
+      and pg_get_functiondef(p.oid) like '%from_id%'
+      and pg_get_functiondef(p.oid) like '%follower_id%'
+  ));
+
 -- ── Presence (paling rawan regresi): ai_always_online masih ada di tick ──
 select supabase_tests.check('ai_presence_tick memuat cabang ai_always_online',
   exists(

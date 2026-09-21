@@ -24,12 +24,18 @@ void main() {
   });
 
   group('filterRpcOnlineRows', () {
-    test('idle tanpa presence dibuang (zombie app di-kill)', () {
+    test('idle tanpa presence TETAP tampil (last_seen masih ≤30 mnt)', () {
+      // RPC server sudah menyaring last_seen ≤ 30 mnt. Idle tanpa socket
+      // (app di-background) HARUS tetap tampil — dulu dibuang sebagai
+      // "zombie", menyebabkan user idle muncul-hilang sebelum 30 menit.
       final rows = ChatService.filterRpcOnlineRows(
-        [_row('zombie', 'idle'), _row('hidup', 'idle')],
-        {'hidup'},
+        [_row('idleA', 'idle'), _row('idleB', 'idle')],
+        <String>{},
       );
-      expect(rows.map((r) => (r as Map)['id']).toList(), ['hidup']);
+      expect(
+        rows.map((r) => (r as Map)['id']).toList(),
+        ['idleA', 'idleB'],
+      );
     });
 
     test('online tanpa presence tetap tampil (baru connect)', () {
@@ -73,45 +79,50 @@ void main() {
       expect(rows.map((r) => (r as Map)['id']).toList(), ['on']);
     });
 
-    test('semua terfilter → fallback RPC asli (cold start)', () {
+    test('semua idle → semua tampil (tanpa fallback khusus)', () {
       final rpc = [_row('a', 'idle'), _row('b', 'idle')];
       final rows = ChatService.filterRpcOnlineRows(rpc, <String>{});
-      expect(identical(rows, rpc), isTrue);
+      expect(rows.map((r) => (r as Map)['id']).toList(), ['a', 'b']);
     });
 
     test('dummy idle tanpa presence tetap tampil', () {
       final rows = ChatService.filterRpcOnlineRows(
-        [_row('sarah', 'idle'), _row('zombie', 'idle')],
+        [_row('sarah', 'idle'), _row('lain', 'idle')],
         <String>{},
         dummyUids: {'sarah'},
       );
-      expect(rows.map((r) => (r as Map)['id']).toList(), ['sarah']);
+      // Keduanya tampil — idle tidak lagi dibuang tanpa presence.
+      expect(
+        rows.map((r) => (r as Map)['id']).toList(),
+        ['sarah', 'lain'],
+      );
     });
 
-    test('guest idle tanpa presence tetap dibuang (bukan dummy)', () {
-      // is_registered=false saja tidak cukup — 73 guest non-dummy juga
-      // false. Hanya UID di dummy_accounts yang lolos jalur dummy.
+    test('guest idle tanpa presence tetap tampil', () {
       final rows = ChatService.filterRpcOnlineRows(
         [_row('guest1', 'idle'), _row('sarah', 'idle')],
         <String>{},
         dummyUids: {'sarah'},
       );
-      expect(rows.map((r) => (r as Map)['id']).toList(), ['sarah']);
+      expect(
+        rows.map((r) => (r as Map)['id']).toList(),
+        ['guest1', 'sarah'],
+      );
     });
 
-    test('campuran: presence menang, online lolos, idle zombie gugur', () {
+    test('campuran: online & idle lolos, offline & invisible gugur', () {
       final rows = ChatService.filterRpcOnlineRows(
         [
           _row('p1', 'idle'),
           _row('p2', 'online'),
           _row('baru', 'online'),
-          _row('zombie', 'idle'),
+          _row('idleX', 'idle'),
           _row('off', 'offline'),
         ],
         {'p1', 'p2'},
       );
       final ids = rows.map((r) => (r as Map)['id']).toSet();
-      expect(ids, {'p1', 'p2', 'baru'});
+      expect(ids, {'p1', 'p2', 'baru', 'idleX'});
     });
   });
 

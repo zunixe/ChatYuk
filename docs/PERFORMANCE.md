@@ -526,6 +526,19 @@ Masalah: spinner logout muter terus karena menunggu network tanpa timeout.
 **Aturan:** setiap RPC di jalur keluar/transisi layar WAJIB punya timeout, dan
 kegagalan jaringan tidak boleh menahan user keluar.
 
+### 2.12 Private chat: kurangi kerja rebuild & fetch foto burst (2026-09-20)
+
+- `private_chat_screen.dart`: `deletedIds` sekarang dihitung sekali per emission
+  stream, bukan sekali untuk setiap bubble. Ini menghapus scan O(N) berulang di
+  dalam `itemBuilder` yang sebelumnya menjadi O(N²) saat chat panjang direbuild.
+- Auto-load foto lama sekarang memakai antrean dengan maksimal **3 fetch aktif**.
+  Sebelumnya semua foto lama yang belum memiliki thumbnail dapat menembak
+  request bersamaan dan membebani network, decoding, serta memory.
+- Cooldown 10 detik per message ID dan dedupe in-flight tetap dipertahankan.
+
+Perubahan ini belum diukur di perangkat fisik; ukur ulang `chat.listFetch`, jumlah
+rebuild `PrivateChatScreen`, dan memory saat chat berisi 100/500/1000 pesan.
+
 ---
 
 ## 3. Alat ukur (opsional, untuk pengembangan)

@@ -29,6 +29,9 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
   /// Filter: 'all' | 'deleted' | 'pending'.
   String _filter = 'all';
   Timer? _refreshTimer;
+  final Set<String> _selectedUids = {};
+  bool _batchDeleting = false;
+  bool get _isSelectionMode => _selectedUids.isNotEmpty;
 
   @override
   void initState() {
@@ -85,6 +88,77 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     }
   }
 
+  void _toggleSelect(String uid) {
+    if (uid.isEmpty) return;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      if (_selectedUids.contains(uid)) {
+        _selectedUids.remove(uid);
+      } else {
+        _selectedUids.add(uid);
+      }
+    });
+  }
+
+  void _selectAll(List<Map<String, dynamic>> items) {
+    setState(() {
+      final allUids = items
+          .map((e) => '${e['user_id'] ?? ''}')
+          .where((id) => id.isNotEmpty);
+      _selectedUids.addAll(allUids);
+    });
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selectedUids.clear();
+    });
+  }
+
+  Future<void> _deleteSelected(S s, List<Map<String, dynamic>> allItems) async {
+    final selectedItems = allItems
+        .where((e) => _selectedUids.contains('${e['user_id'] ?? ''}'))
+        .toList();
+    if (selectedItems.isEmpty || _batchDeleting) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: Text(s.adminDeletedBatchDeleteTitle(selectedItems.length)),
+        content: Text(s.adminDeletedBatchDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(dctx, true),
+            child: Text(s.btnDelete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _batchDeleting = true);
+    final count =
+        await context.read<AdminProvider>().deleteBatchUsers(selectedItems);
+    if (!mounted) return;
+    setState(() {
+      _batchDeleting = false;
+      _selectedUids.clear();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(s.adminDeletedBatchDeleteDone(count)),
+        backgroundColor: count > 0 ? AppTheme.online : AppTheme.danger,
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> rows) {
     Iterable<Map<String, dynamic>> out = rows;
     // Filter jenis: arsip terhapus vs anon pending.
@@ -114,7 +188,10 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     final base = highlight ? Colors.orange : AppTheme.primary;
     return InkWell(
       borderRadius: BorderRadius.circular(20),
-      onTap: () => setState(() => _filter = value),
+      onTap: () => setState(() {
+        _filter = value;
+        _selectedUids.clear();
+      }),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
@@ -163,16 +240,83 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(s.adminDeletedTitle, style: AppText.titleEmphasis),
-              ),
-              IconButton(
-                icon: Icon(Icons.refresh_rounded, color: AppTheme.primary),
-                onPressed: () => admin.fetchDeleted(),
-              ),
-            ],
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: _isSelectionMode
+                ? Container(
+                    key: const ValueKey('selection_header'),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          tooltip: s.btnCancel,
+                          onPressed: _clearSelection,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            s.adminDeletedSelected(_selectedUids.length),
+                            style: AppText.titleEmphasis.copyWith(
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.select_all_rounded,
+                            color: AppTheme.primary,
+                          ),
+                          tooltip: s.adminDeletedSelectAll,
+                          onPressed: () =>
+                              _selectAll(_filtered(admin.deleted)),
+                        ),
+                        IconButton(
+                          icon: _batchDeleting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.danger,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.delete_rounded,
+                                  color: AppTheme.danger,
+                                ),
+                          tooltip: s.btnDelete,
+                          onPressed: _batchDeleting
+                              ? null
+                              : () =>
+                                  _deleteSelected(s, _filtered(admin.deleted)),
+                        ),
+                      ],
+                    ),
+                  )
+                : Row(
+                    key: const ValueKey('normal_header'),
+                    children: [
+                      Expanded(
+                        child: Text(
+                          s.adminDeletedTitle,
+                          style: AppText.titleEmphasis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.refresh_rounded,
+                          color: AppTheme.primary,
+                        ),
+                        onPressed: () => admin.fetchDeleted(),
+                      ),
+                    ],
+                  ),
           ),
         ),
         // Filter: Semua / Terhapus / Belum dihapus (anon).
@@ -304,13 +448,25 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                         );
                       }
                       final d = filtered[i];
+                      final uid = '${d['user_id'] ?? ''}';
                       final isPending = d['pending'] == true;
+                      final isSelected = _selectedUids.contains(uid);
                       return DeletedCard(
+                        key: ValueKey('del-$uid'),
                         entry: d,
                         s: s,
                         pending: isPending,
+                        selected: isSelected,
+                        isSelectionMode: _isSelectionMode,
                         reasonLabel: _reasonLabel(s, '${d['reason'] ?? ''}'),
-                        onTap: () => _showDetail(context, d),
+                        onTap: () {
+                          if (_isSelectionMode) {
+                            _toggleSelect(uid);
+                          } else {
+                            _showDetail(context, d);
+                          }
+                        },
+                        onLongPress: () => _toggleSelect(uid),
                       );
                     },
                   ),

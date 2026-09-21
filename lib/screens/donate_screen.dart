@@ -316,7 +316,7 @@ class _NetworkCard extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () =>
-                    onCopy(network.address, 'Alamat ${network.label}'),
+                    onCopy(network.address, '${s.donateCopyAddress}${network.label}'),
                 icon: const Icon(Icons.copy, size: 16),
                 label: Text('${s.btnCopyAddress}${network.label}'),
                 style: OutlinedButton.styleFrom(

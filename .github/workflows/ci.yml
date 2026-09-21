@@ -71,17 +71,17 @@ jobs:
         run: flutter test --coverage --no-pub
 
       - name: Coverage gate (ratchet anti-regresi)
-        # Baseline 2026-09-19: providers ~22%, services ~6%, models ~65%.
-        # Gate ini ANTI-REGRESI (bukan target akhir 60%): gagal hanya kalau
-        # coverage TURUN dari baseline. Naikkan ambang bertahap tiap ada
-        # PR yang menambah test (target akhir: 60% per direktori).
+        # Ratchet dinaikkan 2026-09-20 setelah menambah test mixin/SQL/auth/
+        # io-service. Angka = sedikit di bawah hasil ukur nyata (margin anti
+        # fluktuasi), bukan target akhir. Terukur saat itu:
+        #   providers 26.3% · services 16.3% · models 78.2% · mixins 15.5%
+        # Naikkan bertahap tiap ada PR yang menambah test.
         run: |
           python3 - <<'PY'
           import os, sys
           path = 'coverage/lcov.info'
           if not os.path.exists(path):
               print('coverage/lcov.info tidak ada'); sys.exit(1)
-          # Hitung DA (found/hit) per direktori target.
           stats = {}
           cur = None
           for line in open(path, encoding='utf-8', errors='ignore'):
@@ -94,7 +94,7 @@ jobs:
                   except Exception:
                       continue
                   key = 'other'
-                  for d in ('lib/providers/', 'lib/services/', 'lib/models/'):
+                  for d in ('lib/providers/', 'lib/services/', 'lib/models/', 'lib/mixins/'):
                       if cur and cur.endswith('.dart') and d in cur.replace('\\', '/'):
                           key = d; break
                   f, h = stats.get(key, (0, 0))
@@ -102,9 +102,10 @@ jobs:
               elif line == 'end_of_record':
                   cur = None
           minimum = {
-              'lib/providers/': 20.0,
-              'lib/services/': 5.0,
-              'lib/models/': 60.0,
+              'lib/providers/': 25.0,
+              'lib/services/': 15.0,
+              'lib/models/': 75.0,
+              'lib/mixins/': 14.0,
           }
           ok = True
           for d, floor in minimum.items():
@@ -162,5 +163,5 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Deno test (helper edge murni + kontrak)
-        run: deno test --allow-read=supabase/functions supabase/functions/_shared/
+      - name: Deno test (helper edge murni + kontrak + auth)
+        run: deno test --allow-read --allow-env supabase/functions/_shared/

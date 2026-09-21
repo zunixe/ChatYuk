@@ -197,6 +197,11 @@ class AdminProvider extends ChangeNotifier {
       _service.listDummiesPage(limit: limit, offset: offset);
   Future<Map<String, dynamic>> getDummyStories(String uid, {int days = 14}) =>
       _service.getDummyStories(uid, days: days);
+  Future<Map<String, dynamic>> generateDummyStory(
+    String uid, {
+    required String storyDate,
+  }) =>
+      _service.generateDummyStory(uid, storyDate: storyDate);
   Future<Map<String, dynamic>> deleteDummy(String uid) => _service.deleteDummy(uid);
   Future<void> updateDummyProfile({
     required String uid,
@@ -561,6 +566,42 @@ Future<void> fetchDevices() async {
       await fetchDeleted();
     }
     return res;
+  }
+
+  /// Hapus batch user terpilih (bisa arsip `deleted_users` atau pending anon).
+  /// Mengembalikan jumlah user yang berhasil dihapus.
+  Future<int> deleteBatchUsers(List<Map<String, dynamic>> items) async {
+    if (items.isEmpty) return 0;
+    final anonUids = <String>[];
+    final archiveUids = <String>[];
+    for (final item in items) {
+      final uid = '${item['user_id'] ?? ''}';
+      if (uid.isEmpty) continue;
+      if (item['pending'] == true) {
+        anonUids.add(uid);
+      } else {
+        archiveUids.add(uid);
+      }
+    }
+    int count = 0;
+    if (archiveUids.isNotEmpty) {
+      try {
+        await _service.deleteArchivedUsers(archiveUids);
+        count += archiveUids.length;
+      } catch (e) {
+        dlog('[ADMIN] deleteArchivedUsers error: $e');
+      }
+    }
+    for (final uid in anonUids) {
+      try {
+        final res = await _service.deleteAnonUser(uid);
+        if (res['ok'] == true) count++;
+      } catch (e) {
+        dlog('[ADMIN] deleteAnonUser error: $e');
+      }
+    }
+    await fetchDeleted();
+    return count;
   }
 
   // ── Statistik penggunaan data Supabase ──

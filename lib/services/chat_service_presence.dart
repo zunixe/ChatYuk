@@ -29,23 +29,6 @@ mixin ChatServicePresenceMx on ChatBase {
     return _invisibleUidCache;
   }
 
-  Future<Set<String>> _fetchDummyUids() async {
-    final last = _dummyUidFetchedAt;
-    if (last != null &&
-        DateTime.now().difference(last).inMinutes < 5 &&
-        _dummyUidCache != null) {
-      return _dummyUidCache!;
-    }
-    try {
-      final rows = await _sb.rpc('dummy_uids').timeout(const Duration(seconds: 2));
-      _dummyUidCache = {
-        for (final r in rows as List) '$r',
-      }..remove('');
-      _dummyUidFetchedAt = DateTime.now();
-    } catch (_) {}
-    return _dummyUidCache ?? <String>{};
-  }
-
   Future<String?> _fetchOwnCountry() async {
     if (_ownCountryCache != null) return _ownCountryCache;
     try {
@@ -323,12 +306,7 @@ mixin ChatServicePresenceMx on ChatBase {
               if (uid.isNotEmpty) presenceUids.add(uid);
             }
           }
-          final dummyUids = await _fetchDummyUids();
-          rows = ChatService.filterRpcOnlineRows(
-            rpcRows,
-            presenceUids,
-            dummyUids: dummyUids,
-          );
+          rows = ChatService.filterRpcOnlineRows(rpcRows, presenceUids);
         } else {
           // Fallback hybrid lama jika RPC belum deploy / gagal — tetap batasi O(50)
           final presenceUids = firstNPresenceUids(50);

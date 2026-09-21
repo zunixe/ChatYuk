@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/providers/points_provider.dart';
 import 'package:chatyuk/services/points_service.dart';
@@ -22,10 +23,8 @@ void main() {
   setUp(() {
     service = MockPointsService();
     // Poin naik (50 → 999) supaya wrapper klaim mengembalikan true.
-    when(() => service.oneTimeBonus(any(), any()))
-        .thenAnswer((_) async => 999);
-    when(() => service.watchOwnPoints())
-        .thenAnswer((_) => Stream<int>.empty());
+    when(() => service.oneTimeBonus(any(), any())).thenAnswer((_) async => 999);
+    when(() => service.watchOwnPoints()).thenAnswer((_) => Stream<int>.empty());
     when(() => service.getWallet()).thenAnswer(
       (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50},
     );
@@ -88,21 +87,26 @@ void main() {
       expect(provider.points, 60);
     });
 
-    test('key hilang/null → bonus & earned 0, total tak mereset saldo lama',
-        () async {
-      when(() => service.getWallet()).thenAnswer(
-        (_) async => <String, dynamic>{'bonus': 7, 'earned': 3, 'total': 60},
-      );
-      await provider.refreshWallet();
-      when(() => service.getWallet()).thenAnswer(
-        (_) async => <String, dynamic>{'bonus': null, 'earned': null},
-      );
-      await provider.refreshWallet();
-      expect(provider.bonusBalance, 0);
-      expect(provider.earnedBalance, 0);
-      expect(provider.points, 60,
-          reason: 'total null → saldo lama dipertahankan, bukan reset 0');
-    });
+    test(
+      'key hilang/null → bonus & earned 0, total tak mereset saldo lama',
+      () async {
+        when(() => service.getWallet()).thenAnswer(
+          (_) async => <String, dynamic>{'bonus': 7, 'earned': 3, 'total': 60},
+        );
+        await provider.refreshWallet();
+        when(() => service.getWallet()).thenAnswer(
+          (_) async => <String, dynamic>{'bonus': null, 'earned': null},
+        );
+        await provider.refreshWallet();
+        expect(provider.bonusBalance, 0);
+        expect(provider.earnedBalance, 0);
+        expect(
+          provider.points,
+          60,
+          reason: 'total null → saldo lama dipertahankan, bukan reset 0',
+        );
+      },
+    );
 
     test('getWallet error → nilai lama bertahan, tidak throw', () async {
       when(() => service.getWallet()).thenAnswer(
@@ -158,8 +162,11 @@ void main() {
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 1));
         final base = walletCalls;
-        expect(base, greaterThanOrEqualTo(1),
-            reason: 'rincian awal diambil saat subscribe');
+        expect(
+          base,
+          greaterThanOrEqualTo(1),
+          reason: 'rincian awal diambil saat subscribe',
+        );
 
         // Bonus online / bonus pesan memicu beberapa event beruntun.
         ctrl.add(60);
@@ -171,8 +178,7 @@ void main() {
 
         // Lewat 800ms → satu RPC get_wallet, bucket bonus/earned ikut segar.
         async.elapse(const Duration(seconds: 2));
-        expect(walletCalls - base, 1,
-            reason: 'burst → tetap 1 RPC get_wallet');
+        expect(walletCalls - base, 1, reason: 'burst → tetap 1 RPC get_wallet');
         expect(p.bonusBalance, 1);
         expect(p.earnedBalance, 2);
         expect(p.points, 100, reason: 'total ikut rincian wallet terbaru');
@@ -200,7 +206,11 @@ void main() {
         ctrl.add(50); // sama dengan saldo sekarang → tak ada perubahan
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 2));
-        expect(walletCalls, base, reason: 'nilai sama → tak perlu tarik bucket');
+        expect(
+          walletCalls,
+          base,
+          reason: 'nilai sama → tak perlu tarik bucket',
+        );
         p.dispose();
       });
       ctrl.close();
@@ -218,6 +228,83 @@ void main() {
 
       provider.syncFromProfile(75);
       expect(notified, 1, reason: 'nilai sama tidak memicu rebuild');
+    });
+  });
+
+  group('chat charge/refund', () {
+    setUp(() async {
+      when(() => service.fetchEnabled()).thenAnswer((_) async => true);
+      await provider.refreshEnabled();
+    });
+
+    test('deduct berhasil mengembalikan saldo baru dan notify', () async {
+      when(() => service.deductChatPoint('text')).thenAnswer((_) async => 49);
+      var notified = 0;
+      provider.addListener(() => notified++);
+
+      final result = await provider.deductBeforeSend('text');
+
+      expect(result, 49);
+      expect(provider.points, 49);
+      expect(notified, 1);
+      verify(() => service.deductChatPoint('text')).called(1);
+    });
+
+    test('saldo tidak cukup mengembalikan -1 tanpa mengubah saldo', () async {
+      when(() => service.deductChatPoint('image')).thenThrow(
+        PostgrestException(
+          message: 'Not enough points',
+          code: 'P0001',
+          details: null,
+          hint: null,
+        ),
+      );
+
+      final result = await provider.deductBeforeSend('image');
+
+      expect(result, -1);
+      expect(provider.points, 50);
+    });
+
+    test('error RPC mengembalikan -2 tanpa mengubah saldo', () async {
+      when(
+        () => service.deductChatPoint('voice'),
+      ).thenThrow(Exception('network offline'));
+
+      final result = await provider.deductBeforeSend('voice');
+
+      expect(result, -2);
+      expect(provider.points, 50);
+    });
+
+    test('refund memperbarui saldo dan memanggil service', () async {
+      when(() => service.refundChatPoint('text')).thenAnswer((_) async => 51);
+
+      await provider.refundChatPoint('text');
+
+      expect(provider.points, 51);
+      verify(() => service.refundChatPoint('text')).called(1);
+    });
+
+    test('refund error tidak melempar dan saldo tetap', () async {
+      when(
+        () => service.refundChatPoint('text'),
+      ).thenThrow(Exception('network offline'));
+
+      await expectLater(provider.refundChatPoint('text'), completes);
+      expect(provider.points, 50);
+    });
+
+    test('charge dan refund disabled tidak memanggil service', () async {
+      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
+      await provider.refreshEnabled();
+
+      expect(await provider.deductBeforeSend('text'), 50);
+      await provider.refundChatPoint('text');
+
+      verifyNever(() => service.deductChatPoint(any()));
+      verifyNever(() => service.refundChatPoint(any()));
+      expect(provider.points, 50);
     });
   });
 }

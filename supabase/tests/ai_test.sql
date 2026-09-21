@@ -54,5 +54,23 @@ select supabase_tests.check('cron ai-presence aktif',
 select supabase_tests.check('cron ai-claim-recovery aktif',
   exists(select 1 from cron.job where jobname='chatyuk-ai-claim-recovery' and active));
 
+-- ── FROZEN: kontrol AI dari admin (pernah jadi sumber regresi) ──
+select supabase_tests.check('admin_set_dummy_ai() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='admin_set_dummy_ai'));
+select supabase_tests.check('admin_ai_settings() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='admin_ai_settings'));
+select supabase_tests.check('admin_register_dummy() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='admin_register_dummy'));
+-- Tabel konfigurasi provider AI (RLS deny — hanya service_role/RPC admin).
+select supabase_tests.check('tabel ai_provider_config ada',
+  exists(select 1 from information_schema.tables
+         where table_schema='public' and table_name='ai_provider_config'));
+select supabase_tests.check('tabel ai_internal_config ada',
+  exists(select 1 from information_schema.tables
+         where table_schema='public' and table_name='ai_internal_config'));
+
 select supabase_tests.report() as result;
 rollback;

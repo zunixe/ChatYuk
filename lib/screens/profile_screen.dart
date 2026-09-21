@@ -26,6 +26,7 @@ import '../providers/timeline_provider.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
 import 'notification_settings_screen.dart';
+import 'privacy_settings_screen.dart';
 import '../core/admin_gate.dart';
 import 'contact_screen.dart';
 import 'donate_screen.dart';
@@ -97,7 +98,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loggingOut = false;
   bool _deletingAccount = false;
 
-  
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
 
@@ -257,9 +257,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       dlog('[PROFILE] pickImage error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.errPhotoPermission)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoPermission)));
       }
       return;
     }
@@ -351,9 +351,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Cancel sebelum izin kamera/galeri → PlatformException, jangan error.
       dlog('[PROFILE] pickImage error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.errPhotoPermission)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoPermission)));
       }
       return;
     }
@@ -378,10 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             activeControlsWidgetColor: AppTheme.primary,
             lockAspectRatio: true,
           ),
-          IOSUiSettings(
-            title: s.avatarCamera,
-            aspectRatioLockEnabled: true,
-          ),
+          IOSUiSettings(title: s.avatarCamera, aspectRatioLockEnabled: true),
         ],
       );
     } catch (e) {
@@ -485,14 +482,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     final uid = context.read<AuthProvider>().profile?.uid ?? '';
                     if (uid.isNotEmpty) {
                       try {
-                        context
-                            .read<OnlineUsersProvider>()
-                            .removeAvatarForUid(uid);
+                        context.read<OnlineUsersProvider>().removeAvatarForUid(
+                          uid,
+                        );
                       } catch (_) {}
                       try {
-                        context
-                            .read<TimelineProvider>()
-                            .refreshAvatarForUid(uid, '');
+                        context.read<TimelineProvider>().refreshAvatarForUid(
+                          uid,
+                          '',
+                        );
                       } catch (_) {}
                     }
                   }
@@ -522,10 +520,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: bytes != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(
-                          bytes,
-                          fit: BoxFit.contain,
-                        ),
+                        child: Image.memory(bytes, fit: BoxFit.contain),
                       )
                     : CircleAvatar(
                         radius: 90,
@@ -562,6 +557,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (profile == null) return;
     final currentNick = profile.nickname;
     final ctrl = TextEditingController(text: currentNick);
+    final aboutCtrl = TextEditingController(text: profile.about);
     final focus = FocusNode();
     int age = profile.age;
     String negara = profile.country;
@@ -626,6 +622,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           : null,
                     ),
                     onChanged: (v) => setSheet(() => error = null),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: aboutCtrl,
+                    style: TextStyle(color: AppTheme.textPrimary),
+                    maxLength: 150,
+                    maxLines: 3,
+                    minLines: 2,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      labelText: s.labelAbout,
+                      hintText: s.hintAbout,
+                      prefixIcon: const Icon(Icons.info_outline, size: 20),
+                      counterText: '',
+                      helperText: s.aboutPrivacyHint,
+                      helperStyle: AppText.caption.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
@@ -699,9 +714,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   return;
                                 }
                                 if (isBannedNickname(nick) &&
-                                    !context
-                                        .read<AuthProvider>()
-                                        .isRealAdmin) {
+                                    !context.read<AuthProvider>().isRealAdmin) {
                                   setSheet(() => error = s.errNicknameBanned);
                                   focus.requestFocus();
                                   return;
@@ -724,6 +737,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       age: age,
                                       country: negara,
                                       city: kota,
+                                      about: aboutCtrl.text,
                                     );
                                 if (sheetCtx.mounted) Navigator.pop(sheetCtx);
                                 if (mounted) {
@@ -754,7 +768,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         (msg.contains('nickname_banned') ||
                                             msg.contains('banned'))
                                         ? s.errNicknameBanned
-                                        : s.errGeneric; dlog(e.toString(), tag: 'PROFILE');
+                                        : s.errGeneric;
+                                    dlog(e.toString(), tag: 'PROFILE');
                                   });
                                 }
                               }
@@ -921,7 +936,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 3),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 3,
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black26,
@@ -1045,8 +1063,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // email dummy → isRealAdmin false → banner hilang.
                   if (auth.dummySessionActive)
                     AdminGate.dummySessionBanner?.call(
-                      context, profile?.nickname) ??
-                  const SizedBox.shrink(),
+                          context,
+                          profile?.nickname,
+                        ) ??
+                        const SizedBox.shrink(),
                   // Anonymous warning — prominent (sembunyikan saat sesi dummy)
                   if (isAnon && !dummyActive) ...[
                     Container(
@@ -1231,6 +1251,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         iconColor: AppTheme.primary,
                         label: s.labelUserId,
                         value: auth.uid?.substring(0, 8) ?? '-',
+                      ),
+                      Divider(height: 1, indent: 52),
+                      // About — teks bebas 150 karakter. Visibilitas diatur
+                      // di Pengaturan > Privasi (about_visibility).
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.info_outline,
+                                color: AppTheme.primary,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    s.labelAbout,
+                                    style: AppText.caption.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    (profile?.about ?? '').isEmpty
+                                        ? s.aboutEmpty
+                                        : profile!.about,
+                                    style: (profile?.about ?? '').isEmpty
+                                        ? AppText.bodySmall.copyWith(
+                                            color: AppTheme.textSecondary,
+                                          )
+                                        : AppText.bodyStrong,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.edit_outlined,
+                                size: 18,
+                                color: AppTheme.primary,
+                              ),
+                              tooltip: s.btnEditProfile,
+                              onPressed: _editProfile,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -1764,7 +1842,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       // Sesi dummy → tile & toggles admin disembunyikan.
                       // UI admin hanya untuk admin sungguhan (bukan dummy,
                       // bukan anon/user biasa yang login di build admin).
-                      if (!dummyActive && auth.isRealAdmin) ...?AdminGate.profileSettingsHeader?.call(context),
+                      if (!dummyActive && auth.isRealAdmin)
+                        ...?AdminGate.profileSettingsHeader?.call(context),
                       // Notifikasi
                       Padding(
                         padding: EdgeInsets.symmetric(
@@ -1789,24 +1868,117 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             SizedBox(width: 12),
                             Expanded(
                               child: InkWell(
-                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen())),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const NotificationSettingsScreen(),
+                                  ),
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(children: [Text(s.labelNotifications, style: AppText.bodyStrong.copyWith(fontWeight: FontWeight.w500)), SizedBox(width: 4), Icon(Icons.chevron_right, size: 16, color: AppTheme.textSecondary)]),
-                                    Text(s.notifEnabledDesc, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          s.labelNotifications,
+                                          style: AppText.bodyStrong.copyWith(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        SizedBox(width: 4),
+                                        Icon(
+                                          Icons.chevron_right,
+                                          size: 16,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      s.notifEnabledDesc,
+                                      style: AppText.bodySmall.copyWith(
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
                             ),
                             Switch(
                               value: auth.notificationsEnabled,
-                              onChanged: (v) => context.read<AuthProvider>().setNotificationsEnabled(v),
+                              onChanged: (v) => context
+                                  .read<AuthProvider>()
+                                  .setNotificationsEnabled(v),
                               activeThumbColor: AppTheme.primary,
                             ),
                           ],
                         ),
                       ),
+                      if (!isAnon) ...[
+                        Divider(height: 1, indent: 52),
+                        // Privasi — struktur sama dengan tile Notifikasi &
+                        // Password (lingkaran 36, ikon 20, padding 4) supaya
+                        // ikon & teks sejajar rapi satu kolom.
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const PrivacySettingsScreen(),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.lock_outline,
+                                    color: AppTheme.primary,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        s.privacyTitle,
+                                        style: AppText.bodyStrong.copyWith(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        s.privacyHint,
+                                        style: AppText.bodySmall.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.chevron_right,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                       Divider(height: 1, indent: 52),
                       // Ukuran font chat (slider) — hanya berlaku di bubble
                       // chat, tidak mengubah tipografi halaman lain.
@@ -1814,7 +1986,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Divider(height: 1, indent: 52),
                       // Admin: toggle screenshot/watermark/invisible —
                       // hanya ada di build admin (via AdminGate).
-                      if (!dummyActive && auth.isRealAdmin) ...?AdminGate.profileSettingsTail?.call(context),
+                      if (!dummyActive && auth.isRealAdmin)
+                        ...?AdminGate.profileSettingsTail?.call(context),
                       // Password: set (akun Google) / change (akun email) —
                       // hanya untuk user terdaftar (email/Google), bukan anon.
                       if (!isAnon) ...[
@@ -1826,8 +1999,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
                             onTap: () async {
-                              final hasPw = await context.read<AuthProvider>().fetchHasPassword();
-                              if (context.mounted) _showPasswordDialog(context, isSet: !hasPw);
+                              final hasPw = await context
+                                  .read<AuthProvider>()
+                                  .fetchHasPassword();
+                              if (context.mounted)
+                                _showPasswordDialog(context, isSet: !hasPw);
                             },
                             child: Row(
                               children: [
@@ -1858,8 +2034,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         _hasPassword
                                             ? s.btnChangePassword
                                             : s.btnSetPassword,
-                                        style:
-                                            AppText.bodyStrong.copyWith(
+                                        style: AppText.bodyStrong.copyWith(
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -2133,7 +2308,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-
   /// Dialog set password (akun Google) / ganti password (akun email).
   Future<void> _showPasswordDialog(
     BuildContext context, {
@@ -2204,17 +2378,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: OutlinedButton.styleFrom(
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 side: BorderSide(color: AppTheme.divider),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 minimumSize: Size(100, 36),
               ),
               onPressed: loading ? null : () => Navigator.pop(ctx, false),
-              child: Text(s.btnCancel, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+              child: Text(
+                s.btnCancel,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 minimumSize: Size(100, 36),
               ),
               onPressed: loading
@@ -2358,9 +2542,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     // Admin dilarang self-delete di sisi server — tidak tampilkan menu.
     if (auth.isRealAdmin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.errDeleteAccountForbidden)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errDeleteAccountForbidden)));
       return;
     }
 
@@ -2416,9 +2600,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Text(
               s.labelDeleteAccountConfirm,
-              style: AppText.bodySmall.copyWith(
-                color: AppTheme.textSecondary,
-              ),
+              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
             ),
             SizedBox(height: 12),
             TextField(
@@ -2469,9 +2651,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await auth.signOut();
       chat.reset();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.msgDeleteAccountSuccess)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.msgDeleteAccountSuccess)));
       }
     } catch (e) {
       dlog('[PROFILE] delete account error: $e', tag: 'PROFILE');
@@ -2535,13 +2717,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // logout: relasi sosial boleh tersisa, tapi user harus tetap bisa keluar.
     if (auth.isAnonymous) {
       try {
-        await context
-            .read<SocialProvider>()
-            .clearAnonSocial()
-            .timeout(const Duration(seconds: 5));
+        await context.read<SocialProvider>().clearAnonSocial().timeout(
+          const Duration(seconds: 5),
+        );
       } catch (e) {
-        dlog('[PROFILE] clearAnonSocial saat logout dilewati: $e',
-            tag: 'PROFILE');
+        dlog(
+          '[PROFILE] clearAnonSocial saat logout dilewati: $e',
+          tag: 'PROFILE',
+        );
       }
     }
     // Logout TIDAK boleh menggantung karena jaringan: signOut punya timeout
@@ -2549,8 +2732,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await auth.signOut().timeout(const Duration(seconds: 8));
     } catch (e) {
-      dlog('[PROFILE] signOut timeout/error, lanjut paksa keluar: $e',
-          tag: 'PROFILE');
+      dlog(
+        '[PROFILE] signOut timeout/error, lanjut paksa keluar: $e',
+        tag: 'PROFILE',
+      );
     } finally {
       chat.reset();
       if (mounted) setState(() => _loggingOut = false);

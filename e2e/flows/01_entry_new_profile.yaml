@@ -1,0 +1,40 @@
+# E2E-01 — Jalur MASUK pertama: profil baru (nickname → masuk app)
+#
+# Jalur utama user baru. Kalau ini rusak, tidak ada yang bisa masuk app.
+#
+# PENTING: field nickname memakai `textInputAction: done` +
+# `onSubmitted: onNicknameSubmitted` (profile_form_card.dart:101-102), jadi
+# `inputText` yang diakhiri Enter LANGSUNG memicu submit — tidak perlu tap
+# tombol. Assertion gender/umur harus dilakukan SEBELUM mengetik nickname.
+#
+# Prasyarat: dijalankan lewat scripts/e2e/run.sh (reset + pilih device).
+appId: com.chatyuk.chatyuk
+tags:
+  - entry
+  - smoke
+---
+- launchApp:
+    clearState: true
+
+# Splash → entry screen (init Supabase + geo detect bisa lambat).
+- extendedWaitUntil:
+    visible: "MULAI CHAT SEKARANG"
+    timeout: 60000
+
+# Kontrol profil dirender lengkap (dicek SEBELUM submit).
+- assertVisible: "Username"
+- assertVisible: "Laki-laki"
+- assertVisible: "Perempuan"
+- assertVisible: "Umur"
+- assertVisible: "Negara"
+- assertVisible: "Kota"
+
+# Isi nickname → Enter otomatis submit → masuk main nav.
+- tapOn: "Username"
+- inputText: "E2E Baru"
+
+- extendedWaitUntil:
+    visible: "Online"
+    timeout: 60000
+- assertVisible: "Chat"
+- assertVisible: "Profil"

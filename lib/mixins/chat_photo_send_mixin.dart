@@ -193,6 +193,20 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     final pp = context.read<PointsProvider>();
     final r = await pp.deductBeforeSend(kind);
     if (r < 0) {
+      if (r == -2) {
+        await queueOffline(
+          pending: pendingPhoto,
+          pointsKind: kind,
+          pointsDeducted: false,
+          imagePayload: base64,
+          needsUpload: true,
+          uploadKind: 'image',
+          repliedToId: reply?.id,
+          repliedToText: reply?.text,
+          repliedToSenderName: reply?.senderName,
+        );
+        return;
+      }
       setState(() => outboxPending.removeWhere((m) => m.id == pendingPhoto.id));
       if (!mounted) return;
       final s = context.read<LocaleProvider>().s;

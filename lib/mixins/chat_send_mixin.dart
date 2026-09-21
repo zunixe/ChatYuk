@@ -138,10 +138,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
     sendMsgCtrl.clear();
     sendIsSending = true;
     final reply = sendReplyingTo;
-    final mentions = parseMentions(
-      text,
-      candidates: sendMentionCandidates(),
-    );
+    final mentions = parseMentions(text, candidates: sendMentionCandidates());
     final pending = MessageModel(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
       senderId: uid,
@@ -181,6 +178,19 @@ mixin ChatSendMixin<T extends StatefulWidget>
     final pp = context.read<PointsProvider>();
     final remaining = await pp.deductBeforeSend('text');
     if (remaining < 0) {
+      if (remaining == -2) {
+        await queueOffline(
+          pending: pending,
+          pointsKind: 'text',
+          pointsDeducted: false,
+          repliedToId: reply?.id,
+          repliedToText: reply?.text,
+          repliedToSenderName: reply?.senderName,
+          mentions: mentions,
+        );
+        sendIsSending = false;
+        return;
+      }
       setState(() => outboxPending.remove(pending));
       sendIsSending = false;
       if (!mounted) return;
@@ -221,7 +231,9 @@ mixin ChatSendMixin<T extends StatefulWidget>
               e.toString().toLowerCase().contains('policy');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(blockedByOther ? s.msgBlockedByOther : s.errSendFailed),
+              content: Text(
+                blockedByOther ? s.msgBlockedByOther : s.errSendFailed,
+              ),
             ),
           );
         }

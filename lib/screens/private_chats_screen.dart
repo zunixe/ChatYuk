@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
@@ -22,7 +23,11 @@ import '../core/chat/chat_filter.dart';
 class PrivateChatsScreen extends StatefulWidget {
   final bool embedded;
   final String? externalQuery;
-  const PrivateChatsScreen({super.key, this.embedded = false, this.externalQuery});
+  const PrivateChatsScreen({
+    super.key,
+    this.embedded = false,
+    this.externalQuery,
+  });
 
   @override
   State<PrivateChatsScreen> createState() => _PrivateChatsScreenState();
@@ -48,6 +53,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   String _lastQueryUsed = '';
   Map<String, String> _statusMap = const {};
   Map<String, String> _nameMap = const {};
+  Set<String> _friendSet = const {};
   String _query = '';
   final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _selected = {};
@@ -55,22 +61,28 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   // Tampilan arsip (gaya WhatsApp): list hanya chat terarsip.
   bool _showArchived = false;
   int _archivedCount = 0;
-  /// Filter daftar chat (semua/belum dibaca/anon/terdaftar).
+
+  /// Filter daftar chat (semua/belum dibaca/teman/anon/terdaftar).
   ChatFilter _chatFilter = ChatFilter.all;
+
   /// Jumlah per filter — disiarkan lewat notifier supaya mengubah filter
   /// hanya me-rebuild baris chip, bukan seluruh halaman.
-  final ValueNotifier<({int all, int unread, int anon, int registered})>
-      _countsNotifier = ValueNotifier<
-          ({int all, int unread, int anon, int registered})>(
-    (all: 0, unread: 0, anon: 0, registered: 0),
-  );
+  final ValueNotifier<
+    ({int all, int unread, int friends, int anon, int registered})
+  >
+  _countsNotifier =
+      ValueNotifier<
+        ({int all, int unread, int friends, int anon, int registered})
+      >((all: 0, unread: 0, friends: 0, anon: 0, registered: 0));
   List<PrivateChatInfo> _lastFiltered = [];
   List<PrivateChatInfo> _lastChats = [];
 
   void _toggleSelect(String chatId) {
     setState(() {
-      if (_selected.contains(chatId)) _selected.remove(chatId);
-      else _selected.add(chatId);
+      if (_selected.contains(chatId))
+        _selected.remove(chatId);
+      else
+        _selected.add(chatId);
     });
   }
 
@@ -106,9 +118,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       } catch (_) {}
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mute ? s.msgMuted : s.msgUnmuted)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mute ? s.msgMuted : s.msgUnmuted)));
     }
   }
 
@@ -137,11 +149,26 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
-        title: Text(s.btnDeleteSelected, style: TextStyle(color: AppTheme.textPrimary)),
-        content: Text(s.deleteSelectedConfirm(_selected.length), style: TextStyle(color: AppTheme.textSecondary)),
+        title: Text(
+          s.btnDeleteSelected,
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          s.deleteSelectedConfirm(_selected.length),
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.btnCancel)),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.btnDeleteSelected, style: const TextStyle(color: AppTheme.danger))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.btnCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              s.btnDeleteSelected,
+              style: const TextStyle(color: AppTheme.danger),
+            ),
+          ),
         ],
       ),
     );
@@ -152,7 +179,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   /// Ikon = AKSI yang akan dijalankan (semua sudah pin → tawarkan unpin).
   List<Widget> _selectionActions(String uid, S s) {
     final byId = <String, PrivateChatInfo>{
-      for (final c in _lastChats) c.chatId: c
+      for (final c in _lastChats) c.chatId: c,
     };
     var allPinned = _selected.isNotEmpty;
     var allMuted = _selected.isNotEmpty;
@@ -174,9 +201,11 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       ),
       IconButton(
         tooltip: allMuted ? s.btnUnmute : s.btnMute,
-        icon: Icon(allMuted
-            ? Icons.notifications_active
-            : Icons.notifications_off_outlined),
+        icon: Icon(
+          allMuted
+              ? Icons.notifications_active
+              : Icons.notifications_off_outlined,
+        ),
         onPressed: () => _muteSelected(uid, !allMuted),
       ),
       if (!_showArchived)
@@ -217,10 +246,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
             icon: const Icon(Icons.arrow_back),
             onPressed: _clearSelection,
           ),
-          Text(
-            s.selectedCount(_selected.length),
-            style: AppText.bodyStrong,
-          ),
+          Text(s.selectedCount(_selected.length), style: AppText.bodyStrong),
           const Spacer(),
           ..._selectionActions(uid, s),
         ],
@@ -233,7 +259,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   /// jumlah berubah (ValueListenable) — bukan seluruh halaman.
   Widget _chatFilterBar(S s) {
     return ValueListenableBuilder<
-        ({int all, int unread, int anon, int registered})>(
+      ({int all, int unread, int friends, int anon, int registered})
+    >(
       valueListenable: _countsNotifier,
       builder: (_, counts, __) {
         return SingleChildScrollView(
@@ -246,6 +273,11 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
               _filterChip(
                 s.filterUnreadCount(counts.unread),
                 ChatFilter.unread,
+              ),
+              const SizedBox(width: 6),
+              _filterChip(
+                s.filterFriendsCount(counts.friends),
+                ChatFilter.friends,
               ),
               const SizedBox(width: 6),
               _filterChip(s.filterAnonCount(counts.anon), ChatFilter.anon),
@@ -282,7 +314,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: active ? AppTheme.primary.withValues(alpha: 0.18)
+          color: active
+              ? AppTheme.primary.withValues(alpha: 0.18)
               : AppTheme.bgInput,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
@@ -334,8 +367,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                 const SizedBox(width: 10),
                 Text(
                   s.labelArchived(archivedCount),
-                  style:
-                      AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
+                  style: AppText.bodyStrong.copyWith(
+                    color: AppTheme.textPrimary,
+                  ),
                 ),
                 const Spacer(),
                 Icon(
@@ -361,7 +395,11 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     if (_showArchived && mounted) setState(() => _showArchived = false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.read<LocaleProvider>().s.deleteSelectedSuccess(ids.length))),
+        SnackBar(
+          content: Text(
+            context.read<LocaleProvider>().s.deleteSelectedSuccess(ids.length),
+          ),
+        ),
       );
     }
   }
@@ -463,8 +501,13 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       _archivedCount = 0;
       if (notify) {
         _listNotifier.value = const [];
-        _countsNotifier.value =
-            (all: 0, unread: 0, anon: 0, registered: 0);
+        _countsNotifier.value = (
+          all: 0,
+          unread: 0,
+          friends: 0,
+          anon: 0,
+          registered: 0,
+        );
       }
       return;
     }
@@ -489,10 +532,10 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       if (aPinned && !bPinned) return -1;
       if (!aPinned && bPinned) return 1;
       if (aPinned && bPinned) {
-        final aT = a.pinnedAtFor(myUid) ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        final bT = b.pinnedAtFor(myUid) ??
-            DateTime.fromMillisecondsSinceEpoch(0);
+        final aT =
+            a.pinnedAtFor(myUid) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bT =
+            b.pinnedAtFor(myUid) ?? DateTime.fromMillisecondsSinceEpoch(0);
         final c = bT.compareTo(aT);
         if (c != 0) return c;
       }
@@ -510,6 +553,14 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     // Hitung jumlah per filter dari daftar yang SUDAH lolos arsip+query —
     // supaya angka chip konsisten dengan isi yang benar-benar tampil.
     int unreadOf(PrivateChatInfo c) => c.unreadCounts[myUid] ?? 0;
+    bool friendOf(PrivateChatInfo c) {
+      final other = c.participants.firstWhere(
+        (p) => p != myUid,
+        orElse: () => '',
+      );
+      return context.read<SocialProvider>().isFriend(other);
+    }
+
     bool registeredOf(PrivateChatInfo c) {
       final other = c.participants.firstWhere(
         (p) => p != myUid,
@@ -519,20 +570,26 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     }
 
     _lastFiltered = visible
-        .where((c) => ChatFilterLogic.matches(
-              _chatFilter,
-              unread: unreadOf(c),
-              otherRegistered: registeredOf(c),
-            ))
+        .where(
+          (c) => ChatFilterLogic.matches(
+            _chatFilter,
+            unread: unreadOf(c),
+            otherRegistered: registeredOf(c),
+            otherFriend: friendOf(c),
+          ),
+        )
         .toList();
     if (notify) {
       _listNotifier.value = _lastFiltered;
       _archivedNotifier.value = _archivedCount;
-      _countsNotifier.value = ChatFilterLogic.counts(
-        visible.map((c) => (
-          unread: unreadOf(c),
-          registered: registeredOf(c),
-        )),
+      _countsNotifier.value = ChatFilterLogic.countsWithFriends(
+        visible.map(
+          (c) => (
+            unread: unreadOf(c),
+            registered: registeredOf(c),
+            friend: friendOf(c),
+          ),
+        ),
       );
     }
   }
@@ -567,14 +624,18 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
     // query, tab arsip, atau peta nama live). Rebuild lain (tema dsb.)
     // tidak lagi mengurutkan ulang list.
     final queryChanged = effectiveQuery != _lastQueryUsed;
-    final liveChanged = !_sameStatusMap(statusMap, _statusMap) ||
+    final liveChanged =
+        !_sameStatusMap(statusMap, _statusMap) ||
         !_sameStatusMap(liveNameMap, _nameMap);
+    final currentFriends = context.read<SocialProvider>().friends;
+    final friendsChanged = !setEquals(currentFriends, _friendSet);
     if (_lastChats.isNotEmpty &&
-        (_recomputeDirty || queryChanged || liveChanged)) {
+        (_recomputeDirty || queryChanged || liveChanged || friendsChanged)) {
       _recomputeDirty = false;
       _lastQueryUsed = effectiveQuery;
       _statusMap = Map.of(statusMap);
       _nameMap = Map.of(liveNameMap);
+      _friendSet = Set.of(currentFriends);
       _recomputeFiltered(
         myUid: auth.uid ?? '',
         query: effectiveQuery,
@@ -589,569 +650,767 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
         if (!didPop) _clearSelection();
       },
       child: Scaffold(
-      backgroundColor: AppTheme.bgScreen,
-      appBar: widget.embedded
-          ? null
-          : _selectionMode
-              ? AppBar(
-                  leading: IconButton(
-                    tooltip: s.btnCancel,
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: _clearSelection,
-                  ),
-                  title: Text(s.selectedCount(_selected.length)),
-                  actions: _selectionActions(auth.uid!, s),
-                )
-              : AppBar(title: Text(s.titlePrivateChat)),
-      body: Column(
-        children: [
-          // Mode embedded (tab Chat): bar seleksi gaya WA di dalam body.
-          if (_selectionMode && widget.embedded)
-            _selectionBar(auth.uid!, s),
-          // Baris arsip hanya rebuild saat jumlah arsip berubah.
-          ValueListenableBuilder<int>(
-            valueListenable: _archivedNotifier,
-            builder: (_, count, __) =>
-                count > 0 ? _archivedToggle(s, count) : const SizedBox.shrink(),
-          ),
-          // Filter daftar chat (Semua / Belum dibaca / Anon / Terdaftar) —
-          // hanya saat tab Pesan aktif & baris arsip tidak sedang dibuka.
-          if (!_showArchived) _chatFilterBar(s),
-          Expanded(
-            child: StreamBuilder<List<PrivateChatInfo>>(
-              stream: _stream,
-              initialData: _initial,
-              builder: (_, snap) {
-                if (snap.connectionState == ConnectionState.waiting &&
-                    snap.data == null) {
-                  // Loader tema saat stream belum memberi data pertama.
-                  return const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: AppTheme.primary,
+        backgroundColor: AppTheme.bgScreen,
+        appBar: widget.embedded
+            ? null
+            : _selectionMode
+            ? AppBar(
+                leading: IconButton(
+                  tooltip: s.btnCancel,
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: _clearSelection,
+                ),
+                title: Text(s.selectedCount(_selected.length)),
+                actions: _selectionActions(auth.uid!, s),
+              )
+            : AppBar(title: Text(s.titlePrivateChat)),
+        body: Column(
+          children: [
+            // Mode embedded (tab Chat): bar seleksi gaya WA di dalam body.
+            if (_selectionMode && widget.embedded) _selectionBar(auth.uid!, s),
+            // Baris arsip hanya rebuild saat jumlah arsip berubah.
+            ValueListenableBuilder<int>(
+              valueListenable: _archivedNotifier,
+              builder: (_, count, __) => count > 0
+                  ? _archivedToggle(s, count)
+                  : const SizedBox.shrink(),
+            ),
+            // Filter daftar chat (Semua / Belum dibaca / Anon / Terdaftar) —
+            // hanya saat tab Pesan aktif & baris arsip tidak sedang dibuka.
+            if (!_showArchived) _chatFilterBar(s),
+            Expanded(
+              child: StreamBuilder<List<PrivateChatInfo>>(
+                stream: _stream,
+                initialData: _initial,
+                builder: (_, snap) {
+                  if (snap.connectionState == ConnectionState.waiting &&
+                      snap.data == null) {
+                    // Loader tema saat stream belum memberi data pertama.
+                    return const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: AppTheme.primary,
+                        ),
                       ),
-                    ),
-                  );
-                }
-                final chats = (snap.data ?? []).toList();
-                // Data berubah → tandai perlu recompute. Dulu ini memicu
-                // setState() post-frame (build KEDUA di frame pertama tab);
-                // sekarang cukup menandai dirty + recompute di build().
-                if (_lastChats.length != chats.length ||
-                    (chats.isNotEmpty && _lastChats != chats)) {
-                  _lastChats = chats;
-                  _recomputeDirty = true;
-                  _warmTopChats(chats);
-                  // Reset page jika data berubah total
-                  if (chats.length != _lastTotal) {
-                    _lastTotal = chats.length;
-                    _page = 1;
-                    _pageNotifier.value = 1;
+                    );
                   }
-                }
-                // ── RECOMPUTE SINKRON (fix kedip "kosong" 1 frame) ──
-                // Dulu recompute baru jalan di build BERIKUTNYA (lewat blok
-                // `_recomputeDirty` di atas build()). Akibatnya di frame
-                // pertama setelah data tiba, `_listNotifier.value` masih []
-                // → user melihat EmptyStateView ("belum ada chat") kedip
-                // walau data SUDAH ada, baru list muncul frame berikutnya.
-                // `_recomputeFiltered` sinkron & murah (≤50 chat), jadi
-                // jalankan langsung di sini — list tampil di frame yang sama.
-                if (_recomputeDirty) {
-                  _recomputeDirty = false;
-                  _lastQueryUsed = effectiveQuery;
-                  _statusMap = Map.of(statusMap);
-                  _nameMap = Map.of(liveNameMap);
-                  _recomputeFiltered(
-                    myUid: auth.uid ?? '',
-                    query: effectiveQuery,
-                    liveNameMap: liveNameMap,
-                  );
-                }
-                // List terlihat: hanya rebuild bagian ini saat data berganti.
-                final filtered = _listNotifier.value;
-                if (filtered.isEmpty) {
-                  final searching = effectiveQuery.isNotEmpty;
-                  return EmptyStateView(
-                    icon: searching
-                        ? Icons.search_off_rounded
-                        : Icons.chat_bubble_outline_rounded,
-                    title: searching
-                        ? s.searchNoResult
-                        : s.noPrivateChats,
-                    hint: searching ? '' : s.noPrivateChatsHint,
-                  );
-                }
-                // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus.
-                // Paginasi lewat notifier: scroll tidak rebuild AppBar dkk.
-                final page = _pageNotifier.value;
-                final paged = filtered.take(page * _pageSize).toList();
-                final hasMore = paged.length < filtered.length;
-                return ListView.builder(
-                  controller: _scrollCtrl,
-                  padding: EdgeInsets.fromLTRB(
-                    10,
-                    10,
-                    10,
-                    MediaQuery.of(context).padding.bottom + 16,
-                  ),
-                  itemCount: paged.length + (hasMore ? 1 : 0),
-                  itemBuilder: (_, i) {
-                    if (i >= paged.length) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: CircularProgressIndicator(
-                            color: AppTheme.primary,
-                            strokeWidth: 2,
+                  final chats = (snap.data ?? []).toList();
+                  // Data berubah → tandai perlu recompute. Dulu ini memicu
+                  // setState() post-frame (build KEDUA di frame pertama tab);
+                  // sekarang cukup menandai dirty + recompute di build().
+                  if (_lastChats.length != chats.length ||
+                      (chats.isNotEmpty && _lastChats != chats)) {
+                    _lastChats = chats;
+                    _recomputeDirty = true;
+                    _warmTopChats(chats);
+                    // Reset page jika data berubah total
+                    if (chats.length != _lastTotal) {
+                      _lastTotal = chats.length;
+                      _page = 1;
+                      _pageNotifier.value = 1;
+                    }
+                  }
+                  // ── RECOMPUTE SINKRON (fix kedip "kosong" 1 frame) ──
+                  // Dulu recompute baru jalan di build BERIKUTNYA (lewat blok
+                  // `_recomputeDirty` di atas build()). Akibatnya di frame
+                  // pertama setelah data tiba, `_listNotifier.value` masih []
+                  // → user melihat EmptyStateView ("belum ada chat") kedip
+                  // walau data SUDAH ada, baru list muncul frame berikutnya.
+                  // `_recomputeFiltered` sinkron & murah (≤50 chat), jadi
+                  // jalankan langsung di sini — list tampil di frame yang sama.
+                  if (_recomputeDirty) {
+                    _recomputeDirty = false;
+                    _lastQueryUsed = effectiveQuery;
+                    _statusMap = Map.of(statusMap);
+                    _nameMap = Map.of(liveNameMap);
+                    _recomputeFiltered(
+                      myUid: auth.uid ?? '',
+                      query: effectiveQuery,
+                      liveNameMap: liveNameMap,
+                    );
+                  }
+                  // List terlihat: hanya rebuild bagian ini saat data berganti.
+                  final filtered = _listNotifier.value;
+                  if (filtered.isEmpty) {
+                    final searching = effectiveQuery.isNotEmpty;
+                    return EmptyStateView(
+                      icon: searching
+                          ? Icons.search_off_rounded
+                          : Icons.chat_bubble_outline_rounded,
+                      title: searching ? s.searchNoResult : s.noPrivateChats,
+                      hint: searching ? '' : s.noPrivateChatsHint,
+                    );
+                  }
+                  // Tampilkan semua chat — yang diblokir tetap tampil dengan tanda khusus.
+                  // Paginasi lewat notifier: scroll tidak rebuild AppBar dkk.
+                  final page = _pageNotifier.value;
+                  final paged = filtered.take(page * _pageSize).toList();
+                  final hasMore = paged.length < filtered.length;
+                  return ListView.builder(
+                    controller: _scrollCtrl,
+                    padding: EdgeInsets.fromLTRB(
+                      10,
+                      10,
+                      10,
+                      MediaQuery.of(context).padding.bottom + 16,
+                    ),
+                    itemCount: paged.length + (hasMore ? 1 : 0),
+                    itemBuilder: (_, i) {
+                      if (i >= paged.length) {
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: CircularProgressIndicator(
+                              color: AppTheme.primary,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        );
+                      }
+                      final chat = paged[i];
+                      final otherUid = chat.participants.firstWhere(
+                        (p) => p != auth.uid,
+                        orElse: () => '',
+                      );
+                      final otherName =
+                          liveNameMap[otherUid] ??
+                          chat.participantNames[otherUid] ??
+                          'Anon';
+                      final otherGender =
+                          chat.participantGenders[otherUid] ?? '';
+                      final unread = chat.unreadCounts[auth.uid] ?? 0;
+                      final isBlocked = blocked.contains(otherUid);
+
+                      final isSelected = _selected.contains(chat.chatId);
+                      final isPinned = chat.isPinnedFor(auth.uid ?? '');
+                      // RepaintBoundary per kartu — satu kartu berubah
+                      // (badge/centang) tidak repaint seluruh list.
+                      return RepaintBoundary(
+                        // AppGestureDetector: tahan 320ms langsung masuk mode
+                        // seleksi (bukan 500ms default Flutter).
+                        child: AppGestureDetector(
+                          // Tahan = mulai seleksi (gaya WhatsApp), ketuk = tambah/kurangi.
+                          onLongPress: () {
+                            if (!_selectionMode) _toggleSelect(chat.chatId);
+                          },
+                          child: Dismissible(
+                            key: ValueKey(chat.chatId),
+                            direction: DismissDirection.horizontal,
+                            background: Container(
+                              alignment: Alignment.centerLeft,
+                              padding: EdgeInsets.only(left: 20),
+                              margin: EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    isPinned
+                                        ? Icons.push_pin_outlined
+                                        : Icons.push_pin,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    isPinned ? s.btnUnpin : s.btnPin,
+                                    style: AppText.caption.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            secondaryBackground: Container(
+                              alignment: Alignment.centerRight,
+                              padding: EdgeInsets.only(right: 20),
+                              margin: EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.danger,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    s.btnDelete,
+                                    style: AppText.caption.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            confirmDismiss: (direction) async {
+                              if (direction == DismissDirection.startToEnd) {
+                                final myUid = auth.uid;
+                                final ok = await context
+                                    .read<ChatProvider>()
+                                    .pinChat(
+                                      chat.chatId,
+                                      !isPinned,
+                                      myUid: myUid,
+                                    )
+                                    .then((_) => true)
+                                    .catchError((_) => false);
+                                if (ok && mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isPinned ? s.msgUnpinned : s.msgPinned,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return false;
+                              }
+                              return await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      backgroundColor: AppTheme.bgCard,
+                                      title: Text(
+                                        s.btnDeleteChat,
+                                        style: TextStyle(
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                      content: Text(
+                                        s.deleteChatConfirm,
+                                        style: TextStyle(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(ctx).pop(false),
+                                          child: Text(
+                                            context
+                                                .read<LocaleProvider>()
+                                                .s
+                                                .btnCancel,
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(ctx).pop(true),
+                                          child: Text(
+                                            s.btnDeleteChat,
+                                            style: const TextStyle(
+                                              color: AppTheme.danger,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ) ??
+                                  false;
+                            },
+                            onDismissed: (_) async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              await _deleteChat(auth.uid!, chat.chatId);
+                              if (mounted) {
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text(s.deleteChatSuccess)),
+                                );
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              margin: EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppTheme.primary.withValues(
+                                        alpha: AppTheme.isDark ? 0.15 : 0.06,
+                                      )
+                                    : isBlocked
+                                    ? AppTheme.bgCard.withValues(alpha: 0.5)
+                                    : AppTheme.bgCard,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppTheme.primary.withValues(alpha: 0.4)
+                                      : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(
+                                      alpha: isSelected ? 0.08 : 0.05,
+                                    ),
+                                    blurRadius: isSelected ? 12 : 8,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: _selectionMode
+                                      ? () => _toggleSelect(chat.chatId)
+                                      : () {
+                                          // Prefetch pesan ke memori sebelum push →
+                                          // buka chat instant (tanpa loading pesan).
+                                          context
+                                              .read<ChatProvider>()
+                                              .prefetchPrivateChat(chat.chatId);
+                                          Navigator.push(
+                                            context,
+                                            PageRouteBuilder(
+                                              transitionDuration:
+                                                  const Duration(
+                                                    milliseconds: 150,
+                                                  ),
+                                              reverseTransitionDuration:
+                                                  const Duration(
+                                                    milliseconds: 120,
+                                                  ),
+                                              settings: RouteSettings(
+                                                name: privateChatRoute(
+                                                  chat.chatId,
+                                                ),
+                                              ),
+                                              pageBuilder: (_, __, ___) => PrivateChatScreen(
+                                                chatId: chat.chatId,
+                                                otherName: otherName,
+                                                otherUid: otherUid,
+                                                otherGender:
+                                                    chat.participantGenders[otherUid] ??
+                                                    '',
+                                                otherCountry:
+                                                    chat.participantLocations[otherUid] ??
+                                                    '',
+                                                otherAge:
+                                                    chat.participantAges[otherUid] ??
+                                                    0,
+                                                otherRegistered:
+                                                    chat.participantRegistered[otherUid] ==
+                                                    true,
+                                              ),
+                                              transitionsBuilder:
+                                                  (_, animation, __, child) {
+                                                    final curved =
+                                                        CurvedAnimation(
+                                                          parent: animation,
+                                                          curve: Curves
+                                                              .easeOutCubic,
+                                                          reverseCurve: Curves
+                                                              .easeInCubic,
+                                                        );
+                                                    return SlideTransition(
+                                                      position: Tween<Offset>(
+                                                        begin: const Offset(
+                                                          1,
+                                                          0,
+                                                        ),
+                                                        end: Offset.zero,
+                                                      ).animate(curved),
+                                                      child: child,
+                                                    );
+                                                  },
+                                            ),
+                                          );
+                                        },
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        ProfileAvatar(
+                                          uid: otherUid,
+                                          name: otherName,
+                                          size: 44,
+                                          borderRadius: 0,
+                                          borderColor: isBlocked
+                                              ? null
+                                              : (otherGender == 'male'
+                                                    ? AppTheme.male
+                                                    : otherGender == 'female'
+                                                    ? AppTheme.female
+                                                    : AppTheme.accent),
+                                          bgColor: isBlocked
+                                              ? AppTheme.avatarBgBlocked
+                                              : AppTheme.avatarBg,
+                                          textColor: isBlocked
+                                              ? AppTheme.textSecondary
+                                              : AppTheme.textPrimary,
+                                          badge: isBlocked
+                                              ? Container(
+                                                  padding: EdgeInsets.all(2),
+                                                  decoration: BoxDecoration(
+                                                    color: AppTheme.danger,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.block,
+                                                    size: 10,
+                                                    color: Colors.white,
+                                                  ),
+                                                )
+                                              : Container(
+                                                  width: 11,
+                                                  height: 11,
+                                                  decoration: BoxDecoration(
+                                                    color: AppTheme.statusColor(
+                                                      statusMap[otherUid] ??
+                                                          'offline',
+                                                    ),
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(
+                                                      color: Colors.white,
+                                                      width: 1.5,
+                                                    ),
+                                                  ),
+                                                ),
+                                        ),
+                                        SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Flexible(
+                                                          child: Text(
+                                                            otherName,
+                                                            style: AppText
+                                                                .bodyStrong
+                                                                .copyWith(
+                                                                  color:
+                                                                      isBlocked
+                                                                      ? AppTheme
+                                                                            .textSecondary
+                                                                      : AppTheme
+                                                                            .textPrimary,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        if (isPinned) ...[
+                                                          SizedBox(width: 3),
+                                                          Icon(
+                                                            Icons.push_pin,
+                                                            size: 14,
+                                                            color: AppTheme
+                                                                .primary,
+                                                          ),
+                                                        ],
+                                                        if (chat.participantRegistered[otherUid] ==
+                                                            true) ...[
+                                                          SizedBox(width: 3),
+                                                          Icon(
+                                                            Icons.verified,
+                                                            size: 14,
+                                                            color: Color(
+                                                              0xFF4A90E2,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  if (isBlocked)
+                                                    Container(
+                                                      padding:
+                                                          EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: AppTheme.danger
+                                                            .withValues(
+                                                              alpha: 0.15,
+                                                            ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              6,
+                                                            ),
+                                                      ),
+                                                      child: Text(
+                                                        s.msgBlocked
+                                                            .split(',')
+                                                            .first,
+                                                        style: AppText.micro
+                                                            .copyWith(
+                                                              color: AppTheme
+                                                                  .danger,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                              SizedBox(height: 4),
+                                              // #5: baris preview (centang + unread) punya layer repaint sendiri -
+                                              // badge/centang berubah sering, tanpa ini seluruh kartu ikut repaint.
+                                              RepaintBoundary(
+                                                child: Builder(
+                                                  builder: (_) {
+                                                    final otherStatus =
+                                                        statusMap[otherUid] ??
+                                                        'offline';
+                                                    final isOnline =
+                                                        otherStatus == 'online';
+                                                    final profile =
+                                                        _chatSubtitle(
+                                                          chat,
+                                                          auth.uid!,
+                                                          s,
+                                                        );
+                                                    final hasMessage = chat
+                                                        .lastMessage
+                                                        .isNotEmpty;
+                                                    final preview = hasMessage
+                                                        ? chat.lastMessage
+                                                        : s.noMessages;
+                                                    final hasUnread =
+                                                        unread > 0;
+                                                    final myUid =
+                                                        auth.uid ?? '';
+                                                    final otherRead = chat
+                                                        .lastReadAt[otherUid];
+                                                    final isLastFromMe =
+                                                        hasMessage &&
+                                                        chat
+                                                            .lastSenderId
+                                                            .isNotEmpty &&
+                                                        chat.lastSenderId ==
+                                                            myUid;
+                                                    final isLastRead =
+                                                        isLastFromMe &&
+                                                        otherRead != null &&
+                                                        !chat.lastMessageAt
+                                                            .isAfter(otherRead);
+                                                    return Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        if (isOnline ||
+                                                            profile
+                                                                .isNotEmpty) ...[
+                                                          Text(
+                                                            isOnline
+                                                                ? s.chatOnlineSubtitle
+                                                                : profile,
+                                                            style: AppText.bodySmall.copyWith(
+                                                              color: isOnline
+                                                                  ? AppTheme
+                                                                        .online
+                                                                  : AppTheme
+                                                                        .textSecondary,
+                                                              fontWeight:
+                                                                  isOnline
+                                                                  ? FontWeight
+                                                                        .w600
+                                                                  : FontWeight
+                                                                        .w400,
+                                                            ),
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                          const SizedBox(
+                                                            height: 4,
+                                                          ),
+                                                        ],
+                                                        Row(
+                                                          children: [
+                                                            if (isLastFromMe) ...[
+                                                              Icon(
+                                                                Icons.done_all,
+                                                                size: 14,
+                                                                color:
+                                                                    isLastRead
+                                                                    ? AppTheme
+                                                                          .primary
+                                                                    : AppTheme
+                                                                          .textSecondary,
+                                                              ),
+                                                              const SizedBox(
+                                                                width: 4,
+                                                              ),
+                                                            ],
+                                                            Expanded(
+                                                              child: Text(
+                                                                preview,
+                                                                style: AppText.bodySmall.copyWith(
+                                                                  color:
+                                                                      hasUnread
+                                                                      ? AppTheme
+                                                                            .textPrimary
+                                                                      : AppTheme
+                                                                            .textSecondary,
+                                                                  fontWeight:
+                                                                      hasUnread
+                                                                      ? FontWeight
+                                                                            .w600
+                                                                      : FontWeight
+                                                                            .w400,
+                                                                ),
+                                                                maxLines: 1,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        if (isBlocked)
+                                          GestureDetector(
+                                            onTap: () async {
+                                              await context
+                                                  .read<ChatProvider>()
+                                                  .unblockUser(
+                                                    auth.uid!,
+                                                    otherUid,
+                                                  );
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      s.unblockSuccess,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            child: Container(
+                                              padding: EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: AppTheme.primary,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                s.btnUnblock,
+                                                style: AppText.caption.copyWith(
+                                                  color: AppTheme.primary,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        else
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                _formatTime(
+                                                  chat.lastMessageAt,
+                                                  s,
+                                                ),
+                                                style: AppText.bodySmall
+                                                    .copyWith(
+                                                      color: AppTheme
+                                                          .textSecondary,
+                                                    ),
+                                              ),
+                                              // Tanda bisu gaya WA di samping jam.
+                                              if (chat.isMutedFor(
+                                                auth.uid ?? '',
+                                              )) ...[
+                                                const SizedBox(height: 4),
+                                                Icon(
+                                                  Icons.notifications_off,
+                                                  size: 14,
+                                                  color: AppTheme.textSecondary,
+                                                ),
+                                              ],
+                                              if (unread > 0) ...[
+                                                const SizedBox(height: 4),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: AppTheme.primary,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          10,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    '$unread',
+                                                    style: AppText.caption
+                                                        .copyWith(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
+                                              if (otherUid.isNotEmpty &&
+                                                  chat.participantRegistered[otherUid] ==
+                                                      true) ...[
+                                                const SizedBox(height: 6),
+                                                _FriendButton(
+                                                  otherUid: otherUid,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       );
-                    }
-                    final chat = paged[i];
-                    final otherUid = chat.participants.firstWhere(
-                      (p) => p != auth.uid,
-                      orElse: () => '',
-                    );
-                    final otherName = liveNameMap[otherUid] ?? chat.participantNames[otherUid] ?? 'Anon';
-                    final otherGender = chat.participantGenders[otherUid] ?? '';
-                    final unread = chat.unreadCounts[auth.uid] ?? 0;
-                    final isBlocked = blocked.contains(otherUid);
-
-                    final isSelected = _selected.contains(chat.chatId);
-                    final isPinned = chat.isPinnedFor(auth.uid ?? '');
-                    // RepaintBoundary per kartu — satu kartu berubah
-                    // (badge/centang) tidak repaint seluruh list.
-                    return RepaintBoundary(
-                      // AppGestureDetector: tahan 320ms langsung masuk mode
-                      // seleksi (bukan 500ms default Flutter).
-                      child: AppGestureDetector(
-                      // Tahan = mulai seleksi (gaya WhatsApp), ketuk = tambah/kurangi.
-                      onLongPress: () {
-                        if (!_selectionMode) _toggleSelect(chat.chatId);
-                      },
-                      child: Dismissible(
-                      key: ValueKey(chat.chatId),
-                      direction: DismissDirection.horizontal,
-                      background: Container(
-                        alignment: Alignment.centerLeft,
-                        padding: EdgeInsets.only(left: 20),
-                        margin: EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              isPinned ? Icons.push_pin_outlined : Icons.push_pin,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              isPinned ? s.btnUnpin : s.btnPin,
-                              style: AppText.caption.copyWith(color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                      secondaryBackground: Container(
-                        alignment: Alignment.centerRight,
-                        padding: EdgeInsets.only(right: 20),
-                        margin: EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.danger,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.delete_outline, color: Colors.white, size: 24),
-                            SizedBox(height: 4),
-                            Text(s.btnDelete, style: AppText.caption.copyWith(color: Colors.white)),
-                          ],
-                        ),
-                      ),
-                      confirmDismiss: (direction) async {
-                        if (direction == DismissDirection.startToEnd) {
-                          final myUid = auth.uid;
-                          final ok = await context.read<ChatProvider>().pinChat(chat.chatId, !isPinned, myUid: myUid).then((_) => true).catchError((_) => false);
-                          if (ok && mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isPinned ? s.msgUnpinned : s.msgPinned)));
-                          }
-                          return false;
-                        }
-                        return await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                backgroundColor: AppTheme.bgCard,
-                                title: Text(s.btnDeleteChat, style: TextStyle(color: AppTheme.textPrimary)),
-                                content: Text(s.deleteChatConfirm, style: TextStyle(color: AppTheme.textSecondary)),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(context.read<LocaleProvider>().s.btnCancel)),
-                                  TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(s.btnDeleteChat, style: const TextStyle(color: AppTheme.danger))),
-                                ],
-                              ),
-                            ) ??
-                            false;
-                      },
-                      onDismissed: (_) async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        await _deleteChat(auth.uid!, chat.chatId);
-                        if (mounted) {
-                          messenger.showSnackBar(SnackBar(content: Text(s.deleteChatSuccess)));
-                        }
-                      },
-                      child: AnimatedContainer(
-                        duration: Duration(milliseconds: 200),
-                        curve: Curves.easeOutCubic,
-                        margin: EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppTheme.primary.withValues(alpha: AppTheme.isDark ? 0.15 : 0.06)
-                              : isBlocked
-                                  ? AppTheme.bgCard.withValues(alpha: 0.5)
-                                  : AppTheme.bgCard,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: isSelected ? AppTheme.primary.withValues(alpha: 0.4) : Colors.transparent, width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: isSelected ? 0.08 : 0.05),
-                              blurRadius: isSelected ? 12 : 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: _selectionMode ? () => _toggleSelect(chat.chatId) : () {
-                              // Prefetch pesan ke memori sebelum push →
-                              // buka chat instant (tanpa loading pesan).
-                              context.read<ChatProvider>().prefetchPrivateChat(chat.chatId);
-                              Navigator.push(
-                              context,
-                              PageRouteBuilder(
-                                transitionDuration: const Duration(
-                                  milliseconds: 150,
-                                ),
-                                reverseTransitionDuration: const Duration(
-                                  milliseconds: 120,
-                                ),
-                                settings: RouteSettings(
-                                  name: privateChatRoute(chat.chatId),
-                                ),
-                                pageBuilder: (_, __, ___) => PrivateChatScreen(
-                                  chatId: chat.chatId,
-                                  otherName: otherName,
-                                  otherUid: otherUid,
-                                  otherGender:
-                                      chat.participantGenders[otherUid] ?? '',
-                                  otherCountry:
-                                      chat.participantLocations[otherUid] ?? '',
-                                  otherAge: chat.participantAges[otherUid] ?? 0,
-                                  otherRegistered:
-                                      chat.participantRegistered[otherUid] ==
-                                      true,
-                                ),
-                                transitionsBuilder: (_, animation, __, child) {
-                                  final curved = CurvedAnimation(
-                                    parent: animation,
-                                    curve: Curves.easeOutCubic,
-                                    reverseCurve: Curves.easeInCubic,
-                                  );
-                                  return SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(1, 0),
-                                      end: Offset.zero,
-                                    ).animate(curved),
-                                    child: child,
-                                  );
-                                },
-                              ),
-                            );
-                            },
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              child: Row(
-                                children: [
-                                   ProfileAvatar(
-                                    uid: otherUid,
-                                    name: otherName,
-                                    size: 44,
-                                    borderRadius: 0,
-                                    borderColor: isBlocked
-                                        ? null
-                                        : (otherGender == 'male'
-                                            ? AppTheme.male
-                                            : otherGender == 'female'
-                                                ? AppTheme.female
-                                                : AppTheme.accent),
-                                    bgColor: isBlocked
-                                        ? AppTheme.avatarBgBlocked
-                                        : AppTheme.avatarBg,
-                                    textColor: isBlocked
-                                        ? AppTheme.textSecondary
-                                        : AppTheme.textPrimary,
-                                    badge: isBlocked
-                                        ? Container(
-                                            padding: EdgeInsets.all(2),
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.danger,
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Icon(
-                                              Icons.block,
-                                              size: 10,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : Container(
-                                            width: 11,
-                                            height: 11,
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.statusColor(
-                                                statusMap[otherUid] ??
-                                                    'offline',
-                                              ),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color: Colors.white,
-                                                width: 1.5,
-                                              ),
-                                            ),
-                                          ),
-                                  ),
-                                  SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Flexible(
-                                                    child: Text(
-                                                      otherName,
-                                                      style: AppText.bodyStrong
-                                                          .copyWith(
-                                                            color: isBlocked
-                                                                ? AppTheme
-                                                                      .textSecondary
-                                                                : AppTheme
-                                                                      .textPrimary,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                  if (isPinned) ...[
-                                                    SizedBox(width: 3),
-                                                    Icon(Icons.push_pin, size: 14, color: AppTheme.primary),
-                                                  ],
-                                                  if (chat.participantRegistered[otherUid] ==
-                                                      true) ...[
-                                                    SizedBox(width: 3),
-                                                    Icon(
-                                                      Icons.verified,
-                                                      size: 14,
-                                                      color: Color(0xFF4A90E2),
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                            ),
-                                            if (isBlocked)
-                                              Container(
-                                                padding: EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: AppTheme.danger
-                                                      .withValues(alpha: 0.15),
-                                                  borderRadius:
-                                                      BorderRadius.circular(6),
-                                                ),
-                                                child: Text(
-                                                  s.msgBlocked.split(',').first,
-                                                  style: AppText.micro.copyWith(
-                                                    color: AppTheme.danger,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        SizedBox(height: 4),
-                                        // #5: baris preview (centang + unread) punya layer repaint sendiri -
-                                        // badge/centang berubah sering, tanpa ini seluruh kartu ikut repaint.
-                                        RepaintBoundary(
-                                        child: Builder(builder: (_) {
-                                          final otherStatus = statusMap[otherUid] ?? 'offline';
-                                          final isOnline = otherStatus == 'online';
-                                          final profile = _chatSubtitle(chat, auth.uid!, s);
-                                          final hasMessage = chat.lastMessage.isNotEmpty;
-                                          final preview = hasMessage ? chat.lastMessage : s.noMessages;
-                                          final hasUnread = unread > 0;
-                                          final myUid = auth.uid ?? '';
-                                          final otherRead = chat.lastReadAt[otherUid];
-                                          final isLastFromMe = hasMessage && chat.lastSenderId.isNotEmpty && chat.lastSenderId == myUid;
-                                          final isLastRead = isLastFromMe && otherRead != null && !chat.lastMessageAt.isAfter(otherRead);
-                                          return Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              if (isOnline || profile.isNotEmpty) ...[
-                                                Text(
-                                                  isOnline ? s.chatOnlineSubtitle : profile,
-                                                  style: AppText.bodySmall.copyWith(color: isOnline ? AppTheme.online : AppTheme.textSecondary, fontWeight: isOnline ? FontWeight.w600 : FontWeight.w400),
-                                                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                ),
-                                                const SizedBox(height: 4),
-                                              ],
-                                              Row(
-                                                children: [
-                                                  if (isLastFromMe) ...[
-                                                    Icon(
-                                                      Icons.done_all,
-                                                      size: 14,
-                                                      color: isLastRead ? AppTheme.primary : AppTheme.textSecondary,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                  ],
-                                                  Expanded(
-                                                    child: Text(
-                                                      preview,
-                                                      style: AppText.bodySmall.copyWith(
-                                                        color: hasUnread ? AppTheme.textPrimary : AppTheme.textSecondary,
-                                                        fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
-                                                      ),
-                                                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          );
-                                        }),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  if (isBlocked)
-                                    GestureDetector(
-                                      onTap: () async {
-                                        await context
-                                            .read<ChatProvider>()
-                                            .unblockUser(auth.uid!, otherUid);
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(s.unblockSuccess),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: AppTheme.primary,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          s.btnUnblock,
-                                          style: AppText.caption.copyWith(
-                                            color: AppTheme.primary,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  else
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          _formatTime(chat.lastMessageAt, s),
-                                          style: AppText.bodySmall.copyWith(
-                                            color: AppTheme.textSecondary,
-                                          ),
-                                        ),
-                                        // Tanda bisu gaya WA di samping jam.
-                                        if (chat.isMutedFor(auth.uid ?? '')) ...[
-                                          const SizedBox(height: 4),
-                                          Icon(
-                                            Icons.notifications_off,
-                                            size: 14,
-                                            color: AppTheme.textSecondary,
-                                          ),
-                                        ],
-                                        if (unread > 0) ...[
-                                          const SizedBox(height: 4),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.primary,
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: Text(
-                                              '$unread',
-                                              style: AppText.caption.copyWith(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                        if (otherUid.isNotEmpty &&
-                                            chat.participantRegistered[otherUid] ==
-                                                true) ...[
-                                          const SizedBox(height: 6),
-                                          _FriendButton(otherUid: otherUid),
-                                        ],
-                                      ],
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      ),
-                      ),
-                    );
-                  },
-                );
-              },
+                    },
+                  );
+                },
+              ),
             ),
-          ),
           ],
         ),
       ),
@@ -1257,11 +1516,7 @@ class _FriendButtonState extends State<_FriendButton> {
                       color: AppTheme.primary,
                     ),
                   )
-              : Icon(
-                  icon,
-                  size: 20,
-                  color: Colors.white,
-                ),
+                : Icon(icon, size: 20, color: Colors.white),
           ),
         ),
       ),

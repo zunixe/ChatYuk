@@ -23,6 +23,7 @@ class UserModel {
   final int subscriptionPrice;
   final int friendsCount;
   final String email;
+  final String about;
 
   UserModel({
     required this.uid,
@@ -47,6 +48,7 @@ class UserModel {
     this.subscriptionPrice = 0,
     this.friendsCount = 0,
     this.email = '',
+    this.about = '',
   });
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -75,6 +77,7 @@ class UserModel {
       subscriptionPrice: (map['subscriptionPrice'] as num?)?.toInt() ?? 0,
       friendsCount: (map['friendsCount'] as num?)?.toInt() ?? 0,
       email: map['email'] ?? '',
+      about: map['about'] ?? '',
     );
   }
 
@@ -95,6 +98,7 @@ class UserModel {
       'hashtags': hashtags,
       'points': points,
       'email': email,
+      'about': about,
     };
   }
 
@@ -118,6 +122,7 @@ class UserModel {
     int? subscriptionPrice,
     int? friendsCount,
     String? email,
+    String? about,
   }) {
     return UserModel(
       uid: uid,
@@ -142,6 +147,7 @@ class UserModel {
       subscriptionPrice: subscriptionPrice ?? this.subscriptionPrice,
       friendsCount: friendsCount ?? this.friendsCount,
       email: email ?? this.email,
+      about: about ?? this.about,
     );
   }
 

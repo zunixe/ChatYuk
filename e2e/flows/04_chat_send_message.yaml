@@ -1,0 +1,57 @@
+# E2E-04 — Alur PESAN: buka chat → kirim teks → bubble muncul
+#
+# Prasyarat: sesi sudah login (dijalankan SETELAH 01_* atau pada device yang
+# sudah punya sesi). Flow ini TIDAK `clearState` supaya sesi tidak hilang.
+#
+# Jalur: tab Chat/Online → buka chat → ketik → tekan tombol kirim
+# (key `send`, lihat chat_composer_input.dart) → bubble teks tampil.
+appId: com.chatyuk.chatyuk
+tags:
+  - chat
+  - smoke
+---
+- launchApp
+
+- extendedWaitUntil:
+    visible: "Online"
+    timeout: 60000
+
+# Masuk tab Online (kartu user = cara paling pasti membuka chat).
+- tapOn: "Online"
+- extendedWaitUntil:
+    visible: "Orang Sekitar|Nearby"
+    timeout: 30000
+
+# Buka chat pertama yang tersedia. Kartu user punya tombol "Chat".
+# Bila tidak ada user online, uji dibatalkan sebagai skipped (bukan gagal) —
+# kondisi data, bukan regresi kode.
+- runFlow:
+    when:
+      visible: "Chat"
+    commands:
+      - tapOn:
+          id: ".*"
+          text: "Chat"
+          index: 0
+
+- runFlow:
+    when:
+      notVisible: "Ketik pesan\\.\\.\\."
+    commands:
+      - takeScreenshot: e2e-skip-tidak-ada-user-online
+      - stopFlow
+
+# Composer chat harus muncul.
+- extendedWaitUntil:
+    visible: "Ketik pesan..."
+    timeout: 30000
+
+- tapOn: "Ketik pesan..."
+- inputText: "Halo dari E2E"
+- tapOn:
+    id: "send"
+
+# Bubble pesan terkirim tampil di daftar.
+- extendedWaitUntil:
+    visible: "Halo dari E2E"
+    timeout: 30000

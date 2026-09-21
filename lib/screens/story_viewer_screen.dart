@@ -1,20 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
-import '../config/theme.dart';
-import '../models/story_model.dart';
-import '../providers/auth_provider.dart';
-import '../providers/storage_provider.dart';
-import '../providers/chat_provider.dart';
-import '../providers/locale_provider.dart';
-import '../providers/story_provider.dart';
-import '../core/cache/media_disk_cache.dart';
-import '../utils.dart';
-import '../widgets/story_text_overlay.dart';
-import 'private_chat_screen.dart';
+import '../../../config/strings.dart';
+import '../../../config/theme.dart';
+import '../../../models/story_model.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/chat_provider.dart';
+import '../../../providers/locale_provider.dart';
+import '../../../providers/storage_provider.dart';
+import '../../../providers/story_provider.dart';
+import '../../../core/cache/media_disk_cache.dart';
+import '../../../utils.dart';
+import '../../../widgets/story_text_overlay.dart';
 
 /// Cache RAM bytes slide (path → image) — bertahan antar slide/penonton
 /// selama sesi viewer supaya mundur/maju tidak download ulang.
@@ -25,6 +28,8 @@ final Map<String, Uint8List> _slideBytesCache = {};
 /// - Hold = pause. Tap kanan/kiri = next/prev slide. Swipe vertikal = tutup.
 /// - Horizontal PageView antar penonton (urutan tray).
 /// - Slide milik sendiri: tombol hapus + tombol daftar penonton.
+/// - Slide orang lain: foto SEUKURAN punya pembuat story (bisa digeser
+///   ke atas/bawah) + kolom balas, like, dan share DI DALAM foto.
 class StoryViewerScreen extends StatefulWidget {
   final List<StoryTrayItem> items;
   final int initialIndex;
@@ -40,27 +45,30 @@ class StoryViewerScreen extends StatefulWidget {
 }
 
 class _StoryViewerScreenState extends State<StoryViewerScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late PageController _pageCtrl;
   late int _person;
+  late AnimationController _progress;
   List<StorySlide> _slides = [];
   int _slide = 0;
   bool _loading = true;
   bool _paused = false;
-  Timer? _autoTimer;
   final Map<String, Uint8List?> _localImg = {};
+
   final _replyCtrl = TextEditingController();
   final _replyFocus = FocusNode();
   bool _sendingReply = false;
+  bool _sharingStory = false;
+  // Tokoh yang sudah dikirimi notifikasi "balasan terkirim" (sekali).
+  final Set<String> _replyNotified = {};
 
   // Slide yang benar-benar ditonton → dikirim SEKALI (bulk) saat keluar
   // viewer / ganti author. Dulu 1 RPC per slide.
   final List<String> _seenIds = [];
   final Set<String> _seenDedup = {};
-  // Sisa waktu slide saat app di-background — opsi A: lanjut dari sisa,
+  // Sisa waktu slide saat app di-background — lanjut dari sisa,
   // bukan mulai ulang 5 detik penuh.
   Duration? _remainingOnResume;
-  DateTime? _slideStartedAt;
 
   static const _slideDuration = Duration(seconds: 5);
 
@@ -70,13 +78,20 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     WidgetsBinding.instance.addObserver(this);
     // Nav bar Android opaque hitam selama viewer aktif — foto fullscreen
     // tidak tembus/transparan di area menu bawah.
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      systemNavigationBarColor: Colors.black,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
     _person = widget.initialIndex;
     _pageCtrl = PageController(initialPage: _person);
-    // Ketik balasan = auto-advance berhenti; selesai ketik = jalan lagi.
+    _progress = AnimationController(vsync: this, duration: _slideDuration);
+    _progress.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) _next();
+    });
+    // Balasan DI DALAM foto: ketik = auto-advance berhenti (tidak pindah
+    // slide saat sedang membalas).
     _replyFocus.addListener(() {
       if (_replyFocus.hasFocus) {
         _pause();
@@ -90,11 +105,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ));
-    _autoTimer?.cancel();
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
+    _progress.dispose();
     // Sisa slide yang belum terkirim (user keluar sebelum timer ganti
     // author) → kirim sekarang supaya ring tray tetap akurat.
     _flushSeen();
@@ -105,28 +122,29 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   /// App di-background → hentikan auto-advance (jangan tandai slide yang
-  /// tidak ditonton). Kembali → lanjut dari SISA waktu (opsi A).
+  /// tidak ditonton). Kembali → lanjut dari SISA waktu.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       final rem = _remainingOnResume;
       _remainingOnResume = null;
       if (rem != null && !_paused && _slides.isNotEmpty) {
-        _autoTimer?.cancel();
-        _autoTimer = Timer(rem, _next);
+        _startTimer(duration: rem);
       }
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
-      if (_autoTimer?.isActive == true) {
-        final elapsed = _slideStartedAt == null
-            ? _slideDuration
-            : DateTime.now().difference(_slideStartedAt!);
-        final rem = _slideDuration - elapsed;
-        _remainingOnResume =
-            rem.isNegative ? const Duration(milliseconds: 200) : rem;
+      if (_progress.isAnimating) {
+        final rem = Duration(
+          milliseconds:
+              (_progress.duration!.inMilliseconds * (1 - _progress.value))
+                  .round(),
+        );
+        _remainingOnResume = rem.isNegative
+            ? const Duration(milliseconds: 200)
+            : rem;
       }
-      _autoTimer?.cancel();
+      _progress.stop();
     }
   }
 
@@ -137,17 +155,17 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final author = _item.authorId;
     _seenIds.clear();
     _seenDedup.clear();
-    unawaited(
-      context.read<StoryProvider>().markSeenBulk(ids, author),
-    );
+    unawaited(context.read<StoryProvider>().markSeenBulk(ids, author));
   }
 
   StoryTrayItem get _item => widget.items[_person];
   bool get _own => _item.own;
   bool get _isAdmin => context.read<AuthProvider>().isRealAdmin;
+  StorySlide? get _current =>
+      (_slide >= 0 && _slide < _slides.length) ? _slides[_slide] : null;
 
   Future<void> _loadPerson() async {
-    _autoTimer?.cancel();
+    _progress.stop();
     // Ganti author → kirim slide yang sudah ditonton author sebelumnya
     // (bulk), lalu mulai kumpulan baru.
     _flushSeen();
@@ -173,27 +191,30 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   void _preload(List<StorySlide> slides) async {
     // Paralel (dulu sequential await — slide ke-N nunggu slide ke-1).
     await Future.wait(
-      slides.where((sl) => !_localImg.containsKey(sl.imagePath)).map(
-        (sl) async {
-          _localImg[sl.imagePath] = await _bytes(sl.imagePath);
-          if (mounted) setState(() {});
-        },
-      ),
+      slides.where((sl) => !_localImg.containsKey(sl.imagePath)).map((
+        sl,
+      ) async {
+        _localImg[sl.imagePath] = await _bytes(sl.imagePath);
+        if (mounted) setState(() {});
+      }),
     );
     // Retry sekali untuk slide yang gagal (network blip) — tanpa ini
     // slide gagal tampil HITAM permanen selama viewer dibuka.
     Future.delayed(const Duration(seconds: 3), () async {
       if (!mounted) return;
-      final missing =
-          _slides.where((sl) => _localImg[sl.imagePath] == null).toList();
+      final missing = _slides
+          .where((sl) => _localImg[sl.imagePath] == null)
+          .toList();
       if (missing.isEmpty) return;
-      await Future.wait(missing.map((sl) async {
-        final b = await _bytes(sl.imagePath);
-        if (b != null && b.isNotEmpty) {
-          _localImg[sl.imagePath] = b;
-          if (mounted) setState(() {});
-        }
-      }));
+      await Future.wait(
+        missing.map((sl) async {
+          final b = await _bytes(sl.imagePath);
+          if (b != null && b.isNotEmpty) {
+            _localImg[sl.imagePath] = b;
+            if (mounted) setState(() {});
+          }
+        }),
+      );
     });
   }
 
@@ -232,22 +253,29 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   void _startTimer({Duration? duration}) {
-    _autoTimer?.cancel();
+    _progress.stop();
     _paused = false;
-    _slideStartedAt = DateTime.now();
-    _autoTimer = Timer(duration ?? _slideDuration, _next);
+    _progress.duration = duration ?? _slideDuration;
+    _progress.forward(from: 0);
   }
 
   void _pause() {
     if (_paused) return;
     _paused = true;
-    _autoTimer?.cancel();
+    _progress.stop();
   }
 
   void _resume() {
     if (!_paused) return;
     _paused = false;
-    _startTimer();
+    final rem = Duration(
+      milliseconds: (_progress.duration!.inMilliseconds * (1 - _progress.value))
+          .round(),
+    );
+    _progress.duration = rem.isNegative || rem.inMilliseconds < 50
+        ? _slideDuration
+        : rem;
+    _progress.forward(from: 0);
   }
 
   void _next() {
@@ -337,8 +365,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
               s.btnDelete,
-              style: AppText.button
-                  .copyWith(color: AppTheme.danger),
+              style: AppText.button.copyWith(color: AppTheme.danger),
             ),
           ),
         ],
@@ -382,8 +409,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   s.storyViewersEmpty,
-                  style: AppText.bodySmall
-                      .copyWith(color: AppTheme.textSecondary),
+                  style: AppText.bodySmall.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
               )
             else
@@ -398,13 +426,18 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       leading: _viewerAvatar(v.avatar, v.nickname),
                       title: Text(v.nickname, style: AppText.bodyStrong),
                       subtitle: Text(
-                        formatRelativeTime(
-                          v.viewedAt.toLocal(),
-                          isId: s.isId,
+                        formatRelativeTime(v.viewedAt.toLocal(), isId: s.isId),
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
                         ),
-                        style: AppText.bodySmall
-                            .copyWith(color: AppTheme.textSecondary),
                       ),
+                      trailing: v.liked
+                          ? const Icon(
+                              Icons.favorite,
+                              size: 16,
+                              color: AppTheme.danger,
+                            )
+                          : null,
                     );
                   },
                 ),
@@ -456,12 +489,28 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     );
   }
 
+  /// Kotak foto — ukuran SAMA antara pembuat story & penonton (WYSIWYG).
+  Rect _storyRect(BuildContext ctx) {
+    final mq = MediaQuery.of(ctx);
+    // Koordinat ini harus identik dengan composer:
+    // AppBar 40 + top body 20 = 60, bawah body = padding + 68.
+    final top = mq.padding.top + 60;
+    // Composer menyembunyikan navigation bar, sehingga padding.bottom-nya
+    // efektif 0. Viewer harus memakai batas visual yang sama agar foto tidak
+    // berhenti lebih tinggi dari foto saat dibuat.
+    const bottom = 68.0;
+    final h = mq.size.height - top - bottom;
+    return Rect.fromLTWH(0, top, mq.size.width, h);
+  }
+
   Widget _buildPerson(int index) {
     if (index != _person) {
       // Halaman tetangga — render ringan (background saja).
       return Container(color: Colors.black);
     }
     final s = context.watch<LocaleProvider>().s;
+    final rect = _storyRect(context);
+    final showReply = !_own && !_loading && _slides.isNotEmpty;
     return GestureDetector(
       onTapDown: (_) => _pause(),
       onTapUp: (_) => _resume(),
@@ -475,34 +524,71 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Foto slide — owner TIDAK berubah (atas di bawah header,
-          // bawah di atas nav bar). Viewer: bawah di atas kolom balasan
-          // (tidak overlap), atas tetap di bawah header (tidak overlap).
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 60,
-            bottom:
-                MediaQuery.of(context).padding.bottom + (_own ? 10 : 68),
-            left: 0,
-            right: 0,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    )
-                  : _slides.isEmpty
-                      ? Center(
-                          child: Text(
-                            s.storyEmptyTray,
-                            style: AppText.body
-                                .copyWith(color: Colors.white54),
-                          ),
-                        )
-                      : _buildSlide(),
+          // ── Foto slide: kartu yang bisa digeser ke atas/bawah ──
+          Positioned.fromRect(
+            rect: rect,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragEnd: (d) {
+                if (d.primaryVelocity != null && d.primaryVelocity! > 300) {
+                  Navigator.pop(context);
+                }
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: _loading
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      )
+                    : _slides.isEmpty
+                    ? Center(
+                        child: Text(
+                          s.storyEmptyTray,
+                          style: AppText.body.copyWith(color: Colors.white54),
+                        ),
+                      )
+                    : _buildSlide(),
+              ),
             ),
           ),
 
-          // ── Progress segmented atas — DI BAWAH header nama/tombol.
+          // ── Kontrol (progress + zona tap + balasan) DI ATAS foto,
+          //    dibatasi tepat ke kotak foto supaya tidak menutupi
+          //    header/bawah dan foto tetap bisa digeser. ──
+          Positioned.fromRect(
+            rect: rect,
+            child: ClipRect(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Zona tap kanan/kiri — DI BAWAH baris tombol header
+                  // supaya tombol delete/close/penonton tetap bisa ditekan.
+                  if (!_loading && _slides.isNotEmpty) ...[
+                    Positioned.fill(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onTap: _prev,
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onTap: _next,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          // Progress berada tepat di bawah nama dan icon header.
           if (_slides.isNotEmpty)
             Positioned(
               top: MediaQuery.of(context).padding.top + 42,
@@ -513,54 +599,61 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 children: [
                   for (int i = 0; i < _slides.length; i++)
                     Expanded(
-                      child: i < _slides.length - 1
-                          ? Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: LinearProgressIndicator(
-                                value: i < _slide ? 1 : i == _slide ? 1 : 0,
-                                backgroundColor: Colors.white24,
-                                valueColor:
-                                    const AlwaysStoppedAnimation(Colors.white),
-                              ),
-                            )
-                          : LinearProgressIndicator(
-                              value: i < _slide ? 1 : i == _slide ? 1 : 0,
-                              backgroundColor: Colors.white24,
-                              valueColor:
-                                  const AlwaysStoppedAnimation(Colors.white),
-                            ),
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: i < _slides.length - 1 ? 4 : 0,
+                        ),
+                        child: i < _slide
+                            ? Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(1),
+                                ),
+                              )
+                            : i == _slide
+                            ? AnimatedBuilder(
+                                animation: _progress,
+                                builder: (_, __) => LinearProgressIndicator(
+                                  value: _progress.value,
+                                  backgroundColor: Colors.white24,
+                                  valueColor: const AlwaysStoppedAnimation(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : Container(color: Colors.white24),
+                      ),
                     ),
                 ],
               ),
             ),
 
-          // ── Zona tap kanan/kiri — DI BAWAH baris tombol header supaya
-          // tombol delete/close/penonton tetap bisa ditekan.
-          if (!_loading && _slides.isNotEmpty) ...[
-            Positioned.fill(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: _prev,
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: _next,
-                    ),
-                  ),
-                ],
+          // Comment tetap berada DI ATAS layer gambar sebagai overlay.
+          // Kotak fotonya tetap memakai ukuran pembuat story.
+          if (showReply)
+            Positioned.fromRect(
+              // Posisi normal tetap mengikuti gambar. Saat keyboard muncul,
+              // seluruh bar naik sebesar keyboard dikurangi ruang bawah
+              // normal composer (68px), agar berhenti 5px di atas keyboard.
+              rect: rect.translate(
+                0,
+                -((MediaQuery.of(context).viewInsets.bottom - 68).clamp(
+                  0.0,
+                  double.infinity,
+                )),
+              ),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 5),
+                  child: _replyBar(s),
+                ),
               ),
             ),
-          ],
 
           // ── Header: nama kiri + tombol kanan — TERPISAH via Stack
           // supaya X menempel TEPAT di ujung kanan layar (right: 0).
           if (_slides.isNotEmpty) ...[
-            // Nama + waktu — kiri (di atas garis progress)
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
               left: 12,
@@ -571,11 +664,16 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     child: Text(
                       _own ? s.storyMine : _item.authorName,
                       style: AppText.bodyStrong.copyWith(
-                          color: Colors.white,
-                          shadows: const [
-                            Shadow(color: Color(0xCC000000), blurRadius: 6),
-                            Shadow(color: Color(0x80000000), blurRadius: 2, offset: Offset(1, 1)),
-                          ]),
+                        color: Colors.white,
+                        shadows: const [
+                          Shadow(color: Color(0xCC000000), blurRadius: 6),
+                          Shadow(
+                            color: Color(0x80000000),
+                            blurRadius: 2,
+                            offset: Offset(1, 1),
+                          ),
+                        ],
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -588,10 +686,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         isId: s.isId,
                       ),
                       style: AppText.caption.copyWith(
-                          color: Colors.white54,
-                          shadows: const [
-                            Shadow(color: Color(0xCC000000), blurRadius: 6),
-                          ]),
+                        color: Colors.white54,
+                        shadows: const [
+                          Shadow(color: Color(0xCC000000), blurRadius: 6),
+                        ],
+                      ),
                     ),
                   // Visibilitas story milik sendiri — jawab "story ini
                   // tayang untuk siapa" (Semua orang / Pengikut / Teman).
@@ -609,11 +708,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if ((_own || _isAdmin) && !_loading && _slides.isNotEmpty) ...[
-                    _HeaderBtn(
-                      icon: Icons.visibility,
-                      onPressed: _showViewers,
-                    ),
+                  if ((_own || _isAdmin) &&
+                      !_loading &&
+                      _slides.isNotEmpty) ...[
+                    _HeaderBtn(icon: Icons.visibility, onPressed: _showViewers),
                     const SizedBox(width: 12),
                     _HeaderBtn(
                       icon: Icons.delete_outline,
@@ -630,111 +728,158 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               ),
             ),
           ],
-
-          // ── Kolom balasan (story orang lain) — gaya input chat:
-          // kirim = pesan masuk ke private chat pembuat story, lalu
-          // langsung pindah ke halaman chat orang itu.
-          if (!_own && !_loading && _slides.isNotEmpty)
-            Positioned(
-              left: 10,
-              right: 10,
-              bottom: MediaQuery.of(context).padding.bottom + 10,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Container(
-                      constraints: const BoxConstraints(maxHeight: 132),
-                      decoration: BoxDecoration(
-                        color: AppTheme.bgCard,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: AppTheme.bgCard,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: TextField(
-                              controller: _replyCtrl,
-                              focusNode: _replyFocus,
-                              style: AppText.body
-                                  .copyWith(color: Colors.white),
-                              decoration: InputDecoration(
-                                hintText:
-                                    s.storyReplyHint(_item.authorName),
-                                hintStyle: AppText.body.copyWith(
-                                  color: Colors.white54,
-                                ),
-                                filled: false,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(
-                                  vertical: 10,
-                                ),
-                              ),
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _sendReply(),
-                              minLines: 1,
-                              maxLines: 4,
-                              keyboardType: TextInputType.multiline,
-                              textCapitalization:
-                                  TextCapitalization.sentences,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _sendingReply ? null : _sendReply,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primary
-                                .withValues(alpha: 0.4),
-                            blurRadius: 10,
-                          ),
-                        ],
-                      ),
-                      child: _sendingReply
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.send_rounded,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
   }
 
-  /// Kirim balasan story sebagai pesan private chat ke pembuat story,
-  /// lalu langsung pindah ke halaman chat orang itu.
+  /// Kolom balas + tombol like & share — DI DALAM foto story orang lain.
+  Widget _replyBar(S s) {
+    final slide = _current;
+    final liked = slide?.liked ?? false;
+    final likeCount = slide?.likeCount ?? 0;
+    final hasText = _replyCtrl.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Jumlah suka — kecil di atas tombol (tidak menutupi isi foto).
+        if (likeCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6, left: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                s.storyLikeCount(likeCount),
+                style: AppText.caption.copyWith(
+                  color: Colors.white70,
+                  shadows: const [
+                    Shadow(color: Color(0xCC000000), blurRadius: 6),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Container(
+                constraints: const BoxConstraints(
+                  minHeight: 40,
+                  maxHeight: 132,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white24, width: 1),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: _replyCtrl,
+                        focusNode: _replyFocus,
+                        style: AppText.body.copyWith(color: Colors.white),
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: s.storyReplyHint(_item.authorName),
+                          hintStyle: AppText.body.copyWith(
+                            color: Colors.white60,
+                          ),
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                          ),
+                        ),
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: hasText
+                            ? (_) => _sendReply()
+                            : (_) => _replyFocus.unfocus(),
+                        minLines: 1,
+                        maxLines: 4,
+                        keyboardType: TextInputType.multiline,
+                        textCapitalization: TextCapitalization.sentences,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _CircleBtn(
+              icon: Icons.send_rounded,
+              color: AppTheme.primary,
+              busy: _sendingReply,
+              onTap: hasText && !_sendingReply ? _sendReply : null,
+            ),
+            const SizedBox(width: 8),
+            _CircleBtn(
+              icon: liked ? Icons.favorite : Icons.favorite_border,
+              color: liked ? AppTheme.danger : Colors.white24,
+              onTap: _toggleLike,
+            ),
+            const SizedBox(width: 8),
+            _CircleBtn(
+              icon: Icons.share_outlined,
+              color: Colors.white24,
+              busy: _sharingStory,
+              onTap: _shareStory,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _toggleLike() async {
+    final slide = _current;
+    if (slide == null) return;
+    _pause();
+    final authorId = _item.authorId;
+    final sp = context.read<StoryProvider>();
+    // Provider sudah menerapkan optimistic update secara sinkron sebelum
+    // menunggu RPC. Rebuild viewer sekarang supaya hati langsung berubah;
+    // hasil server menyusul untuk mengoreksi count/status bila perlu.
+    final pending = sp.toggleLike(slide.id, authorId);
+    if (mounted) setState(() {});
+    await pending;
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _shareStory() async {
+    if (_sharingStory) return;
+    final s = context.read<LocaleProvider>().s;
+    final slide = _current;
+    if (slide == null) return;
+    setState(() => _sharingStory = true);
+    try {
+      final bytes = _localImg[slide.imagePath];
+      if (bytes == null || bytes.isEmpty) {
+        await Share.share(s.storyShareMsg(_item.authorName));
+      } else {
+        final dir = await getTemporaryDirectory();
+        final file = File(
+          '${dir.path}/chatyuk_story_${slide.id.replaceAll('-', '')}.jpg',
+        );
+        await file.writeAsBytes(bytes, flush: true);
+        // Share sheet Android akan menampilkan Instagram Stories, WhatsApp
+        // Status, Instagram, atau target lain yang menerima gambar.
+        await Share.shareXFiles([
+          XFile(file.path, mimeType: 'image/jpeg'),
+        ], text: s.storyShareMsg(_item.authorName));
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _sharingStory = false);
+  }
+
+  /// Kirim balasan story sebagai pesan private chat ke pembuat story.
+  /// TIDAK membuka halaman chat — penonton lanjut menyimak story.
   Future<void> _sendReply() async {
     // Kapitalkan huruf pertama balasan story (gaya WhatsApp).
     final text = capitalizeFirst(_replyCtrl.text.trim());
@@ -767,86 +912,57 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         text: text,
       );
       if (!mounted) return;
+      setState(() => _sendingReply = false);
+      _replyCtrl.clear();
       _replyFocus.unfocus();
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 150),
-          reverseTransitionDuration: const Duration(milliseconds: 120),
-          pageBuilder: (_, __, ___) => PrivateChatScreen(
-            chatId: chatId,
-            otherName: _item.authorName,
-            otherUid: authorId,
+      // Notifikasi sekali per penonton — balasan TIDAK membuka chat;
+      // penonton lanjut menyimak story.
+      if (_replyNotified.add(authorId)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(s.storyReplySent),
+            backgroundColor: AppTheme.online,
+            duration: const Duration(seconds: 2),
           ),
-          transitionsBuilder: (_, animation, __, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(1, 0),
-                end: Offset.zero,
-              ).animate(curved),
-              child: child,
-            );
-          },
-        ),
-      );
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _sendingReply = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.errSendFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errSendFailed)));
     }
   }
 
   Widget _buildSlide() {
     final slide = _slides[_slide];
     final bytes = _localImg[slide.imagePath];
-    // Proporsional mengikuti kotak preview tray: tile 64x114 dengan
-    // ring 2.5 → area gambar 59x109, cover + center SAMA di keduanya
-    // sehingga crop persis identik (9:16 generik meleset ~4%).
-    // Full-bleed kiri-kanan (padding 0) + sudut rounded, letterbox hitam
-    // atas-bawah karena layar lebih jangkung.
-    return Container(
-      color: Colors.black,
-      child: Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: AspectRatio(
-            aspectRatio: 59 / 109,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (bytes != null)
-                  Image.memory(bytes, fit: BoxFit.cover)
-                else
-                  Container(color: Colors.white10),
-                StoryTextOverlay(
-                  text: slide.textOverlay,
-                  x: slide.textX,
-                  y: slide.textY,
-                  colorIndex: slide.textColorIndex,
-                  sizeIndex: slide.textSizeIndex,
-                  scale: slide.textScale,
-                  rotation: slide.textRotation,
-                  withBg: slide.textBg,
-                ),
-              ],
-            ),
-          ),
+    // Sama seperti composer: Stack langsung mengisi seluruh kotak story.
+    // Jangan memakai AspectRatio di sini karena itu membuat gambar mengecil
+    // dan menyisakan ruang hitam di kiri/kanan atau bawah.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (bytes != null)
+          Image.memory(bytes, fit: BoxFit.cover)
+        else
+          Container(color: Colors.white10),
+        StoryTextOverlay(
+          text: slide.textOverlay,
+          x: slide.textX,
+          y: slide.textY,
+          colorIndex: slide.textColorIndex,
+          sizeIndex: slide.textSizeIndex,
+          scale: slide.textScale,
+          rotation: slide.textRotation,
+          withBg: slide.textBg,
         ),
-      ),
+      ],
     );
   }
 }
 
-/// Tombol header viewer yang rapat — IconButton Material 3 selalu
-/// menambah tap-target/padding internal (48px) walau padding: zero →
-/// ikon tidak pernah menempel tepi. Pakai GestureDetector murni 32px.
 /// Badge visibilitas story milik sendiri — ikon + label pendek di
 /// header viewer (Semua orang / Pengikut / Teman), gaya menyatu dgn
 /// header (teks putih + shadow, tanpa kotak supaya tidak berat).
@@ -886,6 +1002,58 @@ class _VisibilityBadge extends StatelessWidget {
   }
 }
 
+/// Tombol bulat kecil di dalam foto (like / share / kirim) — GestureDetector
+/// murni 40px supaya rapat dan tidak menambah padding Material.
+class _CircleBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final bool busy;
+  final VoidCallback? onTap;
+
+  const _CircleBtn({
+    required this.icon,
+    required this.color,
+    this.busy = false,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primary.withValues(alpha: 0.3),
+              blurRadius: 10,
+            ),
+          ],
+        ),
+        child: busy
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(icon, size: 20, color: Colors.white),
+      ),
+    );
+  }
+}
+
+/// Tombol header viewer yang rapat — IconButton Material 3 selalu
+/// menambah tap-target/padding internal (48px) walau padding: zero →
+/// ikon tidak pernah menempel tepi. Pakai GestureDetector murni.
 class _HeaderBtn extends StatelessWidget {
   final IconData icon;
   final double iconSize;
@@ -904,7 +1072,12 @@ class _HeaderBtn extends StatelessWidget {
       Shadow(color: Color(0xCC000000), blurRadius: 8),
       Shadow(color: Color(0x80000000), blurRadius: 2, offset: Offset(1, 1)),
     ];
-    final ic = Icon(icon, color: Colors.white, size: iconSize, shadows: shadows);
+    final ic = Icon(
+      icon,
+      color: Colors.white,
+      size: iconSize,
+      shadows: shadows,
+    );
     final btn = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onPressed,

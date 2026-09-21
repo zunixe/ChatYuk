@@ -229,6 +229,12 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? {'ok': false};
   }
 
+  /// Hapus baris arsip user dari tabel `deleted_users`.
+  Future<void> deleteArchivedUsers(List<String> userIds) async {
+    if (userIds.isEmpty) return;
+    await _sb.from('deleted_users').delete().inFilter('user_id', userIds);
+  }
+
   /// Riwayat device milik user yang sudah dihapus (via nickname snapshot).
   Future<List<Map<String, dynamic>>> getDeletedDeviceHistory(
     String nickname,
@@ -385,6 +391,22 @@ class AdminService {
       params: {'p_uid': uid, 'p_days': days},
     );
     return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Generate story hari ini untuk satu dummy biasa dari tombol admin.
+  Future<Map<String, dynamic>> generateDummyStory(
+    String uid, {
+    required String storyDate,
+  }) async {
+    final res = await _sb.functions.invoke(
+      'ai-daily-life',
+      body: {'dummy_uid': uid, 'story_date': storyDate},
+    );
+    final data = res.data;
+    if (data is Map && data['ok'] == false) {
+      throw StateError('${data['error'] ?? 'story_generation_failed'}');
+    }
+    return data is Map ? Map<String, dynamic>.from(data) : {};
   }
 
   /// Set status dummy: 'online' | 'idle' | 'offline' | 'invisible'.

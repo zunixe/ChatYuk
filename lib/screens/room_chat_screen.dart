@@ -2486,7 +2486,7 @@ class _BroadcastStage extends StatelessWidget {
                 color: Colors.red.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Text('LIVE · ${session.viewerCount}',
+              child: Text(s.liveViewerCount(session.viewerCount),
                   style: AppText.micro.copyWith(color: Colors.white)),
             ),
           ),

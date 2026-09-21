@@ -28,8 +28,7 @@ class StoryProvider extends ChangeNotifier {
   List<StoryTrayItem> get tray => _tray;
   bool get loading => _loading;
   String? get error => _error;
-  bool get hasOwnStory =>
-      _tray.any((t) => t.own && t.slideCount > 0);
+  bool get hasOwnStory => _tray.any((t) => t.own && t.slideCount > 0);
 
   /// Item tray milik sendiri (null kalau belum pernah bikin story).
   StoryTrayItem? get ownItem {
@@ -39,7 +38,8 @@ class StoryProvider extends ChangeNotifier {
     return null;
   }
 
-  StoryProvider({StoryService? service}) : _service = service ?? StoryService() {
+  StoryProvider({StoryService? service})
+    : _service = service ?? StoryService() {
     // Resilient: tanpa onError, error channel MEMBUNUH subscription
     // (tray story freeze sampai restart).
     _storiesSub = listenResilient<String>(
@@ -92,6 +92,56 @@ class StoryProvider extends ChangeNotifier {
   /// Daftar penonton satu slide (pemilik slide only — server guard).
   Future<List<StoryViewer>> fetchViewers(String storyId) {
     return _service.fetchViewers(storyId);
+  }
+
+  /// Toggle like slide: optimistic dulu (hati langsung berubah), lalu
+  /// koreksi dengan hasil server. Return status akhir (null = gagal →
+  /// dikembalikan ke nilai semula).
+  Future<bool?> toggleLike(String storyId, String authorId) async {
+    final before = _findSlide(authorId, storyId);
+    if (before == null) return null;
+    final optimisticLiked = !before.liked;
+    final optimisticCount = (before.likeCount + (optimisticLiked ? 1 : -1))
+        .clamp(0, 1 << 30);
+    _patchSlide(
+      authorId,
+      storyId,
+      likeCount: optimisticCount,
+      liked: optimisticLiked,
+    );
+    final res = await _service.toggleLike(storyId);
+    if (res == null) {
+      _patchSlide(
+        authorId,
+        storyId,
+        likeCount: before.likeCount,
+        liked: before.liked,
+      );
+      return null;
+    }
+    _patchSlide(authorId, storyId, likeCount: res.$2, liked: res.$1);
+    return res.$1;
+  }
+
+  StorySlide? _findSlide(String authorId, String storyId) {
+    for (final sl in _slidesByAuthor[authorId] ?? const <StorySlide>[]) {
+      if (sl.id == storyId) return sl;
+    }
+    return null;
+  }
+
+  void _patchSlide(
+    String authorId,
+    String storyId, {
+    required int likeCount,
+    required bool liked,
+  }) {
+    final list = _slidesByAuthor[authorId];
+    if (list == null) return;
+    final i = list.indexWhere((s) => s.id == storyId);
+    if (i < 0) return;
+    list[i] = list[i].copyWith(likeCount: likeCount, liked: liked);
+    if (!_disposed) notifyListeners();
   }
 
   /// Buang cache slide author (dipanggil viewer saat mau buka ulang /
