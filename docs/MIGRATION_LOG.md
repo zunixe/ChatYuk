@@ -1,5 +1,50 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-22 — Privacy hardening: tutup bypass REST (`20260922100000`, `20260922110000`)
+
+**Masalah (audit privasi):** setting privasi berfungsi di jalur RPC, tapi bisa
+**dilewati via REST langsung** karena RLS `profiles_select`/`user_photos_select`
+= `USING(true)` dan kolom sensitif masih ter-grant SELECT ke `anon`+`authenticated`.
+
+**Yang bocor (terverifikasi live):**
+- `user_photos.photo` → readable anon+authenticated → **bypass paywall**
+  `get_user_photos_access`/`unlock_photo` (foto terkunci bisa dibaca gratis).
+- `profiles.status` + `last_seen` → bypass `presence_visibility`/`last_seen_visibility`.
+- `profiles.avatar` → bypass `profile_photo_visibility`.
+- `story_tray` tidak cek `privacy_can_view(author,'story')` → story "nobody"
+  tetap muncul (avatar + count slide) di tray.
+
+**Sudah aman sebelumnya (tidak disentuh):** `lat/lon/lat_gps/lon_gps/lat_ip/
+lon_ip/ip_address/email/fcm_token/about` — tidak ter-grant; `app_shared_secret`
+tak ada SELECT grant.
+
+**Migrasi 1 — `20260922100000_privacy_harden_columns.sql`:**
+- RPC baru (security definer, grant `authenticated` saja): `presence_for(uuid[])`,
+  `avatar_for(uuid)`, `avatars_for(uuid[])`, `my_photos()` — semua menerapkan
+  `privacy_can_view` + blokir + invisible.
+- `revoke select (status, last_seen, avatar, share_location) on profiles`
+  → baca via RPC di atas.
+- `user_photos`: **revoke table-level SELECT** dulu (grant `arwdDxtm` menutupi
+  revoke kolom!) lalu `grant select (id, user_id, photo_preview, created_at)`.
+  Foto asli hanya lewat RPC ber-gating (`get_user_photos_access`/`my_photos`).
+
+**Migrasi 2 — `20260922110000_story_tray_privacy.sql`:**
+- `story_tray` tambah `privacy_can_view(author, 'story', auth.uid())` +
+  mask avatar via `profile_photo_visibility`.
+
+**Dampak klien (diubah di commit yang sama):** `chat_service_presence.dart`
+(getUserStatus/getUserLastSeen/fast-path/fallback) & `avatar_service.dart`
+(get/refresh/prefetch) → RPC; `getPhotos(own)` → `my_photos`, foto orang lain →
+`get_user_photos_access`; `auth_service_auth.dart` buang kolom revoked dari
+copy profil; `user_info_screen.dart` pakai `getPhotosWithAccess`.
+
+**Apply:** Management API (bukan `db push` — hang di mesin ini), tercatat di
+`APPLIED_VIA_API.md`. **Verifikasi live:** `has_column_privilege('authenticated',
+'profiles','avatar','SELECT')=false`, `('anon','user_photos','photo','SELECT')=false`,
+`photo_preview`=true; REST anon/authenticated → 403 utk kolom revoked, 200 utk
+kolom aman; RPC → 200 (anon RPC → 401); masking avatar terbukti
+(`everyone`=path, `nobody`='').
+
 ## 2026-09-21 - Penanda "peserta sudah dihapus" (20260921230000)
 
 **Masalah:** saat akun dihapus (self-delete / admin hapus anon / hapus dummy /

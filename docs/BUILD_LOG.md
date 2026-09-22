@@ -54,3 +54,9 @@ lalu **dihapus** (tetap butuh SHA-1 terdaftar sendiri).
 | 2026-09-19 18:40 | develop | adminProd + apkpureProd | Rebuild: fix watermark forensik detect (grid 16→skala size) + guard decode crash (image 4.x) + 46 unit test baru (watermark/geo/linkpreview/outbox/providers) | Success (33: admin+user stream install; 240: admin ok, user di-push ke /sdcard/Download/chatyuk.apk — MIUI USER_RESTRICTED, install manual dari File Manager) |
 
 | 2026-09-19 19:47 | develop | playProd (AAB) | Fix error Play "ID iklan": tambah izin AD_ID eksplisit di manifest + perbarui deklarasi ID Iklan (Ya + Analytics + Iklan/pemasaran). Bump 1.2.42+54 (53 sudah terpakai) | Success: AAB upload track alpha; Play "Perlu diperhatikan" kosong, ID Iklan "Siap dikirim untuk ditinjau" |
+
+| 2026-09-22 07:35 | develop | adminProd + apkpureProd | Privacy hardening: revoke kolom sensitif (status/last_seen/avatar/share_location, user_photos.photo) + RPC ber-privacy (presence_for/avatar_for/avatars_for/my_photos) + story_tray cek privacy; client presence/avatar/foto pakai RPC | Success (33: admin+user stream install; push ke /sdcard/Download/). Verifikasi REST: anon/authenticated select kolom revoked → 403, kolom aman → 200, RPC → 200 (anon RPC → 401). analyze 0/0, 964 test hijau |
+
+| 2026-09-22 06:00 | develop | adminProd + apkpureProd | Perf timeline (comment cache+TTL, realtime terfilter, guard notify, prefetch 2x idle) + fix admin monitor "kadang ilang" (merge refreshChats) + bubble lawan pindah sisi; +titik ukur PERF_PROBE | Success (33: install; ukur: comment 3×buka → RPC n=1 saja) |
+
+| 2026-09-22 05:30 | develop | — | Fix AI dummy: jangan bocorkan detail pribadi/nama tempat spesifik/janji temu/teknis kalau tak diminta (kecuali expert/CS) — deploy ai-reply | Deployed (edge function ai-reply) |

@@ -225,11 +225,50 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 
 ---
 
+## 9. Privasi (visibilitas presence/photo/about/story) — RAWAN BYPASS
+
+| Lapis | Lokasi |
+|---|---|
+| UI | `lib/screens/privacy_settings_screen.dart` |
+| Provider | `lib/providers/privacy_provider.dart` |
+| Service | `lib/services/privacy_service.dart` |
+| Model | `lib/models/privacy_settings.dart` |
+| SQL inti | `privacy_can_view()`, `_privacy_are_friends()`, `my_privacy_settings()`, `update_privacy_settings()`, `replace_privacy_exclusions()`, `privacy_excludable_users()`, `profile_public()`, `get_online_users()`, `nearby_users()`, `story_slides()`, `story_tray()` |
+| RPC baca ber-privacy (baru 2026-09-22) | `presence_for(uuid[])`, `avatar_for(uuid)`, `avatars_for(uuid[])`, `my_photos()`, `get_user_photos_access()` |
+| Kolom | `profiles.{presence,last_seen,profile_photo,about,story}_visibility` (5 nilai: everyone/everyone_except/friends/friends_except/nobody), `profiles.read_receipts_enabled`, `profile_privacy_exclusions`, `user_photos.photo` (di-revoke), `user_photos.photo_preview` |
+| Test | `test/privacy_settings_test.dart`, `test/privacy_service_io_test.dart`, `test/privacy_provider_test.dart`, `test/privacy_widget_test.dart`, `test/photo_privacy_access_test.dart`, `supabase/tests/privacy_test.sql` |
+
+**Invariant (dijaga test — JANGAN diregresikan):**
+1. **Kolom sensitif TIDAK boleh ter-grant SELECT** ke `anon`/`authenticated`:
+   `profiles.status`, `last_seen`, `avatar`, `share_location`, `ip_address`,
+   `email`, `fcm_token`, `about`, `lat*`, `lon*`; dan `user_photos.photo`.
+   Kalau perlu baca → **WAJIB lewat RPC ber-privacy** (`presence_for`,
+   `avatar_for`, `avatars_for`, `my_photos`, `profile_public`,
+   `get_user_photos_access`). Jangan `from('profiles').select('avatar')` lagi.
+2. `user_photos` punya **table-level** SELECT grant (menutupi revoke kolom) →
+   untuk cabut, revoke TABLE-level lalu grant kolom aman (`id, user_id,
+   photo_preview, created_at`).
+3. `privacy_can_view(owner, field, viewer)`: owner=self → true; `nobody` →
+   false; `everyone_except`/`friends_except` → cek `profile_privacy_exclusions`;
+   `friends`/`friends_except` → cek `_privacy_are_friends` (mutual follow).
+4. `story_tray` WAJIB cek `privacy_can_view(author,'story')` + mask avatar —
+   dulu tidak (story "nobody" bocor di tray).
+5. `mark_chat_read`: `read_receipts_enabled=false` → unread tetap 0 tapi
+   `last_read_at` tidak ditulis (centang-2 lawan tidak muncul).
+
+**Review/diagnosa cepat:** `select has_column_privilege('authenticated',
+'public.profiles','<kolom>','SELECT');` harus **false** untuk kolom sensitif.
+
+---
+
 ## Peta kolom lintas-fitur (JANGAN ubah semantik tanpa cek semua)
 
 | Kolom | Dipakai oleh |
 |---|---|
-| `profiles.status`, `profiles.last_seen` | presence, chat list, nearby, online users, admin |
+| `profiles.status`, `profiles.last_seen` | presence, chat list, nearby, online users, admin — **SELECT di-revoke** (2026-09-22); baca lewat `presence_for()` / `get_online_users()` |
+| `profiles.avatar` | avatar list/chat/feed — **SELECT di-revoke**; baca lewat `avatar_for()` / `avatars_for()` / `profile_public()` |
+| `profiles.share_location` | lokasi peta — **SELECT di-revoke**; admin lewat RPC admin |
+| `user_photos.photo` | galeri — **SELECT di-revoke** (paywall); baca lewat `get_user_photos_access()` / `my_photos()`; `photo_preview` tetap publik |
 | `dummy_accounts.ai_*` (enabled/always_online/no_sleep/wake/offline/mood/persona) | AI reply, presence tick, admin, daily-life, proaktif |
 | `app_settings.ai_global_enabled` | AI reply, admin toggle |
 | `ai_internal_config.callback_secret` | ai_reply_post, semua AI |
