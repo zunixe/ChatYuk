@@ -38,6 +38,34 @@ Format: tanggal | branch | flavor | isi | hasil install.
 | 2026-09-19 16:45 | develop | adminProd + apkpureProd | End-call: UI hilang dulu (notify sebelum cleanup WebRTC) + pop 250ms; tap notif panggilan aktif → langsung layar call (resume hook) | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
 
 | 2026-09-22 10:32 | develop | adminProd | Avatar anti-hilang (4 bug): decode gagal tak lagi mengosongkan foto; eviction `_avatarLastSrcByUid` dibuang; `user_info` retry 1x; `_applyProfileUpdate` pertahankan foto lama. Detail di bawah | Success (push 192.168.137.155:33151) |
+| 2026-09-22 11:11 | develop | adminProd | Logout bersih dari sesi dummy: gate root langsung EntryScreen (flag `signingOut`), tak lagi flash MainNav + popup form profil. `resetPassword` ikut diperbaiki | Success (push 192.168.137.155:33151) |
+
+### Detail: flash halaman lain saat logout (sesi dummy)
+
+**Gejala:** logout dari sesi dummy (atau akun ber-email) memunculkan sekejap
+halaman utama + popup "lengkapi profil" sebelum EntryScreen.
+
+**Akar:** `AuthProvider.signOut()` mengosongkan `_profile` tanpa menandai
+transisi. `app.dart` membaca kondisi `loading=false, profile=null,
+isAnonymous=false` (dummy punya email) dan `dummySessionActive=false` (baru
+dibersihkan) -> `needsProfile` menjadi TRUE -> `_ProfileGate(child: _MainNav())`
+ter-render sekejap. Cabang `profile == null && isAnonymous` tidak menolong
+karena dummy BUKAN anon.
+
+**Perbaikan (opsi b: langsung EntryScreen, tanpa splash):**
+- `auth_provider.dart`: field `_signingOut` + getter `signingOut`. Di-set `true`
+  di AWAL `signOut()`/`resetPassword()` (sebelum sesi dihapus) dan dibersihkan
+  di `finally`; `_init()` juga mereset supaya tidak nyangkut.
+- `app.dart`: cabang baru SEBELUM `needsProfile` -> `if (signingOut) return
+  EntryScreen();` Jadi transisi keluar langsung ke EntryScreen pada frame yang
+  sama.
+
+**Test:** 2 test baru di `test/auth_login_flow_test.dart` (flag aktif selama
+proses + dibersihkan di akhir; flag tidak nyangkut setelah `_init`).
+
+**Verifikasi:** `flutter analyze` 0 error; `flutter test` 971 lulus.
+
+
 
 ---
 
