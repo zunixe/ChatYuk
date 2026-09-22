@@ -45,6 +45,12 @@ class AuthProvider extends ChangeNotifier {
   bool _disposed = false;
   bool _initInProgress = false;
 
+  /// True selagi proses keluar berjalan (logout / hapus akun). Dipakai gate
+  /// root supaya transisi keluar LANGSUNG ke EntryScreen — tanpa sempat
+  /// merender `_ProfileGate`/MainNav sekejap (flash "halaman lain").
+  bool _signingOut = false;
+  bool get signingOut => _signingOut;
+
   String? _error;
 
   Timer? _idleTimer;
@@ -274,6 +280,8 @@ class AuthProvider extends ChangeNotifier {
     dlog('[AUTH] _init start');
     _loading = true;
     _error = null;
+    // Login/restore baru: transisi keluar sudah selesai.
+    _signingOut = false;
     if (!_disposed) notifyListeners();
     // Auto-retry dengan backoff: jaringan (DNS/connectivity) sering gagal
     // sesaat, apalagi pas baru connect WiFi atau ganti user. Jangan langsung
@@ -1006,6 +1014,11 @@ class AuthProvider extends ChangeNotifier {
     _locationTimer?.cancel();
     _isIdle = false;
     _manualSignOut = true;
+    // Sama seperti signOut(): tandai transisi keluar supaya gate root
+    // langsung EntryScreen, bukan `_ProfileGate`/MainNav sekejap.
+    _signingOut = true;
+    _loading = true;
+    if (!_disposed) notifyListeners();
     try {
       await _auth.resetPassword(newPassword);
     } finally {
@@ -1013,6 +1026,7 @@ class AuthProvider extends ChangeNotifier {
     }
     _profile = null;
     _loading = false;
+    _signingOut = false;
     if (!_disposed) notifyListeners();
   }
 
@@ -1159,6 +1173,14 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> signOut() async {
     _manualSignOut = true;
+    // Tandai "sedang keluar" SEBELUM sesi dihapus: gate root memakai ini
+    // untuk langsung pindah ke EntryScreen. Tanpa flag ini, `_profile=null`
+    // sementara `dummySessionActive` sudah false membuat `needsProfile`
+    // bernilai true → `_ProfileGate(child: _MainNav())` ter-render sekejap
+    // (flash halaman utama + popup isi profil) sebelum EntryScreen.
+    _signingOut = true;
+    _loading = true;
+    if (!_disposed) notifyListeners();
     try {
       _idleTimer?.cancel();
       _heartbeatTimer?.cancel();
@@ -1179,9 +1201,14 @@ class AuthProvider extends ChangeNotifier {
           await prefs.remove(k);
         }
       } catch (_) {}
+      // Sesi benar-benar kosong sekarang → EntryScreen (bukan splash).
+      // `loading=false` + `profile=null` + `signingOut=true` = gate root
+      // menampilkan EntryScreen pada frame yang sama.
+      _loading = false;
       if (!_disposed) notifyListeners();
     } finally {
       _manualSignOut = false;
+      _signingOut = false;
     }
   }
 

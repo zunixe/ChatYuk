@@ -331,4 +331,50 @@ void main() {
       verifyNever(() => auth.checkEmailExists(any()));
     });
   });
+
+  // ── LOGOUT CLEAN (anti-flash halaman lain) ──
+  // Gate root membaca `signingOut` untuk langsung merender EntryScreen.
+  // Tanpa flag ini, `profile=null` sementara sesi bukan anon (mis. dummy
+  // punya email) membuat gate menampilkan MainNav + popup form profil
+  // sekejap sebelum EntryScreen.
+  group('logout bersih', () {
+    test('signingOut true selama logout, false setelah selesai', () async {
+      when(() => auth.isSignedIn).thenReturn(true);
+      when(() => auth.goOffline()).thenAnswer((_) async {});
+      when(() => auth.signOut()).thenAnswer((_) async {});
+      when(() => auth.dummySessionActive).thenReturn(true);
+
+      provider = await build();
+      expect(provider.signingOut, isFalse, reason: 'awal: tidak sedang keluar');
+
+      // Rekam nilai signingOut saat proses berjalan (setelah flag diset,
+      // sebelum finally mengembalikannya).
+      bool? duringFlag;
+      bool? duringLoading;
+      when(() => auth.signOut()).thenAnswer((_) async {
+        duringFlag = provider.signingOut;
+        duringLoading = provider.loading;
+      });
+
+      await provider.signOut();
+
+      expect(duringFlag, isTrue, reason: 'flag aktif selama proses keluar');
+      expect(duringLoading, isTrue, reason: 'loading aktif (transisi keluar)');
+      expect(provider.signingOut, isFalse, reason: 'flag dibersihkan di akhir');
+      expect(provider.profile, isNull, reason: 'profil dibuang');
+    });
+
+    test('signingOut false setelah _init (login/restore baru)', () async {
+      when(() => auth.isSignedIn).thenReturn(false);
+      when(() => auth.signInAnonymously()).thenAnswer((_) async {});
+      when(() => auth.getProfile()).thenAnswer((_) async => _profile('uid-1'));
+      when(() => auth.dummySessionActive).thenReturn(false);
+
+      provider = await build();
+      // _init dipanggil saat bootstrap; pastikan flag tidak nyangkut true.
+      await provider.retry();
+
+      expect(provider.signingOut, isFalse);
+    });
+  });
 }

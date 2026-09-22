@@ -263,6 +263,9 @@ class _AuthGateState extends State<_AuthGate> {
       (a) => a.dummySessionActive,
     );
     final profile = context.select<AuthProvider, UserModel?>((a) => a.profile);
+    final signingOut = context.select<AuthProvider, bool>(
+      (a) => a.signingOut,
+    );
     final s = context.watch<LocaleProvider>().s;
     // Watch ThemeProvider supaya seluruh tree rebuild saat mode gelap/terang
     // berubah — warna AppTheme diambil ulang di build().
@@ -317,6 +320,19 @@ class _AuthGateState extends State<_AuthGate> {
     // terpisah). Tetap muncul walau logout-login email sama sampai profil
     // diisi. Anon bebas (pakai AnonPromptDialog per fitur). Sesi dummy
     // admin juga bebas — bukan user sungguhan.
+    //
+    // LOGOUT CLEAN (jangan dihapus): saat proses keluar, LANGSUNG render
+    // EntryScreen. Tanpa cabang ini, `signOut()` membuat `profile=null`
+    // sementara `dummySessionActive` sudah false → `needsProfile` jadi true
+    // → `_ProfileGate(child: _MainNav())` ter-render sekejap (flash halaman
+    // utama + popup form) sebelum EntryScreen. Khusus sesi dummy, karena
+    // dummy punya email (isAnonymous=false) sehingga tidak tertangkap
+    // cabang `profile == null && isAnonymous` di bawah.
+    if (signingOut) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
+      return EntryScreen();
+    }
+
     final p = profile;
     final needsProfile =
         !isAnonymous &&
