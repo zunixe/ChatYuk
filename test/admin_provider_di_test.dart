@@ -280,4 +280,155 @@ void main() {
       verify(() => service.listChats(limit: 60, offset: 0)).called(1);
     });
   });
+
+  group('fetchStats', () {
+    test('sukses → stats terisi, loading mati, pointsEnabled dari server',
+        () async {
+      when(() => service.getStats()).thenAnswer(
+        (_) async => {'points_enabled': true, 'users': 5},
+      );
+      await provider.fetchStats();
+      expect(provider.stats?['users'], 5);
+      expect(provider.loading, isFalse);
+      expect(provider.pointsEnabled, isTrue);
+      expect(provider.error, isNull);
+    });
+
+    test('force=true → panggil getStatsForce (bukan getStats)', () async {
+      when(() => service.getStatsForce())
+          .thenAnswer((_) async => {'points_enabled': false});
+      await provider.fetchStats(force: true);
+      verify(() => service.getStatsForce()).called(1);
+      verifyNever(() => service.getStats());
+      expect(provider.pointsEnabled, isFalse);
+    });
+
+    test('error → error terisi, loading tetap mati', () async {
+      when(() => service.getStats()).thenThrow(Exception('boom'));
+      await provider.fetchStats();
+      expect(provider.error, isNotNull);
+      expect(provider.loading, isFalse);
+    });
+  });
+
+  group('fetchStatsDetail (cache 60 detik)', () {
+    test('panggilan kedua dalam TTL → tidak fetch ulang', () async {
+      when(() => service.getStatsDetail())
+          .thenAnswer((_) async => {'x': 1});
+      await provider.fetchStatsDetail();
+      await provider.fetchStatsDetail();
+      verify(() => service.getStatsDetail()).called(1);
+    });
+
+    test('force=true → fetch ulang meski cache hangat', () async {
+      when(() => service.getStatsDetail())
+          .thenAnswer((_) async => {'x': 1});
+      await provider.fetchStatsDetail();
+      await provider.fetchStatsDetail(force: true);
+      verify(() => service.getStatsDetail()).called(2);
+    });
+
+    test('invalidateStatsDetail → panggilan berikutnya fetch lagi', () async {
+      when(() => service.getStatsDetail())
+          .thenAnswer((_) async => {'x': 1});
+      await provider.fetchStatsDetail();
+      provider.invalidateStatsDetail();
+      await provider.fetchStatsDetail();
+      verify(() => service.getStatsDetail()).called(2);
+    });
+
+    test('error → {} (bukan throw)', () async {
+      when(() => service.getStatsDetail()).thenThrow(Exception('x'));
+      expect(await provider.fetchStatsDetail(), isEmpty);
+    });
+  });
+
+  group('hidden uids', () {
+    test('fetchHiddenUids mengisi set + isHiddenUid benar', () async {
+      when(() => service.fetchHiddenUids())
+          .thenAnswer((_) async => {'a', 'b'});
+      await provider.fetchHiddenUids();
+      expect(provider.isHiddenUid('a'), isTrue);
+      expect(provider.isHiddenUid('z'), isFalse);
+    });
+
+    test('isHiddenUid id kosong → selalu false', () {
+      expect(provider.isHiddenUid(''), isFalse);
+    });
+
+    test('error → set dibiarkan (tidak crash)', () async {
+      when(() => service.fetchHiddenUids()).thenThrow(Exception('x'));
+      await provider.fetchHiddenUids();
+      expect(provider.hiddenUids, isEmpty);
+    });
+  });
+
+  group('fetchRegistrationsDaily', () {
+    test('sukses → regDaily terisi, regLoading mati', () async {
+      when(() => service.fetchRegistrationsDaily(any(), any()))
+          .thenAnswer((_) async => {1: 3, 2: 5});
+      await provider.fetchRegistrationsDaily(2020, 1);
+      expect(provider.regDaily, {1: 3, 2: 5});
+      expect(provider.regLoading, isFalse);
+    });
+
+    test('bulan lampau → cache permanen (fetch sekali)', () async {
+      when(() => service.fetchRegistrationsDaily(any(), any()))
+          .thenAnswer((_) async => {1: 1});
+      await provider.fetchRegistrationsDaily(2020, 1);
+      await provider.fetchRegistrationsDaily(2020, 1);
+      verify(() => service.fetchRegistrationsDaily(2020, 1)).called(1);
+    });
+
+    test('error → regDaily dikosongkan', () async {
+      when(() => service.fetchRegistrationsDaily(any(), any()))
+          .thenThrow(Exception('x'));
+      await provider.fetchRegistrationsDaily(2020, 1);
+      expect(provider.regDaily, isEmpty);
+      expect(provider.regLoading, isFalse);
+    });
+  });
+
+  group('aksi poin', () {
+    test('massBonus sukses → refresh stats & kembalikan hasil', () async {
+      when(() => service.massBonus(any()))
+          .thenAnswer((_) async => {'ok': true});
+      when(() => service.getStats()).thenAnswer((_) async => {});
+      final out = await provider.massBonus(50);
+      expect(out?['ok'], true);
+      verify(() => service.getStats()).called(1);
+    });
+
+    test('massBonus error → null', () async {
+      when(() => service.massBonus(any())).thenThrow(Exception('x'));
+      expect(await provider.massBonus(50), isNull);
+    });
+
+    test('resetAllPoints sukses → refresh stats + kembalikan count', () async {
+      when(() => service.resetAllPoints()).thenAnswer((_) async => 42);
+      when(() => service.getStats()).thenAnswer((_) async => {});
+      expect(await provider.resetAllPoints(), 42);
+    });
+
+    test('togglePointsSystem mengubah _pointsEnabled', () async {
+      when(() => service.togglePointsSystem(any()))
+          .thenAnswer((_) async => true);
+      expect(await provider.togglePointsSystem(true), isTrue);
+      expect(provider.pointsEnabled, isTrue);
+    });
+
+    test('togglePointsSystem error → false', () async {
+      when(() => service.togglePointsSystem(any())).thenThrow(Exception('x'));
+      expect(await provider.togglePointsSystem(true), isFalse);
+    });
+
+    test('forceLogout sukses → delegasi; error → rethrow', () async {
+      when(() => service.forceLogout(any())).thenAnswer((_) async {});
+      await provider.forceLogout('u1');
+      verify(() => service.forceLogout('u1')).called(1);
+
+      when(() => service.forceLogout('u2')).thenThrow(Exception('x'));
+      expect(() => provider.forceLogout('u2'), throwsA(isA<Exception>()));
+    });
+  });
 }

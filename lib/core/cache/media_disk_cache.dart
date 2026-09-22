@@ -7,6 +7,23 @@ import 'package:flutter/foundation.dart';
 import '../../utils.dart';
 import 'package:path_provider/path_provider.dart';
 
+/// Nama file cache = hash FNV-1a (32-bit) dari serverPath, hex 8 digit.
+/// Murni & top-level supaya bisa di-unit-test (stabilitas & anti-tabrakan).
+@visibleForTesting
+String mediaCacheFileName(String serverPath) {
+  var h = 0x811c9dc5;
+  for (final c in serverPath.codeUnits) {
+    h ^= c;
+    h = (h * 0x01000193) & 0xFFFFFFFF;
+  }
+  return h.toRadixString(16).padLeft(8, '0');
+}
+
+/// Apakah kuota terlampaui (perlu buang LRU)? Murni & testable.
+@visibleForTesting
+bool mediaQuotaExceeded(int total, int incoming, int maxBytes) =>
+    total + incoming > maxBytes;
+
 /// Cache DISK untuk semua media dari Supabase Storage (avatar, galeri
 /// profil, voice) — sumber kebenaran lokal.
 ///
@@ -46,14 +63,7 @@ class MediaDiskCache {
     }
   }
 
-  String _fileName(String serverPath) {
-    var h = 0x811c9dc5;
-    for (final c in serverPath.codeUnits) {
-      h ^= c;
-      h = (h * 0x01000193) & 0xFFFFFFFF;
-    }
-    return h.toRadixString(16).padLeft(8, '0');
-  }
+  String _fileName(String serverPath) => mediaCacheFileName(serverPath);
 
   String _pathFor(String serverPath) =>
       '$_docs/$_dirName/${_fileName(serverPath)}';
@@ -203,7 +213,7 @@ class MediaDiskCache {
         total += len;
         files.add((f, len));
       }
-      if (total + incoming <= maxBytes) return;
+      if (!mediaQuotaExceeded(total, incoming, maxBytes)) return;
       final byName = {
         for (final (f, len) in files) f.uri.pathSegments.last: (f, len),
       };

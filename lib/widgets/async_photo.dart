@@ -15,7 +15,8 @@ Uint8List? _decodeBase64(String b64) {
 
 // Top-level untuk compute() — decode + resize ke thumbnail kecil (~256px).
 // Grid galeri tidak perlu memegang gambar penuh 800px; render jadi ringan.
-Uint8List? _decodeThumb(String b64) {
+@visibleForTesting
+Uint8List? decodeThumbB64(String b64) {
   try {
     final bytes = base64Decode(b64);
     final image = img.decodeImage(bytes);
@@ -80,7 +81,7 @@ class _AsyncPhotoThumbnailState extends State<AsyncPhotoThumbnail> {
   }
 
   Future<void> _decode() async {
-    final bytes = await compute(_decodeThumb, widget.base64);
+    final bytes = await compute(decodeThumbB64, widget.base64);
     if (!mounted) return;
     if (bytes != null && _cache.length < 300) _cache[widget.base64] = bytes;
     setState(() => _bytes = bytes);

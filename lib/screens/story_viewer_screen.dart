@@ -28,6 +28,23 @@ import '../../../widgets/story_text_overlay.dart';
 final Map<String, Uint8List> _slideBytesCache = {};
 const int _kSlideBytesCacheMax = 8;
 
+/// Index slide yang perlu dimuat untuk window preload: [start-1 .. start+ahead],
+/// di-clamp ke [0, total-1]. Top-level & murni supaya bisa di-unit-test tanpa
+/// membangun widget/halaman.
+@visibleForTesting
+List<int> storyPreloadWindow(int start, int total, int ahead) {
+  if (total <= 0) return const [];
+  final s = (start - 1).clamp(0, total - 1);
+  final e = (start + ahead).clamp(0, total - 1);
+  return [for (var i = s; i <= e; i++) i];
+}
+
+/// Apakah entri terlama harus dibuang setelah insert (size > max)? Murni &
+/// top-level supaya kontrak cap cache bisa dikunci tanpa widget.
+@visibleForTesting
+bool slideCacheShouldEvict(int size, {int max = _kSlideBytesCacheMax}) =>
+    size > max;
+
 /// Viewer story fullscreen (gaya IG):
 /// - Progress segmented atas (1 segmen per slide), auto-advance 5 detik.
 /// - Hold = pause. Tap kanan/kiri = next/prev slide. Swipe vertikal = tutup.
@@ -199,14 +216,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   /// Sekarang memuat [aktif-1 .. aktif+2] saja; sisanya dimuat saat navigasi.
   static const int _preloadAhead = 2;
 
-  /// Diindex di mana (dalam list slide) sebagai offset dari slide aktif.
-  List<int> _windowIndices() {
-    final n = _slides.length;
-    if (n == 0) return const [];
-    final start = (_slide - 1).clamp(0, n - 1);
-    final end = (_slide + _preloadAhead).clamp(0, n - 1);
-    return [for (var i = start; i <= end; i++) i];
-  }
+  /// Index slide di window preload aktif (delegasi ke fungsi murni).
+  List<int> _windowIndices() =>
+      storyPreloadWindow(_slide, _slides.length, _preloadAhead);
 
   void _preload(List<StorySlide> slides) async {
     await _preloadWindow();
@@ -263,7 +275,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       b ??= await context.read<StorageProvider>().downloadBytes(path);
       if (b != null && b.isNotEmpty) {
         _slideBytesCache[path] = b;
-        if (_slideBytesCache.length > _kSlideBytesCacheMax) {
+        if (slideCacheShouldEvict(_slideBytesCache.length)) {
           _slideBytesCache.remove(_slideBytesCache.keys.first);
         }
         unawaited(MediaDiskCache.instance.write(path, b));

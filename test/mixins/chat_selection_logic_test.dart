@@ -187,6 +187,16 @@ void main() {
       expect(identical(l1, l2), isTrue);
       expect(identical(s.linkFor('m2'), l1), isFalse);
     });
+
+    testWidgets('linkFor membatasi peta agar tidak tumbuh tanpa batas',
+        (tester) async {
+      final s = await pumpSel(tester);
+      // Isi melewati cap 500 → entri lama harus mulai dibuang.
+      for (var i = 0; i < 520; i++) {
+        s.linkFor('id_$i');
+      }
+      expect(s.msgLinks.length, lessThanOrEqualTo(501));
+    });
   });
 
   group('ChatSelectionMixin — edit & balas', () {

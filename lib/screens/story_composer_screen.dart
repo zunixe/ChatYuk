@@ -49,16 +49,18 @@ String _processStoryImage(Uint8List bytes) {
 }
 
 /// Payload rectangle untuk encode JPEG di isolate (top-level agar compute-safe).
-class _RawJpg {
+@visibleForTesting
+class RawJpg {
   final Uint8List rgba;
   final int width;
   final int height;
-  const _RawJpg(this.rgba, this.width, this.height);
+  const RawJpg(this.rgba, this.width, this.height);
 }
 
 /// rawRgba (dari ui.Image.toByteData) → JPEG bytes. Top-level supaya bisa
 /// dijalankan via compute() di isolate terpisah (tidak blocking UI thread).
-Uint8List _encodeRawRgbaToJpg(_RawJpg p) {
+@visibleForTesting
+Uint8List encodeRawRgbaToJpg(RawJpg p) {
   // numChannels 4 + order rgba: cocok dgn output
   // ui.ImageByteFormat.rawRgba (R,G,B,A per pixel).
   final image = img.Image.fromBytes(
@@ -230,7 +232,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
     rendered.dispose();
     final raw = data!.buffer.asUint8List();
     // Encode JPEG di isolate (rawRgba → img.Image → encodeJpg q90).
-    return compute(_encodeRawRgbaToJpg, _RawJpg(raw, w, h));
+    return compute(encodeRawRgbaToJpg, RawJpg(raw, w, h));
   }
 
   @override
