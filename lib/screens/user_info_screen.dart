@@ -496,7 +496,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             ).showSnackBar(SnackBar(content: Text(s.photoUnlockedToast)));
         } else {
           // Lihat sekali: ambil foto asli sementara & tampilkan viewer.
-          final full = await context.read<AuthProvider>().getPhotos(widget.userId);
+          // Lewat getPhotosWithAccess (menghormati unlock) — kolom photo
+          // mentah sudah di-revoke dari akses publik.
+          final full = await context
+              .read<AuthProvider>()
+              .getPhotosWithAccess(widget.userId);
           if (!mounted) return;
           final match = full.where((p) => p.id == photo.id).toList();
           if (match.isNotEmpty) {

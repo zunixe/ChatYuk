@@ -63,12 +63,17 @@ mixin ChatServicePresenceMx on ChatBase {
 
     Future<void> fetchStatus() async {
       try {
-        final row = await _sb
-            .from('profiles')
-            .select('status,last_seen')
-            .eq('id', uid)
-            .maybeSingle();
-        if (row == null || controller.isClosed) return;
+        // Kolom status/last_seen sudah di-revoke dari SELECT publik (hardening
+        // 2026-09-22) → baca lewat RPC ber-privacy presence_for.
+        final res = await _sb.rpc(
+          'presence_for',
+          params: {
+            'p_uids': [uid],
+          },
+        );
+        final list = res is List ? res : <dynamic>[];
+        if (list.isEmpty || controller.isClosed) return;
+        final row = Map<String, dynamic>.from(list.first as Map);
         final s = ChatService.effectiveStatusOf(
           row['status'] as String?,
           row['last_seen'] as String?,
@@ -115,15 +120,19 @@ mixin ChatServicePresenceMx on ChatBase {
   }
 
   /// Ambil last_seen satu user (untuk "terakhir dilihat" di header chat).
+  /// Lewat RPC presence_for (kolom last_seen sudah di-revoke dari publik).
   Future<DateTime?> getUserLastSeen(String uid) async {
     if (uid.isEmpty) return null;
     try {
-      final row = await _sb
-          .from('profiles')
-          .select('last_seen')
-          .eq('id', uid)
-          .maybeSingle();
-      final v = row?['last_seen'] as String?;
+      final res = await _sb.rpc(
+        'presence_for',
+        params: {
+          'p_uids': [uid],
+        },
+      );
+      final list = res is List ? res : <dynamic>[];
+      if (list.isEmpty) return null;
+      final v = (list.first as Map)['last_seen'] as String?;
       return v == null ? null : DateTime.tryParse(v)?.toLocal();
     } catch (e) {
       dlog('[chat] getUserLastSeen error: $e');
@@ -166,8 +175,14 @@ mixin ChatServicePresenceMx on ChatBase {
         dlog('[ONLINE-EMIT] presenceUidsFast=${presenceUidsFast.length}');
         if (presenceUidsFast.isNotEmpty) {
           try {
-            const colsFast = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
-            final fastRows = await _sb.from('profiles').select(colsFast).inFilter('id', presenceUidsFast).limit(50).timeout(const Duration(seconds: 2));
+            // status/avatar/last_seen sudah di-revoke dari SELECT publik →
+            // ambil lewat RPC ber-privacy presence_for (bukan profiles mentah).
+            final res = await _sb
+                .rpc('presence_for', params: {'p_uids': presenceUidsFast})
+                .timeout(const Duration(seconds: 3));
+            final fastRows = res is List
+                ? res.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+                : <Map<String, dynamic>>[];
             if (fastRows.isNotEmpty && !controller.isClosed) {
               // Emit cepat dari presence
               final seenFast = <String>{};
@@ -308,18 +323,11 @@ mixin ChatServicePresenceMx on ChatBase {
           }
           rows = ChatService.filterRpcOnlineRows(rpcRows, presenceUids);
         } else {
-          // Fallback hybrid lama jika RPC belum deploy / gagal — tetap batasi O(50)
-          final presenceUids = firstNPresenceUids(50);
-          Set<String> dbUids = {};
-          try {
-            final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 30)).toIso8601String();
-            final dbRows = await _sb.from('profiles').select('id').neq('status', 'offline').neq('status', 'invisible').gte('last_seen', cutoff).limit(100).timeout(const Duration(seconds: 2));
-            for (final r in dbRows) {
-              final id = '${r['id'] ?? ''}';
-              if (id.isNotEmpty) dbUids.add(id);
-            }
-          } catch (_) {}
-          final uids = {...presenceUids, ...dbUids}.toList();
+          // Fallback hybrid lama jika RPC get_online_users belum deploy/gagal.
+          // status/last_seen sudah di-revoke dari SELECT publik → jalur
+          // dbUids lama TIDAK mungkin; pakai presence_for (ber-privacy) atas
+          // uid yang memang punya presence realtime saja.
+          final uids = firstNPresenceUids(50);
           if (uids.isEmpty) {
             // Jangan kosongkan list yang sudah tampil (emit kosong bikin
             // list online kedip hilang-muncul) — biarkan fallback tick
@@ -327,13 +335,18 @@ mixin ChatServicePresenceMx on ChatBase {
             return;
           }
           String? invisibleUid2 = await _fetchInvisibleUid();
-          final filtered2 = invisibleUid2 == null ? uids : uids.where((id) => id != invisibleUid2).toList();
+          final filtered2 = invisibleUid2 == null
+              ? uids
+              : uids.where((id) => id != invisibleUid2).toList();
           if (filtered2.isEmpty) {
-            // Sama: skip emit kosong, jangan timpa list terisi.
             return;
           }
-          const cols2 = 'id,nickname,gender,age,country,city,status,avatar,is_registered,last_seen';
-          rows = await _sb.from('profiles').select(cols2).inFilter('id', filtered2).limit(1000).timeout(const Duration(seconds: 6));
+          final res = await _sb
+              .rpc('presence_for', params: {'p_uids': filtered2})
+              .timeout(const Duration(seconds: 6));
+          rows = res is List
+              ? res.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+              : <Map<String, dynamic>>[];
         }
         // Invisible filter untuk path RPC juga (cache 5 mnt, bukan per tick)
         String? invisibleUid = await _fetchInvisibleUid();

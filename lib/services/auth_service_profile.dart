@@ -234,14 +234,10 @@ mixin AuthServiceProfileMx on AuthBase {
     // Upload ke Storage — DB hanya simpan path (hemat ruang).
     // Path baru diberi timestamp (cache-buster) — hapus file avatar lama
     // supaya Storage tidak menumpuk file versi lama.
+    // Avatar lama dibaca lewat RPC (kolom avatar sudah di-revoke dari SELECT
+    // publik). Untuk diri sendiri, avatar_for selalu mengembalikan nilainya.
     final oldAvatar =
-        (await _sb
-                .from('profiles')
-                .select('avatar')
-                .eq('id', id)
-                .maybeSingle())?['avatar']
-            as String? ??
-        '';
+        (await _sb.rpc('avatar_for', params: {'p_uid': id})) as String? ?? '';
     final path = base64.isEmpty
         ? ''
         : await StoragePhotoService.instance.uploadAvatar(
@@ -379,27 +375,33 @@ mixin AuthServiceProfileMx on AuthBase {
     }
   }
 
-  /// Ambil semua foto galeri milik satu user.
+  /// Ambil semua foto galeri milik USER SENDIRI (jalur aman).
+  ///
+  /// Sejak hardening 2026-09-22, `user_photos.photo` TIDAK lagi ter-grant
+  /// SELECT ke anon/authenticated (mencegah bypass paywall). Foto sendiri
+  /// dibaca lewat RPC `my_photos()` (security definer, hanya milik pemanggil).
   Future<List<UserPhoto>> getPhotos(String userId) async {
     if (userId.isEmpty) return [];
-    final rows = await _sb
-        .from('user_photos')
-        .select('id,user_id,photo,created_at')
-        .eq('user_id', userId)
-        .order('created_at', ascending: false);
+    // Hanya untuk foto sendiri — pengguna lain WAJIB lewat
+    // getPhotosWithAccess (yang menerapkan paywall).
+    if (userId != uid) return getPhotosWithAccess(userId);
+    final res = await _sb.rpc('my_photos');
+    final list = res is List ? res : <dynamic>[];
     final result = <UserPhoto>[];
-    for (final row in rows) {
-      var photo = row['photo'] as String? ?? '';
+    for (final row in list) {
+      final m = Map<String, dynamic>.from(row as Map);
+      var photo = m['photo'] as String? ?? '';
       // photo bisa berupa PATH storage (foto baru) → download → base64.
       if (photo.isNotEmpty &&
           StoragePhotoService.instance.isGalleryPath(photo)) {
         photo = await _galleryPhotoB64(photo);
       }
       result.add(
-        UserPhoto.fromMap('${row['id']}', {
-          'userId': row['user_id'],
+        UserPhoto.fromMap('${m['id']}', {
+          'userId': userId,
           'photo': photo,
-          'createdAt': row['created_at'],
+          'unlocked': true,
+          'createdAt': m['created_at'],
         }),
       );
     }
