@@ -855,6 +855,11 @@ class AuthProvider extends ChangeNotifier {
   /// Ambil profil user lain by UID.
   Future<UserModel?> getOtherProfile(String uid) => _auth.getProfileById(uid);
 
+  /// Resolve PATH avatar → base64 (RAM → disk → network). Dipisah dari
+  /// [getOtherProfile] supaya lambatnya/gagalnya avatar tidak menahan
+  /// tampilnya profil.
+  Future<String> getAvatarByPath(String path) => _auth.getAvatarByPath(path);
+
   /// Sign up dengan email — membuat akun Supabase baru (butuh verifikasi
   /// email). Return true bila session sudah aktif (auto-confirm), false bila
   /// perlu verifikasi OTP dulu.

@@ -60,3 +60,7 @@ lalu **dihapus** (tetap butuh SHA-1 terdaftar sendiri).
 | 2026-09-22 06:00 | develop | adminProd + apkpureProd | Perf timeline (comment cache+TTL, realtime terfilter, guard notify, prefetch 2x idle) + fix admin monitor "kadang ilang" (merge refreshChats) + bubble lawan pindah sisi; +titik ukur PERF_PROBE | Success (33: install; ukur: comment 3×buka → RPC n=1 saja) |
 
 | 2026-09-22 05:30 | develop | — | Fix AI dummy: jangan bocorkan detail pribadi/nama tempat spesifik/janji temu/teknis kalau tak diminta (kecuali expert/CS) — deploy ai-reply | Deployed (edge function ai-reply) |
+
+| 2026-09-22 07:52 | develop | apkpureProd | Fix "profil ga muncul" (SimpleMe): avatar tidak lagi memblokir tampilnya profil — `getProfileById` stop download avatar (dulu bisa >10 dtk → timeout → layar "Coba lagi" padahal data ada); avatar dimuat terpisah via `getAvatarByPath` setelah profil tampil + retry otomatis 1x. File: `auth_service_profile.dart`, `auth_provider.dart`, `user_info_screen.dart` | Success (push 192.168.18.33:41885) |
+
+| 2026-09-22 08:05 | develop | apkpureProd | Fix avatar "kadang muncul kadang ilang": (1) `AvatarB64Service._downloadPath` dulu meng-cache kegagalan sebagai `''` PERMANEN → avatar hilang sampai app restart; (2) `_cache[uid] = avatar` juga menyimpan `''`; (3) dedup `_inflight` return `''` instan ke caller kedua → sekarang pakai `_uidJobs` (Future) sehingga caller kedua MENUNGGU hasil sama; (4) `_downloadWithDisk` tambah `waitReady()` supaya disk-read tidak gagal saat boot. File: `avatar_service.dart` | Success (push 192.168.18.33:41885) |

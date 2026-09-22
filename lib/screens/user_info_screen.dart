@@ -35,6 +35,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   // Gagal total (timeout/network) saat profil masih null — tampilkan
   // error + tombol retry, jangan spinner selamanya.
   bool _loadError = false;
+  // Avatar (base64) dimuat TERPISAH dari profil: profil teks muncul duluan,
+  // foto menyusul. Dulu avatar diunduh di dalam getProfileById → kalau
+  // lambat, SELURUH profil kena timeout 10 dtk → layar "Coba lagi"
+  // (keluhan "profilnya ga muncul" padahal datanya ada).
+  String _avatarB64 = '';
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
   String _status = 'offline';
@@ -378,20 +383,42 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   Future<void> _load() async {
     UserModel? p;
-    try {
-      p = await context.read<AuthProvider>()
-          .getOtherProfile(widget.userId)
-          .timeout(_loadTimeout);
-    } catch (_) {}
-    if (mounted) {
-      setState(() {
-        if (p != null) _profile = p;
-        _loading = false;
-        // Profil tetap null = gagal total (bukan user tanpa data).
-        _loadError = _profile == null;
-      });
-      _subscribeStatus(p);
+    // Retry sekali: timeout/gangguan jaringan sesaat tidak boleh langsung
+    // memvonis gagal (kasus "tadi tidak, sekarang muncul").
+    for (var attempt = 0; attempt < 2 && p == null; attempt++) {
+      try {
+        p = await context.read<AuthProvider>()
+            .getOtherProfile(widget.userId)
+            .timeout(_loadTimeout);
+      } catch (_) {
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 600));
+        }
+      }
     }
+    if (!mounted) return;
+    setState(() {
+      if (p != null) _profile = p;
+      _loading = false;
+      // Profil tetap null = gagal total (bukan user tanpa data).
+      _loadError = _profile == null;
+    });
+    _subscribeStatus(p);
+    // Avatar menyusul — tidak menahan tampilnya profil.
+    final path = _profile?.avatar ?? '';
+    if (path.isNotEmpty) _loadAvatar(path);
+  }
+
+  /// Muat foto profil (path → base64) setelah profil tampil. Kegagalan di
+  /// sini hanya berarti avatar kosong (inisial), BUKAN layar error.
+  Future<void> _loadAvatar(String path) async {
+    try {
+      final b64 = await context
+          .read<AuthProvider>()
+          .getAvatarByPath(path)
+          .timeout(_loadTimeout);
+      if (mounted && b64.isNotEmpty) setState(() => _avatarB64 = b64);
+    } catch (_) {}
   }
 
   void _retryLoad() {
@@ -623,13 +650,13 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      (profile?.avatar ?? '').isNotEmpty
+                      _avatarB64.isNotEmpty
                           ? AsyncCircleAvatar(
-                              base64: profile!.avatar,
+                              base64: _avatarB64,
                               radius: 50,
-                              bgColor: profile.gender == 'male'
+                              bgColor: profile?.gender == 'male'
                                   ? AppTheme.male
-                                  : profile.gender == 'female'
+                                  : profile?.gender == 'female'
                                   ? AppTheme.female
                                   : AppTheme.accent,
                             )

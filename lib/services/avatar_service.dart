@@ -36,7 +36,10 @@ class AvatarB64Service {
 
   final Map<String, String> _cache = {};
   final Map<String, String> _pathCache = {};
-  final Set<String> _inflight = {};
+  // Job in-flight per-uid: caller kedua MENUNGGU hasil yang sama, bukan
+  // dapat '' instan (dulu `if (_inflight.contains(uid)) return ''` bikin
+  // avatar kedip-hilang saat dua widget minta uid yang sama bersamaan).
+  final Map<String, Future<String>> _uidJobs = {};
   final Set<String> _bgRefreshed = {};
   // In-flight dedup: caller kedua MENUNGGU hasil yang sama, bukan return
   // '' instan — dulu penyebab race "inisial → foto" saat halaman profil
@@ -74,8 +77,20 @@ class AvatarB64Service {
         return b64;
       }
     } catch (_) {}
-    if (_inflight.contains(uid)) return '';
-    _inflight.add(uid);
+    // Dedup: caller kedua menunggu job yang sama (bukan '' instan).
+    final job = _uidJobs[uid];
+    if (job != null) return job;
+    final future = _fetchUid(uid);
+    _uidJobs[uid] = future;
+    try {
+      return await future;
+    } finally {
+      _uidJobs.remove(uid);
+    }
+  }
+
+  /// Fetch avatar 1 uid dari RPC ber-privacy + download bila path.
+  Future<String> _fetchUid(String uid) async {
     try {
       // Kolom profiles.avatar sudah di-revoke dari SELECT publik (hardening
       // 2026-09-22) → baca lewat RPC ber-privacy avatar_for.
@@ -85,8 +100,9 @@ class AvatarB64Service {
           StoragePhotoService.instance.isAvatarPath(avatar)) {
         avatar = await _downloadWithDisk(avatar);
       }
-      if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
-      _cache[uid] = avatar;
+      // HANYA simpan hasil berisi — '' (gagal sesaat) tidak boleh dihafal
+      // permanen, kalau tidak avatar "hilang" sampai app di-restart.
+      if (avatar.isNotEmpty && _cache.length < _maxCache) _cache[uid] = avatar;
       // Simpan disk — sesi berikutnya instan tanpa network.
       if (avatar.isNotEmpty) {
         try {
@@ -98,38 +114,20 @@ class AvatarB64Service {
       }
       return avatar;
     } catch (e) {
-      _cache[uid] = '';
       return '';
-    } finally {
-      _inflight.remove(uid);
     }
   }
 
   /// Fetch ulang avatar satu uid di background (fire-and-forget) —
   /// hanya update RAM+disk, tidak me-repaint UI sesi ini.
   Future<void> _refreshInBackground(String uid) async {
-    if (_inflight.contains(uid)) return;
-    _inflight.add(uid);
+    if (_uidJobs.containsKey(uid)) return;
+    final future = _fetchUid(uid);
+    _uidJobs[uid] = future;
     try {
-      var avatar = await _sb.rpc('avatar_for', params: {'p_uid': uid}) as String?;
-      avatar ??= '';
-      if (avatar.isNotEmpty &&
-          StoragePhotoService.instance.isAvatarPath(avatar)) {
-        avatar = await _downloadWithDisk(avatar);
-      }
-      if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
-      _cache[uid] = avatar;
-      if (avatar.isNotEmpty) {
-        try {
-          await MediaDiskCache.instance.write(
-            'avatars/$uid.jpg',
-            Uint8List.fromList(base64Decode(avatar)),
-          );
-        } catch (_) {}
-      }
-    } catch (_) {
+      await future;
     } finally {
-      _inflight.remove(uid);
+      _uidJobs.remove(uid);
     }
   }
 
@@ -138,14 +136,14 @@ class AvatarB64Service {
   void clearForUid(String uid) {
     _cache.remove(uid);
     _pathCache.remove('avatars/$uid.jpg');
-    _inflight.remove(uid);
-    _inflight.remove('avatars/$uid.jpg');
+    _uidJobs.remove(uid);
+    _pathJobs.remove('avatars/$uid.jpg');
   }
 
   /// Clear cache untuk path tertentu (avatar path berubah / dihapus)
   void clearForPath(String path) {
     _pathCache.remove(path);
-    _inflight.remove(path);
+    _pathJobs.remove(path);
   }
 
   /// Batch prefetch avatar untuk banyak uid sekaligus (1 query `in` ganti
@@ -183,8 +181,10 @@ class AvatarB64Service {
             StoragePhotoService.instance.isAvatarPath(avatar)) {
           avatar = await _downloadWithDisk(avatar);
         }
-        if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
-        _cache[uid] = avatar;
+      if (_cache.length >= _maxCache) _cache.remove(_cache.keys.first);
+      // HANYA simpan hasil berisi — '' (gagal sesaat) tidak boleh dihafal
+      // permanen, kalau tidak avatar "hilang" sampai app di-restart.
+      if (avatar.isNotEmpty) _cache[uid] = avatar;
       }
     } catch (e) {
       dlog('[avatar] prefetch error: $e');
@@ -225,6 +225,11 @@ class AvatarB64Service {
 
   /// Download path → base64, DISK FIRST (instan untuk sesi berikutnya).
   Future<String> _downloadWithDisk(String path) async {
+    // Tunggu prewarm disk siap (bounded) — tanpa ini `read` bisa throw saat
+    // boot sehingga avatar gagal padahal filenya ada di disk.
+    try {
+      await MediaDiskCache.instance.waitReady();
+    } catch (_) {}
     final disk = await MediaDiskCache.instance.read(path);
     if (disk != null && disk.isNotEmpty) {
       return base64Encode(disk);
@@ -257,12 +262,18 @@ class AvatarB64Service {
   Future<String> _downloadPath(String path) async {
     try {
       final b64 = await _downloadWithDisk(path);
-      if (_pathCache.length >= _maxCache)
-        _pathCache.remove(_pathCache.keys.first);
-      _pathCache[path] = b64;
+      // HANYA cache hasil yang BERISI. Kegagalan ('' karena jaringan putus
+      // sesaat / media-cache belum siap) TIDAK boleh dihafal permanen —
+      // dulu `_pathCache[path] = ''` di catch membuat avatar "hilang" sampai
+      // app di-restart (gejala: kadang muncul kadang ilang).
+      if (b64.isNotEmpty) {
+        if (_pathCache.length >= _maxCache) {
+          _pathCache.remove(_pathCache.keys.first);
+        }
+        _pathCache[path] = b64;
+      }
       return b64;
     } catch (_) {
-      _pathCache[path] = '';
       return '';
     } finally {
       _pathJobs.remove(path);

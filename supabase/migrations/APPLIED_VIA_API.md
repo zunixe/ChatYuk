@@ -911,3 +911,12 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   'SELECT')=false`, `('anon','user_photos','photo','SELECT')=false`,
   `photo_preview`=true; `story_tray` punya klausa privacy; 4 RPC ada + grant
   authenticated.
+
+## 2026-09-22 — Rapikan pencatatan 20260922100000 & 20260922110000 (BOOKKEEPING)
+
+- **Latar:** dua migration sudah ter-apply ke DB live (objeknya ada & berfungsi) tapi TIDAK tercatat di `supabase_migrations.schema_migrations` → `db push` berisiko meng-apply ulang.
+- **Verifikasi sebelum catat:**
+  - `20260922100000_privacy_harden_columns`: RPC `presence_for(uuid[])`, `avatar_for(uuid)`, `avatars_for(uuid[])`, `my_photos()` ADA; SELECT kolom `status/last_seen/avatar/share_location` pada `profiles` = **NO SELECT** untuk anon+authenticated (inti hardening jalan) ✅
+  - `20260922110000_story_tray_privacy`: `story_tray()` berjalan (`jsonb_typeof` = array) & definisi di DB memuat masking `privacy_can_view(...,'profile_photo',...)` ✅
+- **Aksi:** `insert into supabase_migrations.schema_migrations (version) values ('20260922100000'),('20260922110000') on conflict do nothing`.
+- **Verifikasi:** urutan versi teratas kini `…20260922110000, 20260922100000, 20260922000000` ✅
