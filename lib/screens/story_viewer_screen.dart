@@ -198,16 +198,35 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       _slide = 0;
     });
     final sp = context.read<StoryProvider>();
+    final authorId = _item.authorId;
     final slides = await sp.slidesFor(_item.authorId);
     if (!mounted) return;
     setState(() {
       _slides = slides;
-      _loading = false;
+      // Tetap loading sampai gambar aktif tersedia. Sebelumnya false terlalu
+      // cepat setelah RPC selesai, sehingga placeholder tampil sementara
+      // gambar aktif masih berebut bandwidth dengan preload tetangga.
+      _loading = slides.isNotEmpty;
     });
-    if (slides.isEmpty) return;
+    if (slides.isEmpty) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     _markSeen();
+    // Prioritas pertama selalu gambar aktif. Sebelumnya tiga gambar
+    // (aktif-1..aktif+2) dimulai bersamaan sehingga gambar yang terlihat
+    // ikut berebut bandwidth dan tampak seperti lazy-load tidak bekerja.
+    final activePath = slides[_slide].imagePath;
+    final active = await _bytes(activePath);
+    if (!mounted || _item.authorId != authorId) return;
+    if (active != null && active.isNotEmpty) {
+      _localImg[activePath] = active;
+    }
+    if (!mounted || _item.authorId != authorId) return;
+    setState(() => _loading = false);
     _startTimer();
-    _preload(slides);
+    // Tetangga dimuat setelah gambar aktif siap, tanpa menahan first paint.
+    unawaited(_preloadAdjacent());
   }
 
   /// PERF: hanya preload slide di sekitar slide aktif (window ±N), bukan
@@ -220,23 +239,20 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   List<int> _windowIndices() =>
       storyPreloadWindow(_slide, _slides.length, _preloadAhead);
 
-  void _preload(List<StorySlide> slides) async {
-    await _preloadWindow();
-    // Retry sekali untuk slide yang gagal (network blip) — tanpa ini
-    // slide gagal tampil HITAM permanen selama viewer dibuka. Hanya
-    // untuk window aktif (bukan semua slide) agar tetap hemat.
-    Future.delayed(const Duration(seconds: 3), () async {
-      if (!mounted) return;
-      await _preloadWindow();
-    });
+  Future<void> _preloadAdjacent() async {
+    await _preloadWindow(includeActive: false);
+    // Retry tetangga yang gagal tanpa mengganggu gambar aktif.
+    await Future<void>.delayed(const Duration(seconds: 3));
+    if (mounted) await _preloadWindow(includeActive: false);
   }
 
   /// Muat byte untuk slide di window aktif yang belum ada. Paralel agar
   /// slide berikutnya siap tanpa nunggu sequential, tapi terbatas pada
   /// window (bukan seluruh list).
-  Future<void> _preloadWindow() async {
+  Future<void> _preloadWindow({bool includeActive = true}) async {
     if (_slides.isEmpty) return;
     final idxs = _windowIndices()
+        .where((i) => includeActive || i != _slide)
         .where((i) => !_localImg.containsKey(_slides[i].imagePath))
         .toList();
     if (idxs.isEmpty) return;
@@ -254,7 +270,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   /// Muat ulang foto slide aktif bila masih kosong (dipanggil saat
   /// pindah slide) — jaring pengaman kedua selain retry _preload.
-  void _reloadCurrentIfMissing() async {
+  Future<void> _reloadCurrentIfMissing() async {
     if (_slides.isEmpty || _slide < 0 || _slide >= _slides.length) return;
     final path = _slides[_slide].imagePath;
     if (_localImg[path] != null) return;
@@ -317,8 +333,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       setState(() => _slide++);
       _markSeen();
       _startTimer();
-      _reloadCurrentIfMissing();
-      _preloadWindow();
+      unawaited(_loadSlideAndPreloadAdjacent());
     } else {
       _nextPerson();
     }
@@ -328,11 +343,15 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (_slide > 0) {
       setState(() => _slide--);
       _startTimer();
-      _reloadCurrentIfMissing();
-      _preloadWindow();
+      unawaited(_loadSlideAndPreloadAdjacent());
     } else {
       _prevPerson();
     }
+  }
+
+  Future<void> _loadSlideAndPreloadAdjacent() async {
+    await _reloadCurrentIfMissing();
+    if (mounted) await _preloadAdjacent();
   }
 
   void _nextPerson() {
@@ -496,8 +515,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       radius: 16,
       backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
       // Avatar mungil (radius 16) — cap decode.
-      backgroundImage:
-          bytes != null ? ResizeImage(MemoryImage(bytes), width: 64) : null,
+      backgroundImage: bytes != null
+          ? ResizeImage(MemoryImage(bytes), width: 64)
+          : null,
       child: bytes != null
           ? null
           : Text(
