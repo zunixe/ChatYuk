@@ -33,6 +33,28 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     });
   }
 
+  /// Ikon spesifik per opsi visibilitas — biar sekali lihat langsung paham.
+  IconData _icon(PrivacyVisibility value) {
+    return switch (value) {
+      PrivacyVisibility.everyone => Icons.public,
+      PrivacyVisibility.everyoneExcept => Icons.person_remove_alt_1,
+      PrivacyVisibility.friends => Icons.people_alt,
+      PrivacyVisibility.friendsExcept => Icons.group_remove,
+      PrivacyVisibility.nobody => Icons.lock,
+    };
+  }
+
+  /// Deskripsi singkat tiap opsi (sub-judul).
+  String _desc(S s, PrivacyVisibility value) {
+    return switch (value) {
+      PrivacyVisibility.everyone => s.privacyEveryoneDesc,
+      PrivacyVisibility.everyoneExcept => s.privacyEveryoneExceptDesc,
+      PrivacyVisibility.friends => s.privacyFriendsDesc,
+      PrivacyVisibility.friendsExcept => s.privacyFriendsExceptDesc,
+      PrivacyVisibility.nobody => s.privacyNobodyDesc,
+    };
+  }
+
   String _label(S s, PrivacyVisibility value) {
     return switch (value) {
       PrivacyVisibility.everyone => s.privacyEveryone,
@@ -104,39 +126,36 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(_titleForField(s, field), style: AppText.title),
-              ),
-            ),
-            for (final value in PrivacyVisibility.values)
-              ListTile(
-                leading: Icon(
-                  value == current
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  color: value == current
-                      ? AppTheme.primary
-                      : AppTheme.textSecondary,
-                  size: 20,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(_titleForField(s, field), style: AppText.title),
                 ),
-                title: Text(
-                  _label(s, value),
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: value == current
-                        ? FontWeight.w600
-                        : FontWeight.w400,
-                  ),
-                ),
-                onTap: () => Navigator.pop(ctx, value),
               ),
-            const SizedBox(height: 6),
-          ],
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Column(
+                  children: [
+                    for (final value in PrivacyVisibility.values)
+                      _VisibilityOptionTile(
+                        icon: _icon(value),
+                        title: _label(s, value),
+                        subtitle: _desc(s, value),
+                        selected: value == current,
+                        onTap: () => Navigator.pop(ctx, value),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -416,6 +435,86 @@ class _PrivacySwitchTile extends StatelessWidget {
         activeThumbColor: AppTheme.primary,
       ),
       onTap: () => onChanged(!value),
+    );
+  }
+}
+
+/// Baris opsi di sheet pemilih visibilitas — ikon lingkaran berwarna,
+/// judul + deskripsi singkat, dan centang pada opsi terpilih.
+class _VisibilityOptionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _VisibilityOptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = selected ? AppTheme.primary : AppTheme.textSecondary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: selected
+            ? AppTheme.primary.withValues(alpha: 0.10)
+            : AppTheme.bgScreen.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: selected ? 0.16 : 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: accent, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: AppText.bodyStrong.copyWith(
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        subtitle,
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  selected ? Icons.check_circle : Icons.circle_outlined,
+                  color: selected ? AppTheme.primary : AppTheme.textSecondary,
+                  size: 22,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,0 +1,13 @@
+-- Perbaiki GRANT `app_settings`: role `anon` & `authenticated` kehilangan
+-- hak SELECT (kemungkinan terdampak hardening RLS 2026-09-22), sehingga
+-- klien gagal membaca setting global → fitur popup update TIDAK bisa
+-- membaca latest_version/min_version (PostgrestException 42501
+-- "permission denied for table app_settings").
+--
+-- RLS policy `app_settings_select_all` (using(true)) tetap yang menentukan
+-- baris mana yang boleh dibaca; GRANT hanya membuka hak di level tabel.
+-- Ini mengembalikan perilaku yang memang didokumentasikan di migrasi
+-- baseline: "App membaca lewat anon key".
+--
+-- Idempotent: grant aman dipanggil berulang.
+grant select on public.app_settings to anon, authenticated;

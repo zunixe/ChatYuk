@@ -23,6 +23,7 @@ import 'providers/auth_provider.dart';
 import 'providers/call_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/nav_provider.dart';
+import 'providers/update_provider.dart';
 import 'screens/incoming_call_screen.dart';
 import 'screens/call_screen.dart';
 import 'screens/private_chat_screen.dart';
@@ -1511,6 +1512,13 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   runApp(const ChatYukApp());
   // Token FCM lambat (5s) - lazy setelah UI tampil, tidak block TTI
   unawaited(_initFcmTokenLazy());
+  // Cek update (silent) — tunda sedikit supaya frame pertama + warm-gate
+  // selesai dulu; popup update tidak boleh menahan TTI.
+  unawaited(
+    Future<void>.delayed(const Duration(seconds: 4)).then(
+      (_) => UpdateProvider.checkOnStart(navigatorKey),
+    ),
+  );
   // Warm-up jalur RPC: panggilan Supabase PERTAMA selalu jauh lebih mahal
   // (terukur 839ms vs 127-170ms setelahnya) karena TLS handshake + koneksi
   // pool dingin. Bayar biaya itu SEKARANG saat user masih melihat layar

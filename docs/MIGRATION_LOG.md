@@ -1,5 +1,64 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-22 — Privasi "Orang Sekitar": filter blokir + gate berbagi (`20260922140000`)
+
+**Masalah (audit fitur Nearby):**
+1. `nearby_users` **tanpa filter `blocks`** → user yang saling memblokir tetap
+   muncul di daftar Orang Sekitar (keberadaan + jarak bocor; chat-nya sendiri
+   sudah ditolak server).
+2. Gate "harus bagikan lokasi dulu" hanya di UI
+   (`nearby_screen` `if (!_shareOn)`) → panggilan RPC langsung tetap bisa
+   melihat orang lain walau viewer `share_location=false` (bisa "mengintip").
+3. `get_online_users` punya lubang blokir **sama** (daftar online tak memfilter
+   `blocks`).
+
+**Migrasi `20260922140000_nearby_privacy_blocks_share_gate.sql`** (menyentuh
+FROZEN `nearby_users` + non-frozen `get_online_users`):
+- `nearby_users`: gate simetris — bila `share_location=false` → `raise exception
+  'Share required'` (dicek sebelum cek `lat/lon`, sebelum `'No location'`);
+  tambah filter blokir dua arah (`blocks`) idiom sama dengan `story_slides`.
+- `get_online_users` (kedua overload plpgsql): tambah filter blokir dua arah.
+  Tidak ada gate share di sini (online list bukan fitur lokasi).
+
+**Klien:** `lib/config/strings.dart` + `nearbyNeedShareDesc` (bilingual);
+`lib/screens/nearby_screen.dart` memetakan error `'share required'` → empty
+state "Butuh berbagi lokasi" (dibedakan dari `'no location'`).
+
+**Apply:** via Management API (bukan `db push`), versi `20260922140000` dicatat
+di `supabase_migrations.schema_migrations`. **Status: DITERAPKAN 2026-09-22** —
+terverifikasi live: `nearby_users` punya `public.blocks` + `'Share required'`;
+`get_online_users` punya `public.blocks`. Snapshot FROZEN di-regenerate
+(`supabase/snapshots/functions.sql`, diff = hanya `nearby_users`). Test pgTAP
+`schema_sync_test.sql` +4 assert (29/29 hijau).
+
+## 2026-09-22 — Konfigurasi popup update aplikasi (`20260922120000`)
+
+**Fitur:** klien menampilkan popup update saat masuk app bila ada versi baru.
+Sumber kebijakan = `app_settings` (bukan hardcode), sehingga admin bisa
+mengaktifkan/mengubah tanpa rilis ulang.
+
+**Migrasi `20260922120000_app_update_config.sql`:** tambah 4 kolom ke
+`public.app_settings` (idempotent, tanpa DROP/ALTER TYPE, tidak menyentuh
+fungsi FROZEN):
+- `update_enabled boolean not null default false` — saklar fitur (default OFF
+  supaya aman dirilis sebelum admin mengisi).
+- `latest_version text not null default ''` — versionName terbaru (`X.Y.Z`).
+- `min_version text not null default ''` — batas bawah; versi lokal di bawah
+  ini → popup wajib (force).
+- `update_notes text not null default ''` — catatan rilis (bilingual, teks
+  bebas dari admin).
+
+**Klien:** `lib/services/app_update_service.dart` (fetch policy + banding
+semver + deteksi installer Play + Play Core flexible/immediate),
+`lib/providers/update_provider.dart` (state + snooze 24 jam),
+`lib/widgets/update_dialog.dart`. Non-Play (apkpure/admin) → tombol membuka
+listing Play di browser.
+
+**Apply:** via Management API (bukan `db push`), lalu catat versi di
+`supabase_migrations.schema_migrations`. **Status: DITERAPKAN 2026-09-22** —
+4 kolom terverifikasi ada; versi `20260922120000` tercatat. Detail + rollback
+di `supabase/migrations/APPLIED_VIA_API.md`.
+
 ## 2026-09-22 — Privacy hardening: tutup bypass REST (`20260922100000`, `20260922110000`)
 
 **Masalah (audit privasi):** setting privasi berfungsi di jalur RPC, tapi bisa

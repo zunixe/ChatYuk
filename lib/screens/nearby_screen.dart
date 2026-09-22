@@ -102,7 +102,9 @@ class _NearbyScreenState extends State<NearbyScreen> {
       final msg = e.toString().toLowerCase();
       setState(() {
         _loading = false;
-        _error = msg.contains('no location') ? 'no_location' : 'generic';
+        _error = msg.contains('share required')
+            ? 'share_required'
+            : (msg.contains('no location') ? 'no_location' : 'generic');
       });
     }
   }
@@ -283,6 +285,18 @@ class _NearbyScreenState extends State<NearbyScreen> {
     }
     if (!_shareOn) {
       return _emptyState(Icons.location_off, s.nearbyNeedShare, null, s);
+    }
+    // Server menolak karena share_location=false (server = sumber kebenaran;
+    // mis. switch lokal sempat ON padahal update gagal). Arahkan user
+    // mengaktifkan berbagi — simetris: tak berbagi = tak boleh melihat.
+    if (_error == 'share_required') {
+      return _emptyState(
+        Icons.location_off,
+        s.nearbyNeedShare,
+        null,
+        s,
+        hint: s.nearbyNeedShareDesc,
+      );
     }
     if (_error == 'no_location') {
       return _emptyState(

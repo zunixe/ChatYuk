@@ -235,6 +235,9 @@ class S {
   String get nearbyNeedShare => isId
       ? 'Aktifkan "Bagikan Lokasi" untuk memakai fitur ini'
       : 'Enable "Share Location" to use this feature';
+  String get nearbyNeedShareDesc => isId
+      ? 'Untuk melihat orang sekitar, kamu juga perlu ikut membagikan lokasi.'
+      : 'To see people nearby, you also need to share your location.';
   String get nearbyShareToggle => isId ? 'Bagikan Lokasi' : 'Share Location';
   String get nearbyShareDesc => isId
       ? 'Orang lain bisa menemukanmu di sekitar mereka'
@@ -530,6 +533,19 @@ class S {
   String get privacyFriendsExcept =>
       isId ? 'Teman saya kecuali...' : 'My friends except...';
   String get privacyNobody => isId ? 'Tidak ada' : 'Nobody';
+  // Deskripsi tiap opsi (sub-judul di sheet pemilih).
+  String get privacyEveryoneDesc =>
+      isId ? 'Siapa pun bisa melihat' : 'Anyone can see';
+  String get privacyEveryoneExceptDesc =>
+      isId ? 'Semua bisa melihat, kecuali orang terpilih'
+          : 'Anyone except selected people';
+  String get privacyFriendsDesc =>
+      isId ? 'Hanya teman kamu' : 'Only your friends';
+  String get privacyFriendsExceptDesc =>
+      isId ? 'Hanya teman, kecuali orang terpilih'
+          : 'Only friends, except selected people';
+  String get privacyNobodyDesc =>
+      isId ? 'Tidak ada yang bisa melihat' : 'No one can see';
   String get privacyPresence => isId ? 'Status online' : 'Online status';
   String get privacyLastSeen => isId ? 'Terakhir dilihat' : 'Last seen';
   String get privacyProfilePhoto => isId ? 'Foto profil' : 'Profile photo';
@@ -1268,6 +1284,38 @@ class S {
   String get msgFileTooLarge => isId
       ? 'File terlalu besar. Maksimal 10MB.'
       : 'File too large. Maximum 10MB.';
+
+  // ── Popup update aplikasi ──
+  String get updateTitle => isId ? 'Update Tersedia' : 'Update Available';
+  String get updateRequiredTitle =>
+      isId ? 'Update Wajib' : 'Update Required';
+  String updateAvailableMsg(String v) => isId
+      ? 'Versi $v sudah tersedia. Update sekarang untuk pengalaman terbaik.'
+      : 'Version $v is available. Update now for the best experience.';
+  String get updateRequiredMsg => isId
+      ? 'Versi kamu sudah tidak didukung. Update dulu untuk lanjut memakai app.'
+      : 'Your version is no longer supported. Please update to continue.';
+  String get updateNotesLabel => isId ? 'Yang baru:' : "What's new:";
+  String get btnUpdateNow => isId ? 'Update Sekarang' : 'Update Now';
+  String get btnUpdateLater => isId ? 'Nanti' : 'Later';
+  String updateDownloading(int pct) =>
+      isId ? 'Mengunduh… $pct%' : 'Downloading… $pct%';
+  String get updatePreparing =>
+      isId ? 'Menyiapkan unduhan…' : 'Preparing download…';
+  String get updateReadyTitle =>
+      isId ? 'Update siap dipasang' : 'Update ready to install';
+  String get updateReadyMsg => isId
+      ? 'Update sudah diunduh. Mulai ulang app untuk menerapkannya.'
+      : 'The update is downloaded. Restart the app to apply it.';
+  String get btnUpdateRestart =>
+      isId ? 'Mulai Ulang & Pasang' : 'Restart & Install';
+  String get updateFailed => isId
+      ? 'Gagal memulai update. Coba lagi atau update lewat Google Play.'
+      : 'Failed to start the update. Try again or update via Google Play.';
+  String get btnOpenStore => isId ? 'Buka Google Play' : 'Open Google Play';
+  String get updateOpenStoreMsg => isId
+      ? 'App ini tidak di-install dari Google Play. Buka halaman app di Play Store untuk update.'
+      : 'This app was not installed from Google Play. Open the Play Store listing to update.';
   String get btnEmoji => isId ? 'Emoji' : 'Emoji';
   String get tooltipResize =>
       isId ? 'Geser untuk mengubah ukuran' : 'Drag to resize';

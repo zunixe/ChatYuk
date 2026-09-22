@@ -80,6 +80,9 @@ dependencies:
   permission_handler: ^13.0.1
   device_info_plus: ^12.4.0
   package_info_plus: ^9.0.1
+  # Popup update: Play Core In-App Update (hanya Android; hanya bekerja
+  # bila app di-install dari Google Play — lihat app_update_service.dart).
+  in_app_update: ^5.0.0
   sqflite_sqlcipher: ^3.4.1
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.4.0

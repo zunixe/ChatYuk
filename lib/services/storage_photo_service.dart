@@ -53,9 +53,47 @@ class StoragePhotoService {
   /// setelah re-upload).
   String avatarPath(String uid) => 'avatars/$uid.jpg';
 
+  /// Deteksi format gambar asli dari bytes (magic bytes), BUKAN dari nama
+  /// file / asumsi. Mengembalikan ekstensi + MIME yang benar.
+  ///
+  /// Kenapa penting: avatar bisa di-upload sebagai WebP/PNG, tapi dulu path
+  /// SELALU berakhiran `.jpg` dan upload TANPA `contentType`. Akibatnya file
+  /// WebP disimpan bernama `.jpg` + dilabeli `image/jpeg` → device LAIN yang
+  /// men-decode lewat CDN menerima content-type palsu → decode tidak sempurna
+  /// (muncul artefak/"biro-biro"). Pemilik tetap melihat benar karena
+  /// bytes asli sudah ter-cache lokal.
+  static ({String ext, String mime}) _detectImageFormat(Uint8List b) {
+    // JPEG: FF D8 FF
+    if (b.length >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) {
+      return (ext: 'jpg', mime: 'image/jpeg');
+    }
+    // PNG: 89 50 4E 47
+    if (b.length >= 4 &&
+        b[0] == 0x89 &&
+        b[1] == 0x50 &&
+        b[2] == 0x4E &&
+        b[3] == 0x47) {
+      return (ext: 'png', mime: 'image/png');
+    }
+    // WebP: "RIFF" .... "WEBP"
+    if (b.length >= 12 &&
+        b[0] == 0x52 &&
+        b[1] == 0x49 &&
+        b[2] == 0x46 &&
+        b[3] == 0x46 &&
+        b[8] == 0x57 &&
+        b[9] == 0x45 &&
+        b[10] == 0x42 &&
+        b[11] == 0x50) {
+      return (ext: 'webp', mime: 'image/webp');
+    }
+    // Fallback: perlakukan sebagai JPEG (perilaku lama).
+    return (ext: 'jpg', mime: 'image/jpeg');
+  }
+
   /// Avatar versi unik per upload — dipakai untuk upload BARU.
-  String avatarPathVersioned(String uid) =>
-      'avatars/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+  String avatarPathVersioned(String uid, {String ext = 'jpg'}) =>
+      'avatars/${uid}_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
   /// Path foto galeri user (indeks/detik untuk keunikan).
   String photoPath(String uid) =>
@@ -171,7 +209,8 @@ class StoragePhotoService {
   /// tidak didukung server — thumbnail tidak boleh gagal total.
   /// height/resize WAJIB diisi untuk hasil proporsional: server
   /// menghancurkan aspek bila hanya width tanpa resize (kasus nyata:
-  /// story 960x1440 → 160x1440). Story tile 59x109: height 296 + cover.
+  /// story 960x1440 → 160x1440). Story tile 62x109: width 180 + height 316 +
+  /// cover (rasio 0.569 = kartu preview viewer, crop thumbnail = preview).
   Future<Uint8List?> downloadThumbBytes(String path,
       {int width = 160,
       int? height,
@@ -213,13 +252,17 @@ class StoragePhotoService {
   }) async {
     try {
       final bytes = base64Decode(base64);
-      final path = avatarPathVersioned(uid);
+      // Ekstensi + contentType HARUS cocok dengan bytes asli. Kalau tidak,
+      // device penonton men-decode lewat CDN dengan content-type palsu →
+      // gambar tampil rusak (artefak). Lihat [_detectImageFormat].
+      final fmt = _detectImageFormat(bytes);
+      final path = avatarPathVersioned(uid, ext: fmt.ext);
       await _sb.storage
           .from(_bucket)
           .uploadBinary(
             path,
             bytes,
-            fileOptions: const FileOptions(upsert: true),
+            fileOptions: FileOptions(upsert: true, contentType: fmt.mime),
           );
       return path;
     } catch (e) {

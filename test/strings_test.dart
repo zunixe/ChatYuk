@@ -36,6 +36,20 @@ void main() {
         id.msgDeleteAccountSuccess,
         id.confirmLogoutBody,
         id.offlineBanner,
+        // Popup update aplikasi.
+        id.updateTitle,
+        id.updateRequiredTitle,
+        id.updateRequiredMsg,
+        id.updateNotesLabel,
+        id.btnUpdateNow,
+        id.btnUpdateLater,
+        id.updatePreparing,
+        id.updateReadyTitle,
+        id.updateReadyMsg,
+        id.btnUpdateRestart,
+        id.updateFailed,
+        id.btnOpenStore,
+        id.updateOpenStoreMsg,
       ];
       final gettersEn = <String>[
         en.navOnline,
@@ -60,6 +74,19 @@ void main() {
         en.msgDeleteAccountSuccess,
         en.confirmLogoutBody,
         en.offlineBanner,
+        en.updateTitle,
+        en.updateRequiredTitle,
+        en.updateRequiredMsg,
+        en.updateNotesLabel,
+        en.btnUpdateNow,
+        en.btnUpdateLater,
+        en.updatePreparing,
+        en.updateReadyTitle,
+        en.updateReadyMsg,
+        en.btnUpdateRestart,
+        en.updateFailed,
+        en.btnOpenStore,
+        en.updateOpenStoreMsg,
       ];
       for (final v in [...getters, ...gettersEn]) {
         expect(v.trim(), isNotEmpty);
