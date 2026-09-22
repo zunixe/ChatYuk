@@ -37,6 +37,43 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | 2026-09-19 16:45 | develop | adminProd + apkpureProd | End-call: UI hilang dulu (notify sebelum cleanup WebRTC) + pop 250ms; tap notif panggilan aktif → langsung layar call (resume hook) | Success (stream install keduanya di 192.168.18.240:38199 & 192.168.18.33:42003) |
 
+| 2026-09-22 10:32 | develop | adminProd | Avatar anti-hilang (4 bug): decode gagal tak lagi mengosongkan foto; eviction `_avatarLastSrcByUid` dibuang; `user_info` retry 1x; `_applyProfileUpdate` pertahankan foto lama. Detail di bawah | Success (push 192.168.137.155:33151) |
+
+---
+
+## 2026-09-22 - Avatar "kadang ada kadang hilang" (4 bug, sudah beres)
+
+**Gejala:** foto avatar di halaman **Pengguna Online** & **Profil sendiri**
+kadang tampil, kadang hilang sendiri, lalu muncul lagi tanpa aksi user.
+
+**Akar masalah (semua pola sama: hasil kosong/gagal menimpa foto yang sudah
+tampil):**
+
+| # | File | Bug | Perbaikan |
+|---|---|---|---|
+| 1 | `lib/widgets/async_photo.dart` | `AsyncCircleAvatar._decode()` memanggil `setState(() => _bytes = bytes)` apa pun hasilnya - `bytes == null` (decode gagal) bikin foto hilang, `build()` kembalikan `SizedBox.shrink()` = transparan | Hanya set saat `bytes != null`; gagal -> **pertahankan `_bytes` lama** + retry 1x (300ms). `build()` tampilkan inisial saat bytes null (bukan kosong) - tambah param `initial`/`initialColor` |
+| 2 | `lib/screens/online_users_screen.dart` | `_AsyncAvatarState._resolve()` -> `if (b == null) { _provider = null; }` membuang foto yang sudah tampil | `return` saja (pertahankan provider) + log `DECODE-FAIL(sync/async) keep-old=` |
+| 3 | `lib/screens/online_users_screen.dart` | `_avatarLastSrcByUid` di-evict cap 200 -> cek "sumber sama" gagal -> decode ulang percuma -> memicu bug #2 | Eviction map itu **dihapus** (isinya string pendek, bukan byte) |
+| 4 | `lib/screens/user_info_screen.dart` | `_loadAvatar()` sekali gagal = inisial permanen sampai layar dibuka ulang | Retry otomatis 1x (400ms) + pemuatan ulang via post-frame dengan guard `_avatarRetried` |
+| 5 | `lib/providers/auth_provider.dart` | `_applyProfileUpdate()` -> `copyWith(avatar: b64)` dengan `b64=''` saat `getByPath` gagal -> foto profil hilang | Pertahankan avatar lama kalau hasil kosong (`keep = b64.isNotEmpty ? b64 : prev`) |
+
+**Perilaku baru saat foto memang tidak ada:** tampil **inisial**, bukan
+transparan - user tahu bedanya "belum selesai" vs "tidak punya foto".
+
+**Verifikasi:**
+- `flutter analyze` -> **0 error**
+- `flutter test` -> **969 test lulus** (2 test baru di
+  `test/image_cap_widgets_test.dart`: "base64 rusak tidak mengosongkan foto
+  lama" + "fallback inisial dipakai saat tidak ada foto")
+- Log uji membuktikan: `[AVATAR] decode-fail len=15 attempt=1 keep-old=true`
+
+**Log diagnostik `[AVATAR]` DIPASANG SEMENTARA** - ditambahkan di beberapa
+titik (`decode-fail`, `EMPTY keep-old`, `DECODE-FAIL(sync/async)`, plus 3 log
+di `user_info_screen`). **Hapus setelah user memastikan foto tidak hilang
+lagi di HP.**
+
+
+
 ## Catatan penting: build probe & the underlying provider Sign-In
 
 Build `--profile`/`--debug` **selalu** bikin the underlying provider Sign-In gagal (`DEVELOPER_ERROR`)

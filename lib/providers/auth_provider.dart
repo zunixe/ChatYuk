@@ -1506,7 +1506,16 @@ class AuthProvider extends ChangeNotifier {
         StoragePhotoService.instance.isAvatarPath(avatar)) {
       final b64 = await AvatarB64Service.instance.getByPath(avatar);
       if (_disposed) return;
-      final finalProfile = updated.copyWith(avatar: b64);
+      // ANTI-HILANG: download gagal (jaringan/storage sesaat) TIDAK boleh
+      // mengosongkan foto yang sudah tampil. Dulu `copyWith(avatar: b64)`
+      // dengan b64='' → foto profil hilang sampai event realtime berikutnya
+      // (gejala "kadang ada kadang hilang" di halaman Profil).
+      final prev = _profile?.avatar ?? '';
+      final keep = b64.isNotEmpty ? b64 : prev;
+      if (b64.isEmpty && prev.isNotEmpty) {
+        dlog('[AUTH] avatar gagal diunduh, pertahankan foto lama (${avatar})');
+      }
+      final finalProfile = updated.copyWith(avatar: keep);
       final uid = finalProfile.uid;
       if (b64.isNotEmpty) {
         AvatarB64Service.instance.setForUid(uid, b64);
@@ -1514,7 +1523,14 @@ class AuthProvider extends ChangeNotifier {
       }
       _profile = finalProfile;
     } else {
-      _profile = updated;
+      // Avatar kosong di payload (mis. field belum ikut terkirim): jangan
+      // buang foto lama — hanya ganti kalau payload memang membawa nilai.
+      var next = updated;
+      final prev = _profile?.avatar ?? '';
+      if (avatar.isEmpty && prev.isNotEmpty) {
+        next = updated.copyWith(avatar: prev);
+      }
+      _profile = next;
       if (avatar.isNotEmpty) {
         AvatarB64Service.instance.setForUid(updated.uid, avatar);
         ChatService.setAvatarCacheForUid(updated.uid, avatar);

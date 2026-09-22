@@ -67,4 +67,54 @@ void main() {
     expect(decodeThumbB64('not base64 !!!'), isNull);
     expect(decodeThumbB64(base64Encode(Uint8List.fromList([1, 2, 3]))), isNull);
   });
+
+  // ── ANTI-KEDIP AVATAR (regresi nyata: "kadang ada kadang hilang") ──
+  // Kontrak: hasil decode GAGAL tidak boleh mengosongkan foto yang sudah
+  // tampil. Widget mempertahankan bytes lama; hanya GANTI kalau berhasil.
+  group('AsyncCircleAvatar anti-kedip', () {
+    testWidgets('base64 rusak tidak mengosongkan foto lama', (tester) async {
+      final good = _b64Jpeg(200, 200);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: AsyncCircleAvatar(base64: good, radius: 40)),
+      ));
+      // Decode awal (compute di isolate) — tunggu selesai.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      });
+      await tester.pump();
+      expect(find.byType(CircleAvatar), findsOneWidget,
+          reason: 'foto valid harus tampil');
+
+      // Sumber berubah ke base64 RUSAK (emission ternetwork) — foto lama
+      // WAJIB dipertahankan, bukan hilang.
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: AsyncCircleAvatar(base64: 'bukan-base64!!!', radius: 40)),
+      ));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+      });
+      await tester.pump();
+      // Retry 1x di dalam widget: tetap gagal, tapi CircleAvatar lama TIDAK
+      // boleh hilang selama widget belum di-dispose.
+      expect(find.byType(CircleAvatar), findsOneWidget,
+          reason: 'decode gagal tidak boleh mengosongkan foto lama');
+
+      // Lepas widget dari tree + habiskan timer retry (300ms di dalam
+      // widget) supaya tidak ada "Timer still pending" saat test selesai.
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+    });
+
+    testWidgets('fallback inisial dipakai saat tidak ada foto', (tester) async {
+      await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+          body: AsyncCircleAvatar(base64: '', radius: 40, initial: 'Z'),
+        ),
+      ));
+      await tester.pump();
+      expect(find.text('Z'), findsOneWidget,
+          reason: 'tanpa foto → inisial, bukan kosong transparan');
+    });
+  });
 }

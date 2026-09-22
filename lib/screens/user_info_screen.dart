@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../utils.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
 import '../providers/chat_provider.dart';
@@ -40,6 +41,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   // lambat, SELURUH profil kena timeout 10 dtk → layar "Coba lagi"
   // (keluhan "profilnya ga muncul" padahal datanya ada).
   String _avatarB64 = '';
+  // Path avatar terakhir + penanda sudah pernah dicoba, supaya kegagalan
+  // sesaat bisa dicoba ulang sekali (foto tidak "menghilang" permanen
+  // selama layar terbuka).
+  String _avatarPath = '';
+  bool _avatarRetried = false;
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
   String _status = 'offline';
@@ -406,19 +412,46 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     _subscribeStatus(p);
     // Avatar menyusul — tidak menahan tampilnya profil.
     final path = _profile?.avatar ?? '';
-    if (path.isNotEmpty) _loadAvatar(path);
+    if (path.isNotEmpty && path != _avatarPath) {
+      _avatarRetried = false;
+      _loadAvatar(path);
+    }
   }
 
   /// Muat foto profil (path → base64) setelah profil tampil. Kegagalan di
   /// sini hanya berarti avatar kosong (inisial), BUKAN layar error.
+  ///
+  /// ANTI-HILANG: kalau gagal sesaat, coba SEKALI lagi setelah jeda pendek.
+  /// Dulu sekali gagal = inisial permanen sampai layar dibuka ulang; kalau
+  /// kebetulan decoding/network sedang sibuk saat masuk, foto tampak
+  /// "hilang" padahal ada di server.
   Future<void> _loadAvatar(String path) async {
-    try {
-      final b64 = await context
-          .read<AuthProvider>()
-          .getAvatarByPath(path)
-          .timeout(_loadTimeout);
-      if (mounted && b64.isNotEmpty) setState(() => _avatarB64 = b64);
-    } catch (_) {}
+    _avatarPath = path;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (!mounted) return;
+      try {
+        final b64 = await context
+            .read<AuthProvider>()
+            .getAvatarByPath(path)
+            .timeout(_loadTimeout);
+        if (!mounted) return;
+        if (b64.isNotEmpty) {
+          setState(() => _avatarB64 = b64);
+          dlog('[AVATAR] info ${widget.userId.substring(0, 8)} load OK '
+              'len=${b64.length} attempt=$attempt');
+          return;
+        }
+        dlog('[AVATAR] info ${widget.userId.substring(0, 8)} kosong '
+            'attempt=$attempt');
+      } catch (e) {
+        dlog('[AVATAR] info ${widget.userId.substring(0, 8)} gagal '
+            'attempt=$attempt err=$e');
+      }
+      if (attempt == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+    }
+    _avatarRetried = true;
   }
 
   void _retryLoad() {
@@ -633,7 +666,18 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           ? _LoadingPlaceholder(name: widget.fallbackName)
           : (_loadError && _profile == null)
               ? _LoadErrorView(onRetry: _retryLoad)
-              : SingleChildScrollView(
+              : Builder(builder: (_) {
+              // Foto masih kosong padahal profil punya path → coba sekali lagi
+              // (kegagalan pertama bisa sesaat). Guard `_avatarRetried` supaya
+              // tidak memicu loop kalau memang tidak ada fotonya.
+              if (_avatarB64.isEmpty &&
+                  _avatarPath.isNotEmpty &&
+                  !_avatarRetried) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && _avatarB64.isEmpty) _loadAvatar(_avatarPath);
+                });
+              }
+              return SingleChildScrollView(
               // padding bawah + tinggi nav bar Android supaya card galeri
               // (terakhir) tidak tertutup gesture bar / 3-tombol.
               padding: EdgeInsets.fromLTRB(
@@ -659,6 +703,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                   : profile?.gender == 'female'
                                   ? AppTheme.female
                                   : AppTheme.accent,
+                              // Foto gagal decode → inisial, jangan kosong.
+                              initial:
+                                  (name.isNotEmpty ? name[0] : '?').toUpperCase(),
                             )
                           : CircleAvatar(
                               radius: 50,
@@ -1071,7 +1118,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   ),
                 ],
               ),
-            ),
+              );
+              }),
     );
   }
 
