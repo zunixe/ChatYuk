@@ -156,8 +156,12 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
   void _resolve() {
     final src = widget.avatarB64;
     // Batasi map global sebelum tulis baru — evict FIFO kalau lewat cap.
+    // CATATAN: `_avatarLastSrcByUid` SENGAJA tidak di-evict. Map itu hanya
+    // menyimpan string pendek (path/base64), tapi jadi kunci "sumber sama"
+    // di bawah — kalau entry-nya terbuang saat list panjang, decode ulang
+    // jalan percuma dan satu kegagalan decode sempat mengosongkan foto
+    // (gejala "kadang ada kadang hilang").
     _boundAvatarMap(_avatarBytesByUid);
-    _boundAvatarMap(_avatarLastSrcByUid);
     _boundAvatarMap(_avatarImageByUid);
     final srcType = src.isEmpty ? 'EMPTY' : src.startsWith('avatars/') ? 'PATH' : 'B64';
     // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
@@ -168,6 +172,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     _avatarLastSrcByUid[widget.uid] = src;
     if (src.isEmpty) {
       // Kosong → pertahankan provider lama (jangan kedip ke inisial).
+      dlog('[AVATAR] $_uid8 EMPTY keep-old=${_provider != null}');
       return;
     }
     // PATH storage → baca bytes dari MEDIA DISK CACHE (instan, tanpa
@@ -207,7 +212,10 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
         _asyncResolvingFor = src;
         compute(_decodeAvatarB64Iso, src).then((decoded) {
           _asyncResolvingFor = null;
-          if (decoded == null || decoded.isEmpty) return;
+          if (decoded == null || decoded.isEmpty) {
+            dlog('[AVATAR] $_uid8 DECODE-FAIL(async) keep-old=${_provider != null}');
+            return;
+          }
           _avatarCache.putIfAbsent(src, () => decoded);
           _avatarBytesByUid[widget.uid] ??= decoded;
           _avatarImageByUid.putIfAbsent(
@@ -231,7 +239,14 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
         }
       }
       if (b == null) {
-        _provider = null;
+        // ── JANGAN buang foto yang sudah tampil ──
+        // Satu emission dengan base64 rusak/kecil tidak boleh mengosongkan
+        // kartu: pertahankan `_provider` lama dan tunggu emission berikutnya
+        // membawa data benar. Dulu `_provider = null` di sini → foto hilang
+        // (transparan) sampai batch network menyusul = "kadang ada kadang
+        // hilang".
+        dlog('[AVATAR] $_uid8 DECODE-FAIL(sync) len=${src.length} '
+            'keep-old=${_provider != null}');
         return;
       }
       _avatarBytesByUid[widget.uid] = b;
@@ -241,7 +256,6 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
       () => MemoryImage(_avatarBytesByUid[widget.uid]!),
     );
     _boundAvatarMap(_avatarBytesByUid);
-    _boundAvatarMap(_avatarLastSrcByUid);
     _boundAvatarMap(_avatarImageByUid);
   }
 

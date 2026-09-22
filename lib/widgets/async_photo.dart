@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
 import '../config/theme.dart';
+import '../utils.dart';
 
 Uint8List? _decodeBase64(String b64) {
   try {
@@ -149,17 +150,34 @@ class _AsyncPhotoViewerState extends State<AsyncPhotoViewer> {
 }
 
 /// CircleAvatar async — decode dari base64 dengan cache sederhana.
+///
+/// ANTI-KEDIP (jangan dibalik): hasil decode yang GAGAL (`null`) TIDAK BOLEH
+/// menimpa bytes yang sudah tampil. Dulu `setState(() => _bytes = bytes)`
+/// dipanggil apa pun hasilnya, sehingga satu decode gagal (base64 korup dari
+/// emission ternetwork, isolate kehabisan memori) langsung mengosongkan foto
+/// — lalu muncul lagi saat decode berikutnya berhasil. Gejala: "kadang ada
+/// kadang hilang".
 class AsyncCircleAvatar extends StatefulWidget {
   final String base64;
   final double radius;
   final Color? bgColor;
   final Widget? fallback;
+
+  /// Huruf inisial saat foto belum/gagal tampil. Kalau kosong, memakai
+  /// `fallback` (bila ada) — perilaku lama.
+  final String initial;
+
+  /// Warna huruf inisial (default putih, kontras dgn bgColor berwarna).
+  final Color? initialColor;
+
   const AsyncCircleAvatar({
     super.key,
     required this.base64,
     this.radius = 40,
     this.bgColor,
     this.fallback,
+    this.initial = '',
+    this.initialColor,
   });
 
   @override
@@ -171,6 +189,9 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
   Uint8List? _bytes;
   // RAM cache dipasangkan fade agar first-appearance tidak pop kasar.
   static final _cache = <String, Uint8List>{};
+  // Percobaan decode per base64 (maks 2: awal + 1 retry) supaya base64 rusak
+  // tidak memicu decode berulang tanpa henti tiap rebuild.
+  final Map<String, int> _attempts = {};
   late final AnimationController _fade = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 150),
@@ -206,11 +227,36 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
   }
 
   Future<void> _decode() async {
-    final bytes = await compute(_decodeBase64, widget.base64);
+    final src = widget.base64;
+    final bytes = await compute(_decodeBase64, src);
     if (!mounted) return;
-    if (bytes != null && _cache.length < 200) _cache[widget.base64] = bytes;
-    setState(() => _bytes = bytes);
-    _fade.forward();
+    if (bytes != null) {
+      if (_cache.length < 200) _cache[src] = bytes;
+      setState(() => _bytes = bytes);
+      _fade.forward();
+      return;
+    }
+    // ── GAGAL DECODE ──
+    // Jangan sentuh `_bytes` (foto lama tetap tampil). Coba sekali lagi
+    // setelah jeda pendek — kegagalan sering sesaat (isolate belum siap /
+    // base64 terpotong saat emission bertabrakan).
+    final tried = (_attempts[src] ?? 0) + 1;
+    _attempts[src] = tried;
+    dlog('[AVATAR] decode-fail len=${src.length} attempt=$tried '
+        'keep-old=${_bytes != null}');
+    if (tried >= 2) return;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted || widget.base64 != src) return;
+    final retry = await compute(_decodeBase64, src);
+    if (!mounted || widget.base64 != src) return;
+    if (retry != null) {
+      if (_cache.length < 200) _cache[src] = retry;
+      setState(() => _bytes = retry);
+      _fade.forward();
+      dlog('[AVATAR] decode-retry OK len=${src.length}');
+    } else {
+      dlog('[AVATAR] decode-retry GAGAL len=${src.length} keep-old=${_bytes != null}');
+    }
   }
 
   @override
@@ -222,7 +268,24 @@ class _AsyncCircleAvatarState extends State<AsyncCircleAvatar>
   @override
   Widget build(BuildContext context) {
     final b = _bytes;
-    if (b == null) return widget.fallback ?? const SizedBox.shrink();
+    if (b == null) {
+      // Foto belum/gagal siap. Utamakan `fallback` eksplisit; kalau tidak ada
+      // dan ada inisial, tampilkan huruf (lebih jelas daripada kosong).
+      if (widget.fallback != null) return widget.fallback!;
+      if (widget.initial.isNotEmpty) {
+        return Center(
+          child: Text(
+            widget.initial,
+            style: TextStyle(
+              color: widget.initialColor ?? Colors.white,
+              fontSize: AppGlyph.avatarInitial(widget.radius * 2),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
     return FadeTransition(
       opacity: _fade,
       child: CircleAvatar(
