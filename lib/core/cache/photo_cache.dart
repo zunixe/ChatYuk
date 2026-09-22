@@ -8,7 +8,8 @@ import 'package:path_provider/path_provider.dart';
 import 'message_cache.dart';
 
 // Top-level untuk compute() — buat thumbnail JPEG kecil (~512px) dari base64.
-Future<String?> _genThumb(Map<String, dynamic> args) async {
+@visibleForTesting
+Future<String?> genThumb(Map<String, dynamic> args) async {
   try {
     final b64 = args['b64'] as String;
     final bytes = base64Decode(b64);
@@ -25,6 +26,17 @@ Future<String?> _genThumb(Map<String, dynamic> args) async {
     return null;
   }
 }
+
+/// Apakah memori LRU melebihi cap (buang tertua)? Murni & testable.
+/// `chars` = total karakter b64; `cap` = batas karakter.
+@visibleForTesting
+bool chatMemShouldEvict(int chars, int cap) => chars > cap;
+
+/// Batas memori cache chat (full-res 20MB, thumb 8MB) — diekspos untuk test.
+@visibleForTesting
+const int chatMemMaxChars = 20 * 1024 * 1024;
+@visibleForTesting
+const int chatThumbMemMaxChars = 8 * 1024 * 1024;
 
 /// Cache foto pesan lokal sebagai FILE terenkripsi (AES-GCM, kunci dari
 /// Android Keystore via MessageCache). Setiap foto satu file terpisah
@@ -56,7 +68,8 @@ class PhotoCache {
     _memCache.remove(messageId);
     _memCache[messageId] = b64;
     _memChars += b64.length;
-    while (_memChars > _memMaxChars && _memCache.isNotEmpty) {
+    while (chatMemShouldEvict(_memChars, _memMaxChars) &&
+        _memCache.isNotEmpty) {
       final oldest = _memCache.keys.first;
       _memChars -= _memCache.remove(oldest)!.length;
     }
@@ -68,7 +81,8 @@ class PhotoCache {
     _thumbMem.remove(messageId);
     _thumbMem[messageId] = b64;
     _thumbMemChars += b64.length;
-    while (_thumbMemChars > _thumbMemMaxChars && _thumbMem.isNotEmpty) {
+    while (chatMemShouldEvict(_thumbMemChars, _thumbMemMaxChars) &&
+        _thumbMem.isNotEmpty) {
       final oldest = _thumbMem.keys.first;
       _thumbMemChars -= _thumbMem.remove(oldest)!.length;
     }
@@ -131,7 +145,7 @@ class PhotoCache {
         await f.readAsString(),
       );
       if (full == null) return null;
-      final thumb = await compute(_genThumb, {'b64': full});
+      final thumb = await compute(genThumb, {'b64': full});
       if (thumb != null) {
         _thumbPut(messageId, thumb);
         _writeThumbFileAsync(chatKey, messageId, thumb);
@@ -215,7 +229,7 @@ class PhotoCache {
       while (true) {
         final idx = next++;
         if (idx >= entries.length) return;
-        final thumb = await compute(_genThumb, {'b64': entries[idx].value});
+        final thumb = await compute(genThumb, {'b64': entries[idx].value});
         if (thumb != null) result[entries[idx].key] = thumb;
       }
     }
@@ -250,7 +264,7 @@ class PhotoCache {
     final enc = await MessageCache.instance.encryptString(base64Image);
     await f.writeAsString(enc, flush: true);
     _memPut(messageId, base64Image);
-    final thumb = await compute(_genThumb, {'b64': base64Image});
+    final thumb = await compute(genThumb, {'b64': base64Image});
     if (thumb != null) {
       _thumbPut(messageId, thumb);
       _writeThumbFileAsync(chatKey, messageId, thumb);

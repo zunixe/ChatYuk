@@ -7,7 +7,8 @@ import 'package:path_provider/path_provider.dart';
 
 // Top-level untuk compute() — buat thumbnail JPEG (~1024px) dari bytes asli.
 // 512px terlihat blur saat foto single di-upscale selebar layar (1080px fisik).
-Uint8List? _genPostThumb(Uint8List bytes) {
+@visibleForTesting
+Uint8List? genPostThumb(Uint8List bytes) {
   try {
     final image = img.decodeImage(bytes);
     if (image == null) return null;
@@ -21,6 +22,15 @@ Uint8List? _genPostThumb(Uint8List bytes) {
     return null;
   }
 }
+
+/// Apakah total byte LRU melebihi cap (harus buang yang tertua)? Murni &
+/// top-level supaya kontrak cap bisa dikunci tanpa filesystem/plugin.
+@visibleForTesting
+bool lruShouldEvict(int bytes, int cap) => bytes > cap;
+
+/// Cap memori thumbnail post (30MB) — diekspos untuk test.
+@visibleForTesting
+const int postPhotoMemMaxBytes = 30 * 1024 * 1024;
 
 /// Cache foto post timeline di DISK + MEMORY.
 ///
@@ -54,7 +64,7 @@ class PostPhotoCache {
     _mem.remove(path);
     _mem[path] = bytes;
     _memBytes += bytes.length;
-    while (_memBytes > _memMaxBytes && _mem.isNotEmpty) {
+    while (lruShouldEvict(_memBytes, _memMaxBytes) && _mem.isNotEmpty) {
       final oldest = _mem.keys.first;
       _memBytes -= _mem.remove(oldest)!.length;
     }
@@ -96,7 +106,7 @@ class PostPhotoCache {
       }
       final full = await (downloader?.call(path) ?? Future<Uint8List?>.value());
       if (full == null) return null;
-      final thumb = await compute(_genPostThumb, full);
+      final thumb = await compute(genPostThumb, full);
       if (thumb != null) {
         _memPut(path, thumb);
         _writeFileAsync(folder, f, thumb);
@@ -159,7 +169,7 @@ class PostPhotoCache {
           try {
             final full = await (downloader?.call(p) ?? Future<Uint8List?>.value());
             if (full == null) continue;
-            final thumb = await compute(_genPostThumb, full);
+            final thumb = await compute(genPostThumb, full);
             if (thumb == null) continue;
             _memPut(p, thumb);
             _writeFileAsync(folder, _fileFor(folder, p), thumb);
@@ -217,7 +227,7 @@ class PostPhotoCache {
   /// re-download dari Storage. Pola sama dengan PhotoCache.save (chat).
   Future<Uint8List?> save(String path, Uint8List fullBytes) async {
     try {
-      final thumb = await compute(_genPostThumb, fullBytes);
+      final thumb = await compute(genPostThumb, fullBytes);
       if (thumb == null) return null;
       _memPut(path, thumb);
       final folder = await _folder();

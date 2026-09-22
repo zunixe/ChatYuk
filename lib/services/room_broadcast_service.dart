@@ -69,6 +69,11 @@ class RoomBroadcastSession extends ChangeNotifier {
   int get viewerCount => _peers.length;
   static const int kMaxBroadcasters = 4;
 
+  /// Tangga bitrate berdasarkan jumlah penonton — diekspos untuk test
+  /// (murni, tanpa WebRTC). Semakin banyak viewer → bitrate turun.
+  @visibleForTesting
+  static int targetKbps(int viewers) => _targetKbps(viewers);
+
   static int _targetKbps(int viewers) {
     if (viewers <= 2) return 1200;
     if (viewers <= 4) return 700;

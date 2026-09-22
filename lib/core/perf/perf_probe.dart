@@ -192,6 +192,10 @@ class PerfProbe {
   static double _avg(List<int> v) =>
       v.isEmpty ? 0 : v.reduce((a, b) => a + b) / v.length;
 
+  /// Rata-rata (0 bila kosong) — diekspos untuk test statistik probe.
+  @visibleForTesting
+  static double avgOf(List<int> v) => _avg(v);
+
   /// Persentil dari daftar yang SUDAH terurut (interpolasi linear).
   /// Dipakai membedakan noise (max jauh dari p50) dari pola (p90 ikut naik).
   static double _pct(List<int> sorted, int p) {
@@ -204,4 +208,9 @@ class PerfProbe {
     final frac = rank - lo;
     return sorted[lo] * (1 - frac) + sorted[hi] * frac;
   }
+
+  /// Persentil dari daftar SUDAH terurut (interpolasi linear) — diekspos
+  /// untuk test (p50/p90 sering salah kalau rank tidak di-handle benar).
+  @visibleForTesting
+  static double pctOf(List<int> sorted, int p) => _pct(sorted, p);
 }
