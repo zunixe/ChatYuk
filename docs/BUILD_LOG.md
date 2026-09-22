@@ -39,6 +39,55 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | 2026-09-22 10:32 | develop | adminProd | Avatar anti-hilang (4 bug): decode gagal tak lagi mengosongkan foto; eviction `_avatarLastSrcByUid` dibuang; `user_info` retry 1x; `_applyProfileUpdate` pertahankan foto lama. Detail di bawah | Success (push 192.168.137.155:33151) |
 | 2026-09-22 11:11 | develop | adminProd | Logout bersih dari sesi dummy: gate root langsung EntryScreen (flag `signingOut`), tak lagi flash MainNav + popup form profil. `resetPassword` ikut diperbaiki | Success (push 192.168.137.155:33151) |
+| 2026-09-22 16:20 | develop | adminProd | Admin panel tahan offline: error ramah (tanpa URL Supabase), cache disk semua data admin, banner "data terakhir", guard aksi tulis + tombol bersih cache | Success (push 192.168.137.155:33881) |
+
+### Detail: admin panel tahan offline
+
+**Masalah yang dilaporkan:**
+1. Tanpa internet, panel admin menampilkan pesan mentah
+   `ClientException ... Failed host lookup: 'fohcucyyejdryryoxitm.supabase.co'`
+   - membocorkan URL project Supabase + membingungkan.
+2. Data hilang (layar error penuh) padahal seharusnya tetap tampil data
+   terakhir.
+
+**Akar:**
+- `AdminProvider` menyimpan `e.toString()` mentah di 5 field error, dirender
+  apa adanya di 7 tempat (termasuk `'EXCEPTION: $e'` di monitor chat).
+- TIDAK ADA cache disk: `_stats/_chats/_devices/_deleted/_contactMessages/_dummies`
+  murni memori → cold start offline = kosong.
+- Lazy tab sudah ada (`admin_panel_screen._visitedTabs`) tapi fetch pertama
+  tidak dilindungi.
+
+**Perbaikan:**
+- `lib/core/admin_err.dart` (baru): `AdminErrKind` (offline/unauthorized/
+  server/unknown) + `classifyAdminError` + `blockIfOffline`/`guardOfflineCtx`.
+  Klasifikasi mengenali SocketException/ClientException/host-lookup/timeout
+  sebagai `offline`.
+- Semua field error provider jadi `AdminErrKind?`; teks ramah via
+  `s.adminErrTextOf/adminErrHintOf` (extension `strings_admin`, ikut
+  tree-shaken dari build rilis).
+- Cache disk terenkripsi (MessageCache): `admin_stats`, `admin_chats`,
+  `admin_devices`, `admin_deleted`, `admin_contact`, `admin_dummy_list`,
+  `admin_chatmsg_<chatId>`. Pola: sukses tulis disk; gagal JANGAN kosongkan
+  data; data kosong -> muat disk.
+- UI: banner tipis "Data terakhir - tidak ada koneksi" saat data ada tapi
+  refresh gagal; layar error penuh hanya bila belum ada data sama sekali
+  (dengan kategori ramah + tombol coba lagi).
+- Guard aksi tulis saat offline: tab dummy (status/wake/hapus/submit),
+  tab Terhapus (hapus/batch), tab Perangkat (exclude), monitor chat (hapus),
+  Global Setting (semua simpan + toggle AI).
+- Tombol "Bersihkan cache admin" di Global Setting (data admin memuat PII:
+  email/IP/device) -> `AdminProvider.clearAdminCache()`.
+
+**Test:** `test/admin_offline_test.dart` (9 assert): klasifikasi error
+(termasuk pesan ber-URL Supabase -> offline, bukan bocor), guard blokir/tidak.
+
+**Verifikasi:** `flutter analyze` 0 error; `flutter test` **1012 lulus**.
+
+**Catatan:** log diagnostik `[AVATAR]` (dari perbaikan avatar sebelumnya)
+MASIH terpasang - menunggu konfirmasi user.
+
+
 
 ### Detail: flash halaman lain saat logout (sesi dummy)
 
