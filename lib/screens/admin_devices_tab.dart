@@ -11,6 +11,7 @@ import '../providers/admin_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../core/admin_err.dart';
 import '../utils.dart';
 import 'admin_chat_view_screen.dart';
 
@@ -258,11 +259,25 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                         color: AppTheme.danger,
                       ),
                       const SizedBox(height: 8),
+                      // Kategori ramah (detail exception hanya ke dlog).
                       Text(
-                        admin.devicesError!,
+                        s.adminErrTextOf(admin.devicesError!),
                         style: TextStyle(color: AppTheme.danger),
                       ),
-                      const SizedBox(height: 8),
+                      if (s.adminErrHintOf(admin.devicesError!).isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            s.adminErrHintOf(admin.devicesError!),
+                            textAlign: TextAlign.center,
+                            style: AppText.bodySmall.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
                       ElevatedButton(
                         onPressed: () => admin.fetchDevices(),
                         child: Text(s.btnRetry),
@@ -270,7 +285,38 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                     ],
                   ),
                 )
-              : _byDevice
+              : Column(
+                  children: [
+                    // Data ada tapi refresh gagal → banner, bukan layar error.
+                    if (admin.devicesError != null)
+                      Container(
+                        width: double.infinity,
+                        color: AppTheme.danger.withValues(alpha: 0.12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.cloud_off,
+                              size: 16,
+                              color: AppTheme.danger,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                s.adminErrStaleBanner,
+                                style: AppText.bodySmall.copyWith(
+                                  color: AppTheme.danger,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Expanded(
+                      child: _byDevice
               ? _deviceGroupsView(admin, s)
               : _filtered(admin.devices).isEmpty
               ? Center(
@@ -326,6 +372,9 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                       );
                     },
                   ),
+                ),
+                    ),
+                  ],
                 ),
         ),
       ],
@@ -615,6 +664,15 @@ class _DeviceDetailSheet extends StatelessWidget {
   Future<void> _excludeDevice(BuildContext context, String installId) async {
     if (installId.isEmpty) return;
     final s = context.read<LocaleProvider>().s;
+    // Aksi tulis: tidak boleh jalan saat offline (gagal separuh jalan).
+    if (guardOfflineCtx(
+      context,
+      s.adminNeedsConnection,
+      (m) => ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(m))),
+    )) {
+      return;
+    }
     final auth = context.read<AuthProvider>();
     if (auth.excludedDevices.contains(installId)) return;
     final ok = await auth.excludeDeviceCascade(installId);

@@ -358,11 +358,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 
   Widget _buildOverviewTab(AdminProvider admin, S s, Map<String, dynamic>? stats) {
-    return admin.loading
-        ? const Center(child: CircularProgressIndicator())
-        : admin.error != null
-        ? _errorView(admin, s)
-        : RefreshIndicator(
+    // Layar error penuh HANYA bila memang belum ada data sama sekali
+    // (cold start + offline). Kalau data lama ada → tetap tampilkan + banner.
+    final noData = stats == null || stats.isEmpty;
+    if (admin.error != null && noData) return _errorView(admin, s);
+    if (admin.loading && noData) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return RefreshIndicator(
             onRefresh: () async {
               // force = server hitung ulang sekarang (lewati cache 5 mnt).
               await admin.fetchStats(force: true);
@@ -379,6 +382,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 MediaQuery.of(context).padding.bottom + 24,
               ),
               children: [
+                // Kegagalan koneksi tapi data lama ada → banner, bukan error.
+                if (admin.error != null) ...[
+                  _staleBanner(s),
+                  const SizedBox(height: 8),
+                ],
                 _lastUpdatedHeader(s),
                 const SizedBox(height: 8),
                 _statsGrid(stats, s),
@@ -401,11 +409,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 
   Widget _buildPointTab(AdminProvider admin, S s, Map<String, dynamic>? stats) {
-    return admin.loading
-        ? const Center(child: CircularProgressIndicator())
-        : admin.error != null
-        ? _errorView(admin, s)
-        : RefreshIndicator(
+    final noData = stats == null || stats.isEmpty;
+    if (admin.error != null && noData) return _errorView(admin, s);
+    if (admin.loading && noData) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return RefreshIndicator(
             onRefresh: () async {
               await admin.fetchStats(); // cache server 5 mnt — cukup
               if (mounted) setState(() => _lastUpdated = DateTime.now());
@@ -418,6 +427,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 MediaQuery.of(context).padding.bottom + 24,
               ),
               children: [
+                if (admin.error != null) ...[
+                  _staleBanner(s),
+                  const SizedBox(height: 8),
+                ],
                 _lastUpdatedHeader(s),
                 const SizedBox(height: 8),
                 _pointStats(stats, s),
@@ -442,11 +455,47 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         children: [
           const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
           const SizedBox(height: 8),
-          Text(admin.error!, style: const TextStyle(color: AppTheme.danger)),
-          const SizedBox(height: 8),
+          // Kategori ramah (bukan pesan exception mentah — lihat
+          // lib/core/admin_err.dart; detail asli hanya ke dlog).
+          Text(s.adminErrTextOf(admin.error!), style: const TextStyle(color: AppTheme.danger)),
+          if (s.adminErrHintOf(admin.error!).isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                s.adminErrHintOf(admin.error!),
+                textAlign: TextAlign.center,
+                style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
           ElevatedButton(
             onPressed: () => admin.fetchStats(),
             child: Text(s.btnRetry),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Banner tipis saat kegagalan terakhir karena koneksi TAPI data lama masih
+  /// ada. User tetap melihat datanya (permintaan: "offline tetap tampilkan
+  /// data terakhir"), bukan layar error.
+  Widget _staleBanner(S s) {
+    return Container(
+      width: double.infinity,
+      color: AppTheme.danger.withValues(alpha: 0.12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off, size: 16, color: AppTheme.danger),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              s.adminErrStaleBanner,
+              style: AppText.bodySmall.copyWith(color: AppTheme.danger),
+            ),
           ),
         ],
       ),

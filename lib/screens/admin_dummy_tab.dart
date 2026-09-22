@@ -9,9 +9,12 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../core/admin_gate.dart';
+import '../core/admin_err.dart';
+import '../core/cache/message_cache.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/profile_form_card.dart';
 import '../providers/locale_provider.dart';
+import '../providers/connectivity_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
 
@@ -111,7 +114,8 @@ class _AdminDummyTabState extends State<AdminDummyTab>
   String? _editingUid;
   bool _busy = false;
   bool _loading = true;
-  String? _error;
+  /// Kategori kegagalan (bukan teks mentah — lihat lib/core/admin_err.dart).
+  AdminErrKind? _error;
   List<Map<String, dynamic>> _items = [];
   Timer? _refreshTimer;
   // Paginasi server (admin_list_dummies_page) — cegah tarik seluruh tabel.
@@ -219,16 +223,36 @@ class _AdminDummyTabState extends State<AdminDummyTab>
         _hasMore = items.length < total;
         _loading = false;
       });
+      // Simpan cache disk (tahan offline) — kunci per-uid admin.
+      if (items.isNotEmpty) {
+        MessageCache.instance
+            .saveRawList('admin_dummy_list', items);
+      }
     } catch (e) {
       dlog('[DUMMY] list error: $e');
       if (!mounted) return;
       // Refresh senyap (timer): jangan timpa list/badge yang sudah tampil
       // dengan error transien — cukup lewati sampai tick berikutnya.
       if (silent) return;
-      final s = context.read<LocaleProvider>().s;
+      // Offline & belum ada data → coba tampilkan cache disk dulu.
+      if (_items.isEmpty) {
+        try {
+          final cached = await MessageCache.instance.loadRawList(
+            'admin_dummy_list',
+          );
+          if (cached.isNotEmpty && mounted) {
+            setState(() {
+              _items = cached;
+              _total = cached.length;
+              _loading = false;
+            });
+          }
+        } catch (_) {}
+      }
+      if (!mounted) return;
       setState(() {
-        _error =
-            '$e'.contains('Unauthorized') ? s.dummyNeedAdmin : e.toString();
+        // Kategori ramah; detail exception hanya ke dlog.
+        _error = classifyAdminError(e);
         _loading = false;
       });
     }
@@ -297,6 +321,7 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     StateSetter setSheet,
     BuildContext sheetCtx,
   ) async {
+    if (_guardOffline(s)) return;
     final nick = _nickCtrl.text.trim();
     if (nick.isEmpty) {
       _toast(s, s.dummyInvalidInput);
@@ -485,6 +510,7 @@ class _AdminDummyTabState extends State<AdminDummyTab>
   }
 
   Future<void> _setStatus(Map<String, dynamic> item, String status, S s) async {
+    if (_guardOffline(s)) return;
     try {
       await _svc.setDummyStatus(item['uid'] as String, status);
       await _load();
@@ -495,9 +521,24 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     }
   }
 
+  /// Blokir aksi tulis saat offline (hasilnya gagal separuh jalan +
+  /// membingungkan). Return true = diblokir.
+  bool _guardOffline(S s) {
+    bool online = true;
+    try {
+      online = context.read<ConnectivityProvider>().online;
+    } catch (_) {}
+    return blockIfOffline(
+      online,
+      (m) => _toast(s, m),
+      message: s.adminNeedsConnection,
+    );
+  }
+
   /// Bangunkan dummy 30 menit: AI melek & membalas walau jam tidur,
   /// presence dipaksa online. Chip kartu ikut berubah (konsisten).
   Future<void> _wake(Map<String, dynamic> item, S s) async {
+    if (_guardOffline(s)) return;
     try {
       await _svc.wakeDummy(item['uid'] as String);
       await _load();
@@ -551,6 +592,7 @@ class _AdminDummyTabState extends State<AdminDummyTab>
   }
 
   Future<void> _delete(Map<String, dynamic> item, S s) async {
+    if (_guardOffline(s)) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -724,12 +766,35 @@ class _AdminDummyTabState extends State<AdminDummyTab>
         return const SizedBox.shrink();
       case 7:
         if (!_loading && _error != null) {
+          // Hanya tampil bila memang belum ada data dummy; kalau list sudah
+          // terisi (cache/refresh gagal) cukup banner di atasnya.
+          if (_items.isNotEmpty) return const SizedBox.shrink();
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Center(
-              child: Text(
-                '${s.dummyListFail}: $_error',
-                style: AppText.bodySmall.copyWith(color: AppTheme.danger),
+              child: Column(
+                children: [
+                  Text(
+                    '${s.dummyListFail} — ${s.adminErrTextOf(_error!)}',
+                    textAlign: TextAlign.center,
+                    style: AppText.bodySmall.copyWith(color: AppTheme.danger),
+                  ),
+                  if (s.adminErrHintOf(_error!).isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      s.adminErrHintOf(_error!),
+                      textAlign: TextAlign.center,
+                      style: AppText.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () => _load(),
+                    child: Text(s.btnRetry),
+                  ),
+                ],
               ),
             ),
           );

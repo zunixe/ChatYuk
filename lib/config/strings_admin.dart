@@ -2,6 +2,7 @@
 // Extension on S: karena hanya modul admin yang meng-import file
 // ini, tree shaker membuang seluruh string bersama layar admin.
 import 'strings.dart';
+import '../core/admin_err.dart';
 
 extension SAdminX on S {
   String get adminCallLive => isId ? 'Call aktif' : 'Live call';
@@ -925,4 +926,78 @@ extension SAdminExcludeX on S {
   String get adminShareLinkLabel => isId
       ? 'Link tujuan share (Google Play / apkpure)'
       : 'Share destination link (Google Play / apkpure)';
+
+  // ── Popup update aplikasi ──
+  String get adminUpdateTitle =>
+      isId ? 'Popup Update Aplikasi' : 'App Update Popup';
+  String get adminUpdateDesc => isId
+      ? 'Tawarkan update saat app dibuka. Kosongkan versi terbaru untuk mematikan.'
+      : 'Offer update on app open. Leave latest version empty to disable.';
+  String get adminUpdateEnable =>
+      isId ? 'Aktifkan popup update' : 'Enable update popup';
+  String get adminUpdateLatest =>
+      isId ? 'Versi terbaru (X.Y.Z)' : 'Latest version (X.Y.Z)';
+  String get adminUpdateMin =>
+      isId ? 'Versi minimum (wajib update)' : 'Minimum version (force update)';
+  String get adminUpdateMinHint => isId
+      ? 'User di bawah versi ini wajib update (tidak bisa ditutup).'
+      : 'Users below this version must update (cannot be dismissed).';
+  String get adminUpdateNotes =>
+      isId ? 'Catatan rilis (Yang baru)' : 'Release notes (What\'s new)';
+  String get adminUpdateSaved =>
+      isId ? 'Konfigurasi update tersimpan' : 'Update config saved';
+
+  // ── Pesan error ramah (offline) ──
+  // Detail exception mentah TIDAK ditampilkan ke layar (bocorkan URL Supabase
+  // + membingungkan). Kategori + teks di bawah ini yang tampil; detail asli
+  // tetap ke dlog. Lihat lib/core/admin_err.dart.
+  String get adminErrOffline =>
+      isId ? 'Tidak ada koneksi internet' : 'No internet connection';
+  String get adminErrOfflineHint => isId
+      ? 'Menampilkan data terakhir yang tersimpan.'
+      : 'Showing the last saved data.';
+  String get adminErrUnauthorized =>
+      isId ? 'Sesi admin tidak valid' : 'Admin session invalid';
+  String get adminErrUnauthorizedHint => isId
+      ? 'Masuk ulang sebagai admin untuk melanjutkan.'
+      : 'Sign in again as admin to continue.';
+  String get adminErrServer =>
+      isId ? 'Server sedang bermasalah' : 'Server error';
+  String get adminErrServerHint =>
+      isId ? 'Coba lagi beberapa saat lagi.' : 'Please try again shortly.';
+  String get adminErrUnknown => isId ? 'Gagal memuat data' : 'Failed to load data';
+  String get adminErrStaleBanner =>
+      isId ? 'Data terakhir — tidak ada koneksi' : 'Last data — offline';
+  String get adminErrNoCache => isId
+      ? 'Belum ada data tersimpan. Sambungkan internet lalu muat ulang.'
+      : 'No saved data yet. Connect to the internet and reload.';
+  String get adminNeedsConnection =>
+      isId ? 'Butuh koneksi internet' : 'Needs internet connection';
+  String get adminClearCache =>
+      isId ? 'Bersihkan cache admin' : 'Clear admin cache';
+  String get adminClearCacheDesc => isId
+      ? 'Hapus data admin yang tersimpan di perangkat ini (statistik, daftar user/perangkat, pesan monitor). Berguna bila HP dipakai bergantian.'
+      : 'Delete admin data saved on this device (stats, user/device lists, monitor messages). Useful when the device is shared.';
+  String get adminClearCacheDone =>
+      isId ? 'Cache admin dibersihkan' : 'Admin cache cleared';
+  String get adminClearCacheConfirm => isId
+      ? 'Hapus semua data admin yang tersimpan di perangkat ini?'
+      : 'Delete all admin data saved on this device?';
+
+  /// Judul pesan ramah untuk kategori kegagalan admin. Detail exception
+  /// mentah tidak pernah ditampilkan (lihat lib/core/admin_err.dart).
+  String adminErrTextOf(AdminErrKind k) => switch (k) {
+    AdminErrKind.offline => adminErrOffline,
+    AdminErrKind.unauthorized => adminErrUnauthorized,
+    AdminErrKind.server => adminErrServer,
+    AdminErrKind.unknown => adminErrUnknown,
+  };
+
+  /// Kalimat penjelas di bawah judul (kosong bila tidak perlu).
+  String adminErrHintOf(AdminErrKind k) => switch (k) {
+    AdminErrKind.offline => adminErrOfflineHint,
+    AdminErrKind.unauthorized => adminErrUnauthorizedHint,
+    AdminErrKind.server => adminErrServerHint,
+    AdminErrKind.unknown => '',
+  };
 }

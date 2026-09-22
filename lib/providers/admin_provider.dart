@@ -10,6 +10,7 @@ import '../services/admin_call_watch_service.dart';
 export '../services/admin_call_watch_service.dart' show WatchSession;
 import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
+import '../core/admin_err.dart';
 import '../services/storage_photo_service.dart';
 
 class AdminProvider extends ChangeNotifier {
@@ -94,14 +95,39 @@ class AdminProvider extends ChangeNotifier {
   }
   Map<String, dynamic>? _stats;
   bool _loading = false;
-  String? _error;
+  AdminErrKind? _error;
   bool _pointsEnabled = true;
   bool _disposed = false;
 
   Map<String, dynamic>? get stats => _stats;
   bool get loading => _loading;
-  String? get error => _error;
+  AdminErrKind? get error => _error;
   bool get pointsEnabled => _pointsEnabled;
+
+  // ── Cache disk data admin ──
+  // Data admin disimpan terenkripsi (MessageCache → SQLCipher + Keystore)
+  // supaya saat OFFLINE panel tetap menampilkan data terakhir, bukan layar
+  // error. Kunci `admin_*` supaya tombol "bersihkan cache admin" bisa
+  // menghapusnya selektif (lihat clearAdminCache()).
+  static const kAdminStatsKey = 'admin_stats';
+  static const kAdminChatsKey = 'admin_chats';
+  static const kAdminDevicesKey = 'admin_devices';
+  static const kAdminDeletedKey = 'admin_deleted';
+  static const kAdminContactKey = 'admin_contact';
+  static String adminDummyKey(String myUid) => 'admin_dummy_$myUid';
+  static String adminChatMsgKey(String chatId) => 'admin_chatmsg_$chatId';
+
+  /// Kunci cache yang dibersihkan tombol "Bersihkan cache admin".
+  static const List<String> adminCacheKeys = [
+    kAdminStatsKey,
+    kAdminChatsKey,
+    kAdminDevicesKey,
+    kAdminDeletedKey,
+    kAdminContactKey,
+  ];
+
+  /// True bila kegagalan terakhir karena koneksi (dipakai banner "data terakhir").
+  bool get hasData => _stats != null && _stats!.isNotEmpty;
 
 
   // ── Passthrough (Fase 9b) — screen admin tidak import AdminService ──
@@ -132,6 +158,23 @@ class AdminProvider extends ChangeNotifier {
   Future<List<int>> autoScheduleAi(String uid) => _service.autoScheduleAi(uid);
   /// Buat sesi pantau panggilan (admin) — di-dispose oleh screen.
   WatchSession createWatchSession(ActiveCallInfo call) => WatchSession(call);
+
+  /// Popup update aplikasi (app_settings) — dibaca/disimpan dari tab
+  /// Global Setting. Screen admin tidak import AdminService.
+  Future<Map<String, dynamic>?> getUpdateConfig() =>
+      _service.getUpdateConfig();
+  Future<void> saveUpdateConfig({
+    required bool enabled,
+    required String latestVersion,
+    required String minVersion,
+    required String notes,
+  }) =>
+      _service.saveUpdateConfig(
+        enabled: enabled,
+        latestVersion: latestVersion,
+        minVersion: minVersion,
+        notes: notes,
+      );
 
   Future<Map<String, dynamic>> getPointSettings() => _service.getPointSettings();
   Future<Map<String, dynamic>> updatePointSettings(Map<String, dynamic> p) =>
@@ -222,17 +265,37 @@ class AdminProvider extends ChangeNotifier {
   Future<void> wakeDummy(String uid, {int minutes = 30}) =>
       _service.wakeDummy(uid, minutes: minutes);
 
+  /// Muat statistik. Urutan: memori → cache disk (instan, tahan offline) →
+  /// network. Kegagalan TIDAK mengosongkan data lama; hanya menandai error
+  /// agar UI bisa menampilkan banner "data terakhir".
   Future<void> fetchStats({bool force = false}) async {
     _loading = true;
     _error = null;
     if (!_disposed) notifyListeners();
+    // Cold start / data kosong: tampilkan cache disk dulu (instan, tanpa
+    // network) supaya panel tidak kosong saat offline.
+    if (_stats == null) {
+      try {
+        final cached = await MessageCache.instance.loadRawObj(kAdminStatsKey);
+        if (cached.isNotEmpty && _stats == null) {
+          _stats = cached;
+          _pointsEnabled = _stats?['points_enabled'] == true;
+          if (!_disposed) notifyListeners();
+        }
+      } catch (_) {}
+    }
     try {
       _stats = force
           ? await _service.getStatsForce()
           : await _service.getStats();
       _pointsEnabled = _stats?['points_enabled'] == true;
+      if (_stats != null && _stats!.isNotEmpty) {
+        MessageCache.instance.saveRawObj(kAdminStatsKey, _stats!);
+      }
     } catch (e) {
-      _error = e.toString();
+      // Data lama dipertahankan; error hanya ditandai (kategori, bukan teks
+      // mentah — detail asli tetap ke dlog).
+      _error = classifyAdminError(e);
       dlog('[ADMIN] fetchStats error: $e');
     }
     _loading = false;
@@ -241,12 +304,16 @@ class AdminProvider extends ChangeNotifier {
 
   /// Refresh statistik tanpa memicu state "loading" (untuk timer/polling).
   /// Server meng-cache hasil 5 menit — polling ini jadi O(1) di DB.
+  /// Gagal = data lama dipertahankan (tanpa error banner; polling diam-diam).
   Future<void> refreshStats({bool force = false}) async {
     try {
-      _stats = force
+      final fresh = force
           ? await _service.getStatsForce()
           : await _service.getStats();
+      if (fresh.isEmpty) return; // jangan timpa data baik dengan kosong
+      _stats = fresh;
       _pointsEnabled = _stats?['points_enabled'] == true;
+      MessageCache.instance.saveRawObj(kAdminStatsKey, fresh);
     } catch (e) {
       dlog('[ADMIN] refreshStats error: $e');
     }
@@ -388,7 +455,7 @@ class AdminProvider extends ChangeNotifier {
   bool _chatsHasMore = true;
   int _chatsTotal = 0;
   bool _chatsFetchingMore = false;
-  String? _chatsError;
+  AdminErrKind? _chatsError;
 
   List<Map<String, dynamic>> get chats => _chats;
   List<Map<String, dynamic>> get chatMessages => _chatMessages;
@@ -396,7 +463,7 @@ class AdminProvider extends ChangeNotifier {
   bool get chatsLoading => _chatsLoading;
   bool get chatsHasMore => _chatsHasMore;
   int get chatsTotal => _chatsTotal;
-  String? get chatsError => _chatsError;
+  AdminErrKind? get chatsError => _chatsError;
 
   // ── Device tracking (tab Perangkat) ──
   static const int _devicePageSize = 100;
@@ -405,29 +472,48 @@ class AdminProvider extends ChangeNotifier {
   bool _devicesHasMore = true;
   int _devicesTotal = 0;
   bool _devicesFetchingMore = false;
-  String? _devicesError;
+  AdminErrKind? _devicesError;
 
   List<Map<String, dynamic>> get devices => _devices;
   bool get devicesLoading => _devicesLoading;
   bool get devicesHasMore => _devicesHasMore;
   int get devicesTotal => _devicesTotal;
-  String? get devicesError => _devicesError;
+  AdminErrKind? get devicesError => _devicesError;
 
 Future<void> fetchDevices() async {
     _devicesLoading = true;
     _devicesError = null;
     if (!_disposed) notifyListeners();
+    // Cold start / tab baru → cache disk dulu (tahan offline).
+    if (_devices.isEmpty) {
+      try {
+        final cached = await MessageCache.instance.loadRawList(
+          kAdminDevicesKey,
+        );
+        if (cached.isNotEmpty && _devices.isEmpty) {
+          _devices = cached;
+          _devicesTotal = cached.length;
+          if (!_disposed) notifyListeners();
+        }
+      } catch (_) {}
+    }
     try {
       final res = await _service.listDevices(
         limit: _devicePageSize,
         offset: 0,
       );
-      _devices = List<Map<String, dynamic>>.from(res['items'] ?? const []);
-      _devicesTotal = (res['total'] as num?)?.toInt() ?? 0;
-      _devicesHasMore = _devices.length < _devicesTotal;
+      final fresh = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      if (fresh.isNotEmpty || _devices.isEmpty) {
+        _devices = fresh;
+        _devicesTotal = (res['total'] as num?)?.toInt() ?? 0;
+        _devicesHasMore = _devices.length < _devicesTotal;
+      }
+      if (_devices.isNotEmpty) {
+        MessageCache.instance.saveRawList(kAdminDevicesKey, _devices);
+      }
       await _detectNewDevices(_devices);
     } catch (e) {
-      _devicesError = e.toString();
+      _devicesError = classifyAdminError(e);
       dlog('[ADMIN] fetchDevices error: $e');
     }
     _devicesLoading = false;
@@ -472,7 +558,7 @@ Future<void> fetchDevices() async {
       _devicesError = null;
     } catch (e) {
       dlog('[ADMIN] refreshDevicesSilent error: $e');
-      if (_devices.isEmpty) _devicesError = e.toString();
+      if (_devices.isEmpty) _devicesError = classifyAdminError(e);
     }
     if (!_disposed) notifyListeners();
   }
@@ -507,28 +593,47 @@ Future<void> fetchDevices() async {
   bool _deletedHasMore = true;
   int _deletedTotal = 0;
   bool _deletedFetchingMore = false;
-  String? _deletedError;
+  AdminErrKind? _deletedError;
 
   List<Map<String, dynamic>> get deleted => _deleted;
   bool get deletedLoading => _deletedLoading;
   bool get deletedHasMore => _deletedHasMore;
   int get deletedTotal => _deletedTotal;
-  String? get deletedError => _deletedError;
+  AdminErrKind? get deletedError => _deletedError;
 
   Future<void> fetchDeleted() async {
     _deletedLoading = true;
     _deletedError = null;
     if (!_disposed) notifyListeners();
+    // Cold start / tab baru → cache disk dulu (tahan offline).
+    if (_deleted.isEmpty) {
+      try {
+        final cached = await MessageCache.instance.loadRawList(
+          kAdminDeletedKey,
+        );
+        if (cached.isNotEmpty && _deleted.isEmpty) {
+          _deleted = cached;
+          _deletedTotal = cached.length;
+          if (!_disposed) notifyListeners();
+        }
+      } catch (_) {}
+    }
     try {
       final res = await _service.listDeleted(
         limit: _deletedPageSize,
         offset: 0,
       );
-      _deleted = List<Map<String, dynamic>>.from(res['items'] ?? const []);
-      _deletedTotal = (res['total'] as num?)?.toInt() ?? 0;
-      _deletedHasMore = _deleted.length < _deletedTotal;
+      final fresh = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      if (fresh.isNotEmpty || _deleted.isEmpty) {
+        _deleted = fresh;
+        _deletedTotal = (res['total'] as num?)?.toInt() ?? 0;
+        _deletedHasMore = _deleted.length < _deletedTotal;
+      }
+      if (_deleted.isNotEmpty) {
+        MessageCache.instance.saveRawList(kAdminDeletedKey, _deleted);
+      }
     } catch (e) {
-      _deletedError = e.toString();
+      _deletedError = classifyAdminError(e);
       dlog('[ADMIN] fetchDeleted error: $e');
     }
     _deletedLoading = false;
@@ -672,16 +777,36 @@ Future<void> fetchDevices() async {
     _chatsLoading = true;
     _chatsError = null;
     if (!_disposed) notifyListeners();
+    // Data kosong (cold start / tab baru) → tampilkan cache disk dulu.
+    if (_chats.isEmpty) {
+      try {
+        final cached = await MessageCache.instance.loadRawList(kAdminChatsKey);
+        if (cached.isNotEmpty && _chats.isEmpty) {
+          _chats = cached;
+          _chatsTotal = cached.length;
+          if (!_disposed) notifyListeners();
+        }
+      } catch (_) {}
+    }
     try {
       final res = await _service.listChats(limit: chatPageSize, offset: 0);
-      _chats = List<Map<String, dynamic>>.from(res['items'] ?? const []);
-      _chatsTotal = (res['total'] as num?)?.toInt() ?? 0;
-      _chatsHasMore = _chats.length < _chatsTotal;
+      final fresh = List<Map<String, dynamic>>.from(res['items'] ?? const []);
+      // Jangan timpa data baik dengan hasil kosong (bisa karena server
+      // mengembalikan kosong sesaat) — kecuali memang belum ada data.
+      if (fresh.isNotEmpty || _chats.isEmpty) {
+        _chats = fresh;
+        _chatsTotal = (res['total'] as num?)?.toInt() ?? 0;
+        _chatsHasMore = _chats.length < _chatsTotal;
+      }
       _adminUids = (res['admin_uids'] as List<dynamic>? ?? const [])
           .map((e) => '$e')
           .toList();
+      if (_chats.isNotEmpty) {
+        MessageCache.instance.saveRawList(kAdminChatsKey, _chats);
+      }
     } catch (e) {
-      _chatsError = e.toString();
+      // Data lama dipertahankan → banner "data terakhir" di UI.
+      _chatsError = classifyAdminError(e);
       dlog('[ADMIN] fetchChats error: $e');
     }
     _chatsLoading = false;
@@ -824,30 +949,49 @@ Future<void> fetchDevices() async {
   bool _contactHasMore = true;
   bool _contactFetchingMore = false;
   int _contactTotal = 0;
-  String? _contactError;
+  AdminErrKind? _contactError;
 
   List<Map<String, dynamic>> get contactMessages => _contactMessages;
   bool get contactLoading => _contactLoading;
   bool get contactHasMore => _contactHasMore;
   int get contactTotal => _contactTotal;
-  String? get contactError => _contactError;
+  AdminErrKind? get contactError => _contactError;
 
   Future<void> fetchContactMessages() async {
     _contactLoading = true;
     _contactError = null;
     if (!_disposed) notifyListeners();
+    // Cold start / tab baru → cache disk dulu (tahan offline).
+    if (_contactMessages.isEmpty) {
+      try {
+        final cached = await MessageCache.instance.loadRawList(
+          kAdminContactKey,
+        );
+        if (cached.isNotEmpty && _contactMessages.isEmpty) {
+          _contactMessages = cached;
+          _contactTotal = cached.length;
+          if (!_disposed) notifyListeners();
+        }
+      } catch (_) {}
+    }
     try {
       final res = await _service.listContactMessages(
         limit: chatPageSize,
         offset: 0,
       );
-      _contactMessages = List<Map<String, dynamic>>.from(
+      final fresh = List<Map<String, dynamic>>.from(
         res['items'] ?? const [],
       );
-      _contactTotal = (res['total'] as num?)?.toInt() ?? 0;
-      _contactHasMore = _contactMessages.length < _contactTotal;
+      if (fresh.isNotEmpty || _contactMessages.isEmpty) {
+        _contactMessages = fresh;
+        _contactTotal = (res['total'] as num?)?.toInt() ?? 0;
+        _contactHasMore = _contactMessages.length < _contactTotal;
+      }
+      if (_contactMessages.isNotEmpty) {
+        MessageCache.instance.saveRawList(kAdminContactKey, _contactMessages);
+      }
     } catch (e) {
-      _contactError = e.toString();
+      _contactError = classifyAdminError(e);
       dlog('[ADMIN] fetchContactMessages error: $e');
     }
     _contactLoading = false;
@@ -907,21 +1051,71 @@ Future<void> fetchDevices() async {
     // (anti-blink: dulu _chatMessages=[] → layar kosong → isi ulang, ikut
     // terulang tiap poll 5s).
     _chatMessagesHasMore = true;
+    // Chat berbeda → muat cache disk chat itu dulu (tahan offline).
+    if (_chatMsgCacheFor != chatId) {
+      _chatMsgCacheFor = chatId;
+      _chatMessages = const [];
+      try {
+        final cached = await MessageCache.instance.loadRawList(
+          adminChatMsgKey(chatId),
+        );
+        if (cached.isNotEmpty && _chatMsgCacheFor == chatId) {
+          _chatMessages = cached;
+          if (!_disposed) notifyListeners();
+        }
+      } catch (_) {}
+    }
     try {
       final fresh = await _service.getChatMessages(
         chatId,
         limit: messagePageSize,
         offset: 0,
       );
-      _chatMessages = fresh;
+      if (fresh.isNotEmpty) {
+        _chatMessages = fresh;
+        MessageCache.instance.saveRawList(adminChatMsgKey(chatId), fresh);
+      }
       _chatMessagesHasMore = fresh.length >= messagePageSize;
       return true;
     } catch (e) {
+      // Data lama (memori/disk) dipertahankan — layar tetap ada isinya.
       dlog('[ADMIN] fetchChatMessages error: $e');
       return false;
     } finally {
       if (!_disposed) notifyListeners();
     }
+  }
+
+  /// Chat yang sedang ditampilkan di monitor (untuk tahu kapan cache disk
+  /// perlu dimuat ulang saat pindah chat).
+  String? _chatMsgCacheFor;
+
+  /// Hapus SEMUA cache data admin di perangkat ini (tombol di tab Global
+  /// Setting). Dipakai bila HP bergantian dipakai orang lain — data admin
+  /// memuat PII user (email/IP/device).
+  Future<void> clearAdminCache() async {
+    for (final k in adminCacheKeys) {
+      try {
+        await MessageCache.instance.removeRawList(k);
+        await MessageCache.instance.removeRawObj(k);
+      } catch (_) {}
+    }
+    // Pesan monitor per-chat: kunci dinamis, bersihkan yang sedang terbuka.
+    final cur = _chatMsgCacheFor;
+    if (cur != null) {
+      try {
+        await MessageCache.instance.removeRawList(adminChatMsgKey(cur));
+      } catch (_) {}
+    }
+    // Kosongkan state memori supaya UI tidak menampilkan data basi.
+    _stats = null;
+    _chats = const [];
+    _devices = const [];
+    _deleted = const [];
+    _contactMessages = const [];
+    _chatMessages = const [];
+    _chatMsgCacheFor = null;
+    if (!_disposed) notifyListeners();
   }
 
   /// Muat pesan lebih lama (pagination, dipanggil saat scroll ke atas).

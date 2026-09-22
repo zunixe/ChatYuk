@@ -45,7 +45,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   // Masih ada pesan lama untuk dimuat (pagination) — state lokal supaya
   // build tak perlu watch AdminProvider.
   bool _hasMore = false;
-  String? _error;
+  /// True bila pemuatan pesan gagal. UI memakai teks ramah `s.adminChatError`
+  /// — detail exception hanya ke dlog, tidak pernah ke layar.
+  bool _error = false;
   String? _leftUid;
   String get _chatKey => cacheKeyFor(widget.chatId);
   // last_read_at kedua peserta (uid → waktu) — dasar hitung centang-2
@@ -241,7 +243,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       _msgs = list;
       _invalidateItems();
       _leftUid = _computeLeftUid(senders);
-      _error = null;
+      _error = false;
     });
     _loadPhotos();
   }
@@ -328,7 +330,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       if (!mounted) return;
       if (!ok) {
         setState(() {
-          _error = 'fetchChatMessages returned false';
+          _error = true;
         });
         return;
       }
@@ -341,8 +343,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      dlog('[ADMIN] chat view load error: $e');
       setState(() {
-        _error = 'EXCEPTION: $e';
+        _error = true;
       });
     }
   }
@@ -536,7 +539,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       body: Column(
         children: [
           // Tanpa bar loading — data dari SQLite instan (WhatsApp-style).
-          if (_error != null)
+          if (_error)
             Container(
               width: double.infinity,
               padding: EdgeInsets.symmetric(vertical: 6),

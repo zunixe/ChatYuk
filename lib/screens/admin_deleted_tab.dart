@@ -9,6 +9,8 @@ import '../config/strings_admin.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/connectivity_provider.dart';
+import '../core/admin_err.dart';
 import '../utils.dart';
 
 /// Admin: arsip user yang sudah dihapus (tab Terhapus).
@@ -115,7 +117,16 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     });
   }
 
+  /// Blokir aksi tulis saat offline (gagal separuh jalan + membingungkan).
+  bool _guardOffline(S s) => guardOfflineCtx(
+    context,
+    s.adminNeedsConnection,
+    (m) => ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(m))),
+  );
+
   Future<void> _deleteSelected(S s, List<Map<String, dynamic>> allItems) async {
+    if (_guardOffline(s)) return;
     final selectedItems = allItems
         .where((e) => _selectedUids.contains('${e['user_id'] ?? ''}'))
         .toList();
@@ -378,7 +389,7 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
               ? Center(
                   child: CircularProgressIndicator(color: AppTheme.primary),
                 )
-              : admin.deletedError != null
+              : admin.deletedError != null && admin.deleted.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -389,11 +400,25 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                         color: AppTheme.danger,
                       ),
                       const SizedBox(height: 8),
+                      // Kategori ramah (detail exception hanya ke dlog).
                       Text(
-                        admin.deletedError!,
+                        s.adminErrTextOf(admin.deletedError!),
                         style: TextStyle(color: AppTheme.danger),
                       ),
-                      const SizedBox(height: 8),
+                      if (s.adminErrHintOf(admin.deletedError!).isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            s.adminErrHintOf(admin.deletedError!),
+                            textAlign: TextAlign.center,
+                            style: AppText.bodySmall.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
                       ElevatedButton(
                         onPressed: () => admin.fetchDeleted(),
                         child: Text(s.btnRetry),
@@ -401,7 +426,37 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                     ],
                   ),
                 )
-              : _filtered(admin.deleted).isEmpty
+              : Column(
+                  children: [
+                    if (admin.deletedError != null)
+                      Container(
+                        width: double.infinity,
+                        color: AppTheme.danger.withValues(alpha: 0.12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.cloud_off,
+                              size: 16,
+                              color: AppTheme.danger,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                s.adminErrStaleBanner,
+                                style: AppText.bodySmall.copyWith(
+                                  color: AppTheme.danger,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Expanded(
+                      child: _filtered(admin.deleted).isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -471,6 +526,9 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                     },
                   ),
                 ),
+                    ),
+                  ],
+                ),
         ),
       ],
     );
@@ -526,7 +584,16 @@ class _DeletedDetailSheetState extends State<_DeletedDetailSheet> {
   bool get _isPending => entry['pending'] == true;
 
   /// Hapus user anon (pending) — membebaskan nickname. Konfirmasi dulu.
+  /// Blokir aksi tulis saat offline (gagal separuh jalan + membingungkan).
+  bool _guardOffline(S s) => guardOfflineCtx(
+    context,
+    s.adminNeedsConnection,
+    (m) => ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(m))),
+  );
+
   Future<void> _deleteAnon() async {
+    if (_guardOffline(s)) return;
     final uid = '${entry['user_id'] ?? ''}';
     if (uid.isEmpty || _deleting) return;
     final confirmed = await showDialog<bool>(

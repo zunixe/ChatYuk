@@ -7,6 +7,7 @@ import '../config/strings_admin.dart';
 import '../models/active_call_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
+import '../core/admin_err.dart';
 import '../utils.dart';
 import 'admin_chat_view_screen.dart';
 import '../providers/theme_provider.dart';
@@ -189,7 +190,8 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
               ? Center(
                   child: CircularProgressIndicator(color: AppTheme.primary),
                 )
-              : admin.chatsError != null
+              // Layar error penuh HANYA bila belum ada data sama sekali.
+              : admin.chatsError != null && admin.chats.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -201,10 +203,23 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                       ),
                       SizedBox(height: 8),
                       Text(
-                        admin.chatsError!,
+                        s.adminErrTextOf(admin.chatsError!),
                         style: TextStyle(color: AppTheme.danger),
                       ),
-                      SizedBox(height: 8),
+                      if (s.adminErrHintOf(admin.chatsError!).isNotEmpty) ...[
+                        SizedBox(height: 6),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            s.adminErrHintOf(admin.chatsError!),
+                            textAlign: TextAlign.center,
+                            style: AppText.bodySmall.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                      SizedBox(height: 12),
                       ElevatedButton(
                         onPressed: () => admin.fetchChats(),
                         child: Text(s.btnRetry),
@@ -230,7 +245,38 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                     ],
                   ),
                 )
-              : RefreshIndicator(
+              : Column(
+                  children: [
+                    // Data ada tapi refresh gagal → banner, bukan layar error.
+                    if (admin.chatsError != null)
+                      Container(
+                        width: double.infinity,
+                        color: AppTheme.danger.withValues(alpha: 0.12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.cloud_off,
+                              size: 16,
+                              color: AppTheme.danger,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                s.adminErrStaleBanner,
+                                style: AppText.bodySmall.copyWith(
+                                  color: AppTheme.danger,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Expanded(
+                      child: RefreshIndicator(
                   onRefresh: () => admin.fetchChats(),
                   child: ListView.builder(
                     controller: _scrollCtrl,
@@ -265,6 +311,9 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                       );
                     },
                   ),
+                ),
+                    ),
+                  ],
                 ),
         ),
       ],
@@ -470,6 +519,15 @@ class _AdminChatCard extends StatelessWidget {
     final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
     final myUids = participants.map((e) => '$e').toList();
     if (myUids.length < 2) return;
+    // Aksi tulis: tidak boleh jalan saat offline.
+    if (guardOfflineCtx(
+      context,
+      s.adminNeedsConnection,
+      (m) => ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(m))),
+    )) {
+      return;
+    }
 
     final selected = <String>{};
     // Secara default centang SEMUA user yang bukan admin.
