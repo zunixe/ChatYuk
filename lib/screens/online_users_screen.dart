@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../utils.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -73,8 +72,6 @@ void _boundAvatarMap(Map<String, Object?> m) {
 }
 
 String? _processAvatarImage(Uint8List bytes) {
-  // Fallback SAMA PERSIS dengan profile_screen: JPEG 1024 q92 kalau
-  // encoder WebP gagal di device tertentu (dulu q70 300px — jelek).
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
   final resized = img.copyResize(
@@ -83,25 +80,14 @@ String? _processAvatarImage(Uint8List bytes) {
     height: 1024,
     interpolation: img.Interpolation.cubic,
   );
-  return base64Encode(img.encodeJpg(resized, quality: 92));
+  return base64Encode(img.encodeJpg(resized, quality: 90));
 }
 
-// Proses avatar SAMA dengan profile_screen: WebP 1024 via native encoder,
-// fallback JPEG 1024. Crop interaktif sudah menentukan area 1:1.
-Future<String?> _processAvatarWebp(Uint8List bytes) async {
-  try {
-    final webp = await FlutterImageCompress.compressWithList(
-      bytes,
-      minWidth: 1024,
-      minHeight: 1024,
-      quality: 90,
-      format: CompressFormat.webp,
-      keepExif: false,
-    );
-    if (webp.isNotEmpty) return base64Encode(webp);
-  } catch (e) {
-    dlog('[ONLINE] webp encode failed, fallback jpeg: $e');
-  }
+// Avatar SELALU JPEG (sama seperti profile_screen & foto chat). Dulu memakai
+// encoder WebP native FlutterImageCompress, tapi hasilnya membawa ICC
+// profile/krominansi yang tidak konsisten antar-device → avatar tampil
+// "biro-biro" saat dilihat dari HP lain lewat CDN. JPEG polos universal.
+Future<String?> _processAvatarJpeg(Uint8List bytes) async {
   return _processAvatarImage(bytes);
 }
 
@@ -526,7 +512,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         return;
       }
 
-      final processed = await compute(_processAvatarWebp, bytes);
+      final processed = await compute(_processAvatarJpeg, bytes);
       if (processed == null || !mounted) {
         setState(() => _uploadingAvatar = false);
         if (mounted) {
@@ -844,7 +830,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           }
           final it = items[showAdd ? j - 1 : j];
           final idx = showAdd ? j - 1 : j;
+          // KEY berbasis identitas (authorId + thumbPath): State tile
+          // di-reuse saat urutan berubah / tray refresh, bukan dibuang lalu
+          // dibuat ulang (dulu: thumbnail "keload ulang" tiap refresh karena
+          // State baru mulai dari _thumb=null). Ganti slide → thumbPath
+          // berubah → key berubah → State baru ambil thumb baru (benar).
           return _StoryTrayTile(
+            key: ValueKey('story_${it.authorId}_${it.thumbPath}'),
             item: it,
             // Badge "+" di tile sendiri untuk tambah slide baru —
             // buka composer (sama seperti tombol + di AppBar).
@@ -2207,8 +2199,14 @@ class _UserCard extends StatelessWidget {
 
 // ── Story tray widgets ──────────────────────────────────────────────────────
 
-/// Kotak story satu orang: portrait rounded 64×96, thumbnail slide terbaru,
+/// Kotak story satu orang: portrait rounded 67×114, thumbnail slide terbaru,
 /// ring gradient (belum dilihat) / abu (sudah), username di bawah.
+///
+/// Rasio 67×114 dipilih agar kotak FOTO DI DALAM ring (≈62×109 setelah
+/// padding 2.5 / border 2) mendekati rasio kartu preview di StoryViewer
+/// (`_storyRect`: lebar layar ÷ (tinggi - padTop-60 - 68) ≈ 0.57 di HP
+/// portrait umum). Dengan rasio sama, crop `BoxFit.cover` thumbnail = crop
+/// preview → tampak "skala sama", bukan lebih zoom.
 class _StoryTrayTile extends StatefulWidget {
   final StoryTrayItem item;
   final VoidCallback onTap;
@@ -2216,6 +2214,7 @@ class _StoryTrayTile extends StatefulWidget {
   final VoidCallback? onAddTap;
 
   const _StoryTrayTile({
+    super.key,
     required this.item,
     required this.onTap,
     this.isOwnWithAdd = false,
@@ -2232,6 +2231,10 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
   @override
   void initState() {
     super.initState();
+    // SINKRON dulu: kalau thumbnail sudah ada di RAM/disk (sesi sebelumnya,
+    // atau tile lain author sama), frame pertama LANGSUNG terisi — tidak
+    // "keload ulang" seperti cold start sebelumnya.
+    _thumb = context.read<StoryProvider>().thumbCached(widget.item.thumbPath);
     _loadThumb();
   }
 
@@ -2239,34 +2242,24 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     final p = widget.item.thumbPath;
     if (p.isEmpty) return;
     if (context.read<StorageProvider>().isAvatarPath(p)) return;
-    // Sudah punya thumbnail (didUpdateWidget / recycle) → tidak perlu ulang.
+    // Sudah punya thumbnail (sync hit / didUpdateWidget) → tidak perlu ulang.
     if (_thumb != null) return;
-    // Kunci cache beda dari full image + mencakup dimensi (thumb lawas
-    // 160px tanpa resize aspeknya hancur di server — jangan dipakai lagi).
-    final key = '$p#thumb160x296';
-    // Disk dulu (repeat view instan) — baru network + simpan disk.
     try {
-      final d = MediaDiskCache.instance.readSync(key) ??
-          await MediaDiskCache.instance.read(key);
-      if (d != null && d.isNotEmpty) {
-        if (mounted) setState(() => _thumb = d);
-        return;
-      }
-    } catch (_) {}
-    try {
-      // Thumb server-side (KB, bukan MB) — fallback full otomatis.
-      // Proporsional mengikuti tile 59x109: height+cover eksplisit
-      // (width saja tanpa resize dihancurkan server jadi 160x1440).
-      final b = await context.read<StorageProvider>().downloadThumbBytes(
-        p,
-        height: 296,
-        resize: ResizeMode.cover,
-      );
+      final b = await context.read<StoryProvider>().thumbFor(p);
       if (mounted && b != null && b.isNotEmpty) {
         setState(() => _thumb = b);
-        unawaited(MediaDiskCache.instance.write(key, b));
       }
     } catch (_) {}
+  }
+
+  @override
+  void didUpdateWidget(covariant _StoryTrayTile old) {
+    super.didUpdateWidget(old);
+    // Path berganti (slide baru) → ambil yang baru; kalau sama, biarkan.
+    if (old.item.thumbPath != widget.item.thumbPath) {
+      _thumb = context.read<StoryProvider>().thumbCached(widget.item.thumbPath);
+      _loadThumb();
+    }
   }
 
   @override
@@ -2281,7 +2274,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
       child: GestureDetector(
       onTap: widget.onTap,
       child: SizedBox(
-        width: 64,
+        width: 67,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2289,7 +2282,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 64,
+                  width: 67,
                   height: 114,
                   padding:
                       seen ? EdgeInsets.zero : const EdgeInsets.all(2.5),
@@ -2328,10 +2321,11 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                         ? Image.memory(_thumb!,
                             fit: BoxFit.cover,
                             alignment: Alignment.center,
-                            // Decode kecil (tile 64px, x2 density) — hemat
-                            // CPU/memory raster frame pertama.
-                            cacheWidth: 128,
-                            cacheHeight: 192)
+                            // Decode kecil (kotak foto 62x109, x2 density) —
+                            // rasio 124:218 = 0.569 sama dengan tile agar
+                            // tidak ada crop tambahan saat raster.
+                            cacheWidth: 124,
+                            cacheHeight: 218)
                         : Center(
                             child: Text(
                               it.authorName.isNotEmpty
@@ -2373,7 +2367,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
             ),
             const SizedBox(height: 2),
             SizedBox(
-              width: 64,
+              width: 67,
               child: Text(
                 it.own
                     ? context.read<LocaleProvider>().s.storyMine
@@ -2405,12 +2399,12 @@ class _OwnAddTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: 64,
+        width: 67,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 64,
+              width: 67,
               height: 114,
               decoration: BoxDecoration(
                 color: AppTheme.bgInput,

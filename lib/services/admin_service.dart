@@ -588,4 +588,37 @@ class AdminService {
   Future<void> deleteContactMessage(String id) async {
     await _rpc('admin_contact_delete', params: {'p_id': id});
   }
+
+  // ── Popup update aplikasi (app_settings) ──
+  /// Baca konfigurasi update. Return null bila gagal.
+  Future<Map<String, dynamic>?> getUpdateConfig() async {
+    try {
+      return await _sb
+          .from('app_settings')
+          .select(
+            'update_enabled,latest_version,min_version,update_notes',
+          )
+          .eq('id', 'global')
+          .maybeSingle();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Simpan konfigurasi update. RLS membatasi tulis ke admin.
+  Future<void> saveUpdateConfig({
+    required bool enabled,
+    required String latestVersion,
+    required String minVersion,
+    required String notes,
+  }) async {
+    await _sb.from('app_settings').upsert({
+      'id': 'global',
+      'update_enabled': enabled,
+      'latest_version': latestVersion.trim(),
+      'min_version': minVersion.trim(),
+      'update_notes': notes.trim(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'id');
+  }
 }

@@ -129,6 +129,20 @@ select supabase_tests.check('nearby_users() urut jarak (bukan ordinal salah)',
   (select pg_get_functiondef(p.oid) like '%order by 11 asc%'
    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='public' and p.proname='nearby_users' limit 1));
+-- Privasi nearby (20260922140000): filter blokir + gate berbagi simetris.
+select supabase_tests.check('nearby_users() filter blocks (blokir tak muncul)',
+  (select pg_get_functiondef(p.oid) like '%public.blocks%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='nearby_users' limit 1));
+select supabase_tests.check('nearby_users() gate share_location (Share required)',
+  (select pg_get_functiondef(p.oid) like '%Share required%'
+      and pg_get_functiondef(p.oid) like '%share_location%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='nearby_users' limit 1));
+select supabase_tests.check('get_online_users() filter blocks',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='get_online_users'
+           and pg_get_functiondef(p.oid) like '%public.blocks%'));
 select supabase_tests.check('get_online_users() tetap boleh anon',
   exists(select 1 from pg_proc p
          where p.proname='get_online_users' and has_function_privilege('anon', p.oid, 'execute')));

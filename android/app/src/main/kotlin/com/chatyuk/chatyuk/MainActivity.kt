@@ -17,6 +17,7 @@ import android.content.Intent
 class MainActivity : FlutterActivity() {
     private val channel = "com.chatyuk.chatyuk/window"
     private val callUiChannel = "com.chatyuk.chatyuk/call_ui"
+    private val updateChannel = "com.chatyuk.chatyuk/update"
     private var bootOverlay: FrameLayout? = null
     private var wasSecureAtPause = false
     private var callUiBridge: CallUiBridge? = null
@@ -134,7 +135,41 @@ class MainActivity : FlutterActivity() {
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, callUiChannel),
         )
 
+        // Jembatan fitur update: deteksi installer package. Hanya update
+        // in-app (Play Core) yang boleh dijalankan bila app di-install dari
+        // Google Play (com.android.vending); selain itu popup mengarahkan
+        // user ke listing Play di browser.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, updateChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getInstallerPackage" -> {
+                        result.success(installerPackageName())
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         handleCallIntent(intent)
+    }
+
+    /**
+     * Nama package yang meng-install app ini ("com.android.vending" = Google
+     * Play). API modern getInstallSourceInfo (Android 11+), fallback ke
+     * getInstallerPackageName untuk API lama. Return "" bila tidak diketahui.
+     */
+    @Suppress("DEPRECATION")
+    private fun installerPackageName(): String {
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                packageManager.getInstallSourceInfo(packageName)
+                    .installingPackageName ?: ""
+            } else {
+                packageManager.getInstallerPackageName(packageName) ?: ""
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("ChatYukUpdate", "installerPackageName gagal: $e")
+            ""
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

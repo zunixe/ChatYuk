@@ -28,6 +28,48 @@
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
 
+## 2026-09-22 — 20260922140000_nearby_privacy_blocks_share_gate.sql
+
+- **Status:** SUDAH TERAPPLIED di remote DB fohcucyyejdryryoxitm pada 2026-09-22.
+- **Isi:** `nearby_users` — tambah gate simetris (`raise exception 'Share required'`
+  bila `share_location=false`, dicek sebelum `'No location'`) + filter blokir
+  dua arah (`public.blocks`); `get_online_users` (kedua overload) — tambah
+  filter blokir dua arah. Menyentuh FROZEN `nearby_users` (header
+  `-- menyentuh: nearby_users` ada).
+- **Cara apply:** Management API POST /v1/projects/{ref}/database/query. Di
+  Windows: JSON dibangun via Python `json.dumps` (script
+  `%TEMP%\opencode\snapshot_win.py` dipakai juga untuk snapshot) lalu di-POST
+  dengan `curl.exe --data-binary`; token dari `.env` baris SUPABASE_ACCESS_TOKEN.
+- **Snapshot:** `nearby_users` di-regenerate — diff = hanya fungsi itu
+  (+1 var `my_share`, gate, filter blocks); tidak ada cabang hilang. Snapshot
+  dibuat via port Windows `scripts/snapshot_functions.sh` (30/30 fungsi OK).
+- **Verifikasi:** live `pg_get_functiondef` → `nearby_users` `has_blocks=true`
+  & `has_gate=true`; `get_online_users` (plpgsql) `has_blocks=true`; versi
+  `20260922140000` tercatat di `supabase_migrations.schema_migrations`;
+  `schema_sync_test.sql` 29/29 (termasuk 4 assert baru). Semua 10 file
+  `supabase/tests/*.sql` hijau.
+- **Rollback (bila perlu):** re-apply definisi sebelumnya dari snapshot lama
+  (`nearby_users @20260920130001`, `get_online_users @20260920130004`).
+
+## 2026-09-22 — 20260922120000_app_update_config.sql
+
+- **Status:** SUDAH TERAPPLIED di remote DB ohcucyyejdryryoxitm pada 2026-09-22.
+- **Isi:** tambah 4 kolom ke public.app_settings — update_enabled (bool,
+  default false), latest_version, min_version, update_notes (text, default '').
+  Fitur popup update aplikasi (Play In-App Update).
+- **Cara apply:** Management API POST /v1/projects/{ref}/database/query
+  (CLI db push hang — butuh Docker). Di Windows, JSON dibangun via Python
+  (json.dumps) lalu di-POST dengan curl.exe --data-binary — ConvertTo-Json
+  PowerShell 5.1 menambah wrapper {value:{...}} yang ditolak API (HTTP 400).
+- **Token Management API (Windows):** disimpan di .env baris
+  SUPABASE_ACCESS_TOKEN. Token lama sbp_26b1b8…d76cf4 **kedaluwarsa (401)**
+  → diganti sbp_89ae76…1016d pada 2026-09-22. (JANGAN commit .env.)
+- **Verifikasi:** information_schema.columns menunjukkan 4 kolom dengan tipe &
+  default benar; supabase_migrations.schema_migrations memuat 20260922120000.
+- **Rollback (bila perlu):** lter table public.app_settings drop column
+  update_enabled, drop column latest_version, drop column min_version,
+  drop column update_notes; (kolom baru, default kosong — aman).
+
 ## 2026-08-27 — 20260827100000_fix_call_ended_dataonly.sql
 
 - **Status:** SUDAH TERAPPLIED di remote DB `fohcucyyejdryryoxitm` pada 2026-08-27.

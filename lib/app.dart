@@ -30,6 +30,7 @@ import 'providers/theme_provider.dart';
 import 'providers/timeline_provider.dart';
 import 'providers/story_provider.dart';
 import 'providers/privacy_provider.dart';
+import 'providers/update_provider.dart';
 import 'services/chat_service.dart';
 import 'services/boot_overlay.dart';
 import 'core/perf/perf_probe.dart';
@@ -100,6 +101,7 @@ class _ChatYukAppState extends State<ChatYukApp> {
         ChangeNotifierProvider.value(value: _onlineUsersProvider),
         ChangeNotifierProvider(create: (_) => NavProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
+        ChangeNotifierProvider(create: (_) => UpdateProvider.instance),
         ChangeNotifierProvider(create: (_) => localeProvider),
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider.value(value: CallProvider.instance),
@@ -642,6 +644,14 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // notifnya hilang (app di-swipe/OS restart service saat keluar) —
       // tanpa ini tap-untuk-kembali-ke-panggilan lenyap padahal call jalan.
       unawaited(CallProvider.instance.ensureActiveNotif());
+      // Update: cek ulang saat kembali foreground — Play Core flexible
+      // menyelesaikan unduhan di background; popup juga muncul lagi bila
+      // belum di-snooze (mis. user menutup dialog lalu balik).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        UpdateProvider.instance.presentIfNeeded(navigatorKey);
+        UpdateProvider.instance.check(navigatorKey: navigatorKey);
+      });
     }
   }
 

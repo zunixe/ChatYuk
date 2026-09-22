@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_cropper/image_cropper.dart';
 import '../widgets/async_photo.dart';
@@ -39,24 +38,12 @@ import 'subscriptions_screen.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
 Future<String?> _processAvatar(Uint8List bytes) async {
-  // Cropper interaktif sudah menentukan area 1:1 persisnya (user geser/zoom)
-  // — center-crop manual redundant. Encode WebP via native encoder:
-  // 25-35% lebih kecil dari JPEG pada kualitas setara, decode Flutter
-  // natively di semua platform.
-  try {
-    final webp = await FlutterImageCompress.compressWithList(
-      bytes,
-      minWidth: 1024,
-      minHeight: 1024,
-      quality: 90,
-      format: CompressFormat.webp,
-      keepExif: false,
-    );
-    if (webp.isNotEmpty) return base64Encode(webp);
-  } catch (e) {
-    dlog('[PROFILE] webp encode failed, fallback jpeg: $e');
-  }
-  // Fallback JPEG q92 kalau encoder WebP gagal di device tertentu.
+  // SELALU JPEG. Dulu dicoba WebP via FlutterImageCompress dulu, tapi encoder
+  // WebP native itu menghasilkan file dengan ICC profile/krominansi yang tidak
+  // konsisten antar-device → avatar tampil "biro-biro" (warna aneh) saat
+  // dilihat dari HP LAIN lewat CDN. JPEG polos tidak punya masalah ini dan
+  // di-decode universal — sama seperti foto chat. Cropper interaktif sudah
+  // menentukan area 1:1, jadi cukup resize + encode.
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
   final resized = img.copyResize(
@@ -65,7 +52,7 @@ Future<String?> _processAvatar(Uint8List bytes) async {
     height: 1024,
     interpolation: img.Interpolation.cubic,
   );
-  return base64Encode(img.encodeJpg(resized, quality: 92));
+  return base64Encode(img.encodeJpg(resized, quality: 90));
 }
 
 // Galeri foto + preview blur. Return {full, preview}.

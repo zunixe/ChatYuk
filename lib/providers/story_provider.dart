@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils.dart';
 
+import '../core/cache/media_disk_cache.dart';
 import '../models/story_model.dart';
 import '../services/rt_resilient.dart';
+import '../services/storage_photo_service.dart';
 import '../services/story_service.dart';
 
 /// State story: tray (daftar author aktif), slide per author yang sedang
@@ -20,6 +23,16 @@ class StoryProvider extends ChangeNotifier {
 
   /// Slide per author — di-cache supaya buka penonton berikutnya instan.
   final Map<String, List<StorySlide>> _slidesByAuthor = {};
+
+  /// Thumbnail tray per `thumbPath` — RAM cache (bytes). Tanpa ini setiap
+  /// tile baru (rebuild/refresh/cold start) mengulang baca disk → thumbnail
+  /// "keload ulang" padahal sudah ada. Sama seperti pola avatar (RAM→disk→net).
+  final Map<String, Uint8List> _thumbByPath = {};
+
+  /// Job thumbnail in-flight per path — caller kedua menunggu job yang sama
+  /// (bukan mulai unduh ganda).
+  final Map<String, Future<Uint8List?>> _thumbJobs = {};
+  static const int _maxThumbs = 80;
 
   StreamSubscription? _storiesSub;
   StreamSubscription? _viewsSub;
@@ -79,7 +92,6 @@ class StoryProvider extends ChangeNotifier {
     _loading = false;
     if (!_disposed) notifyListeners();
   }
-
   /// Slide author — dari cache kalau ada, else fetch.
   Future<List<StorySlide>> slidesFor(String authorId) async {
     final cached = _slidesByAuthor[authorId];
@@ -87,6 +99,86 @@ class StoryProvider extends ChangeNotifier {
     final slides = await _service.fetchSlides(authorId);
     if (slides.isNotEmpty) _slidesByAuthor[authorId] = slides;
     return slides;
+  }
+
+  /// Thumbnail tray untuk [thumbPath] — RAM → disk (SINKRON, anti-blink) →
+  /// network + tulis disk. Sumber kebenaran lokal sama seperti avatar:
+  /// begitu pernah dimuat, tampil instan di rebuild/cold start berikutnya
+  /// (tidak "keload ulang").
+  ///
+  /// [sync] = true mengembalikan HANYA hasil dari RAM/disk yang sudah siap
+  /// (tanpa menunggu network) — dipakai tile agar frame pertama langsung
+  /// terisi kalau cache ada. Bila null, pemanggil boleh await versi async.
+  Uint8List? thumbCached(String thumbPath) {
+    if (thumbPath.isEmpty) return null;
+    final ram = _thumbByPath[thumbPath];
+    if (ram != null) return ram;
+    // Prewarm belum siap → jangan vonis miss (bisa fetch network sia-sia).
+    if (!MediaDiskCache.instance.isReady) return null;
+    final disk = MediaDiskCache.instance.readSync(_thumbKey(thumbPath));
+    if (disk != null && disk.isNotEmpty) {
+      _rememberThumb(thumbPath, disk);
+      return disk;
+    }
+    return null;
+  }
+
+  /// Versi async: tunggu prewarm, cek RAM/disk, lalu (bila perlu) unduh +
+  /// simpan disk. Unduhan digabung per-path (tidak ganda).
+  Future<Uint8List?> thumbFor(String thumbPath) async {
+    if (thumbPath.isEmpty) return null;
+    final ram = _thumbByPath[thumbPath];
+    if (ram != null) return ram;
+    final job = _thumbJobs[thumbPath];
+    if (job != null) return job;
+    final future = _loadThumbNetwork(thumbPath);
+    _thumbJobs[thumbPath] = future;
+    try {
+      return await future;
+    } finally {
+      _thumbJobs.remove(thumbPath);
+    }
+  }
+
+  Future<Uint8List?> _loadThumbNetwork(String thumbPath) async {
+    // Disk dulu (jangan salah vonis miss saat cold start).
+    try {
+      await MediaDiskCache.instance.waitReady();
+      final disk = MediaDiskCache.instance.readSync(_thumbKey(thumbPath));
+      if (disk != null && disk.isNotEmpty) {
+        _rememberThumb(thumbPath, disk);
+        return disk;
+      }
+    } catch (_) {}
+    // Network: thumb server-side (proporsional, rasio = kartu preview viewer).
+    try {
+      final bytes = await StoragePhotoService.instance.downloadThumbBytes(
+        thumbPath,
+        width: 180,
+        height: 316,
+        resize: ResizeMode.cover,
+      );
+      if (bytes != null && bytes.isNotEmpty) {
+        _rememberThumb(thumbPath, bytes);
+        unawaited(MediaDiskCache.instance.write(_thumbKey(thumbPath), bytes));
+        return bytes;
+      }
+    } catch (e) {
+      dlog('[StoryProvider] thumb error: $e');
+    }
+    return null;
+  }
+
+  /// Kunci cache beda dari full image + mencakup dimensi (thumb lawas 160px
+  /// tanpa resize aspeknya rusak — jangan dipakai lagi).
+  String _thumbKey(String thumbPath) => '$thumbPath#thumb180x316';
+
+  void _rememberThumb(String thumbPath, Uint8List bytes) {
+    if (_thumbByPath.length >= _maxThumbs &&
+        !_thumbByPath.containsKey(thumbPath)) {
+      _thumbByPath.remove(_thumbByPath.keys.first);
+    }
+    _thumbByPath[thumbPath] = bytes;
   }
 
   /// Daftar penonton satu slide (pemilik slide only — server guard).
