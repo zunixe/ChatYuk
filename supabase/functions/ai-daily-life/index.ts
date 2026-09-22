@@ -165,13 +165,15 @@ Deno.serve(async (req: Request) => {
     // Dipanggil worker pool di bawah. Format output JSON story TIDAK berubah.
     // OPT: ketiga query independen (prev tidak butuh hasil cek today —
     // hanya butuh keputusannya) → Promise.all sekaligus, hemat 1 RTT.
-    const processDummy = async (uid: string): Promise<void> => {
+    // targetDate default = storyDate (perilaku lama). Backfill memanggil
+    // per-tanggal untuk mengisi hari yang kosong/tertinggal.
+    const processDummy = async (uid: string, targetDate = storyDate): Promise<void> => {
       const [todayRes, profileRes, prevRes, dummyRes] = await Promise.all([
         admin
           .from('ai_daily_story')
           .select('story_date')
           .eq('dummy_uid', uid)
-           .eq('story_date', storyDate)
+           .eq('story_date', targetDate)
           .maybeSingle(),
         admin
           .from('profiles')
@@ -182,7 +184,7 @@ Deno.serve(async (req: Request) => {
           .from('ai_daily_story')
           .select('story, story_date')
           .eq('dummy_uid', uid)
-           .lt('story_date', storyDate)
+           .lt('story_date', targetDate)
           .order('story_date', { ascending: false })
           .limit(1),
         admin
@@ -219,7 +221,9 @@ Deno.serve(async (req: Request) => {
         persona?.personality?.toString()?.trim() ||
         persona?.extra_prompt?.toString()?.trim() ||
         '';
-      const weekday = new Date(nowMs + 7 * 3600 * 1000).toLocaleDateString(
+      // Weekday diambil dari TANGGAL TARGET (bukan now) — backfill hari
+      // lampau dulu memakai hari ini → cerita "Senin" untuk tanggal Sabtu.
+      const weekday = new Date(`${targetDate}T12:00:00+07:00`).toLocaleDateString(
         'id-ID',
         {
           weekday: 'long',
@@ -254,12 +258,18 @@ Deno.serve(async (req: Request) => {
       const rawOf = (j: any): string => {
         const m = j?.choices?.[0]?.message;
         const c = m?.content;
-        if (typeof c === 'string' && c.length > 0) return c;
-        // Zen/Mimo kadang menaruh teks di reasoning_content saat content
-        // kosong — pakai sebagai cadangan sebelum menyerah.
         const rc = (m as any)?.reasoning_content;
-        if (typeof rc === 'string' && rc.length > 0) return rc;
-        return '';
+        const cStr = typeof c === 'string' ? c : '';
+        const rcStr = typeof rc === 'string' ? rc : '';
+        // Kasus model reasoning (Nemotron): kadang teks "berpikir"
+        // ("We need to produce JSON only...") mendarat di `content`, dan
+        // JSON asli TIDAK ADA sama sekali. Pilih kandidat yang benar-benar
+        // mengandung objek JSON; kalau tidak ada, kembalikan yang terpanjang
+        // supaya rawLen/rawHead di failedWhy tetap informatif.
+        const looksJson = (s: string) => s.includes('{') && s.includes('}');
+        if (looksJson(cStr)) return cStr;
+        if (looksJson(rcStr)) return rcStr;
+        return cStr.length >= rcStr.length ? cStr : rcStr;
       };
       const callPrimary = async (strict: boolean): Promise<GenRes> => {
         const prompt = strict ? `${storyPrompt} ${strictSuffix}` : storyPrompt;
@@ -272,7 +282,11 @@ Deno.serve(async (req: Request) => {
             },
             body: JSON.stringify({
               model: sModel,
-              max_tokens: 600,
+              // Headroom untuk model REASONING (Nemotron/Ultra): token
+              // dihitung termasuk reasoning_content, bukan hanya content.
+              // 600 dulu → finish_reason 'length' + JSON terpotong → parse
+              // gagal (kasus rutin di cron 21-22 Sep). 2000 aman.
+              max_tokens: 2000,
               temperature: 0.8,
               // Base OpenRouter (provider aktif): matikan reasoning Nemotron
               // (cepat + hemat token). Base lain: reasoning_effort low (glm).
@@ -398,12 +412,89 @@ Deno.serve(async (req: Request) => {
         },
       };
       await admin.from('ai_daily_story').upsert(
-         { dummy_uid: uid, story_date: storyDate, story },
+         { dummy_uid: uid, story_date: targetDate, story },
         { onConflict: 'dummy_uid,story_date' },
       );
       generated.push(uid);
       delete failWhy[uid];
     };
+
+    // ── MODE BACKFILL ───────────────────────────────────────────────
+    // Cron mengirim backfill_days=N → scan SEMUA kombinasi
+    // (dummy regular × tanggal N hari terakhir) yang belum punya story,
+    // lalu isi satu per satu. Jadi kalau ada hari yang gagal/terlewat,
+    // cron berikutnya otomatis MENYUSUL, bukan cuma mengisi hari ini.
+    const backfillDays = Number(body?.backfill_days ?? 0);
+    if (backfillDays > 0 && !manualUid) {
+      const days = Math.min(Math.max(Math.trunc(backfillDays), 1), 31);
+      const uids = ((dummies as any[]) || []).map((d) => d.uid as string);
+
+      // Daftar tanggal backfill (termasuk HARI INI).
+      const dates: string[] = [];
+      for (let i = 0; i < days; i++) {
+        const t = new Date(nowMs - i * 86400000 + 7 * 3600 * 1000)
+          .toISOString()
+          .slice(0, 10);
+        dates.push(t);
+      }
+
+      // Ambil semua story yang SUDAH ada pada rentang tsb (1 query), lalu
+      // hitung selisihnya → daftar tugas yang benar-benar kosong saja.
+      const { data: existing } = await admin
+        .from('ai_daily_story')
+        .select('dummy_uid, story_date')
+        .in('dummy_uid', uids.length ? uids : ['00000000-0000-0000-0000-000000000000'])
+        .gte('story_date', dates[dates.length - 1]);
+      const have = new Set(
+        ((existing as any[]) || []).map((r) => `${r.dummy_uid}|${r.story_date}`),
+      );
+
+      // Urutkan LAMA→BARU supaya "kemarin" sudah ada saat mengisi hari ini
+      // (cerita nyambung: prevStory = tanggal sebelumnya).
+      const tasks: Array<{ uid: string; date: string }> = [];
+      for (const date of [...dates].reverse()) {
+        for (const uid of uids) {
+          if (!have.has(`${uid}|${date}`)) tasks.push({ uid, date });
+        }
+      }
+
+      // Isi satu per satu (paralel terbatas) — sama seperti "isi satu2 yang
+      // belum ada isinya".
+      const BF_CONCURRENCY = 4;
+      const queue = [...tasks];
+      let bfOk = 0;
+      const bfFail: Array<{ uid: string; date: string }> = [];
+      const workers = Array.from(
+        { length: Math.min(BF_CONCURRENCY, queue.length) },
+        async () => {
+          while (queue.length > 0) {
+            const t = queue.shift()!;
+            try {
+              const g = generated.length;
+              await processDummy(t.uid, t.date);
+              if (generated.length > g) bfOk++;
+              else if (!skipped.length) bfFail.push(t);
+            } catch (_) {
+              bfFail.push(t);
+            }
+          }
+        },
+      );
+      await Promise.all(workers);
+
+      return json({
+        ok: true,
+        backfill: true,
+        days,
+        dates: dates.length,
+        dummies: uids.length,
+        missing: tasks.length,
+        generated: bfOk,
+        failed: bfFail.length,
+        failedList: bfFail.slice(0, 20),
+        failedWhy: failWhy,
+      });
+    }
 
     if (manualUid) {
       if (!dummies?.length) {

@@ -109,20 +109,27 @@ mixin AuthServiceProfileMx on AuthBase {
   }
 
   /// Ambil profil user lain (untuk halaman info pengguna).
+  ///
+  /// PENTING: method ini TIDAK men-download avatar. Dulu avatar diunduh di
+  /// sini (base64) SEBELUM return — kalau jaringan/storage lambat, seluruh
+  /// future melewati timeout 10 dtk di UI → _profile tetap null → layar
+  /// "Coba lagi" muncul padahal datanya ada (kasus "profilnya ga muncul").
+  /// Sekarang: data profil dikembalikan apa adanya (kolom `avatar` masih
+  /// berisi PATH), UI memuat avatar terpisah via [getAvatarByPath].
   Future<UserModel?> getProfileById(String id) async {
     if (id.isEmpty) return null;
     final raw = await _sb.rpc('profile_public', params: {'p_user': id});
     if (raw is! Map || raw.isEmpty) return null;
-    final model = UserModel.fromMap(
-      id,
-      snakeToCamel(Map<String, dynamic>.from(raw)),
-    );
-    if (model.avatar.isNotEmpty &&
-        StoragePhotoService.instance.isAvatarPath(model.avatar)) {
-      final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
-      return model.copyWith(avatar: b64);
-    }
-    return model;
+    return UserModel.fromMap(id, snakeToCamel(Map<String, dynamic>.from(raw)));
+  }
+
+  /// Resolve PATH avatar → base64 (RAM → disk → network). Dipanggil UI
+  /// TERPISAH dari [getProfileById] supaya kegagalan/lambatnya avatar tidak
+  /// pernah menahan tampilnya profil. Return '' bila bukan path / gagal.
+  Future<String> getAvatarByPath(String path) async {
+    if (path.isEmpty) return '';
+    if (!StoragePhotoService.instance.isAvatarPath(path)) return path;
+    return AvatarB64Service.instance.getByPath(path);
   }
 
   /// Stream realtime profil sendiri — poin, status, email terdaftar, dll.
