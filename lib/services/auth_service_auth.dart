@@ -29,8 +29,11 @@ mixin AuthServiceAuthMx on AuthBase {
       // Copy profile lama ke uid baru.
       // Exclude ip_address & fcm_token — kolom ini di-revoke dari akses
       // publik (hardening), dan tidak boleh ditimpa saat link akun.
+      // status/last_seen/avatar/share_location juga sudah di-revoke
+      // (hardening 2026-09-22) → jangan di-SELECT; avatar disalin terpisah
+      // via RPC avatar_for bila perlu (di sini cukup kolom publik).
       const cols =
-          'id,nickname,gender,age,country,city,status,avatar,is_registered,hashtags,points';
+          'id,nickname,gender,age,country,city,is_registered,hashtags,points';
       final old = await _sb
           .from('profiles')
           .select(cols)

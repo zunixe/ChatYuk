@@ -844,3 +844,70 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
 - **Apply:** via Management API (`POST /v1/projects/fohcucyyejdryryoxitm/database/query`) + `insert into supabase_migrations.schema_migrations (version) values ('20260921220000') on conflict do nothing`.
 - **Verifikasi live:** `pg_get_functiondef('_social_registered_guard')` memuat `from_id` DAN `follower_id` ✅; insert teman antar-registered sukses ✅; antar-anon → `SOCIAL_REGISTERED_ONLY` (bukan 42703) ✅.
 - **Test:** `supabase/tests/privacy_test.sql` 23/23; suite SQL penuh hijau.
+
+## 2026-09-22 — 20260922000000_toggle_like_return_count.sql (APPLY)
+
+- **Bug:** like di timeline tampil **2** padahal harusnya 1.
+- **Akar masalah (FE race, bukan DB):** RPC `toggle_post_like`/`toggle_comment_like` hanya mengembalikan `{ok, liked}` tanpa `like_count` → client menghitung sendiri `cur ± 1` dari nilai lokal. Sementara trigger `post_like_count_sync` (AFTER INSERT/DELETE) meng-update `posts.like_count` → memicu event realtime UPDATE `posts` yang menimpa `likeCount` lokal. Balapan: realtime tiba dulu (0→1), client lalu `cur+1` = **2**.
+- **Fix:** kedua RPC mengembalikan `likeCount` **absolut** (SELECT setelah trigger, transaksi sama). Pola sama dengan `toggle_story_like` yang sudah benar. FE (`post_card.dart` `_like()`) kini pakai `res['likeCount']` sebagai sumber kebenaran, fallback `cur ± 1` bila field absen.
+- **Apply:** via Management API `POST /v1/projects/fohcucyyejdryryoxitm/database/query` + `insert into supabase_migrations.schema_migrations (version) values ('20260922000000') on conflict do nothing`.
+- **Verifikasi live:** `pg_get_functiondef` untuk `toggle_post_like` & `toggle_comment_like` → `has_likecount=true`, `has_vcount=true` ✅; `select version ... order by version desc limit 3` → `20260922000000` teratas ✅.
+- **Code sync:** `lib/widgets/post_card.dart` `_like()` post (line ~86) & comment (line ~969) sudah pakai `likeCount` server. `flutter analyze` bersih; `flutter test test/timeline_provider_test.dart` 4/4 lulus.
+
+## 2026-09-22 — Backfill resync like_count (DATA, tanpa migration file)
+
+- **Tujuan:** koreksi sisa drift `like_count` dari bug double-like lama (nilai 2 tertinggal).
+- **Hasil:** **TIDAK ADA drift** — `posts.like_count` & `post_comments.like_count` sudah 100% konsisten dengan `count(*)` tabel likes. Resync idempoten dijalankan → `posts_fixed=0`, `comments_fixed=0`.
+- **Snapshot data:** posts=6, post_likes=4, comments=5, comment_likes=3.
+- **Verifikasi:** `drift_posts=0`, `drift_comments=0` ✅.
+- **Kesimpulan:** bug lama tidak meninggalkan data rusak (volume kecil + trigger DELETE clamp `greatest(x-1,0)` menjaga). Fix server (`20260922000000`) + APK baru sudah cukup; tidak perlu backfill.
+
+## 2026-09-22 — Fix story AI dummy gagal + deploy ai-daily-life v31 (DEPLOY + DATA)
+
+- **Keluhan:** tombol "buat story" untuk dummy di admin panel SELALU gagal (`Gagal membuat story hari ini`). Cron harian juga tidak menghasilkan story 21-22 Sep.
+- **Akar masalah 1 (model salah):** `ai_provider_config` (baris aktif, NVIDIA) menyimpan `default_model = 'nim/nvidia/nemotron-3-ultra-550b-a55b'`. Prefix `nim/` BUKAN bagian dari ID native NVIDIA — **tes live: `nim/...` → 404, `nvidia/...` → 200**. Fix data: `update ai_provider_config set default_model = regexp_replace(default_model,'^nim/','')` (kini `nvidia/nemotron-3-ultra-550b-a55b`).
+- **Akar masalah 2 (max_tokens kurang):** `ai-daily-life` memakai `max_tokens: 600` untuk model REASONING (Nemotron Ultra). Token dihitung termasuk `reasoning_content` (~800-1800 char) → sering `finish_reason: 'length'` → JSON terpotong → parse gagal. Tes 5x: 600 → 4/5 valid; **2000 → 5/5 valid**. Dinaikkan ke 2000.
+- **Perbaikan tambahan `rawOf()`:** model reasoning kadang mendaratkan teks "berpikir" ("We need to produce JSON only...") di `content` tanpa JSON sama sekali. Sekarang pilih kandidat (`content`/`reasoning_content`) yang benar-benar mengandung objek JSON.
+- **Deploy:** bundle esbuild (`--external:https://esm.sh/*`) + Management API multipart `POST /v1/projects/.../functions/deploy?slug=ai-daily-life` → **ACTIVE v31**.
+- **Verifikasi:** invoke manual (`x-app-secret`) → `generated:[uid], failed:[]` ✅.
+- **Data lengkap:** semua 7 dummy `kind='regular'` + `ai_enabled` kini punya story untuk **15-22 Sep** (0 kosong). 2 story RUSAK (`story ? '_dbg'`, 18 Sep: MbakPijit & SoftwareExpert) dihapus + digenerate ulang (expert di-switch sementara ke `regular`, lalu dikembalikan). Story 15/16 Sep hanya format lama tanpa `timeline` (field inti lengkap, BUKAN rusak).
+- **Catatan ai-reply:** routing `nim/` di `ai-reply/index.ts:2391` mengasumsikan prefix `nim/` = ID native NIM — TERBUKTI SALAH (404). Bila ada dummy memakai model `nim/...`, ganti ke `nvidia/...`. Belum diubah (menunggu keputusan karena menyentuh fungsi chat).
+
+## 2026-09-22 — ai-daily-life v32: mode BACKFILL + cron auto-susul (DEPLOY + CRON)
+
+- **Permintaan owner:** cron jangan cuma isi story hari ini — kalau ada hari yang kosong/terlewat, harus **menyusul otomatis** ("isi satu2 yang belum ada isinya tiap hari").
+- **Mode `backfill` baru di edge function:** body `{backfill_days: N}` → scan SEMUA kombinasi (dummy regular × N hari terakhir) yang belum punya story, hitung selisih via 1 query `.in('dummy_uid', uids).gte('story_date', ...)`, lalu isi satu per satu (paralel terbatas 4). Urutan LAMA→BARU supaya `prevStory` sudah ada = cerita nyambung. Respons: `{ok, backfill, days, missing, generated, failed}`.
+- **Fix bug weekday:** `weekday` dulu dihitung dari `nowMs` (HARI INI) → backfill hari lampau salah label ("Senin" untuk tanggal Sabtu). Sekarang dari `targetDate`. `processDummy(uid, targetDate)` + upsert pakai `targetDate` (bukan `storyDate`).
+- **Cron diupdate:** `cron.alter_job(15, command := ...)` → body `{'source':'cron','backfill_days':8}`. Setiap 05:00 WIB otomatis mengisi **semua** hari kosong dalam 8 hari terakhir, bukan hanya hari itu.
+- **Verifikasi:** backfill 8 hari saat data lengkap → `missing:0`. Hapus 1 story (Sarah 17 Sep) → backfill `missing:1, generated:1` ✅ dan cerita menyebut "**Kamis** 17 September" (weekday benar) ✅. Kekosongan 15-22 Sep = 0; story rusak `_dbg` = 0.
+- **Deploy:** esbuild bundle + Management API multipart → **ACTIVE v32**.
+- **Retensi:** `chatyuk-ai-daily-life` di `0 22 * * *`; backfill N hari bisa dituning lewat `backfill_days` (maks 31).
+
+## 2026-09-22 — Privacy hardening: tutup bypass REST langsung (MIGRASI)
+
+- **Audit privasi** menemukan setting privasi BERFUNGSI di jalur RPC, tapi bisa
+  DILEWATI via REST langsung karena RLS `profiles_select`/`user_photos_select`
+  = `USING(true)` + kolom sensitif masih ter-grant SELECT.
+- **Yang bocor (terverifikasi):**
+  - `user_photos.photo` → readable anon+authenticated → **bypass paywall**
+    `get_user_photos_access`/`unlock_photo` (foto terkunci bisa dibaca gratis).
+  - `profiles.status` + `last_seen` → bypass `presence_visibility`/`last_seen_visibility`.
+  - `profiles.avatar` → bypass `profile_photo_visibility`.
+  - `story_tray` tidak cek `privacy_can_view(author,'story')` → story "nobody"
+    tetap muncul (avatar+count) di tray.
+- **Sudah aman sebelumnya (tidak disentuh):** `lat/lon/lat_gps/lon_gps/lat_ip/
+  lon_ip/ip_address/email/fcm_token/about` — tidak ter-grant; `app_shared_secret`
+  tak ada SELECT grant.
+- **Migrasi 1** `20260922100000_privacy_harden_columns.sql`:
+  - RPC baru: `presence_for(uuid[])`, `avatar_for(uuid)`, `avatars_for(uuid[])`,
+    `my_photos()` — semua security definer + ber-privacy, grant `authenticated`.
+  - `revoke select (status,last_seen,avatar,share_location) on profiles`.
+  - `revoke select on user_photos` (table-level `arwdDxtm` menutupi revoke kolom
+    → harus revoke TABLE-level) lalu `grant select (id,user_id,photo_preview,
+    created_at)`.
+- **Migrasi 2** `20260922110000_story_tray_privacy.sql`: `story_tray` tambah
+  `privacy_can_view(author,'story')` + mask avatar via `profile_photo_visibility`.
+- **Verifikasi live:** `has_column_privilege('authenticated','profiles','avatar',
+  'SELECT')=false`, `('anon','user_photos','photo','SELECT')=false`,
+  `photo_preview`=true; `story_tray` punya klausa privacy; 4 RPC ada + grant
+  authenticated.

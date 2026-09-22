@@ -77,12 +77,10 @@ class AvatarB64Service {
     if (_inflight.contains(uid)) return '';
     _inflight.add(uid);
     try {
-      final res = await _sb
-          .from('profiles')
-          .select('avatar')
-          .eq('id', uid)
-          .maybeSingle();
-      var avatar = (res?['avatar'] as String?) ?? '';
+      // Kolom profiles.avatar sudah di-revoke dari SELECT publik (hardening
+      // 2026-09-22) → baca lewat RPC ber-privacy avatar_for.
+      var avatar = await _sb.rpc('avatar_for', params: {'p_uid': uid}) as String?;
+      avatar ??= '';
       if (avatar.isNotEmpty &&
           StoragePhotoService.instance.isAvatarPath(avatar)) {
         avatar = await _downloadWithDisk(avatar);
@@ -113,12 +111,8 @@ class AvatarB64Service {
     if (_inflight.contains(uid)) return;
     _inflight.add(uid);
     try {
-      final res = await _sb
-          .from('profiles')
-          .select('avatar')
-          .eq('id', uid)
-          .maybeSingle();
-      var avatar = (res?['avatar'] as String?) ?? '';
+      var avatar = await _sb.rpc('avatar_for', params: {'p_uid': uid}) as String?;
+      avatar ??= '';
       if (avatar.isNotEmpty &&
           StoragePhotoService.instance.isAvatarPath(avatar)) {
         avatar = await _downloadWithDisk(avatar);
@@ -179,10 +173,8 @@ class AvatarB64Service {
         }
       }
       if (missing.isEmpty) return;
-      final res = await _sb
-          .from('profiles')
-          .select('id,avatar')
-          .inFilter('id', missing);
+      // RPC batch ber-privacy (avatar di-mask sesuai profile_photo_visibility).
+      final res = await _sb.rpc('avatars_for', params: {'p_uids': missing});
       for (final row in (res as List? ?? const [])) {
         final uid = '${(row as Map)['id'] ?? ''}';
         var avatar = '${row['avatar'] ?? ''}';
