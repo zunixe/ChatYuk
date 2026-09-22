@@ -9,7 +9,6 @@ import '../config/strings_admin.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
-import '../providers/connectivity_provider.dart';
 import '../core/admin_err.dart';
 import '../utils.dart';
 

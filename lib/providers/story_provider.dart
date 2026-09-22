@@ -85,6 +85,9 @@ class StoryProvider extends ChangeNotifier {
     try {
       _tray = await _service.fetchTray();
       _error = null;
+      // Prewarm thumbnail sinkron dari disk (bila prewarm disk sudah siap)
+      // supaya tile pertama langsung terisi — tidak "hilang dulu" lalu tampil.
+      warmTrayThumbs();
     } catch (e) {
       dlog('[StoryProvider] refresh error: $e');
       _error = e.toString();
@@ -92,6 +95,7 @@ class StoryProvider extends ChangeNotifier {
     _loading = false;
     if (!_disposed) notifyListeners();
   }
+
   /// Slide author — dari cache kalau ada, else fetch.
   Future<List<StorySlide>> slidesFor(String authorId) async {
     final cached = _slidesByAuthor[authorId];
@@ -121,6 +125,36 @@ class StoryProvider extends ChangeNotifier {
       return disk;
     }
     return null;
+  }
+
+  /// Isi RAM cache thumbnail dari disk SECARA SINKRON bila memungkinkan.
+  ///
+  /// Pola ini yang menyamakan story dengan avatar: hasil disk ditulis ke RAM
+  /// provider (bukan hanya disimpan di State widget). Tanpa ini, tiap tile
+  /// baru (rebuild / ganti tab / scroll) kehilangan `_thumb` dan harus
+  /// menunggu `waitReady()` → muncul efek "hilang dulu baru tampil".
+  ///
+  /// Return true bila RAM cache sudah terisi (siap dipakai paint pertama).
+  bool warmThumb(String thumbPath) {
+    if (thumbPath.isEmpty) return false;
+    if (_thumbByPath.containsKey(thumbPath)) return true;
+    if (!MediaDiskCache.instance.isReady) return false;
+    final disk = MediaDiskCache.instance.readSync(_thumbKey(thumbPath));
+    if (disk == null || disk.isEmpty) return false;
+    _rememberThumb(thumbPath, disk);
+    return true;
+  }
+
+  /// Prewarm semua thumbnail tray secara sinkron — dipanggil setelah tray
+  /// dimuat supaya saat tile dibangun, cache RAM sudah terisi dan thumbnail
+  /// tampil di frame pertama (tidak "hilang dulu").
+  void warmTrayThumbs() {
+    if (!MediaDiskCache.instance.isReady) return;
+    for (final item in _tray) {
+      final p = item.thumbPath;
+      if (p.isEmpty) continue;
+      warmThumb(p);
+    }
   }
 
   /// Versi async: tunggu prewarm, cek RAM/disk, lalu (bila perlu) unduh +

@@ -86,4 +86,37 @@ void main() {
       expect(provider.loading, isFalse);
     });
   });
+
+  group('warm thumb (persistensi seperti avatar)', () {
+    test('warmThumb: path kosong → false', () {
+      expect(provider.warmThumb(''), isFalse);
+    });
+
+    test('warmThumb: disk belum siap → false, tidak menandai cache', () {
+      // MediaDiskCache belum di-prewarm di test → isReady false.
+      expect(provider.warmThumb('story/u1/a.jpg'), isFalse);
+      expect(provider.thumbCached('story/u1/a.jpg'), isNull);
+    });
+
+    test('warmTrayThumbs aman saat disk belum siap (tidak throw)', () async {
+      await provider.refresh();
+      expect(() => provider.warmTrayThumbs(), returnsNormally);
+    });
+
+    test(
+      'thumbFor: hasil masuk RAM provider, panggilan kedua tidak unduh',
+      () async {
+        var calls = 0;
+        when(() => service.fetchTray()).thenAnswer((_) async => []);
+        await provider.refresh();
+        // thumbFor tanpa network & tanpa disk → null, tapi tidak boleh throw
+        // dan tidak boleh menyimpan nilai kosong ke RAM.
+        final b = await provider.thumbFor('story/u1/missing.jpg');
+        calls++;
+        expect(b, isNull);
+        expect(calls, 1);
+        expect(provider.thumbCached('story/u1/missing.jpg'), isNull);
+      },
+    );
+  });
 }
