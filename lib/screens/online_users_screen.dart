@@ -126,8 +126,8 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
   String get _uid8 => widget.uid.length >= 8
       ? widget.uid.substring(0, 8)
       : widget.uid.isEmpty
-          ? '-'
-          : widget.uid;
+      ? '-'
+      : widget.uid;
 
   @override
   void initState() {
@@ -149,10 +149,16 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     // (gejala "kadang ada kadang hilang").
     _boundAvatarMap(_avatarBytesByUid);
     _boundAvatarMap(_avatarImageByUid);
-    final srcType = src.isEmpty ? 'EMPTY' : src.startsWith('avatars/') ? 'PATH' : 'B64';
+    final srcType = src.isEmpty
+        ? 'EMPTY'
+        : src.startsWith('avatars/')
+        ? 'PATH'
+        : 'B64';
     // Sumber sama & provider sudah ada → nol pekerjaan (paling sering).
     if (src == _avatarLastSrcByUid[widget.uid] && _provider != null) {
-      dlog('[AVATAR] $_uid8 KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}');
+      dlog(
+        '[AVATAR] $_uid8 KEEP ($srcType) t=${DateTime.now().millisecondsSinceEpoch % 100000}',
+      );
       return;
     }
     _avatarLastSrcByUid[widget.uid] = src;
@@ -181,7 +187,9 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
     // Instance MemoryImage stabil per-uid → pakai apa adanya.
     final stable = _avatarImageByUid[widget.uid];
     if (stable != null && _provider != stable) {
-      dlog('[AVATAR] $_uid8 SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}');
+      dlog(
+        '[AVATAR] $_uid8 SWAP-STABLE t=${DateTime.now().millisecondsSinceEpoch % 100000}',
+      );
       _provider = stable;
       return;
     }
@@ -199,7 +207,9 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
         compute(_decodeAvatarB64Iso, src).then((decoded) {
           _asyncResolvingFor = null;
           if (decoded == null || decoded.isEmpty) {
-            dlog('[AVATAR] $_uid8 DECODE-FAIL(async) keep-old=${_provider != null}');
+            dlog(
+              '[AVATAR] $_uid8 DECODE-FAIL(async) keep-old=${_provider != null}',
+            );
             return;
           }
           _avatarCache.putIfAbsent(src, () => decoded);
@@ -210,7 +220,8 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
           );
           _boundAvatarMap(_avatarBytesByUid);
           _boundAvatarMap(_avatarImageByUid);
-          if (mounted) setState(() => _provider = _avatarImageByUid[widget.uid]);
+          if (mounted)
+            setState(() => _provider = _avatarImageByUid[widget.uid]);
         });
         return;
       } else if (src.length > 100000) {
@@ -231,8 +242,10 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
         // membawa data benar. Dulu `_provider = null` di sini → foto hilang
         // (transparan) sampai batch network menyusul = "kadang ada kadang
         // hilang".
-        dlog('[AVATAR] $_uid8 DECODE-FAIL(sync) len=${src.length} '
-            'keep-old=${_provider != null}');
+        dlog(
+          '[AVATAR] $_uid8 DECODE-FAIL(sync) len=${src.length} '
+          'keep-old=${_provider != null}',
+        );
         return;
       }
       _avatarBytesByUid[widget.uid] = b;
@@ -263,8 +276,14 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
         return const SizedBox.shrink();
       }
       return Center(
-        child: Text(widget.initial,
-            style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
+        child: Text(
+          widget.initial,
+          style: TextStyle(
+            color: widget.color,
+            fontSize: AppGlyph.avatarInitial(40),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       );
     }
     // gaplessPlayback: foto benar-benar baru (bytes beda) → bitmap lama
@@ -274,8 +293,14 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
       fit: BoxFit.cover,
       gaplessPlayback: true,
       errorBuilder: (_, __, ___) => Center(
-        child: Text(widget.initial,
-            style: TextStyle(color: widget.color, fontSize: AppGlyph.avatarInitial(40), fontWeight: FontWeight.w700)),
+        child: Text(
+          widget.initial,
+          style: TextStyle(
+            color: widget.color,
+            fontSize: AppGlyph.avatarInitial(40),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -289,9 +314,7 @@ class OnlineUsersScreen extends StatefulWidget {
 }
 
 class _OnlineUsersScreenState extends State<OnlineUsersScreen>
-    with
-        AutomaticKeepAliveClientMixin,
-        WidgetsBindingObserver {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   // Multi-select negara: kosong = Semua. Persist via prefs (JSON list).
   List<String> _negaraSel = const [];
   // Single-select gender: all | male | female. Persist via prefs.
@@ -372,7 +395,6 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     _requestGpsOnce();
   }
 
-
   /// Minta izin GPS saat masuk menu pengguna online (dialog native muncul
   /// sekali; kalau ditolak, user tetap bisa aktifkan lewat "bagikan lokasi").
   Future<void> _requestGpsOnce() async {
@@ -414,7 +436,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     setState(() {
       // Migrasi legacy single ('all' | 1 negara) → list.
       final legacy = prefs.getString(_prefKeyNegara);
-      _negaraSel = prefs.getStringList(_prefKeyNegaraList) ??
+      _negaraSel =
+          prefs.getStringList(_prefKeyNegaraList) ??
           (legacy != null && legacy != 'all' ? [legacy] : const []);
       _gender = prefs.getString(_prefKeyGender) ?? 'all';
     });
@@ -465,9 +488,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     } catch (e) {
       dlog('[ONLINE] pickImage error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.errPhotoPermission)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoPermission)));
       }
       return;
     }
@@ -492,10 +515,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             activeControlsWidgetColor: AppTheme.primary,
             lockAspectRatio: true,
           ),
-          IOSUiSettings(
-            title: s.avatarCamera,
-            aspectRatioLockEnabled: true,
-          ),
+          IOSUiSettings(title: s.avatarCamera, aspectRatioLockEnabled: true),
         ],
       );
     } catch (e) {
@@ -516,9 +536,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       if (processed == null || !mounted) {
         setState(() => _uploadingAvatar = false);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(s.errPhotoProcess)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(s.errPhotoProcess)));
         }
         return;
       }
@@ -531,26 +551,33 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         try {
           final uid = pp.profile?.uid ?? '';
           if (uid.isNotEmpty) {
-            context.read<OnlineUsersProvider>().updateAvatarForUid(uid, processed);
-            context.read<TimelineProvider>().refreshAvatarForUid(uid, processed);
+            context.read<OnlineUsersProvider>().updateAvatarForUid(
+              uid,
+              processed,
+            );
+            context.read<TimelineProvider>().refreshAvatarForUid(
+              uid,
+              processed,
+            );
           }
         } catch (_) {}
         setState(() => _uploadingAvatar = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.msgProfileSaved)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.msgProfileSaved)));
       }
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingAvatar = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.errPhotoUpload)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errPhotoUpload)));
       }
     }
   }
 
-  void _showAvatarZoom(String b64, Color bgColor, String initial) {    Uint8List? bytes;
+  void _showAvatarZoom(String b64, Color bgColor, String initial) {
+    Uint8List? bytes;
     if (b64.isNotEmpty) {
       try {
         bytes = base64Decode(b64);
@@ -614,7 +641,8 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     }
     if (bytes == null && src.startsWith('avatars/')) {
       try {
-        bytes = MediaDiskCache.instance.readSync(src) ??
+        bytes =
+            MediaDiskCache.instance.readSync(src) ??
             await MediaDiskCache.instance.read(src) ??
             await context.read<StorageProvider>().downloadBytes(src);
       } catch (_) {}
@@ -643,16 +671,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     // jepret ATAU pilih foto galeri dalam satu halaman.
     final picked = await Navigator.push<File>(
       context,
-      MaterialPageRoute(
-        builder: (_) => const StoryCameraPickerScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const StoryCameraPickerScreen()),
     );
     if (picked == null || !mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            StoryComposerScreen(picked: XFile(picked.path)),
+        builder: (_) => StoryComposerScreen(picked: XFile(picked.path)),
       ),
     );
     if (mounted) {
@@ -675,120 +700,122 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       child: SizedBox(
         width: 64,
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              GestureDetector(
-                onTap: () {
-                  final b64 = myAvatar;
-                  final init =
-                      (myNickname.isEmpty ? '?' : myNickname)[0].toUpperCase();
-                  _showAvatarZoom(b64, AppTheme.primary, init);
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 6,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Builder(builder: (_) {
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                GestureDetector(
+                  onTap: () {
                     final b64 = myAvatar;
-                    final bytes = _resolveOwnAvatar(b64);
-                    // Huruf inisial HANYA kalau memang tidak ada
-                    // avatar (string kosong). Selama bytes belum
-                    // siap → lingkaran tint polos, tanpa flash "S".
-                    final showInitial = b64.isEmpty;
-                    return CircleAvatar(
-                      radius: 27,
-                      backgroundColor:
-                          AppTheme.primary.withValues(alpha: 0.15),
-                      backgroundImage:
-                          bytes != null ? MemoryImage(bytes) : null,
-                      child: showInitial
-                          ? Text(
-                              (myNickname.isEmpty ? '?' : myNickname)[0]
-                                  .toUpperCase(),
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: AppGlyph.avatarInitial(54),
-                                fontWeight: FontWeight.w800,
-                              ),
-                            )
-                          : null,
-                    );
-                  }),
-                ),
-              ),
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: GestureDetector(
-                  onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+                    final init = (myNickname.isEmpty ? '?' : myNickname)[0]
+                        .toUpperCase();
+                    _showAvatarZoom(b64, AppTheme.primary, init);
+                  },
                   child: Container(
-                    width: 20,
-                    height: 20,
                     decoration: BoxDecoration(
-                      color: Colors.white,
                       shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black26,
-                          blurRadius: 3,
+                          blurRadius: 6,
+                          offset: Offset(0, 2),
                         ),
                       ],
                     ),
-                    child: _uploadingAvatar
-                        ? Padding(
-                            padding: EdgeInsets.all(4),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: AppTheme.primary,
-                            ),
-                          )
-                        : Icon(
-                            Icons.camera_alt,
-                            color: AppTheme.primary,
-                            size: 11,
+                    child: Builder(
+                      builder: (_) {
+                        final b64 = myAvatar;
+                        final bytes = _resolveOwnAvatar(b64);
+                        // Huruf inisial HANYA kalau memang tidak ada
+                        // avatar (string kosong). Selama bytes belum
+                        // siap → lingkaran tint polos, tanpa flash "S".
+                        final showInitial = b64.isEmpty;
+                        return CircleAvatar(
+                          radius: 27,
+                          backgroundColor: AppTheme.primary.withValues(
+                            alpha: 0.15,
                           ),
+                          backgroundImage: bytes != null
+                              ? MemoryImage(bytes)
+                              : null,
+                          child: showInitial
+                              ? Text(
+                                  (myNickname.isEmpty ? '?' : myNickname)[0]
+                                      .toUpperCase(),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: AppGlyph.avatarInitial(54),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                )
+                              : null,
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          SizedBox(
-            width: 64,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    myNickname,
-                    style: AppText.bodyStrong
-                        .copyWith(color: AppTheme.textPrimary),
-                  ),
-                  if (myRegistered) ...[
-                    const SizedBox(width: 2),
-                    const Icon(
-                      Icons.verified,
-                      size: 13,
-                      color: Color(0xFF4A90E2),
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: GestureDetector(
+                    onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: Colors.black26, blurRadius: 3),
+                        ],
+                      ),
+                      child: _uploadingAvatar
+                          ? Padding(
+                              padding: EdgeInsets.all(4),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: AppTheme.primary,
+                              ),
+                            )
+                          : Icon(
+                              Icons.camera_alt,
+                              color: AppTheme.primary,
+                              size: 11,
+                            ),
                     ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            SizedBox(
+              width: 64,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      myNickname,
+                      style: AppText.bodyStrong.copyWith(
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    if (myRegistered) ...[
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.verified,
+                        size: 13,
+                        color: Color(0xFF4A90E2),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -855,10 +882,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => StoryViewerScreen(
-          items: items,
-          initialIndex: target,
-        ),
+        builder: (_) => StoryViewerScreen(items: items, initialIndex: target),
       ),
     );
   }
@@ -970,7 +994,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     }
   }
 
-  Future<void> _showUnreadBubble(BuildContext cardCtx, UserModel user, int unreadCount, Offset globalPos) async {
+  Future<void> _showUnreadBubble(
+    BuildContext cardCtx,
+    UserModel user,
+    int unreadCount,
+    Offset globalPos,
+  ) async {
     final myUid = cardCtx.read<AuthProvider>().uid;
     final s = cardCtx.read<LocaleProvider>().s;
     if (myUid == null) return;
@@ -980,19 +1009,25 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     try {
       final rows = await Supabase.instance.client
           .from('private_messages')
-          .select('id, sender_id, sender_name, text, type, image_data, created_at')
+          .select(
+            'id, sender_id, sender_name, text, type, image_data, created_at',
+          )
           .eq('chat_id', chatId)
           .eq('sender_id', user.uid)
           .order('created_at', ascending: false)
           .limit(unreadCount > 8 ? 8 : unreadCount);
-      msgs = rows.map((r) => MessageModel.fromMap('${r['id']}', {
-            'senderId': r['sender_id'],
-            'senderName': r['sender_name'],
-            'text': r['text'] ?? '',
-            'type': r['type'] ?? 'text',
-            'imageData': r['image_data'] ?? '',
-            'createdAt': r['created_at'],
-          })).toList();
+      msgs = rows
+          .map(
+            (r) => MessageModel.fromMap('${r['id']}', {
+              'senderId': r['sender_id'],
+              'senderName': r['sender_name'],
+              'text': r['text'] ?? '',
+              'type': r['type'] ?? 'text',
+              'imageData': r['image_data'] ?? '',
+              'createdAt': r['created_at'],
+            }),
+          )
+          .toList();
     } catch (_) {}
     if (!cardCtx.mounted || msgs.isEmpty) return;
     HapticFeedback.mediumImpact();
@@ -1008,13 +1043,16 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       builder: (ctx) {
         final size = MediaQuery.of(ctx).size;
         final bubbleWidth = 280.0;
-        final bubbleHeight = (msgs.length * 48.0 + 40).clamp(72, 280).toDouble();
+        final bubbleHeight = (msgs.length * 48.0 + 40)
+            .clamp(72, 280)
+            .toDouble();
         double left = cardCenterX - bubbleWidth / 2;
         left = left.clamp(12, size.width - bubbleWidth - 12);
         // Nempel tepat: 0 gap + ekor 8px
         final spaceAbove = cardTopLeft.dy;
         final spaceBelow = size.height - (cardTopLeft.dy + cardSize.height);
-        final isAbove = spaceAbove > spaceBelow && spaceAbove >= bubbleHeight + 16;
+        final isAbove =
+            spaceAbove > spaceBelow && spaceAbove >= bubbleHeight + 16;
         double top;
         if (isAbove) {
           top = cardTopLeft.dy - bubbleHeight - 8;
@@ -1039,7 +1077,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (!isAbove) ...[
-                      CustomPaint(size: const Size(14, 8), painter: _BubbleTailPainter(color: AppTheme.bgInput, isTop: true)),
+                      CustomPaint(
+                        size: const Size(14, 8),
+                        painter: _BubbleTailPainter(
+                          color: AppTheme.bgInput,
+                          isTop: true,
+                        ),
+                      ),
                     ],
                     Container(
                       width: bubbleWidth,
@@ -1048,34 +1092,101 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                       decoration: BoxDecoration(
                         color: AppTheme.bgInput,
                         borderRadius: BorderRadius.circular(16),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 16, offset: const Offset(0, 6))],
-                        border: Border.all(color: AppTheme.divider.withValues(alpha: 0.8)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: AppTheme.divider.withValues(alpha: 0.8),
+                        ),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(children: [
-                            Text(user.nickname, style: AppText.bodyStrong),
-                            const SizedBox(width: 6),
-                            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)), child: Text(s.newCount(unreadCount), style: AppText.micro.copyWith(color: AppTheme.danger, fontWeight: FontWeight.w800))),
-                            const Spacer(),
-                            GestureDetector(onTap: () => entry.remove(), child: Icon(Icons.close, size: 16, color: AppTheme.textSecondary)),
-                          ]),
-                          Divider(height: 1, color: AppTheme.divider.withValues(alpha: 0.5)),
+                          Row(
+                            children: [
+                              Text(user.nickname, style: AppText.bodyStrong),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.danger.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  s.newCount(unreadCount),
+                                  style: AppText.micro.copyWith(
+                                    color: AppTheme.danger,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () => entry.remove(),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 16,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Divider(
+                            height: 1,
+                            color: AppTheme.divider.withValues(alpha: 0.5),
+                          ),
                           Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               for (final m in msgs) ...[
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
-                                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Expanded(child: Text(m.text.isNotEmpty ? m.text : (m.type == 'image' ? s.msgPhoto : m.type), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodySmall)),
-                                    const SizedBox(width: 8),
-                                    Text(formatBubbleTime(m.timestamp), style: AppText.micro.copyWith(color: AppTheme.textSecondary)),
-                                  ]),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 3,
+                                    horizontal: 2,
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          m.text.isNotEmpty
+                                              ? m.text
+                                              : (m.type == 'image'
+                                                    ? s.msgPhoto
+                                                    : m.type),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppText.bodySmall,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        formatBubbleTime(m.timestamp),
+                                        style: AppText.micro.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                if (m != msgs.last) Divider(height: 1, color: AppTheme.divider.withValues(alpha: 0.3)),
+                                if (m != msgs.last)
+                                  Divider(
+                                    height: 1,
+                                    color: AppTheme.divider.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                  ),
                               ],
                             ],
                           ),
@@ -1083,7 +1194,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                       ),
                     ),
                     if (isAbove) ...[
-                      CustomPaint(size: const Size(14, 8), painter: _BubbleTailPainter(color: AppTheme.bgInput, isTop: false)),
+                      CustomPaint(
+                        size: const Size(14, 8),
+                        painter: _BubbleTailPainter(
+                          color: AppTheme.bgInput,
+                          isTop: false,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -1122,9 +1239,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final dummySession = context.select<AuthProvider, bool>(
       (a) => a.dummySessionActive,
     );
-    final anonymous = context.select<AuthProvider, bool>(
-      (a) => a.isAnonymous,
-    );
+    final anonymous = context.select<AuthProvider, bool>((a) => a.isAnonymous);
     final isAdmin = isRealAdmin && !dummySession;
     super.build(context);
     final s = context.watch<LocaleProvider>().s;
@@ -1182,13 +1297,25 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     decoration: InputDecoration(
                       isDense: true,
                       hintText: s.searchHint,
-                      hintStyle: AppText.body.copyWith(color: AppTheme.textSecondary),
-                      prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
-                      prefixIconConstraints:
-                          const BoxConstraints(minWidth: 36, minHeight: 0),
+                      hintStyle: AppText.body.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: AppTheme.textSecondary,
+                        size: 20,
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 0,
+                      ),
                       suffixIcon: _search.isNotEmpty
                           ? IconButton(
-                              icon: Icon(Icons.clear, size: 18, color: AppTheme.textSecondary),
+                              icon: Icon(
+                                Icons.clear,
+                                size: 18,
+                                color: AppTheme.textSecondary,
+                              ),
                               onPressed: () {
                                 _searchCtrl.clear();
                                 setState(() {
@@ -1200,7 +1327,10 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                           : null,
                       filled: true,
                       fillColor: AppTheme.bgCard,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 12,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -1217,12 +1347,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     final seenU = <String>{};
                     final seenN = <String>{};
                     final n = prov.users
-                        .where((u) =>
-                            u.uid != authUid &&
-                            u.uid.isNotEmpty &&
-                            !chat.isBlocked(u.uid) &&
-                            seenU.add(u.uid) &&
-                            seenN.add(u.nickname.toLowerCase()))
+                        .where(
+                          (u) =>
+                              u.uid != authUid &&
+                              u.uid.isNotEmpty &&
+                              !chat.isBlocked(u.uid) &&
+                              seenU.add(u.uid) &&
+                              seenN.add(u.nickname.toLowerCase()),
+                        )
                         .length;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -1230,11 +1362,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                       children: [
                         Text(
                           s.titleOnline,
-                          style: AppText.title.copyWith(color: AppTheme.textPrimary),
+                          style: AppText.title.copyWith(
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
                         Text(
                           '$n ${s.onlineActiveUsers}',
-                          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
                       ],
                     );
@@ -1258,15 +1394,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         // rapat (tanpa padding). IconButton tidak dipakai: minimumSize M3
         // selalu memaksa 48px walau constraints 32 diberikan.
         actions: [
-          Builder(builder: (_) {
-            dlog(
-              '[ADMINICON] panelBuilder=${AdminGate.panelBuilder != null} '
-              'isRealAdmin=$isRealAdmin '
-              'dummySession=$dummySession '
-              '',
-            );
-            return const SizedBox.shrink();
-          }),
+          Builder(
+            builder: (_) {
+              dlog(
+                '[ADMINICON] panelBuilder=${AdminGate.panelBuilder != null} '
+                'isRealAdmin=$isRealAdmin '
+                'dummySession=$dummySession '
+                '',
+              );
+              return const SizedBox.shrink();
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Row(
@@ -1274,8 +1412,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               children: [
                 // Jalan pintas Admin Panel — hanya untuk admin sungguhan
                 // (bukan sesi dummy). User biasa tidak melihat ikon ini.
-                if (AdminGate.panelBuilder != null &&
-                    isAdmin)
+                if (AdminGate.panelBuilder != null && isAdmin)
                   Tooltip(
                     message: 'Admin Panel',
                     child: GestureDetector(
@@ -1312,8 +1449,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                       behavior: HitTestBehavior.opaque,
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(
-                            builder: (_) => const NearbyScreen()),
+                        MaterialPageRoute(builder: (_) => const NearbyScreen()),
                       ),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 3),
@@ -1342,8 +1478,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               final users = allUsers.where((u) {
                 if (!seenU.add(u.uid)) return false;
                 if (!seenN.add(u.nickname.toLowerCase())) return false;
-                if (_negaraSel.isNotEmpty &&
-                    !_negaraSel.contains(u.country)) {
+                if (_negaraSel.isNotEmpty && !_negaraSel.contains(u.country)) {
                   return false;
                 }
                 if (_gender != 'all' && u.gender != _gender) {
@@ -1412,15 +1547,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                     ),
                   ),
                   Expanded(
-                      child: !provider.hasLoaded
-                          ? ListView.builder(
-                              padding: EdgeInsets.fromLTRB(
-                                10,
-                                10,
-                                10,
-                                MediaQuery.of(context).padding.bottom + 12,
-                              ),
-                              itemCount: 6,
+                    child: !provider.hasLoaded
+                        ? ListView.builder(
+                            padding: EdgeInsets.fromLTRB(
+                              10,
+                              10,
+                              10,
+                              MediaQuery.of(context).padding.bottom + 12,
+                            ),
+                            itemCount: 6,
                             itemBuilder: (_, _) => const SkeletonCard(),
                           )
                         : users.isEmpty
@@ -1477,14 +1612,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                               ],
                             ),
                           )
-                          : ListView.builder(
-                              controller: _scrollCtrl,
-                              padding: EdgeInsets.fromLTRB(
-                                10,
-                                10,
-                                10,
-                                MediaQuery.of(context).padding.bottom + 12,
-                              ),
+                        : ListView.builder(
+                            controller: _scrollCtrl,
+                            padding: EdgeInsets.fromLTRB(
+                              10,
+                              10,
+                              10,
+                              MediaQuery.of(context).padding.bottom + 12,
+                            ),
                             // Kartu ikut pindah posisi saat urutan berubah
                             // (sort last_seen) — State _AsyncAvatar tidak
                             // di-dispose/recreate → avatar tidak kedip.
@@ -1517,14 +1652,21 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
                                 // jauh lebih murah.
                                 builder: (cardCtx) => RepaintBoundary(
                                   child: _UserCard(
-                                  user: paged[i],
-                                  onTap: () => _startChat(context, paged[i]),
-                                  onAvatarTap: (c) =>
-                                      _zoomUserAvatar(paged[i], c),
-                                  onLongPressStart: unreadMap[paged[i].uid] != null && unreadMap[paged[i].uid]! > 0
-                                      ? (d) => _showUnreadBubble(cardCtx, paged[i], unreadMap[paged[i].uid]!, d.globalPosition)
-                                      : null,
-                                  unreadCount: unreadMap[paged[i].uid] ?? 0,
+                                    user: paged[i],
+                                    onTap: () => _startChat(context, paged[i]),
+                                    onAvatarTap: (c) =>
+                                        _zoomUserAvatar(paged[i], c),
+                                    onLongPressStart:
+                                        unreadMap[paged[i].uid] != null &&
+                                            unreadMap[paged[i].uid]! > 0
+                                        ? (d) => _showUnreadBubble(
+                                            cardCtx,
+                                            paged[i],
+                                            unreadMap[paged[i].uid]!,
+                                            d.globalPosition,
+                                          )
+                                        : null,
+                                    unreadCount: unreadMap[paged[i].uid] ?? 0,
                                   ),
                                 ),
                               );
@@ -1547,7 +1689,9 @@ class _BubbleTailPainter extends CustomPainter {
   _BubbleTailPainter({required this.color, required this.isTop});
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color..style = PaintingStyle.fill;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
     final path = Path();
     if (isTop) {
       path.moveTo(size.width / 2 - 7, size.height);
@@ -1561,9 +1705,13 @@ class _BubbleTailPainter extends CustomPainter {
     path.close();
     canvas.drawShadow(path, Colors.black.withValues(alpha: 0.1), 2, false);
     canvas.drawPath(path, paint);
-    final border = Paint()..color = AppTheme.divider.withValues(alpha: 0.6)..style = PaintingStyle.stroke..strokeWidth = 1;
+    final border = Paint()
+      ..color = AppTheme.divider.withValues(alpha: 0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
     canvas.drawPath(path, border);
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
@@ -1573,7 +1721,6 @@ class _BubbleTailPainter extends CustomPainter {
 /// Kosong = Semua. Commit hanya saat Terapkan (tap luar = batal).
 /// Single-select dropdown — panel TERANCUNG sama seperti multi-select
 /// tapi tanpa search/footer: tap opsi → langsung terapkan + tutup.
-
 
 class _MultiSelectDropdown extends StatefulWidget {
   final String label;
@@ -1611,8 +1758,8 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
   /// Tinggi keyboard MENTAH — `MediaQuery.of(context).viewInsets.bottom`
   /// selalu 0 di body Scaffold (di-mask `resizeToAvoidBottomInset`).
   double get _keyboardH => MediaQueryData.fromView(
-        WidgetsBinding.instance.platformDispatcher.views.first,
-      ).viewInsets.bottom;
+    WidgetsBinding.instance.platformDispatcher.views.first,
+  ).viewInsets.bottom;
 
   @override
   void initState() {
@@ -1752,18 +1899,23 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
                           child: TextField(
                             controller: _searchCtrl,
                             autofocus: false,
-                            style: AppText.bodySmall
-                                .copyWith(color: AppTheme.textPrimary),
+                            style: AppText.bodySmall.copyWith(
+                              color: AppTheme.textPrimary,
+                            ),
                             decoration: InputDecoration(
                               isDense: true,
                               prefixIcon: const Icon(Icons.search, size: 18),
                               prefixIconConstraints: const BoxConstraints(
-                                  minWidth: 36, minHeight: 0),
+                                minWidth: 36,
+                                minHeight: 0,
+                              ),
                               hintText: s.searchCountry,
-                              hintStyle: AppText.bodySmall
-                                  .copyWith(color: AppTheme.textSecondary),
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 10),
+                              hintStyle: AppText.bodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 10,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                                 borderSide: BorderSide(color: AppTheme.divider),
@@ -1778,26 +1930,34 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
                         child: filtered.isEmpty
                             ? Padding(
                                 padding: const EdgeInsets.all(16),
-                                child: Text('-',
-                                    style: AppText.bodySmall.copyWith(
-                                        color: AppTheme.textSecondary)),
+                                child: Text(
+                                  '-',
+                                  style: AppText.bodySmall.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
                               )
                             : ListView.builder(
                                 shrinkWrap: true,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
                                 itemCount: filtered.length,
                                 itemBuilder: (_, i) {
                                   final idx = filtered[i];
-                                  final checked =
-                                      _temp.contains(widget.items[idx]);
+                                  final checked = _temp.contains(
+                                    widget.items[idx],
+                                  );
                                   return CheckboxListTile(
                                     dense: true,
                                     visualDensity: VisualDensity.compact,
                                     value: checked,
-                                    title: Text(widget.labels[idx],
-                                        style: AppText.bodySmall.copyWith(
-                                            color: AppTheme.textPrimary)),
+                                    title: Text(
+                                      widget.labels[idx],
+                                      style: AppText.bodySmall.copyWith(
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                    ),
                                     controlAffinity:
                                         ListTileControlAffinity.trailing,
                                     activeColor: AppTheme.primary,
@@ -1824,17 +1984,22 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
                           children: [
                             TextButton.icon(
                               onPressed: () => setState(() => _temp = {}),
-                              icon: const Icon(Icons.filter_alt_off_outlined,
-                                  size: 16),
+                              icon: const Icon(
+                                Icons.filter_alt_off_outlined,
+                                size: 16,
+                              ),
                               label: Text(s.filterReset),
                               // Tinggi 40 — sama dengan field cari & Terapkan.
                               style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.textSecondary,
-                                  textStyle: AppText.bodySmall.copyWith(
-                                      fontWeight: FontWeight.w600),
-                                  minimumSize: const Size(0, 40),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8)),
+                                foregroundColor: AppTheme.textSecondary,
+                                textStyle: AppText.bodySmall.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                minimumSize: const Size(0, 40),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                              ),
                             ),
                             const Spacer(),
                             // Tinggi dikunci 40 — sama persis dengan field cari negara.
@@ -1843,14 +2008,17 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
                               child: FilledButton.icon(
                                 onPressed: _apply,
                                 icon: const Icon(Icons.check, size: 16),
-                                label:
-                                    Text('${s.filterApply} (${_temp.length})'),
+                                label: Text(
+                                  '${s.filterApply} (${_temp.length})',
+                                ),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppTheme.primary,
                                   textStyle: AppText.bodySmall.copyWith(
-                                      fontWeight: FontWeight.w600),
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 12),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1872,31 +2040,43 @@ class _MultiSelectDropdownState extends State<_MultiSelectDropdown>
           child: InputDecorator(
             decoration: InputDecoration(
               isDense: true,
-              prefixIcon: Icon(widget.icon,
-                  size: 20, color: AppTheme.textSecondary),
-              prefixIconConstraints:
-                  const BoxConstraints(minWidth: 36, minHeight: 0),
+              prefixIcon: Icon(
+                widget.icon,
+                size: 20,
+                color: AppTheme.textSecondary,
+              ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 36,
+                minHeight: 0,
+              ),
               labelText: widget.label,
               contentPadding:
                   // Sama dengan SearchDropdown (gender) → tinggi identik.
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              suffixIconConstraints:
-                  const BoxConstraints(minWidth: 36, minHeight: 0),
+              suffixIconConstraints: const BoxConstraints(
+                minWidth: 36,
+                minHeight: 0,
+              ),
               suffixIcon: widget.selected.isEmpty
-                  ? Icon(Icons.arrow_drop_down,
-                      size: 20, color: AppTheme.textSecondary)
+                  ? Icon(
+                      Icons.arrow_drop_down,
+                      size: 20,
+                      color: AppTheme.textSecondary,
+                    )
                   : GestureDetector(
                       onTap: () => widget.onChanged(const []),
-                      child: Icon(Icons.close,
-                          size: 18, color: AppTheme.textSecondary),
+                      child: Icon(
+                        Icons.close,
+                        size: 18,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
             ),
             child: Text(
               _fieldText(),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
-              style:
-                  AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
+              style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
             ),
           ),
         ),
@@ -1929,7 +2109,6 @@ class _UserCard extends StatelessWidget {
     if (diff.inDays < 7) return '${diff.inDays}d';
     return DateFormat('d MMM').format(lastSeen.toLocal());
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -1975,20 +2154,20 @@ class _UserCard extends StatelessWidget {
         // Tanpa onTap di level kartu: 3 zona punya handler sendiri
         // (avatar→zoom, username→profil, ikon chat→chat).
         child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    GestureDetector(
-                      onTap: () => onAvatarTap(color),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: color.withValues(alpha: 0.15),
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  GestureDetector(
+                    onTap: () => onAvatarTap(color),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color.withValues(alpha: 0.15),
                         border: Border.all(color: color, width: 1.5),
                       ),
                       clipBehavior: Clip.antiAlias,
@@ -1997,203 +2176,200 @@ class _UserCard extends StatelessWidget {
                       // di-dispose/dibuat-ulang tiap emission → kedip.
                       // Inisial dirender di dalam _AsyncAvatar.
                       child: _AsyncAvatar(
-                          key: ValueKey(user.uid),
-                          uid: user.uid,
-                          avatarB64: user.avatar,
-                          initial: user.initial,
-                          color: color,
-                        ),
+                        key: ValueKey(user.uid),
+                        uid: user.uid,
+                        avatarB64: user.avatar,
+                        initial: user.initial,
+                        color: color,
                       ),
                     ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 11,
+                      height: 11,
+                      decoration: BoxDecoration(
+                        color: _statusColor(user.status),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                    ),
+                  ),
+                  if (unreadCount > 0)
                     Positioned(
-                      right: 0,
-                      bottom: 0,
+                      right: -2,
+                      top: -2,
                       child: Container(
-                        width: 11,
-                        height: 11,
+                        padding: EdgeInsets.all(3),
                         decoration: BoxDecoration(
-                          color: _statusColor(user.status),
+                          color: AppTheme.danger,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Text(
+                          '$unreadCount',
+                          style: AppText.micro.copyWith(color: Colors.white),
                         ),
                       ),
                     ),
-                    if (unreadCount > 0)
-                      Positioned(
-                        right: -2,
-                        top: -2,
-                        child: Container(
-                          padding: EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            color: AppTheme.danger,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '$unreadCount',
-                            style: AppText.micro.copyWith(color: Colors.white),
+                ],
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: GestureDetector(
+                            onTap: onTap,
+                            child: Text(
+                              user.nickname,
+                              style: AppText.bodyStrong,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
+                        if (user.gender == 'male' ||
+                            user.gender == 'female') ...[
+                          SizedBox(width: 4),
+                          Icon(
+                            user.gender == 'male' ? Icons.male : Icons.female,
+                            size: 15,
+                            color: user.gender == 'male'
+                                ? AppTheme.male
+                                : AppTheme.female,
+                          ),
+                        ],
+                        if (user.isRegistered) ...[
+                          SizedBox(width: 4),
+                          Tooltip(
+                            message: s.labelVerified,
+                            child: Icon(
+                              Icons.verified,
+                              size: 15,
+                              color: Color(0xFF4A90E2),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    GestureDetector(
+                      onTap: onTap,
+                      child: Text(
+                        '$genderLabel ${user.age} · ${user.city}, ${user.country}',
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                    ),
                   ],
                 ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              const SizedBox(width: 6),
+              Column(
+                children: [
+                  Text(
+                    statusLabel,
+                    style: AppText.caption.copyWith(
+                      color: _statusColor(user.status),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: GestureDetector(
-                              onTap: onTap,
-                              child: Text(
-                                user.nickname,
-                                style: AppText.bodyStrong,
-                                overflow: TextOverflow.ellipsis,
+                      // Tombol TAMBAH TEMAN hanya untuk user ter-registrasi.
+                      // Lingkaran belakang ikon transparan — ikon saja.
+                      if (user.isRegistered)
+                        Consumer<SocialProvider>(
+                          builder: (_, sp, __) {
+                            final isFriend = sp.isFriend(user.uid);
+                            final pending = sp.isPendingFriendRequest(user.uid);
+                            final done = isFriend || pending;
+                            final tip = isFriend
+                                ? s.btnFriends
+                                : (pending
+                                      ? s.btnFriendRequested
+                                      : s.btnAddFriend);
+                            return Tooltip(
+                              message: tip,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  // Sudah teman / permintaan terkirim → tidak
+                                  // bisa dikirim ulang (ikon jadi status).
+                                  onTap: done
+                                      ? null
+                                      : () async {
+                                          final messenger =
+                                              ScaffoldMessenger.of(context);
+                                          final res = await sp
+                                              .sendFriendRequest(user.uid);
+                                          // 'rejected' = gagal; selain itu
+                                          // (ok/pending) anggap terkirim.
+                                          if (res != 'rejected') {
+                                            messenger.showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  s.friendRequestSent,
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                  child: SizedBox(
+                                    width: 32,
+                                    height: 32,
+                                    child: Icon(
+                                      isFriend
+                                          ? Icons.how_to_reg_rounded
+                                          : (pending
+                                                ? Icons.schedule_rounded
+                                                : Icons.person_add_alt_rounded),
+                                      size: 20,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          if (user.gender == 'male' ||
-                              user.gender == 'female') ...[
-                            SizedBox(width: 4),
-                            Icon(
-                              user.gender == 'male' ? Icons.male : Icons.female,
-                              size: 15,
-                              color: user.gender == 'male'
-                                  ? AppTheme.male
-                                  : AppTheme.female,
-                            ),
-                          ],
-                          if (user.isRegistered) ...[
-                            SizedBox(width: 4),
-                            Tooltip(
-                              message: s.labelVerified,
+                            );
+                          },
+                        ),
+                      const SizedBox(width: 2),
+                      Tooltip(
+                        message: s.btnChatNow,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: onTap,
+                            child: const SizedBox(
+                              width: 32,
+                              height: 32,
                               child: Icon(
-                                Icons.verified,
-                                size: 15,
-                                color: Color(0xFF4A90E2),
+                                Icons.chat_bubble_outline_rounded,
+                                color: Colors.white,
+                                size: 20,
                               ),
                             ),
-                          ],
-                        ],
-                      ),
-                      GestureDetector(
-                        onTap: onTap,
-                        child: Text(
-                          '$genderLabel ${user.age} · ${user.city}, ${user.country}',
-                          style: AppText.bodySmall.copyWith(
-                            color: AppTheme.textSecondary,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 6),
-                Column(
-                  children: [
-                    Text(
-                      statusLabel,
-                      style: AppText.caption.copyWith(
-                        color: _statusColor(user.status),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        // Tombol TAMBAH TEMAN hanya untuk user ter-registrasi.
-                        // Lingkaran belakang ikon transparan — ikon saja.
-                        if (user.isRegistered)
-                          Consumer<SocialProvider>(
-                            builder: (_, sp, __) {
-                              final isFriend = sp.isFriend(user.uid);
-                              final pending = sp.isPendingFriendRequest(
-                                user.uid,
-                              );
-                              final done = isFriend || pending;
-                              final tip = isFriend
-                                  ? s.btnFriends
-                                  : (pending
-                                        ? s.btnFriendRequested
-                                        : s.btnAddFriend);
-                              return Tooltip(
-                                message: tip,
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(16),
-                                    // Sudah teman / permintaan terkirim → tidak
-                                    // bisa dikirim ulang (ikon jadi status).
-                                    onTap: done
-                                        ? null
-                                        : () async {
-                                            final messenger =
-                                                ScaffoldMessenger.of(context);
-                                            final res = await sp.sendFriendRequest(
-                                              user.uid,
-                                            );
-                                            // 'rejected' = gagal; selain itu
-                                            // (ok/pending) anggap terkirim.
-                                            if (res != 'rejected') {
-                                              messenger.showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    s.friendRequestSent,
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                          },
-                                    child: SizedBox(
-                                      width: 32,
-                                      height: 32,
-                                      child: Icon(
-                                        isFriend
-                                            ? Icons.how_to_reg_rounded
-                                            : (pending
-                                                  ? Icons.schedule_rounded
-                                                  : Icons
-                                                        .person_add_alt_rounded),
-                                        size: 20,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        const SizedBox(width: 2),
-                        Tooltip(
-                          message: s.btnChatNow,
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(16),
-                              onTap: onTap,
-                              child: const SizedBox(
-                                width: 32,
-                                height: 32,
-                                child: Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
-    ));
+        ),
+      ),
+    );
   }
 }
 
@@ -2233,8 +2409,12 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     super.initState();
     // SINKRON dulu: kalau thumbnail sudah ada di RAM/disk (sesi sebelumnya,
     // atau tile lain author sama), frame pertama LANGSUNG terisi — tidak
-    // "keload ulang" seperti cold start sebelumnya.
-    _thumb = context.read<StoryProvider>().thumbCached(widget.item.thumbPath);
+    // "keload ulang" seperti cold start sebelumnya. `warmThumb` mengisi RAM
+    // provider dari disk (pola sama dengan AvatarB64Service) sehingga state
+    // widget tidak lagi satu-satunya tempat menyimpan hasil.
+    final sp = context.read<StoryProvider>();
+    sp.warmThumb(widget.item.thumbPath);
+    _thumb = sp.thumbCached(widget.item.thumbPath);
     _loadThumb();
   }
 
@@ -2244,8 +2424,22 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     if (context.read<StorageProvider>().isAvatarPath(p)) return;
     // Sudah punya thumbnail (sync hit / didUpdateWidget) → tidak perlu ulang.
     if (_thumb != null) return;
+    // Tunggu prewarm disk dulu — kalau ternyata ADA di disk, ambil sinkron
+    // tanpa network (ini yang membuat tampil persisten seperti avatar).
     try {
-      final b = await context.read<StoryProvider>().thumbFor(p);
+      await MediaDiskCache.instance.waitReady();
+    } catch (_) {}
+    if (!mounted) return;
+    final sp = context.read<StoryProvider>();
+    if (sp.warmThumb(p)) {
+      final cached = sp.thumbCached(p);
+      if (mounted && cached != null) {
+        setState(() => _thumb = cached);
+      }
+      return;
+    }
+    try {
+      final b = await sp.thumbFor(p);
       if (mounted && b != null && b.isNotEmpty) {
         setState(() => _thumb = b);
       }
@@ -2257,7 +2451,9 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     super.didUpdateWidget(old);
     // Path berganti (slide baru) → ambil yang baru; kalau sama, biarkan.
     if (old.item.thumbPath != widget.item.thumbPath) {
-      _thumb = context.read<StoryProvider>().thumbCached(widget.item.thumbPath);
+      final sp = context.read<StoryProvider>();
+      sp.warmThumb(widget.item.thumbPath);
+      _thumb = sp.thumbCached(widget.item.thumbPath);
       _loadThumb();
     }
   }
@@ -2272,118 +2468,120 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     // selesai dimuat (tray panjang = scroll lebih mulus).
     return RepaintBoundary(
       child: GestureDetector(
-      onTap: widget.onTap,
-      child: SizedBox(
-        width: 67,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 67,
-                  height: 114,
-                  padding:
-                      seen ? EdgeInsets.zero : const EdgeInsets.all(2.5),
-                  decoration: BoxDecoration(
-                    gradient: seen
-                        ? null
-                        : const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF9C27B0),
-                              AppTheme.primary
-                            ],
-                          ),
-                    border: seen
-                        ? Border.all(color: Colors.white, width: 2)
-                        : null,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: seen
-                        ? [
-                            BoxShadow(
-                              color: Colors.black26,
-                              blurRadius: 6,
-                              offset: Offset(0, 2),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Container(
+        onTap: widget.onTap,
+        child: SizedBox(
+          width: 67,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 67,
+                    height: 114,
+                    padding: seen ? EdgeInsets.zero : const EdgeInsets.all(2.5),
                     decoration: BoxDecoration(
-                      color: AppTheme.bgCard,
-                      borderRadius: BorderRadius.circular(12),
+                      gradient: seen
+                          ? null
+                          : const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF9C27B0), AppTheme.primary],
+                            ),
+                      border: seen
+                          ? Border.all(color: Colors.white, width: 2)
+                          : null,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: seen
+                          ? [
+                              BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 6,
+                                offset: Offset(0, 2),
+                              ),
+                            ]
+                          : null,
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: _thumb != null
-                        ? Image.memory(_thumb!,
-                            fit: BoxFit.cover,
-                            alignment: Alignment.center,
-                            // Decode kecil (kotak foto 62x109, x2 density) —
-                            // rasio 124:218 = 0.569 sama dengan tile agar
-                            // tidak ada crop tambahan saat raster.
-                            cacheWidth: 124,
-                            cacheHeight: 218)
-                        : Center(
-                            child: Text(
-                              it.authorName.isNotEmpty
-                                  ? it.authorName[0].toUpperCase()
-                                  : '?',
-                              style: TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: AppGlyph.avatarInitial(64),
-                                fontWeight: FontWeight.w700,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgCard,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _thumb != null
+                          ? Image.memory(
+                              _thumb!,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.center,
+                              // Decode kecil (kotak foto 62x109, x2 density) —
+                              // rasio 124:218 = 0.569 sama dengan tile agar
+                              // tidak ada crop tambahan saat raster.
+                              cacheWidth: 124,
+                              cacheHeight: 218,
+                            )
+                          : Center(
+                              child: Text(
+                                it.authorName.isNotEmpty
+                                    ? it.authorName[0].toUpperCase()
+                                    : '?',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: AppGlyph.avatarInitial(64),
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                ),
-                if (widget.isOwnWithAdd)
-                  Positioned(
-                    // DI DALAM bounds tile (right:2, bottom:2) — dulu -3
-                    // (di luar tile) sehingga tidak pernah bisa di-tap.
-                    right: 2,
-                    bottom: 2,
-                    // Badge "+" punya handler sendiri (buka composer) —
-                    // lebih dalam dari GestureDetector tile → menang arena.
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: widget.onAddTap ?? widget.onTap,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                        child: const Icon(Icons.add, size: 13, color: Colors.white),
-                      ),
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            SizedBox(
-              width: 67,
-              child: Text(
-                it.own
-                    ? context.read<LocaleProvider>().s.storyMine
-                    : it.authorName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: AppText.micro.copyWith(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
+                  if (widget.isOwnWithAdd)
+                    Positioned(
+                      // DI DALAM bounds tile (right:2, bottom:2) — dulu -3
+                      // (di luar tile) sehingga tidak pernah bisa di-tap.
+                      right: 2,
+                      bottom: 2,
+                      // Badge "+" punya handler sendiri (buka composer) —
+                      // lebih dalam dari GestureDetector tile → menang arena.
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onAddTap ?? widget.onTap,
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            size: 13,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              SizedBox(
+                width: 67,
+                child: Text(
+                  it.own
+                      ? context.read<LocaleProvider>().s.storyMine
+                      : it.authorName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppText.micro.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
