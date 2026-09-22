@@ -52,14 +52,16 @@ mixin AuthServiceProfileMx on AuthBase {
       lastSeen: now,
     );
 
-    // Upsert HANYA kolom yang di-grant SELECT (lihat
-    // 20260915120000_security_hardening.sql). Kolom sensitif
-    // (email/ip_address/fcm_token/lat/lon) TIDAK boleh ikut di upsert:
-    // PostgREST `ON CONFLICT DO UPDATE` butuh SELECT pada kolom yang
-    // ditulis, dan kolom itu sengaja di-revoke → dulu seluruh registrasi
-    // gagal 42501. Setelah upsert, kolom sensitif ditulis lewat UPDATE
-    // terpisah (grant UPDATE penuh, RLS `profiles_update_own`).
-    await _sb.from('profiles').upsert({
+    // Upsert TANPA butuh SELECT: PostgREST `ON CONFLICT DO UPDATE` butuh
+    // SELECT di SEMUA kolom yang ditulis, sedangkan kolom status/avatar/
+    // last_seen (dan email/ip/fcm/lat/lon) sengaja di-revoke dari
+    // anon/authenticated untuk hardening privasi (baca lewat RPC
+    // profile_public/avatar_for). Upsert biasa selalu gagal 42501
+    // "permission denied for table profiles".
+    // Pola: INSERT ... ON CONFLICT DO NOTHING (`ignoreDuplicates`, tidak
+    // butuh SELECT) + UPDATE terpisah untuk baris yang sudah ada. Keduanya
+    // hanya butuh grant INSERT/UPDATE + RLS own (auth.uid() = id).
+    final row = <String, dynamic>{
       'id': user.id,
       'nickname': nickname,
       'gender': gender,
@@ -72,7 +74,12 @@ mixin AuthServiceProfileMx on AuthBase {
       'login_at': now.toUtc().toIso8601String(),
       'created_at': now.toUtc().toIso8601String(),
       'last_seen': now.toUtc().toIso8601String(),
-    }, onConflict: 'id');
+    };
+    await _sb
+        .from('profiles')
+        .upsert(row, onConflict: 'id', ignoreDuplicates: true);
+    final existing = Map<String, dynamic>.from(row)..remove('id');
+    await _sb.from('profiles').update(existing).eq('id', user.id);
 
     // Kolom sensitif via UPDATE (tidak butuh SELECT kolom tsb).
     final sensitive = <String, dynamic>{

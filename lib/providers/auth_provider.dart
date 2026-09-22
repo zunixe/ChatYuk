@@ -1101,7 +1101,9 @@ class AuthProvider extends ChangeNotifier {
     );
     resetIdleTimer();
     _restartPresenceTimers();
-    updateFcmToken();
+    // Fire-and-forget: di HP tanpa GMS (mis. Huawei) getToken() melempar —
+    // jangan biarkan unhandled async error mengganggu alur registrasi.
+    safeUnawaited(updateFcmToken());
     // Ikat referrer (bila ada) — sekali saja, setelah profil terdaftar.
     _bindAndClaimReferrer();
   }
