@@ -247,9 +247,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> showOnboardingIfNeeded(BuildContext context, dynamic s) async {
-    // Tunggu fetch flag selesai dulu supaya popup tidak muncul saat disabled
+    // Tunggu fetch flag selesai dulu supaya popup tidak muncul saat disabled.
+    // Pakai `enabled` (terkonfirmasi) bukan mentah `_enabled`: kalau fetch
+    // gagal, default mentah true akan membocorkan popup padahal server OFF.
     await refreshEnabled();
-    if (_onboardingShown || !_enabled) return;
+    if (_onboardingShown || !enabled) return;
     if (!context.mounted) return;
     markOnboardingShown();
     showDialog(
@@ -418,7 +420,9 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _checkOnlineMilestones() {
-    if (!_enabled) return;
+    // Pakai `enabled` terkonfirmasi: default mentah true sebelum fetch
+    // pertama akan mengklaim bonus + antre toast padahal server OFF.
+    if (!enabled) return;
     if (_sessionStart != null) {
       _todayOnlineSeconds += DateTime.now()
           .difference(_sessionStart!)
@@ -469,6 +473,12 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   };
 
   void checkAndShowOnlineToast(BuildContext context, bool isId) {
+    // Jangan tampilkan sisa antrean toast saat sistem OFF (mis. bonus
+    // diklaim sebelum admin mematikan) — buang antreannya.
+    if (!enabled) {
+      _lastToastMsg = null;
+      return;
+    }
     if (_lastToastMsg == null) return;
     final s = S(isId: isId);
     final labels = {
@@ -506,7 +516,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> debugClaimOnlineBonus() => _tryClaimOnlineBonus();
 
   Future<void> claimDailyLogin() async {
-    if (!_enabled) return;
+    if (!enabled) return;
     try {
       final old = _points;
       final res = await _service.dailyLoginBonus();
@@ -527,6 +537,10 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Tampilkan toast streak setelah daily login (dipanggil dari UI yang punya context).
   void checkAndShowStreakToast(BuildContext context, bool isId) {
+    if (!enabled) {
+      _lastStreakBonus = 0;
+      return;
+    }
     if (_lastStreakBonus <= 0) return;
     final bonus = _lastStreakBonus;
     final streak = _loginStreak;
@@ -541,7 +555,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Bonus chat orang baru (harian ber-limit, dikelola server).
   Future<bool> newChatBonus(String otherUid) async {
-    if (!_enabled) return false;
+    if (!enabled) return false;
     try {
       final old = _points;
       _points = await _service.newChatBonus(otherUid);
@@ -558,6 +572,9 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   ///   -1    poin tidak cukup
   ///   -2    error tak dikenal (RPC/network) — JANGAN kirim pesan
   Future<int> deductBeforeSend(String msgType) async {
+    // SENGAJA pakai mentah `_enabled` (default true): sebelum flag server
+    // terkonfirmasi, kirim tetap dicharge agar tidak ada jendela gratis.
+    // Server sendiri mengembalikan saldo tanpa potong saat OFF, jadi aman.
     if (!_enabled) return _points;
     try {
       final remaining = await _service.deductChatPoint(msgType);
@@ -587,7 +604,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> roomReadBonus() async {
-    if (!_enabled) return;
+    if (!enabled) return;
     try {
       _points = await _service.roomReadBonus();
       if (!_disposed) notifyListeners();
@@ -597,7 +614,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<bool> oneTimeBonus(String actionKey, int bonus) async {
-    if (!_enabled) return false;
+    if (!enabled) return false;
     try {
       final old = _points;
       _points = await _service.oneTimeBonus(actionKey, bonus);
@@ -612,7 +629,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Reward koin untuk upload foto galeri slot 1..5 (sekali per slot).
   /// Return jumlah koin yang bertambah (0 jika tidak dapat).
   Future<int> rewardPhotoSlot(int slotIndex) async {
-    if (!_enabled) return 0;
+    if (!enabled) return 0;
     try {
       final old = _points;
       _points = await _service.rewardPhotoSlot(slotIndex);
@@ -643,7 +660,7 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<bool> claimRegisterBonus() async {
-    if (!_enabled) return false;
+    if (!enabled) return false;
     try {
       final old = _points;
       _points = await _service.registerBonus();
@@ -677,6 +694,11 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     String message, {
     bool isError = false,
   }) {
+    // Penjaga terpusat: SEMUA toast koin (bonus, kirim, gift, misi, streak,
+    // online) lewat sini. Saat sistem OFF — termasuk untuk admin (server
+    // masih memberi bonus via bypass zunixe agar bisa diuji) — jangan
+    // tampilkan apa pun supaya tidak dikira bug.
+    if (!enabled) return;
     try {
       final overlay = Overlay.of(context);
       late OverlayEntry entry;
@@ -708,6 +730,9 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void showOutOfPointsDialog(BuildContext context, bool isId) {
+    // Saat sistem OFF tidak ada biaya kirim — dialog "koin habis" tidak
+    // relevan. Cegah muncul dari jalur basi (flag lama / antrean offline).
+    if (!enabled) return;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
