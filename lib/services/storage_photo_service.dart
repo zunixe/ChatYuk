@@ -35,7 +35,8 @@ class StoragePhotoService {
       (value.startsWith('chat/') ||
           value.startsWith('posts/') ||
           value.startsWith('timeline/') ||
-          value.startsWith('voice/')) &&
+          value.startsWith('voice/') ||
+          value.startsWith('story/')) &&
       (value.contains('.jpg') ||
           value.contains('.jpeg') ||
           value.contains('.png') ||
@@ -180,10 +181,18 @@ class StoragePhotoService {
 
   bool isVoicePath(String v) => v.startsWith('voice/') && v.contains('.m4a');
 
+  // Timeout sentral download: tanpa ini, koneksi stall menggantung
+  // selamanya → foto "ketuk untuk memuat" tak pernah selesai (kasus nyata:
+  // monitor admin 9436). Timeout → null → pemanggil bisa retry.
+  static const _dlTimeout = Duration(seconds: 30);
+
   /// Download path → base64. Null jika gagal / tidak ditemukan.
   Future<String?> download(String path) async {
     try {
-      final bytes = await _sb.storage.from(_bucket).download(path);
+      final bytes = await _sb.storage
+          .from(_bucket)
+          .download(path)
+          .timeout(_dlTimeout);
       if (bytes.isEmpty) return null;
       return base64Encode(bytes);
     } catch (e) {
@@ -195,7 +204,10 @@ class StoragePhotoService {
   /// Download path → bytes mentah (untuk cache/thumbnail). Null jika gagal.
   Future<Uint8List?> downloadBytes(String path) async {
     try {
-      final bytes = await _sb.storage.from(_bucket).download(path);
+      final bytes = await _sb.storage
+          .from(_bucket)
+          .download(path)
+          .timeout(_dlTimeout);
       if (bytes.isEmpty) return null;
       return bytes;
     } catch (e) {
@@ -217,7 +229,9 @@ class StoragePhotoService {
       ResizeMode? resize,
       int quality = 70}) async {
     try {
-      final bytes = await _sb.storage.from(_bucket).download(
+      final bytes = await _sb.storage
+          .from(_bucket)
+          .download(
             path,
             transform: TransformOptions(
               width: width,
@@ -225,7 +239,8 @@ class StoragePhotoService {
               resize: resize,
               quality: quality,
             ),
-          );
+          )
+          .timeout(_dlTimeout);
       if (bytes.isNotEmpty) return bytes;
     } catch (e) {
       dlog('[StoragePhoto] thumb transform gagal, fallback full: $e');
@@ -290,4 +305,5 @@ class StoragePhotoService {
   /// Path storage bisa berupa path biasa atau base64? Deteksi.
   bool isAvatarPath(String v) => v.startsWith('avatars/');
   bool isGalleryPath(String v) => v.startsWith('gallery/');
+  bool isStoryPath(String v) => v.startsWith('story/');
 }

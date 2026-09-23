@@ -464,6 +464,8 @@ class S {
       isId ? 'Sedang mengedit pesan' : 'Editing message';
   String get menuReply => isId ? 'Balas' : 'Reply';
   String get messageDeleted => isId ? 'Pesan dihapus' : 'Message deleted';
+  String get msgDeleteFailed =>
+      isId ? 'Gagal menghapus pesan' : 'Failed to delete message';
   String get confirmDeleteMessage => isId
       ? 'Hapus pesan ini? Pesan tidak bisa dipulihkan.'
       : 'Delete this message? It cannot be recovered.';

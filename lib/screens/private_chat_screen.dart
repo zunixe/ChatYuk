@@ -49,6 +49,7 @@ class PrivateChatScreen extends StatefulWidget {
   final String otherCity;
   final int otherAge;
   final bool otherRegistered;
+  final bool initialOtherDeleted;
   const PrivateChatScreen({
     super.key,
     required this.chatId,
@@ -59,6 +60,7 @@ class PrivateChatScreen extends StatefulWidget {
     this.otherCity = '',
     this.otherAge = 0,
     this.otherRegistered = false,
+    this.initialOtherDeleted = false,
   });
 
   @override
@@ -373,6 +375,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
     final chat = context.read<ChatProvider>();
     final auth = context.read<AuthProvider>();
+
+    // Prime sinkron supaya akun terhapus langsung tampil banner di frame
+    // pertama — tanpa kedip composer "Ketik pesan..." dulu menunggu stream.
+    _otherDeleted = widget.initialOtherDeleted;
+    if (!_otherDeleted && auth.uid != null) {
+      final snap = chat.lastPrivateChatsSnapshot(auth.uid!);
+      if (snap != null) {
+        for (final c in snap) {
+          if (c.chatId == widget.chatId && c.otherDeleted) {
+            _otherDeleted = true;
+            break;
+          }
+        }
+      }
+    }
 
     final msgsHandle = chat.getPrivateChatMessages(widget.chatId);
     _msgsStream = msgsHandle.stream;

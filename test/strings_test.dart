@@ -50,6 +50,10 @@ void main() {
         id.updateFailed,
         id.btnOpenStore,
         id.updateOpenStoreMsg,
+        // Hapus pesan (soft-delete + snackbar gagal).
+        id.messageDeleted,
+        id.confirmDeleteMessage,
+        id.msgDeleteFailed,
       ];
       final gettersEn = <String>[
         en.navOnline,
@@ -87,6 +91,9 @@ void main() {
         en.updateFailed,
         en.btnOpenStore,
         en.updateOpenStoreMsg,
+        en.messageDeleted,
+        en.confirmDeleteMessage,
+        en.msgDeleteFailed,
       ];
       for (final v in [...getters, ...gettersEn]) {
         expect(v.trim(), isNotEmpty);

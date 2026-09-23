@@ -37,20 +37,25 @@ class AdminService {
     return PerfProbe.timed('admin.$fn', () => _sb.rpc(fn, params: params));
   }
 
+  // Timeout jalur buka panel: tanpa ini, koneksi stall membuat future
+  // tidak pernah selesai → spinner selamanya (panel "blank"/"hang").
+  // Gagal-timeout ditangkap provider → tampil error/stale, bukan blank.
+  static const _openTimeout = Duration(seconds: 30);
+
   Future<Map<String, dynamic>> getStats() async {
-    final res = await _rpc('admin_stats');
+    final res = await _rpc('admin_stats').timeout(_openTimeout);
     return res as Map<String, dynamic>;
   }
 
   /// Paksa server menghitung ulang statistik (pull-to-refresh).
   Future<Map<String, dynamic>> getStatsForce() async {
-    final res = await _rpc('admin_stats_force');
+    final res = await _rpc('admin_stats_force').timeout(_openTimeout);
     return res as Map<String, dynamic>;
   }
 
   /// Detail data per kategori untuk card Overview (list user/room).
   Future<Map<String, dynamic>> getStatsDetail() async {
-    final res = await _rpc('admin_stats_detail');
+    final res = await _rpc('admin_stats_detail').timeout(_openTimeout);
     return (res as Map<String, dynamic>?) ?? {};
   }
 
@@ -87,7 +92,9 @@ class AdminService {
 
   /// Ambil nominal pengaturan poin (untuk form admin).
   Future<Map<String, dynamic>> getPointSettings() async {
-    final res = await _rpc('admin_get_point_settings');
+    final res = await _rpc(
+      'admin_get_point_settings',
+    ).timeout(_openTimeout);
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
@@ -152,7 +159,7 @@ class AdminService {
     final res = await _rpc(
       'admin_get_message_image',
       params: {'p_message_id': messageId},
-    );
+    ).timeout(_openTimeout);
     return (res as String?) ?? '';
   }
 
@@ -195,7 +202,7 @@ class AdminService {
     final res = await _rpc('admin_list_devices', params: {
       'p_limit': limit,
       'p_offset': offset,
-    });
+    }).timeout(_openTimeout);
     return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
   }
 

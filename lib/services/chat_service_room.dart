@@ -59,7 +59,15 @@ mixin ChatServiceRoomMx on ChatBase {
 
   Future<bool> deleteRoomMessage(String messageId) async {
     try {
-      await _sb.from('messages').update({'is_deleted': true}).eq('id', messageId);
+      final rows = await _sb
+          .from('messages')
+          .update({'is_deleted': true})
+          .eq('id', messageId)
+          .select('id');
+      if (rows.isEmpty) {
+        dlog('[ChatService] deleteRoomMessage 0 rows: $messageId');
+        return false;
+      }
       return true;
     } catch (_) {
       return false;

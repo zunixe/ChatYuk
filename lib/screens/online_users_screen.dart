@@ -96,12 +96,18 @@ class _AsyncAvatar extends StatefulWidget {
   final String avatarB64;
   final String initial;
   final Color color;
+  // Ring warna digambar DI DALAM sini supaya hanya muncul saat placeholder
+  // inisial — foto yang sudah tampil tidak kena ring (lihat ProfileAvatar).
+  final Color? borderColor;
+  final double borderWidth;
   const _AsyncAvatar({
     super.key,
     required this.uid,
     required this.avatarB64,
     required this.initial,
     required this.color,
+    this.borderColor,
+    this.borderWidth = 1.5,
   });
 
   @override
@@ -275,7 +281,7 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
       if (widget.avatarB64.isNotEmpty) {
         return const SizedBox.shrink();
       }
-      return Center(
+      final letter = Center(
         child: Text(
           widget.initial,
           style: TextStyle(
@@ -284,6 +290,19 @@ class _AsyncAvatarState extends State<_AsyncAvatar> {
             fontWeight: FontWeight.w700,
           ),
         ),
+      );
+      // Placeholder inisial: pakai ring kalau diminta. Foto/loading:
+      // tanpa ring supaya foto gelap tidak terlihat bercacat biru.
+      if (widget.borderColor == null) return letter;
+      return Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: widget.borderColor!,
+            width: widget.borderWidth,
+          ),
+        ),
+        child: letter,
       );
     }
     // gaplessPlayback: foto benar-benar baru (bytes beda) → bitmap lama
@@ -2171,19 +2190,22 @@ class _UserCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: color.withValues(alpha: 0.15),
-                        border: Border.all(color: color, width: 1.5),
                       ),
                       clipBehavior: Clip.antiAlias,
                       // SELALU _AsyncAvatar (jangan ternary inisial↔foto):
                       // pergantian tipe widget menyebabkan State avatar
                       // di-dispose/dibuat-ulang tiap emission → kedip.
                       // Inisial dirender di dalam _AsyncAvatar.
+                      // Ring warna digambar _AsyncAvatar hanya saat
+                      // placeholder inisial — foto tampil tanpa ring.
                       child: _AsyncAvatar(
                         key: ValueKey(user.uid),
                         uid: user.uid,
                         avatarB64: user.avatar,
                         initial: user.initial,
                         color: color,
+                        borderColor: color,
+                        borderWidth: 1.5,
                       ),
                     ),
                   ),

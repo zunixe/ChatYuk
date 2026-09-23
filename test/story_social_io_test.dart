@@ -41,6 +41,17 @@ void main() {
       expect(p['p_visibility'], 'friends');
     });
 
+    test('createStory menolak base64 (bukan story/ path)', () async {
+      final handler = FakeSupabaseHandler();
+      final svc = StoryService(fakeSupabaseClient(handler: handler));
+
+      expect(await svc.createStory(imagePath: '/9j/4AAQSkZJRg=='), '');
+      expect(await svc.createStory(imagePath: ''), '');
+      expect(await svc.createStory(imagePath: 'chat/u1/a.jpg'), '');
+      expect(handler.captured, isEmpty,
+          reason: 'base64 tidak boleh sampai ke server');
+    });
+
     test('markSeenBulk: daftar id terkirim sekali (1 round-trip)', () async {
       final handler = FakeSupabaseHandler();
       handler.on('/rest/v1/rpc/mark_story_seen_bulk', (_) => []);

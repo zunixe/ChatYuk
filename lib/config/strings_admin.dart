@@ -626,6 +626,10 @@ extension SAdminX on S {
       ? 'Bukan sesi admin — kembali ke akun admin dulu baru simpan'
       : 'Not an admin session — switch back to the admin account first';
 
+  String get adminPhotoLoadFail => isId
+      ? 'Gagal memuat foto — periksa koneksi lalu ketuk lagi'
+      : 'Failed to load photo — check connection then tap again';
+
   String get dummyAiScheduleTitle =>
       isId ? 'Jadwal kehadiran AI' : 'AI presence schedule';
 

@@ -474,12 +474,14 @@ mixin AuthServiceProfileMx on AuthBase {
       throw Exception('Max 6 photos');
     }
     // Upload ke Storage — DB hanya simpan path (hemat ruang).
-    final path =
-        await StoragePhotoService.instance.uploadPhoto(
-          uid: id,
-          base64: base64,
-        ) ??
-        base64;
+    // Gagal upload = throw (konsisten story/post/chat): JANGAN fallback
+    // base64 ke kolom `photo` — row base64 merusak asumsi baca
+    // (`isGalleryPath` false → file tak terhapus, DB boros).
+    final path = await StoragePhotoService.instance.uploadPhoto(
+      uid: id,
+      base64: base64,
+    );
+    if (path == null || path.isEmpty) throw Exception('upload_failed');
     await _sb.from('user_photos').insert({
       'user_id': id,
       'photo': path,

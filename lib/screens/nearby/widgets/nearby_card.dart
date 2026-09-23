@@ -87,7 +87,12 @@ class NearbyCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: color.withValues(alpha: 0.15),
-                        border: Border.all(color: color, width: 1.5),
+                        // Ring warna hanya untuk inisial — foto tampil
+                        // bersih tanpa ring (lihat ProfileAvatar).
+                        border: Border.all(
+                          color: hasAvatar ? Colors.transparent : color,
+                          width: 1.5,
+                        ),
                         image: hasAvatar
                             ? DecorationImage(
                                 // Kartu 44px — cap decode biar tidak

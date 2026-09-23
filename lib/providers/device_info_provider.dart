@@ -11,4 +11,19 @@ class DeviceInfoProvider extends ChangeNotifier {
   Future<String> installId() => service.installId();
   Future<void> syncToServer({String ipAddress = ''}) =>
       service.syncToServer(ipAddress: ipAddress);
+
+  String? _appVersionLabel;
+  Future<String>? _appVersionLoading;
+
+  /// Label versi aplikasi (mis. "v1.2.51+63") — di-cache supaya platform
+  /// channel hanya dipanggil sekali.
+  Future<String> appVersionLabel() {
+    if (_appVersionLabel != null) return Future.value(_appVersionLabel);
+    return _appVersionLoading ??= service.collectDeviceInfo().then((info) {
+      final v = info.appVersion;
+      final b = info.buildNumber;
+      _appVersionLabel = v.isEmpty ? '' : (b.isEmpty ? 'v$v' : 'v$v+$b');
+      return _appVersionLabel!;
+    });
+  }
 }

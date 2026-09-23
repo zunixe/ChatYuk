@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -19,11 +20,20 @@ class FakeSupabaseHandler {
   final Map<String, Object Function(http.Request req)> routes = {};
   final List<http.Request> captured = [];
 
+  /// Pola path yang digantung selamanya (simulasi koneksi stall) —
+  /// dipakai dengan `fakeAsync` + `elapse` untuk membuktikan timeout.
+  final Set<String> hangs = {};
+
   FakeSupabaseHandler();
 
   /// `pattern` dicek dengan `path.contains(pattern)`.
   void on(String pattern, Object Function(http.Request req) reply) {
     routes[pattern] = reply;
+  }
+
+  /// Request yang path-nya mengandung `pattern` tidak pernah dijawab.
+  void onHang(String pattern) {
+    hangs.add(pattern);
   }
 
   http.Response _responseFor(http.Request req) {
@@ -52,6 +62,11 @@ class FakeSupabaseHandler {
 
   MockClient client() => MockClient((req) async {
         captured.add(req);
+        for (final pattern in hangs) {
+          if (req.url.path.contains(pattern)) {
+            await Completer<void>().future;
+          }
+        }
         return _responseFor(req);
       });
 }

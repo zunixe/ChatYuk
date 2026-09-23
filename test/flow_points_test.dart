@@ -28,7 +28,9 @@ void main() {
     when(() => service.getWallet()).thenAnswer(
       (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50},
     );
+    when(() => service.fetchEnabled()).thenAnswer((_) async => true);
     final provider = PointsProvider(service: service);
+    await provider.refreshEnabled();
     provider.setOnlineSecondsForTest(300);
 
     await tester.pumpWidget(
@@ -51,6 +53,47 @@ void main() {
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
     verify(() => service.oneTimeBonus('online_5min', 5)).called(1);
+    provider.dispose();
+  });
+
+  testWidgets('flag OFF → klaim ditahan (service tidak dipanggil)', (
+    tester,
+  ) async {
+    final service = MockPointsService();
+    when(
+      () => service.oneTimeBonus(any(), any()),
+    ).thenAnswer((_) async => 999);
+    when(
+      () => service.watchOwnPoints(),
+    ).thenAnswer((_) => Stream<int>.empty());
+    when(() => service.getWallet()).thenAnswer(
+      (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 50},
+    );
+    when(() => service.fetchEnabled()).thenAnswer((_) async => false);
+    final provider = PointsProvider(service: service);
+    await provider.refreshEnabled();
+    provider.setOnlineSecondsForTest(300);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<PointsProvider>.value(
+          value: provider,
+          child: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () =>
+                    context.read<PointsProvider>().debugClaimOnlineBonus(),
+                child: Text(s.btnSave),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    verifyNever(() => service.oneTimeBonus(any(), any()));
     provider.dispose();
   });
 }

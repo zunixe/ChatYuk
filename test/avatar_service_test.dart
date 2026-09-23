@@ -84,4 +84,28 @@ void main() {
     expect(await svc.get('a'), 'QQ==');
     expect(await svc.get('b'), 'Qg==');
   });
+
+  test('hasil kosong tidak dihafal — get kedua coba network lagi', () async {
+    var calls = 0;
+    handler.on('avatar_for', (_) {
+      calls++;
+      return calls == 1 ? '' : 'QUJD';
+    });
+    expect(await svc.get('u-empty'), '');
+    expect(await svc.get('u-empty'), 'QUJD',
+        reason: "'' gagal sesaat tidak boleh di-cache permanen");
+    expect(calls, 2);
+  });
+
+  test('concurrent get uid sama berbagi 1 RPC (dedupe inflight)', () async {
+    var calls = 0;
+    handler.on('avatar_for', (_) {
+      calls++;
+      return 'QUJD';
+    });
+    final results = await Future.wait([svc.get('u-race'), svc.get('u-race')]);
+    expect(results, ['QUJD', 'QUJD']);
+    expect(calls, 1,
+        reason: 'caller kedua menunggu job sama, bukan RPC kedua');
+  });
 }

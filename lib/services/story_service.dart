@@ -61,6 +61,9 @@ class StoryService {
   }
 
   /// Buat slide story baru. Return id slide atau '' kalau gagal.
+  /// `imagePath` WAJIB path storage `story/...` — base64/full-data
+  /// ditolak di sini supaya tidak masuk kolom `stories.image_path`
+  /// (viewer hanya download path; base64 boros DB).
   Future<String> createStory({
     required String imagePath,
     String textOverlay = '',
@@ -72,6 +75,10 @@ class StoryService {
     bool textBg = false,
     String visibility = 'followers',
   }) async {
+    if (!imagePath.startsWith('story/')) {
+      dlog('[Story] createStory ditolak: imagePath bukan story/ path');
+      return '';
+    }
     try {
       final res = await _sb.rpc(
         'create_story',

@@ -36,6 +36,13 @@ void main() {
   });
 
   group('milestone online', () {
+    // Flag enabled wajib terkonfirmasi server (lihat refreshEnabled) —
+    // tanpa ini klaim ditahan guard `enabled` dan service tak dipanggil.
+    setUp(() async {
+      when(() => service.fetchEnabled()).thenAnswer((_) async => true);
+      await provider.refreshEnabled();
+    });
+
     test('300 dtk → klaim online_5min sekali', () async {
       provider.setOnlineSecondsForTest(300);
       await provider.debugClaimOnlineBonus();
@@ -73,6 +80,16 @@ void main() {
       provider.setOnlineSecondsForTest(7200);
       await provider.debugClaimOnlineBonus();
       verify(() => service.oneTimeBonus('online_120min', 15)).called(1);
+    });
+
+    test('sistem OFF → milestone tidak klaim ke service', () async {
+      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
+      await provider.refreshEnabled();
+
+      provider.setOnlineSecondsForTest(7200);
+      await provider.debugClaimOnlineBonus();
+
+      verifyNever(() => service.oneTimeBonus(any(), any()));
     });
   });
 
@@ -305,6 +322,55 @@ void main() {
       verifyNever(() => service.deductChatPoint(any()));
       verifyNever(() => service.refundChatPoint(any()));
       expect(provider.points, 50);
+    });
+
+    test('sebelum flag terkonfirmasi (mentah true) → tetap charge', () async {
+      // Kontrak a5f2e19/deduct: `_enabled` mentah default true supaya tidak
+      // ada jendela gratis sebelum fetchEnabled selesai. Server mengembalikan
+      // saldo tanpa potong saat OFF, jadi aman.
+      final fresh = PointsProvider(service: service);
+      addTearDown(fresh.dispose);
+      when(() => service.deductChatPoint('text')).thenAnswer((_) async => 49);
+
+      expect(await fresh.deductBeforeSend('text'), 49);
+      verify(() => service.deductChatPoint('text')).called(1);
+    });
+  });
+
+  group('harga server (room pricing + photo costs)', () {
+    test('refreshRoomPricing memetakan semua field + notify', () async {
+      when(() => service.roomPricing()).thenAnswer((_) async => {
+            'create_paid': 200,
+            'create_pw_paid': 250,
+            'join_paid': 10,
+            'extend_paid': 80,
+            'multiplier': 5,
+          });
+      var notified = 0;
+      provider.addListener(() => notified++);
+
+      await provider.refreshRoomPricing();
+
+      expect(provider.roomCreatePaid, 200);
+      expect(provider.roomCreatePwPaid, 250);
+      expect(provider.roomJoinPaid, 10);
+      expect(provider.roomExtendPaid, 80);
+      expect(provider.bonusMultiplier, 5);
+      expect(notified, 1);
+    });
+
+    test('refreshRoomPricing error → nilai lama bertahan', () async {
+      when(() => service.roomPricing()).thenThrow(Exception('offline'));
+      await provider.refreshRoomPricing();
+      expect(provider.roomCreatePaid, 100);
+      expect(provider.bonusMultiplier, 3);
+    });
+
+    test('refreshPhotoCosts memetakan once/perm', () async {
+      when(() => service.photoCosts()).thenAnswer((_) async => (7, 25));
+      await provider.refreshPhotoCosts();
+      expect(provider.photoUnlockOnce, 7);
+      expect(provider.photoUnlockPerm, 25);
     });
   });
 }
