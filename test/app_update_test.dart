@@ -63,6 +63,38 @@ class _FakeClient implements AppUpdateClient {
   Stream<InstallStatus> get installStatusStream => _controller.stream;
 }
 
+/// Fake yang selalu menolak flexible update (Play tidak kenal versi ini).
+class _RejectClient implements AppUpdateClient {
+  @override
+  Future<AppUpdateInfo> checkForUpdate() async => AppUpdateInfo(
+        updateAvailability: UpdateAvailability.updateNotAvailable,
+        immediateUpdateAllowed: false,
+        immediateAllowedPreconditions: null,
+        flexibleUpdateAllowed: false,
+        flexibleAllowedPreconditions: null,
+        availableVersionCode: null,
+        installStatus: InstallStatus.unknown,
+        packageName: 'com.chatyuk.chatyuk',
+        clientVersionStalenessDays: null,
+        updatePriority: 0,
+      );
+
+  @override
+  Future<AppUpdateResult> startFlexibleUpdate() async =>
+      AppUpdateResult.inAppUpdateFailed;
+
+  @override
+  Future<AppUpdateResult> performImmediateUpdate() async =>
+      AppUpdateResult.inAppUpdateFailed;
+
+  @override
+  Future<void> completeFlexibleUpdate() async {}
+
+  @override
+  Stream<InstallStatus> get installStatusStream =>
+      const Stream<InstallStatus>.empty();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -179,6 +211,10 @@ void main() {
   });
 
   group('provider startUpdate branch', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
     test('non-Play → fase openStore (buka listing Play)', () async {
       final svc = AppUpdateService.forTest(client: _FakeClient());
       final p = UpdateProvider(service: svc)
@@ -199,7 +235,8 @@ void main() {
       expect(client.flexibleStarted, isFalse);
     });
 
-    test('Play + tidak force → flexible update, status downloaded', () async {
+    test('Play + tidak force → flexible lalu auto-install saat downloaded',
+        () async {
       final client = _FakeClient()
         ..emitOnStart = [InstallStatus.downloading, InstallStatus.downloaded];
       final svc = AppUpdateService.forTest(client: client);
@@ -210,7 +247,45 @@ void main() {
       expect(client.flexibleStarted, isTrue);
       // Status stream dipancarkan asinkron → tunggu mikro-task selesai.
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(p.phase, UpdatePhase.readyToInstall);
+      // downloaded → completeFlexible otomatis, fase kembali idle.
+      expect(client.flexibleCompleted, isTrue);
+      expect(p.phase, UpdatePhase.idle);
+    });
+
+    test('tap Update menandai versi → tidak popup lagi', () async {
+      final client = _FakeClient();
+      final svc = AppUpdateService.forTest(client: client)
+        ..debugPolicyOverride = const UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.48',
+          minVersion: '',
+          notes: '',
+        )
+        ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
+        ..debugPlayAvailabilityOverride = PlayAvailability.available;
+      final p = UpdateProvider(service: svc);
+      await p.check();
+      expect(p.phase, UpdatePhase.available);
+      await p.startUpdate();
+      expect(client.flexibleStarted, isTrue);
+      // Download lanjut diam-diam di background (fase downloading, tanpa
+      // dialog) dan versi ditandai.
+      expect(p.phase, UpdatePhase.downloading);
+      expect(await p.isSnoozedForTest('1.2.48'), isTrue);
+      // Simulasi restart app (provider baru, prefs sama) → tetap diam.
+      final p2 = UpdateProvider(service: svc);
+      await p2.check();
+      expect(p2.phase, UpdatePhase.idle);
+    });
+
+    test('Play menolak flexible (result gagal) → fase failed', () async {
+      final client = _RejectClient();
+      final svc = AppUpdateService.forTest(client: client);
+      final p = UpdateProvider(service: svc)
+        ..setFromPlayForTest(true)
+        ..setForceForTest(false);
+      await p.startUpdate();
+      expect(p.phase, UpdatePhase.failed);
     });
 
     test('Play + force → applyAndRestart memanggil completeFlexible', () async {
@@ -426,6 +501,49 @@ void main() {
       expect(p.phase, UpdatePhase.idle);
       // Fase kini idle → check boleh jalan lagi, tapi versi ter-snooze → idle.
       await p.check();
+      expect(p.phase, UpdatePhase.idle);
+    });
+
+    test('versi lokal lebih baru dari latest → idle', () async {
+      final p = providerWith(
+        local: '1.2.50',
+        policy: const UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.49',
+          minVersion: '',
+          notes: '',
+        ),
+      );
+      await p.check();
+      expect(p.phase, UpdatePhase.idle);
+    });
+
+    test('unduhan Play tertunda → auto-complete tanpa popup', () async {
+      final client = _FakeClient()
+        ..info = AppUpdateInfo(
+          updateAvailability: UpdateAvailability.updateAvailable,
+          immediateUpdateAllowed: true,
+          immediateAllowedPreconditions: null,
+          flexibleUpdateAllowed: true,
+          flexibleAllowedPreconditions: null,
+          availableVersionCode: 60,
+          installStatus: InstallStatus.downloaded,
+          packageName: 'com.chatyuk.chatyuk',
+          clientVersionStalenessDays: 1,
+          updatePriority: 0,
+        );
+      final svc = AppUpdateService.forTest(client: client)
+        ..debugPolicyOverride = const UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.48',
+          minVersion: '',
+          notes: '',
+        )
+        ..debugLocalVersionOverride = (version: '1.2.47', buildNumber: 47)
+        ..debugPlayAvailabilityOverride = PlayAvailability.available;
+      final p = UpdateProvider(service: svc);
+      await p.check();
+      expect(client.flexibleCompleted, isTrue);
       expect(p.phase, UpdatePhase.idle);
     });
   });

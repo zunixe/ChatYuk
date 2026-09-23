@@ -25,7 +25,10 @@ void showUpdateDialog(BuildContext context, UpdateProvider provider) {
     useRootNavigator: true,
     barrierDismissible: !provider.force,
     builder: (ctx) => _UpdateDialog(provider: provider),
-  ).whenComplete(() => _showing = false);
+  ).whenComplete(() {
+    _showing = false;
+    provider.notifyDialogClosed();
+  });
 }
 
 class _UpdateDialog extends StatelessWidget {
