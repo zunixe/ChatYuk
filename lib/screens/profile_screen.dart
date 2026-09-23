@@ -73,6 +73,13 @@ Map<String, String>? _processPhotoWithPreview(Uint8List bytes) {
   return {'full': full, 'preview': previewB64};
 }
 
+/// Validasi kata konfirmasi hapus akun — terima HAPUS / DELETE di semua
+/// bahasa (top-level murni supaya bisa di-unit-test).
+bool isDeleteAccountConfirmValid(String input) {
+  final v = input.trim().toUpperCase();
+  return v == 'HAPUS' || v == 'DELETE';
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -2509,8 +2516,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (step1 != true || !mounted) return;
 
-    // Step 2: ketik HAPUS (id) / DELETE (en) — cegah sentuhan salah.
-    final confirmWord = s.isId ? 'HAPUS' : 'DELETE';
+    // Step 2: ketik HAPUS / DELETE — terima KEDUANYA di semua bahasa.
+    // Dulu hanya kata sesuai locale (HAPUS=id, DELETE=en) sehingga user
+    // berbahasa Inggris yang mengetik HAPUS (atau sebaliknya) mengira
+    // tombol rusak karena tetap nonaktif.
     final ctrl = TextEditingController();
     final step2 = await showDialog<bool>(
       context: context,
@@ -2533,7 +2542,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               autocorrect: false,
               enableSuggestions: false,
               style: AppText.body.copyWith(color: AppTheme.textPrimary),
-              decoration: InputDecoration(hintText: confirmWord),
+              decoration: InputDecoration(
+                hintText: s.deleteAccountConfirmHint,
+              ),
             ),
           ],
         ),
@@ -2548,7 +2559,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ListenableBuilder(
             listenable: ctrl,
             builder: (ctx, _) => FilledButton(
-              onPressed: ctrl.text.trim().toUpperCase() == confirmWord
+              onPressed: isDeleteAccountConfirmValid(ctrl.text)
                   ? () => Navigator.of(ctx).pop(true)
                   : null,
               style: FilledButton.styleFrom(

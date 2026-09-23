@@ -2123,11 +2123,14 @@ class _UserCard extends StatelessWidget {
         : user.gender == 'female'
         ? s.genderFemale
         : s.genderOther;
-    final statusLabel = user.status == 'idle'
+    // Hanya 'online' yang berlabel Online — 'invisible'/lainnya = offline.
+    // Dulu else-default ke Online sehingga baris invisible yang lolos
+    // filter (mis. cache basi) tampil "Online" walau dot-nya abu-abu.
+    final statusLabel = user.status == 'online'
+        ? s.statusOnline
+        : user.status == 'idle'
         ? '${s.statusIdle} · ${_idleDurationLabel(user.lastSeen)}'
-        : user.status == 'offline'
-        ? s.statusOffline
-        : s.statusOnline;
+        : s.statusOffline;
 
     return AppGestureDetector(
       // SELURUH kartu bisa di-tap → buka chat (tadi area kosong tanpa

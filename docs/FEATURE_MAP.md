@@ -276,6 +276,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | `private_messages.*` | chat, notif, AI enqueue, admin monitor |
 | `messages.mentions`, `private_messages.mentions` | highlight mention + push terarah mention (room/grup); `@all` hanya grup/private room (owner/admin), mati di global room |
 | `private_chats.last_read_at` (map uid→ts) | centang-2 di chat, unread badge, mark_chat_read, admin monitor |
+| Registrasi: 12 kolom `profiles` wajib tulis | `id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen` harus tetap `INSERT`+`UPDATE` untuk `authenticated` — pola tulis **split-write** (`upsert ignoreDuplicates` + `PATCH`), JANGAN `merge-duplicates` (butuh SELECT → 42501 bila kolom di-revoke). Insiden: `docs/INCIDENT_ANON_REGISTER_42501.md`. Dikunci: `supabase/tests/auth_write_path_test.sql` + `scripts/smoke_anon_register.sh` |
 | `private_chats.last_message_at` | urutan list chat, pinned sort, cache warm |
 
 ---

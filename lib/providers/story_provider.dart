@@ -216,7 +216,8 @@ class StoryProvider extends ChangeNotifier {
   }
 
   /// Daftar penonton satu slide (pemilik slide only — server guard).
-  Future<List<StoryViewer>> fetchViewers(String storyId) {
+  /// `null` = gagal memuat; `[]` = sukses tapi kosong.
+  Future<List<StoryViewer>?> fetchViewers(String storyId) {
     return _service.fetchViewers(storyId);
   }
 

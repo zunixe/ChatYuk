@@ -1,5 +1,71 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-23 — Hapus akun: fix 23502 user_devices/user_location_history (`20260923130000`)
+
+**Masalah (laporan user: hapus akun anon "hdjdjfj" selalu gagal):**
+`delete_my_account()` → `delete from public.profiles` memicu FK
+`user_devices.user_id` / `user_location_history.user_id` yang aksinya
+SET NULL — tetapi kedua kolom `user_id` NOT NULL → `23502 null value in
+column "user_id"`. Komentar lama ("hardware milik install, FK SET NULL")
+salah asumsi. Akun tanpa device row lolos, sehingga bug tak terdeteksi
+(reproduksi awal dgn anon kosong: `{"ok": true}`).
+
+**Migrasi `20260923130000_delete_account_devices_fix.sql`** (fungsi
+non-FROZEN; definisi penuh disalin dari live + 2 baris hapus eksplisit
+SEBELUM `delete from profiles`; grant tidak diubah):
+- `delete from public.user_devices where user_id = v_uid;`
+- `delete from public.user_location_history where user_id = v_uid;`
+
+**Apply:** via Management API (bukan `db push`), versi `20260923130000`
+dicatat di `schema_migrations`. **Status: DITERAPKAN & TERVERIFIKASI LIVE** —
+anon + device + location + ledger → `delete_my_account` = `{"ok": true}`,
+sisa artefak test 0 (dibersihkan tuntas via pola replica-role).
+
+**Test:** `supabase/tests/delete_account_test.sql` BARU (4 assert, hijau:
+hapus eksplisit ada, urutan SEBELUM profiles, komentar usang hilang).
+Tanpa rebuild aplikasi (fix server-side; app 1.2.49 sudah memanggil RPC ini).
+Lihat `docs/INCIDENT_DELETE_ACCOUNT_23502.md`.
+
+## 2026-09-23 — Penonton story: admin bebas + pariti mark_seen (`20260923120000`)
+
+**Masalah (audit fungsi penonton story, versi live diverifikasi via Management
+API):**
+1. `story_viewers` HANYA mengizinkan author (`s.author_id = auth.uid()`),
+   padahal UI (`story_viewer_screen.dart`) menampilkan tombol penonton untuk
+   `_own || _isAdmin`. Admin membuka slide dummy → RPC `raise 'Unauthorized'`
+   → klien dulu menelan error jadi `[]` → admin melihat "Belum ada penonton"
+   (salah, menyesatkan).
+2. `mark_story_seen` (single) mendukung `'everyone'/'registered'/'friends'`
+   TANPA `'followers'` dan TANPA cek blokir.
+3. `mark_story_seen_bulk` mendukung `'everyone'/'followers'/'friends'`
+   TANPA `'registered'`.
+   Keduanya belum memanggil `privacy_can_view(author,'story')` yang sudah jadi
+   sumber kebenaran di `story_slides` + `story_tray` → penonton tidak tercatat
+   untuk sebagian kombinasi visibility (daftar penonton kurang).
+
+**Migrasi `20260923120000_story_viewers_admin_markseen_parity.sql`** (3 fungsi
+non-FROZEN; signature TIDAK berubah, tanpa `DROP FUNCTION`):
+- `story_viewers`: guard jadi author ATAU `public.is_admin_request()`
+  (guard admin anti-rentan — cek email di DB, bukan hanya klaim JWT).
+- `mark_story_seen` + `mark_story_seen_bulk`: daftar visibility DISAMAKAN ke
+  `everyone`/`followers`/`friends`/`registered` + cek blokir dua arah +
+  `privacy_can_view(author,'story')`.
+- Fungsi FROZEN `story_slides` & `create_story` TIDAK disentuh.
+
+**Klien:** `story_service.dart` `fetchViewers` sekarang `List<StoryViewer>?`
+(`null` = gagal, `[]` = kosong) — dulu keduanya `[]` sehingga kegagalan
+menyamar jadi "belum ada penonton"; `story_provider.dart` + `story_viewer_screen.dart`
+menampilkan pesan gagal (`storyViewersLoadFail`) bila `null`.
+
+**Apply:** via Management API (bukan `db push`), versi `20260923120000` di-apply
+2026-09-23. **Status: DITERAPKAN & TERVERIFIKASI LIVE** —
+`story_viewers` punya `is_admin_request`; `mark_story_seen` &
+`mark_story_seen_bulk` memuat `followers` + `registered` + `privacy_can_view`.
+
+**Test:** `supabase/tests/story_test.sql` BARU (17 assert, hijau);
+`test/story_viewer_model_test.dart` BARU + grup `fetchViewers` di
+`test/story_social_io_test.dart`. `flutter test` 1025 hijau, SQL tests 11 file hijau.
+
 ## 2026-09-22 — Privasi "Orang Sekitar": filter blokir + gate berbagi (`20260922140000`)
 
 **Masalah (audit fitur Nearby):**

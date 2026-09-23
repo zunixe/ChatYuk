@@ -9,6 +9,8 @@
 #   3. ALTER COLUMN ... TYPE tanpa penanda `-- SAFE:`.
 #   4. Fungsi FROZEN di-replace tanpa header `-- menyentuh: <fn>`.
 #   5. Fungsi FROZEN di-replace tapi snapshot belum di-update.
+#   6. GRANT/REVOKE/policy RLS berisiko tanpa penanda `-- SAFE:` (file baru
+#      saja — insiden anon 2026-09-22: REVOKE SELECT tak terdeteksi cek 2–5).
 #
 # Aturan 2–5 hanya berlaku untuk migrasi SEPANJANG cutoff (default:
 # 20260914100000, di-set lewat env CUTOFF) supaya migrasi historis yang
@@ -155,6 +157,39 @@ while IFS= read -r fn; do
   fi
 done < "$FROZEN_LIST"
 ok "cek cabang kritis selesai"
+
+# ── 6. GRANT/REVOKE/policy RLS berisiko (insiden anon 2026-09-22) ──
+# Pola insiden: REVOKE SELECT di profiles.status/avatar/last_seen merusak
+# registrasi (upsert butuh SELECT) — tak terdeteksi cek [2]–[5] karena bukan
+# DROP/ALTER dan bukan replace fungsi.
+# Aturan: pernyataan di bawah pada file migrasi BARU wajib penanda `-- SAFE:`
+# di baris yang sama (tulis alasan + fitur terdampak). Dikecualikan (rutin):
+# `revoke execute on function` (hardening standar tiap RPC baru).
+# Hanya file > GRANT_CUTOFF (default = migrasi terakhir saat guard dibuat)
+# supaya migrasi historis yang sah tidak diblokir retroaktif.
+echo "[6] GRANT/REVOKE/policy RLS butuh penanda '-- SAFE:' (file baru saja)"
+GRANT_CUTOFF="${GRANT_CUTOFF:-20260923120000}"
+hit6=0
+while IFS= read -r rel; do
+  [ -z "$rel" ] && continue
+  f="$ROOT/$rel"
+  [ -f "$f" ] || continue
+  b=$(basename "$f"); v=${b%%_*}
+  case "$v" in ''|*[!0-9]*) continue ;; esac
+  if [ "$v" \> "$GRANT_CUTOFF" ]; then
+    while IFS= read -r ln; do
+      [ -z "$ln" ] && continue
+      case "$ln" in *"-- SAFE:"*) continue ;; esac
+      # rutin: cabut execute fungsi dari public/anon
+      case "$(echo "$ln" | tr '[:upper:]' '[:lower:]')" in
+        *"revoke"*execute*on*function*) continue ;;
+      esac
+      fail "$(basename "$f"): $(echo "$ln" | sed 's/^[[:space:]]*//')"
+      hit6=1
+    done <<< "$(grep -inE '^[[:space:]]*(revoke[[:space:]]|grant[[:space:]]+(select|all)[[:space:]]|grant[[:space:]]+[a-z_,[:space:]]+to[[:space:]]+anon\b|(create|drop|alter)[[:space:]]+policy[[:space:]])' "$f" || true)"
+  fi
+done <<< "$(new_files)"
+[ "$hit6" -eq 0 ] && ok "tidak ada GRANT/REVOKE/policy tanpa SAFE (file baru)"
 
 echo
 if [ "$FAIL" -ne 0 ]; then

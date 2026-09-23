@@ -142,8 +142,12 @@ class StoryService {
     }
   }
 
-  /// Daftar penonton slide milik sendiri.
-  Future<List<StoryViewer>> fetchViewers(String storyId) async {
+  /// Daftar penonton slide (pemilik slide atau admin).
+  ///
+  /// Return `null` bila GAGAL (RPC error/unauthorized/network) dan `[]` bila
+  /// benar-benar tak ada penonton. Dulu keduanya sama-sama `[]` sehingga
+  /// kegagalan (mis. admin tanpa guard) menyamar jadi "belum ada penonton".
+  Future<List<StoryViewer>?> fetchViewers(String storyId) async {
     try {
       final res = await _sb.rpc(
         'story_viewers',
@@ -156,10 +160,10 @@ class StoryService {
             )
             .toList();
       }
-      return [];
+      return const <StoryViewer>[];
     } catch (e) {
       dlog('[Story] fetchViewers error: $e');
-      return [];
+      return null;
     }
   }
 

@@ -139,6 +139,18 @@ jobs:
       - name: Pub outdated (laporan, tidak menggagalkan)
         run: flutter pub outdated || true
 
+  migration-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Murni statis (tanpa secret, tanpa DB) — selalu jalan, termasuk fork.
+    # Menolak: timestamp duplikat, DROP/ALTER TYPE tanpa SAFE, FROZEN tanpa
+    # header/snapshot, GRANT/REVOKE/policy RLS tanpa SAFE (insiden anon 2026-09-22).
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: check_migrations.sh --all
+        run: bash scripts/check_migrations.sh --all
+
   sql-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 15
