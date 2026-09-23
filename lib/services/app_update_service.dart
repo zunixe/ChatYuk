@@ -95,11 +95,14 @@ class AppUpdateService {
   Future<UpdatePolicy?> fetchPolicy() async {
     if (debugPolicyOverride != null) return debugPolicyOverride;
     try {
+      // Timeout: koneksi mati-tapi-tak-putus bisa menggantung query tanpa
+      // batas → fase check stuck di checking selamanya (fitur mati total).
       final row = await _sb
           .from('app_settings')
           .select('update_enabled,latest_version,min_version,update_notes')
           .eq('id', 'global')
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(seconds: 15));
       if (row == null) return null;
       return UpdatePolicy(
         enabled: row['update_enabled'] == true,
@@ -207,7 +210,11 @@ class AppUpdateService {
   }
 
   /// Terapkan update flexible yang sudah selesai diunduh → app restart.
-  Future<void> completeFlexible() => _playCore.completeFlexibleUpdate();
+  /// Timeout: complete yang menggantung membuat fase stuck (checking /
+  /// downloading) dan menahan check berikutnya.
+  Future<void> completeFlexible() => _playCore
+      .completeFlexibleUpdate()
+      .timeout(const Duration(seconds: 30));
 
   /// Update immediate (layar penuh Play, wajib sampai selesai) — untuk force.
   Future<AppUpdateResult> startImmediate() =>
