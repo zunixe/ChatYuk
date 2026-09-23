@@ -70,13 +70,23 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
   }
 
   void hideActionBar() {
-    actionBar?.remove();
+    // Anti-lempar: remove() pada overlay yang overlay-nya sudah unmount
+    // (mis. rute di-pop paksa) melempar dan merusak dispose/navigator.
+    try {
+      actionBar?.remove();
+    } catch (_) {}
     actionBar = null;
   }
 
   void clearSelection() {
     hideActionBar();
     if (selectedIds.isEmpty) return;
+    // Bisa dipanggil setelah unmount (callback async) — jangan setState.
+    if (!mounted) {
+      selectedIds.clear();
+      selectedMsgs.clear();
+      return;
+    }
     setState(() {
       selectedIds.clear();
       selectedMsgs.clear();
@@ -154,7 +164,10 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
       messageId: msg.id,
       emoji: emoji,
     );
-    if (!mounted) return;
+    if (!mounted) {
+      clearSelection();
+      return;
+    }
     // Update optimistis: UI langsung benar tanpa menunggu realtime.
     setState(() {
       final per = reactions.putIfAbsent(msg.id, () => {});

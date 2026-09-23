@@ -820,10 +820,11 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       if (CallProvider.instance.activeCallId == callId) {
         CallProvider.instance.unregisterCall(callId);
       }
-      final nav = navigatorKey.currentState;
-      if (nav != null && nav.canPop()) {
-        try { nav.pop(); } catch (_) {}
-      }
+      // JANGAN pop buta di sini: IncomingCallScreen menutup sendiri via
+      // subscription status realtime (canceled/ended → _close). Pop buta
+      // menutup rute TERATAS apa pun (mis. room chat yang sedang dibuka)
+      // dan pop paksa menembus PopScope → dispose melempar → navigator
+      // rusak (back mati, UI seperti hang, CPU 0%).
       try {
         final dynamic prov = CallProvider.instance;
         if (prov.activeSession != null) {
@@ -896,11 +897,9 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
       if (CallProvider.instance.activeCallId == callId) {
         CallProvider.instance.unregisterCall(callId);
       }
-      final nav = navigatorKey.currentState;
-      if (nav != null && nav.canPop()) {
-        // IncomingCallScreen adalah fullscreenDialog di atas stack — cukup pop sekali
-        nav.pop();
-      }
+      // JANGAN pop buta (lihat call_ended di atas): IncomingCallScreen
+      // menutup sendiri via realtime; pop buta bisa menutup layar yang
+      // salah dan merusak navigator.
     }
     return;
   }
