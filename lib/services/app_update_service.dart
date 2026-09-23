@@ -179,8 +179,9 @@ class AppUpdateService {
       return PlayAvailability.unsupported;
     }
     try {
-      final installer =
-          await _channel.invokeMethod<String>('getInstallerPackage');
+      final installer = await _channel
+          .invokeMethod<String>('getInstallerPackage')
+          .timeout(const Duration(seconds: 5));
       if (installer == 'com.android.vending') {
         return PlayAvailability.available;
       }
@@ -218,11 +219,27 @@ class AppUpdateService {
   /// app_settings — dipakai bila admin belum mengisi latest_version).
   Future<bool> playReportsUpdate() async {
     try {
-      final info = await _playCore.checkForUpdate();
+      final info = await _playCore
+          .checkForUpdate()
+          .timeout(const Duration(seconds: 10));
       return info.updateAvailability == UpdateAvailability.updateAvailable;
     } catch (e) {
       dlog('[UPDATE] playReportsUpdate error: $e');
       return false;
+    }
+  }
+
+  /// Status install Play saat ini (null bila gagal dibaca). Dipakai untuk
+  /// auto-resume: unduhan yang sudah selesai langsung di-complete tanpa popup.
+  Future<InstallStatus?> playInstallStatus() async {
+    try {
+      final info = await _playCore
+          .checkForUpdate()
+          .timeout(const Duration(seconds: 10));
+      return info.installStatus;
+    } catch (e) {
+      dlog('[UPDATE] playInstallStatus error: $e');
+      return null;
     }
   }
 

@@ -644,9 +644,9 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // notifnya hilang (app di-swipe/OS restart service saat keluar) —
       // tanpa ini tap-untuk-kembali-ke-panggilan lenyap padahal call jalan.
       unawaited(CallProvider.instance.ensureActiveNotif());
-      // Update: cek ulang saat kembali foreground — Play Core flexible
-      // menyelesaikan unduhan di background; popup juga muncul lagi bila
-      // belum di-snooze (mis. user menutup dialog lalu balik).
+      // Update: cek ulang saat kembali foreground — popup hanya muncul
+      // bila ada versi baru yang belum ditangani; download yang sudah
+      // dimulai user lanjut diam-diam di background (tidak di-nag ulang).
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         UpdateProvider.instance.presentIfNeeded(navigatorKey);
