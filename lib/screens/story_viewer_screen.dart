@@ -217,16 +217,23 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     // (aktif-1..aktif+2) dimulai bersamaan sehingga gambar yang terlihat
     // ikut berebut bandwidth dan tampak seperti lazy-load tidak bekerja.
     final activePath = slides[_slide].imagePath;
-    final active = await _bytes(activePath);
-    if (!mounted || _item.authorId != authorId) return;
-    if (active != null && active.isNotEmpty) {
-      _localImg[activePath] = active;
+    // `finally`: apa pun yang terjadi (author berganti, gambar gagal/gantung)
+    // spinner WAJIB berhenti. Tanpa ini, `return` dini di bawah meninggalkan
+    // `_loading = true` selamanya → "muter-muter" dan viewer terasa nyangkut.
+    try {
+      final active = await _bytes(activePath);
+      if (!mounted || _item.authorId != authorId) return;
+      if (active != null && active.isNotEmpty) {
+        _localImg[activePath] = active;
+      }
+    } finally {
+      if (mounted && _item.authorId == authorId) {
+        setState(() => _loading = false);
+        _startTimer();
+        // Tetangga dimuat setelah gambar aktif siap, tanpa menahan first paint.
+        unawaited(_preloadAdjacent());
+      }
     }
-    if (!mounted || _item.authorId != authorId) return;
-    setState(() => _loading = false);
-    _startTimer();
-    // Tetangga dimuat setelah gambar aktif siap, tanpa menahan first paint.
-    unawaited(_preloadAdjacent());
   }
 
   /// PERF: hanya preload slide di sekitar slide aktif (window ±N), bukan
@@ -288,7 +295,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       // Disk dulu (repeat view instan) — baru network + simpan disk.
       var b = MediaDiskCache.instance.readSync(path);
       b ??= await MediaDiskCache.instance.read(path);
-      b ??= await context.read<StorageProvider>().downloadBytes(path);
+      // Timeout WAJIB: tanpa ini satu unduhan yang menggantung menahan
+      // `_loading` (spinner) selamanya di jalur pemanggil.
+      b ??= await context
+          .read<StorageProvider>()
+          .downloadBytes(path)
+          .timeout(const Duration(seconds: 8));
       if (b != null && b.isNotEmpty) {
         _slideBytesCache[path] = b;
         if (slideCacheShouldEvict(_slideBytesCache.length)) {
@@ -435,6 +447,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final slide = _slides[_slide];
     final viewers = await sp.fetchViewers(slide.id);
     if (!mounted) return;
+    // null = gagal memuat (network/unauthorized) — beda dari [] yang berarti
+    // benar-benar belum ada penonton. Dulu keduanya tampil "belum ada penonton"
+    // sehingga kegagalan tersembunyi.
+    final failed = viewers == null;
+    final list = viewers ?? const <StoryViewer>[];
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgCard,
@@ -452,14 +469,24 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   Icon(Icons.visibility, size: 20, color: AppTheme.primary),
                   const SizedBox(width: 8),
                   Text(
-                    '${s.storyViewersTitle} · ${viewers.length}',
+                    failed
+                        ? s.storyViewersTitle
+                        : '${s.storyViewersTitle} · ${list.length}',
                     style: AppText.bodyStrong,
                   ),
                 ],
               ),
             ),
             Divider(height: 1, color: AppTheme.divider),
-            if (viewers.isEmpty)
+            if (failed)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  s.storyViewersLoadFail,
+                  style: AppText.bodySmall.copyWith(color: AppTheme.danger),
+                ),
+              )
+            else if (list.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
@@ -473,9 +500,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               Flexible(
                 child: ListView.builder(
                   shrinkWrap: true,
-                  itemCount: viewers.length,
+                  itemCount: list.length,
                   itemBuilder: (_, i) {
-                    final v = viewers[i];
+                    final v = list[i];
                     return ListTile(
                       dense: true,
                       leading: _viewerAvatar(v.avatar, v.nickname),
@@ -1008,7 +1035,22 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           // terlihat buram di HP.
           Image.memory(bytes, fit: BoxFit.cover, cacheWidth: 1080)
         else
-          Container(color: Colors.white10),
+          // Gambar belum termuat / unduhan gagal. Ketuk untuk coba lagi —
+          // dulu hanya kotak putih kosong sehingga tampak seperti "belum ada
+          // story" walau slide-nya sebenarnya ada.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _reloadCurrentIfMissing(),
+            child: Container(
+              color: Colors.white10,
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.refresh_rounded,
+                color: Colors.white54,
+                size: 32,
+              ),
+            ),
+          ),
         StoryTextOverlay(
           text: slide.textOverlay,
           x: slide.textX,

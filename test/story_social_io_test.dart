@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:chatyuk/services/social_service.dart';
 import 'package:chatyuk/services/story_service.dart';
@@ -104,6 +105,67 @@ void main() {
         rpcParamsOf(handler, 'toggle_story_like')['p_story_id'],
         'story-3',
       );
+    });
+
+    test('fetchViewers: p_story_id terkirim + list dipetakan', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/rpc/story_viewers', (_) => [
+            {
+              'viewer_id': 'u-1',
+              'nickname': 'Budi',
+              'avatar': 'avatar/u-1.jpg',
+              'viewed_at': '2026-09-23T10:15:00.000Z',
+              'liked': true,
+            },
+            {
+              'viewer_id': 'u-2',
+              'nickname': 'Sari',
+              'avatar': '',
+              'viewed_at': '2026-09-23T09:00:00.000Z',
+              'liked': false,
+            },
+          ]);
+      final svc = StoryService(fakeSupabaseClient(handler: handler));
+
+      final viewers = await svc.fetchViewers('story-7');
+
+      expect(viewers, isNotNull);
+      expect(viewers!.length, 2);
+      expect(viewers.first.viewerId, 'u-1');
+      expect(viewers.first.nickname, 'Budi');
+      expect(viewers.first.liked, isTrue);
+      expect(viewers[1].liked, isFalse);
+      expect(
+        rpcParamsOf(handler, 'story_viewers')['p_story_id'],
+        'story-7',
+      );
+    });
+
+    test('fetchViewers: daftar kosong → [] (bukan null)', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/rpc/story_viewers', (_) => []);
+      final svc = StoryService(fakeSupabaseClient(handler: handler));
+
+      final viewers = await svc.fetchViewers('story-8');
+
+      expect(viewers, isNotNull);
+      expect(viewers, isEmpty);
+    });
+
+    test('fetchViewers: RPC error → null (bukan [] yang menyamar kosong)',
+        () async {
+      final handler = FakeSupabaseHandler();
+      // Status non-200 → client melempar → service mengembalikan null.
+      handler.on(
+        '/rest/v1/rpc/story_viewers',
+        (req) => http.Response('{"message":"Unauthorized"}', 401, request: req),
+      );
+      final svc = StoryService(fakeSupabaseClient(handler: handler));
+
+      final viewers = await svc.fetchViewers('story-9');
+
+      expect(viewers, isNull,
+          reason: 'gagal harus beda dari "belum ada penonton"');
     });
   });
 

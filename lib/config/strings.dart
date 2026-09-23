@@ -440,8 +440,10 @@ class S {
   String get confirmDeleteAccountBody => isId
       ? 'Akun, pesan, story, dan semua datamu akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.'
       : 'Your account, messages, stories, and all your data will be permanently deleted. This cannot be undone.';
-  String get labelDeleteAccountConfirm =>
-      isId ? 'Ketik HAPUS untuk konfirmasi' : 'Type DELETE to confirm';
+  String get labelDeleteAccountConfirm => isId
+      ? 'Ketik HAPUS / DELETE untuk konfirmasi'
+      : 'Type HAPUS / DELETE to confirm';
+  String get deleteAccountConfirmHint => 'HAPUS / DELETE';
   String get errDeleteAccount => isId
       ? 'Gagal menghapus akun. Coba lagi.'
       : 'Failed to delete account. Try again.';
@@ -1111,6 +1113,9 @@ class S {
   String get storyViewersTitle => isId ? 'Penonton Story' : 'Story Viewers';
   String get storyViewersEmpty =>
       isId ? 'Belum ada yang melihat' : 'No views yet';
+  String get storyViewersLoadFail => isId
+      ? 'Gagal memuat daftar penonton'
+      : 'Failed to load viewers';
   String get storyOwnBadge => isId ? 'Kamu' : 'You';
   String get storyTextPaletteTooltip => isId ? 'Warna teks' : 'Text color';
   String get storyTextSizeTooltip => isId ? 'Ukuran teks' : 'Text size';

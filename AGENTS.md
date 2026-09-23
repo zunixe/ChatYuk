@@ -226,10 +226,21 @@ yang ditambahkan orang/migrasi lain. Kasus nyata: `ai_presence_tick` di-replace
    dipakai presence, notif, chat, admin, poin sekaligus.
 5. **Penerapan SQL di Mac ini HANYA lewat Management API** (CLI `db push`/`db query`
    HANG). Cheat sheet: `supabase/migrations/APPLIED_VIA_API.md`.
+6. **GRANT/REVOKE/policy RLS di tabel bersama WAJIB penanda `-- SAFE:` + daftar
+   fitur terdampak** di baris yang sama (insiden anon 2026-09-22: `REVOKE SELECT`
+   di `profiles.status/avatar/last_seen` merusak registrasi karena upsert butuh
+   SELECT — tak terdeteksi guard lama). `scripts/check_migrations.sh` MENOLAK
+   tanpa penanda. Dikecualikan (rutin): `revoke execute on function`.
+   Tabel bersama = `profiles`, `user_photos`, `private_chats`,
+   `private_messages`, `messages`. Setelah migrasi semacam ini: jalankan
+   `bash scripts/smoke_anon_register.sh` + test pgTAP terkait, lalu update
+   tabel lintas-fitur di `docs/FEATURE_MAP.md`.
 
 ### Checklist sebelum commit migrasi
 
 - [ ] `bash scripts/check_migrations.sh --all` → **OK bersih**
+- [ ] Kalau menyentuh grant/RLS/policy tabel bersama: `bash
+      scripts/smoke_anon_register.sh` → **OK bersih** + test pgTAP terkait hijau
 - [ ] Kalau menyentuh fungsi FROZEN: header `-- menyentuh: <fn>` ada +
       `scripts/snapshot_functions.sh` dijalankan + diff snapshot direview
 - [ ] Kalau mengubah perilaku fitur: tambah/aktifkan test di
@@ -518,6 +529,30 @@ Contoh berurutan yang benar:
 Kalau ragu apakah suatu versionCode sudah terpakai di Play: **jangan dipakai**, ambil `N+1` dari versi aktif sekarang. Lebih aman naik 2 daripada bentrok di Play Console.
 
 Catatan lintas-sesi: setelah upload selesai, **jangan** revert/bump `pubspec.yaml` lagi — biarkan versi terbaru tetap tertulis di file sebagai titik awal sesi AI berikutnya. Referensi versi Play terakhir selalu: `git log --oneline --all -- pubspec.yaml` (cari commit ber-keterangan "upload Google Play").
+
+### Sinkron `latest_version` app_settings SETELAH upload Play (WAJIB — insiden 2026-09-22)
+
+Popup "update tersedia" membandingkan versionName lokal vs `app_settings.latest_version`.
+Kalau `latest_version` LEBIH BARU dari versi yang benar-benar ada di Play (mis. sisa
+nilai uji coba), popup muncul terus walau user sudah update ke versi Play terbaru —
+loop selamanya, tidak bisa hilang (kejadian 2026-09-22: `latest_version='1.2.48'`
+padahal Play mentok `1.2.47`).
+
+Aturan:
+- Setelah upload versi `X.Y.Z+N` ke Play → set `app_settings.latest_version = 'X.Y.Z'`
+  (versionName TANPA `+N`; banding `compareSemver` mengabaikan suffix build).
+- **JANGAN** set `latest_version` ke versi yang BELUM di-upload ke Play (mis. untuk
+  "tes popup") — semua user di versi terbaru akan kena popup palsu.
+- `min_version` hanya diisi bila update WAJIB (force); kosongkan bila tidak force.
+- Cek nilai aktif via Management API sebelum/sesudah upload:
+  ```bash
+  # cek
+  python3 -c "import json; print(json.dumps({'query': \"select update_enabled, latest_version, min_version from app_settings where id='global';\"}))" > /tmp/q.json
+  curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+    -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
+    --data-binary @/tmp/q.json --max-time 60
+  # setelah upload X.Y.Z+N → samakan latest_version ke 'X.Y.Z'
+  ```
 
 ## Build & Push ke HP (WAJIB clean rebuild + push ke Downloads)
 
