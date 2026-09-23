@@ -28,6 +28,25 @@
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
 
+## 2026-09-23 — AI dummy 3.5-lightning → Nemotron 3 Super-120B (DATA, bukan migrasi)
+
+- **Minta user:** model AI dummy pakai Nemotron 3 (bukan 3.5). Pilihan awal
+  Ultra-550B, tapi tes live via OpenRouter (key user, reasoning dimatikan
+  seperti produksi): Ultra timeout 3x (>2–4 menit tak merespons),
+  3.5-lightning 114 dtk, **Super-120B 1,1 dtk bersih** (reasoning 0 token).
+  User setuju pakai Super-120B.
+- **DATA live (query API):**
+  - `dummy_accounts` MbakPijit (`e7166abc…`): `ai_model`
+    `'nvidia/nemotron-3.5-lightning:free'` → `'nvidia/nemotron-3-super-120b-a12b:free'`
+  - `ai_provider_config` baris `openrouter`: `fallback_model`
+    `'nvidia/nemotron-3.5-lightning:free'` → `'nvidia/nemotron-3-super-120b-a12b:free'`
+    (default baris itu memang sudah Super).
+- **Tanpa deploy/migrasi/kode:** routing `routeFor()` generik (`nemotron-*-free`
+  → OpenRouter) + reasoning-off Nemotron sudah ada di ai-reply v150;
+  dropdown admin sudah memuat Super. Sisa `3.5` di live = 0 (cek ulang).
+- **Verifikasi:** select live → MbakPijit super ✅, openrouter
+  default+fallback super ✅, `count 3.5` = 0 ✅.
+
 ## 2026-09-22 — 20260922140000_nearby_privacy_blocks_share_gate.sql
 
 - **Status:** SUDAH TERAPPLIED di remote DB fohcucyyejdryryoxitm pada 2026-09-22.
