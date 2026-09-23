@@ -5,6 +5,7 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | Tanggal | Branch | Flavor | Isi | Install |
 |---|---|---|---|---|
+| 2026-09-23 16:54 | develop | adminProd | Fix hang Flirt: FCM call_ended/canceled jangan pop buta (tutup layar salah → navigator rusak) + hideActionBar anti-lempar + clearSelection/reactToSelected guard mounted | Success (stream install 192.168.137.155:39879, v1.2.49-admin) |
 | 2026-09-17 19:34 | develop | adminProd | Tint primary bubble terpilih private chat; kartu online balik bgCard + ikon transparan; preview + ✓✓ list Pesan; tombol teman ikon | Success (stream install 192.168.18.33) |
 | 2026-09-17 20:05 | develop | adminProd | Menu ⋮ private chat: ikon kanan tiap baris (Ikuti/Tambah Teman/Blokir/Laporkan) + card rounded 14 | Success (stream install 192.168.18.33) |
 | 2026-09-17 20:20 | develop | adminProd | Menu ⋮ private chat: divider antar baris + ikon Ikuti/Tambah Teman putih | Success (stream install 192.168.18.33) |
