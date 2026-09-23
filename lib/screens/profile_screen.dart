@@ -16,6 +16,7 @@ import '../config/strings.dart';
 import '../models/user_photo.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/device_info_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/points_provider.dart';
@@ -2214,6 +2215,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
+                  ),
+                  SizedBox(height: 8),
+                  FutureBuilder<String>(
+                    future: context
+                        .read<DeviceInfoProvider>()
+                        .appVersionLabel(),
+                    builder: (_, snap) {
+                      if (!snap.hasData || snap.data!.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return Center(
+                        child: Text(
+                          'ChatYuk ${snap.data}',
+                          style: AppText.caption.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 
 import 'package:chatyuk/mixins/chat_selection_mixin.dart';
@@ -7,7 +8,10 @@ import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/chat_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/message_reaction_service.dart';
+
+class MockAuthService extends Mock implements AuthService {}
 
 /// Harness minimal untuk `ChatSelectionMixin` — kontraknya mandiri (tidak
 /// bergantung mixin lain), jadi cukup host kecil.
@@ -34,6 +38,9 @@ class SelHostState extends State<SelHost> with ChatSelectionMixin<SelHost> {
   int focusCount = 0;
   int scrollCount = 0;
   final List<String> deleted = [];
+
+  /// Hasil hapus per-id (untuk kunci cabang failCount). Default sukses.
+  static final Map<String, bool> deleteResults = {};
   @override
   void chatFocusComposer() => focusCount++;
   @override
@@ -41,7 +48,7 @@ class SelHostState extends State<SelHost> with ChatSelectionMixin<SelHost> {
   @override
   Future<bool> chatDeleteMessage(String id) async {
     deleted.add(id);
-    return true;
+    return deleteResults[id] ?? true;
   }
 
   @override
@@ -265,6 +272,90 @@ void main() {
       s.cancelReply();
       await tester.pump();
       expect(s.replyingTo, isNull);
+    });
+  });
+
+  group('ChatSelectionMixin — deleteSelected failCount', () {
+    Future<SelHostState> pumpSelWithUid(
+      WidgetTester tester,
+      String uid,
+    ) async {
+      final mockSvc = MockAuthService();
+      when(() => mockSvc.uid).thenReturn(uid);
+      final auth = AuthProvider(authService: mockSvc, autoInit: false);
+      final chat = ChatProvider();
+      SelHostState.deleteResults.clear();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<LocaleProvider>(
+                create: (_) => LocaleProvider()),
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: SelHost(auth: auth, chat: chat)),
+          ),
+        ),
+      );
+      return tester.state<SelHostState>(find.byType(SelHost));
+    }
+
+    Future<void> confirmDialog(WidgetTester tester) async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        final deleteBtn = find.text('Hapus');
+        if (deleteBtn.evaluate().isNotEmpty) {
+          await tester.tap(deleteBtn.last);
+          await tester.pump(const Duration(milliseconds: 100));
+          return;
+        }
+        final enBtn = find.text('Delete');
+        if (enBtn.evaluate().isNotEmpty) {
+          await tester.tap(enBtn.last);
+          await tester.pump(const Duration(milliseconds: 100));
+          return;
+        }
+      }
+      fail('dialog konfirmasi hapus tidak muncul');
+    }
+
+    testWidgets('semua sukses → snackbar messageDeleted (x)', (tester) async {
+      final s = await pumpSelWithUid(tester, 'u-me');
+      s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
+      s.toggleSelect(msg(id: 'm2', senderId: 'u-me'));
+      await tester.pump();
+      expect(s.selectedIds.length, 2);
+
+      SelHostState.deleteResults['m1'] = true;
+      SelHostState.deleteResults['m2'] = true;
+      final fut = s.deleteSelected();
+      await confirmDialog(tester);
+      await fut;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(s.deleted, containsAll(['m1', 'm2']));
+      expect(find.text('x'), findsOneWidget);
+      expect(s.selectedIds, isEmpty);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('campur sukses+gagal → tetap gagal', (tester) async {
+      final s = await pumpSelWithUid(tester, 'u-me');
+      s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
+      s.toggleSelect(msg(id: 'm2', senderId: 'u-me'));
+      await tester.pump();
+
+      SelHostState.deleteResults['m1'] = true;
+      SelHostState.deleteResults['m2'] = false;
+      final fut = s.deleteSelected();
+      await confirmDialog(tester);
+      await fut;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Gagal menghapus pesan'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
     });
   });
 }

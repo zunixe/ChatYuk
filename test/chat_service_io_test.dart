@@ -169,7 +169,9 @@ void main() {
   group('deleteRoomMessage (I/O palsu)', () {
     test('PATCH is_deleted=true ke messages', () async {
       final handler = FakeSupabaseHandler();
-      handler.on('/rest/v1/messages', (_) => []);
+      handler.on('/rest/v1/messages', (_) => [
+        {'id': 'm1'},
+      ]);
       final svc = ChatService(fakeSupabaseClient(handler: handler));
 
       final ok = await svc.deleteRoomMessage('m1');
@@ -178,6 +180,43 @@ void main() {
       final patch = handler.captured.firstWhere((r) => r.method == 'PATCH');
       expect(patch.body, contains('is_deleted'));
       expect(patch.url.query, contains('id=eq.m1'));
+    });
+
+    test('0 baris ter-update (blokir RLS) → return false', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/messages', (_) => []);
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      final ok = await svc.deleteRoomMessage('m1');
+
+      expect(ok, isFalse);
+    });
+  });
+
+  group('deletePrivateMessage (I/O palsu)', () {
+    test('PATCH is_deleted=true ke private_messages', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/private_messages', (_) => [
+        {'id': 'm1'},
+      ]);
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      final ok = await svc.deletePrivateMessage('m1');
+
+      expect(ok, isTrue);
+      final patch = handler.captured.firstWhere((r) => r.method == 'PATCH');
+      expect(patch.body, contains('is_deleted'));
+      expect(patch.url.query, contains('id=eq.m1'));
+    });
+
+    test('0 baris ter-update (blokir RLS) → return false', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/private_messages', (_) => []);
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      final ok = await svc.deletePrivateMessage('m1');
+
+      expect(ok, isFalse);
     });
   });
 

@@ -1000,6 +1000,8 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                 otherRegistered:
                                                     chat.participantRegistered[otherUid] ==
                                                     true,
+                                                initialOtherDeleted:
+                                                    chat.otherDeleted,
                                               ),
                                               transitionsBuilder:
                                                   (_, animation, __, child) {

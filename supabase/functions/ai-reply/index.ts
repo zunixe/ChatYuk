@@ -2398,7 +2398,10 @@ Deno.serve(async (req: Request) => {
     await openTypingChannel();
 
     // Routing per model (eksplisit, tidak tergantung base):
-    // - ':free' / 'nvidia/' → OpenRouter (secret AI_API_KEY_OPENROUTER)
+    // - ':free' → OpenRouter (secret AI_API_KEY_OPENROUTER)
+    // - 'nvidia/' TANPA ':free' → provider AKTIF (panel admin). Bila aktif
+    //   = NVIDIA NIM (integrate.api.nvidia.com) pakai base/key panel itu.
+    //   Jangan paksa ke OpenRouter — itu yang bikin "ga nyambung sama admin".
     // - model free Zen (muse-spark-*, mimo-*, ling-*, nemotron-* tanpa slash,
     //   deepseek-v4-flash-free, big-pickle) → OpenCode Zen
     //   (secret AI_API_KEY_ZEN + header client opencode — free tier Zen
@@ -2434,8 +2437,26 @@ Deno.serve(async (req: Request) => {
           headers: {},
         };
       }
-      const or = m.includes(':free') || m.startsWith('nvidia/');
-      if (or) {
+      if (m.includes(':free')) {
+        return {
+          base: 'https://openrouter.ai/api/v1',
+          key:
+            Deno.env.get('AI_API_KEY_OPENROUTER') || Deno.env.get('AI_API_KEY'),
+          headers: {},
+        };
+      }
+      // 'nvidia/' non-free (mis. nvidia/nemotron-3-ultra-550b-a55b):
+      // hormati provider aktif. Aktif = NIM → langsung ke NIM dengan
+      // base/key panel. Aktif = OpenRouter → base panel juga OpenRouter,
+      // hasil sama. Tanpa panel → fallback OpenRouter (kompat lama).
+      if (m.startsWith('nvidia/')) {
+        if (provCfg?.api_base && provCfg?.api_key) {
+          return {
+            base: provCfg.api_base,
+            key: provCfg.api_key,
+            headers: {},
+          };
+        }
         return {
           base: 'https://openrouter.ai/api/v1',
           key:

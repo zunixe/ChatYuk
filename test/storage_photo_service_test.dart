@@ -26,6 +26,11 @@ void main() {
       expect(svc.isPath('timeline/u1/x.jpg'), isTrue);
     });
 
+    test('story/ → true (fix: dulu tidak dikenal)', () {
+      expect(svc.isPath('story/u1/a.jpg'), isTrue);
+      expect(svc.isPath('story/u1/a.png'), isTrue);
+    });
+
     test('voice/ .m4a / .mp3 → true', () {
       expect(svc.isPath('voice/u1/v.m4a'), isTrue);
       expect(svc.isPath('voice/u1/v.mp3'), isTrue);
@@ -72,6 +77,18 @@ void main() {
     test('gallery/ → true', () {
       expect(svc.isGalleryPath('gallery/u1/x.jpg'), isTrue);
       expect(svc.isGalleryPath('avatars/u1/x.jpg'), isFalse);
+    });
+  });
+
+  group('isStoryPath', () {
+    test('story/ → true', () {
+      expect(svc.isStoryPath('story/u1/a.jpg'), isTrue);
+      expect(svc.isStoryPath('chat/u1/a.jpg'), isFalse);
+      expect(svc.isStoryPath(''), isFalse);
+    });
+
+    test('storyPath() menghasilkan prefix story/<uid>/', () {
+      expect(svc.storyPath('u1'), startsWith('story/u1/'));
     });
   });
 }

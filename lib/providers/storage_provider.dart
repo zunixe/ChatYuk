@@ -56,6 +56,8 @@ class StorageProvider extends ChangeNotifier {
 
   bool isPath(String value) => service.isPath(value);
   bool isAvatarPath(String value) => service.isAvatarPath(value);
+  bool isGalleryPath(String value) => service.isGalleryPath(value);
+  bool isStoryPath(String value) => service.isStoryPath(value);
   bool isVoicePath(String value) => service.isVoicePath(value);
   String avatarPath(String uid) => service.avatarPath(uid);
   String photoPath(String uid) => service.photoPath(uid);

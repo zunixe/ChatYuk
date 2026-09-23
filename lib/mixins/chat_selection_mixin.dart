@@ -268,12 +268,17 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    var failCount = 0;
     for (final m in mine) {
-      await chatDeleteMessage(m.id);
+      if (!await chatDeleteMessage(m.id)) failCount++;
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(chatDeletedLabel(s))),
+        SnackBar(
+          content: Text(
+            failCount == 0 ? chatDeletedLabel(s) : s.msgDeleteFailed,
+          ),
+        ),
       );
     }
     clearSelection();

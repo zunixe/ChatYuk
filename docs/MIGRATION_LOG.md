@@ -1,5 +1,22 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-23 — Delete private chat selalu gagal: fix cast trigger (`20260923160000`)
+
+**Masalah (laporan user: gagal delete pesan):**
+`deletePrivateMessage` → `update is_deleted=true` selalu di-rollback oleh
+trigger `scrub_reply_snapshot_private` yang membandingkan
+`replied_to_id (text) = new.id (bigint)` tanpa cast → Postgres error
+"operator does not exist: text = bigint". Room aman
+(`messages.replied_to_id` bigint). Backfill di migrasi asal sudah pakai
+`::text`, hanya trigger yang kelewat.
+
+**Migrasi `20260923160000_fix_private_delete_trigger.sql`** (fungsi non-FROZEN):
+`where pm.replied_to_id = new.id::text`.
+
+**Apply:** via Management API, versi tercatat di `schema_migrations`.
+**Status: DITERAPKAN & TERVERIFIKASI LIVE** — `pg_get_functiondef`
+mengandung `new.id::text`.
+
 ## 2026-09-23 — Hapus akun: fix 23502 user_devices/user_location_history (`20260923130000`)
 
 **Masalah (laporan user: hapus akun anon "hdjdjfj" selalu gagal):**

@@ -9,11 +9,18 @@ class TimelineService {
 
   String? get uid => _sb.auth.currentUser?.id;
 
+  /// `imagePaths` WAJIB path storage `posts/...` — base64 ditolak
+  /// supaya tidak masuk kolom images (feed hanya download path).
   Future<Map<String, dynamic>> createPost({
     required String text,
     List<String> imagePaths = const [],
     String visibility = 'public',
   }) async {
+    for (final p in imagePaths) {
+      if (!p.startsWith('posts/')) {
+        throw ArgumentError('imagePath bukan posts/ path: $p');
+      }
+    }
     final res = await _sb.rpc(
       'create_post',
       params: {

@@ -111,13 +111,14 @@ class DeviceInfoService {
   }
 
   /// Info perangkat — brand, model, OS, versi app. Return record null-safe.
-  Future<({String brand, String model, String osName, String osVersion, String appVersion})>
+  Future<({String brand, String model, String osName, String osVersion, String appVersion, String buildNumber})>
       collectDeviceInfo() async {
     String brand = '';
     String model = '';
     String osName = '';
     String osVersion = '';
     String appVersion = '';
+    String buildNumber = '';
 
     try {
       final deviceInfo = DeviceInfoPlugin();
@@ -144,6 +145,7 @@ class DeviceInfoService {
     try {
       final p = await PackageInfo.fromPlatform();
       appVersion = p.version;
+      buildNumber = p.buildNumber;
     } catch (e) {
       dlog('[DEVICE] packageInfo failed: $e');
     }
@@ -154,6 +156,7 @@ class DeviceInfoService {
       osName: osName,
       osVersion: osVersion,
       appVersion: appVersion,
+      buildNumber: buildNumber,
     );
   }
 

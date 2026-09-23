@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/services/chat_stream_session.dart';
 
 import '../supabase_test_client.dart';
@@ -109,5 +110,32 @@ void main() {
     // listener TERLAMBAT tetap menerima snapshot, bukan menunggu event baru.
     expect(snapshot, isNotEmpty, reason: 'snapshot harus di-replay');
     expect(snapshot.map((m) => m.id), containsAll(['2', '3']));
+  });
+
+  test('UPDATE int-id cocok dengan model String-id (tanpa reload)', () {
+    // Regresi chat_stream_session.dart:585 — id DB bigint (int) vs model
+    // String. Tanpa stringify, UPDATE is_deleted/edited miss → reload.
+    final current = [
+      MessageModel(
+        id: '42',
+        senderId: 'u1',
+        senderName: 'A',
+        senderGender: 'male',
+        isRegistered: true,
+        text: 'asli',
+        type: 'text',
+        imageData: '',
+        timestamp: DateTime.utc(2026, 1, 1),
+      ),
+    ];
+    final Map<String, dynamic> newRecord = {'id': 42, 'is_deleted': true};
+
+    final newId = '${newRecord['id']}';
+    final idx = current.indexWhere((x) => x.id == newId);
+    expect(idx, 0, reason: 'int 42 harus cocok dengan String "42"');
+    final updated = current[idx].copyWith(isDeleted: true);
+    expect(updated.isDeleted, isTrue);
+    expect(updated.text, isEmpty,
+        reason: 'pesan terhapus tidak boleh membawa isi (privasi)');
   });
 }

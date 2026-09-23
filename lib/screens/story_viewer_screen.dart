@@ -291,6 +291,17 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   Future<Uint8List?> _bytes(String path) async {
     final cached = _slideBytesCache[path];
     if (cached != null) return cached;
+    // Legacy: row lama berisi base64 langsung (bukan path storage).
+    // Tanpa cabang ini slide lama gagal total (return null → kotak retry).
+    if (path.isNotEmpty && !context.read<StorageProvider>().isPath(path)) {
+      try {
+        final legacy = base64Decode(path);
+        if (legacy.isNotEmpty) {
+          _slideBytesCache[path] = legacy;
+          return legacy;
+        }
+      } catch (_) {}
+    }
     try {
       // Disk dulu (repeat view instan) — baru network + simpan disk.
       var b = MediaDiskCache.instance.readSync(path);

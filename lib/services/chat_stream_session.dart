@@ -580,7 +580,10 @@ class ChatStreamSession {
             scheduleReload();
             return;
           }
-          final idx = _current.indexWhere((x) => x.id == newRecord['id']);
+          // id DB bigint (int) vs model String — bandingkan sebagai String
+          // supaya update is_deleted/edited tidak miss lalu cuma reload.
+          final newId = '${newRecord['id']}';
+          final idx = _current.indexWhere((x) => x.id == newId);
           if (idx < 0) {
             scheduleReload();
             return;

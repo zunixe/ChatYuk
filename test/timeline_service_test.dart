@@ -38,6 +38,16 @@ void main() {
       expect(params['p_visibility'], 'public');
       expect(params['p_image_paths'], isEmpty);
     });
+
+    test('imagePaths base64 → ArgumentError sebelum RPC', () async {
+      handler.on('create_post', (_) => {'id': 'p3'});
+      await expectLater(
+        svc.createPost(text: 'x', imagePaths: ['/9j/4AAQSkZJRg==']),
+        throwsArgumentError,
+      );
+      expect(handler.captured, isEmpty,
+          reason: 'base64 tidak boleh sampai ke server');
+    });
   });
 
   group('toggleLike / boost / share', () {

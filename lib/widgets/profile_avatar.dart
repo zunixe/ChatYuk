@@ -121,6 +121,10 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       );
     }
     if (widget.borderColor != null) {
+      // Ring warna HANYA untuk placeholder inisial. Kalau foto sudah
+      // tampil, ring disamarkan (transparan, bukan dihapus) supaya ukuran
+      // tidak berubah dan tidak kedip saat foto masuk. Tanpa ini, ring
+      // (mis. biru gender male) terlihat seperti cacat di foto gelap.
       child = Container(
         width: widget.size + widget.borderWidth * 2,
         height: widget.size + widget.borderWidth * 2,
@@ -128,7 +132,10 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
         decoration: BoxDecoration(
           shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
           borderRadius: isCircle ? null : shape,
-          border: Border.all(color: widget.borderColor!, width: widget.borderWidth),
+          border: Border.all(
+            color: _bytes != null ? Colors.transparent : widget.borderColor!,
+            width: widget.borderWidth,
+          ),
         ),
         child: child,
       );

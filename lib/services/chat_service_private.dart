@@ -57,12 +57,19 @@ mixin ChatServicePrivateMx on ChatBase {
 
   /// Hapus pesan sendiri (soft delete) — tandai is_deleted = true.
   /// RLS menjamin hanya sender_id (auth.uid) yang boleh mengubah pesannya.
+  /// Pakai `.select('id')` supaya blokir RLS (0 baris ter-update) terdeteksi
+  /// sebagai gagal — tanpa ini PostgREST sukses walau 0 baris berubah.
   Future<bool> deletePrivateMessage(String messageId) async {
     try {
-      await _sb
+      final rows = await _sb
           .from('private_messages')
           .update({'is_deleted': true})
-          .eq('id', messageId);
+          .eq('id', messageId)
+          .select('id');
+      if (rows.isEmpty) {
+        dlog('[ChatService] deletePrivateMessage 0 rows: $messageId');
+        return false;
+      }
       return true;
     } catch (e) {
       dlog('[ChatService] deletePrivateMessage error: $e');

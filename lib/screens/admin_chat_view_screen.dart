@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/supabase_config.dart';
 import '../config/theme.dart';
+import '../core/admin_gate.dart';
 import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
@@ -160,6 +162,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   @override
   void initState() {
     super.initState();
+    // Sisi kiri langsung dari judul/chatId — jangan tunggu pesan.
+    // Kalau nunggu _applyMessages + kena early-return (cache == server),
+    // _leftUid tetap null → semua bubble kanan.
+    _leftUid = _computeLeftUid(const []);
     _fetch();
     _subscribeRealtime();
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
@@ -205,6 +211,24 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     }
   }
 
+  /// Pastikan _leftUid tidak null — dipanggil dari jalur cache maupun
+  /// early-return supaya tidak semua bubble kanan.
+  void _ensureLeftUid([List<String>? senders]) {
+    if (_leftUid != null) return;
+    final s = senders ??
+        (() {
+          final set = <String>{};
+          for (final m in _msgs) {
+            if (m.senderId.isNotEmpty) set.add(m.senderId);
+          }
+          return set.toList();
+        })();
+    final computed = _computeLeftUid(s);
+    if (computed != null) {
+      setState(() => _leftUid = computed);
+    }
+  }
+
   /// Re-map dari provider ke _msgs (dipakai setelah load-more / fetch).
   void _applyMessages() {
     if (!mounted) return;
@@ -212,16 +236,21 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     final list = _mapMessages(admin.chatMessages);
     // Anti-blink: bila server mengembalikan KOSONG tapi kita sudah punya
     // pesan (mis. poll sementara gagal/slow), pertahankan yang lama —
-    // jangan kosongkan layar.
-    if (list.isEmpty && _msgs.isNotEmpty) return;
+    // jangan kosongkan layar. Tetap pastikan sisi kiri benar.
+    if (list.isEmpty && _msgs.isNotEmpty) {
+      _ensureLeftUid();
+      return;
+    }
     // Anti-rebuild: bila id + isi terakhir sama persis (poll tanpa perubahan),
     // tak perlu setState → layar tak berkedip/repaint tiap 5 dtk.
+    // Tetap pastikan sisi kiri benar (kasus cache == server).
     if (list.isNotEmpty &&
         _msgs.isNotEmpty &&
         list.length == _msgs.length &&
         list.first.id == _msgs.first.id &&
         list.last.id == _msgs.last.id &&
         list.last.text == _msgs.last.text) {
+      _ensureLeftUid();
       return;
     }
     // Pertahankan imageData yang sudah di-load
@@ -259,15 +288,20 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   /// deterministik. Dulu cadangan terakhir `senders.first` = pengirim pesan
   /// TERBARU — jadi tiap lawan mengirim pesan, `_leftUid` berubah → SEMUA
   /// bubble berpindah sisi (yang tadinya di kiri pindah ke kanan), terlihat
-  /// seperti lawan "hilang" lalu muncul lagi. Sekarang HANYA dua sumber:
+  /// seperti lawan "hilang" lalu muncul lagi. Urutan sumber:
   /// 1) participantOrder (dari list screen, urut kiri→kanan)
   /// 2) chatId split 'uid1_uid2' (format 1:1)
-  /// Jika keduanya gagal → return null (semua bubble sama sisi, aman).
+  /// 3) senders terurut (stabil, bukan urutan kedatangan) — supaya tidak
+  ///    semua kanan (null) bila dua sumber di atas gagal.
   String? _computeLeftUid(List<String> senders) {
     if (widget.participantOrder.length >= 2)
       return widget.participantOrder.first;
     final parts = widget.chatId.split('_');
     if (parts.length == 2) return parts.first;
+    if (senders.isNotEmpty) {
+      final sorted = List<String>.of(senders)..sort();
+      return sorted.first;
+    }
     return null;
   }
 
@@ -305,9 +339,14 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     // 1) SINKRON dari memori (jika sudah panas) — tampil seketika, no skeleton.
     final mem = MessageCache.instance.peekMessages(_chatKey);
     if (mem != null && mem.isNotEmpty && _msgs.isEmpty) {
+      final senders = <String>{};
+      for (final m in mem) {
+        if (m.senderId.isNotEmpty) senders.add(m.senderId);
+      }
       setState(() {
         _msgs = mem;
         _invalidateItems();
+        _leftUid ??= _computeLeftUid(senders.toList());
       });
       _loadPhotos();
     }
@@ -316,9 +355,14 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     try {
       final cached = await MessageCache.instance.loadMessages(_chatKey);
       if (mounted && cached.isNotEmpty && _msgs.isEmpty) {
+        final senders = <String>{};
+        for (final m in cached) {
+          if (m.senderId.isNotEmpty) senders.add(m.senderId);
+        }
         setState(() {
           _msgs = cached;
           _invalidateItems();
+          _leftUid ??= _computeLeftUid(senders.toList());
         });
         _loadPhotos();
       }
@@ -377,60 +421,85 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     }
   }
 
-  Future<void> _loadOnePhoto(MessageModel msg) async {
+  /// Sesi HP harus akun admin asli (bukan sesi dummy hasil swap) —
+  /// kalau tidak, RPC foto melempar 'Unauthorized' dan foto tak pernah
+  /// tampil. Cek di client supaya pesannya jelas.
+  bool _isAdminSession() =>
+      AdminGate.isRealAdmin(SupabaseConfig.client.auth.currentUser?.email);
+
+  /// Return true bila foto berhasil tampil. Gagal (mis. sesi dummy,
+  /// offline) → false supaya pemanggil bisa memberi tahu user, bukan diam.
+  Future<bool> _loadOnePhoto(MessageModel msg) async {
+    if (!mounted) return false;
     _photoLoading.add(msg.id);
-    var data = '';
-    // Coba PhotoCache dulu (thumbnail yang sudah ada di device ini)
+    var loaded = false;
     try {
-      data = await PhotoCache.instance.load(_chatKey, msg.id) ?? '';
-    } catch (_) {}
-    // Kalau belum ada di cache, fetch dari server via admin RPC
-    if (data.isEmpty) {
-      final msgId = int.tryParse(msg.id);
-      if (msgId != null) {
-        final admin = context.read<AdminProvider>();
-        var raw = await admin.fetchMessageImage(msgId);
-        // image_data berupa PATH storage (foto baru) → download dari bucket.
-        if (raw.isNotEmpty && context.read<StorageProvider>().isPath(raw)) {
-          raw = await context.read<StorageProvider>().download(raw) ?? '';
+      var data = '';
+      // Coba PhotoCache dulu (thumbnail yang sudah ada di device ini)
+      try {
+        data = await PhotoCache.instance.load(_chatKey, msg.id) ?? '';
+      } catch (_) {}
+      // Kalau belum ada di cache, fetch dari server via admin RPC
+      if (data.isEmpty) {
+        final msgId = int.tryParse(msg.id);
+        if (msgId != null && mounted) {
+          final admin = context.read<AdminProvider>();
+          var raw = await admin
+              .fetchMessageImage(msgId)
+              .timeout(const Duration(seconds: 30));
+          // image_data berupa PATH storage (foto baru) → download dari bucket.
+          if (raw.isNotEmpty &&
+              mounted &&
+              context.read<StorageProvider>().isPath(raw)) {
+            raw =
+                await context
+                    .read<StorageProvider>()
+                    .download(raw)
+                    .timeout(const Duration(seconds: 30)) ??
+                '';
+          }
+          data = raw;
+          if (data.isNotEmpty) {
+            try {
+              await PhotoCache.instance.save(_chatKey, msg.id, data);
+            } catch (_) {}
+          }
         }
-        data = raw;
-        if (data.isNotEmpty) {
+      }
+      // Decode + buat thumbnail dari full-res
+      if (data.isNotEmpty) {
+        var thumb = '';
+        try {
+          thumb = await PhotoCache.instance.loadThumb(_chatKey, msg.id) ?? '';
+        } catch (_) {}
+        if (thumb.isEmpty) {
           try {
-            await PhotoCache.instance.save(_chatKey, msg.id, data);
+            thumb = await compute(genThumbB64, data);
           } catch (_) {}
         }
-      }
-    }
-    // Decode + buat thumbnail dari full-res
-    if (data.isNotEmpty) {
-      var thumb = '';
-      try {
-        thumb = await PhotoCache.instance.loadThumb(_chatKey, msg.id) ?? '';
-      } catch (_) {}
-      if (thumb.isEmpty) {
-        try {
-          thumb = await compute(genThumbB64, data);
-        } catch (_) {}
-      }
-      if (thumb.isEmpty) thumb = '';
-      if (!mounted) {
-        _photoLoading.remove(msg.id);
-        return;
-      }
-      final idx = _msgs.indexWhere((m) => m.id == msg.id);
-      if (idx >= 0) {
-        // Gunakan thumbnail kalau ada, fallback ke full-res
-        final imgData = thumb.isNotEmpty ? thumb : data;
-        if (_msgs[idx].imageData.isEmpty || _msgs[idx].imageData != imgData) {
-          _msgs[idx] = _msgs[idx].copyWith(imageData: imgData);
-          // Batch: TIDAK setState per foto (dulu tiap foto = rebuild seluruh
-          // list → blink/jank). Jadwalkan satu rebuild per frame.
-          _schedulePhotoSetState();
+        if (thumb.isEmpty) thumb = '';
+        if (!mounted) return false;
+        final idx = _msgs.indexWhere((m) => m.id == msg.id);
+        if (idx >= 0) {
+          // Gunakan thumbnail kalau ada, fallback ke full-res
+          final imgData = thumb.isNotEmpty ? thumb : data;
+          if (_msgs[idx].imageData.isEmpty ||
+              _msgs[idx].imageData != imgData) {
+            _msgs[idx] = _msgs[idx].copyWith(imageData: imgData);
+            // Batch: TIDAK setState per foto (dulu tiap foto = rebuild seluruh
+            // list → blink/jank). Jadwalkan satu rebuild per frame.
+            _schedulePhotoSetState();
+          }
+          loaded = _msgs[idx].imageData.isNotEmpty;
         }
       }
+    } catch (_) {
+      // Gagal (timeout/network/RPC) → biarkan placeholder; tap/auto-load
+      // berikutnya bisa coba lagi (id SELALU dibuang di finally).
+    } finally {
+      _photoLoading.remove(msg.id);
     }
-    _photoLoading.remove(msg.id);
+    return loaded;
   }
 
   bool _photoSetStateScheduled = false;
@@ -445,8 +514,22 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   Future<void> _retryImage(String msgId) async {
     final msg = _msgs.where((m) => m.id == msgId).firstOrNull;
-    if (msg == null) return;
-    await _loadOnePhoto(msg);
+    if (msg == null || !mounted) return;
+    final ok = await _loadOnePhoto(msg);
+    // Gagal tampil JANGAN diam: beri tahu sebabnya. Sesi dummy = RPC
+    // ditolak server; kalau tidak, berarti koneksi/kuota.
+    if (!ok && mounted) {
+      final s = context.read<LocaleProvider>().s;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              _isAdminSession() ? s.adminPhotoLoadFail : s.dummyNeedAdmin,
+            ),
+          ),
+        );
+    }
   }
 
   // ── Realtime ──────────────────────────────────────────────────────────────
