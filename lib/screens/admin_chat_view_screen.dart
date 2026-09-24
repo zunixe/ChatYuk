@@ -409,13 +409,54 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   // ── Photo Loading (lazy, background) ─────────────────────────────────────
 
-  void _loadPhotos() {
+  bool _thumbBatchRunning = false;
+
+  /// Dua lapis supaya tidak spinner lama:
+  /// 1) Thumbnail lokal (file chat di HP ini) dibaca SEKALIGUS via
+  ///    `loadMany` (1 isolate) — bukan satu-satu seperti dulu.
+  /// 2) Sisanya (belum pernah dibuka di HP ini) baru unduh per foto.
+  Future<void> _loadPhotos() async {
+    bool isPhoto(MessageModel m) =>
+        m.type == 'image' ||
+        m.type == 'view_once' ||
+        m.type == 'view_once_expired';
+    if (!_thumbBatchRunning) {
+      _thumbBatchRunning = true;
+      try {
+        final ids = <String>[];
+        for (final m in _msgs) {
+          if (isPhoto(m) &&
+              m.imageData.isEmpty &&
+              !_photoLoading.contains(m.id)) {
+            ids.add(m.id);
+          }
+        }
+        if (ids.isNotEmpty && mounted) {
+          final thumbs = await PhotoCache.instance.loadMany(_chatKey, ids);
+          if (mounted) {
+            var changed = false;
+            for (final id in ids) {
+              final t = thumbs[id];
+              if (t == null || t.isEmpty) continue;
+              final idx = _msgs.indexWhere((x) => x.id == id);
+              if (idx >= 0 && _msgs[idx].imageData.isEmpty) {
+                _msgs[idx] = _msgs[idx].copyWith(imageData: t);
+                changed = true;
+              }
+            }
+            if (changed) setState(() {});
+          }
+        }
+      } catch (_) {
+      } finally {
+        _thumbBatchRunning = false;
+      }
+    }
+    if (!mounted) return;
     for (final m in _msgs) {
-      final isPhoto =
-          m.type == 'image' ||
-          m.type == 'view_once' ||
-          m.type == 'view_once_expired';
-      if (isPhoto && m.imageData.isEmpty && !_photoLoading.contains(m.id)) {
+      if (isPhoto(m) &&
+          m.imageData.isEmpty &&
+          !_photoLoading.contains(m.id)) {
         _loadOnePhoto(m);
       }
     }
