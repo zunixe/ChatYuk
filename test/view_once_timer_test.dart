@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/mixins/chat_photo_send_mixin.dart';
+import 'package:chatyuk/models/message_model.dart';
 import 'package:chatyuk/widgets/private_chat_message.dart';
 
 /// Aturan durasi view-once (durationMs pesan):
@@ -33,6 +34,30 @@ void main() {
     });
     test('gallery view-once tanpa timer tetap view_once', () {
       expect(resolvePhotoSendKind('view_once', null), 'view_once');
+    });
+  });
+
+  group('transit durasi sender→receiver (tidak boleh hilang)', () {
+    test('payload broadcast duration_ms=3 → durationMs 3', () {
+      final m = MessageModel.fromMap('bc-1', {
+        'type': 'view_once',
+        'duration_ms': 3,
+      });
+      expect(m.durationMs, 3);
+      expect(resolveViewOnceSecs(m.durationMs), 3);
+    });
+    test('row realtime duration_ms=0 → mode 1x', () {
+      final m = MessageModel.fromMap('123', {
+        'type': 'view_once',
+        'duration_ms': 0,
+      });
+      expect(m.durationMs, 0);
+      expect(resolveViewOnceSecs(m.durationMs), 0);
+    });
+    test('tanpa duration → null (legacy 10)', () {
+      final m = MessageModel.fromMap('123', {'type': 'view_once'});
+      expect(m.durationMs, isNull);
+      expect(resolveViewOnceSecs(m.durationMs), 10);
     });
   });
 }
