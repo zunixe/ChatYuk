@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chatyuk/mixins/chat_photo_send_mixin.dart';
 import 'package:chatyuk/widgets/private_chat_message.dart';
 
 /// Aturan durasi view-once (durationMs pesan):
@@ -17,6 +18,21 @@ void main() {
     test('N → N detik', () {
       expect(resolveViewOnceSecs(3), 3);
       expect(resolveViewOnceSecs(10), 10);
+    });
+  });
+
+  group('resolvePhotoSendKind (satu dispatch, routing benar)', () {
+    test('tanpa timer → kind asal', () {
+      expect(resolvePhotoSendKind('image', null), 'image');
+      expect(resolvePhotoSendKind('view_once', null), 'view_once');
+    });
+    test('timer 0/3/10 → view_once', () {
+      for (final t in [0, 3, 10]) {
+        expect(resolvePhotoSendKind('image', t), 'view_once');
+      }
+    });
+    test('gallery view-once tanpa timer tetap view_once', () {
+      expect(resolvePhotoSendKind('view_once', null), 'view_once');
     });
   });
 }
