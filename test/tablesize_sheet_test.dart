@@ -1,0 +1,69 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:provider/provider.dart';
+
+import 'package:chatyuk/providers/admin_provider.dart';
+import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/screens/admin_panel/widgets/tablesize_sheet.dart';
+import 'package:chatyuk/services/admin_service.dart';
+
+class MockAdminService extends Mock implements AdminService {}
+
+/// Widget test diagnosis: sheet breakdown tabel harus render baris tanpa
+/// NoSuchMethodError (abu-abu di release = build gagal).
+void main() {
+  late MockAdminService service;
+
+  setUp(() {
+    service = MockAdminService();
+    when(() => service.getTableSizes()).thenAnswer(
+      (_) async => {
+        'db_bytes': 74034323,
+        'tables': [
+          {
+            'schema': 'cron',
+            'table': 'job_run_details',
+            'total_bytes': 34996224,
+            'table_bytes': 32505856,
+            'index_bytes': 2457600,
+            'rows_est': 104602,
+          },
+        ],
+      },
+    );
+  });
+
+  Future<void> pumpSheet(WidgetTester t) async {
+    final admin = AdminProvider(service: service);
+    addTearDown(admin.dispose);
+    await t.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AdminProvider>.value(value: admin),
+          ChangeNotifierProvider<LocaleProvider>(
+            create: (_) => LocaleProvider(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () => showTableSizeSheet(ctx),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+  }
+
+  testWidgets('sheet tampil + render 1 baris tabel', (t) async {
+    await pumpSheet(t);
+    expect(find.text('Rincian Ukuran Tabel'), findsOneWidget);
+    expect(find.text('cron.job_run_details'), findsOneWidget);
+  });
+}
