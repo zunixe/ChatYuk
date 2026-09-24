@@ -774,8 +774,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         }
 
         // Baris khusus user: tampilkan IP + link Google Maps berdasar lokasi.
+        // Avatar + ikon mengikuti gender ala Pengguna Online (biru/pink).
         Widget userRow(Map<String, dynamic> u) {
           final name = '${u['nickname'] ?? '?'}';
+          final gender = '${u['gender'] ?? ''}';
+          final gColor = gender == 'male'
+              ? AppTheme.male
+              : gender == 'female'
+              ? AppTheme.female
+              : item.$4;
           final email = '${u['email'] ?? ''}';
           final ip = '${u['ip_address'] ?? ''}';
           final city = '${u['city'] ?? ''}';
@@ -812,18 +819,34 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 AdminAvatarCircle(
                   uid: '${u['id'] ?? ''}',
                   name: name,
-                  color: item.$4,
+                  color: gColor,
                 ),
                 SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        name,
-                        style: AppText.bodyStrong,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: AppText.bodyStrong,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (gender == 'male' || gender == 'female') ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              gender == 'male'
+                                  ? Icons.male
+                                  : Icons.female,
+                              size: 15,
+                              color: gColor,
+                            ),
+                          ],
+                        ],
                       ),
                       if (sub.isNotEmpty)
                         Text(
@@ -913,9 +936,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           );
         }
 
-        // Baris khusus pesan hari ini.
+        // Baris khusus pesan hari ini (avatar + ikon gender Pengguna Online).
         Widget msgRow(Map<String, dynamic> m) {
           final sender = '${m['sender_name'] ?? '?'}';
+          final senderGender = '${m['sender_gender'] ?? ''}';
+          final sgColor = senderGender == 'male'
+              ? AppTheme.male
+              : senderGender == 'female'
+              ? AppTheme.female
+              : item.$4;
           final text = '${m['text'] ?? ''}';
           final t = m['created_at'] != null
               ? formatRelativeTime(
@@ -928,33 +957,38 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: item.$4.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: Text(
-                      sender.isNotEmpty ? sender[0].toUpperCase() : '?',
-                      style: TextStyle(
-                        color: item.$4,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                AdminAvatarCircle(
+                  uid: '${m['sender_id'] ?? ''}',
+                  name: sender,
+                  color: sgColor,
                 ),
                 SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        sender,
-                        style: AppText.bodyStrong,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              sender,
+                              style: AppText.bodyStrong,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (senderGender == 'male' ||
+                              senderGender == 'female') ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              senderGender == 'male'
+                                  ? Icons.male
+                                  : Icons.female,
+                              size: 15,
+                              color: sgColor,
+                            ),
+                          ],
+                        ],
                       ),
                       Text(
                         text,

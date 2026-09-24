@@ -1,5 +1,26 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-24 — Avatar gender di sheet Ringkasan (`20260924110000`)
+
+**Kebutuhan (laporan user):** daftar user di sheet Ringkasan (Users, Active,
+Msgs, Reg, Anon) disamakan Pengguna Online — foto + ketahuan laki/
+perempuan. Data `gender` sudah ada, tapi `id` (untuk foto) hanya ada di
+`users_all`, dan `messages_today` tanpa sender/gender.
+
+**Migrasi `20260924110000_admin_stats_detail_gender_photo.sql`** (menyentuh
+FROZEN `admin_stats_detail`, header ada; dasar = definisi live persis):
+tambah `'id'` ke users_active/registered/anonymous +
+`'sender_id'`/`'sender_gender'` ke messages_today. Murni aditif.
+
+**Client (`admin_panel_screen`):** `userRow` + `msgRow` pakai avatar warna
+gender (biru/pink ala Online) + ikon ♂/♀ di samping nama; foto via
+`AdminAvatarCircle` yang sudah ada (lazy per viewport).
+
+**Apply:** via Management API, versi tercatat di `schema_migrations`.
+**Status: DITERAPPLIED & TERVERIFIKASI LIVE** — `pg_get_functiondef`
+memuat `sender_gender` + `'id', id` ×4; snapshot diregenerate
+(stamp baru, diff = hanya tambahan itu, tanpa cabang hilang).
+
 ## 2026-09-24 — Breakdown ukuran tabel di Ringkasan (`20260924100000`)
 
 **Kebutuhan (laporan user):** angka "Database 71MB" di kartu Ringkasan tidak
