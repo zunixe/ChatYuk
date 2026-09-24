@@ -368,8 +368,11 @@ pastikan uid ter-exclude tidak muncul.
 - **FLAVOR-GATE ADMIN (WAJIB dipahami sebelum build):**
   - Kode admin TERPISAH dari build rilis. Entry rilis = default `lib/main.dart`
     (TIDAK mengandung kode admin — dijamin tree-shaking via `lib/core/admin_gate.dart`).
-  - Entry admin = `-t lib/main_admin.dart` + flavor `admin` (appId
+  - Entry admin = `-t lib/main_admin.dart` + flavor `adminProd` (appId
     `com.chatyuk.chatyuk.admin`) — HANYA untuk HP pribadi, DILARANG upload store.
+    (Dua dimensi flavor: store × env — `--flavor admin` SAJA ambigu dan
+    ditolak Gradle; yang jalan `adminProd`. `--flavor adminDev` = varian
+    debug `.dev`, jangan dipakai untuk HP harian.)
   - Gerbang wajib SEBELUM upload rilis: `./scripts/check_release_apk.sh <apk>`
     → harus "OK bersih". Kalau DITOLAK, build salah target.
 - Keystore aktif: `android/keystore/chatyuk-release-v2.jks` (alias `chatyuk`, pass `chatyuk2024secure`)
@@ -401,7 +404,7 @@ pastikan uid ter-exclude tidak muncul.
   ```
 - Debug symbols disimpan di `build/app/symbols` (jangan dihapus) — dipakai `flutter symbolize` untuk baca stack trace saat crash.
 - **JANGAN build flavor `play` / AAB untuk Google Play tanpa instruksi eksplisit dari user.** Default build = flavor `apkpure`. Kalau ragu, tanya dulu.
-- Build flavor `admin` (internal): `-t lib/main_admin.dart` + `--flavor admin` — output `app-admin-release.apk`, appId `com.chatyuk.chatyuk.admin`. DILARANG upload ke store mana pun.
+- Build flavor `admin` (internal): `-t lib/main_admin.dart` + `--flavor adminProd --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols` — output `app-adminprod-release.apk`, appId `com.chatyuk.chatyuk.admin`. DILARANG upload ke store mana pun.
 - Sebelum selesai, selalu: `flutter analyze` → `flutter clean` (WAJIB — build incremental sering tidak memasukkan perubahan terbaru) → `flutter build apk --release --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols` → copy ke `~/Downloads/chatyuk.apk` → push ke HP (lihat "Build & Push ke HP")
 
 ### Build cepat — LEWATI iOS (WAJIB untuk kerja Android-only)
@@ -564,7 +567,7 @@ dari file manager (MIUI menolak `adb install`).
 
 ```bash
 export PATH="$PATH:$HOME/Library/Android/sdk/platform-tools"
-APK="build/app/outputs/flutter-apk/app-apkpure-release.apk"
+APK="build/app/outputs/flutter-apk/app-apkpureprod-release.apk"
 
 flutter clean
 KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
@@ -578,6 +581,22 @@ for d in 192.168.18.242:42205 192.168.18.33:44607; do
   adb -s "$d" push "$HOME/Downloads/chatyuk.apk" /sdcard/Download/chatyuk.apk
 done
 ```
+
+### Windows (build dari PC Windows — bukan Mac)
+- **Developer Mode WAJIB ON** (sekali saja, tanpa restart): Settings → System →
+  Untuk pengembang → Mode Pengembang ON. Tanpa ini `flutter build` gagal
+  (`Building with plugins requires symlink support`) — shell non-admin tidak
+  bisa menyalakannya via registry (`Access is denied`).
+- Padanan path: adb di `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe`,
+  Downloads di `%USERPROFILE%\Downloads`. Env keystore di PowerShell:
+  `$env:KEYSTORE_PASS="chatyuk2024secure"; $env:KEY_PASS="chatyuk2024secure"`.
+- Nama APK admin: `app-adminprod-release.apk` → copy sebagai
+  `chatyuk-admin.apk` (jangan timpa `chatyuk.apk`) lalu push ke HP yang sama.
+- Build admin yang terverifikasi (2026-09-24, 157 MB, appId
+  `com.chatyuk.chatyuk.admin` v1.2.52-admin, SHA-1 keystore v2):
+  ```powershell
+  flutter build apk --release --flavor adminProd -t lib/main_admin.dart --dart-define=APP_FLAVOR=apkpure --obfuscate --split-debug-info=build/app/symbols
+  ```
 
 Catatan:
 - User install manual dari **File Manager → Download → `chatyuk.apk`**. Jangan

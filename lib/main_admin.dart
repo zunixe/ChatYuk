@@ -2,9 +2,11 @@
 // Entry BUILD ADMIN — JANGAN PERNAH dipakai untuk rilis store.
 //
 // Build:
-//   flutter build apk --release --flavor admin -t lib/main_admin.dart \
+//   flutter build apk --release --flavor adminProd -t lib/main_admin.dart \
 //     --dart-define=APP_FLAVOR=apkpure \
 //     --obfuscate --split-debug-info=build/app/symbols
+// (--flavor admin SAJA ambigu: ada adminDev/adminProd. adminProd = rilis,
+// appId com.chatyuk.chatyuk.admin. Output: app-adminprod-release.apk.)
 //
 // Build rilis (APKPure/Play/Uptodown) memakai entry default
 // lib/main.dart — tanpa flag -t apa pun.
