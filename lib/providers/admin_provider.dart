@@ -738,6 +738,29 @@ Future<void> fetchDevices() async {
     if (!_disposed) notifyListeners();
   }
 
+  // ── Breakdown ukuran tabel (sheet dari kartu Database) ──
+  List<Map<String, dynamic>> _tableSizes = [];
+  bool _tableSizesLoading = false;
+
+  List<Map<String, dynamic>> get tableSizes => _tableSizes;
+  bool get tableSizesLoading => _tableSizesLoading;
+
+  /// Selalu fetch fresh saat sheet dibuka (tanpa TTL — angka ukuran
+  /// berubah tiap ada tulis; RPC hanya baca katalog, murah).
+  Future<void> fetchTableSizes() async {
+    _tableSizesLoading = true;
+    if (!_disposed) notifyListeners();
+    try {
+      final res = await _service.getTableSizes();
+      _tableSizes =
+          List<Map<String, dynamic>>.from(res['tables'] ?? const []);
+    } catch (e) {
+      dlog('[ADMIN] fetchTableSizes error: $e');
+    }
+    _tableSizesLoading = false;
+    if (!_disposed) notifyListeners();
+  }
+
   // ── Daftar registrasi email ──
   List<Map<String, dynamic>> _registrations = [];
   bool _registrationsLoading = false;

@@ -28,6 +28,19 @@
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
 
+## 2026-09-24 — 20260924100000_admin_table_sizes.sql
+
+- **Status:** SUDAH TERAPPLIED di remote DB fohcucyyejdryryoxitm pada 2026-09-24.
+- **Isi:** fungsi BARU `admin_table_sizes(p_limit=30)` (guard admin
+  zunixe/service_role) — breakdown `{db_bytes, tables[]}` untuk sheet
+  Ringkasan → Database. Bukan FROZEN, tidak menyentuh fungsi lain.
+- **Cara apply:** Management API POST /v1/projects/{ref}/database/query (di
+  Windows: JSON dibangun via Python `json.dumps` ke file UTF-8 lalu
+  `--data-binary`; JANGAN via redirect `>` PowerShell — jadi UTF-16).
+  Versi `20260924100000` dicatat di `schema_migrations`.
+- **Verifikasi live:** `select public.admin_table_sizes(5)` →
+  `db_bytes=74034323`, top `cron.job_run_details` 35MB.
+
 ## 2026-09-23 — AI dummy 3.5-lightning → Nemotron 3 Super-120B (DATA, bukan migrasi)
 
 - **Minta user:** model AI dummy pakai Nemotron 3 (bukan 3.5). Pilihan awal

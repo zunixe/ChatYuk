@@ -1,5 +1,28 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-24 — Breakdown ukuran tabel di Ringkasan (`20260924100000`)
+
+**Kebutuhan (laporan user):** angka "Database 71MB" di kartu Ringkasan tidak
+bisa ditelusur — mau diklik lalu terlihat tabel/fungsi mana yang besar untuk
+cek pertumbuhan.
+
+**Migrasi `20260924100000_admin_table_sizes.sql`** (fungsi BARU, bukan
+FROZEN): `admin_table_sizes(p_limit=30)` — guard admin sama seperti
+`admin_storage_stats`, return `{db_bytes, tables: [{schema, table,
+total_bytes, table_bytes, index_bytes, rows_est}]}`. Hanya baca katalog
+(`pg_total_relation_size` + `reltuples` estimasi) — tanpa seq-scan.
+Fungsi SQL sendiri tidak memakan ruang berarti; yang diukur = tabel (+index).
+
+**Client:** `AdminService.getTableSizes` + `AdminProvider.fetchTableSizes`
+(fresh tiap sheet dibuka) + sheet `tablesize_sheet.dart` dari baris Database
+(chevron). String admin bilingual baru 6 biji.
+
+**Apply:** via Management API, versi tercatat di `schema_migrations`.
+**Status: DITERAPKAN & TERVERIFIKASI LIVE** — RPC balas
+`db_bytes=74034323` (~71MB ✅ cocok dengan kartu). Top live:
+`cron.job_run_details` 35MB (!), `ai_reply_log` ~4MB, `private_messages`
+~2.6MB, `call_signals` ~2.2MB, `auth.refresh_tokens` ~1.8MB.
+
 ## 2026-09-23 — Delete private chat selalu gagal: fix cast trigger (`20260923160000`)
 
 **Masalah (laporan user: gagal delete pesan):**

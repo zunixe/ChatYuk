@@ -36,6 +36,22 @@ void main() {
       handler.on('admin_storage_stats', (_) => {'bytes': 123});
       expect((await svc.getStorageStats())['bytes'], 123);
     });
+
+    test('getTableSizes → RPC admin_table_sizes + p_limit', () async {
+      handler.on(
+        'admin_table_sizes',
+        (_) => {
+          'db_bytes': 74034323,
+          'tables': [
+            {'schema': 'public', 'table': 'ai_reply_log'},
+          ],
+        },
+      );
+      final res = await svc.getTableSizes(limit: 10);
+      expect(res['db_bytes'], 74034323);
+      expect((res['tables'] as List).length, 1);
+      expect(rpcParamsOf(handler, 'admin_table_sizes')['p_limit'], 10);
+    });
   });
 
   group('points', () {

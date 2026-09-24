@@ -10,6 +10,7 @@ import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../utils.dart';
+import 'tablesize_sheet.dart';
 
 class AdminStorageUsageCard extends StatefulWidget {
   const AdminStorageUsageCard();
@@ -88,8 +89,44 @@ class AdminStorageUsageCardState extends State<AdminStorageUsageCard> {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _legendRow(AppTheme.primary, s.adminStorageDb,
-                              formatBytes(dbBytes)),
+                          InkWell(
+                            onTap: () => showTableSizeSheet(context),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: AppTheme.primary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      s.adminStorageDb,
+                                      style: AppText.bodySmall,
+                                    ),
+                                  ),
+                                  Text(
+                                    formatBytes(dbBytes),
+                                    style: AppText.bodySmall.copyWith(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 18,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                           _legendRow(AppTheme.accent, s.adminStorageImages,
                               formatBytes(storBytes)),
                           const Divider(height: 18),
