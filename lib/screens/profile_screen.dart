@@ -1099,6 +1099,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     color: Colors.orange.shade700,
                                   ),
                                 ),
+                                SizedBox(height: 4),
+                                Text(
+                                  s.msgAnonRetention7d,
+                                  style: AppText.bodySmall.copyWith(
+                                    color: Colors.orange.shade800,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
