@@ -5,6 +5,7 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | Tanggal | Branch | Flavor | Isi | Install |
 |---|---|---|---|---|
+| 2026-09-24 10:45 | develop | adminProd | Fix sheet tabel putih (extension vs dynamic + tinggi fraksional) + widget test | Success (stream install 192.168.137.99:43121) |
 | 2026-09-24 10:13 | develop | adminProd | Breakdown ukuran tabel Ringkasan bisa diklik (RPC admin_table_sizes + sheet) | Success (stream install 192.168.137.99:43121, v1.2.52-admin) |
 | 2026-09-24 09:31 | develop | adminProd | Info retensi 7 hari akun anon di banner profil + ajak daftar email (bilingual) | Success (stream install 192.168.137.99:43121, v1.2.52-admin) |
 | 2026-09-23 16:54 | develop | adminProd | Fix hang Flirt: FCM call_ended/canceled jangan pop buta (tutup layar salah → navigator rusak) + hideActionBar anti-lempar + clearSelection/reactToSelected guard mounted | Success (stream install 192.168.137.155:39879, v1.2.49-admin) |
