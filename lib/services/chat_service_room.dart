@@ -48,6 +48,9 @@ mixin ChatServiceRoomMx on ChatBase {
       'image_data': type == 'voice' ? '' : imageData,
       if (type == 'voice') 'voice_path': imageData,
       if (type == 'voice' && durationMs != null) 'duration_ms': durationMs,
+      // Durasi view-once (detik; 0 = sampai ditutup). Voice pakai ms.
+      if (type == 'view_once' && durationMs != null)
+        'duration_ms': durationMs,
       if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
       if (repliedToId != null) 'replied_to_id': repliedToId,
       if (repliedToText != null) 'replied_to_text': repliedToText,

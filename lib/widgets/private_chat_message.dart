@@ -1070,6 +1070,7 @@ class MessageBubble extends StatelessWidget {
                               chatKey: chatKey,
                               isMe: isMe,
                               messageId: msg.id,
+                              viewSecs: msg.durationMs,
                               isExpired: msg.type == 'view_once_expired',
                               isAdminView: isAdminView,
                               isRoom: isRoom,
@@ -1697,8 +1698,15 @@ enum ViewOnceState { idle, viewing, expired }
 
 // Timer & state persist di luar widget lifecycle — ListView.builder recycle
 // widget saat scroll, tapi timer harus terus jalan & state tidak boleh reset.
+/// Durasi view-once efektif (detik): null/negatif = legacy 10 dtk,
+/// 0 = sampai ditutup (mode 1x lihat), N = countdown N detik.
+int resolveViewOnceSecs(int? raw) => raw == null || raw < 0 ? 10 : raw;
+
 class ViewOnceTick {
   int left = 10;
+
+  /// Total countdown detik untuk pesan ini (0 = tanpa timer, sampai ditutup).
+  int totalSecs = 10;
   Timer? timer;
   final ValueNotifier<int> countdown = ValueNotifier<int>(10);
   ViewOnceState _state = ViewOnceState.idle;
@@ -1727,6 +1735,10 @@ class ViewOnceImage extends StatefulWidget {
   final String chatKey;
   final bool isMe;
   final String? messageId;
+
+  /// Durasi view-once detik dari pesan (durationMs): null = legacy 10 dtk,
+  /// 0 = sampai ditutup (1x lihat).
+  final int? viewSecs;
   final bool isExpired;
   // Admin monitor: lewati kartu "expired" — foto tetap bisa dilihat.
   final bool isAdminView;
@@ -1738,6 +1750,7 @@ class ViewOnceImage extends StatefulWidget {
     required this.chatKey,
     required this.isMe,
     this.messageId,
+    this.viewSecs,
     this.isExpired = false,
     this.isAdminView = false,
     this.isRoom = false,
@@ -1762,6 +1775,9 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
     }
     final id = widget.messageId ?? 'pending-${widget.imageData.hashCode}';
     _tick = viewOnceStates[id] ?? (viewOnceStates[id] = ViewOnceTick());
+    if (widget.viewSecs != null) {
+      _tick.totalSecs = resolveViewOnceSecs(widget.viewSecs);
+    }
     if (widget.isExpired && _tick.state != ViewOnceState.viewing) {
       _tick.state = ViewOnceState.expired;
     }
@@ -1877,25 +1893,31 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
 
   void _beginCountdown() {
     if (_tick.timer != null) return;
-    _tick.left = 10;
-    _tick.countdown.value = 10;
+    // Mode 1x (totalSecs 0): tanpa timer — kedaluwarsa saat viewer ditutup.
+    if (_tick.totalSecs <= 0) return;
+    _tick.left = _tick.totalSecs;
+    _tick.countdown.value = _tick.totalSecs;
     _tick.timer = Timer.periodic(const Duration(seconds: 1), (t) {
       _tick.left--;
       _tick.countdown.value = _tick.left;
       if (_tick.left <= 0) {
         t.cancel();
         _tick.timer = null;
-        _tick.state = ViewOnceState.expired;
-        ScreenSecureService.exitViewOnce();
         if (_tick.viewerOpen && mounted) Navigator.of(context).maybePop();
-        if (mounted) {
-          setState(() {});
-          _clearFromServer();
-        }
+        _expireNow();
         return;
       }
       if (mounted) setState(() {});
     });
+  }
+
+  /// Kunci permanen + bersihkan server (dipakai timer habis & viewer 1x ditutup).
+  void _expireNow() {
+    if (!mounted) return;
+    _tick.state = ViewOnceState.expired;
+    ScreenSecureService.exitViewOnce();
+    setState(() {});
+    _clearFromServer();
   }
 
   void _openViewer() {
@@ -1913,11 +1935,18 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                   return Future.value(null);
                 return PhotoCache.instance.load(widget.chatKey, id);
               },
-              countdown: _tick.countdown,
+              countdown: _tick.totalSecs > 0 ? _tick.countdown : null,
             ),
           ),
         )
-        .whenComplete(() => _tick.viewerOpen = false);
+        .whenComplete(() {
+          _tick.viewerOpen = false;
+          // Mode 1x: viewer ditutup = sudah dilihat → kunci permanen.
+          if (_tick.totalSecs <= 0 &&
+              _tick.state == ViewOnceState.viewing) {
+            _expireNow();
+          }
+        });
   }
 
   Future<void> _clearFromServer() async {
@@ -2263,7 +2292,7 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                           ValueListenableBuilder<int>(
                             valueListenable: _tick.countdown,
                             builder: (_, v, _) => Text(
-                              '${v}s',
+                              _tick.totalSecs <= 0 ? '1×' : '${v}s',
                               style: AppText.chatName.copyWith(
                                 color: Colors.white,
                                 letterSpacing: 0,
