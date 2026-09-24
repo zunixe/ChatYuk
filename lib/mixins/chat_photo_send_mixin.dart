@@ -25,6 +25,12 @@ import 'chat_outbox_mixin.dart';
 /// ([photoDispatch] beda private/room, [photoFirstBonus] hanya private).
 ///
 /// Wajib dipakai bersama [ChatOutboxMixin].
+
+/// Routing timer preview → kind efektif. Murni & testable.
+/// Timer apa pun (0/3/10) memaksa view-once; null = kind asal.
+/// Satu dispatch per kirim dijamin pemanggil ([_sendImageLike] satu jalur).
+String resolvePhotoSendKind(String kind, int? viewSecs) =>
+    viewSecs != null ? 'view_once' : kind;
 mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   // ── Kontrak ──
   /// Kirim pesan gambar (private: sendPrivateMessage; room: sendRoomMessage).
@@ -169,8 +175,8 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
 
     // Timer preview (private): paksa jadi view-once berdurasi.
     final viewSecs = photoViewTimerSecs;
-    final effKind = viewSecs != null ? 'view_once' : kind;
-    final effType = viewSecs != null ? 'view_once' : type;
+    final effKind = resolvePhotoSendKind(kind, viewSecs);
+    final effType = resolvePhotoSendKind(type, viewSecs);
     final pendingPhoto = MessageModel(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
       senderId: uid,
