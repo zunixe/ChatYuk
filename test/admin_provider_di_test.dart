@@ -431,4 +431,26 @@ void main() {
       expect(() => provider.forceLogout('u2'), throwsA(isA<Exception>()));
     });
   });
+
+  group('breakdown tabel', () {
+    test('fetchTableSizes mengisi tableSizes + loading mati', () async {
+      when(() => service.getTableSizes()).thenAnswer(
+        (_) async => {
+          'tables': [
+            {'table': 'ai_reply_log', 'total_bytes': 1},
+          ],
+        },
+      );
+      await provider.fetchTableSizes();
+      expect(provider.tableSizes.length, 1);
+      expect(provider.tableSizesLoading, isFalse);
+    });
+
+    test('fetchTableSizes error → list tetap + loading mati', () async {
+      when(() => service.getTableSizes()).thenThrow(Exception('x'));
+      await provider.fetchTableSizes();
+      expect(provider.tableSizes, isEmpty);
+      expect(provider.tableSizesLoading, isFalse);
+    });
+  });
 }

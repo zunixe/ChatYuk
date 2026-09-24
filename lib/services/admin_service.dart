@@ -264,6 +264,17 @@ class AdminService {
     return (res as Map<String, dynamic>?) ?? {};
   }
 
+  /// Breakdown ukuran tabel terbesar (DB Ringkasan diklik).
+  /// Return `{db_bytes, tables: [{schema, table, total_bytes,
+  /// table_bytes, index_bytes, rows_est}]}`.
+  Future<Map<String, dynamic>> getTableSizes({int limit = 30}) async {
+    final res = await _rpc(
+      'admin_table_sizes',
+      params: {'p_limit': limit},
+    );
+    return (res as Map<String, dynamic>?) ?? {};
+  }
+
   /// Daftar user terdaftar (registrasi email) — nickname + email + tgl.
   Future<Map<String, dynamic>> listRegistrations({
     int limit = 100,

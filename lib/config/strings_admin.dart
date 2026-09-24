@@ -100,6 +100,15 @@ extension SAdminX on S {
   String get adminCfQuota => isId ? 'Kuota 1 TB/bulan' : '1 TB/month quota';
   String get adminCfMonth => isId ? 'Bulan ini' : 'This month';
   String get adminQuotaLabel => isId ? 'Kuota' : 'Quota';
+  String get adminTableSizesTitle =>
+      isId ? 'Rincian Ukuran Tabel' : 'Table Size Breakdown';
+  String get adminTableSizesTapHint =>
+      isId ? 'Ketuk untuk rincian tabel' : 'Tap for table breakdown';
+  String get adminTableColTable => isId ? 'Tabel' : 'Table';
+  String get adminTableColSize => isId ? 'Ukuran' : 'Size';
+  String get adminTableColRows => isId ? 'Baris' : 'Rows';
+  String get adminTableSizesEmpty =>
+      isId ? 'Belum ada data ukuran' : 'No size data yet';
 
   String get adminDeletedTab => isId ? 'Terhapus' : 'Deleted';
   String get adminDeletedTitle => isId ? 'User Terhapus' : 'Deleted Users';
