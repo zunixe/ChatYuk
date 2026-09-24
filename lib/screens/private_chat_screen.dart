@@ -123,6 +123,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    int? viewOnceSecs,
   }) async {
     await context.read<ChatProvider>().sendPrivateMessage(
       chatId: widget.chatId,
@@ -132,10 +133,22 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       text: text,
       type: type,
       imageData: imageData,
+      durationMs: viewOnceSecs,
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
     );
+  }
+
+  int? _viewTimerSecs;
+
+  @override
+  int? get photoViewTimerSecs => _viewTimerSecs;
+
+  @override
+  void photoClearViewTimer() {
+    _viewTimerSecs = null;
+    if (mounted) setState(() => _pendingPhotoBase64 = null);
   }
 
   @override
@@ -165,6 +178,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   void photoSetPreview(String base64) {
     setState(() {
       _pendingPhotoBase64 = base64;
+      _viewTimerSecs = null;
       _inputFocus.requestFocus();
     });
     _scrollToBottom();
@@ -1980,7 +1994,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                               : null,
                           pendingPhotoBase64: _pendingPhotoBase64,
                           onCancelPhoto: _pendingPhotoBase64 != null
-                              ? () => setState(() => _pendingPhotoBase64 = null)
+                              ? () => setState(() {
+                                    _pendingPhotoBase64 = null;
+                                    _viewTimerSecs = null;
+                                  })
+                              : null,
+                          viewTimerSecs: _viewTimerSecs,
+                          onViewTimerChanged: _pendingPhotoBase64 != null
+                              ? (v) =>
+                                  setState(() => _viewTimerSecs = v)
                               : null,
                           mentionCandidates: _mentionCandidates,
                           mentionAllowAll: false,

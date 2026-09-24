@@ -126,6 +126,11 @@ class S {
   String get menuSendPhoto => isId ? 'Kirim Foto' : 'Send Photo';
   String get menuTakePhoto => isId ? 'Ambil Foto' : 'Take Photo';
   String get menuViewOnce => isId ? 'Foto Sekali Lihat' : 'View-once Photo';
+  String get viewTimerOff => isId ? 'Tanpa timer' : 'No timer';
+  String get viewTimerOnce => isId ? '1x lihat' : 'View once';
+  String viewTimerSecs(int n) => isId ? '$n detik' : '$n seconds';
+  String get viewTimerHint =>
+      isId ? 'Foto hilang otomatis sesuai timer' : 'Photo disappears per timer';
   String get menuSendCoin => isId ? 'Kirim Koin' : 'Send Coins';
   String get sendCoinTitle => isId ? 'Kirim Koin' : 'Send Coins';
   String sendCoinTo(String name) => isId ? 'Kirim ke $name' : 'Send to $name';

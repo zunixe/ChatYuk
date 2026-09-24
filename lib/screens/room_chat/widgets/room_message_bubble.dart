@@ -141,6 +141,7 @@ class RoomMessageBubble extends StatelessWidget {
             chatKey: chatKey,
             isMe: isMe,
             messageId: msg.id,
+            viewSecs: msg.durationMs,
             isExpired: msg.type == 'view_once_expired',
             isRoom: true,
           ),

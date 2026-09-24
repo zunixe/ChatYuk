@@ -111,6 +111,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    int? viewOnceSecs,
   }) async {
     await _chat.sendRoomMessage(
       roomId: widget.room.id,
@@ -120,6 +121,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       text: text,
       type: type,
       imageData: imageData,
+      durationMs: viewOnceSecs,
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,

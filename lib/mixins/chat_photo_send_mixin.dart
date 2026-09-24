@@ -28,6 +28,8 @@ import 'chat_outbox_mixin.dart';
 mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   // ── Kontrak ──
   /// Kirim pesan gambar (private: sendPrivateMessage; room: sendRoomMessage).
+  /// [viewOnceSecs]: durasi view-once detik (0 = sampai ditutup);
+  /// null = bukan view-once timer / legacy.
   Future<void> photoDispatch({
     required String imageData,
     required String type,
@@ -38,7 +40,15 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     String? repliedToId,
     String? repliedToText,
     String? repliedToSenderName,
+    int? viewOnceSecs,
   });
+
+  /// Timer view-once yang dipilih di preview (detik; null = foto normal).
+  /// Hanya private screen yang mengisi — room default null (tak berubah).
+  int? get photoViewTimerSecs => null;
+
+  /// Reset pilihan timer setelah preview terkirim/dibatalkan.
+  void photoClearViewTimer() {}
 
   /// Folder upload storage (private: chatId; room: `room_<id>`).
   String get photoUploadChatId;
@@ -157,6 +167,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     final profile = auth.profile;
     if (uid == null || profile == null) return;
 
+    // Timer preview (private): paksa jadi view-once berdurasi.
+    final viewSecs = photoViewTimerSecs;
+    final effKind = viewSecs != null ? 'view_once' : kind;
+    final effType = viewSecs != null ? 'view_once' : type;
     final pendingPhoto = MessageModel(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
       senderId: uid,
@@ -164,9 +178,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       senderGender: profile.gender,
       isRegistered: profile.isRegistered,
       text: text,
-      type: type,
+      type: effType,
       imageData: base64,
       timestamp: DateTime.now(),
+      durationMs: viewSecs,
       repliedToId: reply?.id,
       repliedToText: reply?.text,
       repliedToSenderName: reply?.senderName,
@@ -178,11 +193,12 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     if (!outboxIsOnline) {
       await queueOffline(
         pending: pendingPhoto,
-        pointsKind: kind,
+        pointsKind: effKind,
         pointsDeducted: false,
         imagePayload: base64,
         needsUpload: true,
         uploadKind: 'image',
+        durationMs: viewSecs,
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
@@ -191,23 +207,26 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     }
 
     final pp = context.read<PointsProvider>();
-    final r = await pp.deductBeforeSend(kind);
+    final r = await pp.deductBeforeSend(effKind);
     if (r < 0) {
       if (r == -2) {
         await queueOffline(
           pending: pendingPhoto,
-          pointsKind: kind,
+          pointsKind: effKind,
           pointsDeducted: false,
           imagePayload: base64,
           needsUpload: true,
           uploadKind: 'image',
+          durationMs: viewSecs,
           repliedToId: reply?.id,
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
         );
+        photoClearViewTimer();
         return;
       }
       setState(() => outboxPending.removeWhere((m) => m.id == pendingPhoto.id));
+      photoClearViewTimer();
       if (!mounted) return;
       final s = context.read<LocaleProvider>().s;
       if (r == -1) {
@@ -227,7 +246,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       );
       if (path == null || path.isEmpty) {
         if (!outboxIsOnline) throw const SocketException('photo upload failed');
-        safeUnawaited(pp.refundChatPoint(kind));
+        safeUnawaited(pp.refundChatPoint(effKind));
         if (mounted) {
           final s = context.read<LocaleProvider>().s;
           ScaffoldMessenger.of(
@@ -237,11 +256,12 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
             () => outboxPending.removeWhere((m) => m.id == pendingPhoto.id),
           );
         }
+        photoClearViewTimer();
         return;
       }
       await photoDispatch(
         imageData: path,
-        type: type,
+        type: effType,
         senderId: uid,
         senderName: profile.nickname,
         senderGender: profile.gender,
@@ -249,26 +269,29 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         repliedToId: reply?.id,
         repliedToText: reply?.text,
         repliedToSenderName: reply?.senderName,
+        viewOnceSecs: viewSecs,
       );
       if (kind == 'image') photoFirstBonus(pp);
       photoOnSent(kind);
+      photoClearViewTimer();
       outboxScrollToBottom();
     } catch (e) {
       if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
         // Poin sudah dipotong, jangan refund — dipakai saat flush.
         await queueOffline(
           pending: pendingPhoto,
-          pointsKind: kind,
+          pointsKind: effKind,
           pointsDeducted: true,
           imagePayload: base64,
           needsUpload: true,
           uploadKind: 'image',
+          durationMs: viewSecs,
           repliedToId: reply?.id,
           repliedToText: reply?.text,
           repliedToSenderName: reply?.senderName,
         );
       } else {
-        safeUnawaited(pp.refundChatPoint(kind));
+        safeUnawaited(pp.refundChatPoint(effKind));
         if (mounted) {
           setState(
             () => outboxPending.removeWhere((m) => m.id == pendingPhoto.id),
@@ -279,6 +302,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
           ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
         }
       }
+      photoClearViewTimer();
     }
   }
 }

@@ -27,6 +27,10 @@ class ChatComposerInput extends StatefulWidget {
   final VoidCallback onSendViewOnce;
   final String? pendingPhotoBase64;
   final VoidCallback? onCancelPhoto;
+  /// Timer view-once preview (detik; null = foto normal).
+  final int? viewTimerSecs;
+  /// null = sembunyikan pemilih timer (room). Non-null = private.
+  final ValueChanged<int?>? onViewTimerChanged;
   final VoidCallback? onOpenGiftPanel;
   final void Function(String filePath, int durationMs)? onSendVoice;
   /// Sinyal 'sedang merekam' (private pakai typing kind=recording).
@@ -53,6 +57,8 @@ class ChatComposerInput extends StatefulWidget {
     required this.onSendViewOnce,
     this.pendingPhotoBase64,
     this.onCancelPhoto,
+    this.viewTimerSecs,
+    this.onViewTimerChanged,
     this.onOpenGiftPanel,
     this.onSendVoice,
     this.onRecordingSignal,
@@ -135,6 +141,77 @@ class _ChatComposerInputState extends State<ChatComposerInput>
     widget.onTyping?.call();
   }
 
+  String _viewTimerLabel(dynamic s) {
+    final v = widget.viewTimerSecs;
+    if (v == null) return s.viewTimerOff;
+    if (v <= 0) return s.viewTimerOnce;
+    return s.viewTimerSecs(v);
+  }
+
+  /// Pilihan timer view-once saat preview (private): normal / 1x / 3s / 10s.
+  /// -1 = tanpa timer (sentinel supaya dismiss tidak ikut me-reset).
+  Future<void> _pickViewTimer(BuildContext context) async {
+    final s = context.read<LocaleProvider>().s;
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(s.menuViewOnce, style: AppText.titleEmphasis),
+              const SizedBox(height: 2),
+              Text(
+                s.viewTimerHint,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final opt in [-1, 0, 3, 10])
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    opt < 0
+                        ? Icons.timer_off_outlined
+                        : Icons.timer_outlined,
+                    size: 20,
+                    color: (opt < 0 ? null : opt) == widget.viewTimerSecs
+                        ? AppTheme.primary
+                        : AppTheme.textSecondary,
+                  ),
+                  title: Text(
+                    opt < 0
+                        ? s.viewTimerOff
+                        : opt <= 0
+                        ? s.viewTimerOnce
+                        : s.viewTimerSecs(opt),
+                  ),
+                  trailing: (opt < 0 ? null : opt) == widget.viewTimerSecs
+                      ? const Icon(
+                          Icons.check_rounded,
+                          size: 20,
+                          color: AppTheme.primary,
+                        )
+                      : null,
+                  onTap: () => Navigator.pop(ctx, opt),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || picked == null) return;
+    widget.onViewTimerChanged?.call(picked < 0 ? null : picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
@@ -192,6 +269,46 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                           ),
                         ),
                       ),
+                      // Pemilih timer view-once (private saja).
+                      if (widget.onViewTimerChanged != null)
+                        Positioned(
+                          left: 6,
+                          bottom: 6,
+                          child: GestureDetector(
+                            onTap: () => _pickViewTimer(context),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.timer_outlined,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _viewTimerLabel(
+                                      context
+                                          .read<LocaleProvider>()
+                                          .s,
+                                    ),
+                                    style: AppText.label.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
