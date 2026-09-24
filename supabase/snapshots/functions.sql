@@ -1806,7 +1806,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: admin_stats_detail @ 20260914010000_admin_anon_sort_last_seen.sql
+-- snapshot-fn: admin_stats_detail @ 20260924110000_admin_stats_detail_gender_photo.sql
 CREATE OR REPLACE FUNCTION public.admin_stats_detail()
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1841,6 +1841,7 @@ begin
         and not (id = any(v_dummy))), '[]'::jsonb),
     'users_active', coalesce((
       select jsonb_agg(jsonb_build_object(
+        'id', id,
         'nickname', nickname, 'gender', gender, 'age', age,
         'country', country, 'city', city, 'ip_address', ip_address,
         'status', status,
@@ -1853,6 +1854,7 @@ begin
         and not (id = any(v_dummy))), '[]'::jsonb),
     'users_registered', coalesce((
       select jsonb_agg(jsonb_build_object(
+        'id', id,
         'nickname', nickname, 'gender', gender, 'age', age,
         'country', country, 'city', city, 'ip_address', ip_address,
         'status', status,
@@ -1864,6 +1866,7 @@ begin
         and not (id = any(v_dummy))), '[]'::jsonb),
     'users_anonymous', coalesce((
       select jsonb_agg(jsonb_build_object(
+        'id', id,
         'nickname', nickname, 'gender', gender, 'age', age,
         'country', country, 'city', city, 'ip_address', ip_address,
         'status', status,
@@ -1885,7 +1888,9 @@ begin
     'messages_today', coalesce((
       select jsonb_agg(x) from (
         select jsonb_build_object(
+          'sender_id', sender_id,
           'sender_name', sender_name,
+          'sender_gender', sender_gender,
           'text', case when type = 'image' then '[foto]' else text end,
           'type', type,
           'created_at', created_at

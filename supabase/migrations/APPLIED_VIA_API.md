@@ -28,6 +28,22 @@
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
 
+## 2026-09-24 — 20260924110000_admin_stats_detail_gender_photo.sql
+
+- **Status:** SUDAH TERAPPLIED di remote DB fohcucyyejdryryoxitm pada 2026-09-24.
+- **Isi:** tambah `'id'` ke users_active/registered/anonymous +
+  `'sender_id'`/`'sender_gender'` ke messages_today di FROZEN
+  `admin_stats_detail` (header `-- menyentuh:` ada; dasar = live def).
+  Grant tidak berubah (CREATE OR REPLACE mewarisi).
+- **Cara apply:** Management API POST /v1/projects/{ref}/database/query.
+  Catatan: `admin_stats_detail` menolak service_role (guard hanya email
+  admin) → verifikasi fungsional TIDAK bisa via API; verifikasi via
+  `pg_get_functiondef` (ada `sender_gender` + `'id', id`).
+  Versi `20260924110000` dicatat di `schema_migrations`. Snapshot
+  `functions.sql` diregenerate manual (bash tak ada di Windows) — diff
+  = hanya tambahan itu.
+- **Verifikasi live:** def memuat field baru ✅.
+
 ## 2026-09-24 — 20260924100000_admin_table_sizes.sql
 
 - **Status:** SUDAH TERAPPLIED di remote DB fohcucyyejdryryoxitm pada 2026-09-24.
