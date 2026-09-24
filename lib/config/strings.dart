@@ -841,6 +841,9 @@ class S {
   String get msgAnonymousWarning => isId
       ? 'Akun anonim tidak bisa dipulihkan jika logout. Daftarkan email untuk mengamankan data kamu.'
       : 'Anonymous accounts cannot be recovered after logout. Register your email to secure your data.';
+  String get msgAnonRetention7d => isId
+      ? 'Tidak login 7 hari? Akun anonim ini dan username-nya akan dihapus otomatis. Daftarkan email agar username kamu tidak hilang.'
+      : 'Inactive for 7 days? This anonymous account and its username will be deleted automatically. Register your email to keep your username.';
   String get labelSecuredAccount => isId ? 'Akun Email' : 'Email Account';
   String get btnSecureAccount => isId ? 'Daftarkan Email' : 'Register Email';
   String get errEmailEmpty =>
