@@ -5,6 +5,7 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | Tanggal | Branch | Flavor | Isi | Install |
 |---|---|---|---|---|
+| 2026-09-24 11:42 | develop | apkpureProd | ChatYuk user (reguler) + timer view-once; sign beda → uninstall lama lalu fresh install | Success (stream install 192.168.137.99:43121, v1.2.52) |
 | 2026-09-24 11:09 | develop | adminProd | Timer view-once 1x/3s/10s saat preview foto kamera private | Success (stream install 192.168.137.99:43121, v1.2.52-admin) |
 | 2026-09-24 10:45 | develop | adminProd | Fix sheet tabel putih (extension vs dynamic + tinggi fraksional) + widget test | Success (stream install 192.168.137.99:43121) |
 | 2026-09-24 10:13 | develop | adminProd | Breakdown ukuran tabel Ringkasan bisa diklik (RPC admin_table_sizes + sheet) | Success (stream install 192.168.137.99:43121, v1.2.52-admin) |
