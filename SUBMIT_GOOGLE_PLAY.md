@@ -72,6 +72,34 @@ fastlane play_upload track:alpha   # atau track:production
 ```
 `fastlane` otomatis menjalankan guard `check_google_signin` dulu.
 
+## WAJIB setelah upload: sinkron `latest_version` (insiden 2026-09-22)
+
+Popup "update tersedia" membandingkan versionName lokal vs
+`app_settings.latest_version`. Kalau lupa sinkron:
+- user versi lama **tidak dapat popup** (kasus nyata 2026-09-25:
+  Play sudah `1.2.53`, `latest_version` masih `1.2.52` → user 1.2.52 diam saja);
+- kalau `latest_version` lebih baru dari yang ada di Play → popup muncul
+  terus walau sudah update (loop selamanya, kejadian `1.2.48` vs Play `1.2.47`).
+
+Aturan:
+- Setelah upload `X.Y.Z+N` → set `latest_version = 'X.Y.Z'`
+  (versionName TANPA `+N`).
+- **JANGAN** set ke versi yang BELUM live di Play (mis. untuk "tes popup").
+- `min_version` hanya diisi bila update WAJIB (force); kosongkan bila tidak.
+```bash
+# cek dulu
+TOK=$(cat /tmp/sbtoken); REF=fohcucyyejdryryoxitm
+python3 -c "import json; print(json.dumps({'query': \"select update_enabled, latest_version, min_version from app_settings where id='global';\"}))" > /tmp/q.json
+curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+  -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
+  --data-binary @/tmp/q.json --max-time 60
+# setelah upload X.Y.Z+N → samakan latest_version ke 'X.Y.Z'
+python3 -c "import json; print(json.dumps({'query': \"update app_settings set latest_version='X.Y.Z' where id='global';\"}))" > /tmp/q2.json
+curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+  -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
+  --data-binary @/tmp/q2.json --max-time 60
+```
+
 ## Catatan Penting
 - **JANGAN** submit tanpa mengisi Data Safety form
 - **JANGAN** ubah versi aplikasi sebelum submit
@@ -80,6 +108,8 @@ fastlane play_upload track:alpha   # atau track:production
 - **WAJIB** `src/play/google-services.json` = project `chatyuk-7c9e4`
   (guard Gradle menolak project lain — insiden 8470e)
 - **WAJIB** SHA Play App Signing terdaftar di Firebase 7c9e4
+- **WAJIB** sinkron `latest_version` setelah upload (lihat atas) — tanpa ini
+  user lama tidak dapat popup update
 
 ---
 
