@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-22T08:05:09Z
+-- Timestamp: 2026-09-25T00:18:53Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -799,7 +799,7 @@ begin
 end; $function$
 
 -- snapshot-fn: create_private_room @ 20260905190000_group_visibility_expiry.sql
-CREATE OR REPLACE FUNCTION public.create_private_room(p_name text, p_icon text, p_country text, p_password text DEFAULT NULL::text)
+CREATE OR REPLACE FUNCTION public.create_private_room(p_name text, p_icon text, p_country text, p_password text DEFAULT NULL::text, p_category text DEFAULT 'private'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -814,6 +814,8 @@ declare
   is_admin boolean := ((auth.jwt() ->> 'email') = 'zunixe@gmail.com');
   v_token text;
   recent_id text;
+  v_cat text;
+  v_is_category boolean;
 begin
   if uid is null then raise exception 'Not authenticated'; end if;
   -- Grup hanya untuk TERDAFTAR (bypass: dummy & admin).
@@ -827,6 +829,20 @@ begin
   p_name := btrim(coalesce(p_name, ''));
   if length(p_name) < 3 or length(p_name) > 30 then raise exception 'Invalid room name'; end if;
   if p_country is null or p_country = '' then raise exception 'Invalid country'; end if;
+
+  -- Kategori: allowlist 10 kategori global + 'private' (legacy grup).
+  v_cat := coalesce(nullif(btrim(coalesce(p_category, '')), ''), 'private');
+  if v_cat not in ('general', 'curhat', 'pertemanan', 'teknologi', 'gaming',
+                   'musik', 'film', 'joke', 'belajar', 'flirt', 'private') then
+    raise exception 'Invalid category';
+  end if;
+  v_is_category := (v_cat <> 'private');
+
+  -- Room kategori = GLOBAL: tanpa password (abaikan p_password bila ada).
+  if v_is_category then
+    has_pw := false;
+    p_password := null;
+  end if;
 
   -- Idempotency: jika ada room nama sama owner sama dibuat <10 detik lalu, kembalikan itu
   select id into recent_id from public.rooms
@@ -851,7 +867,8 @@ begin
   paid := case when has_pw then create_pw_paid else create_paid end;
   bonus_p := paid * mult;
 
-  if points_on is not false and not is_admin then
+  -- Room kategori = GRATIS (tidak potong koin). Legacy 'private' tetap bayar.
+  if points_on is not false and not is_admin and not v_is_category then
     r := public.ledger_spend_dual(uid, 'spend_room', paid, bonus_p, 'create');
     remaining := (r->>'remaining')::int;
   else
@@ -866,14 +883,18 @@ begin
                             is_private, owner_id, owner_name, password_hash, has_password,
                             expires_at, created_at,
                             join_token, max_members, approval_required)
-  values (new_id, p_name, '', coalesce(nullif(p_icon, ''), '🔒'), 999, p_country, 'private',
-          true, uid, coalesce(my_name, 'Anon'),
+  values (new_id, p_name, '', coalesce(nullif(p_icon, ''), '🔒'), 999, p_country, v_cat,
+          -- PEMISAH: kategori = GLOBAL (false). Legacy grup = private (true).
+          case when v_is_category then false else true end,
+          uid, coalesce(my_name, 'Anon'),
           case when has_pw then crypt(p_password, gen_salt('bf')) else null end,
           has_pw,
           -- TANPA password = permanen (NULL); DENGAN password = 7 hari.
           case when has_pw then now() + interval '7 days' else null end,
           now(),
-          v_token, 20, true);
+          -- Kategori = terbuka (tanpa approval, maks 200). Legacy = antre + maks 20.
+          v_token, case when v_is_category then 200 else 20 end,
+          case when v_is_category then false else true end);
 
   insert into public.room_members (room_id, user_id, role)
   values (new_id, uid, 'owner') on conflict do nothing;
@@ -1833,7 +1854,7 @@ begin
         'id', id,
         'nickname', nickname, 'gender', gender, 'age', age,
         'country', country, 'city', city, 'ip_address', ip_address,
-        'status', status,
+        'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source
       ) order by last_seen desc nulls last)
@@ -1844,7 +1865,7 @@ begin
         'id', id,
         'nickname', nickname, 'gender', gender, 'age', age,
         'country', country, 'city', city, 'ip_address', ip_address,
-        'status', status,
+        'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source
       ) order by last_seen desc nulls last)
@@ -1857,10 +1878,10 @@ begin
         'id', id,
         'nickname', nickname, 'gender', gender, 'age', age,
         'country', country, 'city', city, 'ip_address', ip_address,
-        'status', status,
+        'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source
-      ) order by last_seen desc nulls last)
+      ) order by created_at desc nulls last)
       from profiles where is_registered = true
         and not (id = any(v_excl))
         and not (id = any(v_dummy))), '[]'::jsonb),
@@ -1869,7 +1890,7 @@ begin
         'id', id,
         'nickname', nickname, 'gender', gender, 'age', age,
         'country', country, 'city', city, 'ip_address', ip_address,
-        'status', status,
+        'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
         'lat', lat, 'lon', lon, 'loc_source', loc_source
       ) order by last_seen desc nulls last)

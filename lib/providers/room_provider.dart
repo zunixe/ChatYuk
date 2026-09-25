@@ -60,6 +60,99 @@ class RoomProvider extends ChangeNotifier {
   List<RoomModel> get myGroups => _myGroups;
   bool get myGroupsLoading => _myGroupsLoading;
 
+  // ── Explore (satu list global + grup + statistik) ──
+  // 'rame' = agregat semua kategori yang online > 0; selain itu filter
+  // category == id (0 online tetap tampil di tab kategorinya).
+  String _exploreCategory = 'rame';
+  List<RoomModel> _explore = [];
+  DateTime? _exploreAt;
+  String? _exploreCountry;
+  bool _exploreLoading = false;
+  static const _exploreTtl = Duration(seconds: 30);
+  String get exploreCategory => _exploreCategory;
+  List<RoomModel> get exploreRooms {
+    final list = _exploreCategory == 'rame'
+        ? _explore.where((r) => r.onlineCount > 0).toList()
+        : _explore.where((r) => r.category == _exploreCategory).toList();
+    list.sort((a, b) {
+      final on = b.onlineCount.compareTo(a.onlineCount);
+      if (on != 0) return on;
+      final atA = a.lastAt;
+      final atB = b.lastAt;
+      if (atA == null || atB == null) return atA == null ? 1 : -1;
+      return atB.compareTo(atA);
+    });
+    return list;
+  }
+
+  bool get exploreLoading => _exploreLoading;
+
+  void setExploreCategory(String id) {
+    if (_exploreCategory == id) return;
+    _exploreCategory = id;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Muat satu list explore (global + grup + statistik) untuk negara aktif.
+  /// Online count tetap segar via stream `_counts` (tanpa RPC ulang).
+  Future<void> fetchExplore({bool refresh = false}) async {
+    if (_exploreLoading) return;
+    final fresh = !refresh &&
+        _exploreAt != null &&
+        _exploreCountry == _country &&
+        DateTime.now().difference(_exploreAt!) < _exploreTtl;
+    if (fresh && _explore.isNotEmpty) return;
+    _exploreLoading = true;
+    if (!_disposed) notifyListeners();
+    try {
+      final rows = await _service.fetchExplore(_country);
+      _explore = rows
+          .map((e) => RoomModel.fromMap('${e['id'] ?? ''}', snakeToCamel(e)))
+          .toList();
+      // Samakan online dengan stream counts (sumber kebenaran absolut).
+      _explore = _explore.map((r) {
+        final c = _counts[r.id];
+        return c != null ? r.copyWith(onlineCount: c) : r;
+      }).toList();
+      _exploreAt = DateTime.now();
+      _exploreCountry = _country;
+      if (!_disposed) notifyListeners();
+      _scheduleDiskSave();
+    } catch (e) {
+      dlog('[RoomProvider] fetchExplore error: $e');
+    } finally {
+      _exploreLoading = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Buat GLOBAL room dalam kategori (GRATIS, terbuka, tanpa password).
+  /// TIDAK masuk tab Grup (grup = legacy private saja). Refresh explore.
+  /// Return {id, points, join_token}.
+  Future<Map<String, dynamic>> createGlobalRoom({
+    required String name,
+    required String icon,
+    required String category,
+  }) async {
+    final res = await _service.createGlobalRoom(
+      name: name,
+      icon: icon,
+      country: _country,
+      category: category,
+    );
+    await fetchExplore(refresh: true);
+    return res;
+  }
+
+  /// Tandai room dibaca (sync antar-device) + nol-kan badge lokal langsung.
+  Future<void> markRoomRead(String roomId) async {
+    _explore = _explore
+        .map((r) => r.id == roomId ? r.copyWith(unread: 0) : r)
+        .toList();
+    if (!_disposed) notifyListeners();
+    await _service.markRoomRead(roomId);
+  }
+
 
   // ── Passthrough (Fase 9b) — screen tidak import services/ ──
   final PrivateRoomService _prv = PrivateRoomService.instance;
@@ -244,6 +337,14 @@ class RoomProvider extends ChangeNotifier {
           .map((e) => RoomModel.fromMap(
               '${(e as Map)['id'] ?? ''}', Map<String, dynamic>.from(e)))
           .toList();
+      _explore = ((obj['explore'] as List?) ?? const [])
+          .map((e) => RoomModel.fromMap(
+              '${(e as Map)['id'] ?? ''}', Map<String, dynamic>.from(e)))
+          .toList();
+      if (_explore.isNotEmpty) {
+        _exploreAt = DateTime.now();
+        _exploreCountry = _country;
+      }
       _memberRoomIds = ((memObj['ids'] as List?) ?? const [])
           .map((e) => '$e')
           .toSet();
@@ -264,6 +365,7 @@ class RoomProvider extends ChangeNotifier {
       MessageCache.instance.saveRawObj('rooms_$_country', {
         'rooms': _rooms.map((r) => r.toMap()).toList(),
         'private': _privateRooms.map((r) => r.toMap()).toList(),
+        'explore': _explore.map((r) => r.toMap()).toList(),
       });
       final uid = Supabase.instance.client.auth.currentUser?.id;
       if (uid != null) {
@@ -459,6 +561,13 @@ class RoomProvider extends ChangeNotifier {
     _privateRooms = _privateRooms.map((r) {
       final count = _counts[r.id] ?? 0;
       return r.onlineCount != count ? r.copyWith(onlineCount: count) : r;
+    }).toList();
+
+    _explore = _explore.map((r) {
+      final count = _counts[r.id];
+      return count != null && r.onlineCount != count
+          ? r.copyWith(onlineCount: count)
+          : r;
     }).toList();
   }
 

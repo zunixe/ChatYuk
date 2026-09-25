@@ -35,6 +35,12 @@ class StorageProvider extends ChangeNotifier {
   }) =>
       service.uploadStoryImage(uid: uid, base64: base64);
 
+  Future<String?> uploadRoomIcon({
+    required String uid,
+    required String base64,
+  }) =>
+      service.uploadRoomIcon(uid: uid, base64: base64);
+
   Future<String?> download(String path) => service.download(path);
 
   Future<Uint8List?> downloadBytes(String path) => service.downloadBytes(path);
@@ -55,6 +61,7 @@ class StorageProvider extends ChangeNotifier {
       );
 
   bool isPath(String value) => service.isPath(value);
+  bool isRoomIconPath(String value) => service.isRoomIconPath(value);
   bool isAvatarPath(String value) => service.isAvatarPath(value);
   bool isGalleryPath(String value) => service.isGalleryPath(value);
   bool isStoryPath(String value) => service.isStoryPath(value);

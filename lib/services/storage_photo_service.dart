@@ -31,12 +31,22 @@ class StoragePhotoService {
 
   SupabaseClient get _sb => _injected ?? SupabaseConfig.client;
 
+  /// Ikon room global upload-an (bukan emoji): `room-icons/<uid>/<file>`.
+  /// Dipakai RoomIcon untuk memilih render gambar vs emoji/glyph.
+  bool isRoomIconPath(String value) =>
+      value.startsWith('room-icons/') &&
+      (value.contains('.jpg') ||
+          value.contains('.jpeg') ||
+          value.contains('.png') ||
+          value.contains('.webp'));
+
   bool isPath(String value) =>
       (value.startsWith('chat/') ||
           value.startsWith('posts/') ||
           value.startsWith('timeline/') ||
           value.startsWith('voice/') ||
-          value.startsWith('story/')) &&
+          value.startsWith('story/') ||
+          value.startsWith('room-icons/')) &&
       (value.contains('.jpg') ||
           value.contains('.jpeg') ||
           value.contains('.png') ||
@@ -140,6 +150,35 @@ class StoragePhotoService {
       return path;
     } catch (e) {
       dlog('[StoragePhoto] uploadPostImage error: $e');
+      return null;
+    }
+  }
+
+  /// Path ikon room global. Folder = uid pembuat (syarat policy
+  /// storage_object_owner_ok cabang room-icons).
+  String roomIconPath(String uid, {String ext = 'jpg'}) =>
+      'room-icons/$uid/${DateTime.now().microsecondsSinceEpoch}.$ext';
+
+  /// Upload ikon room global → Storage. Return path atau null jika gagal.
+  /// Dipanggil SEBELUM create (path disimpan di rooms.icon).
+  Future<String?> uploadRoomIcon({
+    required String uid,
+    required String base64,
+  }) async {
+    try {
+      final bytes = base64Decode(base64);
+      final fmt = _detectImageFormat(bytes);
+      final path = roomIconPath(uid, ext: fmt.ext);
+      await _sb.storage
+          .from(_bucket)
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(contentType: fmt.mime),
+          );
+      return path;
+    } catch (e) {
+      dlog('[StoragePhoto] uploadRoomIcon error: $e');
       return null;
     }
   }
