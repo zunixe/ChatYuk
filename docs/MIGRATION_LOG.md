@@ -1,5 +1,42 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-25 — Riwayat device + GPS tetap di tab Terhapus (`20260926000000`)
+
+**Kebutuhan (user):** "info perangkatnya jangan dihapus di admin sama gpsnya"
++ "riwayat device dan riwayat gpsnya" — user yang sudah dihapus harus tetap
+menampilkan info perangkat & riwayat GPS di admin panel tab Terhapus.
+
+**Akar:** `delete_my_account` (20260923130000) & `admin_delete_anon_user`
+(20260921230000) menghapus eksplisit `user_devices` + `user_location_history`
+SEBELUM `delete profiles` (wajib, kalau tidak 23502 NOT NULL). Efek samping:
+`admin_deleted_device_history(nickname)` (baca `nickname_snapshot` live) selalu
+kosong untuk hapusan baru, dan GPS tak ada RPC-nya di tab Terhapus.
+
+**Migrasi `20260926000000_deleted_device_gps_archive.sql`** (bukan FROZEN):
+- `deleted_users` +2 kolom: `devices jsonb`, `locations jsonb` (default `'[]'`).
+- `fn_archive_deleted_user` (dasar = live): snapshot ≤50 device + ≤100 lokasi
+  terbaru SEBELUM baris live dihapus; insert mencakup kedua kolom.
+- `admin_deleted_device_history`: utamakan snapshot arsip terbaru per nickname,
+  fallback ke live yatim (arsip lama).
+- BARU `admin_deleted_location_history(p_user_id)` → snapshot GPS/IP arsip.
+- `admin_list_deleted`: item arsip +`device_count`/`location_count`
+  (pending tetap 0). Live tables tetap dibersihkan (deletion sukses, tab
+  Perangkat tanpa orphan).
+- Client: `AdminService.getDeletedLocationHistory` +
+  `AdminProvider.getDeletedLocationHistory`; `AdminDeletedTab._showDetail`
+  fetch device (by nick) + lokasi (by uid); `DeletedDetailSheet` section
+  "Riwayat GPS" (hijau=gps, oranye=ip, ≤20 terbaru) + string bilingual
+  `adminDeletedLocationHistory`/`adminDeletedNoLocation`.
+
+**Apply:** via Management API, versi tercatat di `schema_migrations`.
+**Status: DITERAPPLIED & TERVERIFIKASI LIVE** — kolom `devices`/`locations` ada;
+`admin_deleted_location_history` ada; `fn_archive` memuat `v_devices`/
+`v_locations`; `admin_list_deleted` memuat counts. pgTAP baru
+`supabase/tests/deleted_archive_test.sql` 8/8 hijau. `flutter test`
+`test/admin_service_test.dart` 29/29 hijau (termasuk RPC lokasi baru).
+Catatan: arsip LAMA (terhapus sebelum migrasi) tetap kosong — snapshot hanya
+untuk hapusan setelah migrasi ini.
+
 ## 2026-09-25 — Email + sort register-terbaru di Reg ringkasan (`20260925061000`)
 
 **Kebutuhan (user):** tab Reg ringkasan admin tampilkan email + sort

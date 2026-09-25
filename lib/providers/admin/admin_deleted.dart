@@ -79,6 +79,19 @@ mixin AdminDeletedMx on AdminBase {
     return _service.getDeletedDeviceHistory(nick);
   }
 
+  /// Riwayat GPS/IP user yang sudah dihapus (dari arsip).
+  Future<List<Map<String, dynamic>>> getDeletedLocationHistory(
+    String userId,
+  ) async {
+    if (userId.isEmpty) return const [];
+    try {
+      return await _service.getDeletedLocationHistory(userId);
+    } catch (e) {
+      dlog('[ADMIN] getDeletedLocationHistory error: $e');
+      return const [];
+    }
+  }
+
   /// Hapus user ANON yang belum terdaftar (membebaskan nickname).
   /// Return `{ok, error?}`. Refresh daftar setelah sukses.
   Future<Map<String, dynamic>> deleteAnonUser(String uid) async {

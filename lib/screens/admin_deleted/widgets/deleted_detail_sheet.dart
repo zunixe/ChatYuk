@@ -13,11 +13,13 @@ import '../../../utils.dart';
 class DeletedDetailSheet extends StatefulWidget {
   final Map<String, dynamic> entry;
   final List<Map<String, dynamic>> devices;
+  final List<Map<String, dynamic>> locations;
   final S s;
   const DeletedDetailSheet({
     super.key,
     required this.entry,
     required this.devices,
+    this.locations = const [],
     required this.s,
   });
 
@@ -30,6 +32,7 @@ class _DeletedDetailSheetState extends State<DeletedDetailSheet> {
 
   Map<String, dynamic> get entry => widget.entry;
   List<Map<String, dynamic>> get devices => widget.devices;
+  List<Map<String, dynamic>> get locations => widget.locations;
   S get s => widget.s;
 
   bool get _isPending => entry['pending'] == true;
@@ -298,6 +301,26 @@ class _DeletedDetailSheetState extends State<DeletedDetailSheet> {
                     )
                   else
                     for (final d in devices) _deviceTile(d),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      s.adminDeletedLocationHistory,
+                      style: AppText.label.copyWith(color: AppTheme.primary),
+                    ),
+                  ),
+                  if (locations.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        s.adminDeletedNoLocation,
+                        style: AppText.bodySmall.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    )
+                  else
+                    for (final l in locations.take(20)) _locTile(l),
                 ],
               ),
             ),
@@ -386,6 +409,49 @@ class _DeletedDetailSheetState extends State<DeletedDetailSheet> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _locTile(Map<String, dynamic> l) {
+    final lat = '${l['lat'] ?? ''}';
+    final lon = '${l['lon'] ?? ''}';
+    final source = '${l['source'] ?? ''}';
+    final at = l['at'] != null
+        ? formatRelativeTime(
+            DateTime.tryParse('${l['at']}') ?? DateTime.now(),
+            isId: s.isId,
+          )
+        : '';
+    final isGps = source == 'gps';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            Icons.place_outlined,
+            size: 14,
+            color: isGps ? Colors.green : AppTheme.accent,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$lat, $lon',
+            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+          ),
+          const Spacer(),
+          if (source.isNotEmpty)
+            Text(
+              source,
+              style: AppText.micro.copyWith(color: AppTheme.textSecondary),
+            ),
+          if (at.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(
+              at,
+              style: AppText.micro.copyWith(color: AppTheme.textSecondary),
+            ),
+          ],
         ],
       ),
     );
