@@ -2768,8 +2768,9 @@ Deno.serve(async (req: Request) => {
                 // HANYA untuk glm — provider lain/Zen menolak param ini (500).
                 ...(sModel.includes('glm') ? { reasoning_effort: 'low' } : {}),
                 // Rute OpenRouter: matikan reasoning (cepat, hemat token).
+                // Hanya ':free' atau base openrouter — nvidia/ non-free ke NIM
+                // pakai reasoning_effort, bukan param gateway ini.
                 ...(sModel.includes(':free') ||
-                sModel.startsWith('nvidia/') ||
                 sBase.includes('openrouter.ai')
                   ? { reasoning: { enabled: false, exclude: true } }
                   : {}),
@@ -3121,15 +3122,18 @@ Deno.serve(async (req: Request) => {
               // glm-5.3-flash selalu reasoning — low = hemat token & latensi.
               // Param ini glm-specific; provider lain bisa menolak.
               ...(m.includes('glm') ? { reasoning_effort: 'low' } : {}),
-              // NIM langsung (nim/): Ultra thinking 114 dtk → 20 dtk
-              // dengan effort low (dites live). Jangan kirim ke OpenRouter
-              // (pakai param 'reasoning' di sana, bukan ini).
-              ...(m.startsWith('nim/') ? { reasoning_effort: 'low' } : {}),
-              // OpenRouter (model ':free' / 'nvidia/'): matikan reasoning
+              // NIM langsung (nim/ + nvidia/ non-free ke NIM): Ultra thinking
+              // 114 dtk → 20 dtk dengan effort low (dites live). Jangan kirim
+              // ke OpenRouter (pakai param 'reasoning' di sana, bukan ini).
+              ...(m.startsWith('nim/') ||
+              (m.startsWith('nvidia/') && !m.includes(':free'))
+                ? { reasoning_effort: 'low' }
+                : {}),
+              // OpenRouter (hanya rute base openrouter.ai): matikan reasoning
               // Nemotron total — tanpa ini 300+ token "berpikir" dulu
               // sebelum jawab = balas lama. Param 'reasoning' milik gateway
-              // OpenRouter (bukan provider), aman di rute ini.
-              ...(m.includes(':free') || m.startsWith('nvidia/')
+              // OpenRouter (bukan provider) — JANGAN kirim ke NIM langsung.
+              ...(rt.base.includes('openrouter.ai')
                 ? { reasoning: { enabled: false, exclude: true } }
                 : {}),
               temperature,
@@ -3205,19 +3209,18 @@ Deno.serve(async (req: Request) => {
     }
     // Fallback MODEL: bila model utama error (mis. Zen free down 500),
     // coba sekali ke model cadangan supaya dummy tidak diam.
-    // Rute fallback: model OpenRouter (':free'/'nvidia/') → OpenRouter +
-    // secret OR (model itu tidak dikenal B.AI); selain itu HARDCODE ke B.AI
-    // via key di DB (JANGAN via routeFor: routeFor me-resolve glm lewat
-    // provCfg = provider AKTIF, yang bisa jadi TokenHarbor/OpenRouter dan
-    // tidak kenal model glm → 404 ganda).
+    // Rute fallback: model ':free' → OpenRouter + secret OR (model itu
+    // tidak dikenal B.AI); nvidia/ non-free ikut provAktif/NIM via route
+    // utama, fallback-nya ke B.AI (aman, anti-loop); selain itu HARDCODE
+    // ke B.AI via key di DB (JANGAN via routeFor: routeFor me-resolve glm
+    // lewat provCfg = provider AKTIF, yang bisa jadi TokenHarbor/OpenRouter
+    // dan tidak kenal model glm → 404 ganda).
     // Key diambil dari baris b-ai (fallback) lalu env — TANPA pernah
     // di-print ke log (secret).
     const primaryErr = llmRes.err ? String(llmRes.err).slice(0, 200) : '';
     if (llmRes.err && model !== fallbackModel) {
       modelUsed = fallbackModel;
-      const fbIsOR =
-        fallbackModel.includes(':free') ||
-        fallbackModel.startsWith('nvidia/');
+      const fbIsOR = fallbackModel.includes(':free');
       let fbBase: string = fbIsOR
         ? 'https://openrouter.ai/api/v1'
         : Deno.env.get('AI_API_BASE') || 'https://api.b.ai/v1';
