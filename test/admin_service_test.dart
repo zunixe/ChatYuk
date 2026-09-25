@@ -81,6 +81,16 @@ void main() {
       handler.on('admin_get_point_settings', (_) => {'bonus': 5});
       expect((await svc.getPointSettings())['bonus'], 5);
     });
+
+    test('setPrivacyBypass → RPC + params + return map', () async {
+      handler.on(
+        'admin_set_privacy_bypass',
+        (_) => {'privacy_bypass_enabled': true},
+      );
+      final res = await svc.setPrivacyBypass(true);
+      expect(rpcParamsOf(handler, 'admin_set_privacy_bypass')['p_enabled'], true);
+      expect(res['privacy_bypass_enabled'], true);
+    });
   });
 
   group('chats', () {

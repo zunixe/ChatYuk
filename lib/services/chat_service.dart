@@ -54,6 +54,8 @@ abstract class ChatBase {
   final Map<String, Future<void>> _chatListFetchInFlight = {};
   final Map<String, Set<String>> _privateChatsHidden = {};
   final Map<String, DateTime> _lastChatReloadAt = {};
+  final Map<String, DateTime> _lastChatListEventAt = {};
+  final Map<String, Timer> _chatListReloadDebounce = {};
   final Map<String, Timer> _chatListSaveTimers = {};
   final Map<String, RealtimeChannel> _typingChannels = {};
   final Map<String, int> _typingRefs = {};
