@@ -14,8 +14,10 @@ import 'room_chat_screen.dart';
 
 /// Tab "Grup": list grup private milikku + FAB buat grup.
 /// Dipindah dari lobby_screen (dulu tab Private di dalam Room).
+/// [externalQuery]: filter nama dari ikon cari AppBar (pola Pesan).
 class GroupScreen extends StatefulWidget {
-  const GroupScreen({super.key});
+  final String? externalQuery;
+  const GroupScreen({super.key, this.externalQuery});
 
   @override
   State<GroupScreen> createState() => _GroupScreenState();
@@ -27,12 +29,16 @@ class _GroupScreenState extends State<GroupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return _GroupList(key: _listKey);
+    return _GroupList(
+      key: _listKey,
+      externalQuery: widget.externalQuery,
+    );
   }
 }
 
 class _GroupList extends StatefulWidget {
-  const _GroupList({super.key});
+  final String? externalQuery;
+  const _GroupList({super.key, this.externalQuery});
   @override
   State<_GroupList> createState() => _GroupListState();
 }
@@ -71,8 +77,14 @@ class _GroupListState extends State<_GroupList> {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final rp = context.watch<RoomProvider>();
-    final rooms = _visibleGroups(rp);
-    if (rp.myGroupsLoading && rooms.isEmpty) {
+    final q = (widget.externalQuery ?? '').trim().toLowerCase();
+    final rooms = q.isEmpty
+        ? _visibleGroups(rp)
+        : _visibleGroups(rp)
+            .where((r) => r.name.toLowerCase().contains(q))
+            .toList();
+    final searching = q.isNotEmpty;
+    if (rp.myGroupsLoading && rooms.isEmpty && !searching) {
       return const Center(
         child: SizedBox(
           width: 24,
@@ -88,9 +100,9 @@ class _GroupListState extends State<_GroupList> {
       children: [
         if (rooms.isEmpty)
           EmptyStateView(
-            icon: Icons.lock_rounded,
-            title: s.noGroups,
-            hint: s.noGroupsHint,
+            icon: searching ? Icons.search_off_rounded : Icons.lock_rounded,
+            title: searching ? s.searchNoResult : s.noGroups,
+            hint: searching ? '' : s.noGroupsHint,
           )
         else
           ListView.builder(

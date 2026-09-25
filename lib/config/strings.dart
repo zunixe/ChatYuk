@@ -122,6 +122,29 @@ class S {
   String roomExpiresIn(int days) => isId ? '$days hari lagi' : '${days}d left';
   String get roomExpiresToday => isId ? 'Berakhir hari ini' : 'Ends today';
 
+  // ── Explore Room (chip kategori + satu list + buat room) ──
+  String get exploreRame => isId ? 'Rame' : 'Trending';
+  String get btnCreateRoom => isId ? 'Buat Room' : 'Create Room';
+  String get roomCategoryLabel => isId ? 'Kategori' : 'Category';
+  String roomMembersOnline(String m, String o) =>
+      isId ? '$m member • $o online' : '$m members • $o online';
+  String get exploreEmptyRame => isId
+      ? 'Belum ada room yang rame'
+      : 'No trending rooms yet';
+  String get exploreEmptyRameHint => isId
+      ? 'Jadilah yang pertama ngobrol'
+      : 'Be the first to chat';
+  String get exploreRoomCreated =>
+      isId ? 'Room berhasil dibuat' : 'Room created';
+  String get exploreLive => isId ? 'Live' : 'Live';
+  String get roomIconPhotoLabel => isId ? 'Foto sendiri' : 'Custom photo';
+  String get roomIconPick => isId ? 'Pilih foto' : 'Choose photo';
+  String get roomIconChange => isId ? 'Ganti foto' : 'Change photo';
+  String get roomIconUploading =>
+      isId ? 'Mengupload ikon...' : 'Uploading icon...';
+  String get roomIconUploadFail =>
+      isId ? 'Upload gagal, pakai emoji' : 'Upload failed, using emoji';
+
   // ── Send Coins ──
   String get menuSendPhoto => isId ? 'Kirim Foto' : 'Send Photo';
   String get menuTakePhoto => isId ? 'Ambil Foto' : 'Take Photo';
@@ -222,6 +245,8 @@ class S {
   String get titleOnline => isId ? 'Pengguna Online' : 'Online Users';
   String get searchHint =>
       isId ? 'Cari nama pengguna...' : 'Search username...';
+  String get searchRoomHint =>
+      isId ? 'Cari room atau grup...' : 'Search rooms or groups...';
   String get filterAll => isId ? 'Semua' : 'All';
   String get filterMale => isId ? 'Laki-laki' : 'Male';
   String get filterFemale => isId ? 'Perempuan' : 'Female';

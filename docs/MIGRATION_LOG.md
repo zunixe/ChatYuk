@@ -1,5 +1,62 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-25 — Email + sort register-terbaru di Reg ringkasan (`20260925061000`)
+
+**Kebutuhan (user):** tab Reg ringkasan admin tampilkan email + sort
+register paling baru di atas (bukan online).
+
+**Migrasi `20260925061000_admin_stats_detail_reg_email.sql`** (menyentuh
+FROZEN `admin_stats_detail`, header ada; dasar = snapshot live persis):
+`'email', email` ke KEEMPAT list user + `users_registered`
+`order by created_at desc nulls last` (list lain tetap `last_seen`).
+UI `userRow` SUDAH membaca `u['email']` — tanpa ubah client.
+
+**Apply:** via Management API, versi tercatat di `schema_migrations`.
+**Status: DITERAPPLIED & TERVERIFIKASI LIVE** — blok `users_registered`
+live memuat email + sort created_at; snapshot diregenerate.
+
+## 2026-09-25 — PEMISAH global vs grup + ikon upload (`20260925054000`)
+
+**Kebutuhan (user, tegas):** room buatan explore = GLOBAL ROOM persis
+seperti global lama (chat terbuka, tanpa anggota/password); grup (legacy
+`'private'`) tampil di tab Grup saja. Kasus: 'Curhat Kehidupan' telanjur
+masuk Grup. Ikon room bisa upload sendiri.
+
+**Migrasi `20260925054000_room_global_split.sql`** (menyentuh FROZEN
+`create_private_room`, header ada; dasar = live persis):
+room kategori → `is_private=false` (GLOBAL, kolom lain sama);
+data fix `category <> 'private' AND is_private` → global (1 room:
+Curhat Kehidupan); `list_room_explore` + `AND is_private=false`
+(grup tidak bocor ke Global Room); `storage_object_owner_ok` (BUKAN
+frozen) + cabang `room-icons/<uid>/<file>` (ikon upload, fail-closed
+tetap untuk prefix lain).
+
+**Apply:** via Management API, versi tercatat di `schema_migrations`.
+**Status: DITERAPPLIED & TERVERIFIKASI LIVE** — Curhat Kehidupan
+`is_private=False`; explore Indonesia → 11 room semua global;
+snapshot diregenerate (diff = hanya tambahan split, tanpa cabang hilang).
+
+## 2026-09-24 — Explore room + buat room gratis per kategori (`20260924221000`)
+
+**Kebutuhan (user):** Global Room ala gambar — chip kategori (Rame/Game/Musik/
+Curhat/...) + satu list gabungan global + grup (member • online, preview,
+badge unread, waktu relatif, Live HANYA grup) + FAB Buat Room gratis.
+
+**Migrasi `20260924221000_room_explore.sql`** (menyentuh FROZEN
+`create_private_room`, header ada; dasar = snapshot live persis):
+tambah `p_category` (allowlist 10 kategori + `'private'` legacy);
+kategori ASLI = GRATIS (skip ledger), terbuka (`approval_required=false`,
+`max_members=200`); legacy `'private'` tidak berubah (bayar + antre + 20).
+Overload 4-arg lama di-DROP (cegah PostgREST 300, preseden 2026-09-11).
+BARU: tabel `room_reads` (unread sync) + RLS own-row;
+RPC `list_room_explore(p_country)` (member/online/pesan terakhir/is_live
+grup-only/unread) + `mark_room_read(p_room_id)`.
+
+**Apply:** via Management API, versi tercatat di `schema_migrations`.
+**Status: DITERAPPLIED & TERVERIFIKASI LIVE** — overload tinggal 1;
+`list_room_explore('Indonesia')` → 11 room; snapshot diregenerate
+(diff = hanya tambahan kategori/gratis, tanpa cabang hilang).
+
 ## 2026-09-24 — Avatar gender di sheet Ringkasan (`20260924110000`)
 
 **Kebutuhan (laporan user):** daftar user di sheet Ringkasan (Users, Active,
@@ -895,3 +952,15 @@ Semua 35 assert hijau kembali.
 "restore/patch" yang lebih baru** untuk fungsi yang sama, ATAU gunakan
 `create or replace` dari snapshot terbaru sebagai sumber. Inilah alasan
 frozen-functions guard + snapshot ada.
+
+## 2026-09-24 — 20260924230000_admin_privacy_bypass.sql (APPLY)
+
+- **Fitur:** toggle Bypass Privasi (Admin > Global Setting). ON + viewer admin
+  → `privacy_can_view()` true semua field (foto/status/last_seen/about/story).
+  User biasa tidak terdampak (server cek `auth.email()`).
+- **Isi:** kolom `app_settings.privacy_bypass_enabled` (default false);
+  rewrite `privacy_can_view` (BUKAN frozen — tanpa header/snapshot);
+  RPC `admin_set_privacy_bypass(p_enabled)` (guard admin); baca via
+  `admin_get_point_settings` (full row).
+- **Apply:** Management API + catat `schema_migrations`. Verifikasi: kolom
+  false, RPC ada, pgTAP `privacy_bypass_test.sql` 7/7.

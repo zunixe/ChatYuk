@@ -3,30 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/room_model.dart';
 import '../config/supabase_config.dart';
 
-/// Kategori room yang sama dipakai untuk SETIAP negara.
-const List<Map<String, String>> roomCategories = [
-  {'id': 'general', 'name': 'General', 'icon': '💬', 'desc': 'Chat umum'},
-  {'id': 'curhat', 'name': 'Curhat', 'icon': '💭', 'desc': 'Cerita & curhat'},
-  {
-    'id': 'pertemanan',
-    'name': 'Pertemanan',
-    'icon': '🤝',
-    'desc': 'Cari teman baru',
-  },
-  {
-    'id': 'teknologi',
-    'name': 'Teknologi',
-    'icon': '💻',
-    'desc': 'Diskusi tech',
-  },
-  {'id': 'gaming', 'name': 'Gaming', 'icon': '🎮', 'desc': 'Main & bahas game'},
-  {'id': 'musik', 'name': 'Musik', 'icon': '🎵', 'desc': 'Sharing musik'},
-  {'id': 'film', 'name': 'Film & TV', 'icon': '🎬', 'desc': 'Review film'},
-  {'id': 'joke', 'name': 'Joke & Meme', 'icon': '😂', 'desc': 'Bikin ngakak'},
-  {'id': 'belajar', 'name': 'Belajar', 'icon': '📚', 'desc': 'Diskusi belajar'},
-  {'id': 'flirt', 'name': 'Flirt', 'icon': '💘', 'desc': 'Ngobrol asyik'},
-];
-
 class RoomService {
   /// Client opsional (LAZY) — test menyuntik client palsu.
   final SupabaseClient? _injected;
@@ -119,7 +95,42 @@ class RoomService {
     }
   }
 
-  /// Buat private room. Return {id, points}. Lempar PostgrestException bila gagal.
+  // ═══════════════════════════════════════════════════════════════════
+  // PEMISAH GLOBAL vs GRUP — baca sebelum nambah cara bikin room baru.
+  //   GLOBAL ROOM (tab Global Room): is_private=false, chat terbuka tanpa
+  //     anggota/password, kelola via admin panel. Dibuat via createGlobalRoom
+  //     (GRATIS, kategori ASLI, TANPA param password — server juga memaksa).
+  //   GRUP (tab Grup, legacy 'private'): is_private=true + room_members +
+  //     BISA password/approval. Dibuat via createPrivateRoom (bayar poin).
+  // JANGAN: bikin room kategori lewat createPrivateRoom + password, atau
+  // menampilkan grup private di explore (lihat list_room_explore).
+  // ═══════════════════════════════════════════════════════════════════
+
+  /// Buat GLOBAL room dalam kategori (GRATIS, terbuka, tanpa password).
+  /// Return {id, points, join_token}. Lempar PostgrestException bila gagal.
+  /// icon: emoji ATAU path storage `room-icons/<uid>/...` (upload dulu
+  /// via StoragePhotoService.uploadRoomIcon).
+  Future<Map<String, dynamic>> createGlobalRoom({
+    required String name,
+    required String icon,
+    required String country,
+    required String category,
+  }) async {
+    final res = await _sb.rpc(
+      'create_private_room',
+      params: {
+        'p_name': name,
+        'p_icon': icon,
+        'p_country': country,
+        'p_category': category,
+      },
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Buat GRUP legacy (private + room_members, BISA password, BAYAR poin).
+  /// JANGAN dipakai untuk room kategori — pakai createGlobalRoom.
+  /// Return {id, points}. Lempar PostgrestException bila gagal.
   Future<Map<String, dynamic>> createPrivateRoom({
     required String name,
     required String icon,
@@ -136,6 +147,36 @@ class RoomService {
       },
     );
     return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Satu list explore (global + grup) beserta statistik untuk negara.
+  /// Return list map mentah (snake_case) — mapping ke RoomModel di provider
+  /// via snakeToCamel agar konsisten dengan chat_stream_session.
+  Future<List<Map<String, dynamic>>> fetchExplore(String country) async {
+    try {
+      final res = await _sb.rpc(
+        'list_room_explore',
+        params: {'p_country': country},
+      );
+      if (res is List) {
+        return res
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      }
+      return const [];
+    } catch (e) {
+      dlog('[room] fetchExplore error: $e');
+      return const [];
+    }
+  }
+
+  /// Tandai room sudah dibaca (unread sync antar-device).
+  Future<void> markRoomRead(String roomId) async {
+    try {
+      await _sb.rpc('mark_room_read', params: {'p_room_id': roomId});
+    } catch (e) {
+      dlog('[room] markRoomRead error: $e');
+    }
   }
 
   /// Masuk private room. Return {ok, charged, points}.

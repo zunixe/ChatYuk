@@ -621,6 +621,12 @@ adb logcat | grep '\[PERF\]'
 - `MessageCache.peekRawList` sinkron + `preloadRawList` saat bootstrap.
 - `MediaDiskCache.readSync` untuk avatar (instan, tanpa network).
 - Cache memori + TTL + disk di `RoomProvider.loadMyGroups` (30s TTL).
+- Explore room (`RoomProvider.fetchExplore`, 30s TTL + disk): full RPC
+  `list_room_explore` HANYA saat buka/ganti negara/pull-refresh/buat room —
+  online count segar via stream `_counts` yang sudah ada (update lokal,
+  tanpa RPC ulang). Sort/filter Rame-vs-kategori di Dart per emission
+  (list ≤200, O(n log n) sekali per notify) — jangan pindah ke SQL
+  per kategori (hemat round-trip).
 - `AutomaticKeepAliveClientMixin` di `OnlineUsersScreen` & `TimelineScreen`
   (`wantKeepAlive => true`) — state tidak dibuang saat pindah tab.
 - `_AsyncAvatar` + `_avatarImageByUid` (MemoryImage stabil per-uid) — avatar

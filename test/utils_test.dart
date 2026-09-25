@@ -194,6 +194,48 @@ void main() {
     });
   });
 
+  group('formatCompactCount', () {
+    test('di bawah 1000 → apa adanya', () {
+      expect(utils.formatCompactCount(0), '0');
+      expect(utils.formatCompactCount(942), '942');
+    });
+
+    test('ribuan → rb/k satu desimal', () {
+      expect(utils.formatCompactCount(1800, isId: true), '1.8rb');
+      expect(utils.formatCompactCount(3100, isId: true), '3.1rb');
+      expect(utils.formatCompactCount(2000, isId: true), '2rb');
+      expect(utils.formatCompactCount(1800, isId: false), '1.8k');
+    });
+  });
+
+  group('formatExploreTime', () {
+    test('baru, menit, jam', () {
+      final now = DateTime.now();
+      expect(utils.formatExploreTime(now, isId: true), 'Baru');
+      expect(
+        utils.formatExploreTime(
+          now.subtract(const Duration(minutes: 2)),
+          isId: true,
+        ),
+        '2 mnt',
+      );
+      expect(
+        utils.formatExploreTime(
+          now.subtract(const Duration(hours: 1)),
+          isId: true,
+        ),
+        '1 jam',
+      );
+      expect(
+        utils.formatExploreTime(
+          now.subtract(const Duration(minutes: 14)),
+          isId: false,
+        ),
+        '14 min',
+      );
+    });
+  });
+
   group('capitalizeFirst', () {
     test('huruf kecil pertama → kapital', () {
       expect(utils.capitalizeFirst('halo apa kabar'), 'Halo apa kabar');

@@ -69,11 +69,29 @@ sebagai dummy.
 | Widget bubble | `lib/widgets/private_chat_message.dart` — `MessageBubble`, `SwipeToReply` |
 | Provider | `lib/providers/chat_provider.dart`, `room_provider.dart` |
 | Service | `lib/services/chat_service.dart`, `chat_stream_session.dart`, `message_cache.dart`, `room_service.dart`, `message_store.dart`, `private_room_service.dart` |
-| SQL inti | `create_private_room()`, `join_private_room()`, `extend_private_room()`, `deduct_chat_point()`, `new_chat_bonus()`, `notify_private_message()`, `handle_new_private_message()`, `mark_chat_read()` |
+| SQL inti | `create_private_room()` (+`p_category`; kategori ASLI = gratis/terbuka, legacy `'private'` bayar), `join_private_room()`, `extend_private_room()`, `deduct_chat_point()`, `new_chat_bonus()`, `notify_private_message()`, `handle_new_private_message()`, `mark_chat_read()`, `list_room_explore()` + `mark_room_read()` + tabel `room_reads` (explore + unread sync) |
 | Test | `test/chat_provider_test.dart`, `test/message_store_test.dart`, `test/chat_service_io_test.dart` (payload PostgREST via HTTP palsu), `test/economy_room_io_test.dart`, `test/functional/` (composer/mention/bubble/reaction), `test/regression/r_read_receipt_test.dart`, `r_swipe_reply_test.dart`, `r_stream_replay_test.dart`, `supabase/tests/notif_chat_test.sql` |
 
 **Invariant:** titik poin terpotong 1× per pesan (idempoten); bonus chat baru
 hanya 1× per pasangan; notif hanya 1× per pesan (dedup).
+
+### 3b. PEMISAH Global Room vs Grup — WAJIB BACA sebelum menyentuh room
+
+| | GLOBAL ROOM (tab Global Room) | GRUP (tab Grup, legacy) |
+|---|---|---|
+| `rooms.is_private` | `false` | `true` |
+| `rooms.category` | 10 id (`general`/`curhat`/...) | SELALU `'private'` |
+| Anggota/password | TIDAK ADA (chat terbuka) | `room_members` + BISA password/approval |
+| Kelola/hapus | admin panel saja | owner (extend/delete) + admin |
+| Buat via | `RoomService.createGlobalRoom` (GRATIS, tanpa param password) | `RoomService.createPrivateRoom` (bayar poin) |
+| List via | `list_room_explore()` (filter `is_private=false`) | `list_my_groups()` |
+| Unread | `room_reads` + `mark_room_read()` | — |
+
+**ATURAN KERAS:** room kategori TIDAK PERNAH `is_private=true` / berpassword
+(dipaksa di `create_private_room`; JANGAN dilonggarkan). Nama RPC
+`create_private_room` historis (dipakai APK lama) — JANGAN rename; bedakan
+di wrapper client. `RoomIcon`: `rooms.icon` = emoji ATAU path
+`room-icons/<uid>/...` (upload via `uploadRoomIcon`).
 
 ### 3a. Buka chat instan + centang-2 (anti-lag) — RAWAN REGRESI
 

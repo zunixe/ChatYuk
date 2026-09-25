@@ -133,6 +133,29 @@ String formatRelativeTime(DateTime dt, {bool isId = false}) {
   return DateFormat('d MMM').format(dt.toLocal());
 }
 
+/// Waktu ala kartu explore: 'Baru', '2 mnt', '14 mnt', '1 jam'.
+String formatExploreTime(DateTime dt, {bool isId = false}) {
+  final diff = DateTime.now().difference(dt.toLocal());
+  if (diff.inSeconds < 60) return isId ? 'Baru' : 'Now';
+  if (diff.inMinutes < 60) {
+    return isId ? '${diff.inMinutes} mnt' : '${diff.inMinutes} min';
+  }
+  if (diff.inHours < 24) {
+    return isId ? '${diff.inHours} jam' : '${diff.inHours}h';
+  }
+  if (diff.inDays < 7) {
+    return isId ? '${diff.inDays} hari' : '${diff.inDays}d';
+  }
+  return DateFormat('d MMM').format(dt.toLocal());
+}
+
+/// Angka ringkas ala kartu explore: 942 → '942', 1800 → '1.8rb', 3100 → '3.1rb'.
+String formatCompactCount(int n, {bool isId = false}) {
+  if (n < 1000) return '$n';
+  final v = (n / 1000).toStringAsFixed(1).replaceAll('.0', '');
+  return isId ? '${v}rb' : '${v}k';
+}
+
 int notifIdForKey(String key) {
   int hash = 0;
   for (int i = 0; i < key.length; i++) {

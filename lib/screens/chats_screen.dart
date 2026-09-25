@@ -32,13 +32,8 @@ class _ChatsScreenState extends State<ChatsScreen>
   }
 
   void _onTabChanged() {
-    if (_tab.index != 0 && _isSearching) {
-      setState(() {
-        _isSearching = false;
-        _searchCtrl.clear();
-        _query = '';
-      });
-    }
+    // Search berlaku di SEMUA tab (Pesan/Grup/Room) — query dibawa pindah
+    // tab, tidak di-reset (pola lama yang reset saat keluar Pesan dihapus).
     // Tab Grup khusus terdaftar (tap maupun swipe) — anon dikembalikan
     // ke tab sebelumnya + dialog ajakan daftar (pola timeline _onNavTap).
     // Sesi dummy (admin jadi anon) diizinkan — bukan anon sungguhan.
@@ -74,7 +69,8 @@ class _ChatsScreenState extends State<ChatsScreen>
     final s = context.watch<LocaleProvider>().s;
     final tabProgress = _tab.animation!.value;
     final isPesanTab = tabProgress < 0.5;
-    final showSearch = _isSearching && isPesanTab;
+    // Search ala Pesan berlaku di ketiga tab (Pesan/Grup/Global Room).
+    final showSearch = _isSearching;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,
@@ -83,22 +79,20 @@ class _ChatsScreenState extends State<ChatsScreen>
         flexibleSpace: Container(
           decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
-        leading: isPesanTab
-            ? IconButton(
-                tooltip: s.searchHint,
-                icon: Icon(showSearch ? Icons.close : Icons.search_rounded),
-                color: Colors.white,
-                onPressed: () {
-                  setState(() {
-                    _isSearching = !_isSearching;
-                    if (!_isSearching) {
-                      _searchCtrl.clear();
-                      _query = '';
-                    }
-                  });
-                },
-              )
-            : null,
+        leading: IconButton(
+          tooltip: s.searchRoomHint,
+          icon: Icon(showSearch ? Icons.close : Icons.search_rounded),
+          color: Colors.white,
+          onPressed: () {
+            setState(() {
+              _isSearching = !_isSearching;
+              if (!_isSearching) {
+                _searchCtrl.clear();
+                _query = '';
+              }
+            });
+          },
+        ),
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           transitionBuilder: (child, anim) => FadeTransition(
@@ -121,7 +115,8 @@ class _ChatsScreenState extends State<ChatsScreen>
                     style: AppText.body.copyWith(color: Colors.white),
                     decoration: InputDecoration(
                       isDense: true,
-                      hintText: s.searchHint,
+                      hintText:
+                          isPesanTab ? s.searchHint : s.searchRoomHint,
                       hintStyle: AppText.body.copyWith(color: Colors.white54),
                       prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 20),
                       prefixIconConstraints:
@@ -218,8 +213,8 @@ class _ChatsScreenState extends State<ChatsScreen>
         controller: _tab,
         children: [
           PrivateChatsScreen(embedded: true, externalQuery: _query),
-          const GroupScreen(),
-          LobbyScreen(embedded: true),
+          GroupScreen(externalQuery: _query),
+          LobbyScreen(embedded: true, externalQuery: _query),
         ],
       ),
     );
