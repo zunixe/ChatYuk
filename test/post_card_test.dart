@@ -173,24 +173,6 @@ void _cleanupTestChannels() {
   } catch (_) {}
 }
 
-  testWidgets('TMP isolasi: buka-tutup sheet tanpa kirim', (tester) async {
-    await pump(tester, _post());
-    await tester.tap(find.byIcon(PhosphorIconsRegular.chatCircle).first);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    Navigator.of(tester.element(find.byType(TextField))).pop();
-    // Dua pump: exit butuh 1 frame untuk mulai + 1 frame untuk lepas route.
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byType(TextField), findsNothing, reason: 'sheet harus tertutup');
-    // Tutup via barrier tap (cara user menutup sheet).
-    await tester.tapAt(const Offset(400, 40));
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byType(TextField), findsNothing, reason: 'sheet harus tertutup');
-    await tester.pump(const Duration(seconds: 120));
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('kirim komentar → sheet tetap terbuka + langsung tampil',
       (tester) async {
     when(() => timeline.addComment(any(), any())).thenAnswer(
@@ -244,7 +226,7 @@ void _cleanupTestChannels() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('sheet komentar dikunci setengah layar saat komentar banyak',
+  testWidgets('sheet komentar dikunci 70% layar saat komentar banyak',
       (tester) async {
     when(() => timeline.comments(any())).thenAnswer(
       (_) async => [
@@ -270,9 +252,58 @@ void _cleanupTestChannels() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // Viewport test 600px → sheet tidak boleh lebih dari 300px.
+    // Viewport test 600px → sheet tidak boleh lebih dari 420px (70%).
     final h = tester.getSize(find.byType(BottomSheet)).height;
-    expect(h, lessThanOrEqualTo(300.0));
+    expect(h, lessThanOrEqualTo(420.0));
+
+    Navigator.of(tester.element(find.byType(TextField))).pop();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    _cleanupTestChannels();
+    await tester.pump(const Duration(seconds: 120));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('hapus komentar sendiri: ikon hanya di milikku + terhapus',
+      (tester) async {
+    Map<String, dynamic> cmt(int id, String authorId, String text) => {
+          'id': id,
+          'postId': 'p1',
+          'parentId': 0,
+          'text': text,
+          'authorId': authorId,
+          'authorName': authorId == 'me' ? 'Saya' : 'Orang',
+          'authorGender': '',
+          'likeCount': 0,
+          'shareCount': 0,
+          'isLiked': false,
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+        };
+    when(() => timeline.comments(any())).thenAnswer(
+      (_) async => [cmt(42, 'me', 'Komen saya'), cmt(43, 'other', 'Komen orang')],
+    );
+    when(() => timeline.deleteComment(any())).thenAnswer((_) async {});
+    await pump(tester, _post());
+
+    await tester.tap(find.byIcon(PhosphorIconsRegular.chatCircle).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Hanya 1 tombol hapus (komentar milik sendiri).
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+
+    // Tap hapus → dialog konfirmasi → Hapus → komentar hilang.
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Hapus komentar?'), findsOneWidget);
+    await tester.tap(find.text('Hapus').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    verify(() => timeline.deleteComment(42)).called(1);
+    expect(find.text('Komen saya'), findsNothing);
+    expect(find.text('Komen orang'), findsOneWidget);
 
     Navigator.of(tester.element(find.byType(TextField))).pop();
     await tester.pump(const Duration(milliseconds: 500));

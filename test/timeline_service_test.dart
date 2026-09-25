@@ -175,4 +175,14 @@ void main() {
       expect(req.url.query.contains('id=eq.post-42'), isTrue);
     });
   });
+
+  group('deleteComment', () {
+    test('DELETE ke tabel post_comments dengan filter id', () async {
+      handler.on('post_comments', (_) => {});
+      await svc.deleteComment(42);
+      final req = handler.captured.firstWhere((r) => r.method == 'DELETE');
+      expect(req.url.path.contains('/rest/v1/post_comments'), isTrue);
+      expect(req.url.query.contains('id=eq.42'), isTrue);
+    });
+  });
 }

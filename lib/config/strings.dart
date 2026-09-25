@@ -1613,6 +1613,12 @@ class S {
   String get msgBoosted => isId ? 'Postingan di-boost' : 'Post boosted';
   String get msgPosted => isId ? 'Berhasil diposting' : 'Posted';
   String get msgCommented => isId ? 'Komentar terkirim' : 'Comment posted';
+  String get commentDeleteTitle =>
+      isId ? 'Hapus komentar?' : 'Delete comment?';
+  String get commentDeleteBody => isId
+      ? 'Komentar yang dihapus tidak bisa dikembalikan.'
+      : 'Deleted comments cannot be restored.';
+  String get commentDeleted => isId ? 'Komentar dihapus' : 'Comment deleted';
   String get msgLiked => isId ? 'Disukai' : 'Liked';
   String get msgUnliked => isId ? 'Batal suka' : 'Unliked';
   String get msgShared => isId ? 'Dibagikan' : 'Shared';
