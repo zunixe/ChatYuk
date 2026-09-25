@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/providers/admin_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
@@ -34,16 +35,17 @@ void main() {
     );
   });
 
-  Future<void> pumpSheet(WidgetTester t) async {
+  Future<void> pumpSheet(WidgetTester t, {String lang = 'id'}) async {
     final admin = AdminProvider(service: service);
     addTearDown(admin.dispose);
+    SharedPreferences.setMockInitialValues({});
+    final lp = LocaleProvider();
+    await lp.setLang(lang);
     await t.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<AdminProvider>.value(value: admin),
-          ChangeNotifierProvider<LocaleProvider>(
-            create: (_) => LocaleProvider(),
-          ),
+          ChangeNotifierProvider<LocaleProvider>.value(value: lp),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -61,9 +63,17 @@ void main() {
     await t.pumpAndSettle();
   }
 
-  testWidgets('sheet tampil + render 1 baris tabel', (t) async {
-    await pumpSheet(t);
-    expect(find.text('Rincian Ukuran Tabel'), findsOneWidget);
-    expect(find.text('cron.job_run_details'), findsOneWidget);
-  });
+  // Judul tahan locale: ID dan EN wajib benar.
+  for (final lang in ['id', 'en']) {
+    testWidgets('sheet tampil + render 1 baris tabel ($lang)', (t) async {
+      await pumpSheet(t, lang: lang);
+      expect(
+        find.text(
+          lang == 'id' ? 'Rincian Ukuran Tabel' : 'Table Size Breakdown',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('cron.job_run_details'), findsOneWidget);
+    });
+  }
 }
