@@ -51,6 +51,8 @@ mixin AdminPassthroughMx on AdminBase {
   Future<Map<String, dynamic>> getPointSettings() => _service.getPointSettings();
   Future<Map<String, dynamic>> updatePointSettings(Map<String, dynamic> p) =>
       _service.updatePointSettings(p);
+  Future<Map<String, dynamic>> setPrivacyBypass(bool v) =>
+      _service.setPrivacyBypass(v);
   Future<Map<String, dynamic>> getAiSettings() => _service.getAiSettings();
   Future<Map<String, dynamic>> setAiSettings({
     bool? globalEnabled,

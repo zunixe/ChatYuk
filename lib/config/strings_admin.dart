@@ -639,6 +639,11 @@ extension SAdminX on S {
       ? 'Gagal memuat foto — periksa koneksi lalu ketuk lagi'
       : 'Failed to load photo — check connection then tap again';
 
+  String get privacyBypassTitle => isId ? 'Bypass Privasi' : 'Privacy Bypass';
+  String get privacyBypassDesc => isId
+      ? 'ON = admin melihat semua profil user tanpa filter privasi. User biasa tidak terdampak.'
+      : 'ON = admin sees all user profiles with no privacy filter. Regular users unaffected.';
+
   String get dummyAiScheduleTitle =>
       isId ? 'Jadwal kehadiran AI' : 'AI presence schedule';
 

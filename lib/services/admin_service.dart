@@ -106,6 +106,17 @@ class AdminService {
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 
+  /// Bypass privasi (toggle admin): bila ON, akun admin melihat semua
+  /// field profil user tanpa filter visibility. Baca via getPointSettings
+  /// (full app_settings). User biasa tidak terdampak (server cek email).
+  Future<Map<String, dynamic>> setPrivacyBypass(bool enabled) async {
+    final res = await _rpc(
+      'admin_set_privacy_bypass',
+      params: {'p_enabled': enabled},
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
   Future<void> forceLogout(String targetUid) async {
     await _sb.from('profiles').update({'fcm_token': ''}).eq('id', targetUid);
   }

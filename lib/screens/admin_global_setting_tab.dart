@@ -4,6 +4,7 @@ import 'admin_global_setting/widgets/setting_tiles.dart';
 import 'admin_global_setting/widgets/ai_global_tile.dart';
 import 'admin_global_setting/widgets/app_font_settings.dart';
 import 'admin_global_setting/widgets/excluded_devices.dart';
+import 'admin_global_setting/widgets/privacy_bypass_tile.dart';
 import 'admin_global_setting/widgets/update_config_tile.dart';
 import '../providers/theme_provider.dart';
 
@@ -41,6 +42,8 @@ class AdminGlobalSettingTab extends StatelessWidget {
         const RequireRegistrationToggle(),
         const SizedBox(height: 10),
         const ReengageToggle(),
+        const SizedBox(height: 10),
+        const PrivacyBypassTile(),
         const SizedBox(height: 10),
         const AiGlobalTile(),
         const SizedBox(height: 10),

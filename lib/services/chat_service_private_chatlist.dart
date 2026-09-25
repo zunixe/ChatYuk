@@ -63,10 +63,39 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     if (controller != null && !controller.isClosed) controller.add(list);
   }
 
+  /// Refetch list ter-debounce (500ms) — dipakai saat event realtime
+  /// gagal diparse / channel error. Tanpa ini satu event gagal = chat itu
+  /// stale sampai user pindah halaman.
+  void _scheduleChatListReload(String myUid) {
+    final controller = _privateChatsStreams[myUid];
+    if (controller == null || controller.isClosed) return;
+    _chatListReloadDebounce[myUid]?.cancel();
+    _chatListReloadDebounce[myUid] = Timer(
+      const Duration(milliseconds: 500),
+      () {
+        _chatListReloadDebounce.remove(myUid);
+        final c = _privateChatsStreams[myUid];
+        if (c != null && !c.isClosed) _refreshChatStreams(myUid);
+      },
+    );
+  }
+
+  void _cancelChatListReload(String myUid) {
+    _chatListReloadDebounce.remove(myUid)?.cancel();
+  }
+
   /// Terapkan row private_chats dari payload realtime ke snapshot lokal —
   /// tanpa query tambahan. Row dikirim lengkap oleh Supabase Realtime.
+  /// TOTAL: payload tak terduga tidak boleh melempar (melempar di dalam
+  /// callback realtime = update hilang diam-diam) — fallback refetch.
   void _applyChatEvent(String myUid, Map<String, dynamic> row) {
-    final chat = _rowToPrivateChat(row, myUid: myUid);
+    late final PrivateChatInfo chat;
+    try {
+      chat = _rowToPrivateChat(row, myUid: myUid);
+    } catch (_) {
+      _scheduleChatListReload(myUid);
+      return;
+    }
     final hiddenBy = List<String>.from(
       (row['hidden_by'] as List<dynamic>?) ?? [],
     );
@@ -400,6 +429,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     // dari 2 screen sekaligus (list chat + layar chat); nama sama = join gagal,
     // event realtime tidak pernah sampai (centang baca jadi tidak update).
     final instanceId = DateTime.now().microsecondsSinceEpoch;
+
     final channel = _sb.channel('private-chats-$myUid-$instanceId');
     channel.onPostgresChanges(
       event: PostgresChangeEvent.all,
@@ -408,16 +438,43 @@ mixin ChatServicePrivateChatListMx on ChatBase {
       callback: (payload) {
         // Update snapshot langsung dari payload (row lengkap) — tanpa
         // refetch 500 row untuk setiap centang baca / pesan baru.
+        // _applyChatEvent total (tak melempar); delete aman-null.
         if (controller.isClosed) return;
+        _lastChatListEventAt[myUid] = DateTime.now();
         if (payload.eventType == PostgresChangeEvent.delete) {
-          final chatId = payload.oldRecord['chat_id'] as String?;
-          if (chatId != null) _removeLocalChat(myUid, chatId);
+          final chatId = payload.oldRecord['chat_id']?.toString();
+          if (chatId != null && chatId.isNotEmpty) {
+            _removeLocalChat(myUid, chatId);
+          }
         } else {
           _applyChatEvent(myUid, payload.newRecord);
         }
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, _) {
+      // Channel mati (error/timeout/closed) = tidak ada event lagi;
+      // refetch supaya list tidak stale selamanya.
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut ||
+          status == RealtimeSubscribeStatus.closed) {
+        _scheduleChatListReload(myUid);
+      }
+    });
+
+    // Fallback polling ala stream pesan: kalau realtime diam >25 dtk
+    // (channel mati diam-diam tanpa status error), refetch kalau snapshot
+    // juga sudah tua (>30 dtk). Saat realtime sehat = nol fetch ekstra.
+    final pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (controller.isClosed) return;
+      final lastEvent = _lastChatListEventAt[myUid];
+      final lastReload = _lastChatReloadAt[myUid];
+      final now = DateTime.now();
+      final silent = lastEvent == null ||
+          now.difference(lastEvent).inSeconds > 25;
+      final stale = lastReload == null ||
+          now.difference(lastReload).inSeconds > 30;
+      if (silent && stale) _refreshChatStreams(myUid);
+    });
 
     // Pesan BARU masuk untuk chat yang aku hapus (hidden) → chat muncul lagi
     // di list, tapi hanya pesan setelah cutoff yang akan tampil isinya.
@@ -466,6 +523,8 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     controller.onCancel = () {
       _chatReloaders[myUid]?.remove(reload);
       if (_chatReloaders[myUid]?.isEmpty == true) _chatReloaders.remove(myUid);
+      pollTimer.cancel();
+      _cancelChatListReload(myUid);
       _sb.removeChannel(channel);
       _sb.removeChannel(msgChannel);
       final cached = _privateChatsStreams[myUid];
@@ -474,6 +533,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         _privateChatsLast.remove(myUid);
         _privateChatsHidden.remove(myUid);
         _lastChatReloadAt.remove(myUid);
+        _lastChatListEventAt.remove(myUid);
       }
     };
 
