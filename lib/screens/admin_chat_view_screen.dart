@@ -23,6 +23,29 @@ import 'admin_chat/widgets/audio_listen_chip.dart';
 import '../providers/theme_provider.dart';
 import '../config/strings_admin.dart';
 
+/// Sisi kiri (lawan bicara) monitor chat — fungsi MURNI agar prioritas
+/// terkunci test (`test/admin_chat_leftuid_test.dart`). Harus STABIL
+/// (tidak ikut urutan kedatangan) supaya bubble tidak berpindah sisi.
+/// Urutan sumber:
+/// 1) participantOrder (dari list screen, urut kiri→kanan)
+/// 2) chatId split 'uid1_uid2' (format 1:1)
+/// 3) senders terurut — supaya tidak semua kanan (null) bila dua sumber
+///    di atas gagal.
+String? computeMonitorLeftUid({
+  required List<String> participantOrder,
+  required String chatId,
+  required List<String> senders,
+}) {
+  if (participantOrder.length >= 2) return participantOrder.first;
+  final parts = chatId.split('_');
+  if (parts.length == 2) return parts.first;
+  if (senders.isNotEmpty) {
+    final sorted = List<String>.of(senders)..sort();
+    return sorted.first;
+  }
+  return null;
+}
+
 class AdminChatViewScreen extends StatefulWidget {
   final String chatId;
   final String chatLabel;
@@ -287,24 +310,15 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   ///
   /// FIX (gejala "lawan kadang muncul kadang ilang"): fallback WAJIB
   /// deterministik. Dulu cadangan terakhir `senders.first` = pengirim pesan
-  /// TERBARU — jadi tiap lawan mengirim pesan, `_leftUid` berubah → SEMUA
-  /// bubble berpindah sisi (yang tadinya di kiri pindah ke kanan), terlihat
-  /// seperti lawan "hilang" lalu muncul lagi. Urutan sumber:
-  /// 1) participantOrder (dari list screen, urut kiri→kanan)
-  /// 2) chatId split 'uid1_uid2' (format 1:1)
-  /// 3) senders terurut (stabil, bukan urutan kedatangan) — supaya tidak
-  ///    semua kanan (null) bila dua sumber di atas gagal.
-  String? _computeLeftUid(List<String> senders) {
-    if (widget.participantOrder.length >= 2)
-      return widget.participantOrder.first;
-    final parts = widget.chatId.split('_');
-    if (parts.length == 2) return parts.first;
-    if (senders.isNotEmpty) {
-      final sorted = List<String>.of(senders)..sort();
-      return sorted.first;
-    }
-    return null;
-  }
+  /// Delegasi tipis ke [computeMonitorLeftUid] (fungsi murni, terkunci test).
+  /// JANGAN menaruh logika di sini — dulu tiap lawan mengirim pesan,
+  /// `_leftUid` berubah → SEMUA bubble berpindah sisi.
+  String? _computeLeftUid(List<String> senders) =>
+      computeMonitorLeftUid(
+        participantOrder: widget.participantOrder,
+        chatId: widget.chatId,
+        senders: senders,
+      );
 
   /// Samakan last-read dari server (dasar centang-2 per pesan).
   /// Dipanggil tiap fetch + poll 5 detik supaya live mengikuti.
