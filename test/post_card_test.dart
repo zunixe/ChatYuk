@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/timeline_provider.dart';
+import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/timeline_service.dart';
 import 'package:chatyuk/widgets/post_card.dart';
@@ -54,9 +59,15 @@ void main() {
 
   setUpAll(() async {
     await initSupabaseForTest();
+    // Sheet komentar memakai AppText (Poppins via google_fonts) — pakai font
+    // sistem di test supaya tidak unduh/bundel font (tanpa jaringan).
+    GoogleFonts.config.allowRuntimeFetching = false;
+    AppFonts.setLocal(AppFonts.systemKey);
     registerFallbackValue(<String, dynamic>{});
     registerFallbackValue(<String>[]);
   });
+
+  tearDownAll(resetFontForTest);
 
   setUp(() {
     timeline = MockTimelineService();
@@ -146,5 +157,128 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     verify(() => timeline.toggleLike('p1')).called(1);
+  });
+
+/// Buang channel + putuskan socket realtime milik test ini dari client
+/// bersama — kalau tidak, loop reconnect socket (URL dummy tak tersambung)
+/// + disconnect tertunda 2×heartbeat (50 dtk) membuat test gagal invariant
+/// "Timer masih pending".
+/// Fire-and-forget (jangan await): leave-ack menunggu timer fake yang hanya
+/// berjalan saat pump → await di sini deadlock.
+void _cleanupTestChannels() {
+  try {
+    final realtime = Supabase.instance.client.realtime;
+    unawaited(Supabase.instance.client.removeAllChannels());
+    unawaited(realtime.disconnect());
+  } catch (_) {}
+}
+
+  testWidgets('TMP isolasi: buka-tutup sheet tanpa kirim', (tester) async {
+    await pump(tester, _post());
+    await tester.tap(find.byIcon(PhosphorIconsRegular.chatCircle).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    Navigator.of(tester.element(find.byType(TextField))).pop();
+    // Dua pump: exit butuh 1 frame untuk mulai + 1 frame untuk lepas route.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(TextField), findsNothing, reason: 'sheet harus tertutup');
+    // Tutup via barrier tap (cara user menutup sheet).
+    await tester.tapAt(const Offset(400, 40));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(TextField), findsNothing, reason: 'sheet harus tertutup');
+    await tester.pump(const Duration(seconds: 120));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('kirim komentar → sheet tetap terbuka + langsung tampil',
+      (tester) async {
+    when(() => timeline.addComment(any(), any())).thenAnswer(
+      (_) async => {
+        'id': 99,
+        'postId': 'p1',
+        'parentId': 0,
+        'text': 'Halo komen uji',
+        'authorId': 'me',
+        'authorName': 'Saya',
+        'authorGender': '',
+        'likeCount': 0,
+        'shareCount': 0,
+        'isLiked': false,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+    await pump(tester, _post());
+
+    // Buka sheet komentar.
+    await tester.tap(find.byIcon(PhosphorIconsRegular.chatCircle).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Ketik + kirim.
+    await tester.enterText(find.byType(TextField), 'Halo komen uji');
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Sheet TIDAK tertutup + komentar langsung tampil (optimistic/server).
+    expect(find.byIcon(Icons.send_rounded), findsOneWidget);
+    expect(find.text('Halo komen uji'), findsOneWidget);
+    verify(() => timeline.addComment('p1', 'Halo komen uji')).called(1);
+
+    // Tutup sheet + buang semua timer (auto-dismiss snackbar 4
+    // detik + reconnect realtime ke URL dummy yang tak pernah tersambung).
+    // Dua pump: exit butuh 1 frame untuk mulai + 1 frame untuk lepas route.
+    Navigator.of(tester.element(find.byType(TextField))).pop();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(TextField), findsNothing, reason: 'sheet harus tertutup');
+    _cleanupTestChannels();
+    await tester.pump(const Duration(seconds: 120));
+    expect(
+      Supabase.instance.client.realtime.channels,
+      isEmpty,
+      reason: 'channel realtime harus bersih',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sheet komentar dikunci setengah layar saat komentar banyak',
+      (tester) async {
+    when(() => timeline.comments(any())).thenAnswer(
+      (_) async => [
+        for (var i = 0; i < 30; i++)
+          {
+            'id': 100 + i,
+            'postId': 'p1',
+            'parentId': 0,
+            'text': 'Komentar $i dengan isi agak panjang',
+            'authorId': 'u$i',
+            'authorName': 'User $i',
+            'authorGender': '',
+            'likeCount': 0,
+            'shareCount': 0,
+            'isLiked': false,
+            'createdAt': DateTime.now().toUtc().toIso8601String(),
+          },
+      ],
+    );
+    await pump(tester, _post());
+
+    await tester.tap(find.byIcon(PhosphorIconsRegular.chatCircle).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Viewport test 600px → sheet tidak boleh lebih dari 300px.
+    final h = tester.getSize(find.byType(BottomSheet)).height;
+    expect(h, lessThanOrEqualTo(300.0));
+
+    Navigator.of(tester.element(find.byType(TextField))).pop();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    _cleanupTestChannels();
+    await tester.pump(const Duration(seconds: 120));
+    expect(tester.takeException(), isNull);
   });
 }
