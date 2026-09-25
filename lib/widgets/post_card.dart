@@ -153,11 +153,18 @@ class _PostCardState extends State<PostCard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      // Kunci setengah layar: komentar sedikit = compact, komentar banyak =
+      // list scroll di dalam 50% layar (tidak full-screen sampai atas).
+      // Flexible di dalam Column(min) selalu mengisi tinggi MAKSIMAL route —
+      // tanpa batas ini sheet ikut setinggi layar penuh.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+      ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx2, setSheet) {
-            // Compact (bukan full page): sheet menempel bawah seperti dulu,
-            // tapi input tetap di atas menu Android (nav/gesture bar) & keyboard.
+            // Sheet dikunci setengah layar via constraints route (di atas);
+            // input tetap di atas menu Android (nav/gesture bar) & keyboard.
             // viewInsets = keyboard; viewPadding = nav bar (tidak terpotong
             // saat keyboard terbuka) — kombinasi ini paling aman di MIUI.
             final bottom =
@@ -262,8 +269,15 @@ class _PostCardState extends State<PostCard> {
                               keyboardType: TextInputType.multiline,
                               textCapitalization: TextCapitalization.sentences,
                               textInputAction: TextInputAction.send,
-                              onSubmitted: (_) =>
-                                  _sendComment(ctx2, ctrl, replyToId),
+                              onSubmitted: (_) => _sendComment(
+                                ctx2,
+                                ctrl,
+                                replyToId,
+                                () => setSheet(() {
+                                  replyToId = 0;
+                                  replyToName = '';
+                                }),
+                              ),
                             ),
                           ),
                         ),
@@ -271,7 +285,15 @@ class _PostCardState extends State<PostCard> {
                         // Tombol send bulatan — gaya sama dengan composer
                         // private chat (40px, primary, ikon putih).
                         GestureDetector(
-                          onTap: () => _sendComment(ctx2, ctrl, replyToId),
+                          onTap: () => _sendComment(
+                            ctx2,
+                            ctrl,
+                            replyToId,
+                            () => setSheet(() {
+                              replyToId = 0;
+                              replyToName = '';
+                            }),
+                          ),
                           child: Container(
                             width: 40,
                             height: 40,
@@ -311,10 +333,14 @@ class _PostCardState extends State<PostCard> {
     BuildContext ctx,
     TextEditingController ctrl,
     int parentId,
+    void Function() resetReply,
   ) async {
     final text = ctrl.text.trim();
     if (text.isEmpty) return;
-    Navigator.of(ctx).pop();
+    // Sheet TETAP terbuka (dulu pop menutup seluruh sheet komentar).
+    ctrl.clear();
+    resetReply();
+    FocusScope.of(ctx).unfocus();
     await _submitComment(text, parentId: parentId);
   }
 
@@ -322,7 +348,9 @@ class _PostCardState extends State<PostCard> {
     final s = context.read<LocaleProvider>().s;
     final tp = context.read<TimelineProvider>();
     final auth = context.read<AuthProvider>();
-    const optimisticId = -1;
+    // Id unik per kiriman — dua komentar cepat tidak tabrakan saat
+    // replace/rollback (dulu konstanta -1 untuk semua).
+    final optimisticId = -DateTime.now().microsecondsSinceEpoch;
 
     // Optimistic insert — tampil instant tanpa tunggu server.
     final optimistic = {
@@ -339,6 +367,10 @@ class _PostCardState extends State<PostCard> {
       'createdAt': DateTime.now().toIso8601String(),
     };
     tp.addCommentToCache(_id, optimistic);
+    // Sheet yang sedang terbuka memakai list lokal (snapshot) — tampilkan
+    // juga di sana + gulir ke bawah (dulu hanya cache provider yang update).
+    _commentsKey.currentState?.addItem(optimistic);
+    _commentsKey.currentState?.scrollToBottom();
 
     try {
       final Map<String, dynamic> result;
@@ -349,6 +381,7 @@ class _PostCardState extends State<PostCard> {
       }
       // Ganti optimistic dengan data server.
       tp.replaceCommentInCache(_id, optimisticId, result);
+      _commentsKey.currentState?.replaceItem(optimisticId, result);
       final cur = (_p['commentCount'] as num?)?.toInt() ?? 0;
       if (mounted) {
         tp.updatePost(_id, {'commentCount': cur + 1});
@@ -359,6 +392,7 @@ class _PostCardState extends State<PostCard> {
     } catch (_) {
       // Rollback optimistic insert jika gagal.
       tp.removeCommentFromCache(_id, optimisticId);
+      _commentsKey.currentState?.removeItem(optimisticId);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -959,6 +993,7 @@ class _CommentsListState extends State<_CommentsList> {
   // tampilkan skeleton, bukan kotak kosong.
   bool _loaded = false;
   RealtimeChannel? _channel;
+  final ScrollController _scrollCtrl = ScrollController();
 
   @override
   void initState() {
@@ -988,6 +1023,7 @@ class _CommentsListState extends State<_CommentsList> {
         Supabase.instance.client.removeChannel(ch);
       } catch (_) {}
     }
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -1021,13 +1057,21 @@ class _CommentsListState extends State<_CommentsList> {
     if (!mounted) return;
     context.read<TimelineProvider>().cacheComments(widget.postId, list);
     // Jangan timpa optimistic user yang belum terkonfirmasi server: bila
-    // item lokal punya id negatif (optimistic), pertahankan.
+    // item lokal punya id negatif (optimistic), pertahankan — kecuali server
+    // sudah mengembalikannya (cocok author+teks) supaya tidak dobel.
     final local = _items;
     if (local != null && local.any((c) => ((c['id'] as num?)?.toInt() ?? 0) < 0)) {
-      final merged = <Map<String, dynamic>>[
-        ...list,
-        ...local.where((c) => ((c['id'] as num?)?.toInt() ?? 0) < 0),
-      ];
+      final pendings = local
+          .where((c) => ((c['id'] as num?)?.toInt() ?? 0) < 0)
+          .toList();
+      final kept = pendings.where((p) {
+        return !list.any(
+          (s) =>
+              '${s['authorId'] ?? ''}' == '${p['authorId'] ?? ''}' &&
+              '${s['text'] ?? ''}' == '${p['text'] ?? ''}',
+        );
+      }).toList();
+      final merged = <Map<String, dynamic>>[...list, ...kept];
       setState(() {
         _items = merged;
         _loaded = true;
@@ -1053,6 +1097,20 @@ class _CommentsListState extends State<_CommentsList> {
         for (final c in _items!)
           if (c['id'] == oldId) newComment else c,
       ];
+    });
+  }
+
+  /// Gulir ke komentar terbawah (dipanggil setelah kirim sendiri).
+  void scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollCtrl.hasClients) return;
+      final max = _scrollCtrl.position.maxScrollExtent;
+      if (max <= 0) return;
+      _scrollCtrl.animateTo(
+        max,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -1119,6 +1177,7 @@ class _CommentsListState extends State<_CommentsList> {
     // boros untuk post dengan banyak komentar). ListView biasa hanya
     // membangun baris yang terlihat.
     return ListView.builder(
+      controller: _scrollCtrl,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       addAutomaticKeepAlives: false,
       addRepaintBoundaries: true,
