@@ -133,6 +133,10 @@ extension SAdminX on S {
       isId ? 'Riwayat Device' : 'Device History';
   String get adminDeletedNoDevice =>
       isId ? 'Tidak ada device tercatat' : 'No devices recorded';
+  String get adminDeletedLocationHistory =>
+      isId ? 'Riwayat GPS' : 'GPS History';
+  String get adminDeletedNoLocation =>
+      isId ? 'Tidak ada riwayat GPS tercatat' : 'No GPS history recorded';
   String get adminDeletedUid => isId ? 'UID Asli' : 'Original UID';
 
   // ── Anon belum terhapus (pending) di tab Terhapus ──

@@ -540,9 +540,14 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     final admin = context.read<AdminProvider>();
     final s = context.read<LocaleProvider>().s;
     final nick = '${d['nickname'] ?? ''}';
+    final uid = '${d['user_id'] ?? ''}';
     List<Map<String, dynamic>> devices = const [];
+    List<Map<String, dynamic>> locations = const [];
     if (nick.isNotEmpty) {
       devices = await admin.getDeletedDeviceHistory(nick);
+    }
+    if (uid.isNotEmpty) {
+      locations = await admin.getDeletedLocationHistory(uid);
     }
     if (!context.mounted) return;
     showModalBottomSheet(
@@ -553,7 +558,12 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (ctx) => DeletedDetailSheet(entry: d, devices: devices, s: s),
+      builder: (ctx) => DeletedDetailSheet(
+        entry: d,
+        devices: devices,
+        locations: locations,
+        s: s,
+      ),
     );
   }
 }

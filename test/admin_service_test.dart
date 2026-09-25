@@ -182,6 +182,18 @@ void main() {
       );
     });
 
+    test('getDeletedLocationHistory → list', () async {
+      handler.on('admin_deleted_location_history', (_) => [
+            {'lat': 1.0, 'lon': 2.0}
+          ]);
+      final out = await svc.getDeletedLocationHistory('uid1');
+      expect(out.length, 1);
+      expect(
+        rpcParamsOf(handler, 'admin_deleted_location_history')['p_user_id'],
+        'uid1',
+      );
+    });
+
     test('listRegistrations → params + fallback shape', () async {
       handler.on('admin_registrations_list', (_) => {'items': [], 'total': 0});
       await svc.listRegistrations(limit: 15, offset: 0);

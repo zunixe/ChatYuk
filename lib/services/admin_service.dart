@@ -269,6 +269,22 @@ class AdminService {
     return const [];
   }
 
+  /// Riwayat GPS/IP milik user yang sudah dihapus (dari arsip deleted_users).
+  Future<List<Map<String, dynamic>>> getDeletedLocationHistory(
+    String userId,
+  ) async {
+    final res = await _rpc(
+      'admin_deleted_location_history',
+      params: {'p_user_id': userId},
+    );
+    if (res is List) {
+      return res
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    }
+    return const [];
+  }
+
   /// Statistik penggunaan data Supabase (DB/storage/kuota + pertumbuhan).
   Future<Map<String, dynamic>> getStorageStats() async {
     final res = await _rpc('admin_storage_stats');
