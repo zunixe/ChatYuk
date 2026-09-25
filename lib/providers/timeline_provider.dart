@@ -402,6 +402,17 @@ class TimelineProvider extends ChangeNotifier {
     }
   }
 
+  /// Hapus komentar sendiri: server (RLS author-only) + cache + counter post.
+  Future<void> deleteComment(String postId, int commentId) async {
+    await _service.deleteComment(commentId);
+    removeCommentFromCache(postId, commentId);
+    final i = _posts.indexWhere((p) => p['id'] == postId);
+    if (i >= 0) {
+      final cur = ((_posts[i]['commentCount'] as num?)?.toInt() ?? 1);
+      updatePost(postId, {'commentCount': (cur - 1).clamp(0, 1 << 31)});
+    }
+  }
+
   /// Hapus semua cache saat logout.
   void resetCache() {
     _diskSaveTimer?.cancel();

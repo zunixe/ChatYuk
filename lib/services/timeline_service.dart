@@ -136,6 +136,12 @@ class TimelineService {
     return _map(res);
   }
 
+  /// Hapus komentar milik sendiri (RLS post_comments_delete_own membatasi
+  /// ke author; trigger comment-count + cascade balasan jalan di server).
+  Future<void> deleteComment(int commentId) async {
+    await _sb.from('post_comments').delete().eq('id', commentId);
+  }
+
   /// Biaya boost + limit harian dari server.
   Future<Map<String, dynamic>> pricing() async {
     try {

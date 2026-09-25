@@ -158,6 +158,25 @@ void main() {
       tp.dispose();
     });
 
+    test('deleteComment: service + buang dari cache + kurangi counter', () async {
+      when(() => service.listPosts(any(),
+              cursor: any(named: 'cursor'),
+              cursorBoosted: any(named: 'cursorBoosted')))
+          .thenAnswer((_) async => [{..._post('p1'), 'commentCount': 2}]);
+      when(() => service.deleteComment(any())).thenAnswer((_) async {});
+      final tp = TimelineProvider(service: service);
+      await tp.load('all', refresh: true);
+      tp.cacheComments('p1', [
+        {'id': 7, 'text': 'hapus saya'},
+        {'id': 8, 'text': 'tetap'},
+      ]);
+      await tp.deleteComment('p1', 7);
+      verify(() => service.deleteComment(7)).called(1);
+      expect(tp.getCachedComments('p1')!.map((c) => c['id']), [8]);
+      expect(tp.posts.first['commentCount'], 1);
+      tp.dispose();
+    });
+
     test('resetCache mengosongkan cache + timestamp komentar', () {
       final tp = TimelineProvider(service: service);
       tp.cacheComments('p1', [

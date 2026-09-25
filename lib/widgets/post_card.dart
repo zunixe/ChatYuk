@@ -153,17 +153,17 @@ class _PostCardState extends State<PostCard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      // Kunci setengah layar: komentar sedikit = compact, komentar banyak =
-      // list scroll di dalam 50% layar (tidak full-screen sampai atas).
+      // Kunci 70% layar: komentar sedikit = compact, komentar banyak =
+      // list scroll di dalam 70% layar (tidak full-screen sampai atas).
       // Flexible di dalam Column(min) selalu mengisi tinggi MAKSIMAL route —
       // tanpa batas ini sheet ikut setinggi layar penuh.
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+        maxHeight: MediaQuery.sizeOf(context).height * 0.7,
       ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx2, setSheet) {
-            // Sheet dikunci setengah layar via constraints route (di atas);
+            // Sheet dikunci 70% layar via constraints route (di atas);
             // input tetap di atas menu Android (nav/gesture bar) & keyboard.
             // viewInsets = keyboard; viewPadding = nav bar (tidak terpotong
             // saat keyboard terbuka) — kombinasi ini paling aman di MIUI.
@@ -1165,9 +1165,54 @@ class _CommentsListState extends State<_CommentsList> {
     } catch (_) {}
   }
 
+  /// Hapus komentar sendiri (konfirmasi dulu). Id ≤ 0 = optimistic yang
+  /// belum terkonfirmasi server — abaikan (segera terganti data server).
+  Future<void> _delete(Map<String, dynamic> c) async {
+    final id = (c['id'] as num?)?.toInt() ?? 0;
+    if (id <= 0) return;
+    final s = context.read<LocaleProvider>().s;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: Text(s.commentDeleteTitle),
+        content: Text(s.commentDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(dctx, true),
+            child: Text(s.btnDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await context.read<TimelineProvider>().deleteComment(widget.postId, id);
+      if (!mounted) return;
+      setState(
+        () => _items = _items!
+            .where((e) => (e['id'] as num?)?.toInt() != id)
+            .toList(),
+      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.commentDeleted)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _items ?? [];
+    final myUid = context.read<AuthProvider>().uid ?? '';
     if (!_loaded && items.isEmpty) return const _CommentSkeleton();
     if (items.isEmpty) {
       return const SizedBox(height: 80);
@@ -1192,6 +1237,8 @@ class _CommentsListState extends State<_CommentsList> {
         final name = c['authorName'] as String? ?? 'Anon';
         final text = c['text'] as String? ?? '';
         final id = (c['id'] as num?)?.toInt() ?? 0;
+        final authorId = '${c['authorId'] ?? ''}';
+        final isMine = authorId.isNotEmpty && authorId == myUid;
         return Padding(
           padding: EdgeInsets.only(left: isReply ? 26 : 0, bottom: 12),
           // Bar luar rata bawah → like sejajar baris terakhir teks.
@@ -1227,6 +1274,23 @@ class _CommentsListState extends State<_CommentsList> {
                             '· ${_timeAgoShort(createdAt)}',
                             style: AppText.micro.copyWith(
                               color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                        // Hapus hanya untuk komentar sendiri (server RLS
+                        // author-only sebagai penegak terakhir).
+                        if (isMine) ...[
+                          SizedBox(width: 2),
+                          InkWell(
+                            onTap: () => _delete(c),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.delete_outline,
+                                size: 14,
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
                           ),
                         ],
