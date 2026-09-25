@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/mixins/chat_selection_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
@@ -278,18 +279,21 @@ void main() {
   group('ChatSelectionMixin — deleteSelected failCount', () {
     Future<SelHostState> pumpSelWithUid(
       WidgetTester tester,
-      String uid,
-    ) async {
+      String uid, {
+      String lang = 'id',
+    }) async {
       final mockSvc = MockAuthService();
       when(() => mockSvc.uid).thenReturn(uid);
       final auth = AuthProvider(authService: mockSvc, autoInit: false);
       final chat = ChatProvider();
       SelHostState.deleteResults.clear();
+      SharedPreferences.setMockInitialValues({});
+      final lp = LocaleProvider();
+      await lp.setLang(lang);
       await tester.pumpWidget(
         MultiProvider(
           providers: [
-            ChangeNotifierProvider<LocaleProvider>(
-                create: (_) => LocaleProvider()),
+            ChangeNotifierProvider<LocaleProvider>.value(value: lp),
             ChangeNotifierProvider<AuthProvider>.value(value: auth),
           ],
           child: MaterialApp(
@@ -340,22 +344,30 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('campur sukses+gagal → tetap gagal', (tester) async {
-      final s = await pumpSelWithUid(tester, 'u-me');
-      s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
-      s.toggleSelect(msg(id: 'm2', senderId: 'u-me'));
-      await tester.pump();
+    // Snackbar gagal tahan locale: ID dan EN wajib benar.
+    for (final lang in ['id', 'en']) {
+      testWidgets('campur sukses+gagal → tetap gagal ($lang)', (tester) async {
+        final s = await pumpSelWithUid(tester, 'u-me', lang: lang);
+        s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
+        s.toggleSelect(msg(id: 'm2', senderId: 'u-me'));
+        await tester.pump();
 
-      SelHostState.deleteResults['m1'] = true;
-      SelHostState.deleteResults['m2'] = false;
-      final fut = s.deleteSelected();
-      await confirmDialog(tester);
-      await fut;
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+        SelHostState.deleteResults['m1'] = true;
+        SelHostState.deleteResults['m2'] = false;
+        final fut = s.deleteSelected();
+        await confirmDialog(tester);
+        await fut;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Gagal menghapus pesan'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 5));
-    });
+        expect(
+          find.text(
+            lang == 'id' ? 'Gagal menghapus pesan' : 'Failed to delete message',
+          ),
+          findsOneWidget,
+        );
+        await tester.pump(const Duration(seconds: 5));
+      });
+    }
   });
 }
