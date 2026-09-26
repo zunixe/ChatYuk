@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
+import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils.dart';
@@ -465,33 +466,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 
   Widget _errorView(AdminProvider admin, S s) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
-          const SizedBox(height: 8),
-          // Kategori ramah (bukan pesan exception mentah — lihat
-          // lib/core/admin_err.dart; detail asli hanya ke dlog).
-          Text(s.adminErrTextOf(admin.error!), style: const TextStyle(color: AppTheme.danger)),
-          if (s.adminErrHintOf(admin.error!).isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                s.adminErrHintOf(admin.error!),
-                textAlign: TextAlign.center,
-                style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () => admin.fetchStats(),
-            child: Text(s.btnRetry),
-          ),
-        ],
-      ),
+    return AdminErrorView(
+      s: s,
+      error: admin.error!,
+      onRetry: () => admin.fetchStats(),
     );
   }
 

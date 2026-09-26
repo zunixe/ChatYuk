@@ -8,9 +8,11 @@ import 'admin_devices/widgets/device_detail_sheet.dart';
 import 'admin_devices/widgets/user_detail_sheet.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
+import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/search_field.dart';
 
 /// Admin: pelacakan device & user (tab Perangkat).
 /// List semua device semua user; klik → detail user (profil + semua device
@@ -28,6 +30,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   final _scrollCtrl = ScrollController();
   String _query = '';
   Timer? _refreshTimer;
+  Timer? _searchDebounce;
   bool _byDevice = true;
 
   @override
@@ -69,9 +72,20 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  /// Ketik search = debounce 250ms: filter+grouping+sort O(n log n) hanya
+  /// jalan setelah user berhenti mengetik, bukan tiap huruf.
+  void _onQueryChanged(String v) {
+    _query = v;
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) setState(() {});
+    });
   }
 
   void _onScroll() {
@@ -176,6 +190,11 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
     context.watch<ThemeProvider>();
     final admin = context.watch<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
+    // Hitung SEKALI per build: dulu `_filtered()` dipanggil di itemCount +
+    // di dalam itemBuilder per baris (O(n²) saat scroll), dan grouping+sort
+    // diulang tiap frame. Sekarang hasilnya dipakai ulang di bawah.
+    final filteredDevices = _filtered(admin.devices);
+    final deviceGroups = _filterGroups(_groupByDevice(admin.devices), _query);
 
     return Column(
       children: [
@@ -213,32 +232,10 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: TextField(
-            controller: _searchCtrl,
-            onChanged: (v) => setState(() => _query = v),
-            style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              hintText: s.adminDeviceSearch,
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                color: AppTheme.textSecondary,
-                size: 20,
-              ),
-              isDense: true,
-              filled: true,
-              fillColor: AppTheme.bgInput,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
+        SearchField(
+          controller: _searchCtrl,
+          onChanged: _onQueryChanged,
+          hint: s.adminDeviceSearch,
         ),
         Expanded(
           child: admin.devicesLoading && admin.devices.isEmpty
@@ -246,41 +243,10 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                   child: CircularProgressIndicator(color: AppTheme.primary),
                 )
               : admin.devicesError != null && admin.devices.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: AppTheme.danger,
-                      ),
-                      const SizedBox(height: 8),
-                      // Kategori ramah (detail exception hanya ke dlog).
-                      Text(
-                        s.adminErrTextOf(admin.devicesError!),
-                        style: TextStyle(color: AppTheme.danger),
-                      ),
-                      if (s.adminErrHintOf(admin.devicesError!).isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Text(
-                            s.adminErrHintOf(admin.devicesError!),
-                            textAlign: TextAlign.center,
-                            style: AppText.bodySmall.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => admin.fetchDevices(),
-                        child: Text(s.btnRetry),
-                      ),
-                    ],
-                  ),
+              ? AdminErrorView(
+                  s: s,
+                  error: admin.devicesError!,
+                  onRetry: () => admin.fetchDevices(),
                 )
               : Column(
                   children: [
@@ -314,8 +280,8 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                       ),
                     Expanded(
                       child: _byDevice
-              ? _deviceGroupsView(admin, s)
-              : _filtered(admin.devices).isEmpty
+              ? _deviceGroupsView(admin, s, deviceGroups)
+              : filteredDevices.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -346,11 +312,10 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                       MediaQuery.of(context).padding.bottom + 12,
                     ),
                     itemCount:
-                        _filtered(admin.devices).length +
+                        filteredDevices.length +
                         (admin.devicesHasMore ? 1 : 0),
                     itemBuilder: (_, i) {
-                      final filtered = _filtered(admin.devices);
-                      if (i >= filtered.length) {
+                      if (i >= filteredDevices.length) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 16),
                           child: Center(
@@ -361,7 +326,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                           ),
                         );
                       }
-                      final d = filtered[i];
+                      final d = filteredDevices[i];
                       return DeviceCard(
                         device: d,
                         s: s,
@@ -442,8 +407,12 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   }
 
   /// List per device (grouping install_id) — device + user yang pernah login.
-  Widget _deviceGroupsView(AdminProvider admin, S s) {
-    final groups = _filterGroups(_groupByDevice(admin.devices), _query);
+  /// [groups] sudah dihitung sekali di `build` (jangan hitung ulang di sini).
+  Widget _deviceGroupsView(
+    AdminProvider admin,
+    S s,
+    List<Map<String, dynamic>> groups,
+  ) {
     if (groups.isEmpty) {
       return Center(
         child: Column(

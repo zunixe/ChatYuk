@@ -19,6 +19,7 @@ import '../widgets/empty_state_view.dart';
 import '../widgets/app_gesture.dart';
 import '../core/perf/perf_probe.dart';
 import '../core/chat/chat_filter.dart';
+import '../widgets/filter_chip_pill.dart';
 
 class PrivateChatsScreen extends StatefulWidget {
   final bool embedded;
@@ -294,9 +295,9 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
   }
 
   Widget _filterChip(String label, ChatFilter value) {
-    final active = _chatFilter == value;
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
+    return FilterChipPill(
+      label: label,
+      active: _chatFilter == value,
       onTap: () {
         if (_chatFilter == value) return;
         setState(() {
@@ -311,26 +312,6 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
           query: widget.externalQuery ?? _query,
         );
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: active
-              ? AppTheme.primary.withValues(alpha: 0.18)
-              : AppTheme.bgInput,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active
-                ? AppTheme.primary.withValues(alpha: 0.7)
-                : AppTheme.divider,
-          ),
-        ),
-        child: Text(
-          label,
-          style: AppText.label.copyWith(
-            color: active ? AppTheme.primary : AppTheme.textSecondary,
-          ),
-        ),
-      ),
     );
   }
 

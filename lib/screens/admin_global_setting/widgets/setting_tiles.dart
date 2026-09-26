@@ -5,6 +5,7 @@ import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
+import '../../../widgets/toggle_tile.dart';
 
 /// Kartu pembungkus standar untuk baris pengaturan admin.
 class SettingCard extends StatelessWidget {
@@ -72,56 +73,13 @@ class ScreenshotToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppTheme.online.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.screenshot_monitor,
-              color: AppTheme.online,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.labelScreenshotAllow,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.descScreenshotAdmin,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.screenshotEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setScreenshotEnabled(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
+    return ToggleTile(
+      icon: Icons.screenshot_monitor,
+      color: AppTheme.online,
+      title: s.labelScreenshotAllow,
+      desc: s.descScreenshotAdmin,
+      value: auth.screenshotEnabled,
+      onChanged: (v) => context.read<AuthProvider>().setScreenshotEnabled(v),
     );
   }
 }
@@ -133,56 +91,13 @@ class WatermarkToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.fingerprint,
-              color: AppTheme.primary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.labelWatermarkAdmin,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.descWatermarkAdmin,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.watermarkEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setWatermarkEnabled(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
+    return ToggleTile(
+      icon: Icons.fingerprint,
+      color: AppTheme.primary,
+      title: s.labelWatermarkAdmin,
+      desc: s.descWatermarkAdmin,
+      value: auth.watermarkEnabled,
+      onChanged: (v) => context.read<AuthProvider>().setWatermarkEnabled(v),
     );
   }
 }
@@ -194,56 +109,13 @@ class InvisibleToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.visibility_off_outlined,
-              color: AppTheme.accent,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.labelInvisibleAdmin,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.descInvisibleAdmin,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.invisibleEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setInvisibleEnabled(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
+    return ToggleTile(
+      icon: Icons.visibility_off_outlined,
+      color: AppTheme.accent,
+      title: s.labelInvisibleAdmin,
+      desc: s.descInvisibleAdmin,
+      value: auth.invisibleEnabled,
+      onChanged: (v) => context.read<AuthProvider>().setInvisibleEnabled(v),
     );
   }
 }
@@ -255,115 +127,32 @@ class CallToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.phone_in_talk_rounded,
-              color: Colors.green,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.adminCallTitle,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.adminCallDesc,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.callAllEnabled && auth.callAnonEnabled,
-            onChanged: (v) => context.read<AuthProvider>().setCallEnabled(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
+    return ToggleTile(
+      icon: Icons.phone_in_talk_rounded,
+      color: Colors.green,
+      title: s.adminCallTitle,
+      desc: s.adminCallDesc,
+      value: auth.callAllEnabled && auth.callAnonEnabled,
+      onChanged: (v) => context.read<AuthProvider>().setCallEnabled(v),
     );
   }
 }
 
 class RequireRegistrationToggle extends StatelessWidget {
   const RequireRegistrationToggle({super.key});
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.deepPurple.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.how_to_reg_outlined,
-              color: Colors.deepPurple,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.labelRequireRegistration,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.descRequireRegistration,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.requireRegistration,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setRequireRegistration(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
+    return ToggleTile(
+      icon: Icons.how_to_reg_outlined,
+      color: Colors.deepPurple,
+      title: s.labelRequireRegistration,
+      desc: s.descRequireRegistration,
+      value: auth.requireRegistration,
+      onChanged: (v) =>
+          context.read<AuthProvider>().setRequireRegistration(v),
     );
   }
 }
@@ -373,60 +162,18 @@ class RequireRegistrationToggle extends StatelessWidget {
 /// (pg_cron + FCM); toggle ini hanya menulis app_settings.reengage_enabled.
 class ReengageToggle extends StatelessWidget {
   const ReengageToggle({super.key});
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.deepOrange.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.notifications_active_outlined,
-              color: Colors.deepOrange,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.labelReengageNotif,
-                  style: AppText.bodyStrong.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  s.descReengageNotif,
-                  style: AppText.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: auth.reengageEnabled,
-            onChanged: (v) =>
-                context.read<AuthProvider>().setReengageEnabled(v),
-            activeThumbColor: AppTheme.primary,
-          ),
-        ],
-      ),
+    return ToggleTile(
+      icon: Icons.notifications_active_outlined,
+      color: Colors.deepOrange,
+      title: s.labelReengageNotif,
+      desc: s.descReengageNotif,
+      value: auth.reengageEnabled,
+      onChanged: (v) => context.read<AuthProvider>().setReengageEnabled(v),
     );
   }
 }

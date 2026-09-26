@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
+import '../widgets/admin_error_view.dart';
 import '../models/active_call_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
@@ -24,6 +25,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     with WidgetsBindingObserver {
   Timer? _refreshTimer;
   Timer? _callTimer;
+  Timer? _searchDebounce;
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   String _query = '';
@@ -78,9 +80,20 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _callTimer?.cancel();
+    _searchDebounce?.cancel();
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// Ketik search = debounce 250ms: filter+sort O(n log n) hanya jalan
+  /// setelah user berhenti mengetik, bukan tiap huruf.
+  void _onQueryChanged(String v) {
+    _query = v;
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) setState(() {});
+    });
   }
 
   void _onScroll() {
@@ -141,6 +154,10 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     context.watch<ThemeProvider>();
     final admin = context.watch<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
+    // Hitung SEKALI per build: dulu `_sortedFiltered()` (filter+sort)
+    // dipanggil di empty-check + itemCount + di dalam itemBuilder per baris
+    // (O(n²) saat scroll). Hasilnya dipakai ulang di bawah.
+    final visibleChats = _sortedFiltered(admin.chats, admin.activeCallsByChat);
 
     return Column(
       children: [
@@ -162,7 +179,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
           padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: TextField(
             controller: _searchCtrl,
-            onChanged: (v) => setState(() => _query = v),
+            onChanged: _onQueryChanged,
             style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: s.adminSearchChat,
@@ -192,42 +209,12 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                 )
               // Layar error penuh HANYA bila belum ada data sama sekali.
               : admin.chatsError != null && admin.chats.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: AppTheme.danger,
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        s.adminErrTextOf(admin.chatsError!),
-                        style: TextStyle(color: AppTheme.danger),
-                      ),
-                      if (s.adminErrHintOf(admin.chatsError!).isNotEmpty) ...[
-                        SizedBox(height: 6),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 32),
-                          child: Text(
-                            s.adminErrHintOf(admin.chatsError!),
-                            textAlign: TextAlign.center,
-                            style: AppText.bodySmall.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
-                      SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => admin.fetchChats(),
-                        child: Text(s.btnRetry),
-                      ),
-                    ],
-                  ),
+              ? AdminErrorView(
+                  s: s,
+                  error: admin.chatsError!,
+                  onRetry: () => admin.fetchChats(),
                 )
-              : _sortedFiltered(admin.chats, admin.activeCallsByChat).isEmpty
+              : visibleChats.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -287,11 +274,10 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                       MediaQuery.of(context).padding.bottom + 12,
                     ),
                     itemCount:
-                        _sortedFiltered(admin.chats, admin.activeCallsByChat).length +
+                        visibleChats.length +
                         (admin.chatsHasMore ? 1 : 0),
                     itemBuilder: (_, i) {
-                      final filtered = _sortedFiltered(admin.chats, admin.activeCallsByChat);
-                      if (i >= filtered.length) {
+                      if (i >= visibleChats.length) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 16),
                           child: Center(
@@ -302,7 +288,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                           ),
                         );
                       }
-                      final chat = filtered[i];
+                      final chat = visibleChats[i];
                       return _AdminChatCard(
                         chat: chat,
                         s: s,
