@@ -7,7 +7,7 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/chat_location.dart';
-import '../utils.dart' show capitalizeFirst;
+import '../utils.dart' show capitalizeFirst, dlog;
 import '../utils/mention.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import 'chat_outbox_mixin.dart';
@@ -45,10 +45,13 @@ mixin ChatSendMixin<T extends StatefulWidget>
   ChatLocation? get sendPendingLocation => null;
   set sendPendingLocation(ChatLocation? v) {}
 
-  /// Kirim lokasi dari preview (+ caption & balasan bila ada).
+  /// Kirim lokasi yang SUDAH ditangkap pemanggil (+ caption & balasan).
+  /// Lokasi dioper sebagai argumen (bukan dibaca ulang dari field) karena
+  /// `sendMessage` membersihkan preview via `setState` sebelum memanggil ini.
   /// Implementasi nyata di layar (private: sendPrivateMessage; room:
   /// sendRoomMessage + dialog konfirmasi).
-  Future<void> sendLocationFromPreview({
+  Future<void> sendLocationFromPreviewAt(
+    ChatLocation location, {
     String text = '',
     MessageModel? reply,
   });
@@ -100,6 +103,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
 
   /// Alur kirim tunggal.
   Future<void> sendMessage() async {
+    dlog('[SEND] start text="${sendMsgCtrl.text}" photo=${sendPendingPhotoBase64 != null} video=$sendPendingVideoPath loc=${sendPendingLocation != null}');
     final raw = sendMsgCtrl.text.trim();
     // Kapitalkan huruf pertama saat kirim PESAN BARU (gaya WhatsApp).
     final text = capitalizeFirst(raw);
@@ -179,6 +183,11 @@ mixin ChatSendMixin<T extends StatefulWidget>
     // Dicek SEBELUM video & foto: preview lokasi & media lain tidak bisa
     // tampil bareng, lokasi paling eksplisit.
     if (hasLocation) {
+      // Tangkap lokasi SEBELUM clear: `setState` menjalankan callback-nya
+      // sinkron, jadi `sendPendingLocation` sudah null saat
+      // sendLocationFromPreview membaca field lagi (bug: lokasi tak pernah
+      // terkirim — preview hilang tapi insert tak jalan).
+      final loc = sendPendingLocation!;
       final reply = sendReplyingTo;
       final caption = sendMsgCtrl.text.trim();
       sendMsgCtrl.clear();
@@ -188,7 +197,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
       });
       sendIsSending = true;
       try {
-        await sendLocationFromPreview(text: caption, reply: reply);
+        await sendLocationFromPreviewAt(loc, text: caption, reply: reply);
       } finally {
         sendIsSending = false;
       }

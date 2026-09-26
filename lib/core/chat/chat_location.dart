@@ -2,7 +2,8 @@ import 'dart:convert';
 
 /// Payload LOKASI untuk pesan `type='location'`.
 ///
-/// Format: kolom `text` berisi JSON ringkas `{"lat":..,"lng":..,"label":".."}`.
+/// Format: kolom `text` berisi JSON ringkas
+/// `{"lat":..,"lng":..,"label":"..","caption":".."}`.
 /// Tidak ada kolom DB baru — koordinat menumpang kolom teks (≤2000 char,
 /// jauh di bawah batas). Murni & testable; TANPA ketergantungan Flutter.
 class ChatLocation {
@@ -10,14 +11,22 @@ class ChatLocation {
   final double lng;
   /// Nama tempat (opsional; '' bila tidak ada).
   final String label;
+  /// Caption dari kolom ketik saat kirim (opsional; '' = lokasi saja).
+  final String caption;
 
-  const ChatLocation({required this.lat, required this.lng, this.label = ''});
+  const ChatLocation({
+    required this.lat,
+    required this.lng,
+    this.label = '',
+    this.caption = '',
+  });
 
   /// Encode ke string untuk kolom `text`.
   String encode() => jsonEncode({
     'lat': lat,
     'lng': lng,
     if (label.isNotEmpty) 'label': label,
+    if (caption.isNotEmpty) 'caption': caption,
   });
 
   /// Tautan buka di Google Maps (universal link, Android/iOS).
@@ -29,10 +38,11 @@ class ChatLocation {
       other is ChatLocation &&
       other.lat == lat &&
       other.lng == lng &&
-      other.label == label;
+      other.label == label &&
+      other.caption == caption;
 
   @override
-  int get hashCode => Object.hash(lat, lng, label);
+  int get hashCode => Object.hash(lat, lng, label, caption);
 }
 
 /// True bila [text] adalah payload lokasi yang valid (punya lat & lng angka).
@@ -58,21 +68,24 @@ ChatLocation? parseLocation(String? text) {
     // Tolak koordinat mustahil (JSON lain yang kebetulan punya lat/lng).
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
     final label = m['label'];
+    final caption = m['caption'];
     return ChatLocation(
       lat: lat.toDouble(),
       lng: lng.toDouble(),
       label: label is String ? label : '',
+      caption: caption is String ? caption : '',
     );
   } catch (_) {
     return null;
   }
 }
 
-/// Label ringkas untuk preview daftar chat (mis. "[Lokasi]" / "📍 Lokasi").
-/// [fallback] dipakai bila [text] tidak bisa di-parse.
+/// Label ringkas untuk preview daftar chat (caption bila ada, jika tidak
+/// label tempat, terakhir fallback mis. "[Lokasi]").
 String locationPreviewLabel(String? text, String fallback) {
   final loc = parseLocation(text);
   if (loc == null) return fallback;
+  if (loc.caption.isNotEmpty) return loc.caption;
   if (loc.label.isNotEmpty) return loc.label;
   return fallback;
 }

@@ -74,10 +74,19 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
   bool get _locked => widget.locked || (_lockedLocal && !widget.isMe);
 
+  // Kunci cache poster di disk (anti-blink cold start): poster yang sudah
+  // pernah dibuat dipakai ulang TANPA unduh video + generate frame lagi.
+  String get _posterKey => 'video_poster:${widget.videoData}';
+
   @override
   void initState() {
     super.initState();
-    unawaited(_loadPoster());
+    // LAZY: tunda 1 frame — bubble yang belum benar-benar tampil (di luar
+    // viewport) tidak memicu unduh video + generate frame. Cegah puluhan
+    // video berebut bandwidth saat cold start (gejala "ngeblink").
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_loadPoster());
+    });
   }
 
   @override
@@ -142,9 +151,25 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   }
 
   /// Poster: base64 kecil dari payload (bubble sendiri) atau generate
-  /// frame dari video (pesan lawan; 1× lalu simpan memori).
+  /// frame dari video (pesan lawan; 1× lalu simpan memori + DISK).
   Future<void> _loadPoster() async {
     if (!mounted) return;
+    // 1) Cache DISK dulu (instan, tanpa unduh video) — kunci anti-blink
+    //    saat cold start / scroll ulang / keluar-masuk chat.
+    try {
+      final cached =
+          MediaDiskCache.instance.readSync(_posterKey) ??
+          await MediaDiskCache.instance.read(_posterKey);
+      if (cached != null && cached.isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _poster = cached;
+          _loading = false;
+          _failed = false;
+        });
+        return;
+      }
+    } catch (_) {}
     setState(() {
       _loading = true;
       _failed = false;
@@ -167,6 +192,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
           _poster = thumb;
           _loading = false;
         });
+        _cachePoster(thumb);
       } catch (e) {
         dlog('[VideoBubble] poster pending gagal: $e');
         if (mounted) setState(() => _loading = false);
@@ -192,6 +218,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         _poster = thumb;
         _loading = false;
       });
+      _cachePoster(thumb);
     } catch (e) {
       dlog('[VideoBubble] poster gagal: $e');
       if (mounted) {
@@ -201,6 +228,13 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
         });
       }
     }
+  }
+
+  /// Simpan poster ke cache disk (fire-and-forget) — cold start berikutnya
+  /// langsung tampil dari disk tanpa generate frame / unduh video.
+  void _cachePoster(Uint8List? thumb) {
+    if (thumb == null || thumb.isEmpty) return;
+    unawaited(MediaDiskCache.instance.write(_posterKey, thumb));
   }
 
   Future<void> _openFullscreen() async {

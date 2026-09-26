@@ -258,10 +258,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   /// (kirim terjadi dari tombol send, bisa + caption).
   Future<void> _sendLocation() async {
     setState(() => _showAttachRow = false);
+    dlog('[LOC] _sendLocation start');
     final picked = await pickChatLocation(
       context,
       messenger: ScaffoldMessenger.of(context),
     );
+    dlog('[LOC] picked=${picked == null ? "null" : "${picked.lat},${picked.lng}"}');
     if (picked == null || !mounted) return;
     setState(() {
       _pendingLocation = picked;
@@ -270,6 +272,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       _viewTimerSecs = null;
       photoClearPreviewState();
     });
+    dlog('[LOC] preview set');
     _inputFocus.requestFocus();
   }
 
@@ -282,22 +285,30 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   set sendPendingLocation(ChatLocation? v) => _pendingLocation = v;
 
   @override
-  Future<void> sendLocationFromPreview({
+  Future<void> sendLocationFromPreviewAt(
+    ChatLocation loc, {
     String text = '',
     MessageModel? reply,
   }) async {
-    final loc = _pendingLocation;
     final auth = context.read<AuthProvider>();
     final uid = auth.uid;
     final profile = auth.profile;
-    if (loc == null || uid == null || profile == null) return;
+    dlog('[LOC] sendLocationFromPreviewAt loc=${loc.lat},${loc.lng} uid=${uid != null} prof=${profile != null}');
+    if (uid == null || profile == null) return;
+    // Caption ikut terkirim di dalam payload (bukan pesan terpisah).
+    final payload = ChatLocation(
+      lat: loc.lat,
+      lng: loc.lng,
+      label: loc.label,
+      caption: text.trim(),
+    );
     try {
       await context.read<ChatProvider>().sendPrivateMessage(
         chatId: widget.chatId,
         senderId: uid,
         senderName: profile.nickname,
         senderGender: profile.gender,
-        text: loc.encode(),
+        text: payload.encode(),
         type: 'location',
         repliedToId: reply?.id,
         repliedToText: reply?.text,

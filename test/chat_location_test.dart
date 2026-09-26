@@ -6,13 +6,19 @@ import 'package:chatyuk/core/chat/chat_location.dart';
 
 void main() {
   group('ChatLocation.encode / parseLocation', () {
-    test('roundtrip koordinat + label', () {
-      const loc = ChatLocation(lat: -6.2, lng: 106.8, label: 'Monas');
+    test('roundtrip koordinat + label + caption', () {
+      const loc = ChatLocation(
+        lat: -6.2,
+        lng: 106.8,
+        label: 'Monas',
+        caption: 'Ketemuan di sini',
+      );
       final parsed = parseLocation(loc.encode());
       expect(parsed, isNotNull);
       expect(parsed!.lat, closeTo(-6.2, 1e-9));
       expect(parsed.lng, closeTo(106.8, 1e-9));
       expect(parsed.label, 'Monas');
+      expect(parsed.caption, 'Ketemuan di sini');
     });
 
     test('tanpa label → encode tidak menyertakan key label', () {
@@ -66,6 +72,16 @@ void main() {
   });
 
   group('locationPreviewLabel', () {
+    test('pakai caption bila ada (di atas label)', () {
+      final t = const ChatLocation(
+        lat: 1,
+        lng: 2,
+        label: 'Rumah',
+        caption: 'Lagi di sini',
+      ).encode();
+      expect(locationPreviewLabel(t, '[Lokasi]'), 'Lagi di sini');
+    });
+
     test('pakai label bila ada', () {
       final t = const ChatLocation(lat: 1, lng: 2, label: 'Rumah').encode();
       expect(locationPreviewLabel(t, '[Lokasi]'), 'Rumah');

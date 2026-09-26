@@ -1633,15 +1633,15 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   set sendPendingLocation(ChatLocation? v) => _pendingLocation = v;
 
   @override
-  Future<void> sendLocationFromPreview({
+  Future<void> sendLocationFromPreviewAt(
+    ChatLocation loc, {
     String text = '',
     MessageModel? reply,
   }) async {
-    final loc = _pendingLocation;
     final auth = context.read<AuthProvider>();
     final uid = auth.uid;
     final profile = auth.profile;
-    if (loc == null || uid == null || profile == null) return;
+    if (uid == null || profile == null) return;
     // Konfirmasi: lokasi akan terlihat semua anggota room.
     final s = context.read<LocaleProvider>().s;
     final ok = await showDialog<bool>(
@@ -1662,13 +1662,20 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       ),
     );
     if (ok != true || !mounted) return;
+    // Caption ikut terkirim di dalam payload (bukan pesan terpisah).
+    final payload = ChatLocation(
+      lat: loc.lat,
+      lng: loc.lng,
+      label: loc.label,
+      caption: text.trim(),
+    );
     try {
       await context.read<ChatProvider>().sendRoomMessage(
         roomId: widget.room.id,
         senderId: uid,
         senderName: profile.nickname,
         senderGender: profile.gender,
-        text: loc.encode(),
+        text: payload.encode(),
         type: 'location',
         repliedToId: reply?.id,
         repliedToText: reply?.text,

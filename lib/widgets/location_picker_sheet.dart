@@ -78,10 +78,17 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
+    // BUG PERNAH KEJADIAN: padding bawah hanya viewInsets (keyboard) lalu
+    // hanya padding.bottom — di HP nav 3-tombol (MIUI), inset yang dilaporkan
+    // = 0 sehingga tombol Batal/Lampirkan TERTUTUP nav bar sistem → tap user
+    // jatuh ke tombol Back sistem → sheet tertutup null (tidak terkirim).
+    // Solusi deterministik: JANGKA MINIMUM 64dp (lebih tinggi dari nav bar
+    // ~48dp) + hormati inset bila lebih besar. Jangan mengandalkan
+    // MediaQuery saja di sheet ini.
+    final navPad = MediaQuery.of(context).padding.bottom;
+    final bottomPad = navPad > 64 ? navPad : 64.0;
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: bottomPad),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

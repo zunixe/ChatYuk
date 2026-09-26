@@ -34,13 +34,17 @@ class _PostCardState extends State<PostCard> {
   Map<String, dynamic> get _p => widget.post;
   bool _busy = false;
   bool _followBusy = false;
-  // Tinggi foto feed MENGIKUTI RASIO ASLI (ala Threads) — lebar penuh,
+  // Tinggi foto feed MENGIKUTI RASIO ASLI (ala Threads) — lebar tetap,
   // tinggi = lebar/rasio, di-clamp supaya ekstrem tidak mendominasi feed.
-  // Angka di bawah = faktor relatif terhadap LEBAR area foto.
-  static const double _kPhotoMinFactor = 0.5; // landscape ekstrem paling pendek
-  static const double _kPhotoMaxFactor = 1.8; // portrait ekstrem paling tinggi
+  static const double _kPhotoMinFactor = 0.35; // landscape ekstrem paling pendek
+  static const double _kPhotoMaxFactor = 1.25; // portrait dicap (1.25× lebar)
+  // Lebar foto single = 83% area konten — seukuran Threads.
+  static const double _kSingleWidthFactor = 0.83;
   // Rasio seragam untuk CAROUSEL multi-foto (ala Threads 4:5).
   static const double _kCarouselAspect = 4 / 5; // w/h → tinggi = lebar * 5/4
+  // Lebar carousel = isi penuh area konten (maxW). Area konten = layar −
+  // padKiri(48) − padKanan(16) ≈ 83% layar — sama seperti Threads.
+  static const double _kCarouselWidthFactor = 1.0;
   // Jarak tepi kiri konten (teks, foto, tombol like/komentar/share).
   // Avatar 38 + spacer 10 = 48 → konten sejajar tepi kanan avatar,
   // dan nama user sejajar sama jarak dari kiri.
@@ -53,7 +57,6 @@ class _PostCardState extends State<PostCard> {
   final List<double?> _imageAspect = [];
   final Set<String> _failedPaths = {};
   final PageController _pageCtrl = PageController();
-  int _page = 0;
   // GlobalKey untuk akses _CommentsListState saat kirim komentar (optimistic).
   final GlobalKey<_CommentsListState> _commentsKey =
       GlobalKey<_CommentsListState>();
@@ -86,7 +89,6 @@ class _PostCardState extends State<PostCard> {
       _imageAspect.clear();
       _initAspects(newPaths);
       _failedPaths.clear();
-      _page = 0;
       if (newPaths.isNotEmpty) _loadImages(newPaths);
     }
   }
@@ -132,12 +134,14 @@ class _PostCardState extends State<PostCard> {
     double aspect,
     double maxW,
   ) {
-    final naturalH = maxW / aspect;
+    // Lebar single dibatasi 70% area (kompak, rata kiri).
+    final w = maxW * _kSingleWidthFactor;
+    final naturalH = w / aspect;
     final minH = maxW * _kPhotoMinFactor;
     final maxH = maxW * _kPhotoMaxFactor;
     if (naturalH > maxH) return (width: maxH * aspect, height: maxH);
-    if (naturalH < minH) return (width: maxW, height: minH);
-    return (width: maxW, height: naturalH);
+    if (naturalH < minH) return (width: w, height: minH);
+    return (width: w, height: naturalH);
   }
 
   /// Ukuran placeholder sebelum thumb tiba — pakai rasio payload kalau ada,
@@ -147,8 +151,8 @@ class _PostCardState extends State<PostCard> {
     required bool multi,
   }) {
     if (multi) {
-      final h = maxW / _kCarouselAspect;
-      return (width: maxW, height: h);
+      final w = maxW * _kCarouselWidthFactor;
+      return (width: w, height: w / _kCarouselAspect);
     }
     final a = _aspectOf(0);
     if (a != null && a > 0) return _photoBoxFor(a, maxW);
@@ -850,8 +854,9 @@ class _PostCardState extends State<PostCard> {
           return Align(
             alignment: Alignment.centerLeft,
             child: Container(
+              key: const ValueKey('photo_placeholder'),
               width: box.width,
-              height: box.height + (isMulti ? 52 + 8 : 0),
+              height: box.height,
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(_kPhotoRadius),
@@ -915,11 +920,13 @@ class _PostCardState extends State<PostCard> {
         if (loaded.length == 1) {
           // Kotak ngikutin proporsi asli (rata kiri, kanan tidak dipaksa) —
           // rasio dari payload, atau fallback thumb yang baru diketahui.
-          // AnimatedSize bikin transisi halus tanpa lompat.
+          // Rasio belum diketahui → tetap pakai LEBAR 50% + rasio 1:1
+          // (JANGAN maxW penuh — itu bikin foto tampak full-width).
           final a = _aspectOf(0);
           final box = a != null && a > 0
               ? _photoBoxFor(a, maxW)
-              : (width: maxW, height: maxW / _kCarouselAspect);
+              : (width: maxW * _kSingleWidthFactor,
+                 height: maxW * _kSingleWidthFactor);
           return AnimatedSize(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
@@ -927,6 +934,7 @@ class _PostCardState extends State<PostCard> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: SizedBox(
+                key: const ValueKey('photo_single'),
                 width: box.width,
                 height: box.height,
                 child: singlePhoto(),
@@ -934,59 +942,21 @@ class _PostCardState extends State<PostCard> {
             ),
           );
         }
-        // Multi foto: thumbnail strip di atas (klik → ganti foto besar) +
-        // carousel slide kiri/kanan. Rasio seragam 4:5 (ala Threads).
-        final carouselH = maxW / _kCarouselAspect;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              height: 52,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: loaded.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 6),
-                itemBuilder: (_, i) => GestureDetector(
-                  onTap: () => _pageCtrl.animateToPage(
-                    i,
-                    duration: const Duration(milliseconds: 240),
-                    curve: Curves.easeOutCubic,
-                  ),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: i == _page ? 52 : 44,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color:
-                            i == _page ? AppTheme.primary : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(
-                        loaded[i].$1,
-                        fit: BoxFit.cover,
-                        cacheWidth: 128,
-                        gaplessPlayback: true,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+        // Multi foto: carousel geser kiri/kanan (ala Threads) — rasio seragam
+        // 4:5, lebar ~83% layar, anchor kiri. Tanpa strip thumbnail.
+        final carouselW = maxW * _kCarouselWidthFactor;
+        final carouselH = carouselW / _kCarouselAspect;
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            width: carouselW,
+            height: carouselH,
+            child: PageView.builder(
+              controller: _pageCtrl,
+              itemCount: loaded.length,
+              itemBuilder: (_, i) => carouselPhoto(i),
             ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: carouselH,
-              child: PageView.builder(
-                controller: _pageCtrl,
-                itemCount: loaded.length,
-                onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (_, i) => carouselPhoto(i),
-              ),
-            ),
-          ],
+          ),
         );
       },
     );

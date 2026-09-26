@@ -161,22 +161,37 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('foto 1:1 (imageW==imageH) → tinggi ≈ lebar, tanpa error',
+  testWidgets('foto 1:1 → lebar ~83% area konten (ala Threads), tanpa error',
       (tester) async {
     await pump(
       tester,
       _post(images: [_pngBase64], imageW: 1000, imageH: 1000),
     );
     expect(tester.takeException(), isNull);
+    // Lebar ~83% area konten (layar 800 − pad 48 − 16 = 736; 83% ≈ 611).
+    final f = find.byKey(const ValueKey('photo_placeholder'));
+    expect(f, findsOneWidget, reason: 'ada kotak foto placeholder');
+    final size = tester.getSize(f);
+    // ignore: avoid_print
+    print('DEBUG lebar foto single = ${size.width} (area konten 736)');
+    expect(size.width, closeTo(611, 3),
+        reason: 'foto single harus ~83% area konten (ala Threads)');
   });
 
-  testWidgets('foto 9:16 portrait → tinggi ter-clamp max 1.8×lebar',
+  testWidgets('foto 9:16 portrait → lebar menyempit (tinggi dicap), tanpa error',
       (tester) async {
     await pump(
       tester,
       _post(images: [_pngBase64], imageW: 1080, imageH: 1920),
     );
     expect(tester.takeException(), isNull);
+    final f = find.byKey(const ValueKey('photo_placeholder'));
+    expect(f, findsOneWidget);
+    final s = tester.getSize(f);
+    // Portrait ekstrem: tinggi dicap 1.25× lebar area → lebar menyempit,
+    // tidak lebih besar dari 83%.
+    expect(s.width, lessThanOrEqualTo(611));
+    expect(s.height, closeTo(736 * 1.25, 3));
   });
 
   testWidgets('foto 16:9 landscape → tinggi ter-clamp min 0.5×lebar',
