@@ -1203,14 +1203,18 @@ class _UserPhotoViewerState extends State<_UserPhotoViewer> {
         foregroundColor: Colors.white,
         title: Text('${_index + 1}/${widget.photos.length}'),
       ),
-      body: PageView.builder(
-        controller: _controller,
-        itemCount: widget.photos.length,
-        onPageChanged: (i) => setState(() => _index = i),
-        itemBuilder: (ctx, i) => Center(
-          child: InteractiveViewer(
-            maxScale: 4,
-            child: AsyncPhotoViewer(base64: widget.photos[i].photo),
+      // SafeArea: foto portrait tinggi TANPA ini mencapai belakang menu
+      // navigasi bawah (kasus sama seperti preview video chat).
+      body: SafeArea(
+        child: PageView.builder(
+          controller: _controller,
+          itemCount: widget.photos.length,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (ctx, i) => Center(
+            child: InteractiveViewer(
+              maxScale: 4,
+              child: AsyncPhotoViewer(base64: widget.photos[i].photo),
+            ),
           ),
         ),
       ),

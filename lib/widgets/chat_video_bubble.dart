@@ -465,8 +465,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: Center(
-        child: _failed
+      // SafeArea: video portrait penuh TANPA ini memanjang sampai ke
+      // belakang menu navigasi Android bawah (overlap). Lihat PhotoViewer.
+      body: SafeArea(
+        child: Center(
+          child: _failed
             ? Text(
                 s.videoCompressFail,
                 style: AppText.body.copyWith(color: Colors.white70),
@@ -498,6 +501,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   ),
                 ),
               ),
+        ),
       ),
     );
   }
