@@ -24,7 +24,17 @@ mixin ChatServiceRoomMx on ChatBase {
     List<Mention> mentions = const [],
   }) async {
     // Validasi tipe pesan
-    if (!['text', 'image', 'view_once', 'voice', 'location'].contains(type)) {
+    if (![
+      'text',
+      'image',
+      'view_once',
+      'voice',
+      'location',
+      // Video (termasuk sekali lihat) — lihat catatan di sender private.
+      'video',
+      'video_once',
+      'video_once_expired',
+    ].contains(type)) {
       throw Exception('Invalid message type');
     }
     // Validasi image/voice data jika ada — boleh base64 (lama) ATAU path storage (baru)
@@ -52,6 +62,17 @@ mixin ChatServiceRoomMx on ChatBase {
       if (type == 'view_once' && durationMs != null)
         'duration_ms': durationMs,
       if (type == 'image' && imageData.isNotEmpty) 'image_path': imageData,
+      // VIDEO: duration_ms = panjang video; image_path = path .mp4.
+      if ((type == 'video' ||
+              type == 'video_once' ||
+              type == 'video_once_expired') &&
+          durationMs != null)
+        'duration_ms': durationMs,
+      if ((type == 'video' ||
+              type == 'video_once' ||
+              type == 'video_once_expired') &&
+          imageData.isNotEmpty)
+        'image_path': imageData,
       if (repliedToId != null) 'replied_to_id': repliedToId,
       if (repliedToText != null) 'replied_to_text': repliedToText,
       if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
