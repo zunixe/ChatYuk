@@ -147,6 +147,8 @@ class _UploadedIconState extends State<_UploadedIcon> {
               height: widget.size,
               fit: BoxFit.cover,
               gaplessPlayback: true,
+              // Kotak kecil — decode 3x ukuran tampil cukup (density).
+              cacheWidth: (widget.size * 3).round(),
             ),
           );
         } catch (_) {

@@ -29,6 +29,25 @@ void main() {
       expect(params['p_text'], 'halo');
       expect(params['p_image_paths'], ['posts/a.jpg']);
       expect(params['p_visibility'], 'friends');
+      // Dimensi selalu ikut (default kosong) — dipakai feed rasio asli.
+      expect(params['p_image_dims'], isEmpty);
+    });
+
+    test('kirim p_image_dims sejajar imagePaths', () async {
+      handler.on('create_post', (_) => {'id': 'p1b'});
+      await svc.createPost(
+        text: 'halo',
+        imagePaths: ['posts/a.jpg', 'posts/b.jpg'],
+        imageDims: [
+          {'w': 1080, 'h': 1920},
+          {'w': 1080, 'h': 1080},
+        ],
+      );
+      final params = rpcParamsOf(handler, 'create_post');
+      expect(params['p_image_dims'], [
+        {'w': 1080, 'h': 1920},
+        {'w': 1080, 'h': 1080},
+      ]);
     });
 
     test('default visibility public & imagePaths kosong', () async {

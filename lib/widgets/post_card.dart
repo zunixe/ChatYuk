@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
@@ -33,12 +34,23 @@ class _PostCardState extends State<PostCard> {
   Map<String, dynamic> get _p => widget.post;
   bool _busy = false;
   bool _followBusy = false;
-  // Tinggi foto feed TETAP (nol layout shift saat scroll): foto tunggal
-  // di-crop cover setinggi carousel, bukan tinggi natural yang baru
-  // diketahui setelah decode (dulu kartu melompat tiap thumb tiba).
-  static const double _kSinglePhotoHeight = 260;
-  static const double _kMultiPhotoHeight = 52 + 8 + 260;
+  // Tinggi foto feed MENGIKUTI RASIO ASLI (ala Threads) — lebar penuh,
+  // tinggi = lebar/rasio, di-clamp supaya ekstrem tidak mendominasi feed.
+  // Angka di bawah = faktor relatif terhadap LEBAR area foto.
+  static const double _kPhotoMinFactor = 0.5; // landscape ekstrem paling pendek
+  static const double _kPhotoMaxFactor = 1.8; // portrait ekstrem paling tinggi
+  // Rasio seragam untuk CAROUSEL multi-foto (ala Threads 4:5).
+  static const double _kCarouselAspect = 4 / 5; // w/h → tinggi = lebar * 5/4
+  // Jarak tepi kiri konten (teks, foto, tombol like/komentar/share).
+  // Avatar 38 + spacer 10 = 48 → konten sejajar tepi kanan avatar,
+  // dan nama user sejajar sama jarak dari kiri.
+  static const double _kContentPadH = 48;
+  // Radius sudut foto agar terlihat rounded.
+  static const double _kPhotoRadius = 14;
   final List<Uint8List?> _imageThumbs = [];
+  // Rasio asli (w/h) per foto — sumber: payload `imageDims`/`imageW`/`imageH`
+  // (akurat, tanpa shift) atau fallback decode bytes thumbnail.
+  final List<double?> _imageAspect = [];
   final Set<String> _failedPaths = {};
   final PageController _pageCtrl = PageController();
   int _page = 0;
@@ -53,6 +65,7 @@ class _PostCardState extends State<PostCard> {
     super.initState();
     final paths = _imagePaths();
     _imageThumbs.addAll(List.filled(paths.length, null));
+    _initAspects(paths);
     if (paths.isNotEmpty) _loadImages(paths);
   }
 
@@ -70,10 +83,68 @@ class _PostCardState extends State<PostCard> {
       _imageThumbs
         ..clear()
         ..addAll(List.filled(newPaths.length, null));
+      _imageAspect.clear();
+      _initAspects(newPaths);
       _failedPaths.clear();
       _page = 0;
       if (newPaths.isNotEmpty) _loadImages(newPaths);
     }
+  }
+
+  /// Isi rasio asli dari payload (`imageDims` array / `imageW`+`imageH`)
+  /// tanpa perlu decode — ini yang bikin layout BENAR sejak frame pertama
+  /// (nol layout shift). Post lama tanpa dimensi → null → fallback decode.
+  void _initAspects(List<String> paths) {
+    _imageAspect.addAll(List.filled(paths.length, null));
+    final dims = _p['imageDims'];
+    var filled = 0;
+    if (dims is List) {
+      for (var i = 0; i < paths.length; i++) {
+        if (i >= dims.length) break;
+        final d = dims[i];
+        if (d is Map) {
+          final w = (d['w'] as num?)?.toDouble() ?? 0;
+          final h = (d['h'] as num?)?.toDouble() ?? 0;
+          if (w > 0 && h > 0) {
+            _imageAspect[i] = w / h;
+            filled++;
+          }
+        }
+      }
+    }
+    // Fallback: imageW/imageH (foto pertama) — post lama / payload parsial.
+    if (filled == 0 && paths.isNotEmpty) {
+      final w = (_p['imageW'] as num?)?.toDouble() ?? 0;
+      final h = (_p['imageH'] as num?)?.toDouble() ?? 0;
+      if (w > 0 && h > 0) _imageAspect[0] = w / h;
+    }
+  }
+
+  /// Rasio (w/h) untuk foto ke-[i]; null = belum diketahui.
+  double? _aspectOf(int i) =>
+      i >= 0 && i < _imageAspect.length ? _imageAspect[i] : null;
+
+  /// Tinggi foto dari rasio asli terhadap [maxW] (lebar area foto), dengan
+  /// clamp lebih longgar: landscape ekstrem dipotong sedang, portrait
+  /// hampir utuh. `cropped` = apakah tinggi kena clamp (foto dipotong).
+  static ({double height, bool cropped}) _photoSizeFor(
+    double aspect,
+    double maxW,
+  ) {
+    final natural = maxW / aspect;
+    final minH = maxW * _kPhotoMinFactor;
+    final maxH = maxW * _kPhotoMaxFactor;
+    final clamped = natural.clamp(minH, maxH);
+    return (height: clamped, cropped: (clamped - natural).abs() > 0.5);
+  }
+
+  /// Tinggi placeholder sebelum thumb tiba — pakai rasio payload kalau ada,
+  /// else rasio carousel (4:5) sebagai default aman.
+  double _placeholderHeight(double maxW, {required bool multi}) {
+    if (multi) return maxW / _kCarouselAspect;
+    final a = _aspectOf(0);
+    if (a != null && a > 0) return _photoSizeFor(a, maxW).height;
+    return maxW / _kCarouselAspect;
   }
 
   /// Semua path foto gagal dimuat → tidak ada foto yang bisa tampil
@@ -121,6 +192,38 @@ class _PostCardState extends State<PostCard> {
           _imageThumbs[i] = t;
         } else {
           _failedPaths.add(paths[i]);
+        }
+      }
+    });
+    // Fallback rasio: post lama tanpa dimensi payload → decode rasio dari
+    // bytes thumbnail (thumb = copyResize(width:1024) → rasio asli terjaga).
+    await _fillAspectsFromThumbs(paths);
+  }
+
+  /// Isi rasio yang MASIH null dengan decode bytes thumbnail (off-main-thread).
+  Future<void> _fillAspectsFromThumbs(List<String> paths) async {
+    final missing = <int>[];
+    for (var i = 0; i < paths.length; i++) {
+      if (i < _imageAspect.length &&
+          _imageAspect[i] == null &&
+          i < _imageThumbs.length &&
+          _imageThumbs[i] != null) {
+        missing.add(i);
+      }
+    }
+    if (missing.isEmpty) return;
+    final computed = <int, double>{};
+    for (final i in missing) {
+      final bytes = _imageThumbs[i];
+      if (bytes == null) continue;
+      final a = await compute(_aspectRatioOfBytes, bytes);
+      if (a != null && a > 0) computed[i] = a;
+    }
+    if (!mounted || computed.isEmpty) return;
+    setState(() {
+      for (final e in computed.entries) {
+        if (e.key < _imageAspect.length && _imageAspect[e.key] == null) {
+          _imageAspect[e.key] = e.value;
         }
       }
     });
@@ -562,14 +665,16 @@ class _PostCardState extends State<PostCard> {
     final isBoosted = _p['isBoosted'] == true;
     final isFriend = _p['isFriend'] == true;
 
-    // Tanpa card abu & tanpa margin: feed tampil full-width (edge-to-edge)
-    // biar konten lebih luas. Pemisah antar post pakai Divider tipis.
+    // Konten (nama, teks, foto, tombol aksi) diberi padding kiri/kanan
+    // supaya sejajar dengan tepi kanan avatar di header. Pemisah antar
+    // post pakai Divider tipis full-width.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(height: 1, thickness: 0.5),
         Padding(
-          padding: EdgeInsets.fromLTRB(0, 12, 0, 8),
+          // Profil dempet ke kiri (tanpa padding kiri).
+          padding: EdgeInsets.fromLTRB(0, 12, 8, 8),
           child: Row(
               children: [
                 // Tap avatar = zoom foto (internal); tap nama = profil.
@@ -656,7 +761,7 @@ class _PostCardState extends State<PostCard> {
           ),
           if ((_p['text'] as String? ?? '').isNotEmpty)
             Padding(
-              padding: EdgeInsets.fromLTRB(0, 10, 0, 2),
+              padding: EdgeInsets.fromLTRB(_kContentPadH, 10, 16, 2),
               child: Text(_p['text'] as String, style: AppText.body),
             ),
           // Area foto dicadangkan sejak path diketahui (bukan saat thumb
@@ -664,11 +769,12 @@ class _PostCardState extends State<PostCard> {
           // melompat saat scroll. Placeholder setinggi layout final.
           if (_imagePaths().isNotEmpty && !_photosAllFailed())
             Padding(
-              padding: EdgeInsets.fromLTRB(0, 10, 0, 2),
+              // Kanan tipis saja (foto hampir penuh ke tepi).
+              padding: EdgeInsets.fromLTRB(_kContentPadH, 10, 4, 2),
               child: _photoGrid(),
             ),
           Padding(
-            padding: EdgeInsets.fromLTRB(0, 4, 0, 8),
+            padding: EdgeInsets.fromLTRB(_kContentPadH, 4, 8, 8),
             child: Row(
               children: [
                 _iconAction(
@@ -724,119 +830,149 @@ class _PostCardState extends State<PostCard> {
       final t = _imageThumbs[i];
       if (t != null && i < paths.length) loaded.add((t, paths[i]));
     }
-    if (loaded.isEmpty) {
-      // Thumb belum tiba: placeholder setinggi layout final (tunggal 260,
-      // multi 52+8+260) supaya kartu tidak melompat saat foto masuk.
-      return Container(
-        width: double.infinity,
-        height: paths.length > 1 ? _kMultiPhotoHeight : _kSinglePhotoHeight,
-        color: AppTheme.primary.withValues(alpha: 0.08),
-      );
-    }
-    // Foto tunggal — tanpa Stack supaya tinggi natural (bukan unbounded).
-    // Tanpa rounded corner → foto nempel penuh ke tepi layar (edge-to-edge).
-    Widget singlePhoto() => GestureDetector(
-      onTap: () => _openViewer(0),
-      child: Image.memory(
-        loaded[0].$1,
-        fit: BoxFit.cover,
-        // Feed lebar ~layar; cap ~1080 cukup tajam, hemat RAM utk
-        // scroll banyak post.
-        cacheWidth: 1080,
-        gaplessPlayback: true,
-      ),
-    );
-    // Foto carousel — Positioned.fill + badge counter "2/3" sebagai penanda
-    // bahwa foto bisa di-slide. Hanya dipakai di PageView (tinggi bounded).
-    Widget carouselPhoto(int i) => GestureDetector(
-      onTap: () => _openViewer(i),
-      child: Stack(
-        children: [
-          Positioned.fill(
+    final isMulti = paths.length > 1;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        if (loaded.isEmpty) {
+          // Thumb belum tiba: placeholder setinggi layout final (rasio payload
+          // kalau ada, else 4:5) supaya kartu tidak melompat saat foto masuk.
+          return Container(
+            width: double.infinity,
+            height: _placeholderHeight(maxW, multi: isMulti) +
+                (isMulti ? 52 + 8 : 0),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(_kPhotoRadius),
+            ),
+          );
+        }
+        // Foto tunggal — tinggi MENGIKUTI rasio asli (clamp 0.5–1.8×lebar).
+        // Crop hanya bila foto ekstrem (kena clamp).
+        Widget singlePhoto() => GestureDetector(
+          onTap: () => _openViewer(0),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(_kPhotoRadius),
             child: Image.memory(
-              loaded[i].$1,
+              loaded[0].$1,
               fit: BoxFit.cover,
+              // Feed lebar ~layar; cap ~1080 cukup tajam, hemat RAM utk
+              // scroll banyak post.
               cacheWidth: 1080,
               gaplessPlayback: true,
+              width: double.infinity,
+              height: double.infinity,
             ),
           ),
-          Positioned(
-            right: 8,
-            bottom: 8,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${i + 1}/${loaded.length}',
-                style: AppText.micro.copyWith(color: Colors.white),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (loaded.length == 1) {
-      // Tinggi TETAP + cover (bukan natural) → nol layout shift.
-      return SizedBox(
-        width: double.infinity,
-        height: _kSinglePhotoHeight,
-        child: singlePhoto(),
-      );
-    }
-    // Multi foto: thumbnail strip di atas (klik → ganti foto besar) +
-    // carousel slide kiri/kanan.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: 52,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: loaded.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 6),
-            itemBuilder: (_, i) => GestureDetector(
-              onTap: () => _pageCtrl.animateToPage(
-                i,
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-              ),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: i == _page ? 52 : 44,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: i == _page ? AppTheme.primary : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+        );
+        // Foto carousel — Positioned.fill + badge counter "2/3" sebagai
+        // penanda bahwa foto bisa di-slide. Hanya dipakai di PageView.
+        Widget carouselPhoto(int i) => GestureDetector(
+          onTap: () => _openViewer(i),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(_kPhotoRadius),
+            child: Stack(
+              children: [
+                Positioned.fill(
                   child: Image.memory(
                     loaded[i].$1,
                     fit: BoxFit.cover,
-                    cacheWidth: 128,
+                    cacheWidth: 1080,
                     gaplessPlayback: true,
+                  ),
+                ),
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${i + 1}/${loaded.length}',
+                      style: AppText.micro.copyWith(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (loaded.length == 1) {
+          // Tinggi dari rasio asli (payload) atau fallback thumb yang baru
+          // diketahui — AnimatedSize bikin transisi halus tanpa lompat.
+          final a = _aspectOf(0);
+          final h = a != null && a > 0
+              ? _photoSizeFor(a, maxW).height
+              : maxW / _kCarouselAspect;
+          return AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: double.infinity,
+              height: h,
+              child: singlePhoto(),
+            ),
+          );
+        }
+        // Multi foto: thumbnail strip di atas (klik → ganti foto besar) +
+        // carousel slide kiri/kanan. Rasio seragam 4:5 (ala Threads).
+        final carouselH = maxW / _kCarouselAspect;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 52,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: loaded.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 6),
+                itemBuilder: (_, i) => GestureDetector(
+                  onTap: () => _pageCtrl.animateToPage(
+                    i,
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: i == _page ? 52 : 44,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color:
+                            i == _page ? AppTheme.primary : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.memory(
+                        loaded[i].$1,
+                        fit: BoxFit.cover,
+                        cacheWidth: 128,
+                        gaplessPlayback: true,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 260,
-          child: PageView.builder(
-            controller: _pageCtrl,
-            itemCount: loaded.length,
-            onPageChanged: (i) => setState(() => _page = i),
-            itemBuilder: (_, i) => carouselPhoto(i),
-          ),
-        ),
-      ],
+            const SizedBox(height: 8),
+            SizedBox(
+              height: carouselH,
+              child: PageView.builder(
+                controller: _pageCtrl,
+                itemCount: loaded.length,
+                onPageChanged: (i) => setState(() => _page = i),
+                itemBuilder: (_, i) => carouselPhoto(i),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -847,11 +983,13 @@ class _PostCardState extends State<PostCard> {
     // bisa tertukar (bug: paths.sublist(0, thumbs.length)).
     final loadedPaths = <String>[];
     final thumbs = <Uint8List>[];
+    final aspects = <double?>[];
     for (var i = 0; i < _imageThumbs.length; i++) {
       final t = _imageThumbs[i];
       if (t != null && i < paths.length) {
         loadedPaths.add(paths[i]);
         thumbs.add(t);
+        aspects.add(_aspectOf(i));
       }
     }
     if (thumbs.isEmpty) return;
@@ -859,6 +997,7 @@ class _PostCardState extends State<PostCard> {
       context,
       paths: loadedPaths,
       thumbs: thumbs,
+      aspects: aspects,
       initialIndex: index,
     );
   }
@@ -1680,5 +1819,24 @@ Uint8List? _decodeAvatarB64(String b64) {
     return base64Decode(b64);
   } catch (_) {
     return null;
+  }
+}
+
+/// Rasio asli (w/h) dari bytes gambar — top-level untuk compute().
+/// Dipakai fallback post lama yang belum menyimpan dimensi.
+Future<double?> _aspectRatioOfBytes(Uint8List bytes) async {
+  ui.Codec? codec;
+  try {
+    codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final w = frame.image.width;
+    final h = frame.image.height;
+    frame.image.dispose();
+    if (w <= 0 || h <= 0) return null;
+    return w / h;
+  } catch (_) {
+    return null;
+  } finally {
+    codec?.dispose();
   }
 }

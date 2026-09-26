@@ -64,4 +64,55 @@ void main() {
       expect(v.liked, isFalse);
     });
   });
+
+  group('StorySlide video', () {
+    test('fromMap baca media_type/video_path/duration_ms', () {
+      final s = StorySlide.fromMap('v1', {
+        'author_id': 'a',
+        'media_type': 'video',
+        'video_path': 'story/a/v.mp4',
+        'duration_ms': 8000,
+        'created_at': '2026-09-26T00:00:00Z',
+      });
+      expect(s.isVideo, isTrue);
+      expect(s.videoPath, 'story/a/v.mp4');
+      expect(s.durationMs, 8000);
+    });
+
+    test('default image tanpa video', () {
+      final s = StorySlide.fromMap('i1', {
+        'author_id': 'a',
+        'created_at': '2026-09-26T00:00:00Z',
+      });
+      expect(s.isVideo, isFalse);
+      expect(s.mediaType, 'image');
+    });
+
+    test('copyWith pertahankan field video', () {
+      final s = StorySlide(
+        id: 'v1',
+        authorId: 'a',
+        authorName: 'A',
+        imagePath: '',
+        createdAt: DateTime.utc(2026, 9, 26),
+        mediaType: 'video',
+        videoPath: 'story/a/v.mp4',
+        durationMs: 8000,
+      );
+      final c = s.copyWith(liked: true);
+      expect(c.isVideo, isTrue);
+      expect(c.videoPath, 'story/a/v.mp4');
+      expect(c.liked, isTrue);
+    });
+  });
+
+  group('StoryTrayItem video', () {
+    test('fromMap baca has_video + copyWith', () {
+      final t = StoryTrayItem.fromMap(
+          {'author_id': 'a', 'has_video': true});
+      expect(t.hasVideo, isTrue);
+      expect(t.copyWith(hasVideo: false).hasVideo, isFalse);
+      expect(StoryTrayItem.fromMap({'author_id': 'a'}).hasVideo, isFalse);
+    });
+  });
 }

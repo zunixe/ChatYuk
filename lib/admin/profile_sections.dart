@@ -11,7 +11,7 @@ import '../config/strings_admin.dart';
 /// entry admin (via admin_wiring.dart). Build rilis tidak pernah
 /// menyentuh file ini.
 ///
-/// [adminSettingsHeader] = tile buka Admin Panel (+divider), ditaruh
+/// [adminSettingsHeader] = tile buka Admin Panel, ditaruh
 /// sebelum baris Notifikasi. [adminSettingsTail] = toggle screenshot/
 /// watermark/invisible (+divider penutup), sesudah baris Notifikasi.
 
@@ -22,7 +22,7 @@ List<Widget> adminSettingsHeader(BuildContext context) {
   final auth = context.read<AuthProvider>();
   final isDummy = auth.dummySessionActive;
   if (isDummy || !auth.isRealAdmin) return const [];
-  return const [_AdminPanelTile(), _AdminDivider()];
+  return const [_AdminPanelTile()];
 }
 
 List<Widget> adminSettingsTail(BuildContext context) {
@@ -33,13 +33,6 @@ List<Widget> adminSettingsTail(BuildContext context) {
   final isDummy = auth.dummySessionActive;
   if (isDummy || !auth.isRealAdmin) return const [];
   return const [];
-}
-
-class _AdminDivider extends StatelessWidget {
-  const _AdminDivider();
-
-  @override
-  Widget build(BuildContext context) => const Divider(height: 1, indent: 52);
 }
 
 /// Tile buka Admin Panel — navigasi lewat AdminGate.panelBuilder supaya

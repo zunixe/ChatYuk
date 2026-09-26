@@ -59,6 +59,11 @@ extension SAdminX on S {
   String get adminDeviceChats => isId ? 'Chat dengan' : 'Chats with';
   String get adminDeviceLocation =>
       isId ? 'Riwayat Lokasi' : 'Location History';
+  String get adminMapViewRoute => isId ? 'Lihat Peta' : 'View Map';
+  String get adminMapRouteTitle => isId ? 'Peta Pergerakan' : 'Movement Map';
+  String get adminMapStart => isId ? 'Awal' : 'Start';
+  String get adminMapEnd => isId ? 'Akhir' : 'End';
+  String adminMapPoints(int n) => isId ? '$n titik' : '$n points';
   String get adminDeviceNoDevices =>
       isId ? 'Belum ada perangkat tercatat' : 'No devices recorded';
   String get adminDeviceNoChats => isId ? 'Belum ada chat' : 'No chats yet';
@@ -92,6 +97,8 @@ extension SAdminX on S {
   String get adminGrowthRegistrations => isId ? 'Registrasi' : 'Registrations';
   String get adminRegListTitle =>
       isId ? 'User Terdaftar (Email)' : 'Registered Users (Email)';
+  String get adminRegSortNewest => isId ? 'Baru daftar' : 'Newest first';
+  String get adminRegSortOldest => isId ? 'Lama daftar' : 'Oldest first';
   String get adminCfTitle =>
       isId ? 'Cloudflare Realtime (TURN)' : 'Cloudflare Realtime (TURN)';
   String get adminCfNotConfigured => isId

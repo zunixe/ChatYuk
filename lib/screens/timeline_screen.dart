@@ -12,6 +12,7 @@ import '../widgets/skeleton_card.dart';
 import 'post_composer_screen.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
+import '../core/perf/perf_probe.dart';
 
 /// Timeline feed: tab Semua / Mengikuti + infinite scroll + refresh.
 class TimelineScreen extends StatefulWidget {
@@ -142,6 +143,7 @@ class _TimelineScreenState extends State<TimelineScreen>
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('Timeline');
     context.watch<ThemeProvider>();
     super.build(context);
     final s = context.watch<LocaleProvider>().s;

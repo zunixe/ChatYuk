@@ -102,16 +102,25 @@ class CallConfig {
   /// Return peerConfig dengan Cloudflare TURN (+ backup relay openrelay).
   /// Dua provider relay independen → ICE punya cadangan kalau satu jalur gagal.
   ///
+  /// [relayOnly] = true (DEFAULT, perilaku call lama):
   /// Cloudflare OK → iceTransportPolicy 'relay' (HANYA kandidat relay).
   /// Host/srflx tidak pernah connect di NAT berbeda (log: cuma relay
   /// 104.30.x.x yang works), jadi lewati saja negosiasi host/srflx yang
   /// cuma buang waktu & bikin call kadang pending/timeout. Relay-only =
   /// koneksi deterministik & cepat (1-3 detik).
   ///
+  /// [relayOnly] = false (dipakai voice stage):
+  /// JANGAN paksa relay-only — pakai semua tipe kandidat (host/srflx/relay)
+  /// supaya P2P langsung tetap bisa connect di jaringan sama (WiFi/hotspot)
+  /// walau TURN bermasalah, sambil tetap menyediakan relay sebagai cadangan.
+  /// Ini mencegah "mic hijau tapi bisu" saat relay gagal/tak tersedia.
+  ///
   /// Cloudflare GAGAL (401 / key mati) → JANGAN paksa relay-only; pakai
   /// semua tipe kandidat (host/srflx/relay) supaya P2P langsung tetap bisa
   /// connect — minimal di jaringan yang sama (WiFi/hotspot) tanpa TURN.
-  static Future<Map<String, dynamic>> getPeerConfig() async {
+  static Future<Map<String, dynamic>> getPeerConfig({
+    bool relayOnly = true,
+  }) async {
     final cloudflare = await PerfProbe.timed(
       'call.turnFetch',
       _fetchCloudflare,
@@ -138,7 +147,7 @@ class CallConfig {
     });
     return {
       'iceServers': iceServers,
-      if (cloudflare != null) 'iceTransportPolicy': 'relay',
+      if (relayOnly && cloudflare != null) 'iceTransportPolicy': 'relay',
       'iceCandidatePoolSize': 2,
       'sdpSemantics': 'unified-plan',
     };

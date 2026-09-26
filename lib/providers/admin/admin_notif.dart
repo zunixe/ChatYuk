@@ -10,32 +10,18 @@ mixin AdminNotifMx on AdminBase {
 
   /// Arm notifikasi: muat dulu daftar device yang SUDAH pernah dinotifikasi
   /// (tersimpan di SharedPreferences, persist antar restart), baru aktif.
+  /// SEED dilakukan malas (lazy) di _detectNewDevices: fetchDevices pertama
+  /// setelah arm menjadi baseline diam-diam — TANPA fetch limit-1000 khusus
+  /// (dulu 1 RPC besar tiap buka panel, penyebab utama lag buka panel).
   Future<void> armNotifications() async {
-    // 1) Muat device yang sudah pernah dinotifikasi (persist antar restart).
+    // Muat device yang sudah pernah dinotifikasi (persist antar restart).
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getStringList(AdminBase._kSeenDevicesKey) ?? const [];
       _seenDeviceIds.addAll(saved);
     } catch (_) {}
 
-    // 2) SEED diam-diam: semua device yang sudah ada SEKARANG dimasukkan ke
-    // daftar seen TANPA notifikasi. Hanya device yang muncul SETELAH titik
-    // ini yang akan dinotifikasi.
-    try {
-      final res = await _service.listDevices(limit: 1000, offset: 0);
-      final items = (res['items'] as List<dynamic>? ?? const [])
-          .cast<Map<String, dynamic>>();
-      for (final d in items) {
-        final id = '${d['install_id'] ?? ''}';
-        if (id.isNotEmpty) _seenDeviceIds.add(id);
-      }
-      // Simpan gabungan supaya restart berikutnya punya baseline yang sama.
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(AdminBase._kSeenDevicesKey, _seenDeviceIds.toList());
-    } catch (e) {
-      dlog('[ADMIN] arm seed devices error: $e');
-    }
-
+    _seedDone = false;
     _seenDevicesLoaded = true;
     _notifArmed = true;
   }

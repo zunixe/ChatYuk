@@ -147,6 +147,15 @@ class AuthProvider extends ChangeNotifier {
     _loadPendingReferrer();
   }
 
+  /// Seed profil untuk pengujian jalur kirim (tanpa login sungguhan).
+  /// Dipakai test yang butuh melewati guard `profile == null`.
+  @visibleForTesting
+  void seedProfileForTest(UserModel p) {
+    _profile = p;
+    _loading = false;
+    notifyListeners();
+  }
+
   /// Baca referrer tersimpan (dari deep link) ke memori.
   Future<void> _loadPendingReferrer() async {
     try {

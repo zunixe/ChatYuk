@@ -1,4 +1,5 @@
--- Lapis 3: invariant STORY — penonton (admin bebas) + pariti mark_seen.
+-- Lapis 3: invariant STORY — penonton (admin bebas) + pariti mark_seen
+-- + ghost-mode admin (20260926030000).
 --
 -- Mengunci migrasi 20260923120000:
 --   1) `story_viewers` mengizinkan author ATAU admin (is_admin_request),
@@ -7,6 +8,10 @@
 --      yang SAMA ('everyone'/'followers'/'friends'/'registered') + cek
 --      blokir + privacy_can_view — mencegah penonton "hilang" dari daftar
 --      untuk sebagian visibility.
+-- Mengunci migrasi 20260926030000 (ghost admin):
+--   3) `mark_story_seen*` TIDAK mencatat bila pemanggil admin dan bukan
+--      author (is_admin_request) — admin invisible saat lihat story orang.
+--   4) `story_viewers` TIDAK mengembalikan baris admin (filter auth.users).
 begin;
 select supabase_tests.begin_tests();
 
@@ -61,6 +66,20 @@ select supabase_tests.check('mark_story_seen_bulk: hormati privacy_can_view',
   (select pg_get_functiondef(p.oid) like '%privacy_can_view%'
    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='public' and p.proname='mark_story_seen_bulk'));
+
+-- ── ghost-mode admin (20260926030000) ──
+select supabase_tests.check('mark_story_seen: ghost admin (is_admin_request)',
+  (select pg_get_functiondef(p.oid) like '%is_admin_request%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='mark_story_seen'));
+select supabase_tests.check('mark_story_seen_bulk: ghost admin (is_admin_request)',
+  (select pg_get_functiondef(p.oid) like '%is_admin_request%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='mark_story_seen_bulk'));
+select supabase_tests.check('story_viewers: sembunyikan baris admin',
+  (select pg_get_functiondef(p.oid) like '%zunixe@gmail.com%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='story_viewers'));
 
 -- ── Tabel + PK + index penonton ──
 select supabase_tests.check('tabel story_views ada',

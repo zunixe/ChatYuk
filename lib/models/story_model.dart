@@ -18,6 +18,10 @@ class StorySlide {
   final int likeCount;
   final bool liked;
   final DateTime createdAt;
+  // Video pendek: 'image' | 'video'. Video polos (tanpa teks overlay).
+  final String mediaType;
+  final String videoPath;
+  final int durationMs;
 
   const StorySlide({
     required this.id,
@@ -36,7 +40,12 @@ class StorySlide {
     this.likeCount = 0,
     this.liked = false,
     required this.createdAt,
+    this.mediaType = 'image',
+    this.videoPath = '',
+    this.durationMs = 0,
   });
+
+  bool get isVideo => mediaType == 'video' && videoPath.isNotEmpty;
 
   factory StorySlide.fromMap(String id, Map<String, dynamic> m) {
     return StorySlide(
@@ -56,6 +65,9 @@ class StorySlide {
       likeCount: _toInt(m['like_count'], 0),
       liked: m['liked'] == true,
       createdAt: parseDate(m['created_at']),
+      mediaType: '${m['media_type'] ?? 'image'}',
+      videoPath: '${m['video_path'] ?? ''}',
+      durationMs: _toInt(m['duration_ms'], 0),
     );
   }
 
@@ -66,6 +78,9 @@ class StorySlide {
       authorId: authorId,
       authorName: authorName,
       imagePath: imagePath,
+      mediaType: mediaType,
+      videoPath: videoPath,
+      durationMs: durationMs,
       textOverlay: textOverlay,
       textX: textX,
       textY: textY,
@@ -121,6 +136,10 @@ class StoryTrayItem {
   final String thumbPath; // image_path slide terbaru
   final bool hasUnseen;
   final bool own;
+  // Dibisukan (mute ala IG): tile transparan + paling belakang.
+  final bool muted;
+  // Ada slide video (badge di tile).
+  final bool hasVideo;
 
   const StoryTrayItem({
     required this.authorId,
@@ -131,6 +150,8 @@ class StoryTrayItem {
     this.thumbPath = '',
     this.hasUnseen = false,
     this.own = false,
+    this.muted = false,
+    this.hasVideo = false,
   });
 
   factory StoryTrayItem.fromMap(Map<String, dynamic> m) {
@@ -143,6 +164,23 @@ class StoryTrayItem {
       thumbPath: '${m['thumb_path'] ?? ''}',
       hasUnseen: m['has_unseen'] == true,
       own: m['own'] == true,
+      muted: m['muted'] == true,
+      hasVideo: m['has_video'] == true,
+    );
+  }
+
+  StoryTrayItem copyWith({bool? hasUnseen, bool? muted, bool? hasVideo}) {
+    return StoryTrayItem(
+      authorId: authorId,
+      authorName: authorName,
+      avatar: avatar,
+      isRegistered: isRegistered,
+      slideCount: slideCount,
+      thumbPath: thumbPath,
+      hasUnseen: hasUnseen ?? this.hasUnseen,
+      own: own,
+      muted: muted ?? this.muted,
+      hasVideo: hasVideo ?? this.hasVideo,
     );
   }
 }

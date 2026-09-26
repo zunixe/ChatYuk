@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../config/strings.dart';
 import '../../../config/theme.dart';
@@ -18,6 +19,7 @@ import '../../../providers/story_provider.dart';
 import '../../../core/cache/media_disk_cache.dart';
 import '../../../utils.dart';
 import '../../../widgets/story_text_overlay.dart';
+import '../../../core/perf/perf_probe.dart';
 
 /// Cache RAM bytes slide (path → image) — bertahan antar slide/penonton
 /// selama sesi viewer supaya mundur/maju tidak download ulang.
@@ -74,8 +76,16 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   List<StorySlide> _slides = [];
   int _slide = 0;
   bool _loading = true;
+  // Fetch gagal padahal tray bilang ada isi (jaringan flaky / timeout) —
+  // tampilkan UI coba-lagi, bukan "belum ada story".
+  bool _loadError = false;
   bool _paused = false;
   final Map<String, Uint8List?> _localImg = {};
+
+  // Video pendek: satu controller aktif (slide aktif saja — hemat memori).
+  // File mp4 di temp (bukan RAM cache gambar).
+  VideoPlayerController? _videoCtrl;
+  String _videoSlideId = '';
 
   final _replyCtrl = TextEditingController();
   final _replyFocus = FocusNode();
@@ -88,6 +98,17 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   // viewer / ganti author. Dulu 1 RPC per slide.
   final List<String> _seenIds = [];
   final Set<String> _seenDedup = {};
+  // Provider dicache saat init — JANGAN context.read di dispose/_flushSeen.
+  // unmount() framework men-defunct-kan element DULU baru memanggil
+  // dispose(), sehingga lookup ancestor dari context tidak bisa diandalkan
+  // (flush saat keluar viewer diam-diam gagal → penonton story selalu 0).
+  StoryProvider? _storyProv;
+  // Status admin dicache saat init — dipakai ghost-mode (admin tidak tercatat
+  // sebagai penonton story orang). Jangan context.read di _flushSeen/dispose.
+  bool _isAdminCached = false;
+  // Sheet penonton sedang terbuka/loading — tap ikon mata berkali-kali
+  // tidak boleh menumpuk sheet (laporan admin: "klik banyak, nampil banyak").
+  bool _viewersOpen = false;
   // Sisa waktu slide saat app di-background — lanjut dari sisa,
   // bukan mulai ulang 5 detik penuh.
   Duration? _remainingOnResume;
@@ -97,6 +118,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   @override
   void initState() {
     super.initState();
+    // Cache provider selagi context masih aktif (lihat catatan _storyProv).
+    _storyProv = context.read<StoryProvider>();
+    // Cache status admin untuk ghost-mode (lihat catatan _isAdminCached).
+    try {
+      _isAdminCached = context.read<AuthProvider>().isRealAdmin;
+    } catch (_) {
+      _isAdminCached = false;
+    }
     WidgetsBinding.instance.addObserver(this);
     // Nav bar Android opaque hitam selama viewer aktif — foto fullscreen
     // tidak tembus/transparan di area menu bawah.
@@ -124,9 +153,74 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _loadPerson();
   }
 
+  /// Sinkronkan video dengan slide aktif: init bila slide video,
+  /// buang controller bila pindah ke gambar / author lain.
+  Future<void> _syncVideo() async {
+    final cur = _current;
+    if (cur == null || !cur.isVideo) {
+      await _dropVideo();
+      return;
+    }
+    if (_videoSlideId == cur.id && _videoCtrl != null) return;
+    await _dropVideo();
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/chatyuk_story_${cur.id}.mp4');
+      if (!await file.exists()) {
+        final sp = _storyProv;
+        if (sp == null) return;
+        Uint8List? bytes = MediaDiskCache.instance.readSync(cur.videoPath);
+        bytes ??= await MediaDiskCache.instance.read(cur.videoPath);
+        if (bytes == null || bytes.isEmpty) {
+          final dl = await _storyProv?.fetchSlideVideo(cur.videoPath);
+          bytes = dl;
+        }
+        if (bytes == null || bytes.isEmpty) return;
+        await file.writeAsBytes(bytes, flush: true);
+      }
+      final ctrl = VideoPlayerController.file(file);
+      await ctrl.initialize().timeout(const Duration(seconds: 10));
+      if (!mounted || _current?.id != cur.id) {
+        await ctrl.dispose();
+        return;
+      }
+      // Loop: kalau video pendek/berhenti, tetap tampil (bukan layar mati)
+      // — auto-advance slide tetap dikendalikan timer.
+      await ctrl.setLooping(true);
+      _videoCtrl = ctrl;
+      _videoSlideId = cur.id;
+      // Auto-advance mengikuti durasi video (bukan 5 dtk).
+      final dur = ctrl.value.duration;
+      _progress.duration = dur.inMilliseconds > 0 ? dur : _slideDuration;
+      // Video SIAP → baru progress bar (timer) jalan; sebelumnya loading.
+      // Ini yang benar: progress tidak "mendahului" frame video.
+      if (mounted) {
+        setState(() {});
+        if (!_paused) {
+          await ctrl.play();
+          _progress.forward(from: 0);
+        }
+      }
+    } catch (e) {
+      dlog('[StoryViewer] video init error: $e');
+      await _dropVideo();
+    }
+  }
+
+  Future<void> _dropVideo() async {
+    _videoSlideId = '';
+    final c = _videoCtrl;
+    _videoCtrl = null;
+    try {
+      await c?.pause();
+      await c?.dispose();
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_dropVideo());
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         systemNavigationBarColor: Colors.transparent,
@@ -156,6 +250,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
+      unawaited(_videoCtrl?.pause());
       if (_progress.isAnimating) {
         final rem = Duration(
           milliseconds:
@@ -171,13 +266,19 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   /// Kirim semua id slide yang ditonton dalam satu RPC, lalu reset.
+  /// Ghost-mode admin: kalau yang menonton admin dan bukan story sendiri,
+  /// JANGAN kirim apa pun (buang antrean) supaya tidak tercatat di penonton.
   void _flushSeen() {
     if (_seenIds.isEmpty) return;
     final ids = List<String>.of(_seenIds);
     final author = _item.authorId;
+    final ghost = _isAdminCached && !_own;
     _seenIds.clear();
     _seenDedup.clear();
-    unawaited(context.read<StoryProvider>().markSeenBulk(ids, author));
+    if (ghost) return;
+    final prov = _storyProv;
+    if (prov == null) return;
+    unawaited(prov.markSeenBulk(ids, author));
   }
 
   StoryTrayItem get _item => widget.items[_person];
@@ -195,11 +296,21 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _sendingReply = false;
     setState(() {
       _loading = true;
+      _loadError = false;
       _slide = 0;
     });
     final sp = context.read<StoryProvider>();
     final authorId = _item.authorId;
-    final slides = await sp.slidesFor(_item.authorId);
+    // Minta sesuai hitungan tray (segar) — jangan pakai cache basi.
+    var slides =
+        await sp.slidesFor(_item.authorId, expectedCount: _item.slideCount);
+    // Retry sekali bila kosong padahal tray ada isinya: fetch pertama
+    // sering kena timeout 6 dtk di jaringan flaky.
+    if (slides.isEmpty && mounted && _item.slideCount > 0) {
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (!mounted || _item.authorId != authorId) return;
+      slides = await sp.slidesFor(_item.authorId);
+    }
     if (!mounted) return;
     setState(() {
       _slides = slides;
@@ -209,7 +320,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       _loading = slides.isNotEmpty;
     });
     if (slides.isEmpty) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          // Bedakan "gagal" vs "benar kosong": tray bilang ada isi tapi
+          // fetch (2×) tetap kosong → kemungkinan jaringan, tawarkan retry.
+          _loadError = _item.slideCount > 0;
+        });
+      }
       return;
     }
     _markSeen();
@@ -229,9 +347,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     } finally {
       if (mounted && _item.authorId == authorId) {
         setState(() => _loading = false);
-        _startTimer();
+        // Video: progress bar JANGAN jalan dulu — tunggu video benar-benar
+        // siap (frame + play), baru timer mulai (progress tidak mendahului).
+        final isVideoSlide = slides[_slide].isVideo;
+        if (!isVideoSlide) _startTimer();
         // Tetangga dimuat setelah gambar aktif siap, tanpa menahan first paint.
         unawaited(_preloadAdjacent());
+        unawaited(_syncVideo());
       }
     }
   }
@@ -336,6 +458,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (_paused) return;
     _paused = true;
     _progress.stop();
+    unawaited(_videoCtrl?.pause());
   }
 
   void _resume() {
@@ -349,14 +472,39 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         ? _slideDuration
         : rem;
     _progress.forward(from: 0);
+    final v = _videoCtrl;
+    if (v != null && _current?.isVideo == true) unawaited(v.play());
+  }
+
+  /// Lompat langsung ke slide ke-[i] (diketuk dari progress bar).
+  /// Di luar rentang = abaikan (tidak pindah author — itu tugas _next).
+  /// Timer hanya jalan untuk slide GAMBAR. Slide video ditangani
+  /// `_syncVideo` (mulai timer setelah video siap).
+  void _startTimerIfImage() {
+    // `_slide` valid & slides non-kosong.
+    if (_slide >= 0 && _slide < _slides.length && !_slides[_slide].isVideo) {
+      _startTimer();
+    } else {
+      _progress.stop();
+    }
+  }
+
+  void _goToSlide(int i) {
+    if (i < 0 || i >= _slides.length || i == _slide) return;
+    setState(() => _slide = i);
+    _markSeen();
+    _startTimerIfImage();
+    unawaited(_loadSlideAndPreloadAdjacent());
+    unawaited(_syncVideo());
   }
 
   void _next() {
     if (_slide < _slides.length - 1) {
       setState(() => _slide++);
       _markSeen();
-      _startTimer();
+      _startTimerIfImage();
       unawaited(_loadSlideAndPreloadAdjacent());
+      unawaited(_syncVideo());
     } else {
       _nextPerson();
     }
@@ -365,8 +513,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   void _prev() {
     if (_slide > 0) {
       setState(() => _slide--);
-      _startTimer();
+      _startTimerIfImage();
       unawaited(_loadSlideAndPreloadAdjacent());
+      unawaited(_syncVideo());
     } else {
       _prevPerson();
     }
@@ -399,7 +548,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   /// Kumpulkan id slide yang ditonton (dedupe) — dikirim bulk saat ganti
   /// author / keluar viewer. Update ring tray lokal sudah instan.
+  /// Ghost-mode admin: lihat story orang TIDAK dikumpulkan sama sekali.
   void _markSeen() {
+    if (_isAdminCached && !_own) return;
     if (_slide >= _slides.length) return;
     final id = _slides[_slide].id;
     if (id.isEmpty || !_seenDedup.add(id)) return;
@@ -453,17 +604,22 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   Future<void> _showViewers() async {
-    final s = context.read<LocaleProvider>().s;
-    final sp = context.read<StoryProvider>();
-    final slide = _slides[_slide];
-    final viewers = await sp.fetchViewers(slide.id);
-    if (!mounted) return;
-    // null = gagal memuat (network/unauthorized) — beda dari [] yang berarti
-    // benar-benar belum ada penonton. Dulu keduanya tampil "belum ada penonton"
-    // sehingga kegagalan tersembunyi.
-    final failed = viewers == null;
-    final list = viewers ?? const <StoryViewer>[];
-    showModalBottomSheet(
+    // Guard tumpuk: fetch lambat + tap berkali-kali = N sheet bertumpuk
+    // (terlihat seperti hang — harus tutup satu-satu).
+    if (_viewersOpen) return;
+    _viewersOpen = true;
+    try {
+      final s = context.read<LocaleProvider>().s;
+      final sp = context.read<StoryProvider>();
+      final slide = _slides[_slide];
+      final viewers = await sp.fetchViewers(slide.id);
+      if (!mounted) return;
+      // null = gagal memuat (network/unauthorized) — beda dari [] yang berarti
+      // benar-benar belum ada penonton. Dulu keduanya tampil "belum ada penonton"
+      // sehingga kegagalan tersembunyi.
+      final failed = viewers == null;
+      final list = viewers ?? const <StoryViewer>[];
+      await showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.bgCard,
       shape: const RoundedRectangleBorder(
@@ -535,10 +691,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   },
                 ),
               ),
-          ],
+            ],
+          ),
         ),
-      ),
     );
+    } finally {
+      _viewersOpen = false;
+    }
   }
 
   Widget _viewerAvatar(String avatar, String nickname) {
@@ -571,6 +730,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('StoryViewer');
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(
@@ -638,10 +798,32 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       )
                     : _slides.isEmpty
                     ? Center(
-                        child: Text(
-                          s.storyEmptyTray,
-                          style: AppText.body.copyWith(color: Colors.white54),
-                        ),
+                        child: _loadError
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    s.storyLoadFail,
+                                    style: AppText.body.copyWith(
+                                      color: Colors.white54,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  FilledButton.icon(
+                                    onPressed: () {
+                                      if (mounted) _loadPerson();
+                                    },
+                                    icon: const Icon(Icons.refresh, size: 18),
+                                    label: Text(s.btnRetry),
+                                  ),
+                                ],
+                              )
+                            : Text(
+                                s.storyEmptyTray,
+                                style: AppText.body.copyWith(
+                                  color: Colors.white54,
+                                ),
+                              ),
                       )
                     : _buildSlide(),
               ),
@@ -685,39 +867,57 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           ),
 
           // Progress berada tepat di bawah nama dan icon header.
+          // Tiap segmen bisa diketuk untuk lompat langsung ke slide itu
+          // (area sentuh diperlebar 24px agar mudah kena jari).
           if (_slides.isNotEmpty)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 42,
+              top: MediaQuery.of(context).padding.top + 36,
               left: 12,
               right: 12,
-              height: 2,
+              height: 24,
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   for (int i = 0; i < _slides.length; i++)
                     Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          right: i < _slides.length - 1 ? 4 : 0,
-                        ),
-                        child: i < _slide
-                            ? Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(1),
-                                ),
-                              )
-                            : i == _slide
-                            ? AnimatedBuilder(
-                                animation: _progress,
-                                builder: (_, __) => LinearProgressIndicator(
-                                  value: _progress.value,
-                                  backgroundColor: Colors.white24,
-                                  valueColor: const AlwaysStoppedAnimation(
-                                    Colors.white,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () => _goToSlide(i),
+                        child: Container(
+                          height: 24,
+                          alignment: Alignment.center,
+                          padding: EdgeInsets.only(
+                            right: i < _slides.length - 1 ? 4 : 0,
+                          ),
+                          child: i < _slide
+                              ? Container(
+                                  height: 2,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(1),
                                   ),
+                                )
+                              : i == _slide
+                              ? SizedBox(
+                                  height: 2,
+                                  child: AnimatedBuilder(
+                                    animation: _progress,
+                                    builder: (_, __) =>
+                                        LinearProgressIndicator(
+                                          value: _progress.value,
+                                          backgroundColor: Colors.white24,
+                                          valueColor:
+                                              const AlwaysStoppedAnimation(
+                                                Colors.white,
+                                              ),
+                                        ),
+                                  ),
+                                )
+                              : Container(
+                                  height: 2,
+                                  color: Colors.white24,
                                 ),
-                              )
-                            : Container(color: Colors.white24),
+                        ),
                       ),
                     ),
                 ],
@@ -955,20 +1155,34 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (slide == null) return;
     setState(() => _sharingStory = true);
     try {
-      final bytes = _localImg[slide.imagePath];
-      if (bytes == null || bytes.isEmpty) {
-        await Share.share(s.storyShareMsg(_item.authorName));
-      } else {
+      // Video: bagikan file mp4 temp (sudah diunduh untuk playback).
+      if (slide.isVideo) {
         final dir = await getTemporaryDirectory();
-        final file = File(
-          '${dir.path}/chatyuk_story_${slide.id.replaceAll('-', '')}.jpg',
-        );
-        await file.writeAsBytes(bytes, flush: true);
-        // Share sheet Android akan menampilkan Instagram Stories, WhatsApp
-        // Status, Instagram, atau target lain yang menerima gambar.
-        await Share.shareXFiles([
-          XFile(file.path, mimeType: 'image/jpeg'),
-        ], text: s.storyShareMsg(_item.authorName));
+        final vf = File('${dir.path}/chatyuk_story_${slide.id}.mp4');
+        if (await vf.exists()) {
+          await Share.shareXFiles(
+            [XFile(vf.path, mimeType: 'video/mp4')],
+            text: s.storyShareMsg(_item.authorName),
+          );
+        } else {
+          await Share.share(s.storyShareMsg(_item.authorName));
+        }
+      } else {
+        final bytes = _localImg[slide.imagePath];
+        if (bytes == null || bytes.isEmpty) {
+          await Share.share(s.storyShareMsg(_item.authorName));
+        } else {
+          final dir = await getTemporaryDirectory();
+          final file = File(
+            '${dir.path}/chatyuk_story_${slide.id.replaceAll('-', '')}.jpg',
+          );
+          await file.writeAsBytes(bytes, flush: true);
+          // Share sheet Android akan menampilkan Instagram Stories, WhatsApp
+          // Status, Instagram, atau target lain yang menerima gambar.
+          await Share.shareXFiles([
+            XFile(file.path, mimeType: 'image/jpeg'),
+          ], text: s.storyShareMsg(_item.authorName));
+        }
       }
     } catch (_) {}
     if (mounted) setState(() => _sharingStory = false);
@@ -1033,6 +1247,46 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   Widget _buildSlide() {
     final slide = _slides[_slide];
+    // Slide video: player (cover) atau spinner sambil init.
+    if (slide.isVideo) {
+      final v = _videoCtrl;
+      final ready =
+          v != null && v.value.isInitialized && _videoSlideId == slide.id;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          if (ready)
+            FittedBox(
+              fit: BoxFit.cover,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox(
+                width: v.value.size.width,
+                height: v.value.size.height,
+                child: VideoPlayer(v),
+              ),
+            )
+          else
+            // Video dimuat → spinner polos (PLAY OTOMATIS, tanpa tombol
+            // play). Ketuk tetap bisa memicu muat ulang bila macet.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => unawaited(_syncVideo()),
+              child: Container(
+                color: Colors.white10,
+                alignment: Alignment.center,
+                child: const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white70,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
     final bytes = _localImg[slide.imagePath];
     // Sama seperti composer: Stack langsung mengisi seluruh kotak story.
     // Jangan memakai AspectRatio di sini karena itu membuat gambar mengecil

@@ -19,7 +19,10 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "8.11.1" apply false
+    // EKSPERIMEN branch experiment/agp9: AGP 9.0.1 + Gradle 9.3.1
+    // (Play Console minta AGP ≥ 9.0; Flutter 3.47 berkahi combo ini:
+    // gradle_utils.dart → AGP 9.0.x butuh Gradle 9.1+ ≤ 9.3.1).
+    id("com.android.application") version "9.0.1" apply false
     // START: FlutterFire Configuration
     id("com.google.gms.google-services") version("4.4.2") apply false
     id("com.google.firebase.crashlytics") version("3.0.3") apply false

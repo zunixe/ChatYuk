@@ -68,3 +68,27 @@ String? processChatImage(Uint8List bytes) {
         );
   return base64Encode(img.encodeJpg(resized, quality: 75));
 }
+
+/// Varian HD (ala WhatsApp): sisi terpanjang 1920 + JPEG q90 (~0.8–2MB).
+/// Dipakai bila user menyalakan toggle HD di preview. Harus top-level
+/// untuk `compute()` isolate (pola sama dengan processChatImage).
+String? processChatImageHd(Uint8List bytes) {
+  // image 4.x MELEMPAR untuk bytes korup/pendek — jangan biarkan crash.
+  final img.Image? decoded;
+  try {
+    decoded = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (decoded == null) return null;
+  final w = decoded.width;
+  final h = decoded.height;
+  final img.Image resized = (w <= 1920 && h <= 1920)
+      ? decoded
+      : img.copyResize(
+          decoded,
+          width: w > h ? 1920 : null,
+          height: h >= w ? 1920 : null,
+        );
+  return base64Encode(img.encodeJpg(resized, quality: 90));
+}

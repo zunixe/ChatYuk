@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../utils.dart';
 import '../utils/mention.dart';
 import 'mention_spans.dart';
+import 'chat_video_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
@@ -15,6 +16,8 @@ import '../models/message_model.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/cache/photo_cache.dart';
+import '../core/chat/chat_location.dart';
+import '../widgets/location_bubble.dart';
 import '../core/screen_secure_service.dart';
 import '../services/storage_photo_service.dart';
 import 'app_gesture.dart';
@@ -1069,6 +1072,35 @@ class MessageBubble extends StatelessWidget {
                           isQueued: isQueued,
                           isRead: isRead,
                         )
+                      else if ((msg.type == 'video' ||
+                              msg.type == 'video_once' ||
+                              msg.type == 'video_once_expired') &&
+                          msg.imageData.isNotEmpty)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ChatVideoBubble(
+                              videoData: msg.imageData,
+                              durationMs: msg.durationMs ?? 0,
+                              // Sekali lihat: sudah ditonton → terkunci.
+                              locked: msg.type == 'video_once_expired',
+                              isOnce: msg.type != 'video',
+                              messageId: msg.id,
+                              isMe: isMe,
+                            ),
+                            if (msg.text.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: MentionAwareText(
+                                  msg.text,
+                                  style: AppText.chatBody.copyWith(
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                  mentions: msg.mentions,
+                                ),
+                              ),
+                          ],
+                        )
                       else if (msg.type == 'image' && msg.imageData.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1150,6 +1182,9 @@ class MessageBubble extends StatelessWidget {
                         DeferredImage(
                           onTap: () async => onRetryImage?.call(msg.id),
                         )
+                      else if (msg.type == 'location' &&
+                          parseLocation(msg.text) != null)
+                        LocationBubble(location: parseLocation(msg.text)!)
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')
                         Stack(

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,7 +11,10 @@ import '../models/message_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
+import '../providers/storage_provider.dart';
+import '../utils.dart';
 import '../core/media/chat_photo_helper.dart';
+import '../core/photo_quality_pref.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
 import 'chat_outbox_mixin.dart';
@@ -47,6 +51,8 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     String? repliedToText,
     String? repliedToSenderName,
     int? viewOnceSecs,
+    /// Durasi VIDEO (ms) untuk bubble + validasi server. Null = bukan video.
+    int? videoDurationMs,
   });
 
   /// Timer view-once yang dipilih di preview (detik; null = foto normal).
@@ -71,9 +77,58 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// Set preview foto di composer (private: + fokus & scroll; room: set saja).
   void photoSetPreview(String base64);
 
+  /// Set preview VIDEO di composer (poster + durasi). Hanya private yang
+  /// mengisi; room default no-op (video room belum aktif).
+  void videoSetPreview({
+    required String path,
+    required String posterBase64,
+    required int durationMs,
+  }) {}
+
+  /// Buang preview video (batal/kirim). Room default no-op.
+  void videoClearPreview() {}
+
+  /// Path video yang sedang di-preview (null = tidak ada). Room selalu null.
+  String? get pendingVideoPath => null;
+
+  /// True bila fitur video aktif di layar ini (private). Room: false.
+  bool get videoSendEnabled => false;
+
+  /// Video dikirim sebagai "sekali lihat"? (private: toggle di preview).
+  /// Room: false. Berbeda dari foto — video TIDAK punya timer detik karena
+  /// `duration_ms` sudah dipakai untuk panjang video (playback).
+  bool get videoOnceSelected => false;
+
+  /// Set status sekali-lihat video. Room: no-op.
+  void videoSetOnce(bool value) {}
+
   final ImagePicker _photoPicker = ImagePicker();
 
   ImagePicker get photoPicker => _photoPicker;
+
+  /// Bytes ASLI foto yang sedang di-preview (untuk proses ulang HD).
+  /// Null = tidak ada preview / preview dibatalkan / sudah terkirim.
+  Uint8List? pendingPhotoOriginal;
+
+  /// Toggle HD di preview (default dari setting). Reset tiap buka preview.
+  bool photoHd = false;
+
+  /// Buka preview: simpan original + default HD dari setting.
+  Future<void> _openPreview(Uint8List original, String? processed) async {
+    pendingPhotoOriginal = original;
+    photoHd = await PhotoQualityPref.defaultHd;
+    if (processed != null && mounted) photoSetPreview(processed);
+    if (processed == null) {
+      pendingPhotoOriginal = null;
+      photoHd = false;
+    }
+  }
+
+  /// Buang state preview (dipanggil saat batal/kirim).
+  void photoClearPreviewState() {
+    pendingPhotoOriginal = null;
+    photoHd = false;
+  }
 
   /// Tombol kamera: ambil → proses → taruh di preview composer.
   Future<void> photoTakeToPreview() async {
@@ -82,15 +137,19 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       preferredCameraDevice: CameraDevice.rear,
     );
     if (picked == null) return;
-    final processed = await photoProcess(await picked.readAsBytes());
-    if (processed != null && mounted) photoSetPreview(processed);
+    final bytes = await picked.readAsBytes();
+    final processed = await photoProcess(bytes);
+    await _openPreview(bytes, processed);
   }
 
-  /// Tombol galeri: ambil → proses → langsung kirim.
-  Future<void> photoPickFromGalleryAndSend() async {
+  /// Tombol galeri: ambil → taruh di preview (caption + toggle HD),
+  /// ala WhatsApp. Kirim terjadi dari tombol send composer.
+  Future<void> photoPickFromGalleryToPreview() async {
     final picked = await _photoPicker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-    await sendPhotoBytes(await picked.readAsBytes());
+    final bytes = await picked.readAsBytes();
+    final processed = await photoProcess(bytes);
+    await _openPreview(bytes, processed);
   }
 
   /// Validasi ukuran + resize isolate. Return base64, null bila gagal
@@ -113,13 +172,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
     }
     return base64;
-  }
-
-  /// Kirim foto biasa (optimistic + poin + upload + antre offline).
-  Future<void> sendPhotoBytes(Uint8List bytes) async {
-    final base64 = await photoProcess(bytes);
-    if (base64 == null || !mounted) return;
-    await _sendImageLike(base64: base64, kind: 'image', type: 'image');
   }
 
   /// Kirim view-once (watermark bila aktif).
@@ -145,6 +197,281 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     await _sendImageLike(base64: base64, kind: 'view_once', type: 'view_once');
   }
 
+  // ── VIDEO (private chat) ──
+  /// Progress kompres 0..1 (null = tidak sedang kompres) — untuk UI.
+  double? videoCompressProgress;
+
+  /// Pilih video dari galeri → validasi durasi → kompres 480p → preview.
+  /// Return true bila preview siap. Pesan error sudah tampil bila gagal.
+  Future<bool> videoPickToPreview() async {
+    if (!videoSendEnabled) return false;
+    final s = context.read<LocaleProvider>().s;
+    void toast(String msg) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+
+    XFile? picked;
+    try {
+      picked = await _photoPicker.pickVideo(source: ImageSource.gallery);
+    } catch (e) {
+      dlog('[Video] pick error: $e');
+      return false;
+    }
+    if (picked == null) return false;
+    if (!mounted) return false;
+
+    // 1) Cek durasi ASLI sebelum kompres (tolak >60 dtk lebih awal —
+    //    jangan buang waktu kompres video 5 menit).
+    final storage = context.read<StorageProvider>();
+    final rawMs = await storage.videoDurationMs(picked.path);
+    if (!mounted) return false;
+    if (rawMs > 0 && rawMs > StoragePhotoService.chatVideoMaxMs) {
+      toast(s.videoTooLong);
+      return false;
+    }
+
+    // 2) Kompres (progress ditampilkan di composer).
+    setState(() => videoCompressProgress = 0);
+    File? out;
+    try {
+      out = await storage.compressChatVideo(
+        picked.path,
+        onProgress: (p) {
+          if (mounted) setState(() => videoCompressProgress = p);
+        },
+      );
+    } finally {
+      if (mounted) setState(() => videoCompressProgress = null);
+    }
+    if (!mounted) return false;
+    if (out == null || !await out.exists()) {
+      toast(s.videoCompressFail);
+      return false;
+    }
+
+    // 3) Batas ukuran hasil.
+    final bytes = await out.readAsBytes();
+    if (bytes.length > StoragePhotoService.chatVideoMaxBytes) {
+      toast(s.videoTooLarge);
+      return false;
+    }
+
+    // 4) Durasi hasil (untuk label + batas server) + poster thumbnail.
+    var outMs = await storage.videoDurationMs(out.path);
+    if (outMs <= 0) outMs = rawMs;
+    if (outMs <= 0) outMs = 1000;
+    final poster = await storage.storyVideoPoster(out.path);
+    if (!mounted) return false;
+    if (poster == null || poster.isEmpty) {
+      toast(s.videoCompressFail);
+      return false;
+    }
+
+    videoSetPreview(
+      path: out.path,
+      posterBase64: base64Encode(poster),
+      durationMs: outMs,
+    );
+    return true;
+  }
+
+  /// Kirim video dari preview (upload → dispatch type 'video').
+  ///
+  /// Nama TIDAK boleh sama dengan kontrak publik di `ChatSendMixin`
+  /// (`sendVideoFromPreview`): implementasi di mixin ini akan MENANG atas
+  /// override layar karena urutan linearisasi mixin → video tak terkirim.
+  /// Kontrak publik tetap `sendVideoFromPreview` (lihat ChatSendMixin);
+  /// layar meng-override-nya dan memanggil `sendVideoFromPreviewImpl`.
+  Future<void> sendVideoFromPreviewImpl({
+    String text = '',
+    MessageModel? reply,
+  }) async {
+    final path = pendingVideoPath;
+    if (path == null || path.isEmpty) return;
+    if (!mounted) return;
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
+    final durationMs = pendingVideoMs;
+    videoClearPreview();
+
+    final file = File(path);
+    final bytes = await file.exists() ? await file.readAsBytes() : null;
+    if (bytes == null || bytes.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.videoCompressFail)));
+      }
+      return;
+    }
+    await _sendVideoLike(
+      bytes: bytes,
+      durationMs: durationMs,
+      text: text,
+      reply: reply,
+    );
+  }
+
+  /// Durasi video preview (ms). WAJIB getter (bukan field) supaya layar
+  /// bisa meng-override dengan state-nya — field di mixin akan MENUTUPI
+  /// getter layar dan selalu bernilai 0 (durasi hilang saat kirim).
+  int get pendingVideoMs => 0;
+
+  /// Jalur kirim video: optimistic bubble → poin → upload → dispatch.
+  /// Tanpa view-once (video tidak punya mode sekali lihat).
+  Future<void> _sendVideoLike({
+    required Uint8List bytes,
+    required int durationMs,
+    String text = '',
+    MessageModel? reply,
+  }) async {
+    final auth = context.read<AuthProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (uid == null || profile == null) return;
+    final s = context.read<LocaleProvider>().s;
+
+    // Preview lokal (base64 data-uri) supaya bubble langsung tampil —
+    // path storage baru ada setelah upload.
+    final pendingVideo = MessageModel(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      senderId: uid,
+      senderName: profile.nickname,
+      senderGender: profile.gender,
+      isRegistered: profile.isRegistered,
+      text: text,
+      type: 'video',
+      imageData: base64Encode(bytes),
+      timestamp: DateTime.now(),
+      durationMs: durationMs,
+      repliedToId: reply?.id,
+      repliedToText: reply?.text,
+      repliedToSenderName: reply?.senderName,
+    );
+    setState(() => outboxPending.add(pendingVideo));
+    outboxScrollToBottom();
+
+    // Offline: antre (upload menyusul saat online).
+    if (!outboxIsOnline) {
+      await queueOffline(
+        pending: pendingVideo,
+        pointsKind: 'image',
+        pointsDeducted: false,
+        imagePayload: base64Encode(bytes),
+        needsUpload: true,
+        uploadKind: 'video',
+        durationMs: durationMs,
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
+      );
+      return;
+    }
+
+    final pp = context.read<PointsProvider>();
+    // Biaya kirim video = sama dengan foto (kind 'image').
+    final r = await pp.deductBeforeSend('image');
+    if (r < 0) {
+      if (r == -2) {
+        await queueOffline(
+          pending: pendingVideo,
+          pointsKind: 'image',
+          pointsDeducted: false,
+          imagePayload: base64Encode(bytes),
+          needsUpload: true,
+          uploadKind: 'video',
+          durationMs: durationMs,
+          repliedToId: reply?.id,
+          repliedToText: reply?.text,
+          repliedToSenderName: reply?.senderName,
+        );
+        return;
+      }
+      setState(
+        () => outboxPending.removeWhere((m) => m.id == pendingVideo.id),
+      );
+      if (!mounted) return;
+      if (r == -1) {
+        pp.showOutOfPointsDialog(context, s.isId);
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+      }
+      return;
+    }
+
+    try {
+      final path = await StoragePhotoService.instance.uploadChatVideo(
+        chatId: photoUploadChatId,
+        bytes: bytes,
+      );
+      if (path == null || path.isEmpty) {
+        if (!outboxIsOnline) {
+          throw const SocketException('video upload failed');
+        }
+        safeUnawaited(pp.refundChatPoint('image'));
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+          setState(
+            () => outboxPending.removeWhere((m) => m.id == pendingVideo.id),
+          );
+        }
+        return;
+      }
+      // "Sekali lihat" video ditandai lewat TYPE (video_once) — bukan
+      // durationMs yang sudah dipakai untuk panjang video.
+      final isOnce = videoOnceSelected;
+      await photoDispatch(
+        imageData: path,
+        type: isOnce ? 'video_once' : 'video',
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: text,
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
+        // Durasi video (panjang playback) — SELALU dikirim.
+        videoDurationMs: durationMs,
+      );
+      photoFirstBonus(pp);
+      photoOnSent(isOnce ? 'video_once' : 'video');
+      outboxScrollToBottom();
+    } catch (e) {
+      if (OfflineOutbox.isNetworkError(e) || !outboxIsOnline) {
+        await queueOffline(
+          pending: pendingVideo,
+          pointsKind: 'image',
+          pointsDeducted: true,
+          imagePayload: base64Encode(bytes),
+          needsUpload: true,
+          uploadKind: 'video',
+          durationMs: durationMs,
+          repliedToId: reply?.id,
+          repliedToText: reply?.text,
+          repliedToSenderName: reply?.senderName,
+        );
+      } else {
+        safeUnawaited(pp.refundChatPoint('image'));
+        if (mounted) {
+          setState(
+            () => outboxPending.removeWhere((m) => m.id == pendingVideo.id),
+          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+        }
+      }
+    }
+  }
+
   /// Kirim foto dari base64 yang sudah diproses (dipakai composer preview).
   Future<void> sendPhotoBase64(
     String base64, {
@@ -152,13 +479,21 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     MessageModel? reply,
   }) async {
     if (!mounted) return;
+    // HD on + original masih ada → proses ulang dari ASLINYA (bukan
+    // kompres-ulang hasil preview standar).
+    var payload = base64;
+    final original = pendingPhotoOriginal;
+    if (photoHd && original != null) {
+      payload = await compute(processChatImageHd, original) ?? base64;
+    }
     await _sendImageLike(
-      base64: base64,
+      base64: payload,
       kind: 'image',
       type: 'image',
       text: text,
       reply: reply,
     );
+    photoClearPreviewState();
   }
 
   Future<void> _sendImageLike({

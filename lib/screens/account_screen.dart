@@ -40,7 +40,9 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
-    final isAnon = auth.isAnonymous;
+    // Jangan tampilkan banner anon saat proses keluar (signingOut) —
+    // sesi belum kosong & isAnonymous masih true sekejap → banner berkedip.
+    final isAnon = auth.isAnonymous && !auth.signingOut;
 
     return Scaffold(
       backgroundColor: AppTheme.bgScreen,

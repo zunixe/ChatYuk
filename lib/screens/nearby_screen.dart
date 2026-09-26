@@ -9,6 +9,7 @@ import 'nearby/widgets/nearby_card.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
+import '../core/perf/perf_probe.dart';
 
 import 'private_chat_screen.dart';
 import '../providers/theme_provider.dart';
@@ -214,6 +215,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('Nearby');
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
@@ -266,8 +268,10 @@ class _NearbyScreenState extends State<NearbyScreen> {
           Slider(
             value: _radiusKm,
             min: 1,
-            max: 200,
-            divisions: 199,
+            // Maks = batas server (nearby_users clamp 500km). 200km terlalu
+            // kecil untuk Indonesia (Bandung–Jogja ~300km).
+            max: 500,
+            divisions: 499,
             activeColor: AppTheme.primary,
             label: '${_radiusKm.round()} km',
             onChanged: (v) => setState(() => _radiusKm = v),

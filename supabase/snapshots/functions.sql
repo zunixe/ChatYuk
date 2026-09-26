@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-25T00:18:53Z
+-- Timestamp: 2026-09-26T16:45:33Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -501,7 +501,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: notify_private_message @ 20260913130001_notif_touid.sql
+-- snapshot-fn: notify_private_message @ 20260926150000_notif_video_label.sql
 CREATE OR REPLACE FUNCTION public.notify_private_message()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -567,6 +567,8 @@ begin
     sender_display := coalesce(nullif(sender_display,''), nullif(new.sender_name,''), 'User');
     -- Preview isi: teks (200 char) atau label tipe non-teks.
     v_body := case when new.type in ('image','view_once') then '[Foto]'
+                   when new.type in ('video','video_once','video_once_expired')
+                     then '[Video]'
                    when new.type = 'voice' then '[Pesan suara]'
                    when new.type = 'coin' then '[Koin]'
                    when new.type = 'gift' then '[Hadiah]'
@@ -1491,7 +1493,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: list_posts @ 20260909000001_timeline_listposts_perf.sql
+-- snapshot-fn: list_posts @ 20260927000000_posts_image_dims.sql
 CREATE OR REPLACE FUNCTION public.list_posts(p_scope text DEFAULT 'all'::text, p_limit integer DEFAULT 30, p_cursor timestamp with time zone DEFAULT NULL::timestamp with time zone, p_cursor_boosted boolean DEFAULT false, p_country text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1564,6 +1566,10 @@ begin
       'authorGender', v.author_gender,
       'text', v.text,
       'imagePath', v.image_path,
+      'images', coalesce(v.images, '{}'),
+      'imageW', coalesce(v.image_w, 0),
+      'imageH', coalesce(v.image_h, 0),
+      'imageDims', coalesce(v.image_dims, '[]'::jsonb),
       'visibility', v.visibility,
       'likeCount', v.like_count,
       'commentCount', v.comment_count,
@@ -1595,7 +1601,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: story_slides @ 20260920130000_profile_privacy.sql
+-- snapshot-fn: story_slides @ 20260926110000_story_video.sql
 CREATE OR REPLACE FUNCTION public.story_slides(p_author uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1610,6 +1616,8 @@ begin
     'text_size', s.text_size, 'text_scale', s.text_scale,
     'text_rotation', s.text_rotation, 'text_bg', s.text_bg,
     'visibility', s.visibility,
+    'media_type', s.media_type, 'video_path', s.video_path,
+    'duration_ms', s.duration_ms,
     'like_count', (select count(*) from public.story_likes l where l.story_id = s.id),
     'liked', exists (select 1 from public.story_likes l where l.story_id = s.id and l.user_id = auth.uid()),
     'created_at', s.created_at
@@ -1628,8 +1636,8 @@ begin
 end;
 $function$
 
--- snapshot-fn: create_story @ 20260907100000_story_visibility_followers.sql
-CREATE OR REPLACE FUNCTION public.create_story(p_image_path text, p_text_overlay text DEFAULT ''::text, p_text_x real DEFAULT 0.5, p_text_y real DEFAULT 0.85, p_text_color integer DEFAULT 0, p_text_size integer DEFAULT 1, p_text_bg boolean DEFAULT false, p_text_scale real DEFAULT 1.0, p_text_rotation real DEFAULT 0, p_visibility text DEFAULT 'followers'::text)
+-- snapshot-fn: create_story @ 20260926110000_story_video.sql
+CREATE OR REPLACE FUNCTION public.create_story(p_image_path text, p_text_overlay text DEFAULT ''::text, p_text_x real DEFAULT 0.5, p_text_y real DEFAULT 0.85, p_text_color integer DEFAULT 0, p_text_size integer DEFAULT 1, p_text_bg boolean DEFAULT false, p_text_scale real DEFAULT 1.0, p_text_rotation real DEFAULT 0, p_visibility text DEFAULT 'followers'::text, p_media_type text DEFAULT 'image'::text, p_video_path text DEFAULT ''::text, p_duration_ms integer DEFAULT 0)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -1638,6 +1646,7 @@ AS $function$
 declare
   v_id uuid;
   v_vis text;
+  v_media text;
 begin
   if not public._viewer_is_registered() then
     v_vis := 'everyone';
@@ -1653,9 +1662,24 @@ begin
   if length(coalesce(p_text_overlay, '')) > 300 then
     raise exception 'Teks terlalu panjang (max 300)';
   end if;
+  v_media := coalesce(p_media_type, 'image');
+  if v_media not in ('image', 'video') then
+    raise exception 'Media tidak valid';
+  end if;
+  if v_media = 'video' then
+    if coalesce(p_video_path, '') = ''
+       or p_video_path not like 'story/%' then
+      raise exception 'Video path tidak valid';
+    end if;
+    if coalesce(p_duration_ms, 0) < 1000
+       or coalesce(p_duration_ms, 0) > 15000 then
+      raise exception 'Durasi video 1-15 detik';
+    end if;
+  end if;
   insert into public.stories (
     author_id, author_name, image_path, text_overlay, text_x, text_y,
-    text_color, text_size, text_bg, text_scale, text_rotation, visibility
+    text_color, text_size, text_bg, text_scale, text_rotation, visibility,
+    media_type, video_path, duration_ms
   )
   select auth.uid(),
          coalesce((select nickname from public.profiles where id = auth.uid()), 'Anon'),
@@ -1667,7 +1691,9 @@ begin
          coalesce(p_text_bg, false),
          greatest(coalesce(p_text_scale, 1.0), 0.1),
          coalesce(p_text_rotation, 0),
-         v_vis
+         v_vis,
+         v_media, coalesce(p_video_path, ''),
+         greatest(coalesce(p_duration_ms, 0), 0)
   returning id into v_id;
   return jsonb_build_object('ok', true, 'id', v_id);
 end;

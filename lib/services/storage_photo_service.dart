@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:video_compress/video_compress.dart';
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
@@ -51,7 +53,11 @@ class StoragePhotoService {
           value.contains('.jpeg') ||
           value.contains('.png') ||
           value.contains('.m4a') ||
-          value.contains('.mp3'));
+          value.contains('.mp3') ||
+          // VIDEO (chat + story) — tanpa ini path .mp4 dikira base64 →
+          // bubble video gagal total (bukan "belum termuat").
+          value.contains('.mp4') ||
+          value.contains('.mov'));
 
   /// Path untuk foto baru di chat. Tidak bergantung messageId (yang baru
   /// diketahui setelah insert) — cukup chatId + timestamp unik.
@@ -131,6 +137,181 @@ class StoragePhotoService {
     } catch (e) {
       dlog('[StoragePhoto] uploadStoryImage error: $e');
       return null;
+    }
+  }
+
+  /// Path video story (slide mp4, maks 15 dtk).
+  String storyVideoPath(String uid) =>
+      'story/$uid/${DateTime.now().microsecondsSinceEpoch}.mp4';
+
+  /// Upload video story → Storage. Return path atau null.
+  Future<String?> uploadStoryVideo({
+    required String uid,
+    required Uint8List bytes,
+  }) async {
+    try {
+      if (bytes.isEmpty) return null;
+      final path = storyVideoPath(uid);
+      await _sb.storage.from(_bucket).uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(contentType: 'video/mp4'),
+          );
+      return path;
+    } catch (e) {
+      dlog('[StoragePhoto] uploadStoryVideo error: $e');
+      return null;
+    }
+  }
+
+  /// True bila path video story (`story/....mp4`).
+  bool isStoryVideoPath(String v) =>
+      v.startsWith('story/') && v.contains('.mp4');
+
+  /// Kompres video story → 720p hemat (±1,5 Mbps, ~3 MB per 15 dtk).
+  /// Return file hasil (di direktori cache) atau null bila gagal —
+  /// pemanggil pakai file asli hanya bila kompresi gagal dan masih di
+  /// bawah cap? TIDAK: gagal kompres = tolak (jangan upload mentah 20 MB).
+  Future<File?> compressStoryVideo(
+    String srcPath, {
+    void Function(double progress01)? onProgress,
+    int? startMs,
+    int? durationMs,
+  }) async {
+    try {
+      Subscription? sub;
+      if (onProgress != null) {
+        sub = VideoCompress.compressProgress$.subscribe((p) {
+          onProgress((p.toDouble() / 100).clamp(0.0, 1.0));
+        });
+      }
+      final info = await VideoCompress.compressVideo(
+        srcPath,
+        quality: VideoQuality.Res1280x720Quality,
+        deleteOrigin: false,
+        includeAudio: true,
+        frameRate: 30,
+        // Potong segmen (video galeri panjang → beberapa story 15 dtk).
+        startTime: startMs,
+        duration: durationMs,
+      ).timeout(const Duration(seconds: 180));
+      sub?.unsubscribe();
+      final f = info?.file;
+      if (f == null || !await f.exists()) return null;
+      return f;
+    } catch (e) {
+      dlog('[StoragePhoto] compressStoryVideo error: $e');
+      return null;
+    }
+  }
+
+  /// Satu frame poster JPEG untuk thumbnail tray story video.
+  /// Pakai getFileThumbnail bawaan video_compress (paket video_thumbnail
+  /// terpisah merusak build AGP 9). Server membuat thumb 180x316-nya.
+  Future<Uint8List?> storyVideoPoster(String videoPath) async {
+    // 1) Byte langsung (paling andal — tanpa file perantara).
+    try {
+      final bytes = await VideoCompress.getByteThumbnail(
+        videoPath,
+        quality: 70,
+        position: 500,
+      ).timeout(const Duration(seconds: 30));
+      if (bytes != null && bytes.isNotEmpty) return bytes;
+    } catch (e) {
+      dlog('[StoragePhoto] poster byte thumb error: $e');
+    }
+    // 2) Fallback: file thumb (posisi 0 bila 500ms tak tersedia).
+    try {
+      final thumb = await VideoCompress.getFileThumbnail(
+        videoPath,
+        quality: 70,
+        position: -1,
+      ).timeout(const Duration(seconds: 30));
+      final bytes = await thumb.readAsBytes();
+      return bytes.isEmpty ? null : bytes;
+    } catch (e) {
+      dlog('[StoragePhoto] storyVideoPoster error: $e');
+      return null;
+    }
+  }
+
+  // ── VIDEO CHAT ── (private chat; room menyusul)
+  /// Batas ukuran hasil kompres video chat (8 MB) — sama dengan foto.
+  static const int chatVideoMaxBytes = 8 * 1024 * 1024;
+
+  /// Batas durasi video chat (60 detik).
+  static const int chatVideoMaxMs = 60 * 1000;
+
+  /// Path video chat. Pola sama [newPath] (chatId + timestamp, tanpa
+  /// messageId yang baru diketahui setelah insert).
+  String chatVideoPath(String chatId) =>
+      'chat/$chatId/${DateTime.now().microsecondsSinceEpoch}.mp4';
+
+  /// True bila path video chat (`chat/....mp4`).
+  bool isChatVideoPath(String v) =>
+      v.startsWith('chat/') && (v.contains('.mp4') || v.contains('.mov'));
+
+  /// Upload video chat → Storage. Return path atau null.
+  Future<String?> uploadChatVideo({
+    required String chatId,
+    required Uint8List bytes,
+  }) async {
+    try {
+      if (bytes.isEmpty) return null;
+      final path = chatVideoPath(chatId);
+      await _sb.storage.from(_bucket).uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(contentType: 'video/mp4'),
+          );
+      return path;
+    } catch (e) {
+      dlog('[StoragePhoto] uploadChatVideo error: $e');
+      return null;
+    }
+  }
+
+  /// Kompres video chat → 480p hemat (target ±1 Mbps, ±7 MB per 60 dtk).
+  /// Return file hasil atau null bila gagal. Gagal kompres = tolak
+  /// (jangan upload mentah — boros kuota + bisa lewat batas 20 MB guard).
+  Future<File?> compressChatVideo(
+    String srcPath, {
+    void Function(double progress01)? onProgress,
+  }) async {
+    try {
+      Subscription? sub;
+      if (onProgress != null) {
+        sub = VideoCompress.compressProgress$.subscribe((p) {
+          onProgress((p.toDouble() / 100).clamp(0.0, 1.0));
+        });
+      }
+      final info = await VideoCompress.compressVideo(
+        srcPath,
+        quality: VideoQuality.Res640x480Quality,
+        deleteOrigin: false,
+        includeAudio: true,
+        frameRate: 30,
+      ).timeout(const Duration(seconds: 240));
+      sub?.unsubscribe();
+      final f = info?.file;
+      if (f == null || !await f.exists()) return null;
+      return f;
+    } catch (e) {
+      dlog('[StoragePhoto] compressChatVideo error: $e');
+      return null;
+    }
+  }
+
+  /// Durasi video (ms) via metadata video_compress — 0 bila gagal dibaca.
+  Future<int> videoDurationMs(String srcPath) async {
+    try {
+      final info = await VideoCompress.getMediaInfo(
+        srcPath,
+      ).timeout(const Duration(seconds: 20));
+      return ((info.duration ?? 0).toDouble()).round();
+    } catch (e) {
+      dlog('[StoragePhoto] videoDurationMs error: $e');
+      return 0;
     }
   }
 

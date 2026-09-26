@@ -21,6 +21,7 @@ class RoomExploreCard extends StatelessWidget {
         'voice' => s.msgVoice,
         'gift' => '🎁',
         'coin' => '🪙',
+        'location' => '📍 ${s.msgLocation}',
         _ => room.lastText.replaceAll('\n', ' '),
       };
       final sender = room.lastSenderName.isNotEmpty

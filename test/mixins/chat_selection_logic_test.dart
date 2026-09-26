@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,8 @@ import 'package:chatyuk/providers/chat_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/services/auth_service.dart';
 import 'package:chatyuk/services/message_reaction_service.dart';
+
+import '../supabase_test_client.dart';
 
 class MockAuthService extends Mock implements AuthService {}
 
@@ -369,5 +372,125 @@ void main() {
         await tester.pump(const Duration(seconds: 5));
       });
     }
+  });
+
+  group('ChatSelectionMixin — cabang delete/copy/react', () {
+    Future<SelHostState> pumpUid(WidgetTester tester, String uid) async {
+      final mockSvc = MockAuthService();
+      when(() => mockSvc.uid).thenReturn(uid);
+      final auth = AuthProvider(authService: mockSvc, autoInit: false);
+      final chat = ChatProvider();
+      SelHostState.deleteResults.clear();
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<LocaleProvider>(
+              create: (_) => LocaleProvider(),
+            ),
+          ],
+          child: MaterialApp(home: Scaffold(body: SelHost(auth: auth, chat: chat))),
+        ),
+      );
+      return tester.state<SelHostState>(find.byType(SelHost));
+    }
+
+    Future<void> tapBatal(WidgetTester tester) async {
+      // Settle + retry: tap tunggal saat animasi bisa miss diam-diam
+      // (down/up tidak di tombol) → fut menggantung selamanya. Ulangi
+      // sampai dialog benar-benar tertutup.
+      for (var i = 0; i < 5; i++) {
+        await tester.pumpAndSettle();
+        if (find.text('Batal').evaluate().isEmpty) return;
+        await tester.tap(find.widgetWithText(TextButton, 'Batal'));
+      }
+      fail('dialog konfirmasi hapus tidak tertutup');
+    }
+
+    testWidgets('seleksi kosong → diam, tanpa dialog', (tester) async {
+      final s = await pumpUid(tester, 'u-me');
+      await s.deleteSelected();
+      await tester.pump();
+
+      expect(s.selectedIds, isEmpty);
+      expect(find.textContaining('Hapus pesan ini?'), findsNothing);
+    });
+
+    testWidgets('hanya pesan orang → dibersihkan, tanpa hapus', (tester) async {
+      final s = await pumpUid(tester, 'u-me');
+      s.toggleSelect(msg(id: 'm9', senderId: 'u-other'));
+      await tester.pump();
+      expect(s.selectedIds, isNotEmpty);
+
+      await s.deleteSelected();
+      await tester.pump();
+
+      expect(s.selectedIds, isEmpty, reason: 'seleksi dibersihkan');
+      expect(s.deleted, isEmpty, reason: 'pesan orang tak dihapus');
+    });
+
+    testWidgets('batal dialog → tidak hapus', (tester) async {
+      final s = await pumpUid(tester, 'u-me');
+      s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
+      await tester.pump();
+
+      final fut = s.deleteSelected();
+      await tapBatal(tester);
+      debugPrint('DBG dialog open=${find.textContaining('Hapus pesan ini?').evaluate().isNotEmpty}');
+      await fut.timeout(const Duration(seconds: 10), onTimeout: () {
+        debugPrint('DBG FUT TIMEOUT');
+      });
+      debugPrint('DBG fut done');
+      await tester.pump();
+
+      expect(s.deleted, isEmpty);
+      expect(s.selectedIds, isNotEmpty, reason: 'seleksi dipertahankan');
+    });
+
+    testWidgets('copy → clipboard terisi + snackbar + seleksi bersih',
+        (tester) async {
+      // Handler eksplisit: mock clipboard bawaan macet bila ada widget
+      // tree ter-pump (diam tanpa reply) — dengan ini deterministik SEKALIGUS
+      // isi teksnya bisa diassert.
+      String? got;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          got = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      });
+      addTearDown(() => TestDefaultBinaryMessengerBinding.instance
+          .defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+
+      final s = await pumpUid(tester, 'u-me');
+      s.toggleSelect(msg(id: 'm1', senderId: 'u-me', text: 'rahasia'));
+      await tester.pump();
+
+      await s.copySelected();
+      await tester.pump();
+
+      expect(got, 'rahasia');
+      expect(find.text(s.context.read<LocaleProvider>().s.msgMessageCopied),
+          findsOneWidget);
+      expect(s.selectedIds, isEmpty);
+    });
+
+    testWidgets('react gagal (tanpa sesi) → seleksi bersih, tanpa crash',
+        (tester) async {
+      MessageReactionService.overrideInstance(
+        MessageReactionService.forTest(fakeSupabaseClientNoTicker()),
+      );
+      final s = await pumpUid(tester, 'u-me');
+      s.toggleSelect(msg(id: 'm1', senderId: 'u-me'));
+      await tester.pump();
+
+      await s.reactToSelected('❤️');
+      await tester.pump();
+
+      expect(s.selectedIds, isEmpty);
+      expect(s.reactions['m1'], isNull);
+    });
   });
 }

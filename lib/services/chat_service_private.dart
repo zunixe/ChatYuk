@@ -141,7 +141,8 @@ mixin ChatServicePrivateMx on ChatBase {
     List<Mention> mentions = const [],
   }) async {
     // Validasi tipe pesan
-    if (!['text', 'image', 'view_once', 'call', 'voice'].contains(type)) {
+    if (!['text', 'image', 'view_once', 'call', 'voice', 'location']
+        .contains(type)) {
       throw Exception('Invalid message type');
     }
     // Validasi image/voice data jika ada — boleh base64 (lama) ATAU path storage (baru)
@@ -205,7 +206,7 @@ mixin ChatServicePrivateMx on ChatBase {
         'sender_gender': senderGender,
         'text': text,
         'type': type,
-        'image_data': type == 'voice' ? '' : imageData,
+      'image_data': (type == 'voice' || type == 'location') ? '' : imageData,
         'voice_path': type == 'voice' ? imageData : '',
         'duration_ms': durationMs ?? 0,
         if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),

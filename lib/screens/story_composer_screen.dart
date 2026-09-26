@@ -6,6 +6,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
 import 'dart:ui' as ui;
 
 import '../config/strings.dart';
@@ -78,7 +79,15 @@ Uint8List encodeRawRgbaToJpg(RawJpg p) {
 /// (tombol + tersembunyi; RLS server juga menolak).
 class StoryComposerScreen extends StatefulWidget {
   final XFile picked;
-  const StoryComposerScreen({super.key, required this.picked});
+  /// Penanda video EKSPLISIT dari kamera/galeri — jangan tebak dari
+  /// ekstensi file (kamera Xiaomi bisa menyimpan ekstensi lain sehingga
+  /// video diperlakukan sebagai foto).
+  final bool isVideo;
+  const StoryComposerScreen({
+    super.key,
+    required this.picked,
+    this.isVideo = false,
+  });
 
   @override
   State<StoryComposerScreen> createState() => _StoryComposerScreenState();
@@ -134,6 +143,278 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
   double _imgRotationBase = 0;
   Offset _imgOffset = Offset.zero;
 
+  // ── VIDEO ──
+  /// Video dari kamera ATAU galeri (penanda eksplisit; ekstensi fallback).
+  bool get _isVideo {
+    if (widget.isVideo) return true;
+    final p = widget.picked.path.toLowerCase();
+    return p.endsWith('.mp4') ||
+        p.endsWith('.mov') ||
+        p.endsWith('.3gp') ||
+        p.endsWith('.mkv') ||
+        p.endsWith('.webm');
+  }
+
+  VideoPlayerController? _videoCtrl;
+  bool _videoReady = false;
+  bool _videoError = false;
+  double? _compressPct;
+  int _segIndex = 0;
+  // Tahan (long-press) pada video = jeda sementara untuk melihat.
+  bool _holdPaused = false;
+  // Segmen potongan: tiap 15 dtk, MAKS 2 segmen (video >60s → 2 pertama).
+  List<({int startMs, int durMs})> _segments = const [];
+  static const int _segLenMs = 15000;
+  static const int _maxSegments = 2;
+
+  static List<({int startMs, int durMs})> _planSegments(int totalMs) {
+    final out = <({int startMs, int durMs})>[];
+    var start = 0;
+    while (out.length < _maxSegments && start < totalMs) {
+      final remaining = totalMs - start;
+      if (remaining < 1000) break; // server butuh >= 1 dtk
+      final dur = remaining > _segLenMs ? _segLenMs : remaining;
+      out.add((startMs: start, durMs: dur));
+      start += _segLenMs;
+    }
+    return out;
+  }
+
+  Future<void> _initVideo() async {
+    final ctrl = VideoPlayerController.file(File(widget.picked.path));
+    _videoCtrl = ctrl;
+    try {
+      await ctrl.initialize().timeout(const Duration(seconds: 15));
+      await ctrl.setLooping(true);
+      await ctrl.play();
+    } catch (e) {
+      dlog('[StoryComposer] video init error: $e');
+      if (mounted) setState(() => _videoError = true);
+      return;
+    }
+    if (!mounted) return;
+    final ms = ctrl.value.duration.inMilliseconds;
+    if (ms < 1000) {
+      if (mounted) {
+        final s = context.read<LocaleProvider>().s;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.storyVideoTooShort)),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+    _segments = _planSegments(ms);
+    if (mounted) setState(() => _videoReady = true);
+  }
+
+  /// Publish video: potong per 15 dtk (maks 2 segmen) → tiap segmen jadi
+  /// satu story. Poster 1 frame jadi thumbnail tray.
+  Future<void> _publishVideo() async {
+    if (_publishing) return;
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final uid = auth.uid;
+    final ctrl = _videoCtrl;
+    if (uid == null || ctrl == null || !ctrl.value.isInitialized) return;
+    final storage = context.read<StorageProvider>();
+    final storyProv = context.read<StoryProvider>();
+    final segs = _segments.isEmpty
+        ? _planSegments(ctrl.value.duration.inMilliseconds)
+        : _segments;
+    if (segs.isEmpty) return;
+    setState(() {
+      _publishing = true;
+      _compressPct = 0;
+      _segIndex = 0;
+    });
+    try {
+      var published = 0;
+      for (var i = 0; i < segs.length; i++) {
+        if (mounted) setState(() => _segIndex = i);
+        final seg = segs[i];
+        // 1) Potong + kompres segmen (≤15 dtk) → 720p hemat.
+        final out = await storage.compressStoryVideo(
+          widget.picked.path,
+          startMs: seg.startMs,
+          durationMs: seg.durMs,
+          onProgress: (p) {
+            if (mounted) setState(() => _compressPct = p);
+          },
+        );
+        if (out == null || !await out.exists()) {
+          throw Exception('compress_fail');
+        }
+        final bytes = await out.readAsBytes();
+        if (bytes.lengthInBytes > 20 * 1024 * 1024) {
+          throw Exception('too_big');
+        }
+        // 2) Poster (thumbnail tray).
+        String posterPath = '';
+        final poster = await storage.storyVideoPoster(out.path);
+        if (poster != null && poster.isNotEmpty) {
+          posterPath = await storage.uploadStoryImage(
+                uid: uid,
+                base64: base64Encode(poster),
+              ) ??
+              '';
+        }
+        // 3) Upload video + publish.
+        final path = await storage.uploadStoryVideo(uid: uid, bytes: bytes);
+        if (path == null || path.isEmpty) throw Exception('upload_failed');
+        final ok = await storyProv.publish(
+              imagePath: posterPath,
+              videoPath: path,
+              durationMs: seg.durMs,
+              visibility: _visibility,
+              myUid: uid,
+              myNickname: auth.profile?.nickname ?? 'Anon',
+              myAvatar: auth.profile?.avatar ?? '',
+            );
+        if (ok) published++;
+      }
+      if (!mounted) return;
+      if (published > 0) {
+        Navigator.pop(context, true);
+      } else {
+        setState(() {
+          _publishing = false;
+          _compressPct = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.storyPublishFail)),
+        );
+      }
+    } catch (e) {
+      dlog('[StoryComposer] publish video error: $e');
+      if (!mounted) return;
+      setState(() {
+        _publishing = false;
+        _compressPct = null;
+      });
+      final msg = '$e';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            msg.contains('too_big')
+                ? s.storyVideoTooBig
+                : msg.contains('compress_fail')
+                ? s.storyCompressFail
+                : s.storyPublishFail,
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Body video: preview loop + kontrol play/pause (ketuk) & tahan-lihat.
+  Widget _videoBody(S s) {
+    final ctrl = _videoCtrl;
+    final ready = _videoReady && ctrl != null && ctrl.value.isInitialized;
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: _videoError
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.videocam_off_outlined,
+                          color: Colors.white54, size: 48),
+                      const SizedBox(height: 8),
+                      Text(s.storyRecordFail,
+                          style: const TextStyle(color: Colors.white70)),
+                    ],
+                  )
+                : !ready
+                ? const CircularProgressIndicator(color: Colors.white)
+                : AspectRatio(
+                    aspectRatio: ctrl.value.aspectRatio,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        VideoPlayer(ctrl),
+                        GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: () => setState(() {
+                            ctrl.value.isPlaying ? ctrl.pause() : ctrl.play();
+                            _holdPaused = false;
+                          }),
+                          onLongPressStart: (_) async {
+                            if (ctrl.value.isPlaying) await ctrl.pause();
+                            if (mounted) setState(() => _holdPaused = true);
+                          },
+                          onLongPressEnd: (_) async {
+                            if (!mounted) return;
+                            setState(() => _holdPaused = false);
+                            await ctrl.play();
+                          },
+                          onLongPressCancel: () async {
+                            if (!mounted) return;
+                            if (_holdPaused) {
+                              setState(() => _holdPaused = false);
+                              await ctrl.play();
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              ctrl.value.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 44,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+        if (_compressPct != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              _segments.length > 1
+                  ? '${s.storyCompressing} ${(_compressPct! * 100).round()}% '
+                      '(${_segIndex + 1}/${_segments.length})'
+                  : '${s.storyCompressing} ${(_compressPct! * 100).round()}%',
+              style: const TextStyle(color: Colors.white70),
+            ),
+          )
+        else if (ready) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              '${(ctrl.value.duration.inMilliseconds / 1000).toStringAsFixed(1)}s',
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ),
+          if (_segments.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, left: 16, right: 16),
+              child: Text(
+                s.storyVideoSplitInfo,
+                textAlign: TextAlign.center,
+                style: AppText.caption.copyWith(color: Colors.white54),
+              ),
+            ),
+        ],
+        Container(
+          color: Colors.black87,
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: _visibilitySelector(s),
+        ),
+      ],
+    );
+  }
+
   Color get _textColor => _colorIndex >= 0 &&
           _colorIndex < StoryText.palette.length
       ? StoryText.palette[_colorIndex]
@@ -175,7 +456,11 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
         setState(() => _textEditing = editing);
       }
     });
-    _loadImage();
+    if (_isVideo) {
+      _initVideo();
+    } else {
+      _loadImage();
+    }
   }
 
   Future<void> _loadImage() async {
@@ -243,6 +528,7 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
       systemNavigationBarIconBrightness: Brightness.light,
     ));
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _videoCtrl?.dispose();
     _textCtrl.dispose();
     _textFocus.dispose();
     super.dispose();
@@ -477,6 +763,14 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
                 ),
               ),
             )
+          else if (_isVideo)
+            IconButton(
+              tooltip: s.storyBtnPublish,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.send_rounded,
+                  color: AppTheme.primary, size: 20),
+              onPressed: _videoReady ? _publishVideo : null,
+            )
           else
             IconButton(
               tooltip: s.storyBtnPublish,
@@ -487,7 +781,9 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
             ),
         ],
       ),
-      body: _bytes == null
+      body: _isVideo
+          ? _videoBody(s)
+          : _bytes == null
           ? const Center(
               child: CircularProgressIndicator(color: Colors.white),
             )

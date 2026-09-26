@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import 'package:provider/provider.dart';
 
+import '../core/chat/chat_location.dart';
 import '../providers/locale_provider.dart';
 
 /// Kutipan balasan (reply quote) di dalam bubble chat — dipakai bersama oleh
@@ -58,6 +59,10 @@ class ReplyQuote extends StatelessWidget {
     final nameStyle = senderColor == null
         ? AppText.chatName
         : AppText.chatName.copyWith(color: senderColor);
+    // Kutipan lokasi: JSON koordinat mentah → label ramah ("📍 Lokasi").
+    final displayText = targetDeleted
+        ? s.messageDeleted
+        : (isLocationPayload(text) ? '📍 ${s.msgLocation}' : text);
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -73,7 +78,7 @@ class ReplyQuote extends StatelessWidget {
         children: [
           Text(senderName ?? '', style: nameStyle),
           Text(
-            targetDeleted ? s.messageDeleted : text,
+            displayText,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppText.chatBodySmall.copyWith(

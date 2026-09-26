@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatyuk/config/strings.dart';
-import 'package:chatyuk/screens/profile_screen.dart';
+import 'package:chatyuk/utils.dart' show isDeleteAccountConfirmValid;
 
 /// Validasi kata konfirmasi hapus akun.
 ///

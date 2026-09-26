@@ -14,6 +14,7 @@ class PostPhotoViewer {
     BuildContext context, {
     required List<String> paths,
     required List<Uint8List> thumbs,
+    List<double?> aspects = const [],
     int initialIndex = 0,
   }) {
     showGeneralDialog<void>(
@@ -22,8 +23,12 @@ class PostPhotoViewer {
       barrierLabel: '',
       barrierColor: Colors.black.withValues(alpha: 0.95),
       transitionDuration: const Duration(milliseconds: 220),
-      pageBuilder: (_, _, _) =>
-          _ViewerBody(paths: paths, thumbs: thumbs, initialIndex: initialIndex),
+      pageBuilder: (_, _, _) => _ViewerBody(
+        paths: paths,
+        thumbs: thumbs,
+        aspects: aspects,
+        initialIndex: initialIndex,
+      ),
       transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: ScaleTransition(
@@ -41,10 +46,12 @@ class PostPhotoViewer {
 class _ViewerBody extends StatefulWidget {
   final List<String> paths;
   final List<Uint8List> thumbs;
+  final List<double?> aspects;
   final int initialIndex;
   const _ViewerBody({
     required this.paths,
     required this.thumbs,
+    required this.aspects,
     required this.initialIndex,
   });
 
@@ -76,8 +83,11 @@ class _ViewerBodyState extends State<_ViewerBody> {
               controller: _page,
               itemCount: widget.paths.length,
               onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (_, i) =>
-                  _ViewerPage(path: widget.paths[i], thumb: widget.thumbs[i]),
+              itemBuilder: (_, i) => _ViewerPage(
+                path: widget.paths[i],
+                thumb: widget.thumbs[i],
+                aspect: i < widget.aspects.length ? widget.aspects[i] : null,
+              ),
             ),
             Positioned(
               top: 8,
@@ -173,7 +183,10 @@ class _ViewerBodyState extends State<_ViewerBody> {
 class _ViewerPage extends StatefulWidget {
   final String path;
   final Uint8List thumb;
-  const _ViewerPage({required this.path, required this.thumb});
+  /// Rasio asli (w/h) dari feed — kalau ada, area gambar dibatasi rasio ini
+  /// supaya proporsi yang tampil = proporsi thumbnail yang diklik.
+  final double? aspect;
+  const _ViewerPage({required this.path, required this.thumb, this.aspect});
 
   @override
   State<_ViewerPage> createState() => _ViewerPageState();
@@ -191,6 +204,15 @@ class _ViewerPageState extends State<_ViewerPage> {
 
   @override
   void dispose() {
+    // Keluarkan bitmap full-res dari ImageCache (pola PhotoViewerScreen) —
+    // tiap buka-tutup viewer menumpuk bitmap sampai èvict LRU.
+    final b = _fullBytes;
+    if (b != null && b.isNotEmpty) {
+      try {
+        PaintingBinding.instance.imageCache.evict(MemoryImage(b));
+      } catch (_) {}
+    }
+    _fullBytes = null;
     _transform.dispose();
     super.dispose();
   }
@@ -212,6 +234,17 @@ class _ViewerPageState extends State<_ViewerPage> {
   @override
   Widget build(BuildContext context) {
     final bytes = _fullBytes ?? widget.thumb;
+    final a = widget.aspect;
+    Widget image = Image.memory(
+      bytes,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
+    );
+    // Rasio thumbnail diketahui → batasi area gambar supaya proporsi saat
+    // dibuka = proporsi yang dilihat di feed (tidak "melebar" di layar).
+    if (a != null && a > 0) {
+      image = AspectRatio(aspectRatio: a, child: image);
+    }
     return Stack(
       children: [
         Center(
@@ -220,11 +253,7 @@ class _ViewerPageState extends State<_ViewerPage> {
             maxScale: 5,
             panEnabled: _zoomed,
             onInteractionUpdate: (_) => setState(() {}),
-            child: Image.memory(
-              bytes,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
-            ),
+            child: image,
           ),
         ),
         if (_fullBytes == null)

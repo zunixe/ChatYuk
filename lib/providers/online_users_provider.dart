@@ -179,14 +179,12 @@ class OnlineUsersProvider extends ChangeNotifier {
     return 2;
   }
 
-  /// Urutan kartu: online di atas, lalu idle, lalu offline — di dalam
-  /// bucket yang sama yang paling lama tidak online paling bawah
-  /// (lastSeen terlama).
-  /// Anti-kedip: posisi dalam bucket yang sama DIPERTAHANKAN antar-emission
-  /// (heartbeat tiap 120 dtk mengubah lastSeen user aktif — tanpa ini kartu
-  /// online bertukar posisi terus). Kartu hanya pindah saat status bucket-nya
-  /// berubah (baru online naik, baru offline turun), atau user baru muncul
-  /// (menempel di ujung bucket-nya, urut lastSeen desc antar sesama baru).
+  /// Urutan kartu: online di atas (yang TERBARU online paling atas),
+  /// lalu idle (yang paling lama idle paling bawah), lalu offline.
+  /// Di dalam bucket yang sama urut lastSeen desc. Sort penuh tiap emission
+  /// (posisi tidak dipertahankan) — kartu yang baru online langsung naik
+  /// ke atas. ListView ber-key stabil sehingga urutan yang tidak berubah
+  /// tidak berkedip.
   List<UserModel> _reorderStable(List<UserModel> prev, List<UserModel> next) {
     int cmpUser(UserModel a, UserModel b) {
       final r = _statusRank(a.status).compareTo(_statusRank(b.status));
@@ -194,35 +192,9 @@ class OnlineUsersProvider extends ChangeNotifier {
       return b.lastSeen.compareTo(a.lastSeen);
     }
 
-    // Load pertama (belum ada posisi): sort penuh bucket + lastSeen desc.
-    if (prev.isEmpty) {
-      final sorted = List<UserModel>.of(next);
-      sorted.sort(cmpUser);
-      return sorted;
-    }
-    final byUid = {for (final u in next) u.uid: u};
-    final prevByUid = {for (final u in prev) u.uid: u};
-    // 1) User lama yang bucket-nya TETAP: update data, posisi dipertahankan.
-    final buckets = <List<UserModel>>[[], [], []];
-    for (final u in prev) {
-      final updated = byUid.remove(u.uid);
-      if (updated == null) continue; // hilang dari stream → buang
-      final old = prevByUid[u.uid]!;
-      if (_statusRank(old.status) == _statusRank(updated.status)) {
-        buckets[_statusRank(updated.status)].add(updated);
-      } else {
-        // 2) Status bucket BERUBAH: masuk antrean pindah (di bawah).
-        byUid[u.uid] = updated;
-      }
-    }
-    // 3) Pindahan + pendatang baru: urut lastSeen desc, tempel di ujung
-    // bucket-nya (baru online = bawah section online, dst — tidak
-    // menggeser kartu lama yang sudah stabil).
-    final moved = byUid.values.toList()..sort(cmpUser);
-    for (final u in moved) {
-      buckets[_statusRank(u.status)].add(u);
-    }
-    return [...buckets[0], ...buckets[1], ...buckets[2]];
+    final sorted = List<UserModel>.of(next);
+    sorted.sort(cmpUser);
+    return sorted;
   }
 
   /// Simpan avatar per-uid ke kv (fire-and-forget). Hanya tulis kalau avatar

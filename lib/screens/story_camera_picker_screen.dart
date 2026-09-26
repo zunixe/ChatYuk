@@ -9,12 +9,12 @@ import '../config/theme.dart';
 import '../core/perf/perf_probe.dart';
 import 'story_camera_capture_screen.dart';
 
-/// Picker foto story — GRID:
-/// - Kotak PERTAMA = kamera (tap → buka layar jepret fullscreen)
-/// - Kotak lainnya = foto recent HP (gambar saja, TANPA video)
-/// - Tap foto → langsung ke composer story
+/// Picker story — GRID:
+/// - Kotak PERTAMA = kamera (tap → layar jepret/rekam fullscreen)
+/// - Kotak lainnya = foto & VIDEO recent HP (badge durasi untuk video)
+/// - Tap → composer story (video dipotong per 15 dtk, maks 2 segmen)
 ///
-/// Return [File] foto yang dipilih/dijepret, atau null kalau batal.
+/// Return [StoryCaptureResult]/[File] yang dipilih, atau null kalau batal.
 class StoryCameraPickerScreen extends StatefulWidget {
   const StoryCameraPickerScreen({super.key});
 
@@ -160,7 +160,8 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
       // selalu di atas. Default createDate bikin foto lama yang baru
       // di-copy/download nyangkut di urutan atas.
       final albums = await PhotoManager.getAssetPathList(
-        type: RequestType.image,
+        // Foto + video: story mendukung video (dipotong per 15 dtk).
+        type: RequestType.common,
         onlyAll: true,
         filterOption: FilterOptionGroup()
           ..addOrderOption(
@@ -249,10 +250,26 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
     }
   }
 
+  /// Format durasi detik → "m:ss" ringkas untuk badge tile.
+  String _fmtDur(int seconds) {
+    final m = seconds ~/ 60;
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  /// Pilih dari galeri. Video dibungkus penanda eksplisit (komposer
+  /// memotong per 15 dtk → maks 2 segmen).
   Future<void> _pickPhoto(AssetEntity asset) async {
     try {
       final f = await asset.file;
-      if (f != null && mounted) Navigator.pop(context, f);
+      if (f == null || !mounted) return;
+      final isVideo = asset.type == AssetType.video;
+      Navigator.pop(
+        context,
+        isVideo
+            ? StoryCaptureResult(f, true, durationMs: asset.duration * 1000)
+            : f,
+      );
     } catch (e) {
       dlog('[StoryGrid] pick error: $e');
     }
@@ -328,14 +345,51 @@ class _StoryCameraPickerScreenState extends State<StoryCameraPickerScreen>
                           valueListenable: _thumbsTick,
                           builder: (_, __, ___) {
                             final thumb = _thumbs[a.id];
-                            return Container(
-                              color: Colors.white10,
-                              child: thumb != null
-                                  ? Image.memory(thumb,
-                                      fit: BoxFit.cover,
-                                      gaplessPlayback: true,
-                                      cacheWidth: 300)
-                                  : const SizedBox.shrink(),
+                            final isVideo = a.type == AssetType.video;
+                            return Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Container(
+                                  color: Colors.white10,
+                                  child: thumb != null
+                                      ? Image.memory(thumb,
+                                          fit: BoxFit.cover,
+                                          gaplessPlayback: true,
+                                          cacheWidth: 300)
+                                      : const SizedBox.shrink(),
+                                ),
+                                // Badge video + durasi (media video).
+                                if (isVideo) ...[
+                                  const Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Icon(
+                                      Icons.videocam_rounded,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    bottom: 4,
+                                    left: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius:
+                                            BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        _fmtDur(a.duration),
+                                        style: AppText.micro.copyWith(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             );
                           },
                         ),

@@ -1,5 +1,136 @@
 # MIGRATION_LOG — catatan perubahan versi & penerapan
 
+## 2026-09-26 — Video di private chat + video "sekali lihat"
+
+**Kebutuhan (user):** "di private chat di bawah icon tambah, selain foto bisa
+kirim video juga tapi dilimit videonya dan dicompress" + "video sama kaya foto
+ada timernya cuman timernya untuk sekali lihat AJA (kalo sesuai panjang video
+kan)". Keputusan: durasi maks 60 dtk, hasil kompres ≤8 MB, preview sebelum
+kirim, private dulu (room menyusul).
+
+**Migrasi (bukan FROZEN, kecuali notif):**
+- `20260926120000_chat_photos_guard_video.sql` (sesi paralel) — guard storage
+  izinkan video/mp4 ≤20 MB di bucket chat-photos.
+- `20260926130000_private_chat_video_type.sql` — `private_messages.type` +
+  `'video'`; `notify_private_message` body `[Video]` (**menyentuh:
+  notify_private_message**).
+- `20260926160000_video_once_type.sql` — + `video_once` & `video_once_expired`.
+  (Timestamp awal `20260926140000` BENTROK dgn sesi paralel
+  `messages_allow_location_type.sql` → dinaikkan.)
+- `20260926150000_notif_video_label.sql` — label `[Video]` untuk ketiga type
+  video (**menyentuh: notify_private_message**). Snapshot di-refresh.
+
+**Keputusan desain penting:** `duration_ms` untuk video = PANJANG VIDEO
+(playback), BUKAN timer. Karena itu "sekali lihat" video ditandai lewat TYPE
+(`video_once`) — menumpang duration_ms akan bertabrakan makna (foto memakai
+duration_ms sebagai timer countdown).
+
+**Klien:**
+- `storage_photo_service.dart`: `chatVideoPath`/`uploadChatVideo`/
+  `compressChatVideo` (480p)/`videoDurationMs`; **fix `isPath()`** menerima
+  `.mp4`/`.mov` (tanpa ini path video dikira base64 → bubble gagal).
+- `chat_photo_send_mixin.dart`: `videoPickToPreview` (validasi durasi →
+  kompres + progress → poster → preview) + `sendVideoFromPreview`/`_sendVideoLike`
+  (optimistic + poin + upload + outbox `uploadKind: 'video'`).
+- `chat_video_bubble.dart` (BARU): poster + play + durasi; `locked` untuk
+  `video_once_expired`; `VideoPlayerScreen` publik (dipakai preview composer).
+- `chat_composer_input.dart`: preview video (play + badge durasi + toggle
+  "sekali lihat") + chip "Kirim Video".
+- `chat_send_mixin.dart`: router video sebelum foto.
+- Outbox flush: cabang `uploadKind == 'video'`.
+
+**Bug yang ditemukan & diperbaiki saat smoke test HP:**
+1. Tombol send tetap jadi tombol MIC saat hanya video pending (kondisi
+   `hasText/hasPhoto` tak menghitung video) → video tak pernah terkirim.
+2. Preview video tak bisa diputar (tidak ada aksi tap) → tombol play sekarang
+   membuka `VideoPlayerScreen`.
+3. `pendingVideoMs` di mixin berbentuk FIELD → menutupi getter layar → durasi
+   selalu 0. Diganti `get` (analyzer menjaga: layar memakai `@override get`).
+
+**Test:** `test/chat_video_bubble_test.dart` 11 assert (label durasi, batas
+60 dtk/8 MB, deteksi path, regresi `isPath` video). `analyze` 0 error.
+
+
+## 2026-09-26 — Voice stage global room (`20260926100000`)
+
+- **Fitur:** max 6 mic nyala (audio-only), pendengar unlimited, mic default
+  mati, admin/owner mute paksa, keluar room = turun stage otomatis.
+- **Isi:** tabel `room_voice_signals` (+index, RLS global/member, realtime)
+  + `room_voice_speakers` (+index, RLS select saja); RPC join (enforce max 6
+  via heartbeat 45 dtk) / heartbeat / leave / mute (owner/app-admin +
+  sinyal v_mute) / sweep; cron `sweep_room_voice` tiap menit.
+- **Check:** `check_migrations.sh` OK bersih (policy baru pakai `-- SAFE:`).
+- **Apply:** Management API + catat `schema_migrations`. Verifikasi: 2 tabel
+  ada, 5 RPC ada, cron job 26 aktif.
+- **Client:** `room_voice_service.dart` (mesh audio, pola broadcast) +
+  `VoiceMicButton`/`VoiceStageStrip` + wiring `room_chat_screen.dart`
+  (global room saja). Test `room_voice_session_test.dart` 3/3.
+
+## 2026-09-26 — Admin scale Fase 2: N+1 → agregasi + sheet paginasi
+
+- **`20260926060000`**: `admin_list_dummies_page` — `unread` 50× correlated
+  → 1× GROUP BY + join (`ai_persona` tetap dikirim).
+- **`20260926070000`**: `admin_list_chats_page` — total → estimasi reltuples;
+  count+max per chat → 1× agregasi (semantik urutan `call` dipertahankan).
+- **`20260926080000`**: `admin_user_detail` — count via agregasi;
+  `location_history` dibatasi 200; kunci JSON tidak berubah.
+- **`20260926090000`**: `admin_stats_users_page` (BARU) — daftar user
+  statistik ber-paginasi; `admin_stats_detail` (FROZEN) tidak disentuh.
+  Client `stat_detail_sheet.dart` infinite scroll untuk 4 kunci user.
+- Apply via Management API + catat `schema_migrations`; verifikasi definisi
+  live per fungsi.
+
+## 2026-09-26 — Fix paginasi admin_list_deleted (`20260926050000`)
+
+**Bug:** `LIMIT/OFFSET` di subquery union tanpa `ORDER BY` dalam (urut baru
+di agregat luar) → halaman 2+ mengambil baris acak/duplikat saat data banyak.
+
+**Fix:** `order by sort_at desc nulls last` di dalam subquery sebelum limit;
+output halaman-1 identik. Dasar = definisi live 20260926000000
+(device_count/location_count dipertahankan). Bukan fungsi frozen.
+Apply via Management API + catat `schema_migrations`. Verifikasi live:
+definisi memuat klausa fix; paginasi deterministik (page1=100, page2=5,
+overlap=0, batas urutan benar); EXPLAIN = Index Only Scan via
+`deleted_users_deleted_idx`.
+
+## 2026-09-25 — Story admin ghost-mode (`20260926030000`)
+
+**Kebutuhan (user):** "chatyuk admin jangan keliatan kalo liat story orang"
++ "hapus yang udah keliatan" — admin moderasi story harus invisible.
+
+**Akar:** viewer memanggil `mark_story_seen_bulk` untuk semua user termasuk
+admin → baris `story_views(viewer_id=admin)` tercatat → pemilik story melihat
+nama admin di daftar penonton.
+
+**Migrasi `20260926030000_story_admin_ghost.sql`** (bukan FROZEN):
+- `mark_story_seen`: return ok tanpa insert bila `is_admin_request()` dan
+  bukan author sendiri.
+- `mark_story_seen_bulk`: WHERE + `(s.author_id = uid or not is_admin_request())`
+  → bulk admin hanya mencatat milik sendiri.
+- `story_viewers`: filter `not exists (auth.users email=zunixe)` → baris admin
+  tidak pernah dikembalikan (walau lolos via client lama).
+- CLEANUP: `delete from story_views using auth.users where email=zunixe`
+  → jejak yang sudah tercatat terhapus (live: 0 sisa).
+- Client `story_viewer_screen.dart`: `_isAdminCached` (init) + skip `_markSeen`
+  / buang antrean di `_flushSeen` bila admin lihat story orang → 0 RPC.
+- Test: `story_test.sql` +3 assert ghost (single/bulk/viewers).
+- Apply via Management API + verified live (single/bulk/viewers true).
+- Catatan: `check_migrations --all` masih FAIL timestamp duplikat lama
+  `20260926020000` (online_list_about + story_mute) — pre-existing, bukan
+  dari migrasi ini.
+
+## 2026-09-25 — Tentang tampil di kartu Online (`20260926020000`)
+
+**Kebutuhan (user):** isi Tentang tampil di bawah baris gender di halaman
+Online. Kolom output baru `about` di `get_online_users` + `presence_for`
+(fast-path presence), hormati `about_visibility` + exclusions (pola sama
+dengan avatar/last_seen). Kosong/tidak diizinkan → server kirim `''`,
+kartu menyembunyikan barisnya. Klien: baris italic maxLines 2 di
+`_UserCard`; `UserModel.fromMap`/`toMap` sudah membawa `about` (cache
+disk ikut). Bukan FROZEN. Apply via Management API + verified live
+(`about_ok`, privacy `about`). Test: `schema_sync_test.sql` +2 assert
+(31/31), `online_visibility_test.dart` +3 (24/24).
+
 ## 2026-09-25 — Riwayat device + GPS tetap di tab Terhapus (`20260926000000`)
 
 **Kebutuhan (user):** "info perangkatnya jangan dihapus di admin sama gpsnya"
@@ -954,6 +1085,12 @@ dicatat di `schema_migrations`. Verifikasi dampak: tidak ada (idempotent).
 |---|---|---|
 | 20260914100000_sql_test_harness.sql | applied + recorded | schema `supabase_tests` + `check()`/`report()`/`mk_dummy()` |
 
+## 2026-09-27 — Dimensi foto post (feed proporsional ala Threads)
+
+| Versi | Aksi | Catatan |
+|---|---|---|
+| 20260927000000_posts_image_dims.sql | applied + recorded | `posts.image_w/image_h/image_dims` + `create_post(p_image_dims)` + FROZEN `list_posts` output `images/imageW/imageH/imageDims` (4 baris ditambah, 0 dihapus) |
+
 Cara jalankan test: `scripts/run_sql_tests.sh` (via Management API, transaksional).
 
 ## Cara mencatat migrasi baru (WAJIB)
@@ -1001,3 +1138,67 @@ frozen-functions guard + snapshot ada.
   `admin_get_point_settings` (full row).
 - **Apply:** Management API + catat `schema_migrations`. Verifikasi: kolom
   false, RPC ada, pgTAP `privacy_bypass_test.sql` 7/7.
+
+## 2026-09-26 — 20260926010000_location_history_dedupe.sql (APPLY)
+
+- **Temuan:** `user_location_history` penuh ratusan baris koordinat identik
+  (tulis tiap 1-2 dtk saat idle→online flap; mis. 1389 baris/7 hari, 18 titik
+  beda). Pengambilan GPS-nya benar (titik berubah saat bergerak).
+- **Isi:** `profiles` lat/lon tetap update tiap panggilan; baris history
+  hanya bila bergerak >50m (`earth_distance`) ATAU titik terakhir >30 mnt.
+  Definisi fungsi disalin persis dari live (overload 4-arg dipertahankan).
+- **Apply:** Management API + catat `schema_migrations`. Verifikasi:
+  def memuat earth_distance + p_ip; cek matematika 0m vs 1135m OK.
+
+## 2026-09-26 — 20260926040000_story_mute.sql (APPLY)
+
+- **Fitur:** mute story ala IG (tahan tile tray → Benamkan). Tile jadi
+  transparan + pindah paling belakang, tanpa ring; viewer paging melewati
+  yang dibenamkan (kecuali tile-nya diketuk sengaja).
+- **Isi:** tabel `story_mutes` (RLS deny, tulis via RPC); RPC
+  `mute/unmute_story_author` (guard auth, tolak self); rewrite
+  `story_tray()` (BUKAN frozen): flag `muted`, `has_unseen` mati bila mute,
+  urutan muted terakhir.
+- **Apply:** Management API + catat `schema_migrations` (rename 2x karena
+  tabrakan timestamp sesi lain: 020000→030000→040000). Verifikasi: RPC ada,
+  pgTAP `story_mute_test.sql` 4/4.
+
+## 2026-09-26 — 20260926110000_story_video.sql (APPLY)
+
+- **Fitur:** story VIDEO pendek (maks 15 dtk, polos). Rekam tahan-shutter
+  dari kamera app, preview + publish, viewer play + auto-advance durasi.
+- **Isi:** kolom stories.media_type/video_path/duration_ms + CHECK;
+  rewrite FROZEN create_story (+3 param defaults, validasi path story/ +
+  durasi 1-15000ms), story_slides + story_tray (+kolom video/has_video);
+  DROP overload lama (hindari PostgREST 300). Policy Storage tak berubah
+  (bucket+owner agnostik ekstensi). RLS 10/hari + purge tak berubah.
+- **Apply:** Management API + snapshot regenerate (diff aditif) + catat
+  schema_migrations. Verifikasi: 1 overload, kolom ada, guard OK,
+  pgTAP story_video_test.sql 7/7.
+
+## Catatan story video — tanpa migrasi tambahan (pakai 20260926110000)
+
+- Kompres 720p hemat (±3 MB) + poster JPEG di `image_path` (kolom lama,
+  tanpa kolom `poster_path` baru, tanpa rewrite FROZEN tambahan).
+- Cap pasca-kompresi 15 MB (client). Timeout download video 15→30 dtk.
+
+## 2026-09-26 — 20260926120000_chat_photos_guard_video.sql (APPLY)
+
+- **Masalah:** publish story video SELALU gagal (`gagal membagikan story`).
+  Poster JPEG terupload sukses, video ditolak trigger `chat_photos_guard`
+  (`Tipe file tidak diizinkan: video/mp4`) — guard hanya whitelist gambar+audio.
+- **Isi:** tambah tipe video (mp4/quicktime/3gpp/mkv) + batas video 20 MB
+  (non-video tetap 8 MB). Fail-closed tipe lain. Server-only, tanpa ubah APK.
+- **Apply:** Management API + catat schema_migrations. Verifikasi:
+  `pg_get_functiondef` memuat `video/mp4` ✅.
+
+## 2026-09-26 — 20260926140000_messages_allow_location_type.sql (APPLY)
+
+- **Fitur:** kirim LOKASI (ala WhatsApp) di private chat & room — koordinat
+  JSON di kolom `text` (`{"lat":..,"lng":..,"label":".."}`), `type='location'`.
+- **Masalah:** `private_messages_type_check` & `messages_type_check` belum
+  memuat `'location'` → insert ditolak check constraint.
+- **Isi:** tambah satu nilai `'location'` ke kedua constraint (nilai lama
+  dipertahankan; idempotent drop+add).
+- **Apply:** Management API. Verifikasi (live): kedua constraint kini memuat
+  `'location'` ✅ (query `pg_constraint`).

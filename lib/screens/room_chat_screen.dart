@@ -33,8 +33,12 @@ import '../widgets/date_chip.dart';
 import '../widgets/private_chat_message.dart';
 import 'room_chat/widgets/room_widgets.dart';
 import 'room_chat/widgets/room_message_bubble.dart';
+import 'room_chat/widgets/voice_stage_strip.dart';
+import '../services/room_voice_service.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../widgets/chat_composer_input.dart';
+import '../widgets/location_picker_sheet.dart';
+import '../core/chat/chat_location.dart';
 import '../utils/mention.dart';
 import '../widgets/gift_fly_overlay.dart';
 import '../widgets/room_gift_panel.dart';
@@ -48,6 +52,7 @@ import '../mixins/chat_selection_mixin.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
+import '../core/perf/perf_probe.dart';
 
 // Isolate helpers untuk proses foto (sama seperti private chat).
 class RoomChatScreen extends StatefulWidget {
@@ -112,6 +117,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     String? repliedToText,
     String? repliedToSenderName,
     int? viewOnceSecs,
+    // Video belum aktif di room (videoSendEnabled=false) — parameter
+    // tetap diterima demi kontrak mixin bersama.
+    int? videoDurationMs,
   }) async {
     await _chat.sendRoomMessage(
       roomId: widget.room.id,
@@ -121,7 +129,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       text: text,
       type: type,
       imageData: imageData,
-      durationMs: viewOnceSecs,
+      durationMs: videoDurationMs ?? viewOnceSecs,
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
@@ -142,7 +150,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   void photoSetPreview(String base64) {
-    setState(() => _pendingPhotoBase64 = base64);
+    // Foto & lokasi tidak boleh tampil bareng di preview.
+    setState(() {
+      _pendingPhotoBase64 = base64;
+      _pendingLocation = null;
+    });
   }
 
   // ── Kontrak ChatSendMixin ──
@@ -302,6 +314,288 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   bool get isPrivateRoom => widget.room.isPrivate == true;
   bool get canModerate =>
       isPrivateRoom && (_myRole == 'owner' || _myRole == 'admin');
+  // Moderasi voice global room: owner room ATAU app admin (server cek ulang).
+  bool get canModerateVoice =>
+      !isPrivateRoom &&
+      (widget.room.ownerId == _auth.uid || _auth.isRealAdmin);
+
+  // ── Voice stage global room (audio-only, max 6 mic) ──
+  RoomVoiceSession? _voiceSession;
+  bool _voiceJoining = false;
+
+  void _onVoiceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _attachVoiceSession(RoomVoiceSession session) {
+    _voiceSession?.removeListener(_onVoiceChanged);
+    _voiceSession = session;
+    session.addListener(_onVoiceChanged);
+    if (mounted) setState(() {});
+  }
+
+  /// Uid yang sudah tampil di strip voice (atas) — disembunyikan dari list
+  /// user (bawah) supaya avatar tidak dobel atas-bawah.
+  Set<String> get _stripUids {
+    final s = _voiceSession;
+    if (isPrivateRoom || s == null) return const {};
+    return s.speakers;
+  }
+
+  /// True bila SEMUA user (cache) sudah terwakili strip → list bawah collapse
+  /// total (tidak menyisakan kotak 90px kosong).
+  bool get _voiceStripCoversUsers {
+    final s = _voiceSession;
+    if (isPrivateRoom || s == null || !_showUsers) return false;
+    final ids = {for (final u in _lastRoomUsers) u.uid};
+    final me = _auth.uid;
+    if (me != null && _auth.profile != null) ids.add(me);
+    if (ids.isEmpty) return false;
+    return ids.every(s.speakers.contains);
+  }
+
+  /// Tap tombol mic: belum join → join + langsung naik stage;
+  /// di stage → toggle mute; belum stage → naik stage.
+  Future<void> _onMicTap() async {
+    if (_voiceJoining) return;
+    final s = context.read<LocaleProvider>().s;
+    final messenger = ScaffoldMessenger.of(context);
+    var session = _voiceSession;
+    if (session == null) {
+      // try/finally: _voiceJoining WAJIB reset apa pun yang terjadi
+      // (RPC/getUserMedia gantung/timeout) — kalau tidak spinner muter
+      // selamanya dan tap berikutnya ditolak mentah-mentah.
+      setState(() => _voiceJoining = true);
+      try {
+        final myUid = _auth.uid;
+        if (myUid == null) return;
+        session = RoomVoiceSession(
+          roomId: widget.room.id,
+          myUid: myUid,
+          onStageFull: () {
+            if (!mounted) return;
+            messenger.showSnackBar(
+              SnackBar(content: Text(s.roomVoiceStageFull)),
+            );
+          },
+          onMutedByAdmin: () {
+            if (!mounted) return;
+            messenger.showSnackBar(
+              SnackBar(content: Text(s.roomVoiceMutedByAdmin)),
+            );
+          },
+        );
+        _attachVoiceSession(session);
+        final ok = await session.startSpeaking();
+        if (!mounted) return;
+        if (!ok && !session.joined) {
+          // Gagal total (mic ditolak/timeout/jaringan): buang sesi + kasih tahu.
+          messenger.showSnackBar(
+            SnackBar(content: Text(s.roomVoiceConnectFail)),
+          );
+          session.removeListener(_onVoiceChanged);
+          await session.stop();
+          _voiceSession = null;
+          if (mounted) setState(() {});
+        }
+      } finally {
+        if (mounted) setState(() => _voiceJoining = false);
+      }
+      return;
+    }
+    if (!session.joined) {
+      await session.startListening();
+      return;
+    }
+    if (!session.onStage) {
+      final ok = await session.startSpeaking();
+      if (!ok && mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(s.roomVoiceStageFull)));
+      }
+      return;
+    }
+    await session.setMuted(!session.muted);
+  }
+
+  /// Tahan tombol mic = keluar voice sepenuhnya.
+  Future<void> _onMicLongPress() async {
+    final session = _voiceSession;
+    if (session == null) return;
+    session.removeListener(_onVoiceChanged);
+    await session.stop();
+    _voiceSession = null;
+    if (mounted) setState(() {});
+  }
+
+  /// Sheet diagnostik voice (tap avatar sendiri di strip): state sesi +
+  /// kondisi tiap peer (conn/ice/pasangan kandidat/level audio).
+  /// Untuk debug "mic hijau tapi bisu" — kirim screenshot ke dev.
+  Future<void> _showVoiceDiagnostics() async {
+    final session = _voiceSession;
+    if (session == null || !mounted) return;
+    final s = context.read<LocaleProvider>().s;
+    Map<String, dynamic>? diag;
+    try {
+      diag = await session
+          .diagnostics()
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      diag = null;
+    }
+    if (!mounted) return;
+    final names = {for (final u in _lastRoomUsers) u.uid: u.nickname};
+    final me = _auth.uid;
+    final List<Widget> rows = [];
+    if (diag == null) {
+      rows.add(Text(s.storyViewersLoadFail, style: AppText.bodySmall));
+    } else {
+      rows.add(
+        Text(
+          'sess=${diag['sess']} joined=${diag['joined']} '
+          'stage=${diag['onStage']} muted=${diag['muted']} '
+          'pairing=${diag['pairing']} mic=${diag['mic']}',
+          style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
+        ),
+      );
+      final peers = Map<String, dynamic>.from(
+        (diag['peers'] as Map?) ?? const {},
+      );
+      if (peers.isEmpty) {
+        rows.add(
+          Text(
+            s.roomVoiceNoSpeakers,
+            style: AppText.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+            ),
+          ),
+        );
+      }
+      peers.forEach((key, v) {
+        final m = Map<String, dynamic>.from(v as Map? ?? const {});
+        final uid = key.startsWith('dn_') ? key.substring(3) : key;
+        final name = uid == me ? 'Kamu' : (names[uid] ?? uid);
+        final short = name.length > 10 ? '${name.substring(0, 10)}…' : name;
+        rows.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '$short [${m['dir'] ?? '?'}] ${m['conn'] ?? '?'}'
+              '/${m['ice'] ?? '?'} ${m['pair'] ?? 'no-pair'}'
+              ' in=${m['in'] ?? '-'} out=${m['out'] ?? '-'}',
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ),
+        );
+      });
+      final speakers = (diag['speakers'] as List?) ?? const [];
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            'stage(${speakers.length}): ${speakers.join(', ')}',
+            style: AppText.caption.copyWith(
+              color: AppTheme.textSecondary,
+            ),
+          ),
+        ),
+      );
+    }
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.bug_report_outlined,
+                    size: 20,
+                    color: AppTheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(s.roomVoiceDiagTitle, style: AppText.bodyStrong),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                s.roomVoiceDiagHint,
+                style: AppText.caption.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...rows,
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(s.btnClose),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tap avatar speaker lain → sheet mute (hanya bila boleh moderasi).
+  Future<void> _onSpeakerTap(String uid) async {
+    if (!canModerateVoice || !mounted) return;
+    final s = context.read<LocaleProvider>().s;
+    final session = _voiceSession;
+    if (session == null) return;
+    final names = {for (final u in _lastRoomUsers) u.uid: u.nickname};
+    final name = names[uid] ?? 'User';
+    final confirm = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(
+                Icons.mic_off_rounded,
+                color: AppTheme.danger,
+              ),
+              title: Text(s.roomVoiceMute),
+              subtitle: Text(
+                name,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              onTap: () => Navigator.pop(ctx, true),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await Supabase.instance.client.rpc('room_voice_mute', params: {
+        'p_room_id': widget.room.id,
+        'p_target': uid,
+      });
+    } catch (_) {}
+  }
   bool get iAmBroadcasting =>
       _broadcastSession != null &&
       _broadcastSession!.isBroadcaster &&
@@ -696,7 +990,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
     } else {
       // Tidak ada live → bersihkan.
-      unawaited(_broadcastSession?.stop());
+    unawaited(_broadcastSession?.stop());
+    _voiceSession?.removeListener(_onVoiceChanged);
+    unawaited(_voiceSession?.stop());
+    _voiceSession = null;
       _broadcastSession = null;
     }
     if (mounted) setState(() {});
@@ -1311,6 +1608,85 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
 
+  /// Izinkan → ambil posisi → sheet peta → TARUH di preview composer.
+  /// Konfirmasi (room banyak orang) + kirim terjadi di tombol send.
+  Future<void> _sendLocation() async {
+    setState(() => _showAttachRow = false);
+    final picked = await pickChatLocation(
+      context,
+      messenger: ScaffoldMessenger.of(context),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _pendingLocation = picked;
+      _pendingPhotoBase64 = null;
+      photoClearPreviewState();
+    });
+  }
+
+  ChatLocation? _pendingLocation;
+
+  @override
+  ChatLocation? get sendPendingLocation => _pendingLocation;
+
+  @override
+  set sendPendingLocation(ChatLocation? v) => _pendingLocation = v;
+
+  @override
+  Future<void> sendLocationFromPreview({
+    String text = '',
+    MessageModel? reply,
+  }) async {
+    final loc = _pendingLocation;
+    final auth = context.read<AuthProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (loc == null || uid == null || profile == null) return;
+    // Konfirmasi: lokasi akan terlihat semua anggota room.
+    final s = context.read<LocaleProvider>().s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: Text(s.locSendRoomTitle),
+        content: Text(s.locSendRoomConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(s.locSendCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: Text(s.locSendConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<ChatProvider>().sendRoomMessage(
+        roomId: widget.room.id,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: loc.encode(),
+        type: 'location',
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errSendFailed)));
+      return;
+    }
+    if (mounted) {
+      setState(() => _pendingLocation = null);
+      _scrollToBottom();
+    }
+  }
+
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
@@ -1434,10 +1810,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('RoomChat');
     context.watch<ThemeProvider>();
     final auth = context.read<AuthProvider>();
     final s = context.watch<LocaleProvider>().s;
-    final points = context.watch<PointsProvider>();
+    // select (bukan watch penuh): perubahan saldo/poin tidak perlu
+    // me-rebuild seluruh layar room — hanya flag enabled yang dipakai.
+    final points = context.select<PointsProvider, bool>((p) => p.enabled);
 
     return PopScope(
       canPop: !inSelection,
@@ -1590,6 +1969,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               ],
             ),
           ] else ...[
+            // Mic voice stage (global room): status sesuai sesi.
+            VoiceMicButton(
+              session: _voiceSession,
+              joining: _voiceJoining,
+              onTap: _onMicTap,
+              onLongPress: _onMicLongPress,
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 10),
               child: RoomHeaderToggle(
@@ -1646,7 +2032,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             },
             onSendPhoto: () {
               setState(() => _showAttachRow = false);
-              photoPickFromGalleryAndSend();
+              photoPickFromGalleryToPreview();
             },
             onSendViewOnce: () {
               setState(() => _showAttachRow = false);
@@ -1655,14 +2041,26 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             onSendVoice: _sendVoiceMessage,
             // Gift (fitur koin) hanya bila sistem koin aktif — hilang
             // total saat dimatikan admin (ikut flag points.enabled).
-            onOpenGiftPanel: points.enabled &&
+            onOpenGiftPanel: points &&
                     isPrivateRoom &&
                     _myRole != 'owner'
                 ? _openRoomGiftPanel
                 : null,
+            onSendLocation: _sendLocation,
+            pendingLocation: _pendingLocation,
+            onCancelLocation: _pendingLocation != null
+                ? () => setState(() => _pendingLocation = null)
+                : null,
             pendingPhotoBase64: _pendingPhotoBase64,
             onCancelPhoto: _pendingPhotoBase64 != null
-                ? () => setState(() => _pendingPhotoBase64 = null)
+                ? () => setState(() {
+                      _pendingPhotoBase64 = null;
+                      photoClearPreviewState();
+                    })
+                : null,
+            photoHd: photoHd,
+            onHdChanged: _pendingPhotoBase64 != null
+                ? (v) => setState(() => photoHd = v)
                 : null,
             mentionCandidates: _mentionCandidates,
             mentionAllowAll: isPrivateRoom && canModerate,
@@ -1716,8 +2114,23 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               onMinimize: () => setState(() => _stageMinimized = true),
             ),
           ],
-          // User list horizontal — private room selalu tampil, global room via toggle
-          if (isPrivateRoom || _showUsers)
+          // Strip speaker voice (global room): tampil bila ikut voice.
+          // Tap avatar SENDIRI → sheet diagnostik (debug suara).
+          if (!isPrivateRoom && _voiceSession != null)
+            VoiceStageStrip(
+              session: _voiceSession!,
+              usersByUid: {for (final u in _lastRoomUsers) u.uid: u},
+              myUid: _auth.uid,
+              onSpeakerTap: (uid) => uid == _auth.uid
+                  ? _showVoiceDiagnostics()
+                  : _onSpeakerTap(uid),
+            ),
+          // User list horizontal — private room selalu tampil, global room via toggle.
+          // Anti-dobel avatar: yang sudah tampil di strip voice (atas) tidak
+          // diulang di list (bawah). Gate sinkron dari cache (builder di dalam
+          // memfilter ulang dengan data stream segar).
+          if (isPrivateRoom ||
+              (_showUsers && !_voiceStripCoversUsers))
             Container(
               height: 90,
               color: AppTheme.bgCard,
@@ -1777,7 +2190,18 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                       ),
                     );
                   }
-                  if (users.isEmpty) {
+                  // Saring yang sudah ada di strip voice (anti-dobel avatar).
+                  final stripGone = _stripUids;
+                  final visible = stripGone.isEmpty
+                      ? users
+                      : users
+                          .where((u) => !stripGone.contains(u.uid))
+                          .toList();
+                  if (visible.isEmpty) {
+                    // Semua sudah di strip → tak ada sisa untuk list bawah.
+                    if (users.isNotEmpty) {
+                      return const SizedBox.shrink();
+                    }
                     // Belum pernah load → placeholder bulat (tinggi sama,
                     // tanpa teks kedip). Sudah load & kosong → teks info.
                     if (data == null) {
@@ -1827,13 +2251,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   return ListView.builder(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: users.length,
+                    itemCount: visible.length,
                     itemBuilder: (_, i) => RoomUserChip(
-                      key: ValueKey(users[i].uid),
-                      user: users[i],
+                      key: ValueKey(visible[i].uid),
+                      user: visible[i],
                       myUid: auth.uid,
                       color: Color(
-                        userColorPalette[colorHashForUid(users[i].uid) %
+                        userColorPalette[colorHashForUid(visible[i].uid) %
                             userColorPalette.length],
                       ),
                     ),
@@ -2090,7 +2514,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(replyingTo!.senderName, style: AppText.chatCaption.copyWith(color: AppTheme.primary, fontWeight: FontWeight.w700)),
-                        Text(replyingTo!.text.isNotEmpty ? replyingTo!.text : s.msgPhoto, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.chatBodySmall),
+                        Text(replyingTo!.text.isNotEmpty ? (isLocationPayload(replyingTo!.text) ? '📍 ${s.msgLocation}' : replyingTo!.text) : s.msgPhoto, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.chatBodySmall),
                       ],
                     ),
                   ),

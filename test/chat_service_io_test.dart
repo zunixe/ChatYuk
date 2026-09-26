@@ -235,4 +235,52 @@ void main() {
       expect(body['edited'], isTrue);
     });
   });
+
+  group('editPrivateMessage (I/O palsu)', () {
+    test('PATCH text + edited ke private_messages', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/private_messages', (_) => [
+        {'id': 'm1'},
+      ]);
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      final ok = await svc.editPrivateMessage('m1', 'teks baru');
+
+      expect(ok, isTrue);
+      final patch = handler.captured.firstWhere((r) => r.method == 'PATCH');
+      final body = jsonDecode(patch.body) as Map<String, dynamic>;
+      expect(body['text'], 'teks baru');
+      expect(body['edited'], isTrue);
+    });
+
+    test('kolom edited belum ada → fallback text saja', () async {
+      final handler = FakeSupabaseHandler();
+      var calls = 0;
+      handler.on('/rest/v1/private_messages', (_) {
+        calls++;
+        if (calls == 1) throw Exception('column edited does not exist');
+        return [
+          {'id': 'm1'},
+        ];
+      });
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      final ok = await svc.editPrivateMessage('m1', 'teks baru');
+
+      expect(ok, isTrue);
+      expect(calls, 2, reason: 'coba edited dulu, lalu fallback text');
+      final retry = handler.captured.where((r) => r.method == 'PATCH').last;
+      final body = jsonDecode(retry.body) as Map<String, dynamic>;
+      expect(body['text'], 'teks baru');
+      expect(body.containsKey('edited'), isFalse);
+    });
+
+    test('dua-duanya gagal → false', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/private_messages', (_) => throw Exception('down'));
+      final svc = ChatService(fakeSupabaseClient(handler: handler));
+
+      expect(await svc.editPrivateMessage('m1', 'x'), isFalse);
+    });
+  });
 }

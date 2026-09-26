@@ -24,7 +24,7 @@ mixin ChatServiceRoomMx on ChatBase {
     List<Mention> mentions = const [],
   }) async {
     // Validasi tipe pesan
-    if (!['text', 'image', 'view_once', 'voice'].contains(type)) {
+    if (!['text', 'image', 'view_once', 'voice', 'location'].contains(type)) {
       throw Exception('Invalid message type');
     }
     // Validasi image/voice data jika ada — boleh base64 (lama) ATAU path storage (baru)
@@ -45,7 +45,7 @@ mixin ChatServiceRoomMx on ChatBase {
       'sender_gender': senderGender,
       'text': text,
       'type': type,
-      'image_data': type == 'voice' ? '' : imageData,
+      'image_data': (type == 'voice' || type == 'location') ? '' : imageData,
       if (type == 'voice') 'voice_path': imageData,
       if (type == 'voice' && durationMs != null) 'duration_ms': durationMs,
       // Durasi view-once (detik; 0 = sampai ditutup). Voice pakai ms.
@@ -125,14 +125,21 @@ mixin ChatServiceRoomMx on ChatBase {
   /// Tandai view_once message sebagai expired setelah dilihat.
   /// image_data DIKEEP di DB (admin masih bisa melihat) — hanya type yang
   /// diubah. Kontrol "boleh lihat/tidak" dilakukan di sisi UI.
+  ///
+  /// [video] = true untuk video "sekali lihat" → type jadi
+  /// `video_once_expired` (video punya type sendiri karena duration_ms
+  /// dipakai untuk panjang video, bukan timer).
   Future<void> clearViewOnceImage(
     String messageId, {
     bool isRoom = false,
+    bool video = false,
   }) async {
     try {
       await _sb
           .from(isRoom ? 'messages' : 'private_messages')
-          .update({'type': 'view_once_expired'})
+          .update({
+            'type': video ? 'video_once_expired' : 'view_once_expired',
+          })
           .eq('id', messageId);
     } catch (e) {
       dlog('[ChatService] expireViewOnce error: $e');
