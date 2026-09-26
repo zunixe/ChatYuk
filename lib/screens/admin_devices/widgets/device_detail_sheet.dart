@@ -8,6 +8,8 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../core/admin_err.dart';
 import '../../../utils.dart';
+import '../../../widgets/detail_row.dart';
+import '../../../widgets/sheet_drag_handle.dart';
 
 /// Bottom sheet detail satu device → daftar user yang pernah login.
 class DeviceDetailSheet extends StatelessWidget {
@@ -53,15 +55,7 @@ class DeviceDetailSheet extends StatelessWidget {
       builder: (context, scrollCtrl) {
         return Column(
           children: [
-            Container(
-              margin: const EdgeInsets.only(top: 10),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.textSecondary.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetDragHandle(),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Row(
@@ -156,24 +150,8 @@ class DeviceDetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _kv(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              k,
-              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-            ),
-          ),
-          Expanded(child: Text(v, style: AppText.bodySmall)),
-        ],
-      ),
-    );
-  }
+  Widget _kv(String k, String v) =>
+      DetailRow(k, v, labelWidth: 110);
 
   /// Exclude perangkat ini: RPC cascade menambahkan install_id SEKALIGUS
   /// semua uid yang pernah login di device ini (ke `excluded_uids`).
