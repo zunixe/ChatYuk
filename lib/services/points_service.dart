@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'subscription_rpc.dart';
 
 class PointsService {
   final SupabaseClient _sb;
@@ -219,11 +220,7 @@ class PointsService {
     String creatorUid, {
     int periods = 1,
   }) async {
-    final res = await _sb.rpc(
-      'subscribe_creator',
-      params: {'p_creator': creatorUid, 'p_periods': periods},
-    );
-    return res is Map ? Map<String, dynamic>.from(res) : {};
+    return subscribeCreatorRpc(_sb, creatorUid, periods: periods);
   }
 
   /// Klaim reward referral-install (sekali per referred).
