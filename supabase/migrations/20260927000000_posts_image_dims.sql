@@ -1,7 +1,7 @@
 -- ============================================================
 -- ChatYuk Timeline — Dimensi foto post (rasio asli)
 --
--- Menyentuh: list_posts (FROZEN)
+-- menyentuh: list_posts (FROZEN)
 -- menyentuh: create_post
 --
 -- Tujuan: feed bisa menampilkan foto dengan RASIO ASLI (ala Threads)
