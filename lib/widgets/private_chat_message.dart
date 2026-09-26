@@ -22,10 +22,81 @@ import 'reply_quote.dart';
 import 'voice_bubble.dart';
 import 'link_preview.dart';
 import '../core/media/link_preview_service.dart';
+import '../core/media/image_cache_hygiene.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
 String cacheKeyFor(String chatId) => 'private_$chatId';
+
+/// Highlight teks hasil search chat (ala WhatsApp): bagian yang cocok
+/// diberi latar kuning. Style & recognizer (link/mention) span asal
+/// dipertahankan — hanya background yang ditimpa.
+List<TextSpan> applySearchHighlight(List<TextSpan> spans, String query) {
+  if (query.isEmpty) return spans;
+  final ql = query.toLowerCase();
+  final out = <TextSpan>[];
+  void add(TextSpan s) {
+    final t = s.text;
+    if (t == null || t.isEmpty) {
+      if (s.children != null) {
+        for (final c in s.children!) {
+          if (c is TextSpan) add(c);
+        }
+      } else {
+        out.add(s);
+      }
+      return;
+    }
+    final tl = t.toLowerCase();
+    var start = 0;
+    var matched = false;
+    while (true) {
+      final i = tl.indexOf(ql, start);
+      if (i < 0) break;
+      matched = true;
+      if (i > start) {
+        out.add(
+          TextSpan(
+            text: t.substring(start, i),
+            style: s.style,
+            recognizer: s.recognizer,
+          ),
+        );
+      }
+      out.add(
+        TextSpan(
+          text: t.substring(i, i + query.length),
+          style: (s.style ?? const TextStyle()).copyWith(
+            backgroundColor: const Color(0xFFFFEB3B).withValues(alpha: 0.75),
+          ),
+          recognizer: s.recognizer,
+        ),
+      );
+      start = i + query.length;
+    }
+    if (!matched) {
+      out.add(s);
+    } else if (start < t.length) {
+      out.add(
+        TextSpan(
+          text: t.substring(start),
+          style: s.style,
+          recognizer: s.recognizer,
+        ),
+      );
+    }
+    if (s.children != null) {
+      for (final c in s.children!) {
+        if (c is TextSpan) add(c);
+      }
+    }
+  }
+
+  for (final s in spans) {
+    add(s);
+  }
+  return out;
+}
 
 // Top-level function untuk compute() isolate — decode base64 + dimensi di background
 DecodedImage? decodeImageB64(String base64) {
@@ -59,7 +130,15 @@ Uint8List? b64ToBytes(String b64) {
 // Cache decode agar scroll-back tidak resize (glitch). Key = hash imageData, bounded 80 (LRU) cegah OOM di 1M.
 final decodedImageCache = <int, DecodedImage>{};
 const _decodedCacheMax = 80;
+// Daftarkan pembersih ke hygiene logout (satu titik, lihat
+// core/media/image_cache_hygiene.dart) — bytes foto user lama tidak boleh
+// tinggal di RAM setelah ganti akun. Lazy: dipanggil saat cache pertama diisi.
+bool _hygieneRegistered = false;
 void _putDecodedCache(int key, DecodedImage img) {
+  if (!_hygieneRegistered) {
+    _hygieneRegistered = true;
+    ImageCacheHygiene.registerAppCache(decodedImageCache.clear);
+  }
   if (decodedImageCache.length >= _decodedCacheMax) {
     decodedImageCache.remove(decodedImageCache.keys.first);
   }
@@ -397,6 +476,8 @@ class MessageTextWithTime extends StatelessWidget {
   final Widget? trailing;
   final List<Mention> mentions;
   final bool highlightMentionAll;
+  // Kata kunci search chat — cocoknya di-highlight kuning (kosong = mati).
+  final String searchQuery;
   const MessageTextWithTime({
     super.key,
     required this.text,
@@ -407,6 +488,7 @@ class MessageTextWithTime extends StatelessWidget {
     this.trailing,
     this.mentions = const [],
     this.highlightMentionAll = false,
+    this.searchQuery = '',
   });
 
   // Poin "1." / "(a)" / "a." di awal baris → baris lanjutan menjorok
@@ -590,12 +672,16 @@ class MessageTextWithTime extends StatelessWidget {
     );
   }
 
-  List<TextSpan> _linkifySpans(String t, TextStyle base) => mentionAwareSpans(
-        t,
-        base,
-        mentions: mentions,
-        highlightAll: highlightMentionAll,
-      );
+  List<TextSpan> _linkifySpans(String t, TextStyle base) {
+    final spans = mentionAwareSpans(
+      t,
+      base,
+      mentions: mentions,
+      highlightAll: highlightMentionAll,
+    );
+    if (searchQuery.isEmpty) return spans;
+    return applySearchHighlight(spans, searchQuery);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -809,6 +895,8 @@ class MessageBubble extends StatelessWidget {
   /// Highlight `@all` — hanya private room/grup. Global room & private 1:1
   /// selalu false (token `@all` tampil sebagai teks biasa).
   final bool highlightMentionAll;
+  // Kata kunci search chat — diteruskan ke teks bubble (kosong = mati).
+  final String searchQuery;
   const MessageBubble({
     super.key,
     required this.msg,
@@ -831,6 +919,7 @@ class MessageBubble extends StatelessWidget {
     this.onTapSelect,
     this.onTapBadge,
     this.highlightMentionAll = false,
+    this.searchQuery = '',
   });
 
   @override
@@ -1271,6 +1360,7 @@ class MessageBubble extends StatelessWidget {
                           alignRight: isMe,
                           mentions: msg.mentions,
                           highlightMentionAll: highlightMentionAll,
+                          searchQuery: searchQuery,
                           trailing: isMe
                               ? Tooltip(
                                   message:
@@ -1529,6 +1619,10 @@ class MessageImage extends StatefulWidget {
 
 class _MessageImageState extends State<MessageImage> {
   DecodedImage? _decoded;
+  // Foto BIASA (bukan view-once) tidak punya konsep expired — null berarti
+  // "belum keload / gagal", bukan "kedaluwarsa". Selama download tampil
+  // spinner; gagal tampil "ketuk untuk memuat", bukan tulisan expired.
+  bool _loading = true;
   // Zoom inline di dalam bubble — gambar tetap kecil di chat, tapi bisa
   // di-pinch 2 jari / ketuk 2x per kotak (mis. baca teks diagram).
   final TransformationController _trans = TransformationController();
@@ -1540,7 +1634,12 @@ class _MessageImageState extends State<MessageImage> {
     super.initState();
     final key = widget.imageData.hashCode;
     _decoded = decodedImageCache[key];
-    if (_decoded == null) _decode(key);
+    if (_decoded == null) {
+      _loading = true;
+      _decode(key);
+    } else {
+      _loading = false;
+    }
   }
 
   @override
@@ -1581,7 +1680,16 @@ class _MessageImageState extends State<MessageImage> {
       _resetZoom();
       final key = widget.imageData.hashCode;
       _decoded = decodedImageCache[key];
-      if (_decoded == null) _decode(key);
+      if (_decoded == null) {
+        if (mounted) setState(() {
+          _loading = true;
+        });
+        _decode(key);
+      } else {
+        if (mounted) setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -1594,16 +1702,37 @@ class _MessageImageState extends State<MessageImage> {
       data = await StoragePhotoService.instance.download(data) ?? '';
       dlog('[PHOTO-DBG] MessageImage ${widget.messageId} downloaded len=${data.length}');
     }
-    if (data.isEmpty) return;
+    if (!mounted) return;
+    if (data.isEmpty) {
+      setState(() {
+        _loading = false;
+      });
+      return;
+    }
     final decoded = await compute(decodeImageB64, data);
     dlog('[PHOTO-DBG] MessageImage ${widget.messageId} decoded=${decoded != null && decoded.width > 0}');
+    if (!mounted) return;
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       // Decode gagal — jangan cache null (dipaksa `!` dulu bikin crash).
+      setState(() {
+        _loading = false;
+      });
       return;
     }
     _putDecodedCache(key, decoded);
     if (!mounted) return;
-    setState(() => _decoded = decoded);
+    setState(() {
+      _decoded = decoded;
+      _loading = false;
+    });
+  }
+
+  void _retry() {
+    final key = widget.imageData.hashCode;
+    setState(() {
+      _loading = true;
+    });
+    _decode(key);
   }
 
   @override
@@ -1611,19 +1740,41 @@ class _MessageImageState extends State<MessageImage> {
     final s = context.read<LocaleProvider>().s;
     final decoded = _decoded;
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
-      // Gagal muat (mis. download path diagram tersendat) — tap untuk coba
-      // lagi, bukan placeholder mati.
+      // Foto biasa: belum keload = spinner; gagal = "ketuk untuk memuat".
+      // JANGAN pakai tulisan expired di sini — itu hanya untuk view-once.
       return GestureDetector(
-        onTap: () => _decode(widget.imageData.hashCode),
+        onTap: _loading ? null : _retry,
         child: Container(
           width: 200,
           height: 200,
           color: AppTheme.bgInput,
           alignment: Alignment.center,
-          child: Text(
-            s.msgPhotoExpired,
-            style: AppText.chatBodySmall.copyWith(color: AppTheme.textSecondary),
-          ),
+          child: _loading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: AppTheme.primary,
+                  ),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.refresh,
+                      color: AppTheme.textSecondary,
+                      size: 22,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      s.msgPhotoTapToLoad,
+                      style: AppText.chatBodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
         ),
       );
     }
@@ -1662,14 +1813,33 @@ class _MessageImageState extends State<MessageImage> {
             height: height,
             fit: BoxFit.contain,
             gaplessPlayback: true,
-            errorBuilder: (_, _, _) => Container(
-              width: 200,
-              height: 200,
-              color: AppTheme.bgInput,
-              alignment: Alignment.center,
-              child: Text(
-                s.msgPhotoExpired,
-                style: AppText.chatBodySmall.copyWith(color: AppTheme.textSecondary),
+            // Decode max 1080px (bukan full-res 12MP): bubble max 280px,
+            // zoom inline 6x tetap tajam; hemat ~6x RAM bitmap.
+            cacheWidth: 1080,
+            errorBuilder: (_, _, _) => GestureDetector(
+              onTap: _retry,
+              child: Container(
+                width: 200,
+                height: 200,
+                color: AppTheme.bgInput,
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.refresh,
+                      color: AppTheme.textSecondary,
+                      size: 22,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      s.msgPhotoTapToLoad,
+                      style: AppText.chatBodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1978,7 +2148,10 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                     decoded.bytes,
                     fit: BoxFit.contain,
                     gaplessPlayback: true,
-                    filterQuality: FilterQuality.high,
+                    // Thumb bubble: decode max 720px + filter sedang.
+                    // Full-res 12MP = ~48MB bitmap; 720px = ~2MB.
+                    cacheWidth: 720,
+                    filterQuality: FilterQuality.medium,
                   )
                 : Container(
                     color: AppTheme.bgInput,
@@ -2026,9 +2199,11 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
       ),
     );
     if (decoded == null) return child;
+    final zoomBytes = decoded.bytes;
     return GestureDetector(
       onTap: () {
-        Navigator.of(context).push(
+        Navigator.of(context)
+            .push(
           MaterialPageRoute(
             builder: (_) => Scaffold(
               backgroundColor: Colors.black,
@@ -2038,7 +2213,12 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                     Center(
                       child: InteractiveViewer(
                         maxScale: 5,
-                        child: Image.memory(decoded.bytes, fit: BoxFit.contain),
+                        child: Image.memory(
+                          zoomBytes,
+                          fit: BoxFit.contain,
+                          // Cap 1080px: layar HP tidak butuh full-res 12MP.
+                          cacheWidth: 1080,
+                        ),
                       ),
                     ),
                     Positioned(
@@ -2058,7 +2238,16 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
               ),
             ),
           ),
-        );
+        ).then((_) {
+          // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
+          if (zoomBytes.isNotEmpty) {
+            try {
+              PaintingBinding.instance.imageCache.evict(
+                MemoryImage(zoomBytes),
+              );
+            } catch (_) {}
+          }
+        });
       },
       child: child,
     );
@@ -2097,7 +2286,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                           decoded.bytes,
                           fit: BoxFit.contain,
                           gaplessPlayback: true,
-                          filterQuality: FilterQuality.high,
+                          cacheWidth: 720,
+                          filterQuality: FilterQuality.medium,
                         )
                       : Container(
                           color: AppTheme.bgInput,
@@ -2255,6 +2445,8 @@ class _ViewOnceImageState extends State<ViewOnceImage> {
                           decoded.bytes,
                           fit: BoxFit.contain,
                           gaplessPlayback: true,
+                          cacheWidth: 720,
+                          filterQuality: FilterQuality.medium,
                         )
                       : Container(
                           color: AppTheme.bgInput,
@@ -2372,6 +2564,15 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
 
   @override
   void dispose() {
+    // Keluarkan bitmap full-res viewer dari ImageCache — kalau tidak,
+    // tiap buka-tutup foto menumpuk puluhan MB bitmap sampai èvict LRU.
+    final b = _fullBytes;
+    if (b != null && b.isNotEmpty) {
+      try {
+        PaintingBinding.instance.imageCache.evict(MemoryImage(b));
+      } catch (_) {}
+    }
+    _fullBytes = null;
     _trans.dispose();
     super.dispose();
   }

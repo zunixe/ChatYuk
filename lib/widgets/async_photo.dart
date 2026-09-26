@@ -134,6 +134,21 @@ class _AsyncPhotoViewerState extends State<AsyncPhotoViewer> {
     _decode();
   }
 
+  @override
+  void dispose() {
+    // Keluarkan bitmap dari ImageCache saat viewer ditutup (pola
+    // PhotoViewerScreen). Galeri di-swipe antar banyak foto full-res —
+    // tanpa evict, tiap foto tertinggal di cache sampai LRU penuh.
+    final b = _bytes;
+    if (b != null && b.isNotEmpty) {
+      try {
+        PaintingBinding.instance.imageCache.evict(MemoryImage(b));
+      } catch (_) {}
+    }
+    _bytes = null;
+    super.dispose();
+  }
+
   Future<void> _decode() async {
     final bytes = await compute(_decodeBase64, widget.base64);
     if (!mounted) return;
@@ -145,7 +160,8 @@ class _AsyncPhotoViewerState extends State<AsyncPhotoViewer> {
     if (_bytes == null) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
-    return Image.memory(_bytes!, fit: BoxFit.contain);
+    // Cap 1080px: layar HP tidak butuh full-res 12MP.
+    return Image.memory(_bytes!, fit: BoxFit.contain, cacheWidth: 1080);
   }
 }
 

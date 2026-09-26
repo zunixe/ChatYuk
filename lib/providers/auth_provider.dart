@@ -20,6 +20,7 @@ import '../services/chat_service.dart';
 import '../services/device_info_service.dart';
 import '../services/location_service.dart';
 import '../core/cache/message_cache.dart';
+import '../core/media/image_cache_hygiene.dart';
 import '../services/realtime_hub.dart';
 import '../services/rt_resilient.dart';
 import '../services/points_service.dart';
@@ -56,7 +57,8 @@ class AuthProvider extends ChangeNotifier {
   Timer? _idleTimer;
   Timer? _heartbeatTimer;
   Timer? _locationTimer;
-  StreamSubscription<UserModel>? _profileSub;
+  StreamSubscription<({UserModel model, Set<String> keys})>?
+  _profileSub;
   StreamSubscription<AuthState>? _authStateSub;
   bool _manualSignOut = false;
   bool _isIdle = false;
@@ -449,8 +451,10 @@ class AuthProvider extends ChangeNotifier {
     if (result == null) return 'canceled';
     final googleEmail = result.googleEmail;
 
-    // Bersihkan semua cache lama setelah login Google
+    // Bersihkan semua cache lama setelah login Google (DB + gambar —
+    // akun bisa berganti pemilik, foto user lama tidak boleh tersisa).
     MessageCache.instance.clearAllLegacy().catchError((_) {});
+    ImageCacheHygiene.clearAll();
 
     // Cek apakah email ini sudah punya profile di akun lain
     if (googleEmail != null) {
@@ -1123,6 +1127,7 @@ class AuthProvider extends ChangeNotifier {
     String? city,
     String? nickname,
     String? about,
+    String? gender,
   }) async {
     await _auth.updateProfile(
       age: age,
@@ -1130,16 +1135,19 @@ class AuthProvider extends ChangeNotifier {
       city: city,
       nickname: nickname,
       about: about,
+      gender: gender,
     );
     final aboutText = about?.trim();
+    final savedAbout = aboutText == null
+        ? null
+        : (aboutText.length > 150 ? aboutText.substring(0, 150) : aboutText);
     _profile = _profile?.copyWith(
       age: age ?? _profile?.age,
       country: country ?? _profile?.country,
       city: city ?? _profile?.city,
       nickname: nickname ?? _profile?.nickname,
-      about: aboutText == null
-          ? null
-          : (aboutText.length > 150 ? aboutText.substring(0, 150) : aboutText),
+      about: savedAbout,
+      gender: gender ?? _profile?.gender,
     );
     if (!_disposed) notifyListeners();
   }
@@ -1190,7 +1198,15 @@ class AuthProvider extends ChangeNotifier {
       _profileSub?.cancel();
       _isIdle = false;
       await _auth.goOffline();
-      await _auth.signOut();
+      // Sesi lokal WAJIB dibuang apa pun hasil revoke server: network
+      // error/timeout di sini dulu melempar keluar sehingga `_loading`
+      // tetap true selamanya → gate root nyangkut di splash dan user
+      // tidak pernah kembali ke halaman utama.
+      try {
+        await _auth.signOut().timeout(const Duration(seconds: 8));
+      } catch (e) {
+        dlog('[AUTH] signOut error (lanjut paksa keluar): $e');
+      }
       _profile = null;
       // Hapus cache profil supaya login berikutnya tidak tampil data lama.
       try {
@@ -1203,6 +1219,9 @@ class AuthProvider extends ChangeNotifier {
           await prefs.remove(k);
         }
       } catch (_) {}
+      // Buang SEMUA cache gambar (bitmap + bytes foto chat) — HP bisa
+      // dipakai bergantian orang; foto user lama tidak boleh tinggal di RAM.
+      ImageCacheHygiene.clearAll();
       // Sesi benar-benar kosong sekarang → EntryScreen (bukan splash).
       // `loading=false` + `profile=null` + `signingOut=true` = gate root
       // menampilkan EntryScreen pada frame yang sama.
@@ -1211,6 +1230,11 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _manualSignOut = false;
       _signingOut = false;
+      // Jaring pengaman: gate root HARUS rebuild apa pun yang terjadi di
+      // atas (termasuk timeout 8s yang dibatalkan pemanggil) — tanpa ini
+      // gate bisa tertinggal di splash bila notify terakhir terlewat.
+      _loading = false;
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -1276,6 +1300,8 @@ class AuthProvider extends ChangeNotifier {
     // Tahap lengkap: avatar (cache per path, biasanya instan).
     try {
       _profile = await _auth.getProfile();
+      // DIAG2 sementara.
+      print('[ABOUT2] reloadProfile full about="${_profile?.about}"');
       dlog('[AUTH] reloadProfile full -> ${_profile?.uid}');
     } catch (e) {
       dlog('[AUTH] reloadProfile full FAILED: $e');
@@ -1519,18 +1545,100 @@ class AuthProvider extends ChangeNotifier {
 
   void _listenProfile() {
     _profileSub?.cancel();
-    _profileSub = _auth.onMyProfileUpdates().listen((updated) {
+    _profileSub = _auth.onMyProfileUpdates().listen((rec) {
       if (_disposed) return;
-      _applyProfileUpdate(updated);
+      _applyProfileUpdate(rec.model, presentKeys: rec.keys);
     });
+  }
+
+  /// Gabung event profil dengan state lokal: hanya kolom yang ADA di
+  /// payload event yang diambil; sisanya dipertahankan dari state saat ini.
+  ///
+  /// Latar: payload realtime tidak memuat kolom yang di-revoke dari role
+  /// authenticated (about/status/avatar/last_seen/dll). Replace mentah
+  /// menimpa kolom-kolom itu dengan default kosong (gejala: Tentang tampil
+  /// lalu hilang lagi). Murni supaya bisa di-unit-test.
+  @visibleForTesting
+  static UserModel mergeProfileEvent({
+    required UserModel? current,
+    required UserModel event,
+    required Set<String> presentKeys,
+  }) {
+    final cur = current;
+    if (cur == null) return event;
+    T pick<T>(String key, T ev, T curV) =>
+        presentKeys.contains(key) ? ev : curV;
+    return event.copyWith(
+      nickname: pick('nickname', event.nickname, cur.nickname),
+      gender: pick('gender', event.gender, cur.gender),
+      age: pick('age', event.age, cur.age),
+      country: pick('country', event.country, cur.country),
+      city: pick('city', event.city, cur.city),
+      ipAddress: pick('ipAddress', event.ipAddress, cur.ipAddress),
+      status: pick('status', event.status, cur.status),
+      avatar: pick('avatar', event.avatar, cur.avatar),
+      isRegistered: pick(
+        'isRegistered',
+        event.isRegistered,
+        cur.isRegistered,
+      ),
+      lastSeen: pick('lastSeen', event.lastSeen, cur.lastSeen),
+      hashtags: pick('hashtags', event.hashtags, cur.hashtags),
+      points: pick('points', event.points, cur.points),
+      shareLocation: pick(
+        'shareLocation',
+        event.shareLocation,
+        cur.shareLocation,
+      ),
+      followersCount: pick(
+        'followersCount',
+        event.followersCount,
+        cur.followersCount,
+      ),
+      followingCount: pick(
+        'followingCount',
+        event.followingCount,
+        cur.followingCount,
+      ),
+      subscriberCount: pick(
+        'subscriberCount',
+        event.subscriberCount,
+        cur.subscriberCount,
+      ),
+      subscriptionPrice: pick(
+        'subscriptionPrice',
+        event.subscriptionPrice,
+        cur.subscriptionPrice,
+      ),
+      friendsCount: pick(
+        'friendsCount',
+        event.friendsCount,
+        cur.friendsCount,
+      ),
+      email: pick('email', event.email, cur.email),
+      about: pick('about', event.about, cur.about),
+    );
   }
 
   /// Terapkan update profil lintas-device: kalau avatar berupa path storage
   /// (re-upload dari device lain), download dulu → sinkronkan cache → baru
   /// tampilkan. Tanpa ini device kedua menampilkan foto LAMA dari cache.
-  Future<void> _applyProfileUpdate(UserModel updated) async {
+  Future<void> _applyProfileUpdate(
+    UserModel updated, {
+    Set<String>? presentKeys,
+  }) async {
     if (_disposed) return;
-    final avatar = updated.avatar;
+    // Merge kolom yang hadir saja (lihat mergeProfileEvent): payload
+    // realtime tidak memuat kolom revoked → jangan timpa dengan default.
+    // presentKeys null = model penuh (mis. refreshProfile) → pakai mentah.
+    final merged = presentKeys == null
+        ? updated
+        : mergeProfileEvent(
+            current: _profile,
+            event: updated,
+            presentKeys: presentKeys,
+          );
+    final avatar = merged.avatar;
     if (avatar.isNotEmpty &&
         StoragePhotoService.instance.isAvatarPath(avatar)) {
       final b64 = await AvatarB64Service.instance.getByPath(avatar);
@@ -1544,7 +1652,7 @@ class AuthProvider extends ChangeNotifier {
       if (b64.isEmpty && prev.isNotEmpty) {
         dlog('[AUTH] avatar gagal diunduh, pertahankan foto lama (${avatar})');
       }
-      final finalProfile = updated.copyWith(avatar: keep);
+      final finalProfile = merged.copyWith(avatar: keep);
       final uid = finalProfile.uid;
       if (b64.isNotEmpty) {
         AvatarB64Service.instance.setForUid(uid, b64);
@@ -1554,15 +1662,15 @@ class AuthProvider extends ChangeNotifier {
     } else {
       // Avatar kosong di payload (mis. field belum ikut terkirim): jangan
       // buang foto lama — hanya ganti kalau payload memang membawa nilai.
-      var next = updated;
+      var next = merged;
       final prev = _profile?.avatar ?? '';
       if (avatar.isEmpty && prev.isNotEmpty) {
-        next = updated.copyWith(avatar: prev);
+        next = merged.copyWith(avatar: prev);
       }
       _profile = next;
       if (avatar.isNotEmpty) {
-        AvatarB64Service.instance.setForUid(updated.uid, avatar);
-        ChatService.setAvatarCacheForUid(updated.uid, avatar);
+        AvatarB64Service.instance.setForUid(merged.uid, avatar);
+        ChatService.setAvatarCacheForUid(merged.uid, avatar);
       }
     }
     if (!_disposed) notifyListeners();
