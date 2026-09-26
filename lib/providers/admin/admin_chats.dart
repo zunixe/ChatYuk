@@ -22,7 +22,6 @@ mixin AdminChatsMx on AdminBase {
   List<String> get adminUids => _adminUids;
   bool get chatsLoading => _chatsLoading;
   bool get chatsHasMore => _chatsHasMore;
-  int get chatsTotal => _chatsTotal;
   AdminErrKind? get chatsError => _chatsError;
 
   Future<void> fetchChats() async {
@@ -206,7 +205,6 @@ mixin AdminChatsMx on AdminBase {
   List<Map<String, dynamic>> get contactMessages => _contactMessages;
   bool get contactLoading => _contactLoading;
   bool get contactHasMore => _contactHasMore;
-  int get contactTotal => _contactTotal;
   AdminErrKind? get contactError => _contactError;
 
   Future<void> fetchContactMessages() async {
@@ -435,12 +433,5 @@ mixin AdminChatsMx on AdminBase {
       dlog('[ADMIN] deleteChat error: $e');
       return false;
     }
-  }
-
-  void clearChatMessages() {
-    _chatMessages = [];
-    _chatMessagesHasMore = true;
-    _chatMessagesFetchingMore = false;
-    if (!_disposed) notifyListeners();
   }
 }

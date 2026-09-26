@@ -12,10 +12,6 @@ mixin AdminStatsMx on AdminBase {
   AdminErrKind? get error => _error;
   bool get pointsEnabled => _pointsEnabled;
 
-  /// True bila kegagalan terakhir karena koneksi (dipakai banner "data terakhir").
-  bool get hasData => _stats != null && _stats!.isNotEmpty;
-
-
   /// Muat statistik. Urutan: memori → cache disk (instan, tahan offline) →
   /// network. Kegagalan TIDAK mengosongkan data lama; hanya menandai error
   /// agar UI bisa menampilkan banner "data terakhir".
@@ -102,6 +98,21 @@ mixin AdminStatsMx on AdminBase {
   void invalidateStatsDetail() {
     _detailCache = null;
     _detailCacheAt = null;
+  }
+
+  /// Halaman daftar user statistik (RPC ber-paginasi — ganti list full dari
+  /// detail untuk 4 kunci user). Return {'items': [...], 'total': n}.
+  Future<Map<String, dynamic>> listStatsUsers(
+    String kind, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    try {
+      return await _service.listStatsUsers(kind, limit: limit, offset: offset);
+    } catch (e) {
+      dlog('[ADMIN] listStatsUsers error: $e');
+      return {'items': const [], 'total': 0};
+    }
   }
 
   // ── UID tersembunyi (dummy + device-ter-exclude) untuk filter peta ──
