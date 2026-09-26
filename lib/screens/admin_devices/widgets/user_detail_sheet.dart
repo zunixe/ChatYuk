@@ -4,7 +4,10 @@ import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../utils.dart';
+import '../../../widgets/detail_row.dart';
 import '../../admin_chat_view_screen.dart';
+import 'location_route_map.dart';
+import '../../../widgets/sheet_drag_handle.dart';
 
 /// Bottom sheet detail satu user: profil + semua device + daftar chat +
 /// riwayat lokasi.
@@ -63,15 +66,7 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
       builder: (context, scrollCtrl) {
         return Column(
           children: [
-            Container(
-              margin: const EdgeInsets.only(top: 10),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.textSecondary.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetDragHandle(),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Row(
@@ -176,7 +171,34 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
                   const SizedBox(height: 12),
 
                   if (locHist.isNotEmpty) ...[
-                    _section(s.adminDeviceLocation),
+                    Row(
+                      children: [
+                        Expanded(child: _section(s.adminDeviceLocation)),
+                        if (parseRoutePoints(locHist).length >= 2)
+                          TextButton.icon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => LocationRouteMapScreen(
+                                  points: parseRoutePoints(locHist),
+                                  titleName: nick,
+                                  s: s,
+                                ),
+                              ),
+                            ),
+                            icon: const Icon(Icons.map_outlined, size: 18),
+                            label: Text(s.adminMapViewRoute),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                      ],
+                    ),
                     for (final l in locHist.take(20)) _locTile(l),
                   ],
                 ],
@@ -195,26 +217,8 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
     );
   }
 
-  Widget _kv(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              k,
-              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-            ),
-          ),
-          Expanded(
-            child: Text(v, style: AppText.bodySmall),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _kv(String k, String v) =>
+      DetailRow(k, v, labelWidth: 110);
 
   Widget _deviceTile(Map<String, dynamic> d) {
     final brand = '${d['brand'] ?? ''}';

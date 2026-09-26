@@ -8,6 +8,7 @@ import '../providers/chat_provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/locale_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../widgets/sheet_drag_handle.dart';
 
 /// Bottom sheet anggota private room: role, kick, jadikan admin,
 /// izinkan broadcast, dan antrean approval (untuk admin).
@@ -185,15 +186,7 @@ class _RoomMembersSheetState extends State<RoomMembersSheet> {
       builder: (context, scrollCtrl) {
         return Column(
           children: [
-            Container(
-              margin: const EdgeInsets.only(top: 10),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.textSecondary.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetDragHandle(),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Row(

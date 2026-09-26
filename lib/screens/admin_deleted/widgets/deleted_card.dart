@@ -3,6 +3,7 @@ import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
 import '../../../utils.dart';
+import '../../../widgets/initial_avatar.dart';
 
 class DeletedCard extends StatelessWidget {
   final Map<String, dynamic> entry;
@@ -92,20 +93,7 @@ class DeletedCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
               ],
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    nick.isNotEmpty ? nick[0].toUpperCase() : '?',
-                    style: AppText.bodyStrong.copyWith(color: accentColor),
-                  ),
-                ),
-              ),
+              InitialAvatarBox(name: nick, color: accentColor),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

@@ -8,6 +8,7 @@ import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../utils.dart';
+import '../../../widgets/sheet_drag_handle.dart';
 
 class AdminRegistrationsSheet extends StatefulWidget {
   const AdminRegistrationsSheet();
@@ -16,6 +17,9 @@ class AdminRegistrationsSheet extends StatefulWidget {
 }
 
 class AdminRegistrationsSheetState extends State<AdminRegistrationsSheet> {
+  // true = baru daftar dulu (default, sama seperti server); false = lama daftar.
+  bool _newestFirst = true;
+
   @override
   void initState() {
     super.initState();
@@ -28,7 +32,14 @@ class AdminRegistrationsSheetState extends State<AdminRegistrationsSheet> {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final admin = context.watch<AdminProvider>();
-    final list = admin.registrations;
+    // Urutkan di klien (≤200 baris, instan) — server selalu newest-first.
+    final list = [...admin.registrations];
+    list.sort((a, b) {
+      DateTime dt(Object? v) =>
+          DateTime.tryParse('$v') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final cmp = dt(a['created_at']).compareTo(dt(b['created_at']));
+      return _newestFirst ? -cmp : cmp;
+    });
 
     return DraggableScrollableSheet(
       expand: false,
@@ -37,18 +48,40 @@ class AdminRegistrationsSheetState extends State<AdminRegistrationsSheet> {
       builder: (context, scrollCtrl) {
         return Column(
           children: [
-            Container(
-              margin: const EdgeInsets.only(top: 10),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.textSecondary.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetDragHandle(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Text(s.adminRegListTitle, style: AppText.title),
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      s.adminRegListTitle,
+                      style: AppText.title,
+                    ),
+                  ),
+                  PopupMenuButton<bool>(
+                    tooltip: _newestFirst
+                        ? s.adminRegSortNewest
+                        : s.adminRegSortOldest,
+                    icon: const Icon(
+                      Icons.sort_rounded,
+                      size: 20,
+                      color: AppTheme.primary,
+                    ),
+                    onSelected: (v) => setState(() => _newestFirst = v),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: true,
+                        child: Text(s.adminRegSortNewest),
+                      ),
+                      PopupMenuItem(
+                        value: false,
+                        child: Text(s.adminRegSortOldest),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             Expanded(
               child: admin.registrationsLoading && list.isEmpty

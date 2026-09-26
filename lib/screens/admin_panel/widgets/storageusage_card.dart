@@ -10,6 +10,7 @@ import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../utils.dart';
+import '../../../widgets/detail_row.dart';
 import 'tablesize_sheet.dart';
 
 class AdminStorageUsageCard extends StatefulWidget {
@@ -265,19 +266,6 @@ Widget _cfSection(AdminProvider admin, S s) {
     );
   }
 
-  Widget _kv(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(k, style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary)),
-          ),
-          Text(v, style: AppText.bodySmall),
-        ],
-      ),
-    );
-  }
 
   Widget _progress(double pct, Color color) {
     return Padding(
@@ -373,6 +361,8 @@ Widget _cfSection(AdminProvider admin, S s) {
       ),
     );
   }
+
+  Widget _kv(String k, String v) => DetailRow(k, v);
 }
 
 /// Pie chart sederhana DB vs Storage (CustomPaint, tanpa dependency).
