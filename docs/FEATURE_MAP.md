@@ -226,6 +226,22 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 
 **Invariant:** 1 call aktif per user; notif missed 1×; `activeCallId` cocok.
 
+### 7b. Voice stage global room (audio-only, max 6 mic) — 2026-09-26
+
+| Lapis | Lokasi |
+|---|---|
+| UI | `room_chat_screen.dart` (tombol mic AppBar + `VoiceStageStrip`), `room_chat/widgets/voice_stage_strip.dart` |
+| Service | `lib/services/room_voice_service.dart` (mesh audio, pola `room_broadcast_service.dart`) |
+| SQL inti | `room_voice_signals` (signaling), `room_voice_speakers` (stage+heartbeat), RPC `room_voice_join/heartbeat/leave/mute/sweep`, cron `sweep_room_voice` (*/1m) |
+| Test | `test/room_voice_session_test.dart` (state awal; handshake butuh 2 HP) |
+
+**Invariant:**
+1. Max 6 mic enforced **server** (`room_voice_join` hitung heartbeat <45 dtk) — client hanya menampilkan "penuh".
+2. Mute paksa hanya owner room / app admin (server cek ulang) — sinyal `v_mute` terarah.
+3. Keluar room/dispose SELALU `stop()` (leave RPC + tutup PC) — mic tidak nyangkut; watchdog cron 45 dtk sebagai jaring pengaman.
+4. Tulis speakers HANYA via RPC (RLS tanpa policy tulis) — jangan tambah policy insert/update/delete.
+5. `room_voice_signals` global terbuka / member (pola `room_signals`); jangan longgarkan ke anon.
+
 ---
 
 ## 8. Admin Panel (flavor terpisah)
@@ -308,3 +324,45 @@ bash scripts/snapshot_functions.sh              # kalau sentuh fungsi frozen
 git diff supabase/snapshots/functions.sql       # REVIEW: ada cabang hilang?
 flutter test && deno test --allow-read supabase/functions/_shared/
 ```
+
+---
+
+## 10. Semantik & konvensi yang SENGAJA berbeda (jangan "diperbaiki" tanpa keputusan)
+
+### 10a. "Blocked" berbeda antara chat dan timeline — KEPUTUSAN SADAR
+| Jalur | Implementasi | Arti |
+|---|---|---|
+| Chat (`ChatProvider.isBlocked`) | `ChatService.getBlockedUids` → `blocks.blocker_id = me` | **satu arah**: saya blokir X → saya tak lihat X |
+| Timeline (`TimelineProvider._blockedIds`) | `blocks` di-query `.or(blocker=me, blocked=me)` | **dua arah**: blokir saling menyembunyikan |
+
+Alasan: chat = kontrol **diri** (saya memilih tak berinteraksi); timeline =
+**keamanan** (post orang yang memblokir saya jangan muncul). Keduanya
+sengaja tidak disatukan. Kalau nanti ingin disatukan, itu keputusan produk —
+ubah di SATU tempat (`ChatService.getBlockedUids`) lalu konsumsi di timeline,
+jangan sebaliknya.
+
+### 10b. Tabel TTL cache admin (jangan salah pilih)
+| Cache | TTL | Lokasi |
+|---|---|---|
+| `_detailCache` (stats detail) | 60 dtk | `admin/admin_stats.dart` |
+| `_storageTtl` (storage stats) | 10 mnt | `admin/admin_stats.dart` |
+| `_excludedTtl` (excluded devices) | 5 mnt | `services/admin_service.dart` |
+| cache stats server | 5 mnt | server-side (RPC) |
+| `_commentTtl` timeline | 30 dtk | `providers/timeline_provider.dart` |
+
+### 10c. Instrumentasi RPC — SATU jalur
+Semua service (admin & user) memakai `measuredRpc()` (`lib/core/perf/
+rpc_probe.dart`): metrik `rpc.<fn>` saat `PERF_PROBE` on, nol overhead saat
+off. Admin memakai label `admin.<fn>`. JANGAN kembali menulis `_sb.rpc`
+langsung untuk RPC baru, dan jangan tambah konvensi ketiga
+(`PerfProbe.timed` manual hanya untuk jalur butuh `.timeout()` chaining,
+mis. `story_service`).
+
+### 10d. Widget bersama (jangan bikin salinan baru)
+`lib/widgets/`: `detail_row.dart` (DetailRow), `sheet_drag_handle.dart`
+(SheetDragHandle), `initial_avatar.dart` (InitialAvatarBox/Circle),
+`admin_error_view.dart` (AdminErrorView), `toggle_tile.dart` (ToggleTile),
+`search_field.dart` (SearchField), `filter_chip_pill.dart` (FilterChipPill).
+Utilitas bersama: `utils.matchesQuery`, `admin/admin_grouping.dart`
+(groupByDevice/filterDeviceGroups), `core/ui/scroll_pagination.dart`
+(ScrollPagination).

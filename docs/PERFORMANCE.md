@@ -1012,6 +1012,40 @@ rasa di HP menyusul. Aturan lanjutan: jangan kembalikan foto tunggal ke tinggi
 natural tanpa placeholder ber-animasi, dan jangan tampilkan blok foto
 berdasarkan `_imageThumbs` (async).
 
+### 12.10 Dummy AI hilang dari daftar Online — timeout RPC 2s (2026-09-26)
+
+Keluhan: dummy `agoy` online (RPC `get_online_users` mengembalikannya, teruji
+via Management API: 7 baris, termasuk agoy `online`) tapi tidak muncul di tab
+Pengguna Online; filter negara = Semua, gender = Semua, search kosong.
+
+**Bukti logcat HP (rilis, 21:43–21:45):**
+```
+21:43:36 [ONLINE-EMIT] calling RPC get_online_users
+   ← tidak ada "RPC done", tidak ada "slow path" (menggantung)
+21:45:01 [ONLINE-EMIT] fallback 30s tick cachedEmpty=true
+21:45:02 [ONLINE-EMIT] slow path n=7   (baru berhasil 85 detik kemudian)
+```
+
+**Root cause:** `getOnlineUsers()` memanggil RPC dengan `.timeout(2s)`. Di
+jaringan blip (yang memang lazim di HP ini — §1h), RPC pertama tembus 2 dtk →
+`catch(_){}` menelan error → `usedRpc=false` → jatuh ke fallback
+`presence_for`, yang **hanya memuat user ber-socket realtime**. Dummy AI tidak
+punya socket presence → hilang dari daftar walau `profiles.status='online'`.
+Ini juga menjelaskan gejala "kadang muncul kadang ilang".
+
+**Fix (`chat_service_presence.dart`, client saja):**
+1. Timeout RPC `online.rpc` **2s → 6s** (konsisten dgn batas atas terukur
+   21–665ms + margin cold-start).
+2. RPC sukses-tapi-kosong tidak lagi ditandai gagal (memang sepi).
+3. **RPC gagal + cache sudah berisi** (dari RPC sebelumnya) → **pertahankan
+   cache**, JANGAN jatuh ke fallback `presence_for`. Emit dikembalikan; tick
+   30s berikutnya memperbarui saat jaringan pulih. Ini menjaga user non-socket
+   (dummy/AI) tetap tampil.
+
+Aturan lanjutan: jangan turunkan kembali timeout RPC daftar online di bawah
+6s, dan jangan biarkan fallback `presence_for` menimpa cache yang sudah berisi
+user dari jalur RPC (fallback hanya untuk cold start tanpa cache).
+
 ---
 
 ## 13. Memori 864MB → 225MB: bitmap full-res (2026-09-26)
@@ -1072,3 +1106,27 @@ full-res (melanggar aturan §13) + cache gambar tidak dibersihkan saat logout.
 sisa edit edge-to-edge foto) → build gagal walau analyzer lolos; diperbaiki
 di sini. Pelajaran: **build rilis = gerbang nyata**, jangan percaya
 `analyze` saja untuk perubahan struktur widget.
+
+---
+
+## 15. Instrumentasi RPC seragam + titik ukur (2026-09-26)
+
+Sebelumnya hanya jalur **admin** terukur (`AdminService._rpc` wrapper);
+64 RPC user tak terukur, plus `story_service` memakai konvensi ketiga
+(`PerfProbe.timed` manual).
+
+**Sekarang satu jalur:** `measuredRpc(sb, fn, {params, label})`
+(`lib/core/perf/rpc_probe.dart`) —
+- probe on → `PerfProbe.timed('rpc.<fn>')` (admin: `admin.<fn>`)
+- probe off → nol overhead, perilaku identik
+
+Dipakai di: AdminService, SocialService, PointsService, PrivateRoomService,
+ChatService (gift/room/presence/chatlist via library induk).
+
+**Cara ukur ulang:** build rilis `--dart-define=PERF_PROBE=true`, buka tiap
+halaman, `adb logcat | grep '\[PERF\]'`. Titik ukur kini mencakup RPC user
+(mis. `rpc.subscribe_creator`, `rpc.get_my_private_chats`) + admin
+(`admin.list_devices`) sehingga biaya per-jalur bisa dibandingkan.
+
+Pengecualian sah: jalur yang butuh `.timeout()` chaining tetap pakai
+`PerfProbe.timed` langsung (mis. `story.tray`, `story.slides`).
