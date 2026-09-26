@@ -312,8 +312,6 @@ class ChatProvider extends ChangeNotifier {
   String privateChatId(String a, String b) => _service.privateChatId(a, b);
   static String effectiveStatusOf(String? raw, String? lastSeen) =>
       ChatService.effectiveStatusOf(raw, lastSeen);
-  static Set<String> get blockedStatusKeys => const {};
-
   bool isBlocked(String uid) => _blockedUids.contains(uid);
 
   void reset() {

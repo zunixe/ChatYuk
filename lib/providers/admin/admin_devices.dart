@@ -14,7 +14,6 @@ mixin AdminDevicesMx on AdminBase {
   List<Map<String, dynamic>> get devices => _devices;
   bool get devicesLoading => _devicesLoading;
   bool get devicesHasMore => _devicesHasMore;
-  int get devicesTotal => _devicesTotal;
   AdminErrKind? get devicesError => _devicesError;
 
 Future<void> fetchDevices() async {
@@ -104,6 +103,27 @@ Future<void> fetchDevices() async {
   /// memicu notifikasi — daftar diambil ringan dari server sekali sesi.
   Future<void> _detectNewDevices(List<Map<String, dynamic>> devices) async {
     if (!_seenDevicesLoaded || _disposed) return; // tunggu armNotifications
+    // SEED malas: fetch pertama setelah arm = baseline diam-diam (tanpa
+    // notifikasi). Device baru selalu muncul di atas (ORDER BY last_seen
+    // desc) sehingga halaman-1 cukup — tanpa fetch limit-1000 khusus.
+    if (!_seedDone) {
+      _seedDone = true;
+      var added = false;
+      for (final d in devices) {
+        final id = '${d['install_id'] ?? ''}';
+        if (id.isNotEmpty && _seenDeviceIds.add(id)) added = true;
+      }
+      if (added) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setStringList(
+            AdminBase._kSeenDevicesKey,
+            _seenDeviceIds.toList(),
+          );
+        } catch (_) {}
+      }
+      return;
+    }
     var excluded = <String>{};
     try {
       excluded = await _service.getExcludedDevices();

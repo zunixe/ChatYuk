@@ -13,7 +13,21 @@ class AdminService {
 
   /// Set UID device yang dikecualikan dari notifikasi device-baru.
   /// Dipindah dari AdminProvider agar I/O lewat service (mudah di-mock).
+  /// Memo 5 menit: dipanggil tiap deteksi device baru — daftar berubah
+  /// jarang (hanya saat admin exclude/unexclude), jadi jangan tembak DB
+  /// tiap kali. Hanya menunda SUPRESI notifikasi, bukan data list.
+  Set<String>? _excludedCache;
+  DateTime? _excludedAt;
+  static const _excludedTtl = Duration(minutes: 5);
+
   Future<Set<String>> getExcludedDevices() async {
+    final cached = _excludedCache;
+    final at = _excludedAt;
+    if (cached != null &&
+        at != null &&
+        DateTime.now().difference(at) < _excludedTtl) {
+      return cached;
+    }
     try {
       final rows = await _sb
           .from('app_settings')
@@ -22,7 +36,10 @@ class AdminService {
           .maybeSingle()
           .timeout(const Duration(seconds: 2));
       final list = rows?['excluded_devices'] as List?;
-      return {for (final e in list ?? const []) '$e'};
+      final out = {for (final e in list ?? const []) '$e'};
+      _excludedCache = out;
+      _excludedAt = DateTime.now();
+      return out;
     } catch (_) {
       return const {};
     }
@@ -57,6 +74,21 @@ class AdminService {
   Future<Map<String, dynamic>> getStatsDetail() async {
     final res = await _rpc('admin_stats_detail').timeout(_openTimeout);
     return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Daftar user statistik ber-paginasi (ganti list full dari detail).
+  /// kind: 'all' | 'active' | 'registered' | 'anonymous'.
+  /// Return {'items': [...], 'total': n}. Otomatis terukur `admin.*` via _rpc.
+  Future<Map<String, dynamic>> listStatsUsers(
+    String kind, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final res = await _rpc(
+      'admin_stats_users_page',
+      params: {'p_kind': kind, 'p_limit': limit, 'p_offset': offset},
+    ).timeout(_openTimeout);
+    return (res as Map<String, dynamic>?) ?? {'items': const [], 'total': 0};
   }
 
   /// Jumlah registrasi email per hari di bulan tertentu (bar chart Ringkasan).
@@ -404,15 +436,9 @@ class AdminService {
     return res == null;
   }
 
-  /// List semua akun dummy: uid, email, password, nickname, status, last_seen.
-  Future<List<Map<String, dynamic>>> listDummies() async {
-    final res = await _rpc('admin_list_dummies');
-    final list = res is List ? res : <dynamic>[];
-    return list.cast<Map<String, dynamic>>();
-  }
-
-  /// Varian ber-paginasi: `{items, total, limit, offset}`. Ganti
-  /// `listDummies()` (tanpa limit) supaya polling tak menarik seluruh tabel.
+  /// Varian ber-paginasi: `{items, total, limit, offset}`. Menggantikan
+  /// `listDummies()` (tanpa limit, sudah dihapus) supaya polling tidak
+  /// menarik seluruh tabel.
   Future<Map<String, dynamic>> listDummiesPage({
     int limit = 50,
     int offset = 0,

@@ -14,7 +14,6 @@ mixin AdminDeletedMx on AdminBase {
   List<Map<String, dynamic>> get deleted => _deleted;
   bool get deletedLoading => _deletedLoading;
   bool get deletedHasMore => _deletedHasMore;
-  int get deletedTotal => _deletedTotal;
   AdminErrKind? get deletedError => _deletedError;
 
   Future<void> fetchDeleted() async {
