@@ -2,6 +2,7 @@ import 'dart:async';
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'subscription_rpc.dart';
+import '../core/perf/rpc_probe.dart';
 
 class PointsService {
   final SupabaseClient _sb;
@@ -9,7 +10,7 @@ class PointsService {
   PointsService([SupabaseClient? sb]) : _sb = sb ?? Supabase.instance.client;
 
   Future<bool> fetchEnabled() async {
-    final res = await _sb.rpc('get_points_enabled');
+    final res = await measuredRpc(_sb, 'get_points_enabled');
     return res == true;
   }
 
@@ -47,7 +48,7 @@ class PointsService {
 
   /// Saldo wallet 3 bucket: {bonus, topup, earned, total, withdrawable}.
   Future<Map<String, dynamic>> getWallet() async {
-    final res = await _sb.rpc('get_wallet');
+    final res = await measuredRpc(_sb, 'get_wallet');
     if (res is Map) return Map<String, dynamic>.from(res);
     return {'bonus': 0, 'topup': 0, 'earned': 0, 'total': 0, 'withdrawable': 0};
   }
@@ -74,13 +75,13 @@ class PointsService {
   }
 
   Future<Map<String, dynamic>> dailyLoginBonus() async {
-    final res = await _sb.rpc('daily_login_bonus');
+    final res = await measuredRpc(_sb, 'daily_login_bonus');
     if (res is Map) return Map<String, dynamic>.from(res);
     return {'points': (res as num?)?.toInt() ?? 0, 'streak': 0, 'bonus': 0};
   }
 
   Future<int> deductChatPoint(String msgType) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'deduct_chat_point',
       params: {'msg_type': msgType},
     );
@@ -88,7 +89,7 @@ class PointsService {
   }
 
   Future<int> refundChatPoint(String msgType) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'refund_chat_point',
       params: {'msg_type': msgType},
     );
@@ -96,7 +97,7 @@ class PointsService {
   }
 
   Future<int> newChatBonus(String otherUid) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'new_chat_bonus',
       params: {'other_uid': otherUid},
     );
@@ -104,12 +105,12 @@ class PointsService {
   }
 
   Future<int> roomReadBonus() async {
-    final res = await _sb.rpc('room_read_bonus');
+    final res = await measuredRpc(_sb, 'room_read_bonus');
     return (res as num).toInt();
   }
 
   Future<int> oneTimeBonus(String actionKey, int bonus) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'one_time_bonus',
       params: {'action_key': actionKey, 'bonus': bonus},
     );
@@ -118,7 +119,7 @@ class PointsService {
 
   /// Reward koin upload foto slot 1..5 (sekali per slot). Return total koin.
   Future<int> rewardPhotoSlot(int slotIndex) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'reward_photo_slot',
       params: {'p_slot_index': slotIndex},
     );
@@ -127,7 +128,7 @@ class PointsService {
 
   /// Buka foto terkunci. mode 'once'|'perm'. Return {ok, points, mode}.
   Future<Map<String, dynamic>> unlockPhoto(String photoId, String mode) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'unlock_photo',
       params: {'p_photo_id': photoId, 'p_mode': mode},
     );
@@ -151,7 +152,7 @@ class PointsService {
   }
 
   Future<int> registerBonus() async {
-    final res = await _sb.rpc('register_bonus');
+    final res = await measuredRpc(_sb, 'register_bonus');
     return (res as num).toInt();
   }
 
@@ -170,14 +171,14 @@ class PointsService {
       'row_limit': limit,
       if (offset > 0) 'row_offset': offset,
     };
-    final res = await _sb.rpc('points_leaderboard', params: params);
+    final res = await measuredRpc(_sb, 'points_leaderboard', params: params);
     if (res is Map) return Map<String, dynamic>.from(res);
     return {'scope': scope, 'entries': [], 'me': null};
   }
 
   /// Status semua misi (harian/mingguan/sekali). tzOffset = menit offset lokal.
   Future<Map<String, dynamic>> quests(int tzOffsetMinutes) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'points_quests',
       params: {'tz_offset_minutes': tzOffsetMinutes},
     );
@@ -190,7 +191,7 @@ class PointsService {
     String key,
     int tzOffsetMinutes,
   ) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'claim_weekly_quest',
       params: {'quest_key': key, 'tz_offset_minutes': tzOffsetMinutes},
     );
@@ -201,7 +202,7 @@ class PointsService {
   /// Harga room (dual pricing) dari server.
   Future<Map<String, dynamic>> roomPricing() async {
     try {
-      final res = await _sb.rpc('room_pricing');
+      final res = await measuredRpc(_sb, 'room_pricing');
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       dlog('[PointsService] roomPricing error: $e');
@@ -225,7 +226,7 @@ class PointsService {
 
   /// Klaim reward referral-install (sekali per referred).
   Future<Map<String, dynamic>> claimReferralReward() async {
-    final res = await _sb.rpc('claim_referral_reward');
+    final res = await measuredRpc(_sb, 'claim_referral_reward');
     return res is Map ? Map<String, dynamic>.from(res) : {};
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'subscription_rpc.dart';
+import '../core/perf/rpc_probe.dart';
 
 /// Service untuk social graph: follow, friend request, subscribe.
 class SocialService {
@@ -11,12 +12,12 @@ class SocialService {
   String? get uid => _sb.auth.currentUser?.id;
 
   Future<Map<String, dynamic>> followUser(String targetUid) async {
-    final res = await _sb.rpc('follow_user', params: {'p_followee': targetUid});
+    final res = await measuredRpc(_sb, 'follow_user', params: {'p_followee': targetUid});
     return _map(res);
   }
 
   Future<Map<String, dynamic>> unfollowUser(String targetUid) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'unfollow_user',
       params: {'p_followee': targetUid},
     );
@@ -24,7 +25,7 @@ class SocialService {
   }
 
   Future<Map<String, dynamic>> sendFriendRequest(String targetUid) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'send_friend_request',
       params: {'p_to': targetUid},
     );
@@ -35,7 +36,7 @@ class SocialService {
     int requestId,
     bool accept,
   ) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'respond_friend_request',
       params: {'p_request_id': requestId, 'p_accept': accept},
     );
@@ -50,7 +51,7 @@ class SocialService {
   }
 
   Future<Map<String, dynamic>> unsubscribeCreator(String creatorUid) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'unsubscribe_creator',
       params: {'p_creator': creatorUid},
     );
@@ -58,7 +59,7 @@ class SocialService {
   }
 
   Future<Map<String, dynamic>> setSubscriptionPrice(int price) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'set_subscription_price',
       params: {'p_price': price},
     );
@@ -66,7 +67,7 @@ class SocialService {
   }
 
   Future<Map<String, dynamic>> mySocialStatus(String otherUid) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'my_social_status',
       params: {'p_other': otherUid},
     );
@@ -79,7 +80,7 @@ class SocialService {
     int limit = 50,
   }) async {
     try {
-      final res = await _sb.rpc(
+      final res = await measuredRpc(_sb, 
         'social_list',
         params: {'p_kind': kind, 'p_user': userUid, 'p_limit': limit},
       );
@@ -95,7 +96,7 @@ class SocialService {
     int offset = 0,
   }) async {
     try {
-      final res = await _sb.rpc(
+      final res = await measuredRpc(_sb, 
         'friend_request_inbox_page',
         params: {'p_limit': limit, 'p_offset': offset},
       );
@@ -111,7 +112,7 @@ class SocialService {
     int offset = 0,
   }) async {
     try {
-      final res = await _sb.rpc(
+      final res = await measuredRpc(_sb, 
         'friend_request_outbox_page',
         params: {'p_limit': limit, 'p_offset': offset},
       );
@@ -124,7 +125,7 @@ class SocialService {
 
   Future<List<Map<String, dynamic>>> mySubscriptions() async {
     try {
-      final res = await _sb.rpc('my_subscriptions');
+      final res = await measuredRpc(_sb, 'my_subscriptions');
       return _list(res);
     } catch (e) {
       dlog('[SocialService] mySubscriptions error: $e');

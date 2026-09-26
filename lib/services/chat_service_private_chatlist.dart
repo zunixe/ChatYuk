@@ -5,7 +5,7 @@ part of 'chat_service.dart';
 mixin ChatServicePrivateChatListMx on ChatBase {
   Future<void> markAsRead(String chatId, String uid) async {
     try {
-      await _sb.rpc(
+      await measuredRpc(_sb, 
         'mark_chat_read',
         params: {'p_chat_id': chatId, 'p_uid': uid},
       );
@@ -22,7 +22,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
   /// sehingga mark_chat_read biasa (RLS participants) tidak mengubah apa-apa.
   Future<void> markAsReadAdmin(String chatId, String uid) async {
     try {
-      await _sb.rpc(
+      await measuredRpc(_sb, 
         'admin_mark_chat_read',
         params: {'p_chat_id': chatId, 'p_uid': uid},
       );
@@ -287,7 +287,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         }
       }
     }
-    await _sb.rpc('pin_private_chat', params: {'p_chat_id': chatId, 'p_pin': pin});
+    await measuredRpc(_sb, 'pin_private_chat', params: {'p_chat_id': chatId, 'p_pin': pin});
   }
 
   /// Mute/unmute notifikasi chat — pola sama seperti pin: optimistic
@@ -312,7 +312,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
       }
     }
     await NotificationPrefsService.setChatMuted(chatId, mute);
-    await _sb.rpc('mute_private_chat', params: {'p_chat_id': chatId, 'p_mute': mute});
+    await measuredRpc(_sb, 'mute_private_chat', params: {'p_chat_id': chatId, 'p_mute': mute});
   }
 
   /// Archive/unarchive chat — optimistic update + RPC.
@@ -336,7 +336,7 @@ mixin ChatServicePrivateChatListMx on ChatBase {
         }
       }
     }
-    await _sb.rpc('archive_private_chat', params: {'p_chat_id': chatId, 'p_archive': archive});
+    await measuredRpc(_sb, 'archive_private_chat', params: {'p_chat_id': chatId, 'p_archive': archive});
   }
 
   /// Snapshot terakhir list private chat — dipakai initialData StreamBuilder

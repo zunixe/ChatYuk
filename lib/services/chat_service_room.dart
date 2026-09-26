@@ -111,7 +111,7 @@ mixin ChatServiceRoomMx on ChatBase {
     String giftId, {
     int qty = 1,
   }) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'send_room_gift',
       params: {
         'p_room_id': roomId,
@@ -145,7 +145,7 @@ mixin ChatServiceRoomMx on ChatBase {
   Future<void> muteRoom(String roomId, bool mute) async {
     await NotificationPrefsService.setChatMuted(roomId, mute);
     try {
-      await _sb.rpc('mute_room', params: {'p_room_id': roomId, 'p_mute': mute});
+      await measuredRpc(_sb, 'mute_room', params: {'p_room_id': roomId, 'p_mute': mute});
     } catch (e) {
       // Server gagal (offline) → tetap tersimpan lokal; sinkron lain waktu.
       dlog('[chat] muteRoom server gagal (lokal tersimpan): $e');
@@ -181,7 +181,7 @@ mixin ChatServiceRoomMx on ChatBase {
       if (closed || controller.isClosed) return;
       try {
         final c = (country == null || country.trim().isEmpty) ? null : country.trim();
-        final res = await _sb.rpc('count_room_presence_by_country', params: {'p_country': c});
+        final res = await measuredRpc(_sb, 'count_room_presence_by_country', params: {'p_country': c});
         final map = <String, int>{};
         if (res is Map) {
           res.forEach((k, v) => map['$k'] = (v as num).toInt());
@@ -198,7 +198,7 @@ mixin ChatServiceRoomMx on ChatBase {
     // terlalu boros RPC hanya untuk angka.
     timer = Timer.periodic(const Duration(seconds: 30), (_) => fetch());
     // Cleanup stale presence di background (idempotent)
-    _sb.rpc('cleanup_room_presence', params: {'p_minutes': 10}).catchError((_) {});
+    measuredRpc(_sb, 'cleanup_room_presence', params: {'p_minutes': 10}).catchError((_) {});
     controller.onCancel = () {
       closed = true;
       timer?.cancel();

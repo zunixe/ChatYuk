@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/active_call_model.dart';
-import '../core/perf/perf_probe.dart';
+import '../core/perf/rpc_probe.dart';
 
 class AdminService {
   final SupabaseClient _sb;
@@ -49,10 +49,8 @@ class AdminService {
   /// (metrik `admin.<nama_rpc>`) tanpa perlu menyentuh 30+ call-site satu
   /// per satu. Saat `PERF_PROBE` tidak diset, ini no-op — nol overhead &
   /// perilaku identik. Dipakai untuk mencari tab admin mana yang lambat.
-  Future<dynamic> _rpc(String fn, {Map<String, dynamic>? params}) {
-    if (!PerfProbe.measuring) return _sb.rpc(fn, params: params);
-    return PerfProbe.timed('admin.$fn', () => _sb.rpc(fn, params: params));
-  }
+  Future<dynamic> _rpc(String fn, {Map<String, dynamic>? params}) =>
+      measuredRpc(_sb, fn, params: params, label: 'admin.$fn');
 
   // Timeout jalur buka panel: tanpa ini, koneksi stall membuat future
   // tidak pernah selesai → spinner selamanya (panel "blank"/"hang").

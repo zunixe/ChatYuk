@@ -16,6 +16,7 @@ import '../utils/mention.dart';
 import '../core/perf/perf_probe.dart';
 import 'notification_prefs_service.dart';
 import 'chat_stream_session.dart';
+import '../core/perf/rpc_probe.dart';
 
 export 'chat_stream_session.dart';
 

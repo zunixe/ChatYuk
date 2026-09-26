@@ -11,7 +11,7 @@ mixin ChatServiceGiftMx on ChatBase {
     String receiverId,
     int amount,
   ) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'send_coins',
       params: {
         'p_chat_id': chatId,
@@ -29,7 +29,7 @@ mixin ChatServiceGiftMx on ChatBase {
     String receiverId,
     String giftId,
   ) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'send_gift',
       params: {
         'p_chat_id': chatId,
@@ -43,7 +43,7 @@ mixin ChatServiceGiftMx on ChatBase {
   /// Daftar hadiah dari server (fallback ke katalog lokal bila gagal).
   Future<List<Map<String, dynamic>>> listGifts() async {
     try {
-      final res = await _sb.rpc('list_gifts');
+      final res = await measuredRpc(_sb, 'list_gifts');
       if (res is List) return res.cast<Map<String, dynamic>>();
     } catch (e) {
       dlog('[ChatService] listGifts fallback local: $e');

@@ -5,6 +5,7 @@ import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import 'room_service.dart';
+import '../core/perf/rpc_probe.dart';
 
 /// Service private room v2: role, approval queue, live broadcast state,
 /// signaling WebRTC (mesh) via tabel room_signals.
@@ -35,7 +36,7 @@ class PrivateRoomService {
 
   /// Role saya di room (null = bukan member).
   Future<String?> myRole(String roomId) async {
-    final res = await _sb.rpc(
+    final res = await measuredRpc(_sb, 
       'fn_room_role',
       params: {'p_uid': uid, 'p_room_id': roomId},
     );
@@ -44,7 +45,7 @@ class PrivateRoomService {
 
   /// Daftar member + role (owner dulu, lalu admin, lalu member).
   Future<List<Map<String, dynamic>>> listMembers(String roomId) async {
-    final res = await _sb.rpc('list_room_members_v2', params: {'p_room_id': roomId});
+    final res = await measuredRpc(_sb, 'list_room_members_v2', params: {'p_room_id': roomId});
     if (res is List) {
       return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     }
@@ -53,7 +54,7 @@ class PrivateRoomService {
 
   /// Antrean approval (hanya terlihat oleh owner/admin via guard RPC).
   Future<List<Map<String, dynamic>>> listJoinRequests(String roomId) async {
-    final res = await _sb.rpc('list_room_join_requests', params: {'p_room_id': roomId});
+    final res = await measuredRpc(_sb, 'list_room_join_requests', params: {'p_room_id': roomId});
     if (res is List) {
       return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     }
@@ -68,28 +69,28 @@ class PrivateRoomService {
   }
 
   Future<void> approveJoin(String roomId, String targetUid) async {
-    await _sb.rpc('approve_join_request', params: {
+    await measuredRpc(_sb, 'approve_join_request', params: {
       'p_room_id': roomId,
       'p_uid': targetUid,
     });
   }
 
   Future<void> rejectJoin(String roomId, String targetUid) async {
-    await _sb.rpc('reject_join_request', params: {
+    await measuredRpc(_sb, 'reject_join_request', params: {
       'p_room_id': roomId,
       'p_uid': targetUid,
     });
   }
 
   Future<void> kick(String roomId, String targetUid) async {
-    await _sb.rpc('kick_room_member', params: {
+    await measuredRpc(_sb, 'kick_room_member', params: {
       'p_room_id': roomId,
       'p_uid': targetUid,
     });
   }
 
   Future<void> setRole(String roomId, String targetUid, String role) async {
-    await _sb.rpc('set_member_role', params: {
+    await measuredRpc(_sb, 'set_member_role', params: {
       'p_room_id': roomId,
       'p_uid': targetUid,
       'p_role': role,
@@ -99,14 +100,14 @@ class PrivateRoomService {
   /// Undang user langsung jadi member (owner/admin saja — server menegakkan).
   /// Target: siapa pun yang pernah chat (teman/bukan). Bypass approval.
   Future<void> invite(String roomId, String targetUid) async {
-    await _sb.rpc('invite_to_room', params: {
+    await measuredRpc(_sb, 'invite_to_room', params: {
       'p_room_id': roomId,
       'p_uid': targetUid,
     });
   }
 
   Future<void> leave(String roomId) async {
-    await _sb.rpc('leave_private_room', params: {'p_room_id': roomId});
+    await measuredRpc(_sb, 'leave_private_room', params: {'p_room_id': roomId});
   }
 
   Future<void> rotateToken(String roomId) async {
@@ -123,14 +124,14 @@ class PrivateRoomService {
   // ── Broadcast grant/stop ──
 
   Future<void> grantBroadcast(String roomId, String targetUid) async {
-    await _sb.rpc('grant_broadcast', params: {
+    await measuredRpc(_sb, 'grant_broadcast', params: {
       'p_room_id': roomId,
       'p_uid': targetUid,
     });
   }
 
   Future<void> revokeBroadcast(String roomId, String targetUid) async {
-    await _sb.rpc('revoke_broadcast', params: {
+    await measuredRpc(_sb, 'revoke_broadcast', params: {
       'p_room_id': roomId,
       'p_uid': targetUid,
     });
@@ -154,7 +155,7 @@ class PrivateRoomService {
   }
 
   Future<void> stopBroadcast(String roomId) async {
-    await _sb.rpc('stop_broadcast', params: {'p_room_id': roomId});
+    await measuredRpc(_sb, 'stop_broadcast', params: {'p_room_id': roomId});
   }
 
   Future<int> broadcastCount(String roomId) async {
@@ -170,12 +171,12 @@ class PrivateRoomService {
   }
 
   Future<void> startBroadcast(String roomId) async {
-    await _sb.rpc('start_broadcast', params: {'p_room_id': roomId});
+    await measuredRpc(_sb, 'start_broadcast', params: {'p_room_id': roomId});
   }
 
   Future<void> stopBroadcastV2(String roomId) async {
     try {
-      await _sb.rpc('stop_broadcast_v2', params: {'p_room_id': roomId});
+      await measuredRpc(_sb, 'stop_broadcast_v2', params: {'p_room_id': roomId});
     } catch (_) {
       // fallback ke RPC lama
       await stopBroadcast(roomId);
@@ -197,7 +198,7 @@ class PrivateRoomService {
 
   Future<List<Map<String, dynamic>>> listMyRooms() async {
     try {
-      final res = await _sb.rpc('list_my_groups', params: {'p_uid': uid});
+      final res = await measuredRpc(_sb, 'list_my_groups', params: {'p_uid': uid});
       if (res is List) return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       if (res is Map && res['data'] is List) {
         return (res['data'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
