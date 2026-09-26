@@ -90,3 +90,5 @@ screencap_*.png
 timeline_screenshot.png
 *_screenshot.png
 threads_*.png
+# Folder kerja sementara (capture HP, apk uji) — jangan commit
+tmp_capture/
