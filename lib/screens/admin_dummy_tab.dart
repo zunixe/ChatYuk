@@ -19,6 +19,7 @@ import '../providers/locale_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils.dart';
+import '../core/ui/scroll_pagination.dart';
 
 /// Sesi HP harus akun admin asli (bukan sesi dummy hasil swap "masuk dummy")
 /// — kalau tidak, semua RPC admin melempar 'Unauthorized' (P0001).
@@ -64,6 +65,7 @@ class _AdminDummyTabState extends State<AdminDummyTab>
   final _nicknameFocus = FocusNode();
   String? _nicknameError;
   final _scrollCtrl = ScrollController();
+  ScrollPagination? _pagination;
   final _searchCtrl = TextEditingController();
   String _search = '';
   /// Filter tipe akun: null = semua, 'regular' = biasa, 'expert' = expert.
@@ -91,7 +93,13 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
-    _scrollCtrl.addListener(_onScroll);
+    _pagination = ScrollPagination(
+      controller: _scrollCtrl,
+      onLoadMore: () {
+        if (!mounted) return;
+        _loadMore();
+      },
+    );
     // Polling 30 dtk (dulu 15 dtk) — cukup untuk badge unread per dummy
     // tanpa membebani DB/rebuild berlebihan. Lewati kalau sudah load-more
     // (jangan reset paginasi yang sedang di-scroll).
@@ -102,13 +110,6 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     });
   }
 
-  void _onScroll() {
-    if (!_scrollCtrl.hasClients) return;
-    if (_scrollCtrl.position.pixels >=
-        _scrollCtrl.position.maxScrollExtent - 300) {
-      _loadMore();
-    }
-  }
 
   /// Muat halaman dummy berikutnya (append).
   Future<void> _loadMore() async {
@@ -160,6 +161,7 @@ class _AdminDummyTabState extends State<AdminDummyTab>
     _refreshTimer?.cancel();
     _nickCtrl.dispose();
     _nicknameFocus.dispose();
+    _pagination?.dispose();
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();

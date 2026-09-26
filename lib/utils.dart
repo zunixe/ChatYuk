@@ -252,3 +252,28 @@ String formatMmSs(int totalSeconds) {
   final sec = (s % 60).toString().padLeft(2, '0');
   return '$m:$sec';
 }
+
+/// Validasi kata konfirmasi hapus akun — terima HAPUS / DELETE di semua
+/// bahasa (top-level murni supaya bisa di-unit-test).
+bool isDeleteAccountConfirmValid(String input) {
+  final v = input.trim().toUpperCase();
+  return v == 'HAPUS' || v == 'DELETE';
+}
+
+/// True bila salah satu [fields] pada [map] mengandung [query]
+/// (case-insensitive, trim). Query kosong = cocok (tak memfilter).
+/// Murni & teruji — menggantikan pola `.where(contains)` yang disalin di
+/// beberapa tab admin.
+bool matchesQuery(
+  Map<String, dynamic> map,
+  String query,
+  List<String> fields,
+) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return true;
+  for (final f in fields) {
+    final v = map[f];
+    if (v != null && '$v'.toLowerCase().contains(q)) return true;
+  }
+  return false;
+}

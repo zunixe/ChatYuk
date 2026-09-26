@@ -11,6 +11,8 @@ import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../utils.dart';
+import '../core/ui/scroll_pagination.dart';
 import '../widgets/search_field.dart';
 import '../widgets/filter_chip_pill.dart';
 import '../core/admin_err.dart';
@@ -29,6 +31,7 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     with WidgetsBindingObserver {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  ScrollPagination? _pagination;
   String _query = '';
   /// Filter: 'all' | 'deleted' | 'pending'.
   String _filter = 'all';
@@ -43,7 +46,13 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     WidgetsBinding.instance.addObserver(this);
     Future.microtask(() => context.read<AdminProvider>().fetchDeleted());
     _startRefreshTimer();
-    _scrollCtrl.addListener(_onScroll);
+    _pagination = ScrollPagination(
+      controller: _scrollCtrl,
+      onLoadMore: () {
+        if (!mounted) return;
+        context.read<AdminProvider>().fetchMoreDeleted();
+      },
+    );
   }
 
   void _startRefreshTimer() {
@@ -79,18 +88,11 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _searchCtrl.dispose();
+    _pagination?.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
 
-  void _onScroll() {
-    final admin = context.read<AdminProvider>();
-    if (!_scrollCtrl.hasClients) return;
-    if (_scrollCtrl.position.pixels >=
-        _scrollCtrl.position.maxScrollExtent - 300) {
-      admin.fetchMoreDeleted();
-    }
-  }
 
   void _toggleSelect(String uid) {
     if (uid.isEmpty) return;
@@ -180,14 +182,14 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     } else if (_filter == 'pending') {
       out = out.where((r) => r['pending'] == true);
     }
-    final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return out.toList();
-    return out.where((r) {
-      final nick = '${r['nickname'] ?? ''}'.toLowerCase();
-      final email = '${r['email'] ?? ''}'.toLowerCase();
-      final uid = '${r['user_id'] ?? ''}'.toLowerCase();
-      return nick.contains(q) || email.contains(q) || uid.contains(q);
-    }).toList();
+    if (_query.trim().isEmpty) return out.toList();
+    return out
+        .where((r) => matchesQuery(r, _query, const [
+              'nickname',
+              'email',
+              'user_id',
+            ]))
+        .toList();
   }
 
   /// Chip filter kecil dengan jumlah item; aktif = warna primary/oranye.
