@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'subscription_rpc.dart';
 
 /// Service untuk social graph: follow, friend request, subscribe.
 class SocialService {
@@ -45,11 +46,7 @@ class SocialService {
     String creatorUid, {
     int periods = 1,
   }) async {
-    final res = await _sb.rpc(
-      'subscribe_creator',
-      params: {'p_creator': creatorUid, 'p_periods': periods},
-    );
-    return _map(res);
+    return subscribeCreatorRpc(_sb, creatorUid, periods: periods);
   }
 
   Future<Map<String, dynamic>> unsubscribeCreator(String creatorUid) async {
