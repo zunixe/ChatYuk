@@ -65,7 +65,7 @@ mixin ChatServicePresenceMx on ChatBase {
       try {
         // Kolom status/last_seen sudah di-revoke dari SELECT publik (hardening
         // 2026-09-22) → baca lewat RPC ber-privacy presence_for.
-        final res = await _sb.rpc(
+        final res = await measuredRpc(_sb, 
           'presence_for',
           params: {
             'p_uids': [uid],
@@ -124,7 +124,7 @@ mixin ChatServicePresenceMx on ChatBase {
   Future<DateTime?> getUserLastSeen(String uid) async {
     if (uid.isEmpty) return null;
     try {
-      final res = await _sb.rpc(
+      final res = await measuredRpc(_sb, 
         'presence_for',
         params: {
           'p_uids': [uid],
@@ -271,20 +271,31 @@ mixin ChatServicePresenceMx on ChatBase {
         // terbaru) selalu masuk top list.
         List<dynamic> rpcRows = [];
         bool usedRpc = false;
+        bool rpcFailed = false;
         try {
           dlog('[ONLINE-EMIT] calling RPC get_online_users');
           final data = await PerfProbe.timed(
             'online.rpc',
             () => _sb
                 .rpc('get_online_users', params: {'p_limit': 200})
-                .timeout(const Duration(seconds: 2)),
+                // 6s (dulu 2s): timeout 2s terbukti memutus RPC di jaringan
+                // HP ber-blip → catch menelan error → jatuh ke fallback
+                // presence_for yang HANYA memuat user ber-socket → dummy AI
+                // (tanpa socket) hilang dari daftar padahal online.
+                .timeout(const Duration(seconds: 6)),
           );
           dlog('[ONLINE-EMIT] RPC done rows=${data is List ? data.length : 0}');
           if (data is List && data.isNotEmpty) {
             rpcRows = data;
             usedRpc = true;
+          } else if (data is List) {
+            // RPC sukses tapi kosong = memang sepi. Jangan tandai gagal.
+            usedRpc = true;
           }
-        } catch (_) {}
+        } catch (e) {
+          rpcFailed = true;
+          dlog('[ONLINE-EMIT] RPC FAILED: $e');
+        }
         // Merge shard country sendiri (ringan, index per-country) — menutup
         // celah user yang tidak masuk top-200 global.
         try {
@@ -322,6 +333,14 @@ mixin ChatServicePresenceMx on ChatBase {
             }
           }
           rows = ChatService.filterRpcOnlineRows(rpcRows, presenceUids);
+        } else if (rpcFailed && cached.isNotEmpty) {
+          // RPC gagal/timeout TAPI kita sudah punya list dari RPC sebelumnya
+          // (berisi user DB termasuk dummy tanpa socket). JANGAN jatuh ke
+          // fallback presence_for: jalur itu hanya memuat user ber-socket,
+          // sehingga dummy AI yang online akan hilang begitu saja. Pertahankan
+          // cache; tick 30s berikutnya akan memperbarui saat jaringan pulih.
+          dlog('[ONLINE-EMIT] rpcFailed & cache n=${cached.length} → keep cache');
+          return;
         } else {
           // Fallback hybrid lama jika RPC get_online_users belum deploy/gagal.
           // status/last_seen sudah di-revoke dari SELECT publik → jalur
