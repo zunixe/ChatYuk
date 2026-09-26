@@ -124,27 +124,36 @@ class _PostCardState extends State<PostCard> {
   double? _aspectOf(int i) =>
       i >= 0 && i < _imageAspect.length ? _imageAspect[i] : null;
 
-  /// Tinggi foto dari rasio asli terhadap [maxW] (lebar area foto), dengan
-  /// clamp lebih longgar: landscape ekstrem dipotong sedang, portrait
-  /// hampir utuh. `cropped` = apakah tinggi kena clamp (foto dipotong).
-  static ({double height, bool cropped}) _photoSizeFor(
+  /// Kotak foto tunggal yang ngikutin proporsi asli (tidak dipaksa full-width):
+  /// - pas di rentang clamp → selebar area, tinggi pas rasio (tanpa crop).
+  /// - portrait ekstrem → tinggi dicap, lebar menyempit (rata kiri, tanpa crop).
+  /// - landscape ekstrem → selebar area, tinggi min (crop atas-bawah).
+  static ({double width, double height}) _photoBoxFor(
     double aspect,
     double maxW,
   ) {
-    final natural = maxW / aspect;
+    final naturalH = maxW / aspect;
     final minH = maxW * _kPhotoMinFactor;
     final maxH = maxW * _kPhotoMaxFactor;
-    final clamped = natural.clamp(minH, maxH);
-    return (height: clamped, cropped: (clamped - natural).abs() > 0.5);
+    if (naturalH > maxH) return (width: maxH * aspect, height: maxH);
+    if (naturalH < minH) return (width: maxW, height: minH);
+    return (width: maxW, height: naturalH);
   }
 
-  /// Tinggi placeholder sebelum thumb tiba — pakai rasio payload kalau ada,
+  /// Ukuran placeholder sebelum thumb tiba — pakai rasio payload kalau ada,
   /// else rasio carousel (4:5) sebagai default aman.
-  double _placeholderHeight(double maxW, {required bool multi}) {
-    if (multi) return maxW / _kCarouselAspect;
+  ({double width, double height}) _placeholderBox(
+    double maxW, {
+    required bool multi,
+  }) {
+    if (multi) {
+      final h = maxW / _kCarouselAspect;
+      return (width: maxW, height: h);
+    }
     final a = _aspectOf(0);
-    if (a != null && a > 0) return _photoSizeFor(a, maxW).height;
-    return maxW / _kCarouselAspect;
+    if (a != null && a > 0) return _photoBoxFor(a, maxW);
+    final h = maxW / _kCarouselAspect;
+    return (width: maxW, height: h);
   }
 
   /// Semua path foto gagal dimuat → tidak ada foto yang bisa tampil
@@ -769,8 +778,8 @@ class _PostCardState extends State<PostCard> {
           // melompat saat scroll. Placeholder setinggi layout final.
           if (_imagePaths().isNotEmpty && !_photosAllFailed())
             Padding(
-              // Kanan tipis saja (foto hampir penuh ke tepi).
-              padding: EdgeInsets.fromLTRB(_kContentPadH, 10, 4, 2),
+              // Kanan 16 — sejajar dengan teks di atasnya.
+              padding: EdgeInsets.fromLTRB(_kContentPadH, 10, 16, 2),
               child: _photoGrid(),
             ),
           Padding(
@@ -835,20 +844,23 @@ class _PostCardState extends State<PostCard> {
       builder: (context, constraints) {
         final maxW = constraints.maxWidth;
         if (loaded.isEmpty) {
-          // Thumb belum tiba: placeholder setinggi layout final (rasio payload
+          // Thumb belum tiba: placeholder seukuran layout final (rasio payload
           // kalau ada, else 4:5) supaya kartu tidak melompat saat foto masuk.
-          return Container(
-            width: double.infinity,
-            height: _placeholderHeight(maxW, multi: isMulti) +
-                (isMulti ? 52 + 8 : 0),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(_kPhotoRadius),
+          final box = _placeholderBox(maxW, multi: isMulti);
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              width: box.width,
+              height: box.height + (isMulti ? 52 + 8 : 0),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(_kPhotoRadius),
+              ),
             ),
           );
         }
-        // Foto tunggal — tinggi MENGIKUTI rasio asli (clamp 0.5–1.8×lebar).
-        // Crop hanya bila foto ekstrem (kena clamp).
+        // Foto tunggal — kotak pas proporsi asli (rata kiri); cover hanya
+        // motong bila landscape ekstrem (kotak min-height).
         Widget singlePhoto() => GestureDetector(
           onTap: () => _openViewer(0),
           child: ClipRRect(
@@ -901,20 +913,24 @@ class _PostCardState extends State<PostCard> {
           ),
         );
         if (loaded.length == 1) {
-          // Tinggi dari rasio asli (payload) atau fallback thumb yang baru
-          // diketahui — AnimatedSize bikin transisi halus tanpa lompat.
+          // Kotak ngikutin proporsi asli (rata kiri, kanan tidak dipaksa) —
+          // rasio dari payload, atau fallback thumb yang baru diketahui.
+          // AnimatedSize bikin transisi halus tanpa lompat.
           final a = _aspectOf(0);
-          final h = a != null && a > 0
-              ? _photoSizeFor(a, maxW).height
-              : maxW / _kCarouselAspect;
+          final box = a != null && a > 0
+              ? _photoBoxFor(a, maxW)
+              : (width: maxW, height: maxW / _kCarouselAspect);
           return AnimatedSize(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              width: double.infinity,
-              height: h,
-              child: singlePhoto(),
+            alignment: Alignment.topLeft,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: box.width,
+                height: box.height,
+                child: singlePhoto(),
+              ),
             ),
           );
         }
