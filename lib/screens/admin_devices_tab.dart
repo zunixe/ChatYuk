@@ -12,6 +12,9 @@ import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../admin/admin_grouping.dart';
+import '../utils.dart';
+import '../core/ui/scroll_pagination.dart';
 import '../widgets/search_field.dart';
 
 /// Admin: pelacakan device & user (tab Perangkat).
@@ -28,6 +31,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
     with WidgetsBindingObserver {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  ScrollPagination? _pagination;
   String _query = '';
   Timer? _refreshTimer;
   Timer? _searchDebounce;
@@ -46,7 +50,13 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
       if (admin.devices.length > 100) return;
       admin.refreshDevicesSilent();
     });
-    _scrollCtrl.addListener(_onScroll);
+    _pagination = ScrollPagination(
+      controller: _scrollCtrl,
+      onLoadMore: () {
+        if (!mounted) return;
+        context.read<AdminProvider>().fetchMoreDevices();
+      },
+    );
   }
 
   /// App di-background → stop polling.
@@ -74,6 +84,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
     _refreshTimer?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
+    _pagination?.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -88,102 +99,31 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
     });
   }
 
-  void _onScroll() {
-    final admin = context.read<AdminProvider>();
-    if (!_scrollCtrl.hasClients) return;
-    if (_scrollCtrl.position.pixels >=
-        _scrollCtrl.position.maxScrollExtent - 300) {
-      admin.fetchMoreDevices();
-    }
-  }
 
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> devices) {
-    final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return devices;
-    return devices.where((d) {
-      final nick = '${d['nickname'] ?? ''}'.toLowerCase();
-      final model = '${d['model'] ?? ''}'.toLowerCase();
-      final brand = '${d['brand'] ?? ''}'.toLowerCase();
-      final installId = '${d['install_id'] ?? ''}'.toLowerCase();
-      final uid = '${d['user_id'] ?? ''}'.toLowerCase();
-      return nick.contains(q) ||
-          model.contains(q) ||
-          brand.contains(q) ||
-          installId.contains(q) ||
-          uid.contains(q);
-    }).toList();
+    if (_query.trim().isEmpty) return devices;
+    return devices
+        .where((d) => matchesQuery(d, _query, const [
+              'nickname',
+              'model',
+              'brand',
+              'install_id',
+              'user_id',
+            ]))
+        .toList();
   }
 
   /// Grouping per device (install_id). Setiap device punya daftar user yang
   /// pernah login memakainya.
-  List<Map<String, dynamic>> _groupByDevice(List<Map<String, dynamic>> rows) {
-    final map = <String, Map<String, dynamic>>{};
-    for (final r in rows) {
-      final key = '${r['install_id'] ?? ''}';
-      if (key.isEmpty) continue;
-      final group = map.putIfAbsent(key, () {
-        return {
-          'install_id': key,
-          'brand': r['brand'],
-          'model': r['model'],
-          'os_name': r['os_name'],
-          'os_version': r['os_version'],
-          'app_version': r['app_version'],
-          'ip_address': r['ip_address'],
-          'last_seen_at': r['last_seen_at'],
-          'users': <Map<String, dynamic>>[],
-          '_namesHash': <String>{},
-        };
-      });
-      final users = group['users'] as List<Map<String, dynamic>>;
-      final seenNicks = group['_namesHash'] as Set<String>;
-      final uid = '${r['user_id'] ?? ''}';
-      final nick = '${r['nickname'] ?? ''}';
-      final key2 = '$uid|$nick';
-      if (!seenNicks.contains(key2)) {
-        seenNicks.add(key2);
-        users.add({
-          'user_id': r['user_id'],
-          'nickname': r['nickname'],
-          'is_registered': r['is_registered'],
-          'last_seen_at': r['last_seen_at'],
-        });
-      }
-      // last seen device = row terbaru
-      final seen = (r['last_seen_at'] as String?) ?? '';
-      final cur = '${group['last_seen_at'] ?? ''}';
-      if (seen.compareTo(cur) > 0) group['last_seen_at'] = r['last_seen_at'];
-    }
-    final list = map.values.toList();
-    list.sort((a, b) =>
-        ('${b['last_seen_at'] ?? ''}').compareTo('${a['last_seen_at'] ?? ''}'));
-    return list;
-  }
+  List<Map<String, dynamic>> _groupByDevice(List<Map<String, dynamic>> rows) =>
+      groupByDevice(rows);
 
   /// Filter device group by query (cocokkan device ATAU salah satu user-nya).
   List<Map<String, dynamic>> _filterGroups(
     List<Map<String, dynamic>> groups,
     String q,
-  ) {
-    if (q.trim().isEmpty) return groups;
-    final lq = q.trim().toLowerCase();
-    return groups.where((g) {
-      final brand = '${g['brand'] ?? ''}'.toLowerCase();
-      final model = '${g['model'] ?? ''}'.toLowerCase();
-      final installId = '${g['install_id'] ?? ''}'.toLowerCase();
-      if (brand.contains(lq) ||
-          model.contains(lq) ||
-          installId.contains(lq)) {
-        return true;
-      }
-      final users = (g['users'] as List<Map<String, dynamic>>? ?? const []);
-      return users.any((u) {
-        final nick = '${u['nickname'] ?? ''}'.toLowerCase();
-        final uid = '${u['user_id'] ?? ''}'.toLowerCase();
-        return nick.contains(lq) || uid.contains(lq);
-      });
-    }).toList();
-  }
+  ) =>
+      filterDeviceGroups(groups, q);
 
   @override
   Widget build(BuildContext context) {

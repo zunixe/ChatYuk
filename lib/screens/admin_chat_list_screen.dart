@@ -12,6 +12,7 @@ import '../core/admin_err.dart';
 import '../utils.dart';
 import 'admin_chat_view_screen.dart';
 import '../providers/theme_provider.dart';
+import '../core/ui/scroll_pagination.dart';
 
 /// Admin: daftar semua percakapan user (monitoring).
 class AdminChatListScreen extends StatefulWidget {
@@ -28,6 +29,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
   Timer? _searchDebounce;
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  ScrollPagination? _pagination;
   String _query = '';
 
   @override
@@ -40,7 +42,13 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
       admin.fetchActiveCalls();
     });
     _startTimers();
-    _scrollCtrl.addListener(_onScroll);
+    _pagination = ScrollPagination(
+      controller: _scrollCtrl,
+      onLoadMore: () {
+        if (!mounted) return;
+        admin.fetchMoreChats();
+      },
+    );
   }
 
   void _startTimers() {
@@ -81,6 +89,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     _refreshTimer?.cancel();
     _callTimer?.cancel();
     _searchDebounce?.cancel();
+    _pagination?.dispose();
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -96,15 +105,6 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     });
   }
 
-  void _onScroll() {
-    final admin = context.read<AdminProvider>();
-    if (!_scrollCtrl.hasClients) return;
-    // Load halaman berikutnya saat mendekati bawah list.
-    if (_scrollCtrl.position.pixels >=
-        _scrollCtrl.position.maxScrollExtent - 300) {
-      admin.fetchMoreChats();
-    }
-  }
 
   List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> chats) {
     // Sembunyikan chat kosong (belum ada percakapan) dari monitor.
