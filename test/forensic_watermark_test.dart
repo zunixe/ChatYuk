@@ -168,6 +168,34 @@ void main() {
     });
   });
 
+  group('processChatImageHd (resize 1920, q90)', () {
+    test('foto besar di-resize proporsional maks 1920', () {
+      final out = processChatImageHd(testJpeg(w: 3840, h: 2160));
+      final decoded = img.decodeImage(base64Decode(out!))!;
+      expect(decoded.width, 1920);
+      expect(decoded.height, 1080);
+    });
+
+    test('foto kecil tidak diperbesar', () {
+      final out = processChatImageHd(testJpeg(w: 500, h: 500));
+      final decoded = img.decodeImage(base64Decode(out!))!;
+      expect(decoded.width, 500);
+      expect(decoded.height, 500);
+    });
+
+    test('HD lebih besar dari standar untuk foto yang sama', () {
+      final src = testJpeg(w: 2000, h: 1500);
+      final hd = processChatImageHd(src)!;
+      final std = processChatImage(src)!;
+      expect(base64Decode(hd).length, greaterThan(base64Decode(std).length));
+    });
+
+    test('bytes bukan gambar → null, tidak crash', () {
+      expect(() => processChatImageHd(Uint8List.fromList([7])), returnsNormally);
+      expect(processChatImageHd(Uint8List.fromList([7])), isNull);
+    });
+  });
+
   group('processViewOnceImage', () {
     test('menyematkan watermark seed penerima (roundtrip detect)', () {
       const viewer = 'viewer-uid-999';

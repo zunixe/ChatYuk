@@ -1409,6 +1409,13 @@ Future<void> main() => bootstrap();
 /// Bootstrap aplikasi — dipakai kedua entry (user & admin).
 Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Batasi cache bitmap Flutter: default 1000 gambar/100MB terlalu longgar
+  // untuk chat penuh foto — bitmap 12MP (~48MB) menumpuk di native heap
+  // sampai ratusan MB (pernah 500MB → ngetik & buka halaman ngelag).
+  // Bubble chat decode max 720–1080px (lihat private_chat_message.dart),
+  // jadi 200 entri / 100MB lebih dari cukup.
+  PaintingBinding.instance.imageCache.maximumSize = 200;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 100 << 20;
   kFirebaseOptionsOverride = firebaseOptions;
   // Crashlytics butuh Firebase ter-init dulu — aktifkan pasca-init di bawah.
   // Handler di sini hanya dlog; setelah FlutterError.crashlytics disambung,

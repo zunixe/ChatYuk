@@ -1,0 +1,300 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:chatyuk/providers/auth_provider.dart';
+import 'package:chatyuk/providers/chat_provider.dart';
+import 'package:chatyuk/providers/device_info_provider.dart';
+import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/social_provider.dart';
+import 'package:chatyuk/providers/theme_provider.dart';
+import 'package:chatyuk/screens/account_screen.dart';
+import 'package:chatyuk/screens/settings_screen.dart';
+import 'package:chatyuk/services/auth_service.dart';
+import 'package:chatyuk/services/chat_service.dart';
+import 'package:chatyuk/services/social_service.dart';
+
+import 'supabase_test_client.dart';
+
+class MockAuthService extends Mock implements AuthService {}
+
+class MockChatService extends Mock implements ChatService {}
+
+class MockSocialService extends Mock implements SocialService {}
+
+/// ChatProvider uji: hitung reset() tanpa menyentuh cache disk.
+class TestChatProvider extends ChatProvider {
+  int resets = 0;
+  TestChatProvider({super.service});
+
+  @override
+  void reset() {
+    resets++;
+  }
+}
+
+/// Alur Pengaturan › Akun (rapihan profil): menu tampil, navigasi jalan,
+/// Keluar terlihat, Hapus Akun sembunyi di ⋮.
+void main() {
+  late MockAuthService mockSvc;
+  late AuthProvider auth;
+
+  Future<void> pumpSettings(WidgetTester t) async {
+    mockSvc = MockAuthService();
+    when(() => mockSvc.isAnonymous).thenReturn(false);
+    when(() => mockSvc.dummySessionActive).thenReturn(false);
+    when(() => mockSvc.emailConfirmed).thenReturn(true);
+    when(() => mockSvc.userEmail).thenReturn('a@b.id');
+    when(() => mockSvc.hasPassword).thenReturn(false);
+    when(() => mockSvc.fetchHasPassword()).thenAnswer((_) async => false);
+    auth = AuthProvider(authService: mockSvc, autoInit: false);
+    addTearDown(auth.dispose);
+    await t.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider<LocaleProvider>(
+            create: (_) => LocaleProvider(),
+          ),
+          ChangeNotifierProvider<ThemeProvider>(
+            create: (_) => ThemeProvider(),
+          ),
+          ChangeNotifierProvider<DeviceInfoProvider>(
+            create: (_) => DeviceInfoProvider(),
+          ),
+        ],
+        child: const MaterialApp(home: SettingsScreen()),
+      ),
+    );
+    await t.pumpAndSettle();
+  }
+
+  testWidgets('menu Pengaturan tampil + Akun bisa dibuka', (t) async {
+    await pumpSettings(t);
+
+    expect(find.text('Pengaturan'), findsWidgets);
+    expect(find.text('Akun'), findsOneWidget);
+
+    await t.tap(find.text('Akun'));
+    await t.pumpAndSettle();
+
+    expect(find.byType(AccountScreen), findsOneWidget);
+  });
+
+  testWidgets('layar Akun: Keluar terlihat, Hapus Akun di ⋮', (t) async {
+    await pumpSettings(t);
+    await t.tap(find.text('Akun'));
+    await t.pumpAndSettle();
+
+    expect(find.text('Keluar'), findsOneWidget);
+    // Hapus Akun TIDAK tampil sebagai baris (tersembunyi di ⋮).
+    expect(find.text('Hapus Akun'), findsNothing);
+
+    await t.tap(find.byIcon(Icons.more_vert));
+    await t.pumpAndSettle();
+
+    expect(find.text('Hapus Akun'), findsOneWidget);
+  });
+
+  group('layar Akun: password/hapus/keluar', () {
+    late MockAuthService authSvc;
+    late MockChatService chatSvc;
+    late MockSocialService socialSvc;
+    late TestChatProvider testChat;
+
+    Future<void> pumpAccount(
+      WidgetTester t, {
+      bool adminEmail = false,
+      bool anon = false,
+    }) async {
+      // Wajib: provider.signOut baca SharedPreferences (cache profil).
+      SharedPreferences.setMockInitialValues({});
+      authSvc = MockAuthService();
+      when(() => authSvc.isAnonymous).thenReturn(anon);
+      when(() => authSvc.isSignedIn).thenReturn(false);
+      when(() => authSvc.dummySessionActive).thenReturn(false);
+      when(() => authSvc.emailConfirmed).thenReturn(true);
+      when(() => authSvc.userEmail)
+          .thenReturn(adminEmail ? 'zunixe@gmail.com' : 'a@b.id');
+      when(() => authSvc.hasPassword).thenReturn(false);
+      when(() => authSvc.fetchHasPassword()).thenAnswer((_) async => false);
+      when(() => authSvc.deleteMyAccount()).thenAnswer((_) async {});
+      when(() => authSvc.goOffline()).thenAnswer((_) async {});
+      when(() => authSvc.signOut()).thenAnswer((_) async {});
+      when(() => authSvc.setPassword(any())).thenAnswer((_) async {});
+      final auth = AuthProvider(authService: authSvc, autoInit: false);
+      addTearDown(auth.dispose);
+      chatSvc = MockChatService();
+      testChat = TestChatProvider(service: chatSvc);
+      addTearDown(testChat.dispose);
+      socialSvc = MockSocialService();
+      when(() => socialSvc.clearAnonSocial()).thenAnswer((_) async {});
+      final social = SocialProvider(
+        service: socialSvc,
+        sb: fakeSupabaseClientNoTicker(),
+        autoInit: false,
+      );
+      addTearDown(social.dispose);
+      await t.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<ChatProvider>.value(value: testChat),
+            ChangeNotifierProvider<SocialProvider>.value(value: social),
+            ChangeNotifierProvider<LocaleProvider>(
+              create: (_) => LocaleProvider(),
+            ),
+          ],
+          child: const MaterialApp(home: AccountScreen()),
+        ),
+      );
+      await t.pumpAndSettle();
+    }
+
+    Future<void> openDeleteMenu(WidgetTester t) async {
+      await t.tap(find.byIcon(Icons.more_vert));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Hapus Akun'));
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('password pendek → error, service tak dipanggil', (t) async {
+      await pumpAccount(t);
+
+      await t.tap(find.text('Set Password'));
+      await t.pumpAndSettle();
+      // Dialog set (tanpa field password saat ini).
+      expect(find.text('Password Saat Ini'), findsNothing);
+
+      await t.enterText(
+        find.widgetWithText(TextField, 'Password'),
+        'pendek',
+      );
+      await t.enterText(
+        find.widgetWithText(TextField, 'Konfirmasi Password'),
+        'pendek',
+      );
+      await t.tap(find.text('Simpan'));
+      await t.pump();
+
+      expect(find.text('Password minimal 8 karakter'), findsOneWidget);
+    });
+
+    testWidgets('password beda → error mismatch', (t) async {
+      await pumpAccount(t);
+
+      await t.tap(find.text('Set Password'));
+      await t.pumpAndSettle();
+      await t.enterText(
+        find.widgetWithText(TextField, 'Password'),
+        'rahasia123',
+      );
+      await t.enterText(
+        find.widgetWithText(TextField, 'Konfirmasi Password'),
+        'lain1234',
+      );
+      await t.tap(find.text('Simpan'));
+      await t.pump();
+
+      expect(find.text('Passwords do not match'), findsNothing);
+      expect(find.text('Password tidak cocok'), findsOneWidget);
+    });
+
+    testWidgets('hapus akun admin → ditolak, service diam', (t) async {
+      await pumpAccount(t, adminEmail: true);
+      await openDeleteMenu(t);
+      await t.pumpAndSettle();
+
+      verifyNever(() => authSvc.deleteMyAccount());
+      verifyNever(() => authSvc.signOut());
+    });
+
+    testWidgets('hapus akun batal step1 → service diam', (t) async {
+      await pumpAccount(t);
+      await openDeleteMenu(t);
+
+      await t.tap(find.text('Batal'));
+      await t.pumpAndSettle();
+
+      verifyNever(() => authSvc.deleteMyAccount());
+      expect(find.text('HAPUS / DELETE'), findsNothing);
+    });
+
+    testWidgets('hapus akun HAPUS → delete + signOut + reset', (t) async {
+      await pumpAccount(t);
+      await openDeleteMenu(t);
+
+      // Step1: lanjutkan (tombol merah di dialog).
+      await t.tap(find.widgetWithText(FilledButton, 'Hapus Akun'));
+      await t.pumpAndSettle();
+
+      // Step2: ketik HAPUS → tombol aktif → eksekusi.
+      await t.enterText(find.byType(TextField), 'HAPUS');
+      await t.pump();
+      await t.tap(find.widgetWithText(FilledButton, 'Hapus Akun'));
+      await t.pumpAndSettle();
+
+      verify(() => authSvc.deleteMyAccount()).called(1);
+      verify(() => authSvc.signOut()).called(1);
+      expect(testChat.resets, 1);
+      verifyNever(() => socialSvc.clearAnonSocial());
+    });
+
+    testWidgets('hapus akun anon → clearAnonSocial dulu', (t) async {
+      await pumpAccount(t, anon: true);
+      // Tile anon: langsung ke ⋮ (email tile tidak ada untuk anon).
+      await t.tap(find.byIcon(Icons.more_vert));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Hapus Akun'));
+      await t.pumpAndSettle();
+      await t.tap(find.widgetWithText(FilledButton, 'Hapus Akun'));
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField), 'DELETE');
+      await t.pump();
+      await t.tap(find.widgetWithText(FilledButton, 'Hapus Akun'));
+      await t.pumpAndSettle();
+
+      verify(() => socialSvc.clearAnonSocial()).called(1);
+      verify(() => authSvc.deleteMyAccount()).called(1);
+    });
+
+    testWidgets('keluar batal → signOut diam', (t) async {
+      await pumpAccount(t);
+
+      await t.tap(find.text('Keluar'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Batal'));
+      await t.pumpAndSettle();
+
+      verifyNever(() => authSvc.signOut());
+    });
+
+    testWidgets('keluar konfirm → signOut + reset', (t) async {
+      await pumpAccount(t);
+
+      await t.tap(find.text('Keluar'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Keluar').last);
+      await t.pumpAndSettle();
+
+      verify(() => authSvc.signOut()).called(1);
+      expect(testChat.resets, 1);
+    });
+
+    testWidgets('keluar anon clear gagal → tetap keluar', (t) async {
+      await pumpAccount(t, anon: true);
+      when(() => socialSvc.clearAnonSocial())
+          .thenThrow(Exception('network down'));
+
+      await t.tap(find.text('Keluar'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Keluar').last);
+      await t.pumpAndSettle();
+
+      verify(() => authSvc.signOut()).called(1);
+      expect(testChat.resets, 1);
+    });
+  });
+}

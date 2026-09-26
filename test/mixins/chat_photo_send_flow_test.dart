@@ -12,6 +12,7 @@ void main() {
     test('bytes korup → null (tidak crash)', () {
       expect(processChatPhoto(Uint8List.fromList([0, 1, 2, 3])), isNull);
       expect(processChatImage(Uint8List.fromList([0, 1, 2, 3])), isNull);
+      expect(processChatImageHd(Uint8List.fromList([0, 1, 2, 3])), isNull);
     });
 
     test('bytes kosong → null', () {

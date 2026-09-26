@@ -8,6 +8,7 @@ import 'package:chatyuk/mixins/chat_outbox_mixin.dart';
 import 'package:chatyuk/mixins/chat_photo_send_mixin.dart';
 import 'package:chatyuk/mixins/chat_send_mixin.dart';
 import 'package:chatyuk/models/message_model.dart';
+import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/providers/points_provider.dart';
@@ -56,6 +57,27 @@ class SendHostState extends State<SendHost>
   @override
   set sendPendingPhotoBase64(String? v) => _photo = v;
 
+  // Video: regresi "kirim video tanpa caption berhenti di guard awal".
+  String? _video;
+  final List<String> videoSends = [];
+  set pendingVideo(String? v) => _video = v;
+  @override
+  String? get sendPendingVideoPath => _video;
+  @override
+  Future<void> sendVideoFromPreview({
+    String text = '',
+    MessageModel? reply,
+  }) async {
+    videoSends.add(text);
+  }
+
+  // Fitur lokasi (sesi paralel) — host uji harus memenuhi kontraknya.
+  @override
+  Future<void> sendLocationFromPreview({
+    String text = '',
+    MessageModel? reply,
+  }) async {}
+
   @override
   String get outboxKind => 'private';
   @override
@@ -94,6 +116,7 @@ class SendHostState extends State<SendHost>
     String? repliedToText,
     String? repliedToSenderName,
     int? viewOnceSecs,
+    int? videoDurationMs,
   }) async {}
   @override
   String get photoUploadChatId => 'c1';
@@ -161,6 +184,24 @@ MessageModel editMsg(String text) => MessageModel(
       timestamp: DateTime.now(),
     );
 
+/// Profil siap-pakai untuk menguji jalur kirim (melewati guard
+/// `profile == null`).
+UserModel profileForTest() => UserModel(
+      uid: 'u-me',
+      nickname: 'Me',
+      gender: 'male',
+      age: 20,
+      country: 'Indonesia',
+      city: 'Jakarta',
+      ipAddress: '',
+      status: 'online',
+      avatar: '',
+      isRegistered: true,
+      loginAt: DateTime.now(),
+      createdAt: DateTime.now(),
+      lastSeen: DateTime.now(),
+    );
+
 /// Mengunci kontrak `chat_send_mixin` lewat mixin ASLI (bukan cermin):
 /// guard kirim + mode edit diuji via `sendMessage()` beneran.
 /// Helper murni (kapitalisasi/mention/pending-id/network-error) tetap
@@ -213,11 +254,17 @@ void main() {
     late MockAuthService mockSvc;
     late AuthProvider auth;
 
-    Future<SendHostState> pumpHost(WidgetTester tester) async {
+    Future<SendHostState> pumpHost(
+      WidgetTester tester, {
+      bool withProfile = false,
+    }) async {
       mockSvc = MockAuthService();
       when(() => mockSvc.uid).thenReturn('u-me');
       when(() => mockSvc.isAnonymous).thenReturn(false);
       auth = AuthProvider(authService: mockSvc, autoInit: false);
+      // Profil WAJIB untuk menguji jalur kirim media: tanpa profil,
+      // `sendMessage` berhenti di guard `profile == null` sebelum dispatch.
+      if (withProfile) auth.seedProfileForTest(profileForTest());
       addTearDown(auth.dispose);
       await tester.pumpWidget(
         MultiProvider(
@@ -243,6 +290,35 @@ void main() {
 
       expect(s.preChecks, 0, reason: 'keluar sebelum precheck');
       expect(s.dispatched, isEmpty);
+    });
+
+    testWidgets(
+        'video pending TANPA caption → tetap kirim (regresi guard awal)',
+        (tester) async {
+      final s = await pumpHost(tester, withProfile: true);
+      s.pendingVideo = '/tmp/v.mp4';
+      s.sendMsgCtrl.text = '   '; // tanpa caption
+      await s.sendMessage();
+      await tester.pump();
+
+      expect(
+        s.videoSends,
+        hasLength(1),
+        reason: 'guard `text.isEmpty && !hasPhoto` dulu mem-BLOKIR video',
+      );
+      expect(s.preChecks, greaterThan(0), reason: 'lanjut melewati precheck');
+    });
+
+    testWidgets('video pending + caption → kirim dengan caption', (
+      tester,
+    ) async {
+      final s = await pumpHost(tester, withProfile: true);
+      s.pendingVideo = '/tmp/v.mp4';
+      s.sendMsgCtrl.text = 'lihat ini';
+      await s.sendMessage();
+      await tester.pump();
+
+      expect(s.videoSends, ['lihat ini']);
     });
 
     testWidgets('double-tap (_isSending) → return awal', (tester) async {

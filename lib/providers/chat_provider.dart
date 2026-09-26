@@ -211,8 +211,13 @@ class ChatProvider extends ChangeNotifier {
   Future<void> clearViewOnceImage(
     String messageId, {
     bool isRoom = false,
+    bool video = false,
   }) async {
-    await _service.clearViewOnceImage(messageId, isRoom: isRoom);
+    await _service.clearViewOnceImage(
+      messageId,
+      isRoom: isRoom,
+      video: video,
+    );
   }
 
   Stream<List<PrivateChatInfo>> getMyPrivateChats(String myUid) {

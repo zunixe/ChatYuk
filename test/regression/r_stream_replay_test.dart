@@ -112,30 +112,55 @@ void main() {
     expect(snapshot.map((m) => m.id), containsAll(['2', '3']));
   });
 
-  test('UPDATE int-id cocok dengan model String-id (tanpa reload)', () {
-    // Regresi chat_stream_session.dart:585 — id DB bigint (int) vs model
-    // String. Tanpa stringify, UPDATE is_deleted/edited miss → reload.
-    final current = [
-      MessageModel(
-        id: '42',
-        senderId: 'u1',
-        senderName: 'A',
-        senderGender: 'male',
-        isRegistered: true,
-        text: 'asli',
-        type: 'text',
-        imageData: '',
-        timestamp: DateTime.utc(2026, 1, 1),
-      ),
-    ];
-    final Map<String, dynamic> newRecord = {'id': 42, 'is_deleted': true};
+  group('applyUpdateRecord (jalur UPDATE realtime ASLI)', () {
+    List<MessageModel> current() => [
+          MessageModel(
+            id: '42',
+            senderId: 'u1',
+            senderName: 'A',
+            senderGender: 'male',
+            isRegistered: true,
+            text: 'asli',
+            type: 'text',
+            imageData: '',
+            timestamp: DateTime.utc(2026, 1, 1),
+          ),
+        ];
 
-    final newId = '${newRecord['id']}';
-    final idx = current.indexWhere((x) => x.id == newId);
-    expect(idx, 0, reason: 'int 42 harus cocok dengan String "42"');
-    final updated = current[idx].copyWith(isDeleted: true);
-    expect(updated.isDeleted, isTrue);
-    expect(updated.text, isEmpty,
-        reason: 'pesan terhapus tidak boleh membawa isi (privasi)');
+    test('UPDATE int-id cocok dengan model String-id (tanpa reload)', () {
+      // Regresi: id DB bigint (int) vs model String. Tanpa stringify,
+      // UPDATE is_deleted/edited miss → reload.
+      final next = ChatStreamSession.applyUpdateRecord(
+        current(),
+        {'id': 42, 'is_deleted': true},
+      );
+
+      expect(next, isNotNull, reason: 'int 42 cocok "42" → tanpa reload');
+      expect(next!.single.isDeleted, isTrue);
+      expect(next.single.text, isEmpty,
+          reason: 'pesan terhapus tidak boleh membawa isi (privasi)');
+    });
+
+    test('id tak dikenal / tanpa id → null (minta reload)', () {
+      expect(
+        ChatStreamSession.applyUpdateRecord(current(), {'id': 43}),
+        isNull,
+      );
+      expect(
+        ChatStreamSession.applyUpdateRecord(current(), {'text': 'x'}),
+        isNull,
+      );
+    });
+
+    test('partial: field absen dipertahankan', () {
+      final next = ChatStreamSession.applyUpdateRecord(
+        current(),
+        {'id': '42', 'edited': true},
+      );
+
+      expect(next!.single.edited, isTrue);
+      expect(next.single.text, 'asli');
+      expect(next.single.isDeleted, isFalse);
+    });
   });
 }

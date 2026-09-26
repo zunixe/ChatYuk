@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.53+65
+version: 1.2.56+78
 
 environment:
   sdk: ^3.11.5
@@ -57,7 +57,9 @@ dependencies:
   http: ^1.2.0
   image_picker: ^1.1.2
   image: ^4.3.0
-  image_cropper: ^9.0.0
+  # EKSPERIMEN branch experiment/agp9: 9.1.0 → 12.2.1 (compileSdk 33 → 36;
+  # AGP 9 menolak AAR metadata plugin yang compileSdk-nya < 34).
+  image_cropper: ^12.2.1
   flutter_image_compress: ^2.5.1
   flutter_local_notifications: ^22.2.0
   flutter_foreground_task: ^8.0.0
@@ -89,11 +91,12 @@ dependencies:
   record: ^7.1.1
   wechat_camera_picker: ^4.6.0
   camera: ^0.12.1
+  video_player: ^2.14.0
   photo_manager: ^3.12.0
   phosphor_icons: ^3.0.1
   connectivity_plus: ^7.3.1
   facebook_app_events: ^0.30.5
-
+  video_compress: ^3.1.4
 dev_dependencies:
   flutter_test:
     sdk: flutter

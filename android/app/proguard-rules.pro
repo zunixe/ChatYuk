@@ -9,11 +9,14 @@
 -dontwarn com.google.firebase.**
 -dontwarn com.google.android.gms.**
 
-# Supabase / OkHttp / Retrofit
+# OkHttp / Okio: JANGAN keep-all manual. Aturan consumer bawaan library
+# (META-INF/proguard/okhttp3.pro & okio.pro, otomatis dipakai AGP) sudah
+# menjaga yang perlu (PublicSuffixDatabase dsb). Keep-all `okhttp3.**`
+# mematikan obfuscation+optimasi R8 untuk library besar ini → Play Console
+# memprotes "persentase obfuscation rendah". -dontwarn tetap dipertahankan.
 -dontwarn okhttp3.**
 -dontwarn okio.**
--keep class okhttp3.** { *; }
--keep class okio.** { *; }
+-dontwarn retrofit2.**
 
 # Keep R8 from stripping serialization classes
 -keepattributes Signature

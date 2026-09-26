@@ -31,6 +31,11 @@ abstract class AdminBase extends ChangeNotifier {
   final Set<String> _seenCallIds = {};
   bool _notifArmed = false;
   bool _seenDevicesLoaded = false;
+  // Seed sekali: fetchDevices pertama SETELAH arm menjadi baseline diam-diam
+  // (pengganti fetch limit-1000 di armNotifications — hemat 1 RPC besar
+  // tiap buka panel). Device baru selalu muncul di atas (ORDER BY last_seen
+  // desc), jadi halaman-1 cukup sebagai baseline.
+  bool _seedDone = false;
   static const String _kSeenDevicesKey = 'admin_seen_device_ids';
 
   void _emit(String msg) {

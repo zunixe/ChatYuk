@@ -174,6 +174,16 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
                 throw const SocketException('voice upload failed');
               }
               imageData = path;
+            } else if (e.uploadKind == 'video') {
+              // Video: payload = bytes video mentah (base64).
+              final path = await StoragePhotoService.instance.uploadChatVideo(
+                chatId: outboxUploadChatId,
+                bytes: base64Decode(imageData),
+              );
+              if (path == null || path.isEmpty) {
+                throw const SocketException('video upload failed');
+              }
+              imageData = path;
             } else {
               final path = await StoragePhotoService.instance.upload(
                 chatId: outboxUploadChatId,

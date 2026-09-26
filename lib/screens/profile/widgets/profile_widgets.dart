@@ -340,55 +340,41 @@ class _ProfileChatFontTileState extends State<ProfileChatFontTile> {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final mult = ChatTextScale.multOfStep(_step);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+    return Material(
+      color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.format_size_rounded,
-                  color: AppTheme.primary,
-                  size: 20,
-                ),
+          // Header sejajar tile lain: ListTile + lingkaran ikon 36.
+          ListTile(
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.labelChatFontSize,
-                      style: AppText.bodyStrong.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      s.descChatFontSize,
-                      style: AppText.bodySmall.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
+              child: Icon(
+                Icons.format_size_rounded,
+                color: AppTheme.primary,
+                size: 18,
               ),
-              Text(
-                ChatTextScale.labelOf(mult),
-                style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
+            ),
+            title: Text(s.labelChatFontSize, style: AppText.bodyStrong),
+            subtitle: Text(
+              s.descChatFontSize,
+              style: AppText.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
               ),
-            ],
+            ),
+            trailing: Text(
+              ChatTextScale.labelOf(mult),
+              style: AppText.bodyStrong.copyWith(color: AppTheme.primary),
+            ),
           ),
           // Preview bubble mengikuti ukuran.
           Container(
-            margin: const EdgeInsets.only(top: 8, left: 48, right: 4),
+            margin: const EdgeInsets.only(top: 8, left: 52, right: 16),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: AppTheme.bgScreen,
@@ -437,6 +423,9 @@ class _ProfileChatFontTileState extends State<ProfileChatFontTile> {
               ],
             ),
           ),
+          // Padding bawah card — samakan dengan inset atas tile Akun
+          // (skala angka sebelumnya nempel ke tepi bawah card).
+          const SizedBox(height: 12),
         ],
       ),
     );

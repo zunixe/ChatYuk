@@ -72,8 +72,9 @@ void main() {
     when(() => auth.userEmail).thenReturn(null);
     when(() => auth.emailConfirmed).thenReturn(false);
     when(() => auth.currentUser).thenReturn(null);
-    when(() => auth.onMyProfileUpdates())
-        .thenAnswer((_) => const Stream<UserModel>.empty());
+    when(() => auth.onMyProfileUpdates()).thenAnswer(
+      (_) => const Stream<({UserModel model, Set<String> keys})>.empty(),
+    );
   });
 
   tearDown(() => provider.dispose());
@@ -332,6 +333,45 @@ void main() {
     });
   });
 
+  // ── AKUN: hapus/password teruskan ke service ──
+  group('akun kritis', () {
+    test('deleteMyAccount → service sekali', () async {
+      when(() => auth.deleteMyAccount()).thenAnswer((_) async {});
+      provider = await build();
+
+      await provider.deleteMyAccount();
+
+      verify(() => auth.deleteMyAccount()).called(1);
+    });
+
+    test('setPassword teruskan password baru', () async {
+      when(() => auth.setPassword(any())).thenAnswer((_) async {});
+      provider = await build();
+
+      await provider.setPassword('rahasia123');
+
+      verify(() => auth.setPassword('rahasia123')).called(1);
+    });
+
+    test('changePassword teruskan lama + baru', () async {
+      when(() => auth.changePassword(any(), any()))
+          .thenAnswer((_) async {});
+      provider = await build();
+
+      await provider.changePassword('lama1234', 'baru1234');
+
+      verify(() => auth.changePassword('lama1234', 'baru1234')).called(1);
+    });
+
+    test('fetchHasPassword teruskan hasil service', () async {
+      when(() => auth.fetchHasPassword()).thenAnswer((_) async => true);
+      provider = await build();
+
+      expect(await provider.fetchHasPassword(), isTrue);
+      verify(() => auth.fetchHasPassword()).called(1);
+    });
+  });
+
   // ── LOGOUT CLEAN (anti-flash halaman lain) ──
   // Gate root membaca `signingOut` untuk langsung merender EntryScreen.
   // Tanpa flag ini, `profile=null` sementara sesi bukan anon (mis. dummy
@@ -362,6 +402,22 @@ void main() {
       expect(duringLoading, isTrue, reason: 'loading aktif (transisi keluar)');
       expect(provider.signingOut, isFalse, reason: 'flag dibersihkan di akhir');
       expect(provider.profile, isNull, reason: 'profil dibuang');
+    });
+
+    test('revoke gagal (network) → tetap keluar, loading tidak nyangkut', () async {
+      when(() => auth.isSignedIn).thenReturn(true);
+      when(() => auth.goOffline()).thenAnswer((_) async {});
+      // Revoke server melempar (mis. SocketException): user TETAP keluar.
+      when(() => auth.signOut()).thenThrow(Exception('network down'));
+      when(() => auth.dummySessionActive).thenReturn(false);
+
+      provider = await build();
+      await provider.signOut();
+
+      expect(provider.profile, isNull, reason: 'profil dibuang');
+      expect(provider.loading, isFalse,
+          reason: 'gate tidak nyangkut di splash');
+      expect(provider.signingOut, isFalse);
     });
 
     test('signingOut false setelah _init (login/restore baru)', () async {

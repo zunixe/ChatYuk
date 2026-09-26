@@ -11,9 +11,12 @@ class TimelineService {
 
   /// `imagePaths` WAJIB path storage `posts/...` — base64 ditolak
   /// supaya tidak masuk kolom images (feed hanya download path).
+  /// `imageDims` = `[{w,h}, ...]` sejajar dengan [imagePaths] (rasio asli
+  /// untuk feed proporsional ala Threads); boleh kosong (post lama/unknown).
   Future<Map<String, dynamic>> createPost({
     required String text,
     List<String> imagePaths = const [],
+    List<Map<String, int>> imageDims = const [],
     String visibility = 'public',
   }) async {
     for (final p in imagePaths) {
@@ -27,6 +30,7 @@ class TimelineService {
         'p_text': text,
         'p_image_paths': imagePaths,
         'p_visibility': visibility,
+        'p_image_dims': imageDims,
       },
     );
     return _map(res);

@@ -57,7 +57,12 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
                 child: bytes != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(bytes, fit: BoxFit.contain),
+                        // Cap 1080px: dialog zoom tidak butuh full-res.
+                        child: Image.memory(
+                          bytes,
+                          fit: BoxFit.contain,
+                          cacheWidth: 1080,
+                        ),
                       )
                     : CircleAvatar(
                         radius: 90,
@@ -86,7 +91,14 @@ class AdminAvatarCircleState extends State<AdminAvatarCircle> {
           ],
         ),
       ),
-    );
+    ).then((_) {
+      // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
+      if (bytes != null && bytes.isNotEmpty) {
+        try {
+          PaintingBinding.instance.imageCache.evict(MemoryImage(bytes));
+        } catch (_) {}
+      }
+    });
   }
 
   @override

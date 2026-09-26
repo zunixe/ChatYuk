@@ -82,6 +82,19 @@ SupabaseClient fakeSupabaseClient({FakeSupabaseHandler? handler}) {
   );
 }
 
+/// Varian tanpa ticker auto-refresh GoTrue — untuk widget test, supaya
+/// tidak ada Timer menggantung saat teardown invariant (flutter_test
+/// gagal "Timer is still pending"). Perilaku HTTP palsu identik.
+SupabaseClient fakeSupabaseClientNoTicker({FakeSupabaseHandler? handler}) {
+  final h = handler ?? FakeSupabaseHandler();
+  return SupabaseClient(
+    'https://test.supabase.co',
+    'test-anon-key',
+    httpClient: h.client(),
+    authOptions: const AuthClientOptions(autoRefreshToken: false),
+  );
+}
+
 /// Ambil request POST ke `/rest/v1/rpc/<fn>` — untuk test semi-integrasi yang
 /// memverifikasi nama RPC + params yang benar-benar dikirim ke PostgREST.
 http.Request rpcRequestOf(FakeSupabaseHandler handler, String fn) {

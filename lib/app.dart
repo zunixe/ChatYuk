@@ -172,6 +172,34 @@ class _ChatYukAppState extends State<ChatYukApp> {
   }
 }
 
+/// Keputusan layar root gate (murni, teruji).
+/// URUTAN PENTING: `signingOut` di ATAS `loading` — signOut() men-set
+/// keduanya, dan tanpa urutan ini gate menampilkan splash sekejap lalu
+/// EntryScreen (satu halaman berkedip saat logout).
+enum GateScreen { splash, error, entry, profileGate, banned, main }
+
+GateScreen decideGateScreen({
+  required bool loading,
+  required bool hasError,
+  required bool signingOut,
+  required bool isAnonymous,
+  required bool dummySessionActive,
+  required bool isSignedIn,
+  required bool hasProfile,
+  required bool needsProfile,
+  required bool banned,
+}) {
+  if (signingOut) return GateScreen.entry;
+  if (loading) return GateScreen.splash;
+  if (hasError) return GateScreen.error;
+  if (needsProfile) {
+    return isSignedIn ? GateScreen.profileGate : GateScreen.entry;
+  }
+  if (!hasProfile && isAnonymous) return GateScreen.entry;
+  if (banned) return GateScreen.banned;
+  return GateScreen.main;
+}
+
 class _AuthGate extends StatefulWidget {
   const _AuthGate();
 
@@ -268,10 +296,37 @@ class _AuthGateState extends State<_AuthGate> {
     final signingOut = context.select<AuthProvider, bool>(
       (a) => a.signingOut,
     );
+    final isSignedIn = context.select<AuthProvider, bool>(
+      (a) => a.isSignedIn,
+    );
     final s = context.watch<LocaleProvider>().s;
     // Watch ThemeProvider supaya seluruh tree rebuild saat mode gelap/terang
     // berubah — warna AppTheme diambil ulang di build().
     context.watch<ThemeProvider>();
+
+    final p0 = profile;
+    final isAdminGate0 = context.select<AuthProvider, bool>(
+      (a) => a.isRealAdmin,
+    );
+    final gate = decideGateScreen(
+      loading: loading,
+      hasError: error != null,
+      signingOut: signingOut,
+      isAnonymous: isAnonymous,
+      dummySessionActive: dummySessionActive,
+      isSignedIn: isSignedIn,
+      hasProfile: p0 != null,
+      needsProfile: !isAnonymous &&
+          !dummySessionActive &&
+          (p0 == null || p0.nickname.trim().isEmpty || !p0.isRegistered),
+      banned: p0 != null &&
+          !isAdminGate0 &&
+          isBannedNickname(p0.nickname),
+    );
+    if (gate == GateScreen.entry) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
+      return const EntryScreen();
+    }
 
     if (loading) {
       // SPLASH REPLIKA: bg gelap + logo di tengah — identik dengan
@@ -330,30 +385,7 @@ class _AuthGateState extends State<_AuthGate> {
     // utama + popup form) sebelum EntryScreen. Khusus sesi dummy, karena
     // dummy punya email (isAnonymous=false) sehingga tidak tertangkap
     // cabang `profile == null && isAnonymous` di bawah.
-    if (signingOut) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
-      return EntryScreen();
-    }
-
-    final p = profile;
-    final needsProfile =
-        !isAnonymous &&
-        !dummySessionActive &&
-        (p == null || p.nickname.trim().isEmpty || !p.isRegistered);
-
-    if (profile == null && isAnonymous) {
-      // Jalur anon belum isi form: EntryScreen first-frame → angkat overlay.
-      WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
-      return EntryScreen();
-    }
-
-    // Nickname terlarang: user tidak bisa masuk app (kecuali admin).
-    // Berdiri SEBELUM needsProfile/MainNav — sesi tetap ada tapi diblokir
-    // di gerbang dengan pesan + tombol keluar.
-    final isAdminGate = context.select<AuthProvider, bool>(
-      (a) => a.isRealAdmin,
-    );
-    if (profile != null && !isAdminGate && isBannedNickname(profile.nickname)) {
+    if (gate == GateScreen.banned && profile != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => BootOverlay.hide());
       return Scaffold(
         backgroundColor: AppTheme.bgScreen,
@@ -387,7 +419,11 @@ class _AuthGateState extends State<_AuthGate> {
       );
     }
 
-    if (needsProfile) {
+    // Sesi KOSONG (sudah keluar / belum masuk) WAJIB EntryScreen — jangan
+    // menu utama. Tanpa cabang ini, needsProfile=true untuk profil null
+    // melempar sesi kosong ke _ProfileGate(_MainNav): klik logout malah
+    // mendarat di menu utama terkunci popup profil (laporan Xiaomi).
+    if (gate == GateScreen.profileGate) {
       return _ProfileGate(child: _MainNav());
     }
 
@@ -851,8 +887,11 @@ class _BottomNav extends StatelessWidget {
     return StreamBuilder<List<PrivateChatInfo>>(
       stream: uid != null ? chat.getMyPrivateChats(uid) : const Stream.empty(),
       builder: (_, snap) {
-        final totalUnread = (snap.data ?? []).fold<int>(0, (sum, c) {
-          return sum + ((c.unreadCounts[uid] ?? 0));
+        // Ukur biaya agregasi badge per emission (kandidat optimasi QA).
+        final totalUnread = PerfProbe.measure('Nav.unread', () {
+          return (snap.data ?? []).fold<int>(0, (sum, c) {
+            return sum + ((c.unreadCounts[uid] ?? 0));
+          });
         });
         return BottomAppBar(
           color: AppTheme.bgCard,

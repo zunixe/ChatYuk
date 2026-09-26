@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chatyuk/providers/admin_provider.dart';
 import 'package:chatyuk/services/admin_service.dart';
@@ -451,6 +452,57 @@ void main() {
       await provider.fetchTableSizes();
       expect(provider.tableSizes, isEmpty);
       expect(provider.tableSizesLoading, isFalse);
+    });
+  });
+
+  group('armNotifications lazy-seed (tanpa fetch limit-1000)', () {
+    Map<String, dynamic> dev(String installId, [String nick = 'U']) => {
+          'install_id': installId,
+          'nickname': nick,
+        };
+
+    setUp(() {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('arm TIDAK memanggil listDevices sama sekali', () async {
+      await provider.armNotifications();
+      verifyNever(() => service.listDevices(
+          limit: any(named: 'limit'), offset: any(named: 'offset')));
+    });
+
+    test('fetch pertama setelah arm = seed diam-diam (tanpa notifikasi)',
+        () async {
+      when(() => service.listDevices(
+              limit: any(named: 'limit'), offset: any(named: 'offset')))
+          .thenAnswer((_) async => {
+                'items': [dev('d1'), dev('d2')],
+                'total': 2,
+              });
+      when(() => service.getExcludedDevices()).thenAnswer((_) async => <String>{});
+
+      final notifs = <String>[];
+      final sub = provider.notifications.listen(notifs.add);
+
+      await provider.armNotifications();
+      await provider.fetchDevices();
+      // Seed: tidak ada notifikasi untuk device yang sudah ada.
+      expect(notifs, isEmpty);
+
+      // Fetch kedua dengan device BARU → notifikasi tepat 1× untuk d3.
+      when(() => service.listDevices(
+              limit: any(named: 'limit'), offset: any(named: 'offset')))
+          .thenAnswer((_) async => {
+                'items': [dev('d3', 'Baru'), dev('d1'), dev('d2')],
+                'total': 3,
+              });
+      await provider.fetchDevices();
+      // Broadcast stream diantar via microtask — beri event-queue jalan.
+      await Future.delayed(const Duration(milliseconds: 10));
+      expect(notifs.length, 1);
+      expect(notifs.single, contains('Baru'));
+      await sub.cancel();
     });
   });
 }

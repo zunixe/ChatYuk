@@ -145,5 +145,49 @@ void main() {
       // base64("ABC") == "QUJD".
       expect(await svc.download('chat/abc/123.jpg'), 'QUJD');
     });
+
+    test('downloadBytes hang → null', () {
+      fakeAsync((async) {
+        final handler = FakeSupabaseHandler();
+        handler.onHang('storage');
+        final svc = StoragePhotoService.forTest(
+          fakeSupabaseClient(handler: handler),
+        );
+        Object? result = 'belum';
+        svc.downloadBytes('chat/abc/123.jpg').then((v) => result = v);
+        async.elapse(const Duration(seconds: 31));
+        async.flushMicrotasks();
+        expect(result, isNull);
+      });
+    });
+
+    test('downloadThumbBytes fallback transform → full', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('storage', (req) {
+        // Transform server (ada query width) gagal → fallback full.
+        if (req.url.query.contains('width')) throw Exception('no transform');
+        return http.Response(
+          'FULL',
+          200,
+          headers: {'content-type': 'image/jpeg'},
+        );
+      });
+      final svc = StoragePhotoService.forTest(
+        fakeSupabaseClient(handler: handler),
+      );
+      final out = await svc.downloadThumbBytes('chat/abc/123.jpg', width: 160);
+      expect(out, isNotNull);
+      expect(String.fromCharCodes(out!), 'FULL');
+    });
+
+    test('upload base64 rusak → null, delete gagal diam', () async {
+      final handler = FakeSupabaseHandler();
+      final svc = StoragePhotoService.forTest(
+        fakeSupabaseClient(handler: handler),
+      );
+      expect(await svc.uploadPostImage(uid: 'u1', base64: 'bukan-base64!!!'), isNull);
+      // delete tidak melempar apa pun.
+      await expectLater(svc.delete('chat/abc/123.jpg'), completes);
+    });
   });
 }

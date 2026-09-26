@@ -96,6 +96,39 @@ class ChatStreamSession {
   static final Map<String, ({DateTime? ts, DateTime fetchedAt})>
       _hiddenCutoffCache = {};
 
+  /// Terapkan satu payload UPDATE realtime ke list pesan.
+  /// Return list BARU bila cocok, null bila perlu refetch (id tak dikenal
+  /// / tanpa id). Fungsi MURNI + static supaya terkunci unit test.
+  /// id DB bigint (int) vs model String — bandingkan sebagai String supaya
+  /// update is_deleted/edited tidak miss lalu cuma reload.
+  static List<MessageModel>? applyUpdateRecord(
+    List<MessageModel> current,
+    Map<String, dynamic> newRecord,
+  ) {
+    if (newRecord['id'] == null) return null;
+    final newId = '${newRecord['id']}';
+    final idx = current.indexWhere((x) => x.id == newId);
+    if (idx < 0) return null;
+    final updated = current[idx].copyWith(
+      text: newRecord.containsKey('text')
+          ? (newRecord['text'] as String? ?? current[idx].text)
+          : current[idx].text,
+      edited: newRecord.containsKey('edited')
+          ? (newRecord['edited'] as bool? ?? false)
+          : current[idx].edited,
+      imageData: newRecord.containsKey('image_data')
+          ? (newRecord['image_data'] as String? ?? current[idx].imageData)
+          : current[idx].imageData,
+      type: newRecord.containsKey('type')
+          ? (newRecord['type'] as String? ?? current[idx].type)
+          : current[idx].type,
+      isDeleted: newRecord.containsKey('is_deleted')
+          ? (newRecord['is_deleted'] as bool? ?? false)
+          : current[idx].isDeleted,
+    );
+    return List<MessageModel>.of(current)..[idx] = updated;
+  }
+
   /// - loadCache dan fetchServer jalan PARALEL untuk tampilan secepat mungkin.
   /// - INSERT event langsung di-append ke list tanpa refetch (0 network round-trip).
   /// - UPDATE/DELETE tetap refetch karena perlu reorder.
@@ -575,38 +608,15 @@ class ChatStreamSession {
         _hiddenCutoffCache.remove(filterVal);
         lastRealtime = DateTime.now();
         try {
-          final newRecord = payload.newRecord;
-          if (newRecord['id'] == null) {
-            scheduleReload();
-            return;
-          }
-          // id DB bigint (int) vs model String — bandingkan sebagai String
-          // supaya update is_deleted/edited tidak miss lalu cuma reload.
-          final newId = '${newRecord['id']}';
-          final idx = _current.indexWhere((x) => x.id == newId);
-          if (idx < 0) {
-            scheduleReload();
-            return;
-          }
-          final updated = _current[idx].copyWith(
-            text: newRecord.containsKey('text')
-                ? (newRecord['text'] as String? ?? _current[idx].text)
-                : _current[idx].text,
-            edited: newRecord.containsKey('edited')
-                ? (newRecord['edited'] as bool? ?? false)
-                : _current[idx].edited,
-            imageData: newRecord.containsKey('image_data')
-                ? (newRecord['image_data'] as String? ??
-                      _current[idx].imageData)
-                : _current[idx].imageData,
-            type: newRecord.containsKey('type')
-                ? (newRecord['type'] as String? ?? _current[idx].type)
-                : _current[idx].type,
-            isDeleted: newRecord.containsKey('is_deleted')
-                ? (newRecord['is_deleted'] as bool? ?? false)
-                : _current[idx].isDeleted,
+          final next = ChatStreamSession.applyUpdateRecord(
+            _current,
+            payload.newRecord,
           );
-          _current[idx] = updated;
+          if (next == null) {
+            scheduleReload();
+            return;
+          }
+          _current = next;
           controller.add(List.unmodifiable(_current));
           scheduleCacheSave();
         } catch (_) {

@@ -7,6 +7,8 @@ import '../../../config/theme.dart';
 import '../../../models/message_model.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../core/media/link_preview_service.dart';
+import '../../../core/chat/chat_location.dart';
+import '../../../widgets/location_bubble.dart';
 import '../../../widgets/link_preview.dart';
 import '../../../widgets/mention_spans.dart';
 import '../../../widgets/private_chat_message.dart';
@@ -51,7 +53,8 @@ class RoomMessageBubble extends StatelessWidget {
   bool get _isMedia =>
       msg.type == 'image' ||
       msg.type == 'view_once' ||
-      msg.type == 'view_once_expired';
+      msg.type == 'view_once_expired' ||
+      msg.type == 'location';
 
   // Konten bubble: foto / view-once / teks — dipakai untuk pesan sendiri & orang lain.
   Widget _replyQuote(BuildContext context) {
@@ -83,6 +86,24 @@ class RoomMessageBubble extends StatelessWidget {
             durationMs: msg.durationMs ?? 0,
             isMe: isMe,
             timeStr: timeStr,
+          ),
+        ],
+      );
+    }
+    if (msg.type == 'location' && parseLocation(msg.text) != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _replyQuote(context),
+          LocationBubble(location: parseLocation(msg.text)!),
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              timeStr,
+              style: AppText.chatTime.copyWith(
+                color: _textColor.withValues(alpha: 0.45),
+              ),
+            ),
           ),
         ],
       );

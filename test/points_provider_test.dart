@@ -248,6 +248,171 @@ void main() {
     });
   });
 
+  group('bonus klaim & unlock (provider)', () {
+    setUp(() async {
+      when(() => service.fetchEnabled()).thenAnswer((_) async => true);
+      await provider.refreshEnabled();
+    });
+
+    test('claimDailyLogin sukses → saldo/streak/bonus + reset tracker',
+        () async {
+      when(() => service.dailyLoginBonus()).thenAnswer(
+        (_) async => {'points': 70, 'streak': 3, 'bonus': 5},
+      );
+      when(() => service.oneTimeBonus(any(), any()))
+          .thenAnswer((_) async => 70);
+
+      await provider.claimDailyLogin();
+
+      expect(provider.points, 70);
+      expect(provider.loginStreak, 3);
+      // Tracker online di-reset → milestone bisa diklaim lagi.
+      provider.setOnlineSecondsForTest(300);
+      await provider.debugClaimOnlineBonus();
+      verify(() => service.oneTimeBonus('online_5min', 5)).called(1);
+    });
+
+    test('claimDailyLogin OFF → diam', () async {
+      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
+      await provider.refreshEnabled();
+
+      await provider.claimDailyLogin();
+
+      verifyNever(() => service.dailyLoginBonus());
+    });
+
+    test('claimDailyLogin error → saldo tetap', () async {
+      when(() => service.dailyLoginBonus()).thenThrow(Exception('offline'));
+
+      await provider.claimDailyLogin();
+
+      expect(provider.points, 50);
+    });
+
+    test('newChatBonus naik → true; gagal → false', () async {
+      when(() => service.newChatBonus('u9')).thenAnswer((_) async => 55);
+      expect(await provider.newChatBonus('u9'), isTrue);
+      expect(provider.points, 55);
+
+      when(() => service.newChatBonus('u9')).thenThrow(Exception('x'));
+      expect(await provider.newChatBonus('u9'), isFalse);
+    });
+
+    test('newChatBonus OFF → false', () async {
+      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
+      await provider.refreshEnabled();
+
+      expect(await provider.newChatBonus('u9'), isFalse);
+      verifyNever(() => service.newChatBonus(any()));
+    });
+
+    test('roomReadBonus update saldo; OFF diam', () async {
+      when(() => service.roomReadBonus()).thenAnswer((_) async => 58);
+      await provider.roomReadBonus();
+      expect(provider.points, 58);
+
+      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
+      await provider.refreshEnabled();
+      await provider.roomReadBonus();
+      verify(() => service.roomReadBonus()).called(1);
+    });
+
+    test('rewardPhotoSlot → delta; error/OFF → 0', () async {
+      when(() => service.rewardPhotoSlot(2)).thenAnswer((_) async => 53);
+      expect(await provider.rewardPhotoSlot(2), 3);
+
+      when(() => service.rewardPhotoSlot(2))
+          .thenThrow(Exception('offline'));
+      expect(await provider.rewardPhotoSlot(2), 0);
+
+      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
+      await provider.refreshEnabled();
+      expect(await provider.rewardPhotoSlot(2), 0);
+      verify(() => service.rewardPhotoSlot(any())).called(2);
+    });
+
+    test('unlockPhoto sukses → true + saldo ikut', () async {
+      when(() => service.unlockPhoto('p1', 'once')).thenAnswer(
+        (_) async => {'ok': true, 'points': 44},
+      );
+
+      expect(await provider.unlockPhoto('p1', 'once'), isTrue);
+      expect(provider.points, 44);
+    });
+
+    test('unlockPhoto ok=false → false', () async {
+      when(() => service.unlockPhoto('p1', 'once')).thenAnswer(
+        (_) async => {'ok': false, 'points': 50},
+      );
+
+      expect(await provider.unlockPhoto('p1', 'once'), isFalse);
+    });
+
+    test('unlockPhoto saldo kurang → lempar topup', () async {
+      when(() => service.unlockPhoto('p1', 'once')).thenThrow(
+        PostgrestException(
+          message: 'Not enough points',
+          code: 'P0001',
+          details: null,
+          hint: null,
+        ),
+      );
+
+      await expectLater(provider.unlockPhoto('p1', 'once'), throwsA('topup'));
+    });
+
+    test('unlockPhoto error lain → rethrow', () async {
+      when(() => service.unlockPhoto('p1', 'once')).thenThrow(
+        PostgrestException(
+          message: 'boom',
+          code: '500',
+          details: null,
+          hint: null,
+        ),
+      );
+
+      await expectLater(
+        provider.unlockPhoto('p1', 'once'),
+        throwsA(isA<PostgrestException>()),
+      );
+    });
+
+    test('claimRegisterBonus naik → true; OFF → false', () async {
+      when(() => service.registerBonus()).thenAnswer((_) async => 60);
+      expect(await provider.claimRegisterBonus(), isTrue);
+
+      when(() => service.fetchEnabled()).thenAnswer((_) async => false);
+      await provider.refreshEnabled();
+      expect(await provider.claimRegisterBonus(), isFalse);
+    });
+
+    test('subscribeCreator → map + wallet refresh', () async {
+      when(() => service.subscribeCreator(any(), periods: any(named: 'periods')))
+          .thenAnswer((_) async => {'ok': true});
+      when(() => service.getWallet()).thenAnswer(
+        (_) async => <String, dynamic>{'bonus': 1, 'earned': 2, 'total': 60},
+      );
+
+      final res = await provider.subscribeCreator('creator', periods: 2);
+
+      expect(res['ok'], isTrue);
+      expect(provider.points, 60);
+    });
+
+    test('claimReferralReward → map + wallet refresh', () async {
+      when(() => service.claimReferralReward())
+          .thenAnswer((_) async => {'ok': true, 'bonus': 10});
+      when(() => service.getWallet()).thenAnswer(
+        (_) async => <String, dynamic>{'bonus': 0, 'earned': 0, 'total': 70},
+      );
+
+      final res = await provider.claimReferralReward();
+
+      expect(res['bonus'], 10);
+      expect(provider.points, 70);
+    });
+  });
+
   group('chat charge/refund', () {
     setUp(() async {
       when(() => service.fetchEnabled()).thenAnswer((_) async => true);

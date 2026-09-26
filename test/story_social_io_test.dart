@@ -52,6 +52,35 @@ void main() {
           reason: 'base64 tidak boleh sampai ke server');
     });
 
+    test('createStory video: params media + validasi path', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on('/rest/v1/rpc/create_story', (_) => {'id': 'story-v'});
+      final svc = StoryService(fakeSupabaseClient(handler: handler));
+
+      final id = await svc.createStory(
+        imagePath: '',
+        videoPath: 'story/u1/v.mp4',
+        durationMs: 8000,
+      );
+
+      expect(id, 'story-v');
+      final p = rpcParamsOf(handler, 'create_story');
+      expect(p['p_media_type'], 'video');
+      expect(p['p_video_path'], 'story/u1/v.mp4');
+      expect(p['p_duration_ms'], 8000);
+    });
+
+    test('createStory video path asing ditolak', () async {
+      final handler = FakeSupabaseHandler();
+      final svc = StoryService(fakeSupabaseClient(handler: handler));
+
+      expect(
+        await svc.createStory(imagePath: '', videoPath: 'chat/u1/v.mp4'),
+        '',
+      );
+      expect(handler.captured, isEmpty);
+    });
+
     test('markSeenBulk: daftar id terkirim sekali (1 round-trip)', () async {
       final handler = FakeSupabaseHandler();
       handler.on('/rest/v1/rpc/mark_story_seen_bulk', (_) => []);
@@ -77,18 +106,34 @@ void main() {
       expect(handler.captured, isEmpty);
     });
 
-    test('deleteStory: p_story_id terkirim + parsing image_path', () async {
+    test('deleteStory: p_story_id terkirim + ok/path', () async {
       final handler = FakeSupabaseHandler();
       handler.on(
         '/rest/v1/rpc/delete_story',
-        (_) => {'image_path': 'story/u1/x.jpg'},
+        (_) => {'ok': true, 'image_path': 'story/u1/x.jpg'},
       );
       final svc = StoryService(fakeSupabaseClient(handler: handler));
 
-      final path = await svc.deleteStory('story-9');
+      final res = await svc.deleteStory('story-9');
 
-      expect(path, 'story/u1/x.jpg');
+      expect(res.ok, isTrue);
+      expect(res.path, 'story/u1/x.jpg');
       expect(rpcParamsOf(handler, 'delete_story')['p_story_id'], 'story-9');
+    });
+
+    test('deleteStory VIDEO (image_path kosong) tetap ok', () async {
+      final handler = FakeSupabaseHandler();
+      handler.on(
+        '/rest/v1/rpc/delete_story',
+        (_) => {'ok': true, 'image_path': ''},
+      );
+      final svc = StoryService(fakeSupabaseClient(handler: handler));
+
+      final res = await svc.deleteStory('story-v');
+
+      expect(res.ok, isTrue,
+          reason: 'hapus story video tidak boleh dianggap gagal');
+      expect(res.path, isEmpty);
     });
 
     test('markSeen: p_story_id terkirim', () async {

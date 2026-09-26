@@ -1,0 +1,101 @@
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:chatyuk/services/storage_photo_service.dart';
+import 'package:chatyuk/widgets/chat_video_bubble.dart';
+
+
+
+/// Video chat: kontrak murni (label durasi + deteksi path + batas).
+/// Handshake upload/putar butuh device — diuji manual di HP.
+void main() {
+  group('formatVideoDuration', () {
+    test('0 / negatif → 0:00', () {
+      expect(formatVideoDuration(0), '0:00');
+      expect(formatVideoDuration(-500), '0:00');
+    });
+
+    test('detik → m:ss (padding 2 digit)', () {
+      expect(formatVideoDuration(7000), '0:07');
+      expect(formatVideoDuration(59000), '0:59');
+    });
+
+    test('>= 60 dtk pindah menit', () {
+      expect(formatVideoDuration(60000), '1:00');
+      expect(formatVideoDuration(65000), '1:05');
+    });
+
+    test('pembulatan ms ke detik terdekat', () {
+      expect(formatVideoDuration(1400), '0:01');
+      expect(formatVideoDuration(1600), '0:02');
+    });
+  });
+
+  group('Batas video chat (kontrak server + client)', () {
+    test('durasi maks 60 dtk', () {
+      expect(StoragePhotoService.chatVideoMaxMs, 60 * 1000);
+    });
+
+    test('ukuran hasil kompres maks 8 MB', () {
+      expect(StoragePhotoService.chatVideoMaxBytes, 8 * 1024 * 1024);
+    });
+  });
+
+  group('Pengenalan type video (dipakai dedupe pending ↔ server)', () {
+    // Kontrak: pending video (base64) dibuang saat versi server (path)
+    // tiba. Keduanya harus dikenali sebagai "video" — dulu cabang dedupe
+    // hanya menangani image/view_once/voice sehingga pending video
+    // menggantung sebagai kotak kosong.
+    bool isVideoType(String t) =>
+        t == 'video' || t == 'video_once' || t == 'video_once_expired';
+
+    test('ketiga type video dikenali', () {
+      expect(isVideoType('video'), isTrue);
+      expect(isVideoType('video_once'), isTrue);
+      expect(isVideoType('video_once_expired'), isTrue);
+    });
+
+    test('type lain BUKAN video', () {
+      for (final t in ['image', 'view_once', 'voice', 'text', 'coin']) {
+        expect(isVideoType(t), isFalse, reason: t);
+      }
+    });
+  });
+
+  group('isChatVideoPath', () {
+    final svc = StoragePhotoService.instance;
+
+    test('path video chat dikenali', () {
+      expect(svc.isChatVideoPath('chat/abc/123.mp4'), isTrue);
+    });
+
+    test('path foto chat BUKAN video', () {
+      expect(svc.isChatVideoPath('chat/abc/123.jpg'), isFalse);
+    });
+
+    test('video story bukan video chat', () {
+      expect(svc.isChatVideoPath('story/uid/123.mp4'), isFalse);
+    });
+  });
+
+  // Catatan regresi (tanpa unit test — host butuh banyak stub mixin):
+  // `pendingVideoMs`/`pendingVideoPath` di ChatPhotoSendMixin WAJIB getter.
+  // Saat berbentuk FIELD, Dart menutupi getter layar → durasi selalu 0
+  // (label 0:00 + validasi durasi server gagal). Dijaga oleh analyzer:
+  // `private_chat_screen` memakai `@override int get pendingVideoMs`, yang
+  // TIDAK akan ter-compile bila mixin kembali memakai field.
+
+  group('isPath menerima video (regresi: video gagal dimuat)', () {
+    final svc = StoragePhotoService.instance;
+
+    test('mp4 & mov dianggap path storage', () {
+      expect(svc.isPath('chat/abc/123.mp4'), isTrue);
+      expect(svc.isPath('chat/abc/123.mov'), isTrue);
+      expect(svc.isPath('story/uid/123.mp4'), isTrue);
+    });
+
+    test('base64 TIDAK dianggap path', () {
+      expect(svc.isPath('/9j/4AAQSkZJRgABAQAAAQ=='), isFalse);
+      expect(svc.isPath(''), isFalse);
+    });
+  });
+}

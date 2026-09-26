@@ -20,6 +20,7 @@ import '../providers/social_provider.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/read_receipt.dart';
+import '../core/chat/chat_location.dart';
 import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
 import '../widgets/date_chip.dart';
@@ -38,7 +39,9 @@ import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
 import '../widgets/chat_composer_input.dart';
+import '../widgets/location_picker_sheet.dart';
 import '../mixins/chat_outbox_mixin.dart';
+import '../core/perf/perf_probe.dart';
 
 class PrivateChatScreen extends StatefulWidget {
   final String chatId;
@@ -67,6 +70,23 @@ class PrivateChatScreen extends StatefulWidget {
   State<PrivateChatScreen> createState() => _PrivateChatScreenState();
 }
 
+/// Id pesan yang teksnya mengandung [query] (case-insensitive),
+/// urut TERBARU dulu — untuk navigasi search chat ala WhatsApp.
+/// Murni (tanpa context) supaya bisa di-unit-test.
+List<String> searchChatMatches(List<MessageModel> msgs, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return const [];
+  final out = <String>[];
+  for (var i = msgs.length - 1; i >= 0 && out.length < 300; i--) {
+    final m = msgs[i];
+    if (m.isDeleted) continue;
+    if (m.text.isNotEmpty && m.text.toLowerCase().contains(q)) {
+      out.add(m.id);
+    }
+  }
+  return out;
+}
+
 class _PrivateChatScreenState extends State<PrivateChatScreen>
     with
         ChatOutboxMixin<PrivateChatScreen>,
@@ -77,6 +97,98 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   final _scrollCtrl = ScrollController();
   final _inputFocus = FocusNode();
   bool _showAttachRow = false;
+
+  // ── Search dalam percakapan (ala WhatsApp) ──
+  bool _searching = false;
+  final _searchCtrl = TextEditingController();
+  final _searchFocus = FocusNode();
+  String _searchQuery = '';
+  List<String> _matchIds = const [];
+  Set<String> _matchSet = const {};
+  int _matchIndex = 0;
+  // GlobalKey per pesan cocok — untuk lompat scroll ke hasil.
+  // Hanya pesan cocok yang pakai ini (bukan ValueKey), sisanya tidak
+  // tersentuh supaya state bubble lain (mis. voice) tidak ikut reset.
+  final Map<String, GlobalKey> _searchKeys = {};
+  int _searchJumpTries = 0;
+
+  void _openSearch() {
+    setState(() {
+      _searching = true;
+      _searchCtrl.clear();
+      _searchQuery = '';
+      _matchIds = const [];
+      _matchSet = const {};
+      _matchIndex = 0;
+    });
+    _searchFocus.requestFocus();
+  }
+
+  void _closeSearch() {
+    _searchFocus.unfocus();
+    setState(() {
+      _searching = false;
+      _searchQuery = '';
+      _matchIds = const [];
+      _matchSet = const {};
+      _matchIndex = 0;
+      _searchKeys.clear();
+    });
+  }
+
+  void _onSearchChanged(String v) {
+    setState(() {
+      _searchQuery = v;
+      _matchIndex = 0;
+      _searchJumpTries = 0;
+    });
+    // Ketik = lompat ke cocok terbaru HANYA bila sudah ter-render
+    // (tanpa jambak scroll untuk yang jauh — user pakai panah).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToMatch(0));
+  }
+
+  /// Pindah ke hasil berikut/sebelumnya (dir +1 = lebih lama, -1 = lebih
+  /// baru), bungkus melingkar ala WhatsApp.
+  void _gotoMatch(int dir) {
+    if (_matchIds.isEmpty) return;
+    setState(() {
+      _matchIndex = (_matchIndex + dir) % _matchIds.length;
+      if (_matchIndex < 0) _matchIndex += _matchIds.length;
+      _searchJumpTries = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scrollToMatch(dir),
+    );
+  }
+
+  /// Scroll ke cocok aktif. dir=0: hanya bila sudah ter-render (lembut,
+  /// untuk saat mengetik). dir!=0: lompat bertahap ke arahnya lalu coba
+  /// lagi (maks 5x) sampai ketemu.
+  void _scrollToMatch(int dir) {
+    if (!mounted || !_searching || _matchIds.isEmpty) return;
+    if (_matchIndex < 0 || _matchIndex >= _matchIds.length) return;
+    final id = _matchIds[_matchIndex];
+    final ctx = _searchKeys[id]?.currentContext;
+    if (ctx != null) {
+      _searchJumpTries = 0;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.45,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+    if (dir == 0 || _searchJumpTries >= 5 || !_scrollCtrl.hasClients) return;
+    _searchJumpTries++;
+    final pos = _scrollCtrl.position;
+    // List reverse: offset 0 = paling baru (bawah). Hasil index naik =
+    // makin lama = offset makin besar.
+    final target = (pos.pixels + dir * pos.viewportDimension * 0.8)
+        .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+    _scrollCtrl.jumpTo(target);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToMatch(dir));
+  }
 
   // ── Kontrak ChatSelectionMixin ──
   @override
@@ -124,6 +236,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     String? repliedToText,
     String? repliedToSenderName,
     int? viewOnceSecs,
+    int? videoDurationMs,
   }) async {
     await context.read<ChatProvider>().sendPrivateMessage(
       chatId: widget.chatId,
@@ -133,18 +246,80 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       text: text,
       type: type,
       imageData: imageData,
-      durationMs: viewOnceSecs,
+      // Video pakai durasi asli (bukan timer view-once).
+      durationMs: videoDurationMs ?? viewOnceSecs,
       repliedToId: repliedToId,
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
     );
   }
 
+  /// Izinkan → ambil posisi → sheet peta → TARUH di preview composer
+  /// (kirim terjadi dari tombol send, bisa + caption).
+  Future<void> _sendLocation() async {
+    setState(() => _showAttachRow = false);
+    final picked = await pickChatLocation(
+      context,
+      messenger: ScaffoldMessenger.of(context),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _pendingLocation = picked;
+      // Lokasi bukan foto/video: buang preview lain.
+      _pendingPhotoBase64 = null;
+      _viewTimerSecs = null;
+      photoClearPreviewState();
+    });
+    _inputFocus.requestFocus();
+  }
+
+  ChatLocation? _pendingLocation;
+
+  @override
+  ChatLocation? get sendPendingLocation => _pendingLocation;
+
+  @override
+  set sendPendingLocation(ChatLocation? v) => _pendingLocation = v;
+
+  @override
+  Future<void> sendLocationFromPreview({
+    String text = '',
+    MessageModel? reply,
+  }) async {
+    final loc = _pendingLocation;
+    final auth = context.read<AuthProvider>();
+    final uid = auth.uid;
+    final profile = auth.profile;
+    if (loc == null || uid == null || profile == null) return;
+    try {
+      await context.read<ChatProvider>().sendPrivateMessage(
+        chatId: widget.chatId,
+        senderId: uid,
+        senderName: profile.nickname,
+        senderGender: profile.gender,
+        text: loc.encode(),
+        type: 'location',
+        repliedToId: reply?.id,
+        repliedToText: reply?.text,
+        repliedToSenderName: reply?.senderName,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)),
+      );
+      return;
+    }
+    if (mounted) {
+      setState(() => _pendingLocation = null);
+      _scrollToBottom();
+    }
+  }
+
   int? _viewTimerSecs;
 
   @override
   int? get photoViewTimerSecs => _viewTimerSecs;
-
   @override
   void photoClearViewTimer() {
     _viewTimerSecs = null;
@@ -178,11 +353,74 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   void photoSetPreview(String base64) {
     setState(() {
       _pendingPhotoBase64 = base64;
+      // Foto, video, & lokasi tidak boleh tampil bareng di preview.
+      _pendingVideoPath = null;
+      _pendingVideoPoster = null;
+      _pendingVideoMs = 0;
+      _pendingVideoOnce = false;
+      _pendingLocation = null;
       _viewTimerSecs = null;
       _inputFocus.requestFocus();
     });
     _scrollToBottom();
   }
+
+  // ── Kontrak video (private) ──
+  @override
+  bool get videoSendEnabled => true;
+
+  @override
+  String? get pendingVideoPath => _pendingVideoPath;
+
+  @override
+  int get pendingVideoMs => _pendingVideoMs;
+
+  /// Kontrak ChatSendMixin: video pending (router tombol kirim).
+  @override
+  String? get sendPendingVideoPath => _pendingVideoPath;
+
+  @override
+  bool get videoOnceSelected => _pendingVideoOnce;
+
+  @override
+  void videoSetOnce(bool value) {
+    setState(() => _pendingVideoOnce = value);
+  }
+
+  @override
+  void videoSetPreview({
+    required String path,
+    required String posterBase64,
+    required int durationMs,
+  }) {
+    setState(() {
+      _pendingVideoPath = path;
+      _pendingVideoPoster = posterBase64;
+      _pendingVideoMs = durationMs;
+      _pendingVideoOnce = false; // default: video biasa
+      // Video bukan foto: buang preview foto + timer view-once. Lokasi juga
+      // (hanya satu preview yang boleh tampil).
+      _pendingPhotoBase64 = null;
+      _pendingLocation = null;
+      _viewTimerSecs = null;
+      _inputFocus.requestFocus();
+    });
+    _scrollToBottom();
+  }
+
+  @override
+  void videoClearPreview() {
+    if (!mounted) return;
+    setState(() {
+      _pendingVideoPath = null;
+      _pendingVideoPoster = null;
+      _pendingVideoMs = 0;
+      _pendingVideoOnce = false;
+    });
+  }
+
+  /// Dibaca composer untuk menampilkan pratinjau video (thumbnail base64).
+  String? get pendingVideoPosterB64 => _pendingVideoPoster;
 
   // ── Kontrak ChatSendMixin ──
   @override
@@ -356,6 +594,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   // history lama tidak ikut menghapus pending.
   final Set<String> _confirmedPhotoIds = {};
   final Set<String> _confirmedVoiceIds = {};
+  final Set<String> _confirmedVideoIds = {};
   late final DateTime _openedAt;
 
   @override
@@ -489,6 +728,29 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
             m.timestamp.isAfter(_openedAt) &&
             _confirmedVoiceIds.add(m.id)) {
           final idx = _pending.indexWhere((p) => p.type == 'voice');
+          if (idx != -1) {
+            _pending.removeAt(idx);
+            changed = true;
+          }
+        }
+      }
+      // Video (biasa / sekali lihat): FIFO seperti foto — pending berisi
+      // base64, versi server berisi PATH, jadi dicocokkan via FIFO bukan isi.
+      // Tanpa cabang ini bubble pending TIDAK pernah dibuang → tetap kotak
+      // (dan balapan dengan versi server yang sudah tampil).
+      for (final m in msgs) {
+        if (mySenderIds.contains(m.senderId) &&
+            (m.type == 'video' ||
+                m.type == 'video_once' ||
+                m.type == 'video_once_expired') &&
+            m.timestamp.isAfter(_openedAt) &&
+            _confirmedVideoIds.add(m.id)) {
+          final idx = _pending.indexWhere(
+            (p) =>
+                p.type == 'video' ||
+                p.type == 'video_once' ||
+                p.type == 'video_once_expired',
+          );
           if (idx != -1) {
             _pending.removeAt(idx);
             changed = true;
@@ -680,6 +942,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     _inputFocus.dispose();
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -852,6 +1116,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   String? _lastPartnerMsgId;
   DateTime? _lastPartnerMsgTime;
   String? _pendingPhotoBase64;
+
+  // ── Preview VIDEO (private chat) ──
+  String? _pendingVideoPath;
+  String? _pendingVideoPoster; // base64 JPEG (thumbnail)
+  int _pendingVideoMs = 0;
+  // Sekali lihat (bukan timer detik — video durasinya = panjang video).
+  bool _pendingVideoOnce = false;
 
   void _subscribeTyping() {
     _typingSub?.cancel();
@@ -1233,20 +1504,84 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   }
 
 
+  /// AppBar mode search (ala WhatsApp): tombol kembali + field cari +
+  /// penghitung hasil + panah atas/bawah.
+  AppBar _buildSearchAppBar() {
+    final s = context.read<LocaleProvider>().s;
+    final total = _matchIds.length;
+    final label = total == 0 ? '0/0' : '${_matchIndex + 1}/$total';
+    return AppBar(
+      toolbarHeight: 56.0,
+      titleSpacing: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        tooltip: s.btnCancel,
+        onPressed: _closeSearch,
+      ),
+      title: TextField(
+        controller: _searchCtrl,
+        focusNode: _searchFocus,
+        autofocus: true,
+        onChanged: _onSearchChanged,
+        textInputAction: TextInputAction.search,
+        style: AppText.body.copyWith(color: Colors.white),
+        cursorColor: Colors.white,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: s.chatSearchHint,
+          hintStyle: AppText.body.copyWith(color: Colors.white70),
+          border: InputBorder.none,
+        ),
+      ),
+      actions: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (_searchQuery.trim().isNotEmpty)
+              Text(
+                label,
+                style: AppText.label.copyWith(color: Colors.white),
+              ),
+            _SearchNavButton(
+              icon: Icons.keyboard_arrow_up,
+              enabled: total > 0,
+              onTap: () => _gotoMatch(-1),
+            ),
+            _SearchNavButton(
+              icon: Icons.keyboard_arrow_down,
+              enabled: total > 0,
+              onTap: () => _gotoMatch(1),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('PrivateChat');
     context.watch<ThemeProvider>();
-    // watch (bukan read): toggle callAllEnabled dari panel admin harus
-    // langsung memunculkan/menyembunyikan tombol call tanpa restart.
-    final auth = context.watch<AuthProvider>();
+    // select per field (bukan watch penuh): heartbeat presence AuthProvider
+    // berubah tiap beberapa detik — watch membuat SELURUH layar chat
+    // rebuild tiap kali. Field yang dipakai render tercantum di bawah.
+    final callAllEnabled = context.select<AuthProvider, bool>(
+      (a) => a.callAllEnabled,
+    );
+    final meRegistered = context.select<AuthProvider, bool>(
+      (a) => a.profile?.isRegistered ?? false,
+    );
+    final myUid = context.select<AuthProvider, String?>((a) => a.uid);
     final chat = context.read<ChatProvider>();
     // select: rebuild hanya saat isBlocked untuk UID lawan bicara berubah
     final isBlocked = context.select<ChatProvider, bool>(
       (c) => c.isBlocked(widget.otherUid),
     );
     final s = context.watch<LocaleProvider>().s;
-    dlog('[CHAT-BUILD] callAllEnabled=${auth.callAllEnabled} '
-        'meRegistered=${auth.profile?.isRegistered} '
+    dlog('[CHAT-BUILD] callAllEnabled=$callAllEnabled '
+        'meRegistered=$meRegistered '
         'otherRegistered=$_otherRegistered/${widget.otherRegistered}');
     // Saat unblock: re-subscribe status realtime
     if (_wasBlocked && !isBlocked) {
@@ -1285,7 +1620,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       if (cityPart.isNotEmpty && cityPart != countryPart) cityPart,
       if (countryPart.isNotEmpty) countryPart,
     ].where((e) => e.isNotEmpty).join(', ');
-    final points = context.watch<PointsProvider>().points;
+    final points = context.select<PointsProvider, int>((p) => p.points);
+    final pointsEnabled = context.select<PointsProvider, bool>(
+      (p) => p.enabled,
+    );
 
     // Show online bonus toast jika ada yang nunggu (sekali per buka chat).
     if (!_bonusToastScheduled) {
@@ -1305,9 +1643,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     final toolbarH = headerRows <= 2 ? 56.0 : 56.0 + (headerRows - 2) * 15.0;
 
     return PopScope(
-      canPop: !inSelection,
+      // Back menutup search dulu, lalu mode seleksi, baru keluar layar.
+      canPop: !inSelection && !_searching,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && inSelection) clearSelection();
+        if (didPop) return;
+        if (_searching) {
+          _closeSearch();
+        } else if (inSelection) {
+          clearSelection();
+        }
       },
       child: Scaffold(
       extendBody: true,
@@ -1316,7 +1660,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       // (satu halaman tetap). List & composer mengatur inset sendiri
       // via viewInsets/MediaQuery — layout konten tidak meng-krem bg.
       resizeToAvoidBottomInset: false,
-      appBar: inSelection ? buildSelectionAppBar() : AppBar(
+      appBar: inSelection
+          ? buildSelectionAppBar()
+          : _searching
+          ? _buildSearchAppBar()
+          : AppBar(
         toolbarHeight: toolbarH,
         titleSpacing: 0,
         title: Row(
@@ -1473,8 +1821,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           // Admin bisa membuka tombol call untuk SEMUA user (termasuk
           // anon) via app_settings.call_all_enabled — realtime mengikuti
           // perubahan toggle di panel admin.
-          if (auth.callAllEnabled ||
-              ((auth.profile?.isRegistered ?? false) &&
+          if (callAllEnabled ||
+              (meRegistered &&
                   (_otherRegistered || widget.otherRegistered)))
             PopupMenuButton(
               padding: EdgeInsets.zero,
@@ -1528,7 +1876,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
               borderRadius: BorderRadius.circular(14),
             ),
             onSelected: (val) {
-              if (val == 'follow') {
+              if (val == 'search') {
+                _openSearch();
+              } else if (val == 'follow') {
                 final social = context.read<SocialProvider>();
                 social.follow(widget.otherUid);
                 ScaffoldMessenger.of(
@@ -1541,7 +1891,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                   context,
                 ).showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
               } else if (val == 'block') {
-                chat.blockUser(auth.uid!, widget.otherUid);
+                chat.blockUser(myUid!, widget.otherUid);
                 ScaffoldMessenger.of(
                   context,
                 ).showSnackBar(SnackBar(content: Text(s.blockSuccess)));
@@ -1550,6 +1900,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
               }
             },
             itemBuilder: (_) => <PopupMenuEntry<String>>[
+              PopupMenuItem(
+                value: 'search',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.search_rounded, size: 20),
+                  title: Text(s.btnSearch),
+                ),
+              ),
+              const PopupMenuDivider(height: 1),
               PopupMenuItem(
                 value: 'follow',
                 child: ListTile(
@@ -1690,6 +2050,28 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                             for (final m in all)
                               if (m.isDeleted) m.id,
                           };
+                          // Search chat: cocokkan sekali per emission juga
+                          // (bukan per bubble). Urutan terbaru-dulu untuk
+                          // navigasi ala WhatsApp.
+                          final searching = _searching &&
+                              _searchQuery.trim().isNotEmpty;
+                          _matchIds = searching
+                              ? searchChatMatches(all, _searchQuery)
+                              : const [];
+                          _matchSet = _matchIds.toSet();
+                          if (_matchIndex >= _matchIds.length) {
+                            _matchIndex = 0;
+                          }
+                          if (searching) {
+                            for (final id in _matchIds) {
+                              _searchKeys.putIfAbsent(id, () => GlobalKey());
+                            }
+                            _searchKeys.removeWhere(
+                              (id, _) => !_matchSet.contains(id),
+                            );
+                          } else if (_searchKeys.isNotEmpty) {
+                            _searchKeys.clear();
+                          }
                           // Selipkan chip tanggal (Hari ini/Kemarin/tanggal) di antara grup hari,
                           // pola WhatsApp — item list berisi pesan + separator tanggal.
                           final items = <ChatItem>[];
@@ -1737,7 +2119,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                 return DateChip(label: item.dateLabel!);
                               }
                               final msg = item.msg!;
-                              final isMe = msg.senderId == auth.uid;
+                              final isMe = msg.senderId == myUid;
                               final isPending = msg.id.startsWith('pending-');
                               final isRead =
                                   isMe &&
@@ -1751,10 +2133,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                                   msg.type == 'image' &&
                                   msg.imageData.isEmpty &&
                                   di >= 50;
+                              final searchKey = searching
+                                  ? _searchKeys[msg.id]
+                                  : null;
                               return MessageBubble(
-                                key: ValueKey(msg.id),
+                                key: searchKey ?? ValueKey(msg.id),
                                 link: linkFor(msg.id),
                                 msg: msg,
+                                searchQuery: searching
+                                    ? _searchQuery.trim()
+                                    : '',
                                 chatKey: cacheKeyFor(widget.chatId),
                                 isMe: isMe,
                                 isRead: isRead,
@@ -1786,7 +2174,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           );
                         },
                       ),
-                      if (context.watch<PointsProvider>().enabled)
+                      if (pointsEnabled)
                         Positioned(
                           top: 8,
                           right: 12,
@@ -1975,7 +2363,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           },
                           onSendPhoto: () {
                             setState(() => _showAttachRow = false);
-                            photoPickFromGalleryAndSend();
+                            photoPickFromGalleryToPreview();
                           },
                           onSendViewOnce: () {
                             setState(() => _showAttachRow = false);
@@ -1986,10 +2374,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           onTyping: _sendTypingSignal,
                           // Koin & hadiah hanya bila sistem koin aktif —
                           // hilang total saat dimatikan admin.
-                          onSendCoin: context.watch<PointsProvider>().enabled
+                          onSendCoin: pointsEnabled
                               ? _showSendCoinDialog
                               : null,
-                          onOpenGiftPanel: context.watch<PointsProvider>().enabled
+                          onSendLocation: _sendLocation,
+                          pendingLocation: _pendingLocation,
+                          onCancelLocation: _pendingLocation != null
+                              ? () => setState(() => _pendingLocation = null)
+                              : null,
+                          onOpenGiftPanel: pointsEnabled
                               ? _showGiftPicker
                               : null,
                           pendingPhotoBase64: _pendingPhotoBase64,
@@ -1997,13 +2390,38 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                               ? () => setState(() {
                                     _pendingPhotoBase64 = null;
                                     _viewTimerSecs = null;
+                                    photoClearPreviewState();
                                   })
+                              : null,
+                          photoHd: photoHd,
+                          onHdChanged: _pendingPhotoBase64 != null
+                              ? (v) => setState(() => photoHd = v)
                               : null,
                           viewTimerSecs: _viewTimerSecs,
                           onViewTimerChanged: _pendingPhotoBase64 != null
                               ? (v) =>
                                   setState(() => _viewTimerSecs = v)
                               : null,
+                          // ── Video (private) ──
+                          onSendVideo: () {
+                            if (mounted) {
+                              setState(() => _showAttachRow = false);
+                            }
+                            unawaited(videoPickToPreview());
+                          },
+                          pendingVideoPoster: _pendingVideoPoster,
+                          pendingVideoPath: _pendingVideoPath,
+                          pendingVideoMs: _pendingVideoMs,
+                          videoOnce: _pendingVideoOnce,
+                          onVideoOnceChanged: (v) =>
+                              setState(() => _pendingVideoOnce = v),
+                          videoCompressing: videoCompressProgress,
+                          onCancelVideo: () {
+                            if (mounted) {
+                              setState(() => _showAttachRow = false);
+                            }
+                            videoClearPreview();
+                          },
                           mentionCandidates: _mentionCandidates,
                           mentionAllowAll: false,
                         )
@@ -2110,6 +2528,36 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     );
   }
 
+}
+
+/// Tombol panah navigasi hasil search — rapat tanpa jeda atas-bawah
+/// (InkWell 32x32, tanpa padding IconButton bawaan).
+class _SearchNavButton extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+  const _SearchNavButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: enabled ? onTap : null,
+      child: SizedBox(
+        width: 32,
+        height: 32,
+        child: Icon(
+          icon,
+          color: enabled ? Colors.white : Colors.white38,
+          size: 24,
+        ),
+      ),
+    );
+  }
 }
 
 

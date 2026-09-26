@@ -20,10 +20,69 @@ Future<void> showStatDetailSheet(
   if (!context.mounted) return;
 
   final key = item.$5;
-  var list = (detail[key] as List<dynamic>?) ?? const [];
+  // 4 kunci user dimuat ber-paginasi (RPC admin_stats_users_page) supaya
+  // sheet tidak menarik full list profiles; kunci lain (rooms/messages)
+  // kecil & teragregasi → tetap dari detail seperti dulu.
+  const userKinds = {
+    'users_all': 'all',
+    'users_active': 'active',
+    'users_registered': 'registered',
+    'users_anonymous': 'anonymous',
+  };
+  const pageSize = 100;
+  final userKind = userKinds[key];
+  var list = <dynamic>[];
+  var total = 0;
+  var loadingMore = false;
+  if (userKind != null) {
+    final first = await admin.listStatsUsers(userKind, limit: pageSize);
+    if (!context.mounted) return;
+    list = (first['items'] as List<dynamic>?) ?? const [];
+    total = (first['total'] as num?)?.toInt() ?? list.length;
+  } else {
+    list = (detail[key] as List<dynamic>?) ?? const [];
+    total = list.length;
+  }
+
+  // Dipanggil dari scroll listener di dalam setSheet (agar rebuild),
+  // dan dari refresh flow. Mengembalikan true bila list bertambah.
+  Future<bool> loadMore() async {
+    if (userKind == null || loadingMore || list.length >= total) return false;
+    loadingMore = true;
+    final res = await admin.listStatsUsers(
+      userKind,
+      limit: pageSize,
+      offset: list.length,
+    );
+    final before = list.length;
+    list = [
+      ...list,
+      ...((res['items'] as List<dynamic>?) ?? const []),
+    ];
+    total = (res['total'] as num?)?.toInt() ?? total;
+    loadingMore = false;
+    return list.length > before;
+  }
+
   // Refresh manual di dalam sheet — list beku saat dibuka + cache
   // provider 60 dtk, tanpa ini daftar (mis. anon) terlihat tidak update.
   var refreshing = false;
+
+  Future<void> doRefresh(StateSetter setSheet) async {
+    setSheet(() => refreshing = true);
+    if (userKind != null) {
+      final first = await admin.listStatsUsers(userKind, limit: pageSize);
+      if (!context.mounted) return;
+      list = (first['items'] as List<dynamic>?) ?? const [];
+      total = (first['total'] as num?)?.toInt() ?? list.length;
+    } else {
+      final d = await admin.fetchStatsDetail(force: true);
+      if (!context.mounted) return;
+      list = (d[key] as List<dynamic>?) ?? const [];
+      total = list.length;
+    }
+    if (context.mounted) setSheet(() => refreshing = false);
+  }
 
   showModalBottomSheet(
     context: context,
@@ -331,13 +390,31 @@ Future<void> showStatDetailSheet(
         );
       }
 
+  // Listener scroll dipasang SEKALI (builder jalan ulang tiap setSheet;
+  // pasang di sini akan menumpuk listener + bocor).
+  var scrollHooked = false;
+
       return SafeArea(
         child: DraggableScrollableSheet(
           expand: false,
           initialChildSize: 0.7,
           maxChildSize: 0.9,
           builder: (ctx, scrollCtrl) => StatefulBuilder(
-        builder: (ctx, setSheet) => Column(
+            builder: (ctx, setSheet) {
+              if (!scrollHooked && userKind != null) {
+                scrollHooked = true;
+                scrollCtrl.addListener(() {
+                  // Infinite scroll khusus kunci user (paginasi server).
+                  if (!scrollCtrl.hasClients) return;
+                  if (scrollCtrl.position.pixels >=
+                      scrollCtrl.position.maxScrollExtent - 300) {
+                    loadMore().then((grew) {
+                      if (grew && ctx.mounted) setSheet(() {});
+                    });
+                  }
+                });
+              }
+              return Column(
             children: [
               Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -347,7 +424,7 @@ Future<void> showStatDetailSheet(
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${item.$1} (${list.length})',
+                        '${item.$1} ($total)',
                         style: AppText.titleEmphasis,
                       ),
                     ),
@@ -363,18 +440,7 @@ Future<void> showStatDetailSheet(
                       tooltip: s.btnRefresh,
                       onPressed: refreshing
                           ? null
-                          : () async {
-                              setSheet(() => refreshing = true);
-                              final d =
-                                  await admin.fetchStatsDetail(force: true);
-                              if (ctx.mounted) {
-                                setSheet(() {
-                                  list =
-                                      (d[key] as List<dynamic>?) ?? const [];
-                                  refreshing = false;
-                                });
-                              }
-                            },
+                          : () => doRefresh(setSheet),
                     ),
                     IconButton(
                       icon: Icon(Icons.close),
@@ -397,8 +463,17 @@ Future<void> showStatDetailSheet(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                         // Builder = baris (termasuk fetch avatar) hanya
                         // jalan untuk viewport yang tampil → lazy & ringan.
-                        itemCount: list.length,
+                        itemCount: list.length + (loadingMore ? 1 : 0),
                         itemBuilder: (_, i) {
+                          if (i >= list.length) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              ),
+                            );
+                          }
                           if (key == 'rooms_active') {
                             final r = list[i] as Map<String, dynamic>;
                             return row(
@@ -421,7 +496,8 @@ Future<void> showStatDetailSheet(
                       ),
               ),
             ],
-          ),
+          );
+            },
       ),
         ),
       );

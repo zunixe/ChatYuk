@@ -89,9 +89,15 @@ class TimelineProvider extends ChangeNotifier {
   Future<Map<String, dynamic>> createPost({
     required String text,
     List<String> imagePaths = const [],
+    List<Map<String, int>> imageDims = const [],
     String visibility = 'public',
   }) =>
-      _service.createPost(text: text, imagePaths: imagePaths, visibility: visibility);
+      _service.createPost(
+        text: text,
+        imagePaths: imagePaths,
+        imageDims: imageDims,
+        visibility: visibility,
+      );
 
   // ── Passthrough aksi post (dipakai PostCard — hindari instansiasi
   //    TimelineService inline di widget, biar DI & testable) ──
@@ -318,6 +324,9 @@ class TimelineProvider extends ChangeNotifier {
       'text': row['text'] ?? '',
       'imagePath': row['image_path'] ?? '',
       'images': images is List ? images : null,
+      'imageW': (row['image_w'] as num?)?.toInt() ?? 0,
+      'imageH': (row['image_h'] as num?)?.toInt() ?? 0,
+      'imageDims': row['image_dims'] is List ? row['image_dims'] : null,
       'visibility': row['visibility'] ?? 'public',
       'likeCount': row['like_count'] ?? 0,
       'commentCount': row['comment_count'] ?? 0,
@@ -363,10 +372,20 @@ class TimelineProvider extends ChangeNotifier {
   /// True bila ada cache (segar atau tidak) untuk postId.
   bool hasCommentsCache(String postId) => _commentCache.containsKey(postId);
 
+  /// Max post yang komentarnya dipegang di RAM (buang tertua).
+  static const int _commentPostCap = 20;
+
   /// Simpan hasil fetch komentar ke cache.
   void cacheComments(String postId, List<Map<String, dynamic>> comments) {
     _commentCache[postId] = List.from(comments);
     _commentCacheAt[postId] = DateTime.now();
+    // Cap jumlah post: tiap buka komentar post baru menambah 1 entri —
+    // tanpa batas, scroll timeline seharian menumpuk puluhan list.
+    while (_commentCache.length > _commentPostCap) {
+      final oldest = _commentCache.keys.first;
+      _commentCache.remove(oldest);
+      _commentCacheAt.remove(oldest);
+    }
   }
 
   /// Tambah satu komentar baru ke cache (setelah submit berhasil).

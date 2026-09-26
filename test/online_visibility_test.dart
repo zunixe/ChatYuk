@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chatyuk/models/user_model.dart';
 import 'package:chatyuk/services/chat_service.dart';
 
 Map<String, dynamic> _row(String id, String status) => {
@@ -206,6 +207,38 @@ void main() {
           reason: 'entri terbaru tetap ada');
       expect(keys, isNot(contains('avatars/cache-0.jpg')),
           reason: 'entri tertua yang ter-evict lebih dulu (FIFO)');
+    });
+  });
+
+  group('about di kartu Online (RPC online list)', () {
+    UserModel fromRpc(Map<String, dynamic> row) =>
+        UserModel.fromMap('${row['id']}', Map<String, dynamic>.from(row));
+
+    test('kolom about dari RPC dipetakan ke model', () {
+      final u = fromRpc({
+        'id': 'u1',
+        'nickname': 'N1',
+        'status': 'online',
+        'about': 'Suka ngopi',
+      });
+      expect(u.about, 'Suka ngopi');
+    });
+
+    test('about kosong/hilang → model aman (kartu sembunyikan baris)', () {
+      expect(fromRpc({'id': 'u2', 'about': ''}).about, '');
+      expect(fromRpc({'id': 'u3'}).about, '');
+    });
+
+    test('about dibatasi server (privasi) → kartu tampil apa adanya', () {
+      // Server mengirim '' bila about_visibility tidak mengizinkan;
+      // kartu hanya menampilkan bila non-kosong setelah trim.
+      const shown = ['Halo', '  Halo  '];
+      for (final a in shown) {
+        expect(fromRpc({'id': 'u', 'about': a}).about.trim().isNotEmpty,
+            isTrue);
+      }
+      expect(fromRpc({'id': 'u', 'about': '   '}).about.trim().isEmpty,
+          isTrue);
     });
   });
 }

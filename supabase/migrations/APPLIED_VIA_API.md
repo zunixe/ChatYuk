@@ -28,6 +28,27 @@
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
 
+## 2026-09-27 — 20260927000000_posts_image_dims.sql
+
+- **Status:** SUDAH TERAPPLIED di remote DB `fohcucyyejdryryoxitm` pada 2026-09-27.
+- **Isi:** kolom `posts.image_w`/`image_h`/`image_dims` (rasio asli foto untuk
+  feed proporsional ala Threads). `create_post` +param `p_image_dims jsonb`
+  (4-arg; overload 3-arg `text,text[],text` di-DROP). Menyentuh FROZEN
+  `list_posts` (header `-- menyentuh: list_posts`) → tambah output
+  `images`/`imageW`/`imageH`/`imageDims`; **hanya 4 baris JSON ditambah,
+  0 baris dihapus** (diff snapshot = aman, tidak ada cabang hilang).
+- **Cara apply:** Management API POST /v1/projects/{ref}/database/query
+  (token `.env` baris SUPABASE_ACCESS_TOKEN). Versi dicatat di
+  `supabase_migrations.schema_migrations` (20260927000000).
+- **Snapshot:** `list_posts` di-regenerate via `scripts/snapshot_functions.sh`
+  (30/30 fungsi) — diff = hanya field baru itu.
+- **Verifikasi live:** `cols_ok=3` (kolom ada), `lp_count=1` (satu overload
+  list_posts), `cp_4arg` ada, `lp_has_dims` di `pg_get_functiondef` ✅.
+  Semua 19 file `supabase/tests/*.sql` hijau (schema_sync 31/31).
+- **Rollback (bila perlu):** `alter table posts drop column image_w, drop
+  column image_h, drop column image_dims;` lalu re-apply `list_posts` v6 dari
+  `supabase/snapshots/functions.sql` lama + `create_post` 3-arg.
+
 ## 2026-09-24 — 20260924110000_admin_stats_detail_gender_photo.sql
 
 - **Status:** SUDAH TERAPPLIED di remote DB fohcucyyejdryryoxitm pada 2026-09-24.
@@ -1010,3 +1031,39 @@ Audit security end-to-end (2 subagent + verifikasi DB live). Temuan & fix:
   - `20260922110000_story_tray_privacy`: `story_tray()` berjalan (`jsonb_typeof` = array) & definisi di DB memuat masking `privacy_can_view(...,'profile_photo',...)` ✅
 - **Aksi:** `insert into supabase_migrations.schema_migrations (version) values ('20260922100000'),('20260922110000') on conflict do nothing`.
 - **Verifikasi:** urutan versi teratas kini `…20260922110000, 20260922100000, 20260922000000` ✅
+
+## 2026-09-26 — 20260926050000_admin_list_deleted_order (APPLY)
+- **Bug:** `LIMIT/OFFSET` di subquery union tanpa `ORDER BY` dalam → halaman 2+ acak/duplikat saat data banyak.
+- **Fix:** `order by sort_at desc nulls last` di dalam subquery; dasar = definisi live 20260926000000 (device_count/location_count dipertahankan). Bukan fungsi frozen.
+- **Apply:** Management API POST /v1/projects/.../database/query (respons `[]` = sukses).
+- **Aksi:** `insert into supabase_migrations.schema_migrations (version) values ('20260926050000') on conflict do nothing`.
+- **Verifikasi:** definisi live memuat `order by sort_at desc nulls last` + `limit greatest` (`fixed: true`); paginasi deterministik di live (page1=100, page2=5, overlap=0, batas urutan benar).
+
+## 2026-09-26 — 20260926060000/070000/080000/090000 admin scale Fase 2 (APPLY)
+- **26060000** `admin_list_dummies_page`: kolom `unread` dari 50× correlated
+  subquery → 1× CTE agregasi GROUP BY + join. `ai_persona` tetap dikirim
+  (dipakai card+sheet). Verifikasi: definisi live memuat GROUP BY.
+- **26070000** `admin_list_chats_page`: `total` count+EXISTS → estimasi
+  reltuples; msg_count + max non-call → 1× GROUP BY. Semantik identik
+  (filter, effective_last, aturan call-tidak-menentukan-urut). Verifikasi:
+  definisi live memuat agregasi + reltuples.
+- **26080000** `admin_user_detail`: message_count via agregasi;
+  location_history dibatasi 200 terbaru; kunci JSON tidak berubah.
+  Verifikasi: definisi live memuat limit 200 + GROUP BY.
+- **26090000** `admin_stats_users_page` (FUNGSI BARU, bukan replace):
+  daftar user statistik ber-paginasi (kind all/active/registered/anonymous,
+  filter/bentuk/urut sama dengan detail). `admin_stats_detail` (FROZEN)
+  tidak disentuh. Dipakai stat_detail_sheet + infinite scroll; usermap
+  tetap pakai detail (cache 60 dtk, cap 300 marker).
+- **Apply:** Management API + catat `schema_migrations` (4 versi).
+
+## 2026-09-26 — 20260926100000_room_voice_stage (APPLY)
+- **Fitur:** voice stage global room (audio-only, max 6 mic, admin/owner mute paksa).
+- **Isi:** tabel `room_voice_signals` (+index, RLS global/member, realtime) +
+  `room_voice_speakers` (+index, RLS select saja); RPC `room_voice_join`
+  (enforce max 6 via heartbeat 45 dtk) / `heartbeat` / `leave` /
+  `mute` (owner/app-admin, kirim sinyal v_mute) / `sweep`; cron
+  `sweep_room_voice` tiap menit (jobid 26).
+- **Apply:** Management API (respons `[{"schedule":26}]`).
+- **Aksi:** catat `schema_migrations` 20260926100000.
+- **Verifikasi:** kedua tabel ada; 5 RPC ada; cron job 26 aktif.

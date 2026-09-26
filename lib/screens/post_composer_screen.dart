@@ -15,14 +15,29 @@ import '../core/cache/post_photo_cache.dart';
 import '../widgets/emoji_picker_sheet.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/theme_provider.dart';
+import '../core/perf/perf_probe.dart';
 
-/// Proses foto (resize + JPEG) di isolate sebelum upload.
-Uint8List? _processPostImage(List<int> bytes) {
+/// Hasil proses satu foto: bytes JPEG + lebar/tinggi (rasio asli).
+class _ProcessedPhoto {
+  final Uint8List bytes;
+  final int width;
+  final int height;
+  const _ProcessedPhoto(this.bytes, this.width, this.height);
+}
+
+/// Proses foto (resize + JPEG) di isolate sebelum upload — sekaligus
+/// kembalikan dimensi supaya composer bisa kirim `image_dims` ke server
+/// (rasio feed asli ala Threads, tanpa layout shift).
+_ProcessedPhoto? _processPostImageDim(List<int> bytes) {
   try {
     final decoded = img.decodeImage(Uint8List.fromList(bytes));
     if (decoded == null) return null;
     final resized = img.copyResize(decoded, width: 1200);
-    return Uint8List.fromList(img.encodeJpg(resized, quality: 82));
+    return _ProcessedPhoto(
+      Uint8List.fromList(img.encodeJpg(resized, quality: 82)),
+      resized.width,
+      resized.height,
+    );
   } catch (_) {
     return null;
   }
@@ -43,6 +58,9 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
   final _picker = ImagePicker();
   final _textCtrl = TextEditingController();
   final List<Uint8List> _images = [];
+  // Dimensi (w,h) sejajar dengan _images — dikirim ke server supaya feed
+  // bisa menampilkan rasio asli tanpa layout shift.
+  final List<({int w, int h})> _imageDims = [];
   String _visibility = 'public';
   bool _posting = false;
   bool _picking = false;
@@ -73,13 +91,16 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       final results = await Future.wait(
         picked.map((p) async {
           final bytes = await p.readAsBytes();
-          return compute(_processPostImage, bytes);
+          return compute(_processPostImageDim, bytes);
         }),
       );
       if (!mounted) return;
       setState(() {
         for (final r in results) {
-          if (r != null && _images.length < _maxImages) _images.add(r);
+          if (r != null && _images.length < _maxImages) {
+            _images.add(r.bytes);
+            _imageDims.add((w: r.width, h: r.height));
+          }
         }
       });
     } finally {
@@ -99,11 +120,12 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       );
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
-      final processed = await compute(_processPostImage, bytes);
+      final processed = await compute(_processPostImageDim, bytes);
       if (!mounted) return;
       setState(() {
         if (processed != null && _images.length < _maxImages) {
-          _images.add(processed);
+          _images.add(processed.bytes);
+          _imageDims.add((w: processed.width, h: processed.height));
         }
       });
     } finally {
@@ -262,6 +284,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
       await context.read<TimelineProvider>().createPost(
         text: text,
         imagePaths: paths,
+        imageDims: [for (final d in _imageDims) {'w': d.w, 'h': d.h}],
         visibility: _visibility,
       );
       if (!mounted) return;
@@ -283,6 +306,7 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('PostComposer');
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final auth = context.watch<AuthProvider>();
@@ -699,7 +723,10 @@ class _PostComposerScreenState extends State<PostComposerScreen> {
                 top: 4,
                 right: 4,
                 child: GestureDetector(
-                  onTap: () => setState(() => _images.removeAt(idx)),
+                  onTap: () => setState(() {
+                    _images.removeAt(idx);
+                    if (idx < _imageDims.length) _imageDims.removeAt(idx);
+                  }),
                   child: Container(
                     width: 24,
                     height: 24,

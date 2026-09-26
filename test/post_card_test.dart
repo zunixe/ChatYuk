@@ -10,18 +10,23 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:chatyuk/providers/auth_provider.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/social_provider.dart';
 import 'package:chatyuk/providers/timeline_provider.dart';
 import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/services/auth_service.dart';
+import 'package:chatyuk/services/social_service.dart';
 import 'package:chatyuk/services/timeline_service.dart';
 import 'package:chatyuk/widgets/post_card.dart';
 
+import 'supabase_test_client.dart';
 import 'test_helper.dart';
 
 /// Fase 5 — PostCard: render + perilaku kunci (logic-only, tanpa jaringan).
 class MockTimelineService extends Mock implements TimelineService {}
 
 class MockAuthService extends Mock implements AuthService {}
+
+class MockSocialService extends Mock implements SocialService {}
 
 Map<String, dynamic> _post({
   String id = 'p1',
@@ -33,6 +38,9 @@ Map<String, dynamic> _post({
   bool boosted = false,
   bool friend = false,
   bool liked = false,
+  List<String>? images,
+  int imageW = 0,
+  int imageH = 0,
 }) =>
     {
       'id': id,
@@ -46,12 +54,19 @@ Map<String, dynamic> _post({
       'isFriend': friend,
       'isLiked': liked,
       'isFollowing': false,
+      if (images != null) 'images': images, // ignore: use_null_aware_elements
+      if (imageW > 0) 'imageW': imageW,
+      if (imageH > 0) 'imageH': imageH,
       // Avatar inline PNG kecil → _AuthorAvatar resolve SINKRON (tak
       // fallback ke ProfileAvatar yang menjadwalkan timer retry 300ms).
       'authorAvatar':
           'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=',
       'createdAt': DateTime.now().toUtc().toIso8601String(),
     };
+
+/// PNG 1×1 transparan (base64) untuk uji thumb foto.
+const _pngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 void main() {
   late MockTimelineService timeline;
@@ -88,9 +103,16 @@ void main() {
     final locale = LocaleProvider();
     final tp = TimelineProvider(service: timeline, autoInit: false);
     final ap = AuthProvider(authService: auth, autoInit: false);
+    // PostCard baca status follow global (SocialProvider.isFollowing).
+    final sp = SocialProvider(
+      service: MockSocialService(),
+      sb: fakeSupabaseClientNoTicker(),
+      autoInit: false,
+    );
     addTearDown(() {
       tp.dispose();
       ap.dispose();
+      sp.dispose();
       locale.dispose();
     });
     await tester.pumpWidget(
@@ -99,6 +121,7 @@ void main() {
           ChangeNotifierProvider.value(value: locale),
           ChangeNotifierProvider.value(value: tp),
           ChangeNotifierProvider.value(value: ap),
+          ChangeNotifierProvider.value(value: sp),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -135,6 +158,49 @@ void main() {
   testWidgets('post boosted & friend menampilkan badge tanpa error',
       (tester) async {
     await pump(tester, _post(boosted: true, friend: true));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('foto 1:1 (imageW==imageH) → tinggi ≈ lebar, tanpa error',
+      (tester) async {
+    await pump(
+      tester,
+      _post(images: [_pngBase64], imageW: 1000, imageH: 1000),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('foto 9:16 portrait → tinggi ter-clamp max 1.8×lebar',
+      (tester) async {
+    await pump(
+      tester,
+      _post(images: [_pngBase64], imageW: 1080, imageH: 1920),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('foto 16:9 landscape → tinggi ter-clamp min 0.5×lebar',
+      (tester) async {
+    await pump(
+      tester,
+      _post(images: [_pngBase64], imageW: 1920, imageH: 1080),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('multi-foto (carousel 4:5) tanpa dimensi → tanpa error',
+      (tester) async {
+    await pump(
+      tester,
+      _post(images: [_pngBase64, _pngBase64]),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('post foto tanpa imageW/H (post lama) → fallback aman',
+      (tester) async {
+    await pump(tester, _post(images: [_pngBase64]));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
   });
 

@@ -188,6 +188,8 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     final selected = Set<String>.of(
       provider.settings.exclusions[field] ?? const {},
     );
+    // Pencarian nama — list "kecuali" bisa ratusan entri.
+    final queryCtrl = TextEditingController();
     if (!mounted) return;
 
     final result = await showModalBottomSheet<Set<String>>(
@@ -198,8 +200,17 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
+        var query = '';
         return StatefulBuilder(
-          builder: (ctx, setSheetState) => SafeArea(
+          builder: (ctx, setSheetState) {
+            final filtered = query.isEmpty
+                ? list
+                : list
+                    .where((e) => '${e['nickname'] ?? ''}'
+                        .toLowerCase()
+                        .contains(query.toLowerCase()))
+                    .toList();
+            return SafeArea(
             child: SizedBox(
               height: MediaQuery.of(ctx).size.height * 0.72,
               child: Column(
@@ -230,15 +241,50 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                       ],
                     ),
                   ),
+                  // Kotak pencarian (nama) — mempermudah saat daftar panjang.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: TextField(
+                      controller: queryCtrl,
+                      onChanged: (v) => setSheetState(() => query = v.trim()),
+                      style: TextStyle(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        hintText: s.searchHint,
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        isDense: true,
+                        suffixIcon: query.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  queryCtrl.clear();
+                                  setSheetState(() => query = '');
+                                },
+                              ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
                   Divider(height: 1, color: AppTheme.divider),
                   Expanded(
-                    child: list.isEmpty
-                        ? _EmptyExcludable(s: s)
+                    child: filtered.isEmpty
+                        ? (list.isEmpty
+                            ? _EmptyExcludable(s: s)
+                            : Center(
+                                child: Text(
+                                  s.searchNoResult,
+                                  style: AppText.body.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ))
                         : ListView.builder(
                             padding: const EdgeInsets.symmetric(vertical: 4),
-                            itemCount: list.length,
+                            itemCount: filtered.length,
                             itemBuilder: (_, i) {
-                              final e = list[i];
+                              final e = filtered[i];
                               final uid = '${e['uid'] ?? ''}';
                               final name = '${e['nickname'] ?? uid}';
                               final isFriend = e['is_friend'] == true;
@@ -270,10 +316,12 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 ],
               ),
             ),
-          ),
+          );
+          },
         );
       },
     );
+    queryCtrl.dispose();
     if (result != null && mounted) {
       await provider.updateExclusions(field, result);
     }

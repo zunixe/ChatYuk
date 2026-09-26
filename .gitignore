@@ -84,3 +84,9 @@ xiaomi15_profil.png
 # opencode local tooling
 .opencode/
 .freebuff/
+
+# Artefak debug sesi (screenshot HP, dump layar) — jangan commit
+screencap_*.png
+timeline_screenshot.png
+*_screenshot.png
+threads_*.png

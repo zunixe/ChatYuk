@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart' show ResizeMode;
@@ -34,6 +36,50 @@ class StorageProvider extends ChangeNotifier {
     required String base64,
   }) =>
       service.uploadStoryImage(uid: uid, base64: base64);
+
+  Future<String?> uploadStoryVideo({
+    required String uid,
+    required Uint8List bytes,
+  }) =>
+      service.uploadStoryVideo(uid: uid, bytes: bytes);
+
+  String storyVideoPath(String uid) => service.storyVideoPath(uid);
+  bool isStoryVideoPath(String v) => service.isStoryVideoPath(v);
+
+  Future<File?> compressStoryVideo(
+    String srcPath, {
+    void Function(double progress01)? onProgress,
+    int? startMs,
+    int? durationMs,
+  }) =>
+      service.compressStoryVideo(
+        srcPath,
+        onProgress: onProgress,
+        startMs: startMs,
+        durationMs: durationMs,
+      );
+
+  Future<Uint8List?> storyVideoPoster(String videoPath) =>
+      service.storyVideoPoster(videoPath);
+
+  // ── VIDEO CHAT ──
+  Future<String?> uploadChatVideo({
+    required String chatId,
+    required Uint8List bytes,
+  }) =>
+      service.uploadChatVideo(chatId: chatId, bytes: bytes);
+
+  String chatVideoPath(String chatId) => service.chatVideoPath(chatId);
+  bool isChatVideoPath(String v) => service.isChatVideoPath(v);
+
+  Future<File?> compressChatVideo(
+    String srcPath, {
+    void Function(double progress01)? onProgress,
+  }) =>
+      service.compressChatVideo(srcPath, onProgress: onProgress);
+
+  Future<int> videoDurationMs(String srcPath) =>
+      service.videoDurationMs(srcPath);
 
   Future<String?> uploadRoomIcon({
     required String uid,

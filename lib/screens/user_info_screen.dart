@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../utils.dart';
@@ -16,6 +17,8 @@ import '../widgets/async_photo.dart';
 import '../providers/theme_provider.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
+import 'social_list_screen.dart';
+import '../core/perf/perf_probe.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String userId;
@@ -47,7 +50,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   String _avatarPath = '';
   bool _avatarRetried = false;
   List<UserPhoto> _photos = [];
-  bool _loadingPhotos = true;
   String _status = 'offline';
   StreamSubscription<String>? _statusSub;
 
@@ -57,6 +59,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   bool _friendRequestSent = false;
   bool _subscribed = false;
   bool _busySocial = false;
+
+  // Carousel foto: geser kiri-kanan (avatar + foto terbuka).
+  late final PageController _carouselCtrl = PageController();
+  int _carouselIndex = 0;
 
   @override
   void initState() {
@@ -71,6 +77,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   @override
   void dispose() {
     _statusSub?.cancel();
+    _carouselCtrl.dispose();
     super.dispose();
   }
 
@@ -458,7 +465,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     setState(() {
       _loading = true;
       _loadError = false;
-      _loadingPhotos = true;
     });
     _load();
     _loadPhotos();
@@ -472,7 +478,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           .timeout(_loadTimeout);
       if (mounted) setState(() => _photos = photos);
     } catch (_) {}
-    if (mounted) setState(() => _loadingPhotos = false);
   }
 
   void _showPhotoViewer(List<UserPhoto> photos, int index) {
@@ -491,114 +496,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     );
   }
 
-  /// Tap foto terkunci → bottom sheet pilihan buka (once/perm).
-  Future<void> _onLockedTap(UserPhoto photo) async {
-    final s = context.read<LocaleProvider>().s;
-    final pp = context.read<PointsProvider>();
-    final auth = context.read<AuthProvider>();
-    if (!auth.canUsePaid) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.msgVerifyToUsePaid)));
-      return;
-    }
-    final onceCost = pp.photoUnlockOnce;
-    final permCost = pp.photoUnlockPerm;
-    final mode = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppTheme.bgScreen,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(height: 12),
-            Icon(Icons.lock_outline, size: 36, color: AppTheme.primary),
-            SizedBox(height: 8),
-            Text(s.photoLockedTitle, style: AppText.title),
-            SizedBox(height: 4),
-            Text(
-              s.photoLockedHint,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(
-                Icons.visibility_outlined,
-                color: AppTheme.primary,
-              ),
-              title: Text(s.photoUnlockOnce(onceCost)),
-              onTap: () => Navigator.pop(ctx, 'once'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.lock_open, color: AppTheme.primary),
-              title: Text(s.photoUnlockPerm(permCost)),
-              onTap: () => Navigator.pop(ctx, 'perm'),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-    if (mode == null || !mounted) return;
-    try {
-      final ok = await pp.unlockPhoto(photo.id, mode);
-      if (!mounted) return;
-      if (ok) {
-        if (mode == 'perm') {
-          // Reload supaya foto asli ikut terbuka permanen.
-          await _loadPhotos();
-          if (mounted)
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(s.photoUnlockedToast)));
-        } else {
-          // Lihat sekali: ambil foto asli sementara & tampilkan viewer.
-          // Lewat getPhotosWithAccess (menghormati unlock) — kolom photo
-          // mentah sudah di-revoke dari akses publik.
-          final full = await context
-              .read<AuthProvider>()
-              .getPhotosWithAccess(widget.userId);
-          if (!mounted) return;
-          final match = full.where((p) => p.id == photo.id).toList();
-          if (match.isNotEmpty) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) =>
-                    _UserPhotoViewer(photos: match, initialIndex: 0),
-              ),
-            );
-          }
-        }
-      }
-    } catch (e) {
-      if (!mounted) return;
-      if (e == 'topup') {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(s.photoLockedTitle),
-            content: Text(s.photoUnlockNeedTopup),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(s.btnClose),
-              ),
-            ],
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.photoUnlockFailed)));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('UserInfo');
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
     final profile = _profile;
@@ -688,53 +588,21 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               ),
               child: Column(
                 children: [
-                  SizedBox(height: 20),
+                  SizedBox(height: 8),
 
-                  // Avatar
-                  Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      _avatarB64.isNotEmpty
-                          ? AsyncCircleAvatar(
-                              base64: _avatarB64,
-                              radius: 50,
-                              bgColor: profile?.gender == 'male'
-                                  ? AppTheme.male
-                                  : profile?.gender == 'female'
-                                  ? AppTheme.female
-                                  : AppTheme.accent,
-                              // Foto gagal decode → inisial, jangan kosong.
-                              initial:
-                                  (name.isNotEmpty ? name[0] : '?').toUpperCase(),
-                            )
-                          : CircleAvatar(
-                              radius: 50,
-                              backgroundColor: profile?.gender == 'male'
-                                  ? AppTheme.male
-                                  : profile?.gender == 'female'
-                                  ? AppTheme.female
-                                  : AppTheme.accent,
-                              child: Text(
-                                (name.isNotEmpty ? name[0] : '?').toUpperCase(),
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: AppGlyph.avatarInitial(100),
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                      Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                      ),
-                    ],
+                  // Galeri geser: avatar + foto terbuka, slide kiri-kanan.
+                  // Ketuk foto = tampil penuh.
+                  _profileCarousel(
+                    avatarB64: _avatarB64,
+                    avatarBg: profile?.gender == 'male'
+                        ? AppTheme.male
+                        : profile?.gender == 'female'
+                        ? AppTheme.female
+                        : AppTheme.accent,
+                    initial: (name.isNotEmpty ? name[0] : '?').toUpperCase(),
+                    statusColor: statusColor,
+                    unlocked: _photos.where((p) => p.unlocked).toList(),
                   ),
-                  SizedBox(height: 12),
                   SizedBox(height: 12),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -848,278 +716,405 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   ),
                   SizedBox(height: 16),
 
-                  // Sosial: angka + tombol Follow / Friend / Subscribe.
-                  // Sembunyikan seluruh card bagi viewer anon.
+                  // Sosial kompak: stat mini + tombol ikon kecil, langsung
+                  // terlihat tanpa scroll. Sembunyi bagi viewer anon.
                   if (profile != null && !isAnonViewer) ...[
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.bgCard,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 12,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          // Stats bar — angka + label + ikon, terpisah rapi.
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(8, 18, 8, 16),
-                            child: Row(
-                              children: [
-                                _statColumn(
-                                  icon: Icons.favorite_rounded,
-                                  color: Color(0xFFE91E63),
-                                  value: profile.followersCount,
-                                  label: s.socialFollowers,
-                                ),
-                                _statDivider(),
-                                _statColumn(
-                                  icon: Icons.person_rounded,
-                                  color: AppTheme.primary,
-                                  value: profile.followingCount,
-                                  label: s.socialFollowing,
-                                ),
-                                _statDivider(),
-                                _statColumn(
-                                  icon: Icons.star_rounded,
-                                  color: Color(0xFFB8860B),
-                                  value: profile.subscriberCount,
-                                  label: s.socialSubscribers,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Divider(height: 1, indent: 16, endIndent: 16),
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(16, 14, 16, 16),
-                            child: Column(
-                              children: [
-                                // Baris tombol aksi utama: Follow + Friend.
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _SocialActionButton(
-                                        active: _following,
-                                        activeIcon: Icons.check_rounded,
-                                        activeLabel: s.btnUnfollow,
-                                        activeColor: AppTheme.textSecondary,
-                                        icon: Icons.person_add_alt_1_rounded,
-                                        label: s.btnFollow,
-                                        color: AppTheme.primary,
-                                        loading: _busySocial,
-                                        onTap: _toggleFollow,
-                                      ),
-                                    ),
-                                    SizedBox(width: 10),
-                                    Expanded(
-                                      child: _friend
-                                          ? _SocialActionButton(
-                                              active: true,
-                                              activeIcon: Icons.group_rounded,
-                                              activeLabel: s.btnFriends,
-                                              activeColor: Colors.green,
-                                              icon: Icons.group_add_rounded,
-                                              label: s.btnFriends,
-                                              color: Colors.green,
-                                              loading: false,
-                                              onTap: () {},
-                                            )
-                                          : _friendRequestSent
-                                          ? _SocialActionButton(
-                                              active: true,
-                                              activeIcon:
-                                                  Icons.schedule_rounded,
-                                              activeLabel: s.btnFriendRequested,
-                                              activeColor: Colors.orange,
-                                              icon: Icons.group_add_rounded,
-                                              label: s.btnFriendRequested,
-                                              color: Colors.orange,
-                                              loading: false,
-                                              onTap: () {},
-                                            )
-                                          : _SocialActionButton(
-                                              active: false,
-                                              icon: Icons.group_add_rounded,
-                                              label: s.btnAddFriend,
-                                              color: Colors.green,
-                                              loading: _busySocial,
-                                              onTap: _addFriend,
-                                            ),
-                                    ),
-                                  ],
-                                ),
-                                if (pointsEnabled &&
-                                    profile.subscriptionPrice > 0) ...[
-                                  SizedBox(height: 10),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: _subscribed
-                                        ? _SocialActionButton(
-                                            active: true,
-                                            activeIcon: Icons.star_rounded,
-                                            activeLabel: s.btnSubscribed,
-                                            activeColor: Color(0xFFB8860B),
-                                            icon: Icons.star_rounded,
-                                            label: s.btnSubscribed,
-                                            color: Color(0xFFB8860B),
-                                            loading: false,
-                                            onTap: () {},
-                                          )
-                                        : _SocialActionButton(
-                                            active: false,
-                                            icon: Icons.star_rounded,
-                                            label:
-                                                '${s.btnSubscribe} · ${s.subscribePrice(profile.subscriptionPrice)}',
-                                            color: Color(0xFFB8860B),
-                                            loading: _busySocial,
-                                            onTap: _subscribe,
-                                          ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _miniStat(
+                          Icons.favorite_rounded,
+                          const Color(0xFFE91E63),
+                          profile.followersCount,
+                          s.socialFollowers,
+                          onTap: () => _openSocialList('followers'),
+                        ),
+                        _miniStat(
+                          Icons.person_rounded,
+                          AppTheme.primary,
+                          profile.followingCount,
+                          s.socialFollowing,
+                          onTap: () => _openSocialList('following'),
+                        ),
+                        _miniStat(
+                          Icons.star_rounded,
+                          const Color(0xFFB8860B),
+                          profile.subscriberCount,
+                          s.socialSubscribers,
+                          onTap: () => _openSocialList('subscribers'),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    if (_busySocial)
+                      const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _friend
+                              ? _iconActionBtn(
+                                  icon: Icons.group_rounded,
+                                  label: s.btnFriends,
+                                  color: Colors.green,
+                                  active: true,
+                                  onTap: () {},
+                                )
+                              : _friendRequestSent
+                              ? _iconActionBtn(
+                                  icon: Icons.schedule_rounded,
+                                  label: s.btnFriendRequested,
+                                  color: Colors.orange,
+                                  active: true,
+                                  onTap: () {},
+                                )
+                              : _iconActionBtn(
+                                  icon: Icons.group_add_rounded,
+                                  label: s.btnAddFriend,
+                                  color: Colors.green,
+                                  active: false,
+                                  onTap: _addFriend,
+                                ),
+                          const SizedBox(width: 12),
+                          _iconActionBtn(
+                            icon: _following
+                                ? Icons.check_rounded
+                                : Icons.person_add_alt_1_rounded,
+                            label: _following ? s.btnUnfollow : s.btnFollow,
+                            color: _following
+                                ? AppTheme.textSecondary
+                                : AppTheme.primary,
+                            active: _following,
+                            onTap: _toggleFollow,
+                          ),
+                          if (pointsEnabled &&
+                              profile.subscriptionPrice > 0) ...[
+                            const SizedBox(width: 12),
+                            _subscribed
+                                ? _iconActionBtn(
+                                    icon: Icons.star_rounded,
+                                    label: s.btnSubscribed,
+                                    color: const Color(0xFFB8860B),
+                                    active: true,
+                                    onTap: () {},
+                                  )
+                                : _iconActionBtn(
+                                    icon: Icons.star_rounded,
+                                    label:
+                                        '${s.btnSubscribe} · ${s.subscribePrice(profile.subscriptionPrice)}',
+                                    color: const Color(0xFFB8860B),
+                                    active: false,
+                                    onTap: _subscribe,
+                                  ),
+                          ],
+                        ],
+                      ),
+                    const SizedBox(height: 8),
                   ],
 
-                  // Galeri Foto Profil
-                  Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.labelOthersGallery,
-                            style: AppText.titleEmphasis,
-                          ),
-                          SizedBox(height: 8),
-                          if (_loadingPhotos)
-                            Padding(
-                              padding: EdgeInsets.symmetric(vertical: 20),
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  color: AppTheme.primary,
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                          else if (_photos.isEmpty)
-                            Padding(
-                              padding: EdgeInsets.symmetric(vertical: 20),
-                              child: Center(
-                                child: Text(
-                                  s.labelGalleryEmpty,
-                                  textAlign: TextAlign.center,
-                                  style: AppText.bodySmall.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            )
-                          else
-                            GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
-                                    mainAxisSpacing: 8,
-                                    crossAxisSpacing: 8,
-                                  ),
-                              itemCount: _photos.length,
-                              itemBuilder: (ctx, i) {
-                                final photo = _photos[i];
-                                if (photo.unlocked) {
-                                  return GestureDetector(
-                                    onTap: () => _showPhotoViewer(_photos, i),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: AsyncPhotoThumbnail(
-                                        base64: photo.photo,
-                                      ),
-                                    ),
-                                  );
-                                }
-                                // Terkunci: preview blur + overlay gelap + gembok + harga.
-                                return GestureDetector(
-                                  onTap: () => _onLockedTap(photo),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        if (photo.preview.isNotEmpty)
-                                          ImageFiltered(
-                                            imageFilter: ui.ImageFilter.blur(
-                                              sigmaX: 8,
-                                              sigmaY: 8,
-                                            ),
-                                            child: AsyncPhotoThumbnail(
-                                              base64: photo.preview,
-                                            ),
-                                          )
-                                        else
-                                          Container(color: AppTheme.bgCard),
-                                        Container(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.35,
-                                          ),
-                                        ),
-                                        Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            const Icon(
-                                              Icons.lock,
-                                              color: Colors.white,
-                                              size: 24,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withValues(
-                                                  alpha: 0.5,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                '${context.read<PointsProvider>().photoUnlockOnce} 🪙',
-                                                style: AppText.micro.copyWith(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  // Galeri Foto Profil dihapus sesuai permintaan — tidak
+                  // ditampilkan lagi di halaman profil orang lain.
+                  const SizedBox.shrink(),
                 ],
               ),
               );
               }),
+    );
+  }
+
+  /// Carousel foto profil: avatar + foto terbuka, geser kiri-kanan.
+  /// Tanpa foto sama sekali → lingkaran inisial (tidak bisa digeser).
+  Widget _profileCarousel({
+    required String avatarB64,
+    required Color avatarBg,
+    required String initial,
+    required Color statusColor,
+    required List<UserPhoto> unlocked,
+  }) {
+    final hasAvatar = avatarB64.isNotEmpty;
+    Uint8List? avatarBytes;
+    if (hasAvatar) {
+      try {
+        avatarBytes = base64Decode(avatarB64);
+      } catch (_) {}
+    }
+    final pageCount = (avatarBytes != null ? 1 : 0) + unlocked.length;
+    if (pageCount == 0) {
+      return CircleAvatar(
+        radius: 60,
+        backgroundColor: avatarBg,
+        child: Text(
+          initial,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: AppGlyph.avatarInitial(120),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+    }
+    if (_carouselIndex >= pageCount) _carouselIndex = 0;
+    Widget avatarPage() {
+      final b = avatarBytes;
+      final img = b == null
+          ? Container(
+              color: avatarBg,
+              child: Center(
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: AppGlyph.avatarInitial(120),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            )
+          // Carousel 280px — cap 720px (bukan full-res).
+          : Image.memory(
+              b,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              cacheWidth: 720,
+            );
+      return GestureDetector(
+        onTap: b == null ? null : () => _showFullscreenPhoto(b),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox.expand(child: img),
+        ),
+      );
+    }
+
+    Widget galleryPage(UserPhoto photo) {
+      Uint8List? b;
+      try {
+        b = base64Decode(photo.photo);
+      } catch (_) {}
+      return GestureDetector(
+        onTap: () => _showPhotoViewer(unlocked, unlocked.indexOf(photo)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox.expand(
+            child: b == null
+                ? Container(color: AppTheme.bgCard)
+                : Image.memory(
+                    b,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    cacheWidth: 720,
+                  ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 280,
+          width: double.infinity,
+          child: Stack(
+            children: [
+              PageView.builder(
+                controller: _carouselCtrl,
+                onPageChanged: (i) =>
+                    setState(() => _carouselIndex = i),
+                itemCount: pageCount,
+                itemBuilder: (_, i) {
+                  if (avatarBytes != null && i == 0) return avatarPage();
+                  final photo =
+                      unlocked[i - (avatarBytes != null ? 1 : 0)];
+                  return galleryPage(photo);
+                },
+              ),
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (pageCount > 1) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              pageCount,
+              (i) => AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: _carouselIndex == i ? 18 : 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: _carouselIndex == i
+                      ? AppTheme.primary
+                      : AppTheme.divider,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _showFullscreenPhoto(Uint8List bytes) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                // Cap 1080px: dialog zoom tidak butuh full-res 12MP.
+                child: Image.memory(
+                  bytes,
+                  fit: BoxFit.contain,
+                  cacheWidth: 1080,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
+      if (bytes.isNotEmpty) {
+        try {
+          PaintingBinding.instance.imageCache.evict(MemoryImage(bytes));
+        } catch (_) {}
+      }
+    });
+  }
+
+  /// Stat mini di bawah nama: ikon kecil + angka (tanpa kartu besar).
+  Widget _miniStat(
+    IconData icon,
+    Color color,
+    int value,
+    String label, {
+    VoidCallback? onTap,
+  }) {
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 4),
+          Text(
+            '$value',
+            style: AppText.bodyStrong.copyWith(color: AppTheme.textPrimary),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return row;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: row,
+    );
+  }
+
+  void _openSocialList(String kind) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SocialListScreen(kind: kind, userId: widget.userId),
+      ),
+    );
+  }
+
+  /// Tombol aksi ikon kecil (ikuti/teman/subscribe): lingkaran + tulisan
+  /// mungil di bawahnya supaya jelas maksud ikonnya. Nonaktif saat sibuk
+  /// / sudah aktif.
+  Widget _iconActionBtn({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool active,
+    required VoidCallback? onTap,
+  }) {
+    return Tooltip(
+      message: label,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Material(
+            color: color.withValues(alpha: active ? 0.14 : 1),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _busySocial ? null : onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(11),
+                child: _busySocial
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: active ? color : Colors.white,
+                        ),
+                      )
+                    : Icon(
+                        icon,
+                        size: 20,
+                        color: active ? color : Colors.white,
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 3),
+          SizedBox(
+            width: 76,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.micro.copyWith(
+                color: active ? color : AppTheme.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1142,43 +1137,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     );
   }
 
-  Widget _statColumn({
-    required IconData icon,
-    required Color color,
-    required int value,
-    required String label,
-  }) {
-    return Expanded(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 18, color: color),
-          ),
-          SizedBox(height: 6),
-          Text(
-            '$value',
-            style: AppText.titleEmphasis.copyWith(color: AppTheme.textPrimary),
-          ),
-          SizedBox(height: 1),
-          Text(
-            label,
-            style: AppText.caption.copyWith(color: AppTheme.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statDivider() {
-    return Container(width: 1, height: 38, color: AppTheme.divider);
-  }
 }
 
 class _ChatIconButton extends StatelessWidget {
@@ -1203,93 +1161,6 @@ class _ChatIconButton extends StatelessWidget {
               size: 18,
               color: AppTheme.primary,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SocialActionButton extends StatelessWidget {
-  final bool active;
-  final bool loading;
-  final IconData icon;
-  final String label;
-  final Color color;
-  final IconData? activeIcon;
-  final String? activeLabel;
-  final Color? activeColor;
-  final VoidCallback onTap;
-  const _SocialActionButton({
-    required this.active,
-    required this.loading,
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-    this.activeIcon,
-    this.activeLabel,
-    this.activeColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isActive = active;
-    final iconData = isActive ? (activeIcon ?? icon) : icon;
-    final labelText = isActive ? (activeLabel ?? label) : label;
-    final bg = isActive ? (activeColor ?? color) : color;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      height: 46,
-      decoration: BoxDecoration(
-        color: isActive ? bg.withValues(alpha: 0.14) : bg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isActive ? bg.withValues(alpha: 0.5) : Colors.transparent,
-          width: 1.2,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: loading ? null : onTap,
-          child: Center(
-            child: loading
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: isActive ? bg : Colors.white,
-                    ),
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        iconData,
-                        size: 18,
-                        color: isActive ? bg : Colors.white,
-                      ),
-                      const SizedBox(width: 7),
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            labelText,
-                            maxLines: 1,
-                            style: AppText.bodySmall.copyWith(
-                              color: isActive ? bg : Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
           ),
         ),
       ),

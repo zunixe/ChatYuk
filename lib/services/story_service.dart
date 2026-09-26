@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -64,6 +65,8 @@ class StoryService {
   /// `imagePath` WAJIB path storage `story/...` — base64/full-data
   /// ditolak di sini supaya tidak masuk kolom `stories.image_path`
   /// (viewer hanya download path; base64 boros DB).
+  /// Video: kirim `videoPath` + `durationMs` (1-15 dtk); imagePath boleh
+  /// string kosong (kolom image_path nullable di insert video).
   Future<String> createStory({
     required String imagePath,
     String textOverlay = '',
@@ -74,9 +77,16 @@ class StoryService {
     double textScale = 1.0,
     bool textBg = false,
     String visibility = 'followers',
+    String videoPath = '',
+    int durationMs = 0,
   }) async {
-    if (!imagePath.startsWith('story/')) {
+    final isVideo = videoPath.isNotEmpty;
+    if (!isVideo && !imagePath.startsWith('story/')) {
       dlog('[Story] createStory ditolak: imagePath bukan story/ path');
+      return '';
+    }
+    if (isVideo && !videoPath.startsWith('story/')) {
+      dlog('[Story] createStory ditolak: videoPath bukan story/ path');
       return '';
     }
     try {
@@ -92,6 +102,9 @@ class StoryService {
           'p_text_scale': textScale,
           'p_text_bg': textBg,
           'p_visibility': visibility,
+          if (isVideo) 'p_media_type': 'video',
+          if (isVideo) 'p_video_path': videoPath,
+          if (isVideo) 'p_duration_ms': durationMs,
         },
       );
       if (res is Map) return '${res['id'] ?? ''}';
@@ -102,12 +115,41 @@ class StoryService {
     }
   }
 
+  /// Unduh bytes video story (untuk VideoPlayer file). Null bila gagal.
+  Future<Uint8List?> downloadVideo(String videoPath) async {
+    try {
+      final bytes = await _sb.storage
+          .from('chat-photos')
+          .download(videoPath)
+          .timeout(const Duration(seconds: 30));
+      if (bytes.isEmpty) return null;
+      return bytes;
+    } catch (e) {
+      dlog('[Story] downloadVideo error: $e');
+      return null;
+    }
+  }
+
   /// Tandai slide dilihat (idempoten).
   Future<void> markSeen(String storyId) async {
     try {
       await _sb.rpc('mark_story_seen', params: {'p_story_id': storyId});
     } catch (e) {
       dlog('[Story] markSeen error: $e');
+    }
+  }
+
+  /// Bisukan / buka bisu story author (idempoten). Return false bila gagal.
+  Future<bool> setStoryMuted(String authorId, bool muted) async {
+    try {
+      await _sb.rpc(
+        muted ? 'mute_story_author' : 'unmute_story_author',
+        params: {'p_author': authorId},
+      ).timeout(const Duration(seconds: 15));
+      return true;
+    } catch (e) {
+      dlog('[Story] setStoryMuted error: $e');
+      return false;
     }
   }
 
@@ -156,10 +198,12 @@ class StoryService {
   /// kegagalan (mis. admin tanpa guard) menyamar jadi "belum ada penonton".
   Future<List<StoryViewer>?> fetchViewers(String storyId) async {
     try {
-      final res = await _sb.rpc(
-        'story_viewers',
-        params: {'p_story_id': storyId},
-      );
+      // Timeout WAJIB: tanpa ini tap ikon mata saat jaringan stall
+      // menggantung selamanya (sheet tak kunjung buka → dikira hang).
+      // Timeout → null → UI tampil "gagal memuat" + bisa coba lagi.
+      final res = await _sb
+          .rpc('story_viewers', params: {'p_story_id': storyId})
+          .timeout(const Duration(seconds: 10));
       if (res is List) {
         return res
             .map(
@@ -175,17 +219,22 @@ class StoryService {
   }
 
   /// Hapus slide milik sendiri. Return image_path untuk hapus file Storage.
-  Future<String> deleteStory(String storyId) async {
+  Future<({bool ok, String path})> deleteStory(String storyId) async {
     try {
       final res = await _sb.rpc(
         'delete_story',
         params: {'p_story_id': storyId},
       );
-      if (res is Map) return '${res['image_path'] ?? ''}';
-      return '';
+      // Sukses ditandai `ok` (bukan dari image_path — slide VIDEO punya
+      // image_path poster/kosong sehingga dulu dianggap gagal padahal
+      // terhapus). `path` untuk pembersihan file.
+      if (res is Map && res['ok'] == true) {
+        return (ok: true, path: '${res['image_path'] ?? ''}');
+      }
+      return (ok: false, path: '');
     } catch (e) {
       dlog('[Story] deleteStory error: $e');
-      return '';
+      return (ok: false, path: '');
     }
   }
 

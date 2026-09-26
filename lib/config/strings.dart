@@ -149,6 +149,23 @@ class S {
   String get menuSendPhoto => isId ? 'Kirim Foto' : 'Send Photo';
   String get menuTakePhoto => isId ? 'Ambil Foto' : 'Take Photo';
   String get menuViewOnce => isId ? 'Foto Sekali Lihat' : 'View-once Photo';
+
+  // ── Video chat (maks 60 dtk, hasil kompres ≤8 MB) ──
+  String get menuSendVideo => isId ? 'Kirim Video' : 'Send Video';
+  String get videoTooLong => isId
+      ? 'Video maksimal 60 detik'
+      : 'Video is 60 seconds max';
+  String get videoTooLarge => isId
+      ? 'Video terlalu besar setelah dikompres (maks 8 MB)'
+      : 'Video too large after compression (8 MB max)';
+  String get videoCompressing =>
+      isId ? 'Mengompres video…' : 'Compressing video…';
+  String get videoCompressFail =>
+      isId ? 'Gagal memproses video' : 'Failed to process video';
+  String get videoPreviewTitle => isId ? 'Pratinjau video' : 'Video preview';
+  String videoDurationLabel(int secs) => isId
+      ? '$secs detik'
+      : '$secs seconds';
   String get viewTimerOff => isId ? 'Tanpa timer' : 'No timer';
   String get viewTimerOnce => isId ? '1x lihat' : 'View once';
   String viewTimerSecs(int n) => isId ? '$n detik' : '$n seconds';
@@ -245,6 +262,9 @@ class S {
   String get titleOnline => isId ? 'Pengguna Online' : 'Online Users';
   String get searchHint =>
       isId ? 'Cari nama pengguna...' : 'Search username...';
+  String get chatSearchHint =>
+      isId ? 'Cari di percakapan...' : 'Search conversation...';
+  String get btnSearch => isId ? 'Cari' : 'Search';
   String get searchRoomHint =>
       isId ? 'Cari room atau grup...' : 'Search rooms or groups...';
   String get filterAll => isId ? 'Semua' : 'All';
@@ -357,6 +377,28 @@ class S {
   String get hintSlideToCancel =>
       isId ? 'Geser untuk batal' : 'Slide to cancel';
   String get msgPhoto => isId ? '[Foto]' : '[Photo]';
+  // ── Kirim Lokasi (ala WhatsApp) ──
+  String get menuSendLocation => isId ? 'Lokasi' : 'Location';
+  String get msgLocation => isId ? '[Lokasi]' : '[Location]';
+  String get locSendTitle => isId ? 'Kirim Lokasi' : 'Send Location';
+  String get locFetching =>
+      isId ? 'Mendeteksi lokasi...' : 'Detecting location...';
+  String get locSendConfirm =>
+      isId ? 'Kirim Lokasi Ini' : 'Send This Location';
+  String get locAttach => isId ? 'Lampirkan' : 'Attach';
+  String get locSendCancel => isId ? 'Batal' : 'Cancel';
+  String get locOpenMaps =>
+      isId ? 'Buka di Google Maps' : 'Open in Google Maps';
+  String get locPermissionDenied => isId
+      ? 'Izin lokasi ditolak. Aktifkan di Pengaturan untuk kirim lokasi.'
+      : 'Location permission denied. Enable it in Settings to send a location.';
+  String get locFetchFailed => isId
+      ? 'Lokasi tidak terdeteksi. Pastikan GPS aktif.'
+      : 'Location not detected. Make sure GPS is on.';
+  String get locSendRoomConfirm => isId
+      ? 'Kirim lokasi ini ke semua anggota room?'
+      : 'Send this location to everyone in the room?';
+  String get locSendRoomTitle => isId ? 'Kirim Lokasi' : 'Send Location';
   String get msgViewOnce => isId ? '[Foto Sekali Lihat]' : '[View Once Photo]';
   String get viewOnceTap =>
       isId ? 'Tekan untuk melihat (10 detik)' : 'Tap to view (10 seconds)';
@@ -466,6 +508,9 @@ class S {
   String get confirmLogoutBody => isId
       ? 'Yakin ingin keluar dari akun ini?'
       : 'Are you sure you want to log out?';
+  String get errLogoutFailed => isId
+      ? 'Keluar gagal — sesi masih aktif. Coba lagi.'
+      : 'Logout failed — session still active. Try again.';
   String get btnDeleteAccount => isId ? 'Hapus Akun' : 'Delete Account';
   String get confirmDeleteAccountBody => isId
       ? 'Akun, pesan, story, dan semua datamu akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.'
@@ -556,6 +601,19 @@ class S {
       ? 'Siapa yang melihat diatur di Pengaturan › Privasi'
       : 'Who can see this is set in Settings › Privacy';
   String get titleSettings => isId ? 'Pengaturan' : 'Settings';
+  String get descSettings => isId
+      ? 'Akun, privasi, notifikasi & lainnya'
+      : 'Account, privacy, notifications & more';
+  String get titleAccount => isId ? 'Akun' : 'Account';
+  String get descAccount =>
+      isId ? 'Keamanan, email, keluar & hapus akun' : 'Security, email, logout & delete account';
+  String get menuDisplay => isId ? 'Tampilan' : 'Appearance';
+  String get descDisplay =>
+      isId ? 'Bahasa, tema & font chat' : 'Language, theme & chat font';
+  String get menuHelp => isId ? 'Bantuan' : 'Help';
+  String get descHelp =>
+      isId ? 'Hubungi kami, donasi & versi' : 'Contact us, donate & version';
+  String get menuChatFont => isId ? 'Font chat' : 'Chat font';
   String get privacyTitle => isId ? 'Privasi' : 'Privacy';
   String get privacyHint => isId
       ? 'Atur siapa yang dapat melihat aktivitas dan informasi profil kamu.'
@@ -789,6 +847,35 @@ class S {
   String get roomBroadcastCapHint => isId
       ? 'Tunggu giliran atau angkat tangan'
       : 'Wait your turn or raise hand';
+
+  // ── Voice stage global room (audio-only, max 6 mic) ──
+  String get roomVoiceJoin => isId ? 'Ikut voice' : 'Join voice';
+  String get roomVoiceConnecting => isId ? 'Menyambungkan…' : 'Connecting…';
+  String get roomVoiceGoStage => isId ? 'Nyalakan mic' : 'Turn on mic';
+  String get roomVoiceMute => isId ? 'Matikan mic' : 'Mute mic';
+  String get roomVoiceUnmute => isId ? 'Nyalakan mic' : 'Unmute mic';
+  String get roomVoiceLeave => isId ? 'Keluar voice' : 'Leave voice';
+  String get roomVoiceStageFull => isId
+      ? 'Panggung penuh (6/6) — tunggu giliran'
+      : 'Stage full (6/6) — wait your turn';
+  String get roomVoiceMutedByAdmin => isId
+      ? 'Mic dimatikan admin'
+      : 'Mic muted by admin';
+  String get roomVoiceConnectFail => isId
+      ? 'Gagal menyambungkan mic — coba lagi'
+      : 'Failed to connect mic — try again';
+  String get roomVoiceDiagTitle =>
+      isId ? 'Diagnostik voice' : 'Voice diagnostics';
+  String get roomVoiceDiagHint => isId
+      ? 'Kirim foto layar ini ke dev bila suara bermasalah'
+      : 'Send a screenshot of this to dev if audio fails';
+  String get roomVoiceMuted => isId ? 'Dimute' : 'Muted';
+  String get roomVoiceSpeaking => isId ? 'Bicara' : 'Speaking';
+  String roomVoiceListeners(int n) =>
+      isId ? '$n pendengar' : '$n listening';
+  String get roomVoiceNoSpeakers => isId
+      ? 'Belum ada yang bicara — jadilah yang pertama'
+      : 'No one speaking yet — be the first';
 
   String get btnClose => isId ? 'Tutup' : 'Close';
   String get btnZoomIn => isId ? 'Perbesar' : 'Zoom in';
@@ -1122,6 +1209,39 @@ class S {
       isId ? 'Hanya teman dua arah' : 'Mutual friends only';
   String get storyBtnPublish => isId ? 'Bagikan ke Story' : 'Share to Story';
   String get storyMine => isId ? 'Story Saya' : 'My Story';
+  String get storyMicNeeded => isId
+      ? 'Izin mikrofon dibutuhkan untuk merekam video'
+      : 'Microphone permission is needed to record video';
+  String get storyRecordFail => isId
+      ? 'Gagal merekam video, coba lagi'
+      : 'Failed to record video, try again';
+  String get storyHoldToRecord =>
+      isId ? 'Tahan untuk merekam video' : 'Hold to record video';
+  String get storyVideoTooLong => isId
+      ? 'Video maksimal 15 detik'
+      : 'Video must be 15 seconds max';
+  String get storyVideoTooShort => isId
+      ? 'Video terlalu pendek (minimal 1 detik)'
+      : 'Video too short (minimum 1 second)';
+  String get storyVideoSplitInfo => isId
+      ? 'Video panjang dipotong otomatis per 15 detik — maksimal 2 story.'
+      : 'Long video is auto-split every 15 seconds — max 2 stories.';
+  String get storyVideoTooBig => isId
+      ? 'Video terlalu besar (maks 15 MB)'
+      : 'Video too large (max 15 MB)';
+  String get storyCompressFail => isId
+      ? 'Gagal mengompres video, coba lagi'
+      : 'Failed to compress video, try again';
+  String get storyCompressing => isId
+      ? 'Mengompres video…'
+      : 'Compressing video…';
+  String get storyMute => isId ? 'Benamkan story' : 'Mute story';
+  String get storyUnmute => isId ? 'Tampilkan lagi' : 'Unmute story';
+  String get storyMuted => isId
+      ? 'Story dibenamkan — pindah paling belakang'
+      : 'Story muted — moved to the back';
+  String get storyUnmuted =>
+      isId ? 'Story ditampilkan lagi' : 'Story unmuted';
   String get storyEmptyTray => isId ? 'Belum ada story' : 'No stories yet';
   String get storyAddToStory => isId ? 'Tambah' : 'Add';
   String get storyUploading => isId ? 'Mengunggah…' : 'Uploading…';
@@ -1140,6 +1260,8 @@ class S {
   String get storyPartialAllowAll => isId ? 'Izinkan semua' : 'Allow all';
   String get storyDeleteFail =>
       isId ? 'Gagal menghapus story' : 'Failed to delete story';
+  String get storyLoadFail =>
+      isId ? 'Gagal memuat story' : 'Failed to load story';
   String get storyDeleteSlideTitle =>
       isId ? 'Hapus slide ini?' : 'Delete this slide?';
   String get storyDeleteSlideMsg => isId
@@ -1324,6 +1446,21 @@ class S {
   String get msgFileTooLarge => isId
       ? 'File terlalu besar. Maksimal 10MB.'
       : 'File too large. Maximum 10MB.';
+
+  // ── Kualitas foto HD (ala WhatsApp) ──
+  String get photoHdLabel => 'HD';
+  String get photoHdOn => isId ? 'HD aktif' : 'HD on';
+  String get photoHdOff => isId ? 'HD mati' : 'HD off';
+  String get photoQualityTitle =>
+      isId ? 'Kualitas Foto' : 'Photo Quality';
+  String get photoQualityStandard => isId ? 'Standar' : 'Standard';
+  String get photoQualityStandardDesc => isId
+      ? 'Kirim cepat & hemat kuota'
+      : 'Fast sending & data saving';
+  String get photoQualityHd => isId ? 'HD' : 'HD';
+  String get photoQualityHdDesc => isId
+      ? 'Resolusi tinggi (~1920px), file lebih besar'
+      : 'High resolution (~1920px), larger files';
 
   // ── Popup update aplikasi ──
   String get updateTitle => isId ? 'Update Tersedia' : 'Update Available';

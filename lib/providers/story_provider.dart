@@ -96,13 +96,24 @@ class StoryProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  /// Slide author — dari cache kalau ada, else fetch.
-  Future<List<StorySlide>> slidesFor(String authorId) async {
+  /// Slide author — dari cache kalau jumlahnya cocok, else fetch.
+  /// [expectedCount] = slide_count tray (segar via realtime). Tanpa ini,
+  /// cache lama (mis. 1 slide) dipakai terus walau author sudah nambah
+  /// slide → viewer cuma tampil 1. Gagal fetch → cache lama dipertahankan.
+  Future<List<StorySlide>> slidesFor(String authorId,
+      {int? expectedCount}) async {
     final cached = _slidesByAuthor[authorId];
-    if (cached != null && cached.isNotEmpty) return cached;
+    if (cached != null &&
+        cached.isNotEmpty &&
+        (expectedCount == null || cached.length == expectedCount)) {
+      return cached;
+    }
     final slides = await _service.fetchSlides(authorId);
-    if (slides.isNotEmpty) _slidesByAuthor[authorId] = slides;
-    return slides;
+    if (slides.isNotEmpty) {
+      _slidesByAuthor[authorId] = slides;
+      return slides;
+    }
+    return cached ?? slides;
   }
 
   /// Thumbnail tray untuk [thumbPath] — RAM → disk (SINKRON, anti-blink) →
@@ -277,6 +288,18 @@ class StoryProvider extends ChangeNotifier {
     _slidesByAuthor.remove(authorId);
   }
 
+  /// Unduh bytes video story (disk → network). SENGAJA tidak lewat cache
+  /// gambar/thumbnail (mp4 belasan MB akan mengusir semuanya).
+  Future<Uint8List?> fetchSlideVideo(String videoPath) async {
+    if (videoPath.isEmpty) return null;
+    try {
+      return await _service.downloadVideo(videoPath);
+    } catch (e) {
+      dlog('[Story] fetchSlideVideo error: $e');
+      return null;
+    }
+  }
+
   /// Optimistic: slide baru dibuat → langsung tampil di tray milik sendiri
   /// tanpa nunggu realtime round-trip.
   Future<bool> publish({
@@ -289,6 +312,8 @@ class StoryProvider extends ChangeNotifier {
     double textScale = 1.0,
     bool textBg = false,
     String visibility = 'followers',
+    String videoPath = '',
+    int durationMs = 0,
     required String myUid,
     required String myNickname,
     required String myAvatar,
@@ -303,6 +328,8 @@ class StoryProvider extends ChangeNotifier {
       textScale: textScale,
       textBg: textBg,
       visibility: visibility,
+      videoPath: videoPath,
+      durationMs: durationMs,
     );
     if (id.isEmpty) return false;
     // Optimistic tray update.
@@ -343,8 +370,10 @@ class StoryProvider extends ChangeNotifier {
 
   /// Hapus slide milik sendiri → refresh tray + cache.
   Future<bool> deleteSlide(String storyId, String authorId) async {
-    final path = await _service.deleteStory(storyId);
-    if (path.isEmpty) return false;
+    // Sumber kebenaran = hasil RPC (ok), BUKAN path — slide video punya
+    // image_path poster/kosong sehingga dulu selalu dianggap gagal.
+    final res = await _service.deleteStory(storyId);
+    if (!res.ok) return false;
     _slidesByAuthor.remove(authorId);
     unawaited(refresh(silent: true));
     return true;
@@ -363,6 +392,28 @@ class StoryProvider extends ChangeNotifier {
     if (storyIds.isEmpty) return;
     _markSeenLocal(authorId);
     await _service.markSeenBulk(storyIds);
+  }
+
+  /// Bisukan / buka bisu story author (optimistis: tile langsung pindah
+  /// + transparan, server menyusul; gagal → refresh mengembalikan).
+  /// Return status akhir (true = dibisukan).
+  Future<bool> toggleStoryMute(String authorId, bool muted) async {
+    final idx = _tray.indexWhere((t) => t.authorId == authorId);
+    if (idx < 0) return muted;
+    _tray[idx] = _tray[idx].copyWith(muted: muted);
+    // Urutan tray mengikuti server: own dulu, muted paling belakang.
+    _tray.sort((a, b) {
+      if (a.own != b.own) return a.own ? -1 : 1;
+      if (a.muted != b.muted) return a.muted ? 1 : -1;
+      if (a.hasUnseen != b.hasUnseen) return a.hasUnseen ? -1 : 1;
+      return 0;
+    });
+    if (!_disposed) notifyListeners();
+    final ok = await _service.setStoryMuted(authorId, muted);
+    if (!ok) {
+      unawaited(refresh(silent: true));
+    }
+    return muted;
   }
 
   /// Update ring tray (hasUnseen=false) untuk satu author — sinkron, tanpa IO.

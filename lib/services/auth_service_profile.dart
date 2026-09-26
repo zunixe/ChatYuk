@@ -141,10 +141,17 @@ mixin AuthServiceProfileMx on AuthBase {
 
   /// Stream realtime profil sendiri — poin, status, email terdaftar, dll.
   /// Dipakai AuthProvider untuk update badge di seluruh app tanpa reload.
-  Stream<UserModel> onMyProfileUpdates() {
+  /// Stream update profil sendiri + kunci kolom yang HADIR di payload.
+  ///
+  /// Payload realtime TIDAK memuat kolom yang di-revoke dari role
+  /// authenticated (mis. about/status/avatar/last_seen) — pemanggil WAJIB
+  /// merge berdasarkan [keys] (lihat AuthProvider.mergeProfileEvent),
+  /// bukan replace mentah (kolom hilang akan tertimpa default kosong).
+  Stream<({UserModel model, Set<String> keys})> onMyProfileUpdates() {
     final id = uid;
     if (id == null) return const Stream.empty();
-    final controller = StreamController<UserModel>.broadcast();
+    final controller =
+        StreamController<({UserModel model, Set<String> keys})>.broadcast();
 
     final channel = _sb.channel('my-profile-$id');
     channel.onPostgresChanges(
@@ -160,7 +167,8 @@ mixin AuthServiceProfileMx on AuthBase {
         if (controller.isClosed) return;
         try {
           final row = payload.newRecord;
-          var model = UserModel.fromMap(id, snakeToCamel(row));
+          final camel = snakeToCamel(row);
+          var model = UserModel.fromMap(id, camel);
           // avatar PATH storage → download → base64 (UI tetap pakai base64).
           // Pakai cache supaya update profil tidak download avatar berulang.
           if (model.avatar.isNotEmpty &&
@@ -168,7 +176,7 @@ mixin AuthServiceProfileMx on AuthBase {
             final b64 = await AvatarB64Service.instance.getByPath(model.avatar);
             model = model.copyWith(avatar: b64);
           }
-          controller.add(model);
+          controller.add((model: model, keys: camel.keys.toSet()));
         } catch (e) {
           dlog('[AuthService] onMyProfileUpdates ignored: $e');
         }
@@ -194,6 +202,7 @@ mixin AuthServiceProfileMx on AuthBase {
     String? city,
     String? nickname,
     String? about,
+    String? gender,
   }) async {
     final id = uid;
     if (id == null) return;
@@ -203,6 +212,8 @@ mixin AuthServiceProfileMx on AuthBase {
         !AdminGate.isRealAdmin(userEmail)) {
       throw Exception('nickname_banned');
     }
+    // Gender hanya male/female — nilai lain diabaikan (jangan tulis sampah).
+    final genderValue = (gender == 'male' || gender == 'female') ? gender : null;
     // About dibatasi 150 karakter (clamp, bukan error) supaya kolom tidak
     // membengkak dan tidak ada pesan gagal yang membingungkan user.
     final aboutText = about?.trim();
@@ -211,6 +222,7 @@ mixin AuthServiceProfileMx on AuthBase {
       if (country != null) 'country': country,
       if (city != null) 'city': city,
       if (nickname != null) 'nickname': nickname,
+      if (genderValue != null) 'gender': genderValue,
       if (aboutText != null)
         'about': aboutText.length > 150
             ? aboutText.substring(0, 150)

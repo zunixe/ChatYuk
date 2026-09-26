@@ -30,6 +30,7 @@ import '../models/message_model.dart';
 import 'private_chat_screen.dart';
 import 'nearby_screen.dart';
 import 'story_composer_screen.dart';
+import 'story_camera_capture_screen.dart';
 import 'story_camera_picker_screen.dart';
 import 'story_viewer_screen.dart';
 import '../providers/story_provider.dart';
@@ -603,6 +604,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       } catch (_) {}
     }
     if (bytes == null && initial.isEmpty) return;
+    final zoomBytes = bytes;
     showDialog(
       context: context,
       barrierColor: Colors.black87,
@@ -615,10 +617,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4,
-                child: bytes != null
+                child: zoomBytes != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(bytes, fit: BoxFit.contain),
+                        // Cap 1080px: dialog zoom tidak butuh full-res 12MP.
+                        child: Image.memory(
+                          zoomBytes,
+                          fit: BoxFit.contain,
+                          cacheWidth: 1080,
+                        ),
                       )
                     : CircleAvatar(
                         radius: 90,
@@ -645,7 +652,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           ],
         ),
       ),
-    );
+    ).then((_) {
+      // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
+      if (zoomBytes != null && zoomBytes.isNotEmpty) {
+        try {
+          PaintingBinding.instance.imageCache.evict(MemoryImage(zoomBytes));
+        } catch (_) {}
+      }
+    });
   }
 
   /// Zoom foto profil user lain: pakai bytes cache global kalau ada (b64
@@ -688,15 +702,29 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
   Future<void> _openStoryComposer() async {
     // Picker ala IG: preview kamera live + strip galeri di bawah —
     // jepret ATAU pilih foto galeri dalam satu halaman.
-    final picked = await Navigator.push<File>(
+    final picked = await Navigator.push<Object>(
       context,
       MaterialPageRoute(builder: (_) => const StoryCameraPickerScreen()),
     );
     if (picked == null || !mounted) return;
+    // Penanda video EKSPLISIT dari kamera (galeri selalu foto) — jangan
+    // tebak dari ekstensi file (kamera Xiaomi bisa beda ekstensi).
+    final File file;
+    final bool isVideo;
+    if (picked is StoryCaptureResult) {
+      file = picked.file;
+      isVideo = picked.isVideo;
+    } else if (picked is File) {
+      file = picked;
+      isVideo = false;
+    } else {
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => StoryComposerScreen(picked: XFile(picked.path)),
+        builder: (_) =>
+            StoryComposerScreen(picked: XFile(file.path), isVideo: isVideo),
       ),
     );
     if (mounted) {
@@ -897,11 +925,24 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
 
   void _openViewer(List<StoryTrayItem> items, int index) {
     if (items.isEmpty) return;
-    final target = index.clamp(0, items.length - 1);
+    final tapped =
+        items[index.clamp(0, items.length - 1)];
+    // Yang dibenamkan tidak ikut paging otomatis — buka hanya author itu
+    // bila memang tile-nya yang diketuk sengaja.
+    final visible = tapped.muted
+        ? [tapped]
+        : items.where((t) => !t.muted).toList();
+    if (visible.isEmpty) return;
+    final target = tapped.muted
+        ? 0
+        : visible.indexWhere((t) => t.authorId == tapped.authorId).clamp(
+            0,
+            visible.length - 1,
+          );
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => StoryViewerScreen(items: items, initialIndex: target),
+        builder: (_) => StoryViewerScreen(items: visible, initialIndex: target),
       ),
     );
   }
@@ -1486,29 +1527,35 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
           Consumer<OnlineUsersProvider>(
             builder: (_, provider, __) {
               final chat = context.read<ChatProvider>();
-              final allUsers = provider.users
-                  .where((u) => u.uid != authUid && !chat.isBlocked(u.uid))
-                  .toList();
+              // Ukur biaya filter per emission (kandidat optimasi QA).
+              final users = PerfProbe.measure('Online.filter', () {
+                final allUsers = provider.users
+                    .where((u) => u.uid != authUid && !chat.isBlocked(u.uid))
+                    .toList();
 
-              // Pertahanan tampilan: dedupe by uid (dan nickname) — jika ada
-              // duplikat lolos dari stream/cache, kartu tidak boleh tampil 2x.
-              final seenU = <String>{};
-              final seenN = <String>{};
-              final users = allUsers.where((u) {
-                if (!seenU.add(u.uid)) return false;
-                if (!seenN.add(u.nickname.toLowerCase())) return false;
-                if (_negaraSel.isNotEmpty && !_negaraSel.contains(u.country)) {
-                  return false;
-                }
-                if (_gender != 'all' && u.gender != _gender) {
-                  return false;
-                }
-                if (_search.isNotEmpty &&
-                    !u.nickname.toLowerCase().contains(_search.toLowerCase())) {
-                  return false;
-                }
-                return true;
-              }).toList();
+                // Pertahanan tampilan: dedupe by uid (dan nickname) — jika ada
+                // duplikat lolos dari stream/cache, kartu tidak boleh tampil 2x.
+                final seenU = <String>{};
+                final seenN = <String>{};
+                return allUsers.where((u) {
+                  if (!seenU.add(u.uid)) return false;
+                  if (!seenN.add(u.nickname.toLowerCase())) return false;
+                  if (_negaraSel.isNotEmpty &&
+                      !_negaraSel.contains(u.country)) {
+                    return false;
+                  }
+                  if (_gender != 'all' && u.gender != _gender) {
+                    return false;
+                  }
+                  if (_search.isNotEmpty &&
+                      !u.nickname
+                          .toLowerCase()
+                          .contains(_search.toLowerCase())) {
+                    return false;
+                  }
+                  return true;
+                }).toList();
+              });
 
               final unreadMap = _unreadMap;
 
@@ -2292,6 +2339,21 @@ class _UserCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    // Isi Tentang (dari RPC online, hormati about_visibility
+                    // di server). Kosong = tidak tampil agar kartu ringkas.
+                    if (user.about.trim().isNotEmpty)
+                      GestureDetector(
+                        onTap: onTap,
+                        child: Text(
+                          user.about.trim(),
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -2483,18 +2545,64 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
     }
   }
 
+  void _showMuteSheet() {
+    final it = widget.item;
+    final s = context.read<LocaleProvider>().s;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(
+                it.muted
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: AppTheme.primary,
+              ),
+              title: Text(it.muted ? s.storyUnmute : s.storyMute),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final sp = context.read<StoryProvider>();
+                final ok = await sp.toggleStoryMute(it.authorId, !it.muted);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(ok ? s.storyMuted : s.storyUnmuted),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final it = widget.item;
+    // Dibisukan → abu transparan TANPA ring (ala IG), walau belum dilihat.
     // Belum dilihat → ring gradient ungu-biru. Sudah dilihat → border
     // PUTIH 2px + shadow, sama seperti avatar di header.
-    final seen = !it.hasUnseen;
+    final seen = !it.hasUnseen || it.muted;
     // RepaintBoundary: tile lain tidak ikut repaint saat satu thumbnail
     // selesai dimuat (tray panjang = scroll lebih mulus).
     return RepaintBoundary(
       child: GestureDetector(
         onTap: widget.onTap,
-        child: SizedBox(
+        // Tahan = benamkan/tampilkan lagi (kecuali tile sendiri).
+        onLongPress: it.own ? null : _showMuteSheet,
+        child: Opacity(
+          opacity: it.muted ? 0.45 : 1,
+          child: SizedBox(
           width: 67,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2545,6 +2653,16 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                               cacheWidth: 124,
                               cacheHeight: 218,
                             )
+                          // Video tanpa poster → ikon video (bukan inisial
+                          // nama yang membingungkan).
+                          : it.hasVideo
+                          ? const Center(
+                              child: Icon(
+                                Icons.videocam_rounded,
+                                color: Colors.white54,
+                                size: 26,
+                              ),
+                            )
                           : Center(
                               child: Text(
                                 it.authorName.isNotEmpty
@@ -2559,6 +2677,17 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
                             ),
                     ),
                   ),
+                  // Badge video: tile berisi slide mp4.
+                  if (it.hasVideo && !widget.isOwnWithAdd)
+                    const Positioned(
+                      left: 4,
+                      bottom: 4,
+                      child: Icon(
+                        Icons.play_circle_fill,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
+                    ),
                   if (widget.isOwnWithAdd)
                     Positioned(
                       // DI DALAM bounds tile (right:2, bottom:2) — dulu -3
@@ -2606,6 +2735,7 @@ class _StoryTrayTileState extends State<_StoryTrayTile> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

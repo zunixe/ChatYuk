@@ -146,6 +146,15 @@ select supabase_tests.check('get_online_users() filter blocks',
 select supabase_tests.check('get_online_users() tetap boleh anon',
   exists(select 1 from pg_proc p
          where p.proname='get_online_users' and has_function_privilege('anon', p.oid, 'execute')));
+select supabase_tests.check('get_online_users() kirim about + hormati about_visibility',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='get_online_users'
+           and pg_get_functiondef(p.oid) like '%about_ok%'
+           and pg_get_functiondef(p.oid) like '%about_visibility%'));
+select supabase_tests.check('presence_for() kirim about + hormati about_visibility',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='presence_for'
+           and pg_get_functiondef(p.oid) like '%about%'));
 
 select supabase_tests.report() as result;
 rollback;

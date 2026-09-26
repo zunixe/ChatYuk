@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
+import '../core/chat/chat_location.dart';
 import '../utils.dart' show capitalizeFirst;
 import '../utils/mention.dart';
 import '../widgets/anon_prompt_dialog.dart';
@@ -36,6 +37,38 @@ mixin ChatSendMixin<T extends StatefulWidget>
   set sendReplyingTo(MessageModel? v);
   String? get sendPendingPhotoBase64;
   set sendPendingPhotoBase64(String? v);
+  /// Path video lokal yang sedang di-preview (null = tidak ada).
+  /// Room mengembalikan null (fitur video belum aktif di sana).
+  String? get sendPendingVideoPath => null;
+
+  /// Lokasi yang sedang di-preview (null = tidak ada).
+  ChatLocation? get sendPendingLocation => null;
+  set sendPendingLocation(ChatLocation? v) {}
+
+  /// Kirim lokasi dari preview (+ caption & balasan bila ada).
+  /// Implementasi nyata di layar (private: sendPrivateMessage; room:
+  /// sendRoomMessage + dialog konfirmasi).
+  Future<void> sendLocationFromPreview({
+    String text = '',
+    MessageModel? reply,
+  });
+
+  /// Kirim video dari preview. Default: delegasi ke implementasi nyata di
+  /// `ChatPhotoSendMixin` (`sendVideoFromPreviewImpl`) — video TIDAK diaktifkan
+  /// di sana (`videoSendEnabled=false`) sehingga aman untuk room (no-op).
+  ///
+  /// Layar BOLEH meng-override method ini (mis. tes/varian lain).
+  Future<void> sendVideoFromPreview({
+    String text = '',
+    MessageModel? reply,
+  }) => sendVideoFromPreviewImpl(text: text, reply: reply);
+
+  /// Implementasi nyata di `ChatPhotoSendMixin`. Dipisah agar nama publik
+  /// `sendVideoFromPreview` bebas di-override tanpa kalah linearisasi mixin.
+  Future<void> sendVideoFromPreviewImpl({
+    String text = '',
+    MessageModel? reply,
+  });
 
   /// Kandidat mention untuk layar ini.
   List<Mention> sendMentionCandidates();
@@ -71,7 +104,13 @@ mixin ChatSendMixin<T extends StatefulWidget>
     // Kapitalkan huruf pertama saat kirim PESAN BARU (gaya WhatsApp).
     final text = capitalizeFirst(raw);
     final hasPhoto = sendPendingPhotoBase64 != null;
-    if (text.isEmpty && !hasPhoto) return;
+    // Media (foto ATAU video) boleh dikirim tanpa caption. Tanpa
+    // `hasVideo` di guard ini, kirim video tanpa teks BERHENTI di sini
+    // (early return) sebelum cabang video sempat jalan.
+    final hasVideo =
+        sendPendingVideoPath != null && sendPendingVideoPath!.isNotEmpty;
+    final hasLocation = sendPendingLocation != null;
+    if (text.isEmpty && !hasPhoto && !hasVideo && !hasLocation) return;
     if (sendIsSending) return;
 
     // Soft gate anon: fitur anon OFF → tawarkan daftar, jangan kirim.
@@ -115,6 +154,46 @@ mixin ChatSendMixin<T extends StatefulWidget>
     final uid = auth.uid;
     final profile = auth.profile;
     if (uid == null || profile == null) return;
+
+    // Jika ada VIDEO preview → kirim video (+ caption & balasan).
+    // Dicek SEBELUM foto: video & foto tidak boleh tampil bareng, tapi
+    // video diprioritaskan bila keduanya sempat terisi.
+    if (sendPendingVideoPath != null &&
+        sendPendingVideoPath!.isNotEmpty) {
+      final reply = sendReplyingTo;
+      final text = sendMsgCtrl.text.trim();
+      sendMsgCtrl.clear();
+      setState(() {
+        sendReplyingTo = null;
+      });
+      sendIsSending = true;
+      try {
+        await sendVideoFromPreview(text: text, reply: reply);
+      } finally {
+        sendIsSending = false;
+      }
+      return;
+    }
+
+    // Jika ada LOKASI preview → kirim lokasi (+ caption & balasan bila ada).
+    // Dicek SEBELUM video & foto: preview lokasi & media lain tidak bisa
+    // tampil bareng, lokasi paling eksplisit.
+    if (hasLocation) {
+      final reply = sendReplyingTo;
+      final caption = sendMsgCtrl.text.trim();
+      sendMsgCtrl.clear();
+      setState(() {
+        sendPendingLocation = null;
+        sendReplyingTo = null;
+      });
+      sendIsSending = true;
+      try {
+        await sendLocationFromPreview(text: caption, reply: reply);
+      } finally {
+        sendIsSending = false;
+      }
+      return;
+    }
 
     // Jika ada foto preview → kirim foto (+ caption & balasan bila ada).
     if (hasPhoto) {

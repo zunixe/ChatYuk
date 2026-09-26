@@ -85,6 +85,31 @@ void main() {
       await _emit([_u('a', 'online'), _u('a', 'online'), _u('', 'online')]);
       expect(provider.users.map((u) => u.uid).toList(), ['a']);
     });
+
+    test('baru online langsung ke atas; idle terlama paling bawah', () async {
+      // Idle >30 mnt disaring (tak tampil) — pakai 25 mnt untuk yang lama.
+      await _emit([
+        _u('lama', 'online', seenMinAgo: 10),
+        _u('idle-lama', 'idle', seenMinAgo: 25),
+        _u('idle-baru', 'idle', seenMinAgo: 2),
+      ]);
+      expect(
+        provider.users.map((u) => u.uid).toList(),
+        ['lama', 'idle-baru', 'idle-lama'],
+      );
+
+      // Pendatang baru yang paling segar langsung ke puncak.
+      await _emit([
+        _u('lama', 'online', seenMinAgo: 10),
+        _u('baru', 'online', seenMinAgo: 0),
+        _u('idle-lama', 'idle', seenMinAgo: 25),
+        _u('idle-baru', 'idle', seenMinAgo: 2),
+      ]);
+      expect(
+        provider.users.map((u) => u.uid).toList(),
+        ['baru', 'lama', 'idle-baru', 'idle-lama'],
+      );
+    });
   });
 
   group('merge avatar anti-kedip', () {

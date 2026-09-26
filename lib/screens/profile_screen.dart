@@ -15,27 +15,25 @@ import '../config/regions.dart';
 import '../config/strings.dart';
 import '../models/user_photo.dart';
 import '../providers/auth_provider.dart';
-import '../providers/chat_provider.dart';
 import '../providers/device_info_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/online_users_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
-import '../providers/theme_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../utils.dart';
 import 'link_email_screen.dart';
-import 'notification_settings_screen.dart';
-import 'privacy_settings_screen.dart';
-import '../core/admin_gate.dart';
+import 'settings_screen.dart';
 import 'contact_screen.dart';
 import 'donate_screen.dart';
+import '../core/admin_gate.dart';
 import 'leaderboard_screen.dart';
 import 'missions_screen.dart';
 import 'point_history_screen.dart';
 import 'social_list_screen.dart';
 import 'friend_requests_screen.dart';
 import 'subscriptions_screen.dart';
+import '../core/perf/perf_probe.dart';
 
 // Top-level function untuk compute() isolate — decode + resize + encode di background
 Future<String?> _processAvatar(Uint8List bytes) async {
@@ -74,13 +72,6 @@ Map<String, String>? _processPhotoWithPreview(Uint8List bytes) {
   return {'full': full, 'preview': previewB64};
 }
 
-/// Validasi kata konfirmasi hapus akun — terima HAPUS / DELETE di semua
-/// bahasa (top-level murni supaya bisa di-unit-test).
-bool isDeleteAccountConfirmValid(String input) {
-  final v = input.trim().toUpperCase();
-  return v == 'HAPUS' || v == 'DELETE';
-}
-
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -90,14 +81,16 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _uploading = false;
-  bool _loggingOut = false;
-  bool _deletingAccount = false;
 
   List<UserPhoto> _photos = [];
   bool _loadingPhotos = true;
 
   final TextEditingController _hashtagCtrl = TextEditingController();
   List<String> _hashtags = [];
+  // About diedit inline di tempat (tanpa bottom sheet).
+  bool _editingAbout = false;
+  bool _savingAbout = false;
+  final TextEditingController _aboutCtrl = TextEditingController();
   bool _savingHashtags = false;
   Uint8List? _cachedAvatarBytes;
   String? _lastAvatarB64;
@@ -105,21 +98,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // sesi dummy ⇄ admin (ProfileScreen hidup di IndexedStack, initState
   // tidak jalan lagi saat swap), supaya foto/hashtag/avatar ikut ganti.
   String? _loadedUid;
-  // Status "punya password" di-cache di state (dulu dipanggil via
-  // FutureBuilder(future: fetchHasPassword()) di build → RPC jaringan tiap
-  // rebuild = flicker + boros). Fetch sekali di initState.
-  bool _hasPassword = false;
 
   @override
   void initState() {
     super.initState();
     _loadPhotos();
-    _hasPassword = context.read<AuthProvider>().hasPassword;
-    // Refresh dari server sekali (non-blocking) supaya label akurat.
-    Future.microtask(() async {
-      final v = await context.read<AuthProvider>().fetchHasPassword();
-      if (mounted) setState(() => _hasPassword = v);
-    });
     _hashtags = List.of(
       context.read<AuthProvider>().profile?.hashtags ?? const [],
     );
@@ -134,7 +117,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _hashtagCtrl.dispose();
+    _aboutCtrl.dispose();
     super.dispose();
+  }
+
+  void _startEditAbout(String current) {
+    _aboutCtrl.text = current;
+    setState(() => _editingAbout = true);
+  }
+
+  void _cancelEditAbout() {
+    FocusScope.of(context).unfocus();
+    setState(() => _editingAbout = false);
+  }
+
+  Future<void> _saveAbout() async {
+    final auth = context.read<AuthProvider>();
+    final s = context.read<LocaleProvider>().s;
+    final text = _aboutCtrl.text.trim();
+    if (text == (auth.profile?.about ?? '')) {
+      setState(() => _editingAbout = false);
+      return;
+    }
+    setState(() => _savingAbout = true);
+    try {
+      await auth.updateProfile(about: text);
+      if (!mounted) return;
+      FocusScope.of(context).unfocus();
+      setState(() {
+        _editingAbout = false;
+        _savingAbout = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _savingAbout = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.errGeneric)));
+    }
   }
 
   void _addHashtag(String raw) {
@@ -500,6 +520,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showAvatarZoom(Uint8List? bytes, Color bgColor, String initial) {
     if (bytes == null && initial.isEmpty) return;
+    final zoomBytes = bytes;
     showDialog(
       context: context,
       barrierColor: Colors.black87,
@@ -512,10 +533,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4,
-                child: bytes != null
+                child: zoomBytes != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(bytes, fit: BoxFit.contain),
+                        // Cap 1080px: dialog zoom tidak butuh full-res 12MP.
+                        child: Image.memory(
+                          zoomBytes,
+                          fit: BoxFit.contain,
+                          cacheWidth: 1080,
+                        ),
                       )
                     : CircleAvatar(
                         radius: 90,
@@ -542,7 +568,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
-    );
+    ).then((_) {
+      // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
+      if (zoomBytes != null && zoomBytes.isNotEmpty) {
+        try {
+          PaintingBinding.instance.imageCache.evict(MemoryImage(zoomBytes));
+        } catch (_) {}
+      }
+    });
   }
 
   Future<void> _editProfile() async {
@@ -552,11 +585,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (profile == null) return;
     final currentNick = profile.nickname;
     final ctrl = TextEditingController(text: currentNick);
-    final aboutCtrl = TextEditingController(text: profile.about);
+    // About TIDAK lagi diedit di sini — punya editor inline sendiri
+    // di baris Tentang (tanpa bottom sheet).
     final focus = FocusNode();
     int age = profile.age;
     String negara = profile.country;
     String kota = profile.city;
+    // null = tidak diubah; hanya male/female yang ditulis ke server.
+    String? gender;
     String? error;
     bool loading = false;
 
@@ -619,23 +655,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onChanged: (v) => setSheet(() => error = null),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: aboutCtrl,
-                    style: TextStyle(color: AppTheme.textPrimary),
-                    maxLength: 150,
-                    maxLines: 3,
-                    minLines: 2,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      labelText: s.labelAbout,
-                      hintText: s.hintAbout,
-                      prefixIcon: const Icon(Icons.info_outline, size: 20),
-                      counterText: '',
-                      helperText: s.aboutPrivacyHint,
-                      helperStyle: AppText.caption.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
+                  DropdownButtonFormField<String>(
+                    initialValue: gender,
+                    hint: Text(
+                      profile.gender == 'female'
+                          ? s.labelGenderFemale
+                          : s.labelGenderMale,
                     ),
+                    decoration: InputDecoration(
+                      labelText: s.labelGenderFilter,
+                      prefixIcon: const Icon(Icons.wc_outlined, size: 20),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'male',
+                        child: Text(s.labelGenderMale),
+                      ),
+                      DropdownMenuItem(
+                        value: 'female',
+                        child: Text(s.labelGenderFemale),
+                      ),
+                    ],
+                    onChanged: (v) => setSheet(() => gender = v),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
@@ -732,7 +773,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       age: age,
                                       country: negara,
                                       city: kota,
-                                      about: aboutCtrl.text,
+                                      gender: gender,
                                     );
                                 if (sheetCtx.mounted) Navigator.pop(sheetCtx);
                                 if (mounted) {
@@ -792,6 +833,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    PerfProbe.buildCount('Profile');
     final auth = context.watch<AuthProvider>();
     final profile = auth.profile;
     // Deteksi swap sesi (dummy ⇄ admin): profil berubah identitas tanpa
@@ -833,7 +875,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : profile?.gender == 'female'
         ? s.labelGenderFemale
         : '';
-    final isAnon = auth.isAnonymous;
+    // Sesi anon SESUNGGUHNYA — jangan tampilkan banner saat proses keluar
+    // (signingOut): sesi belum kosong & isAnonymous masih true sekejap →
+    // banner oranye berkedip sebelum EntryScreen muncul.
+    final isAnon = auth.isAnonymous && !auth.signingOut;
     // Sesi dummy aktif HANYA bisa dibuat dari panel admin (becomeDummy) —
     // flag internal AuthService. Dulu: kondisi && isRealAdmin membuat banner
     // TIDAK PERNAH tampil, karena saat sesi dummy aktif currentUser.email
@@ -851,22 +896,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: AppTheme.headerGradient.colors.first,
             expandedHeight: 280,
             pinned: true,
-            leading: IconButton(
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              icon: _loggingOut
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.power_settings_new, size: 20),
-              tooltip: s.btnLogout,
-              onPressed: _loggingOut ? null : () => _confirmLogout(),
-            ),
+            // Keluar pindah ke Pengaturan › Akun.
             actions: [
               // Tombol Misi — sembunyikan saat sistem poin OFF
               if (context.watch<PointsProvider>().enabled)
@@ -1225,28 +1255,131 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         value: auth.uid?.substring(0, 8) ?? '-',
                       ),
                       Divider(height: 1, indent: 52),
-                      // About — teks bebas 150 karakter. Visibilitas diatur
+                      // About — teks bebas 150 karakter, diedit INLINE di
+                      // tempat (tanpa bottom sheet). Visibilitas diatur
                       // di Pengaturan > Privasi (about_visibility).
-                      ProfileInfoTile(
-                        icon: Icons.info_outline,
-                        iconColor: AppTheme.primary,
-                        label: s.labelAbout,
-                        value: (profile?.about ?? '').isEmpty
-                            ? s.aboutEmpty
-                            : profile!.about,
-                        valueStyle: (profile?.about ?? '').isEmpty
-                            ? AppText.bodySmall.copyWith(
-                                color: AppTheme.textSecondary,
+                      // Metrik sama dengan ProfileInfoTile (padding 4/6,
+                      // ikon lingkaran 36, celah 12) supaya sejajar.
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(
+                                  alpha: 0.1,
+                                ),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.info_outline,
+                                color: AppTheme.primary,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    s.labelAbout,
+                                    style: AppText.caption.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                  if (_editingAbout)
+                                    TextField(
+                                      controller: _aboutCtrl,
+                                      autofocus: true,
+                                      maxLength: 150,
+                                      maxLines: null,
+                                      textInputAction: TextInputAction.done,
+                                      onSubmitted: (_) => _saveAbout(),
+                                      style: AppText.bodyStrong,
+                                      decoration: InputDecoration(
+                                        hintText: s.hintAbout,
+                                        hintStyle:
+                                            AppText.bodySmall.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          vertical: 4,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      (profile?.about ?? '').isEmpty
+                                          ? s.aboutEmpty
+                                          : profile!.about,
+                                      style: (profile?.about ?? '').isEmpty
+                                          ? AppText.bodySmall.copyWith(
+                                              color: AppTheme.textSecondary,
+                                            )
+                                          : AppText.bodyStrong,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (_editingAbout)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_savingAbout)
+                                    const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.check,
+                                        size: 20,
+                                        color: AppTheme.primary,
+                                      ),
+                                      onPressed: _saveAbout,
+                                    ),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.close,
+                                      size: 20,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    onPressed: _savingAbout
+                                        ? null
+                                        : _cancelEditAbout,
+                                  ),
+                                ],
                               )
-                            : AppText.bodyStrong,
-                        trailing: IconButton(
-                          icon: Icon(
-                            Icons.edit_outlined,
-                            size: 18,
-                            color: AppTheme.primary,
-                          ),
-                          tooltip: s.btnEditProfile,
-                          onPressed: _editProfile,
+                            else
+                              IconButton(
+                                icon: Icon(
+                                  Icons.edit_outlined,
+                                  size: 18,
+                                  color: AppTheme.primary,
+                                ),
+                                tooltip: s.btnEditProfile,
+                                onPressed: () => _startEditAbout(
+                                  profile?.about ?? '',
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -1542,46 +1675,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                         Divider(height: 8),
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                          visualDensity: VisualDensity.compact,
-                          leading: Icon(
-                            Icons.person_add_alt,
-                            color: AppTheme.primary,
+                        // Pola sama dengan baris Pengaturan di bawah
+                        // (lingkaran 36 + celah 12) supaya ikon sejajar.
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
                           ),
-                          title: Text(
-                            s.friendRequestTitle,
-                            style: AppText.bodyStrong,
-                          ),
-                          trailing: Consumer<SocialProvider>(
-                            builder: (_, sp, __) => sp.friendRequestCount > 0
-                                ? Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FriendRequestsScreen(),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary.withValues(
+                                      alpha: 0.1,
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.danger,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      '${sp.friendRequestCount}',
-                                      style: AppText.caption.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  )
-                                : Icon(
-                                    Icons.chevron_right,
-                                    color: AppTheme.textSecondary,
+                                    shape: BoxShape.circle,
                                   ),
-                          ),
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => FriendRequestsScreen(),
+                                  child: Icon(
+                                    Icons.person_add_alt,
+                                    color: AppTheme.primary,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    s.friendRequestTitle,
+                                    style: AppText.bodyStrong.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Consumer<SocialProvider>(
+                                  builder: (_, sp, __) =>
+                                      sp.friendRequestCount > 0
+                                      ? Container(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.danger,
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            '${sp.friendRequestCount}',
+                                            style: AppText.caption.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.chevron_right,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -1771,389 +1932,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                   SizedBox(height: 12),
 
-                  // Pengaturan
-                  ProfileSectionLabel(label: s.titleSettings),
-                  SizedBox(height: 6),
+                  // Pengaturan — satu pintu (isi pindah ke SettingsScreen).
                   ProfileSectionCard(
                     children: [
-                      // Admin: tile buka panel — hanya ada di build admin
-                      // (di-inject lewat AdminGate oleh entry lib/main_admin.dart).
-                      // Sesi dummy → tile & toggles admin disembunyikan.
-                      // UI admin hanya untuk admin sungguhan (bukan dummy,
-                      // bukan anon/user biasa yang login di build admin).
-                      if (!dummyActive && auth.isRealAdmin)
-                        ...?AdminGate.profileSettingsHeader?.call(context),
-                      // Notifikasi
                       Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primary.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.notifications_outlined,
-                                color: AppTheme.primary,
-                                size: 20,
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: InkWell(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const NotificationSettingsScreen(),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          s.labelNotifications,
-                                          style: AppText.bodyStrong.copyWith(
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        SizedBox(width: 4),
-                                        Icon(
-                                          Icons.chevron_right,
-                                          size: 16,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ],
-                                    ),
-                                    Text(
-                                      s.notifEnabledDesc,
-                                      style: AppText.bodySmall.copyWith(
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Switch(
-                              value: auth.notificationsEnabled,
-                              onChanged: (v) => context
-                                  .read<AuthProvider>()
-                                  .setNotificationsEnabled(v),
-                              activeThumbColor: AppTheme.primary,
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!isAnon) ...[
-                        Divider(height: 1, indent: 52),
-                        // Privasi — struktur sama dengan tile Notifikasi &
-                        // Password (lingkaran 36, ikon 20, padding 4) supaya
-                        // ikon & teks sejajar rapi satu kolom.
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const PrivacySettingsScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primary.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.lock_outline,
-                                    color: AppTheme.primary,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        s.privacyTitle,
-                                        style: AppText.bodyStrong.copyWith(
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        s.privacyHint,
-                                        style: AppText.bodySmall.copyWith(
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.chevron_right,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                      Divider(height: 1, indent: 52),
-                      // Ukuran font chat (slider) — hanya berlaku di bubble
-                      // chat, tidak mengubah tipografi halaman lain.
-                      const ProfileChatFontTile(),
-                      Divider(height: 1, indent: 52),
-                      // Admin: toggle screenshot/watermark/invisible —
-                      // hanya ada di build admin (via AdminGate).
-                      if (!dummyActive && auth.isRealAdmin)
-                        ...?AdminGate.profileSettingsTail?.call(context),
-                      // Password: set (akun Google) / change (akun email) —
-                      // hanya untuk user terdaftar (email/Google), bukan anon.
-                      if (!isAnon) ...[
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: () async {
-                              final hasPw = await context
-                                  .read<AuthProvider>()
-                                  .fetchHasPassword();
-                              if (context.mounted)
-                                _showPasswordDialog(context, isSet: !hasPw);
-                            },
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primary.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    auth.hasPassword
-                                        ? Icons.password
-                                        : Icons.lock_outline,
-                                    color: AppTheme.primary,
-                                    size: 20,
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _hasPassword
-                                            ? s.btnChangePassword
-                                            : s.btnSetPassword,
-                                        style: AppText.bodyStrong.copyWith(
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        _hasPassword
-                                            ? s.descChangePassword
-                                            : s.descSetPassword,
-                                        style: AppText.bodySmall.copyWith(
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.chevron_right,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Divider(height: 1, indent: 52),
-                      ],
-                      // Bahasa
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppTheme.accent.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.language_outlined,
-                                color: AppTheme.accent,
-                                size: 20,
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.labelLanguage,
-                                    style: AppText.bodyStrong.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    locale.isId
-                                        ? '🇮🇩 Indonesia'
-                                        : '🇬🇧 English',
-                                    style: AppText.bodySmall.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: locale.isId,
-                              onChanged: (v) => context
-                                  .read<LocaleProvider>()
-                                  .setLang(v ? 'id' : 'en'),
-                              activeThumbColor: AppTheme.primary,
-                            ),
-                          ],
-                        ),
-                      ),
-                      Divider(height: 1, indent: 52),
-                      // Tema gelap/terang
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppTheme.accent.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.dark_mode_outlined,
-                                color: AppTheme.accent,
-                                size: 20,
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.labelTheme,
-                                    style: AppText.bodyStrong.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    s.descTheme,
-                                    style: AppText.bodySmall.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: context.watch<ThemeProvider>().isDark,
-                              onChanged: (v) =>
-                                  context.read<ThemeProvider>().setDark(v),
-                              activeThumbColor: AppTheme.primary,
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Hapus akun (kepatuhan Google Play) — semua tipe akun.
-                      Divider(height: 1, indent: 52),
-                      Padding(
-                        padding: EdgeInsets.symmetric(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 4,
                           vertical: 4,
                         ),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
-                          onTap: _deletingAccount
-                              ? null
-                              : _confirmDeleteAccount,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          ),
                           child: Row(
                             children: [
                               Container(
                                 width: 36,
                                 height: 36,
                                 decoration: BoxDecoration(
-                                  color: AppTheme.danger.withValues(alpha: 0.1),
+                                  color: AppTheme.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   shape: BoxShape.circle,
                                 ),
-                                child: _deletingAccount
-                                    ? Padding(
-                                        padding: EdgeInsets.all(9),
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppTheme.danger,
-                                        ),
-                                      )
-                                    : Icon(
-                                        Icons.delete_forever_outlined,
-                                        color: AppTheme.danger,
-                                        size: 20,
-                                      ),
+                                child: Icon(
+                                  Icons.settings_outlined,
+                                  color: AppTheme.primary,
+                                  size: 20,
+                                ),
                               ),
-                              SizedBox(width: 12),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      s.btnDeleteAccount,
+                                      s.titleSettings,
                                       style: AppText.bodyStrong.copyWith(
                                         fontWeight: FontWeight.w500,
-                                        color: AppTheme.danger,
                                       ),
                                     ),
                                     Text(
-                                      s.confirmDeleteAccountBody,
-                                      // Tanpa maxLines — deskripsi panjang
-                                      // harus kebaca semua (Google Play
-                                      // account deletion requirement).
+                                      s.descSettings,
                                       style: AppText.bodySmall.copyWith(
                                         color: AppTheme.textSecondary,
                                       ),
@@ -2266,162 +2091,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  /// Dialog set password (akun Google) / ganti password (akun email).
-  Future<void> _showPasswordDialog(
-    BuildContext context, {
-    required bool isSet,
-  }) async {
-    final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
-    final currentCtrl = TextEditingController();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    var loading = false;
-    String? errorText;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierDismissible: !loading,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          backgroundColor: AppTheme.bgCard,
-          title: Text(isSet ? s.btnSetPassword : s.btnChangePassword),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isSet ? s.descSetPassword : s.descChangePassword,
-                style: AppText.bodySmall.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              SizedBox(height: 12),
-              if (!isSet) ...[
-                TextField(
-                  controller: currentCtrl,
-                  obscureText: true,
-                  style: TextStyle(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: s.labelCurrentPassword,
-                  ),
-                ),
-                SizedBox(height: 10),
-              ],
-              TextField(
-                controller: newCtrl,
-                obscureText: true,
-                style: TextStyle(color: AppTheme.textPrimary),
-                decoration: InputDecoration(labelText: s.labelPassword),
-              ),
-              SizedBox(height: 10),
-              TextField(
-                controller: confirmCtrl,
-                obscureText: true,
-                style: TextStyle(color: AppTheme.textPrimary),
-                decoration: InputDecoration(labelText: s.labelConfirmPassword),
-              ),
-              if (errorText != null) ...[
-                SizedBox(height: 8),
-                Text(
-                  errorText!,
-                  style: AppText.caption.copyWith(color: AppTheme.danger),
-                ),
-              ],
-            ],
-          ),
-          actionsAlignment: MainAxisAlignment.spaceBetween,
-          actions: [
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                side: BorderSide(color: AppTheme.divider),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                minimumSize: Size(100, 36),
-              ),
-              onPressed: loading ? null : () => Navigator.pop(ctx, false),
-              child: Text(
-                s.btnCancel,
-                style: AppText.bodySmall.copyWith(
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                minimumSize: Size(100, 36),
-              ),
-              onPressed: loading
-                  ? null
-                  : () async {
-                      final newPw = newCtrl.text;
-                      final confirm = confirmCtrl.text;
-                      if (newPw.length < 8) {
-                        setState(() => errorText = s.errPasswordShort);
-                        return;
-                      }
-                      if (newPw != confirm) {
-                        setState(() => errorText = s.errPasswordMismatch);
-                        return;
-                      }
-                      setState(() {
-                        loading = true;
-                        errorText = null;
-                      });
-                      try {
-                        if (isSet) {
-                          await auth.setPassword(newPw);
-                        } else {
-                          await auth.changePassword(currentCtrl.text, newPw);
-                        }
-                        if (ctx.mounted) Navigator.pop(ctx, true);
-                      } catch (e) {
-                        final msg = e.toString();
-                        setState(() {
-                          loading = false;
-                          errorText = msg.contains('Invalid login credentials')
-                              ? s.errCurrentPasswordWrong
-                              : '${s.errChangePassword}$msg';
-                        });
-                      }
-                    },
-              child: loading
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(
-                      s.btnSave,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (ok == true && context.mounted) {
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(isSet ? s.msgPasswordSet : s.msgPasswordChanged),
-          ),
-        );
-    }
-  }
-
   Future<void> _editSubscriptionPrice(BuildContext context) async {
     final s = context.read<LocaleProvider>().s;
     final social = context.read<SocialProvider>();
@@ -2489,218 +2158,5 @@ class _ProfileScreenState extends State<ProfileScreen> {
       SnackBar(content: Text(ok ? s.msgProfileSaved : s.errGeneric)),
     );
     if (ok) await context.read<AuthProvider>().reloadProfile();
-  }
-
-  /// Hapus akun (Google Play account deletion requirement).
-  /// Konfirmasi berlapis: dialog ringkasan → dialog ketik HAPUS/DELETE.
-  Future<void> _confirmDeleteAccount() async {
-    final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
-
-    // Admin dilarang self-delete di sisi server — tidak tampilkan menu.
-    if (auth.isRealAdmin) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.errDeleteAccountForbidden)));
-      return;
-    }
-
-    final step1 = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Row(
-          children: [
-            Icon(Icons.delete_forever, color: AppTheme.danger, size: 24),
-            SizedBox(width: 10),
-            Expanded(child: Text(s.btnDeleteAccount, style: AppText.title)),
-          ],
-        ),
-        content: Text(
-          s.confirmDeleteAccountBody,
-          style: AppText.body.copyWith(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              s.btnCancel,
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
-            child: Text(
-              s.btnDeleteAccount,
-              style: const TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (step1 != true || !mounted) return;
-
-    // Step 2: ketik HAPUS / DELETE — terima KEDUANYA di semua bahasa.
-    // Dulu hanya kata sesuai locale (HAPUS=id, DELETE=en) sehingga user
-    // berbahasa Inggris yang mengetik HAPUS (atau sebaliknya) mengira
-    // tombol rusak karena tetap nonaktif.
-    final ctrl = TextEditingController();
-    final step2 = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text(s.btnDeleteAccount, style: AppText.title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              s.labelDeleteAccountConfirm,
-              style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
-            ),
-            SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              autocorrect: false,
-              enableSuggestions: false,
-              style: AppText.body.copyWith(color: AppTheme.textPrimary),
-              decoration: InputDecoration(
-                hintText: s.deleteAccountConfirmHint,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              s.btnCancel,
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          ListenableBuilder(
-            listenable: ctrl,
-            builder: (ctx, _) => FilledButton(
-              onPressed: isDeleteAccountConfirmValid(ctrl.text)
-                  ? () => Navigator.of(ctx).pop(true)
-                  : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.danger,
-                disabledBackgroundColor: AppTheme.danger.withValues(alpha: 0.4),
-              ),
-              child: Text(
-                s.btnDeleteAccount,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (step2 != true || !mounted) return;
-
-    setState(() => _deletingAccount = true);
-    try {
-      if (auth.isAnonymous) {
-        await context.read<SocialProvider>().clearAnonSocial();
-      }
-      await context.read<AuthProvider>().deleteMyAccount();
-      await auth.signOut();
-      chat.reset();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.msgDeleteAccountSuccess)));
-      }
-    } catch (e) {
-      dlog('[PROFILE] delete account error: $e', tag: 'PROFILE');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errDeleteAccount)));
-      }
-    } finally {
-      if (mounted) setState(() => _deletingAccount = false);
-    }
-  }
-
-  Future<void> _confirmLogout() async {
-    final s = context.read<LocaleProvider>().s;
-    final auth = context.read<AuthProvider>();
-    final chat = context.read<ChatProvider>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Row(
-          children: [
-            Icon(Icons.power_settings_new, color: AppTheme.danger, size: 24),
-            SizedBox(width: 10),
-            Expanded(child: Text(s.btnLogout, style: AppText.title)),
-          ],
-        ),
-        content: Text(
-          s.confirmLogoutBody,
-          style: AppText.body.copyWith(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              s.btnCancel,
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
-            child: Text(
-              s.btnLogout,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _loggingOut = true);
-    // Anon logout: hapus relasi sosialnya (follow/subscribe/friend request)
-    // supaya followers/subscribers user lain berkurang sesuai data yang
-    // sebenarnya. Dibatasi waktu (di service) + tidak boleh MENGGAGALKAN
-    // logout: relasi sosial boleh tersisa, tapi user harus tetap bisa keluar.
-    if (auth.isAnonymous) {
-      try {
-        await context.read<SocialProvider>().clearAnonSocial().timeout(
-          const Duration(seconds: 5),
-        );
-      } catch (e) {
-        dlog(
-          '[PROFILE] clearAnonSocial saat logout dilewati: $e',
-          tag: 'PROFILE',
-        );
-      }
-    }
-    // Logout TIDAK boleh menggantung karena jaringan: signOut punya timeout
-    // sendiri, dan apa pun hasilnya user keluar (sesi lokal dibuang).
-    try {
-      await auth.signOut().timeout(const Duration(seconds: 8));
-    } catch (e) {
-      dlog(
-        '[PROFILE] signOut timeout/error, lanjut paksa keluar: $e',
-        tag: 'PROFILE',
-      );
-    } finally {
-      chat.reset();
-      if (mounted) setState(() => _loggingOut = false);
-    }
   }
 }

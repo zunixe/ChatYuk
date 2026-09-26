@@ -247,4 +247,129 @@ void main() {
       expect(await s.getExcludedDevices(), isEmpty);
     });
   });
+
+  group('kritis: poin/dummy/update/monitor', () {
+    test('resetAllPoints → int (mass-reset terkunci)', () async {
+      handler.on('admin_reset_points', (_) => 42);
+      expect(await svc.resetAllPoints(), 42);
+    });
+
+    test('deleteDummy → RPC + p_uid', () async {
+      handler.on('admin_delete_dummy', (_) => {'ok': true});
+      final res = await svc.deleteDummy('u9');
+      expect(res['ok'], isTrue);
+      expect(rpcParamsOf(handler, 'admin_delete_dummy')['p_uid'], 'u9');
+    });
+
+    test('updateDummyProfile → semua params', () async {
+      handler.on('admin_update_dummy_profile', (_) => {'ok': true});
+      await svc.updateDummyProfile(
+        uid: 'u9',
+        nickname: 'Budi',
+        gender: 'male',
+        age: 25,
+        country: 'Indonesia',
+        city: 'Jakarta',
+      );
+      final p = rpcParamsOf(handler, 'admin_update_dummy_profile');
+      expect(p['p_uid'], 'u9');
+      expect(p['p_nickname'], 'Budi');
+      expect(p['p_age'], 25);
+      expect(p['p_city'], 'Jakarta');
+    });
+
+    test('setDummyAi → params wajib + opsional', () async {
+      handler.on('admin_set_dummy_ai', (_) => {'ok': true});
+      await svc.setDummyAi('u9', true, {'tone': 'ceria'}, guardEnabled: false);
+      final p = rpcParamsOf(handler, 'admin_set_dummy_ai');
+      expect(p['p_uid'], 'u9');
+      expect(p['p_enabled'], isTrue);
+      expect(p['p_persona'], {'tone': 'ceria'});
+      expect(p['p_guard_enabled'], isFalse);
+      // max_replies null ikut terkirim (reset override) — perilaku server.
+      expect(p.containsKey('p_max_replies'), isTrue);
+      expect(p['p_active_hours'], isEmpty);
+    });
+
+    test('getAiSettings → map; kosong bila null', () async {
+      handler.on('admin_ai_settings', (_) => {'ai_global_enabled': true});
+      expect((await svc.getAiSettings())['ai_global_enabled'], isTrue);
+    });
+
+    test('autoScheduleAi → jam terurut', () async {
+      handler.on('admin_ai_autoschedule', (_) => {'hours': [22, 8, 8]});
+      expect(await svc.autoScheduleAi('u9'), [8, 8, 22]);
+    });
+
+    test('getUpdateConfig → kolom update (lockout massal terkunci)', () async {
+      handler.on(
+        'app_settings',
+        (_) => {
+          'update_enabled': true,
+          'latest_version': '1.2.55',
+          'min_version': '1.2.49',
+          'update_notes': 'x',
+        },
+      );
+      final cfg = await svc.getUpdateConfig();
+      expect(cfg?['latest_version'], '1.2.55');
+      expect(cfg?['min_version'], '1.2.49');
+    });
+
+    test('saveUpdateConfig → upsert app_settings', () async {
+      handler.on('app_settings', (_) => []);
+      await svc.saveUpdateConfig(
+        enabled: true,
+        latestVersion: '1.2.55',
+        minVersion: '1.2.49',
+        notes: 'x',
+      );
+      final upsert = handler.captured.firstWhere(
+        (r) => r.method == 'POST' && r.url.path.contains('/rest/v1/app_settings'),
+      );
+      expect(upsert.body, contains('1.2.55'));
+    });
+
+    test('getChatLastRead → stringify + {} saat null', () async {
+      handler.on('admin_get_chat_last_read', (_) => {'u1': '2026-01-01'});
+      expect(await svc.getChatLastRead('c1'), {'u1': '2026-01-01'});
+    });
+
+    test('listDummiesPage → params limit/offset', () async {
+      handler.on('admin_list_dummies_page', (_) => {'items': [], 'total': 0});
+      await svc.listDummiesPage(limit: 10, offset: 5);
+      final p = rpcParamsOf(handler, 'admin_list_dummies_page');
+      expect(p['p_limit'], 10);
+      expect(p['p_offset'], 5);
+    });
+
+    test('getDummyStories → params uid/days', () async {
+      handler.on('admin_get_dummy_stories', (_) => {'days': []});
+      await svc.getDummyStories('u9', days: 7);
+      final p = rpcParamsOf(handler, 'admin_get_dummy_stories');
+      expect(p['p_uid'], 'u9');
+      expect(p['p_days'], 7);
+    });
+
+    test('fetchRegistrationsDaily → map hari', () async {
+      handler.on('admin_registrations_daily', (_) => [
+            {'day': 1, 'count': 5},
+            {'day': 2, 'count': 3},
+          ]);
+      expect(await svc.fetchRegistrationsDaily(2026, 9), {1: 5, 2: 3});
+    });
+
+    test('kontak: list/read/delete → endpoint benar', () async {
+      handler.on('admin_contact_messages_page', (_) => {'items': []});
+      await svc.listContactMessages(limit: 5);
+      expect(
+        rpcParamsOf(handler, 'admin_contact_messages_page')['p_limit'],
+        5,
+      );
+      await svc.setContactRead('m1', read: false);
+      expect(rpcParamsOf(handler, 'admin_contact_set_read')['p_read'], isFalse);
+      await svc.deleteContactMessage('m1');
+      rpcRequestOf(handler, 'admin_contact_delete');
+    });
+  });
 }
