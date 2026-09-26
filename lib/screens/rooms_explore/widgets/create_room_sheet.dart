@@ -148,6 +148,8 @@ Future<void> showCreateExploreRoomDialog(
                                   customBytes!,
                                   fit: BoxFit.cover,
                                   gaplessPlayback: true,
+                                  // Kotak 48px — decode 3x (density) cukup.
+                                  cacheWidth: 144,
                                 ),
                               )
                             : Icon(

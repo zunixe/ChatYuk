@@ -156,6 +156,72 @@ kunjungan pertama, n=2 = kunjungan kedua (tab sama).
 4. **Putusan akhir admin panel: TIDAK ada pekerjaan optimasi.** Semua dalam
    batas wajar; variasi antar-panggilan lebih besar daripada selisih cold/warm.
 
+### 1g. Review skala admin panel — "kalau orangnya banyak" (2026-09-26)
+
+Skala live saat ukur: 162 profiles, 66 devices, 341 chats, 2358 messages,
+14 dummies, 105 deleted. Pertanyaan: apa yang jebol duluan di 100×?
+
+**Temuan 1 — O(n²) di client (DIPERBAIKI).** `_filtered()`/`_sortedFiltered()`
+dipanggil di `itemCount` + di dalam `itemBuilder` **per baris** (devices tab
+dan chat list), plus grouping+sort diulang tiap build. Tiap huruf search =
+rebuild penuh. Fix (`admin_devices_tab.dart`, `admin_chat_list_screen.dart`):
+hitung filter/group/sort **sekali per build** ke variabel lokal, `itemBuilder`
+pakai ulang; search di-debounce 250ms.
+
+**Temuan 2 — bug paginasi `admin_list_deleted` (DIPERBAIKI,
+`20260926050000`).** `LIMIT/OFFSET` di subquery union **tanpa ORDER BY**
+(urut baru di agregat luar) → halaman 2+ acak/duplikat saat data banyak.
+Fix: `order by sort_at desc nulls last` di dalam subquery. Verifikasi live:
+page1=100, page2=5, overlap=0, batas urutan benar. EXPLAIN: Index Only Scan
+via `deleted_users_deleted_idx` ✅.
+
+**Divalidasi aman (tidak diubah):**
+- `admin_list_devices`: 1 query, ORDER BY ter-cover `user_devices_seen_idx`,
+  total via estimasi `reltuples`. EXPLAIN: index-friendly.
+- Semua tab sudah paging server (100/100/50/50/40) + infinite scroll +
+  disk cache + polling 30–60 dtk yang skip saat sudah load-more.
+- `admin_stats_detail` (FROZEN): 4× full-scan profiles — terbesar, tapi
+  cache client 60 dtk + hanya saat buka usermap/sheet. **Sengaja tidak
+  disentuh** (aturan frozen); jadi kandidat Fase 2 bila user >2000.
+- N+1 di `admin_list_dummies_page` (`unread` per dummy), `admin_list_chats_page`
+  (count+max per chat), `location_history` tanpa limit di `admin_user_detail`
+  → **SUDAH DIPERBAIKI (2026-09-26, Fase 2):** `20260926060000` (unread via
+  1× GROUP BY), `20260926070000` (msg_count/last_noncall via 1× agregasi +
+  total estimasi reltuples, semantik urutan `call` dipertahankan),
+  `20260926080000` (location_history dibatasi 200 + count via agregasi;
+  kunci JSON tidak berubah).
+- Sheet detail statistik user → paginasi server via RPC **baru**
+  `admin_stats_users_page` (`20260926090000`; filter/bentuk/urut SAMA dengan
+  detail; `admin_stats_detail` FROZEN **tidak disentuh**).
+
+**Catatan 100×:** uji beban sintetis 16k baris **sengaja tidak** dilakukan di
+DB live (risiko trigger/notifikasi/polusi). Sebagai gantinya: EXPLAIN
+index-usage + bukti determinisme paginasi di atas + fix kompleksitas client
+(yang terbukti benar secara konstruksi, bukan pengukuran).
+
+### 1h. Diagnosis "ngelag" di HP (2026-09-26, ukur langsung + PERF_PROBE)
+
+Keluhan user: admin panel terasa ngelag. Diukur live di HP (Xiaomi,
+build admin diagnosis): **semua RPC 130–360ms, tidak ada query patologis**.
+Query per query sudah cepat (EXPLAIN: count devices 0.99ms; payload devices
+cuma 36KB). Lag berasal dari **jumlah round-trip saat buka panel**, bukan
+1 query lambat:
+
+**Temuan — `armNotifications()` menarik `listDevices(limit: 1000)` tiap buka
+panel** (hanya untuk seed ID seen). Bersamaan dengan itu: `fetchStats`,
+`_loadPointSettings`, `fetchDevices` (hal. 100), `fetchActiveCalls` +
+realtime → 4–5 RPC berat berbarengan di koneksi yang sedang buruk (banner
+"Tidak ada koneksi internet" tampil saat ukur).
+
+**Fix (client saja, tanpa SQL):**
+- Seed jadi malas (lazy): `fetchDevices` pertama setelah arm = baseline
+  diam-diam (`_seedDone` di `AdminBase`; device baru selalu di atas karena
+  ORDER BY last_seen desc → halaman-1 cukup). Fetch limit-1000 dihapus total.
+- `getExcludedDevices()` di-memo 5 menit di `AdminService` (dulu tiap
+  deteksi = 1 RPC; hanya menunda supresi notifikasi, bukan data).
+- Test: `armNotifications` verifyNever `listDevices`; fetch-1 seed diam,
+  fetch-2 device baru → tepat 1 notifikasi (`admin_provider_di_test.dart`).
+
 ### 1f. PASS KEDUA — jalur data utama
 
 | Jalur | Pass 1 | Pass 2 | Catatan |
@@ -870,3 +936,139 @@ operator` = 0).
 **Titik ukur baru:** `timeline.comments`, `timeline.like`, `timeline.addComment`,
 `timeline.replyComment`, `timeline.share` (ditambahkan di `TimelineProvider`
 passthrough, `timeline_provider.dart`).
+
+### 12.7 QA performa per halaman (2026-09-26, Xiaomi 24129PN74G, build rilis + `PERF_PROBE=true`)
+
+**Instrumentasi baru (Fase A):** `PerfProbe.buildCount` di 10 layar
+(RoomChat, PrivateChat, Timeline, Profile, UserInfo, StoryViewer,
+StoryComposer, Nearby, SocialList, PostComposer). Jalur data sudah tercakup
+sebelumnya (`chat.listFetch`, `online.rpc`, `timeline.rpc`, `call.*`,
+`admin.*`).
+
+**Hasil buildCount (sesi nyata):**
+| Layar | Sebelum fix | Sesudah fix | Catatan |
+|---|---|---|---|
+| PrivateChat (buka 1 chat + idle) | 50–67 | **3** (ronde kontrol: airplane mode, emisi network dimatikan) | Fix: `watch<AuthProvider>`/`watch<PointsProvider>` → `select` per field |
+| RoomChat | — | `select` boolean `enabled` (pola sama, tanpa ronde ukur khusus) | Satu-satunya field yang dipakai render |
+| Online / MainNav | 56–66 / 52–61 | 9–10 / 9 (ronde kontrol) | Didominasi emisi realtime (presence), bukan watch — by design |
+| Timeline / StoryViewer / UserInfo / Profile / ChatList | 3 / 3 / 2 / 5–12 / 9–15 | — | Sehat, tidak dioptimasi |
+
+**Jalur data (rentang antar-sesi, jaringan rumah berfluktuasi):**
+`chat.listFetch` 225–1007ms (normal) dengan spike server hingga max 1.8s
+(`pg_stat_statements`: mean 1–22ms, max 887–1845ms — bahkan lookup PK ikut
+spike → noise infrastruktur, bukan bentuk query). Sampel >7s adalah artefak
+pengujian (request in-flight saat mode pesawat on) dan dibuang. Warm sehat:
+`online.rpc` 115–185ms, `timeline.rpc` ~115–156ms, `story.tray` 125–265ms.
+
+**Frame:** `SurfaceFlinger --latency` tidak mengembalikan sampel di perangkat/
+Android ini (layer idle; limitasi tooling yang sudah didokumentasikan).
+`gfxinfo` (n=19, lemah): p50 6ms, 2 janky. Tidak ada ANR/crash. Memori sehat
+(PSS ~237MB).
+
+**Belum terukur (butuh sesi lanjutan):** render tab admin, RoomChat rebuild,
+Nearby/SocialList/PostComposer/StoryComposer counts, call 2-device.
+
+**Aturan lanjutan (jangan dibalik):** `select` per field di
+`private_chat_screen.dart` / `room_chat_screen.dart` (bukan `watch` penuh);
+titik `buildCount` 10 layar di atas.
+
+### 12.8 Kandidat yang GUGUR terukur (2026-09-26, ronde kontrol)
+
+Dua dugaan dari review divalidasi dengan `PerfProbe.measure` di build probe
+(sesi nyata: Online scroll 2× + buka 1 chat + background):
+
+| Kandidat | Hasil | Putusan |
+|---|---|---|
+| `Nav.unread` (fold unread badge BottomNav per emission) | n=23, avg=max=0.0ms | **GUGUR** — trivial, jangan dioptimasi |
+| `Online.filter` (filter+dedupe list Online per emission) | n=17, avg=max=0.0ms | **GUGUR** — trivial (<0.05ms), jangan dioptimasi |
+| `deletedIds` per bubble (O(N²)) | Sudah sekali-per-emission di kode (bukan per bubble) | **GUGUR** — dugaan keliru, tidak ada yang diperbaiki |
+| Image auto-load burst | Sudah antrean `_maxImageFetches` di kode | **GUGUR** — sudah ada, tidak ada yang diperbaiki |
+
+Wrapper `measure` dibiarkan di kode (no-op saat probe off) untuk QA berikutnya.
+Bonus validasi: `PrivateChat=3` konsisten pasca-fix select (vs 50–67 sebelum).
+
+### 12.9 Timeline scroll glitch — layout shift foto (2026-09-26)
+
+Keluhan: scroll timeline tidak smooth, "glitch-glitch". Audit: bukan rebuild
+(Timeline buildCount=3, sehat) dan bukan fetch ulang (thumb di-cache
+`PostPhotoCache`, `gaplessPlayback` sudah on). Penyebabnya **layout shift**:
+blok foto dirender `SizedBox.shrink()` sampai thumb tiba, lalu 0→penuh
+tiba-tiba — tiap kartu berfoto mendorong konten di bawahnya tepat saat user
+scroll. Foto tunggal paling parah (tinggi natural baru diketahui setelah
+decode; multi sudah fixed 52+8+260 tapi juga shrink saat loading).
+
+Fix (`post_card.dart`, client saja):
+- Area foto dicadangkan sejak **path diketahui** (synchronous dari `_p`),
+  bukan saat thumb tiba: kondisi tampil `_imagePaths().isNotEmpty`.
+- Placeholder `primary 8%` setinggi layout final selagi thumb loading
+  (tunggal 260 / multi 320) → **nol layout shift** saat foto masuk.
+- Foto tunggal: tinggi TETAP 260 + `BoxFit.cover` (dulu natural). Trade-off
+  disengaja: crop ala feed standar (IG/Threads) demi scroll stabil. Multi
+  tidak berubah (sudah 260 + cover).
+- Semua path gagal → `SizedBox.shrink` seperti dulu (bukan placeholder abadi).
+
+Konstruksi menjamin nol shift (tinggi final == tinggi placeholder); verifikasi
+rasa di HP menyusul. Aturan lanjutan: jangan kembalikan foto tunggal ke tinggi
+natural tanpa placeholder ber-animasi, dan jangan tampilkan blok foto
+berdasarkan `_imageThumbs` (async).
+
+---
+
+## 13. Memori 864MB → 225MB: bitmap full-res (2026-09-26)
+
+**Gejala:** awal cepat, lama-lama ngetik susah + buka halaman ngelag.
+**Ukur HP (Xiaomi):** TOTAL PSS 864MB — Native Heap **500MB**, Dart 6MB.
+Artinya ~500MB bitmap Skia: foto chat di-decode full-res (12MP ≈ 48MB/foto)
+di semua bubble + viewer tanpa batas.
+
+**Fix (client saja):**
+- Bubble chat `cacheWidth: 720–1080` + `filterQuality.medium` (dulu full-res
+  + high tiap frame saat scroll) — `private_chat_message.dart`.
+- Viewer fullscreen (chat + timeline) evict bitmap saat ditutup.
+- Dialog zoom (online/profil/user-info/admin) cap 1080 + evict.
+- Carousel profil/galeri + ikon room + avatar admin: cacheWidth sesuai tampil.
+- Cap komentar timeline 20 post; ImageCache global 200/100MB di `main.dart`.
+- PhotoCache 20+8MB, PostPhoto 30MB, Avatar 100, Story thumbs 80, MessageCache
+  30 chat — sudah bounded, tidak disentuh.
+
+**Verifikasi HP:** fresh 256MB; scroll chat foto → **225MB (turun, tidak
+tumbuh)**. `flutter test` 1251–1264 hijau. Aturan: jangan tampilkan
+`Image.memory` tanpa `cacheWidth` di permukaan persisten; viewer/dialog
+WAJIB evict saat tutup.
+
+**Diagnosis lanjutan (build PERF_PROBE):** rebuild wajar (PrivateChat 63× =
+event nyata + scroll test, bukan storm); RPC 120–600ms variasi jaringan;
+tidak ada query patologis. Sisa lag = varians jaringan, bukan client.
+
+---
+
+## 14. Fase 5 — tutup celah bitmap + hygiene logout (2026-09-26)
+
+Lanjutan §13: audit menemukan 4 titik `Image.memory` yang masih decode
+full-res (melanggar aturan §13) + cache gambar tidak dibersihkan saat logout.
+
+**Ditutup:**
+- `private_chat_message.dart` viewer view-once inline (buka dari bubble):
+  `cacheWidth: 1080` + evict saat route ditutup.
+- `async_photo.dart` `AsyncPhotoViewer` (galeri profil + galeri user-info,
+  swipe antar foto): `cacheWidth: 1080` + evict di `dispose()`.
+- `post_card.dart` `_zoomAuthorPhoto` (dialog zoom avatar): `cacheWidth: 1080`
+  + evict saat dialog ditutup.
+- `create_room_sheet.dart` preview ikon room: `cacheWidth: 144`.
+
+**Hygiene logout (`lib/core/media/image_cache_hygiene.dart`):**
+- Satu titik `ImageCacheHygiene.clearAll()` → kosongkan Flutter `ImageCache`
+  (`clear` + `clearLiveImages`) + semua cache aplikasi terdaftar.
+- `decodedImageCache` (foto chat) mendaftar malas saat pertama diisi.
+- Dipanggil di `AuthProvider.signOut()` dan setelah login Google — foto user
+  lama tidak tinggal di RAM saat HP bergantian pemakai.
+- Test `image_cache_hygiene_test.dart` (4): registry, idempoten,
+  tahan-error, ImageCache bersih.
+
+**Verifikasi HP:** fresh **238MB** (Native Heap 34MB) — konsisten dengan §13
+(tidak ada regresi). `flutter analyze` 0/0, `flutter test` **1268 hijau**.
+
+**Catatan:** `post_card.dart` sempat rusak (kurung `carouselPhoto` hilang,
+sisa edit edge-to-edge foto) → build gagal walau analyzer lolos; diperbaiki
+di sini. Pelajaran: **build rilis = gerbang nyata**, jangan percaya
+`analyze` saja untuk perubahan struktur widget.

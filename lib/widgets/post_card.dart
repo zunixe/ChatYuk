@@ -9,6 +9,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
 import '../services/avatar_service.dart';
@@ -31,6 +32,12 @@ class PostCard extends StatefulWidget {
 class _PostCardState extends State<PostCard> {
   Map<String, dynamic> get _p => widget.post;
   bool _busy = false;
+  bool _followBusy = false;
+  // Tinggi foto feed TETAP (nol layout shift saat scroll): foto tunggal
+  // di-crop cover setinggi carousel, bukan tinggi natural yang baru
+  // diketahui setelah decode (dulu kartu melompat tiap thumb tiba).
+  static const double _kSinglePhotoHeight = 260;
+  static const double _kMultiPhotoHeight = 52 + 8 + 260;
   final List<Uint8List?> _imageThumbs = [];
   final Set<String> _failedPaths = {};
   final PageController _pageCtrl = PageController();
@@ -67,6 +74,13 @@ class _PostCardState extends State<PostCard> {
       _page = 0;
       if (newPaths.isNotEmpty) _loadImages(newPaths);
     }
+  }
+
+  /// Semua path foto gagal dimuat → tidak ada foto yang bisa tampil
+  /// (bukan placeholder selamanya).
+  bool _photosAllFailed() {
+    final paths = _imagePaths();
+    return paths.isNotEmpty && paths.every(_failedPaths.contains);
   }
 
   List<String> _pathsOf(Map<String, dynamic> post) {
@@ -379,9 +393,17 @@ class _PostCardState extends State<PostCard> {
       } else {
         result = await tp.addComment(_id, text);
       }
-      // Ganti optimistic dengan data server.
-      tp.replaceCommentInCache(_id, optimisticId, result);
-      _commentsKey.currentState?.replaceItem(optimisticId, result);
+      // Server (add/reply_post_comment) hanya mengembalikan {ok, id} —
+      // TANPA authorName/teks. Merge ke optimistic supaya nama user
+      // langsung menetap (dulu replace mentah → jadi 'Anon' + teks
+      // hilang + tombol hapus sembunyi sampai refetch berikutnya).
+      final confirmed = <String, dynamic>{
+        ...optimistic,
+        ...result,
+        'id': (result['id'] as num?)?.toInt() ?? optimisticId,
+      };
+      tp.replaceCommentInCache(_id, optimisticId, confirmed);
+      _commentsKey.currentState?.replaceItem(optimisticId, confirmed);
       final cur = (_p['commentCount'] as num?)?.toInt() ?? 0;
       if (mounted) {
         tp.updatePost(_id, {'commentCount': cur + 1});
@@ -488,12 +510,50 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
+  /// Toggle follow/unfollow author (ala Facebook: Follow ↔ Following).
+  /// Guard anon (minta daftar dulu), cegah double-tap, dan patch
+  /// `isFollowing` di post agar konsisten saat scroll.
+  Future<void> _toggleFollow() async {
+    if (_followBusy) return;
+    final authorId = _p['authorId'] as String? ?? '';
+    if (authorId.isEmpty) return;
+    final auth = context.read<AuthProvider>();
+    if (auth.isAnonymous || !(auth.profile?.isRegistered ?? false)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.read<LocaleProvider>().s.msgRegisterToFollow),
+        ),
+      );
+      return;
+    }
+    final sp = context.read<SocialProvider>();
+    final currently =
+        sp.isFollowing(authorId) || _p['isFollowing'] == true;
+    setState(() => _followBusy = true);
+    final ok =
+        currently ? await sp.unfollow(authorId) : await sp.follow(authorId);
+    if (!mounted) return;
+    setState(() => _followBusy = false);
+    // Hanya patch kalau RPC sukses — state tetap sinkron dengan server.
+    if (ok) {
+      context.read<TimelineProvider>().updatePost(_id, {
+        'isFollowing': !currently,
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final uid = context.select<AuthProvider, String?>((a) => a.uid);
-    final isAuthor = _p['authorId'] == uid;
+    final authorId = _p['authorId'] as String? ?? '';
+    final isAuthor = authorId.isNotEmpty && authorId == uid;
     final name = _p['authorName'] as String? ?? 'Anon';
+    // Status follow: set global (realtime) ATAU bawaan server saat load.
+    final following =
+        context.select<SocialProvider, bool>((sp) => sp.isFollowing(authorId)) ||
+        _p['isFollowing'] == true;
     final createdAt = parseDate(_p['createdAt']);
     final isLiked = _p['isLiked'] == true;
     final likeCount = (_p['likeCount'] as num?)?.toInt() ?? 0;
@@ -502,26 +562,15 @@ class _PostCardState extends State<PostCard> {
     final isBoosted = _p['isBoosted'] == true;
     final isFriend = _p['isFriend'] == true;
 
-    return Container(
-      margin: EdgeInsets.fromLTRB(10, 6, 10, 6),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.divider, width: 0.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 10,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Row(
+    // Tanpa card abu & tanpa margin: feed tampil full-width (edge-to-edge)
+    // biar konten lebih luas. Pemisah antar post pakai Divider tipis.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 1, thickness: 0.5),
+        Padding(
+          padding: EdgeInsets.fromLTRB(0, 12, 0, 8),
+          child: Row(
               children: [
                 // Tap avatar = zoom foto (internal); tap nama = profil.
                 _AuthorAvatar(post: _p, name: name, size: 38, onAvatarTap: _zoomAuthorPhoto),
@@ -542,6 +591,30 @@ class _PostCardState extends State<PostCard> {
                               ),
                             ),
                           ),
+                          // Follow ↔ Following ala Facebook: di depan nama,
+                          // tebal (tidak tipis), biru saat Follow.
+                          if (!isAuthor) ...[
+                            Text(
+                              ' · ',
+                              style: AppText.label.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: _followBusy ? null : _toggleFollow,
+                              child: Text(
+                                following
+                                    ? s.socialFollowing
+                                    : s.btnFollow,
+                                style: AppText.label.copyWith(
+                                  color: following
+                                      ? AppTheme.textSecondary
+                                      : AppTheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                           if (isFriend) ...[
                             SizedBox(width: 5),
                             Icon(
@@ -583,16 +656,19 @@ class _PostCardState extends State<PostCard> {
           ),
           if ((_p['text'] as String? ?? '').isNotEmpty)
             Padding(
-              padding: EdgeInsets.fromLTRB(14, 10, 14, 2),
+              padding: EdgeInsets.fromLTRB(0, 10, 0, 2),
               child: Text(_p['text'] as String, style: AppText.body),
             ),
-          if (_imageThumbs.any((t) => t != null))
+          // Area foto dicadangkan sejak path diketahui (bukan saat thumb
+          // tiba) — dulu blok 0→penuh tiba-tiba tiap thumb masuk → kartu
+          // melompat saat scroll. Placeholder setinggi layout final.
+          if (_imagePaths().isNotEmpty && !_photosAllFailed())
             Padding(
-              padding: EdgeInsets.fromLTRB(12, 10, 12, 2),
+              padding: EdgeInsets.fromLTRB(0, 10, 0, 2),
               child: _photoGrid(),
             ),
           Padding(
-            padding: EdgeInsets.fromLTRB(6, 4, 6, 8),
+            padding: EdgeInsets.fromLTRB(0, 4, 0, 8),
             child: Row(
               children: [
                 _iconAction(
@@ -635,7 +711,6 @@ class _PostCardState extends State<PostCard> {
             ),
           ),
         ],
-      ),
     );
   }
 
@@ -649,59 +724,67 @@ class _PostCardState extends State<PostCard> {
       final t = _imageThumbs[i];
       if (t != null && i < paths.length) loaded.add((t, paths[i]));
     }
-    if (loaded.isEmpty) return const SizedBox.shrink();
+    if (loaded.isEmpty) {
+      // Thumb belum tiba: placeholder setinggi layout final (tunggal 260,
+      // multi 52+8+260) supaya kartu tidak melompat saat foto masuk.
+      return Container(
+        width: double.infinity,
+        height: paths.length > 1 ? _kMultiPhotoHeight : _kSinglePhotoHeight,
+        color: AppTheme.primary.withValues(alpha: 0.08),
+      );
+    }
     // Foto tunggal — tanpa Stack supaya tinggi natural (bukan unbounded).
+    // Tanpa rounded corner → foto nempel penuh ke tepi layar (edge-to-edge).
     Widget singlePhoto() => GestureDetector(
       onTap: () => _openViewer(0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Image.memory(
-          loaded[0].$1,
-          fit: BoxFit.cover,
-          // Feed lebar ~layar; cap ~1080 cukup tajam, hemat RAM utk
-          // scroll banyak post.
-          cacheWidth: 1080,
-          gaplessPlayback: true,
-        ),
+      child: Image.memory(
+        loaded[0].$1,
+        fit: BoxFit.cover,
+        // Feed lebar ~layar; cap ~1080 cukup tajam, hemat RAM utk
+        // scroll banyak post.
+        cacheWidth: 1080,
+        gaplessPlayback: true,
       ),
     );
     // Foto carousel — Positioned.fill + badge counter "2/3" sebagai penanda
     // bahwa foto bisa di-slide. Hanya dipakai di PageView (tinggi bounded).
     Widget carouselPhoto(int i) => GestureDetector(
       onTap: () => _openViewer(i),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Image.memory(
-                loaded[i].$1,
-                fit: BoxFit.cover,
-                cacheWidth: 1080,
-                gaplessPlayback: true,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.memory(
+              loaded[i].$1,
+              fit: BoxFit.cover,
+              cacheWidth: 1080,
+              gaplessPlayback: true,
+            ),
+          ),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${i + 1}/${loaded.length}',
+                style: AppText.micro.copyWith(color: Colors.white),
               ),
             ),
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${i + 1}/${loaded.length}',
-                  style: AppText.micro.copyWith(color: Colors.white),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
     if (loaded.length == 1) {
-      return SizedBox(width: double.infinity, child: singlePhoto());
+      // Tinggi TETAP + cover (bukan natural) → nol layout shift.
+      return SizedBox(
+        width: double.infinity,
+        height: _kSinglePhotoHeight,
+        child: singlePhoto(),
+      );
     }
     // Multi foto: thumbnail strip di atas (klik → ganti foto besar) +
     // carousel slide kiri/kanan.
@@ -929,6 +1012,7 @@ class _PostCardState extends State<PostCard> {
   void _zoomAuthorPhoto(Uint8List? bytes) {
     final name = _p['authorName'] as String? ?? 'Anon';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final zoomBytes = bytes;
     showDialog(
       context: context,
       barrierColor: Colors.black87,
@@ -941,10 +1025,15 @@ class _PostCardState extends State<PostCard> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4,
-                child: bytes != null
+                child: zoomBytes != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(bytes, fit: BoxFit.contain),
+                        // Cap 1080px: dialog zoom tidak butuh full-res.
+                        child: Image.memory(
+                          zoomBytes,
+                          fit: BoxFit.contain,
+                          cacheWidth: 1080,
+                        ),
                       )
                     : CircleAvatar(
                         radius: 90,
@@ -971,7 +1060,14 @@ class _PostCardState extends State<PostCard> {
           ],
         ),
       ),
-    );
+    ).then((_) {
+      // Keluarkan bitmap zoom dari ImageCache (pola PhotoViewerScreen).
+      if (zoomBytes != null && zoomBytes.isNotEmpty) {
+        try {
+          PaintingBinding.instance.imageCache.evict(MemoryImage(zoomBytes));
+        } catch (_) {}
+      }
+    });
   }
 
   String _timeAgo(DateTime t) => _timeAgoShort(t);
