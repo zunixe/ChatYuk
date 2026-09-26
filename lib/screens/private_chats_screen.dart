@@ -1179,7 +1179,7 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                     final preview = hasMessage
                                                         ? (isLocationPayload(
                                                                 chat.lastMessage)
-                                                            ? '📍 ${s.msgLocation}'
+                                                            ? '📍 ${locationPreviewLabel(chat.lastMessage, s.msgLocation)}'
                                                             : chat.lastMessage)
                                                         : s.noMessages;
                                                     final hasUnread =

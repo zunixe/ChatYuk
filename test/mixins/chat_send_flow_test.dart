@@ -4,6 +4,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 
 import 'package:chatyuk/core/cache/offline_outbox.dart';
+import 'package:chatyuk/core/chat/chat_location.dart';
 import 'package:chatyuk/mixins/chat_outbox_mixin.dart';
 import 'package:chatyuk/mixins/chat_photo_send_mixin.dart';
 import 'package:chatyuk/mixins/chat_send_mixin.dart';
@@ -71,12 +72,22 @@ class SendHostState extends State<SendHost>
     videoSends.add(text);
   }
 
-  // Fitur lokasi (sesi paralel) — host uji harus memenuhi kontraknya.
+  // Fitur lokasi — host menyimpan lokasi pending + mencatat yang DITERIMA.
+  ChatLocation? _location;
+  final List<ChatLocation> locationSends = [];
+  set pendingLocation(ChatLocation? v) => _location = v;
   @override
-  Future<void> sendLocationFromPreview({
+  ChatLocation? get sendPendingLocation => _location;
+  @override
+  set sendPendingLocation(ChatLocation? v) => _location = v;
+  @override
+  Future<void> sendLocationFromPreviewAt(
+    ChatLocation location, {
     String text = '',
     MessageModel? reply,
-  }) async {}
+  }) async {
+    locationSends.add(location);
+  }
 
   @override
   String get outboxKind => 'private';
@@ -330,6 +341,26 @@ void main() {
 
       expect(s.preChecks, 0, reason: 'guard sending duluan');
       expect(s.dispatched, isEmpty);
+    });
+
+    testWidgets(
+        'lokasi pending → terkirim DENGAN lokasi (regresi capture-before-clear)',
+        (tester) async {
+      final s = await pumpHost(tester, withProfile: true);
+      const loc = ChatLocation(lat: -6.2, lng: 106.8);
+      s.pendingLocation = loc;
+      s.sendMsgCtrl.text = '   '; // boleh tanpa caption
+      await s.sendMessage();
+      await tester.pump();
+
+      // Dulu `setState(() => sendPendingLocation = null)` jalan SEBELUM
+      // sendLocationFromPreview membaca field → lokasi terbaca null → tak
+      // pernah terkirim (preview hilang, insert tak jalan). Regresi ini
+      // mengunci bahwa lokasi DITANGKAP sebelum clear.
+      expect(s.locationSends, hasLength(1));
+      expect(s.locationSends.single.lat, -6.2);
+      expect(s.locationSends.single.lng, 106.8);
+      expect(s.sendPendingLocation, isNull, reason: 'preview dibersihkan');
     });
 
     testWidgets('tanpa profil → batal sebelum dispatch', (tester) async {

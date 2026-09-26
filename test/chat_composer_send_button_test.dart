@@ -104,4 +104,48 @@ void main() {
     await tester.pump();
     expect(sent, 1);
   });
+
+  testWidgets('transisi mic→send saat LOKASI muncul (regresi _ForceRebuild)', (
+    tester,
+  ) async {
+    // Parent ber-STATE: state ChatComposerInput PERSISTEN (bukan di-remount),
+    // meniru private_chat_screen yang setState saat lokasi dilampirkan.
+    // Inilah jalur nyata yang dulu gagal: token _ForceRebuild tak memuat
+    // pendingLocation → cabang mic/send tak dievaluasi ulang → tombol tetap
+    // mic → tap merekam suara, lokasi tak pernah terkirim.
+    ChatLocation? loc;
+    late StateSetter setOuter;
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => LocaleProvider(),
+        child: MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setSt) {
+                setOuter = setSt;
+                return ChatComposerInput(
+                  controller: TextEditingController(),
+                  onSend: () {},
+                  showAttachRow: false,
+                  onToggleAttach: () {},
+                  onTakePhoto: () {},
+                  onSendPhoto: () {},
+                  onSendViewOnce: () {},
+                  pendingLocation: loc,
+                  onCancelLocation: () {},
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('send')), findsNothing); // masih mic
+    // Lampirkan lokasi → setState pada parent (state composer tetap sama).
+    setOuter(() => loc = const ChatLocation(lat: -6.2, lng: 106.8));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('send')), findsOneWidget);
+  });
 }

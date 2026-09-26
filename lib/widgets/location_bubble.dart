@@ -13,10 +13,13 @@ import '../core/chat/chat_location.dart';
 /// tombol buka Google Maps tetap bisa ditekan.
 class LocationBubble extends StatelessWidget {
   final ChatLocation location;
+
   /// Lebar kartu (default 220). Pakai `double.infinity` di preview composer.
   final double width;
+
   /// Tinggi peta (default 160).
   final double height;
+
   /// Boleh di-geser/zoom? Bubble chat = false (agar tidak merebut scroll);
   /// preview composer = true (user bisa koreksi titik sebelum kirim).
   final bool interactive;
@@ -43,71 +46,87 @@ class LocationBubble extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: SizedBox(
           width: width,
-          height: height,
-          child: Stack(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Positioned.fill(
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: LatLng(location.lat, location.lng),
-                    initialZoom: 15,
-                    interactionOptions: InteractionOptions(
-                      flags: interactive
-                          ? InteractiveFlag.all & ~InteractiveFlag.rotate
-                          : InteractiveFlag.none,
-                    ),
-                  ),
+              SizedBox(
+                width: width,
+                height: height,
+                child: Stack(
                   children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.chatyuk.chatyuk',
-                      // Offline/gagal → latar netral, jangan kotak merah.
-                      errorTileCallback: (_, _, _) {},
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: LatLng(location.lat, location.lng),
-                          width: 36,
-                          height: 36,
-                          alignment: Alignment.topCenter,
-                          child: const Icon(
-                            Icons.location_on,
-                            color: Colors.red,
-                            size: 36,
+                    Positioned.fill(
+                      child: FlutterMap(
+                        options: MapOptions(
+                          initialCenter: LatLng(location.lat, location.lng),
+                          initialZoom: 15,
+                          interactionOptions: InteractionOptions(
+                            flags: interactive
+                                ? InteractiveFlag.all & ~InteractiveFlag.rotate
+                                : InteractiveFlag.none,
                           ),
                         ),
-                      ],
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.chatyuk.chatyuk',
+                            // Offline/gagal → latar netral, jangan kotak merah.
+                            errorTileCallback: (_, _, _) {},
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: LatLng(location.lat, location.lng),
+                                width: 36,
+                                height: 36,
+                                alignment: Alignment.topCenter,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.red,
+                                  size: 36,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const RichAttributionWidget(
+                            attributions: [
+                              TextSourceAttribution('OpenStreetMap'),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                    const RichAttributionWidget(
-                      attributions: [
-                        TextSourceAttribution('OpenStreetMap'),
-                      ],
-                    ),
+                    if (location.label.isNotEmpty)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          color: Colors.black.withValues(alpha: 0.5),
+                          child: Text(
+                            location.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.chatCaption.copyWith(
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-              if (location.label.isNotEmpty)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    color: Colors.black.withValues(alpha: 0.5),
-                    child: Text(
-                      location.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.chatCaption.copyWith(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
+              // Caption (diketik di kolom composer saat kirim) — di bawah peta,
+              // ala caption foto WhatsApp.
+              if (location.caption.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  child: Text(location.caption, style: AppText.chatBodySmall),
                 ),
             ],
           ),
