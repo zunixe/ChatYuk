@@ -7,9 +7,12 @@ import 'admin_deleted/widgets/deleted_card.dart';
 import 'admin_deleted/widgets/deleted_detail_sheet.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
+import '../widgets/admin_error_view.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/search_field.dart';
+import '../widgets/filter_chip_pill.dart';
 import '../core/admin_err.dart';
 
 /// Admin: arsip user yang sudah dihapus (tab Terhapus).
@@ -194,32 +197,15 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
     int count, {
     bool highlight = false,
   }) {
-    final active = _filter == value;
-    final base = highlight ? Colors.orange : AppTheme.primary;
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
+    return FilterChipPill(
+      label: label,
+      count: count,
+      active: _filter == value,
+      color: highlight ? Colors.orange : AppTheme.primary,
       onTap: () => setState(() {
         _filter = value;
         _selectedUids.clear();
       }),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: active
-              ? base.withValues(alpha: 0.18)
-              : AppTheme.bgInput,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active ? base.withValues(alpha: 0.7) : AppTheme.divider,
-          ),
-        ),
-        child: Text(
-          '$label ($count)',
-          style: AppText.label.copyWith(
-            color: active ? base : AppTheme.textSecondary,
-          ),
-        ),
-      ),
     );
   }
 
@@ -356,32 +342,10 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: TextField(
-            controller: _searchCtrl,
-            onChanged: (v) => setState(() => _query = v),
-            style: AppText.bodySmall.copyWith(color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              hintText: s.adminDeletedSearch,
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                color: AppTheme.textSecondary,
-                size: 20,
-              ),
-              isDense: true,
-              filled: true,
-              fillColor: AppTheme.bgInput,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
+        SearchField(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _query = v),
+          hint: s.adminDeletedSearch,
         ),
         Expanded(
           child: admin.deletedLoading && admin.deleted.isEmpty
@@ -389,41 +353,10 @@ class _AdminDeletedTabState extends State<AdminDeletedTab>
                   child: CircularProgressIndicator(color: AppTheme.primary),
                 )
               : admin.deletedError != null && admin.deleted.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: AppTheme.danger,
-                      ),
-                      const SizedBox(height: 8),
-                      // Kategori ramah (detail exception hanya ke dlog).
-                      Text(
-                        s.adminErrTextOf(admin.deletedError!),
-                        style: TextStyle(color: AppTheme.danger),
-                      ),
-                      if (s.adminErrHintOf(admin.deletedError!).isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Text(
-                            s.adminErrHintOf(admin.deletedError!),
-                            textAlign: TextAlign.center,
-                            style: AppText.bodySmall.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => admin.fetchDeleted(),
-                        child: Text(s.btnRetry),
-                      ),
-                    ],
-                  ),
+              ? AdminErrorView(
+                  s: s,
+                  error: admin.deletedError!,
+                  onRetry: () => admin.fetchDeleted(),
                 )
               : Column(
                   children: [
