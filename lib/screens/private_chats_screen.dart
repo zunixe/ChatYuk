@@ -629,7 +629,13 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
       // Back sistem saat seleksi aktif = batal seleksi dulu.
       canPop: !_selectionMode,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _clearSelection();
+        if (didPop) return;
+        debugPrint('[NAV] back veto private-chats selection=${_selected.length}');
+        try {
+          _clearSelection();
+        } catch (e) {
+          debugPrint('[NAV] back handler error private-chats: $e');
+        }
       },
       child: Scaffold(
         backgroundColor: AppTheme.bgScreen,

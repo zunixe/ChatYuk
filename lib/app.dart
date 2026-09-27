@@ -667,6 +667,12 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // menimpa balik status admin yang sudah di-toggle invisible.
       auth.resyncInvisible();
       auth.goOnline();
+      // Revalidasi koneksi tiap resume — cek awal connectivity_plus bisa
+      // menangkap `none` sesaat lalu tak ada event lagi → banner offline
+      // nyangkut + kirim selalu masuk antrean padahal internet ada.
+      try {
+        context.read<ConnectivityProvider>().revalidate();
+      } catch (_) {}
       // Catat ulang Device ID tiap resume — TIDAK tergantung guard goOnline
       // (invisible/banned) supaya device selalu tercatat di admin. Fire-and-
       // forget; idempoten (upsert).

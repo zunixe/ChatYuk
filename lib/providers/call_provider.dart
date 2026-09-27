@@ -19,19 +19,33 @@ const String kCallScreenRoute = 'call-screen';
 String privateChatRoute(String chatId) => 'private-chat:$chatId';
 
 /// Memantau rute bernama yang sedang aktif di stack navigator.
+///
+/// Mencatat setiap push/pop/replace ke logcat (`[NAV]`, release-safe via
+/// debugPrint) — jejak ini dipakai mendiagnosa laporan "tombol back mati":
+/// saat back ditekan, log menunjukkan apakah pop terjadi, di-veto PopScope,
+/// atau tidak ada event sama sekali (UI thread macet).
 class RouteTracker extends NavigatorObserver {
   final Set<String> active = {};
 
   bool contains(String name) => active.contains(name);
 
+  static String _label(Route<dynamic>? route) {
+    if (route == null) return '-';
+    final n = route.settings.name;
+    if (n != null && n.isNotEmpty) return n;
+    return route.runtimeType.toString();
+  }
+
   void _add(Route<dynamic> route) {
     final n = route.settings.name;
     if (n != null && n.isNotEmpty) active.add(n);
+    debugPrint('[NAV] push ${_label(route)} stack=${active.toList()}');
   }
 
   void _remove(Route<dynamic> route) {
     final n = route.settings.name;
     if (n != null && n.isNotEmpty) active.remove(n);
+    debugPrint('[NAV] pop ${_label(route)} stack=${active.toList()}');
   }
 
   @override
@@ -50,6 +64,8 @@ class RouteTracker extends NavigatorObserver {
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
     if (oldRoute != null) _remove(oldRoute);
     if (newRoute != null) _add(newRoute);
+    debugPrint(
+        '[NAV] replace ${_label(oldRoute)} -> ${_label(newRoute)} stack=${active.toList()}');
   }
 }
 
@@ -270,17 +286,39 @@ class CallProvider extends ChangeNotifier {
     required String callerUid,
     required String callType,
   }) async {
-    // Nama bisa datang dari payload push (killed state) — kalau kosong,
-    // ambil dari DB. Kegagalan fetch tidak menghalangi ring sistem.
-    var name = '';
-    try {
-      name = await _service.getNickname(callerUid) ?? '';
-    } catch (_) {}
+    // RESPONS CEPAT: tampilkan ring SISTEM dulu dengan nama seadanya, baru
+    // perbarui dengan nama asli setelah fetch selesai. Dulu `await` nickname
+    // (query network) MENAHAN ring sistem → layar kunci terasa lama muncul.
+    var name = _pendingIncomingName ?? '';
     await callUi.showIncoming(
       callId: callId,
       callerName: name.isEmpty ? 'ChatYuk' : name,
       callType: callType,
     );
+    if (name.isNotEmpty) return;
+    try {
+      final fetched = await _service.getNickname(callerUid) ?? '';
+      if (fetched.isEmpty) return;
+      // Layar Dart sudah tampil → cukup pastikan nama di layar sistem ikut
+      // benar bila masih panggilan yang sama.
+      if (_activeCallId != callId) return;
+      await callUi.showIncoming(
+        callId: callId,
+        callerName: fetched,
+        callType: callType,
+      );
+    } catch (_) {}
+  }
+
+  /// Nama pemanggil dari payload PUSH (kalau ada) — dipakai langsung supaya
+  /// ring sistem tidak menunggu query. Diisi di jalur FCM/killed state.
+  String? _pendingIncomingName;
+
+  /// Simpan nama pemanggil dari payload push SEBELUM layar incoming dibuka
+  /// (dipanggil dari jalur notifikasi di main.dart).
+  void setPendingIncomingName(String name) {
+    if (name.isEmpty) return;
+    _pendingIncomingName = name;
   }
 
   /// Handler "terima" dari UI SISTEM (layar kunci/headset). Diteruskan ke

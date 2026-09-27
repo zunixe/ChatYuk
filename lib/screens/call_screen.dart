@@ -224,7 +224,13 @@ class _CallScreenState extends State<CallScreen> {
     return PopScope(
       canPop: !_backMinimizes || _minimizing,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _minimize();
+        if (didPop) return;
+        debugPrint('[NAV] back veto call-screen minimizing=$_minimizing');
+        try {
+          _minimize();
+        } catch (e) {
+          debugPrint('[NAV] back handler error call-screen: $e');
+        }
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF10201A),
@@ -443,12 +449,19 @@ class _CallScreenState extends State<CallScreen> {
                             off: !_session.speakerOn,
                             onTap: _session.toggleSpeaker,
                           ),
-                          if (_minimizable)
-                            CallControlButton(
-                              icon: Icons.picture_in_picture_alt_rounded,
-                              onTap: _minimize,
-                            ),
+                        if (_minimizable)
+                          CallControlButton(
+                            icon: Icons.picture_in_picture_alt_rounded,
+                            onTap: _minimize,
+                          ),
                         ],
+                        // ICE gagal menetap saat call → sambung-ulang manual.
+                        if (_session.iceReconnectFailed)
+                          CallControlButton(
+                            icon: Icons.refresh_rounded,
+                            onTap: () =>
+                                unawaited(_session.reconnect()),
+                          ),
                         CallControlButton(
                           icon: Icons.call_end_rounded,
                           danger: true,
@@ -468,12 +481,25 @@ class _CallScreenState extends State<CallScreen> {
                 child: SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 24, top: 12),
-                    child: Center(
-                      child: CallControlButton(
-                        icon: Icons.call_end_rounded,
-                        danger: true,
-                        onTap: _endCall,
-                      ),
+                    // ICE gagal menetap → tombol sambung-ulang manual di
+                    // samping akhiri (restart otomatis 1× sudah dicoba).
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (_session.iceReconnectFailed) ...[
+                          CallControlButton(
+                            icon: Icons.refresh_rounded,
+                            onTap: () =>
+                                unawaited(_session.reconnect()),
+                          ),
+                          const SizedBox(width: 24),
+                        ],
+                        CallControlButton(
+                          icon: Icons.call_end_rounded,
+                          danger: true,
+                          onTap: _endCall,
+                        ),
+                      ],
                     ),
                   ),
                 ),

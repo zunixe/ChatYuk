@@ -728,7 +728,13 @@ class _StoryComposerScreenState extends State<StoryComposerScreen> {
       canPop: false,
       // Back (sistem/gesture) → konfirmasi dulu, jangan langsung keluar.
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _confirmExit();
+        if (didPop) return;
+        debugPrint('[NAV] back veto story-composer publishing=$_publishing');
+        try {
+          _confirmExit();
+        } catch (e) {
+          debugPrint('[NAV] back handler error story-composer: $e');
+        }
       },
       child: Scaffold(
       // Foto TETAP seukuran layar walau keyboard muncul — panel bawah

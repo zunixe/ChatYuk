@@ -117,4 +117,81 @@ void main() {
     final timeStr = formatBubbleTime(m.timestamp);
     expect(find.text(timeStr), findsOneWidget);
   });
+
+  // ── FOTO SEKALI LIHAT (view_once) + CAPTION ───────────────────────────
+  // Regresi: caption view_once TERSIMPAN di DB tapi TIDAK dirender di bubble
+  // (dulu hanya Stack foto + jam; msg.text diabaikan) → teks seolah hilang.
+  MessageModel viewOnceMsg(String text, {String type = 'view_once'}) =>
+      MessageModel(
+        id: 'v1',
+        senderId: 'u-me',
+        senderName: 'Saya',
+        senderGender: 'male',
+        isRegistered: true,
+        text: text,
+        type: type,
+        // 'x' bukan base64 valid → ViewOnceImage gagal cepat tanpa jaringan.
+        imageData: 'x',
+        timestamp: DateTime(2026, 9, 27, 17, 1),
+        durationMs: 3,
+      );
+
+  testWidgets('view_once + caption: caption IKUT ditampilkan', (tester) async {
+    final m = viewOnceMsg('Tes');
+    await tester.pumpWidget(
+      host(
+        MessageBubble(
+          msg: m,
+          chatKey: 'chat_1',
+          isMe: true,
+          isRead: true,
+          link: LayerLink(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+    // Caption view-once harus tampil (dulu hilang).
+    expect(find.text('Tes'), findsOneWidget);
+  });
+
+  testWidgets('view_once_expired + caption: caption tetap tampil',
+      (tester) async {
+    final m = viewOnceMsg('Tes', type: 'view_once_expired');
+    await tester.pumpWidget(
+      host(
+        MessageBubble(
+          msg: m,
+          chatKey: 'chat_1',
+          isMe: true,
+          isRead: true,
+          link: LayerLink(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Tes'), findsOneWidget);
+  });
+
+  testWidgets('view_once tanpa caption: tidak ada teks caption kosong',
+      (tester) async {
+    final m = viewOnceMsg('');
+    await tester.pumpWidget(
+      host(
+        MessageBubble(
+          msg: m,
+          chatKey: 'chat_1',
+          isMe: true,
+          isRead: true,
+          link: LayerLink(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../config/call_config.dart';
 import '../config/supabase_config.dart';
+import '../core/call/opus_sdp.dart';
 import '../utils.dart';
 
 /// Voice stage global room: mesh WebRTC AUDIO-only, max 6 mic nyala,
@@ -44,6 +45,14 @@ class RoomVoiceSession extends ChangeNotifier {
 
   /// Max mic nyala bersamaan (cermin server room_voice_join).
   static const int kMaxSpeakers = 6;
+
+  /// Munge SDP via helper Opus yang sama dengan call 1:1. Tidak pernah
+  /// mengembalikan string kosong (fallback ke input bila helper gagal).
+  static String _munged(Object? raw) {
+    final s = raw as String? ?? '';
+    final out = applyOpusLowLatencyPrefs(s);
+    return out.isEmpty ? s : out;
+  }
 
   // ── State (baca UI) ──
   bool _joined = false;
@@ -860,7 +869,13 @@ class RoomVoiceSession extends ChangeNotifier {
         notifyListeners();
       };
       final offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      // Opus low-latency + FEC (helper yang sama dengan call 1:1).
+      final offerMunged = applyOpusLowLatencyPrefs(offer.sdp ?? '');
+      final localOffer = RTCSessionDescription(
+        offerMunged.isEmpty ? (offer.sdp ?? '') : offerMunged,
+        offer.type,
+      );
+      await pc.setLocalDescription(localOffer);
       // Trickle: kirim LANGSUNG (tanpa tunggu gathering) — kandidat susul.
       final desc = await pc.getLocalDescription();
       _offerSentAt[peerUid] = DateTime.now();
@@ -967,7 +982,10 @@ class RoomVoiceSession extends ChangeNotifier {
         });
       };
       await pc.setRemoteDescription(
-        RTCSessionDescription(sdp['sdp'], sdp['type']),
+        RTCSessionDescription(
+          _munged(sdp['sdp']),
+          sdp['type'],
+        ),
       );
       for (final c in List<Map<String, dynamic>>.from(
           _pendingCands[dnPcId] ?? const [])) {
@@ -981,7 +999,12 @@ class RoomVoiceSession extends ChangeNotifier {
       }
       _pendingCands.remove(dnPcId);
       final answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+      final answerMunged = applyOpusLowLatencyPrefs(answer.sdp ?? '');
+      final localAnswer = RTCSessionDescription(
+        answerMunged.isEmpty ? (answer.sdp ?? '') : answerMunged,
+        answer.type,
+      );
+      await pc.setLocalDescription(localAnswer);
       // Trickle: kirim LANGSUNG (tanpa tunggu gathering) — kandidat susul.
       final desc = await pc.getLocalDescription();
       await _sendSignal(type: 'v_answer', toUid: from, payload: {
@@ -1005,7 +1028,10 @@ class RoomVoiceSession extends ChangeNotifier {
       final remote = await pc.getRemoteDescription();
       if (remote != null) return;
       await pc.setRemoteDescription(
-        RTCSessionDescription(sdp['sdp'], sdp['type']),
+        RTCSessionDescription(
+          _munged(sdp['sdp']),
+          sdp['type'],
+        ),
       );
       _offerSentAt.remove(from);
       // Flush kandidat tertunda untuk pc uplink ini via pcId (konsisten
