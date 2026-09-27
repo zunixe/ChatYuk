@@ -1244,62 +1244,80 @@ class MessageBubble extends StatelessWidget {
                         )
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')
-                        Stack(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ViewOnceImage(
-                              imageData: msg.imageData,
-                              chatKey: chatKey,
-                              isMe: isMe,
-                              messageId: msg.id,
-                              viewSecs: msg.durationMs,
-                              isExpired: msg.type == 'view_once_expired',
-                              isAdminView: isAdminView,
-                              isRoom: isRoom,
-                            ),
-                            Positioned(
-                              right: 6,
-                              bottom: 6,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 2,
+                            Stack(
+                              children: [
+                                ViewOnceImage(
+                                  imageData: msg.imageData,
+                                  chatKey: chatKey,
+                                  isMe: isMe,
+                                  messageId: msg.id,
+                                  viewSecs: msg.durationMs,
+                                  isExpired: msg.type == 'view_once_expired',
+                                  isAdminView: isAdminView,
+                                  isRoom: isRoom,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.55),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      timeStr,
-                                      style: AppText.chatTime.copyWith(
-                                        color: Colors.white,
-                                      ),
+                                Positioned(
+                                  right: 6,
+                                  bottom: 6,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 2,
                                     ),
-                                    if (isMe || showChecksBothSides) ...[
-                                      const SizedBox(width: 3),
-                                      Tooltip(
-                                        message: isQueued
-                                            ? s.msgWaitingConnection
-                                            : '',
-                                        child: Icon(
-                                          (isPending || isQueued)
-                                              ? Icons.done
-                                              : Icons.done_all,
-                                          size: 12,
-                                          color: (isRead &&
-                                                  !isPending &&
-                                                  !isQueued)
-                                              ? const Color(0xFF7EC8FF)
-                                              : Colors.white70,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.55),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          timeStr,
+                                          style: AppText.chatTime.copyWith(
+                                            color: Colors.white,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ],
+                                        if (isMe || showChecksBothSides) ...[
+                                          const SizedBox(width: 3),
+                                          Tooltip(
+                                            message: isQueued
+                                                ? s.msgWaitingConnection
+                                                : '',
+                                            child: Icon(
+                                              (isPending || isQueued)
+                                                  ? Icons.done
+                                                  : Icons.done_all,
+                                              size: 12,
+                                              color: (isRead &&
+                                                      !isPending &&
+                                                      !isQueued)
+                                                  ? const Color(0xFF7EC8FF)
+                                                  : Colors.white70,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // Caption foto sekali-lihat (dulu tersimpan di DB
+                            // tapi TIDAK dirender → teks seolah hilang).
+                            if (msg.text.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: MentionAwareText(
+                                  msg.text,
+                                  style: AppText.chatBody.copyWith(
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                  mentions: msg.mentions,
                                 ),
                               ),
-                            ),
                           ],
                         )
                       else if (msg.type == 'coin')

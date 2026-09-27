@@ -5,6 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/call_config.dart';
 import '../config/supabase_config.dart';
+import '../core/call/opus_sdp.dart';
 import '../core/perf/perf_probe.dart';
 
 /// Fase panggilan.
@@ -353,6 +354,15 @@ class CallSession extends ChangeNotifier {
   int _syncTick = 0;
   bool _closed = false;
   bool _offered = false;
+  // ICE restart: otomatis 1× saat Disconnected/Failed (tunggu 2 dtk dulu).
+  // Kalau masih gagal → flag _iceReconnectFailed, UI tampilkan tombol
+  // "Sambung ulang" manual (jangan auto-tutup; user pilih retry/akhiri).
+  bool _iceRestarted = false;
+  bool _iceReconnectFailed = false;
+
+  /// True bila ICE sudah dicoba restart tapi masih buruk — UI menampilkan
+  /// tombol sambung-ulang manual di samping tombol akhiri.
+  bool get iceReconnectFailed => _iceReconnectFailed;
   // Sinyal yang datang sebelum peer connection siap (offer bisa sampai
   // sebelum getUserMedia selesai di callee) — diproses setelah setup.
   final List<Map<String, dynamic>> _pendingSignals = [];
@@ -375,6 +385,8 @@ class CallSession extends ChangeNotifier {
   bool _micOn = true;
   bool _cameraOn = true;
   bool _remoteCameraOn = true;
+  // Inisialisasi di init(): audio call → earpiece (privasi + echo rendah),
+  // video call → speaker. Di-set lewat _initAudioRoute().
   bool _speakerOn = true;
   DateTime? _connectedAt;
   // Instrumentasi (PERF_PROBE): tonggak waktu untuk metrik connect.
@@ -416,6 +428,10 @@ class CallSession extends ChangeNotifier {
     _initStartedAt = DateTime.now();
     await localRenderer.initialize();
     await remoteRenderer.initialize();
+    // Route audio default: audio call → earpiece (privasi + echo rendah),
+    // video call → speaker. Bluetooth yang tersambung tetap diprioritaskan
+    // (headset tidak terputus saat masuk call). Best-effort.
+    await _initAudioRoute();
 
     _signalSub = _service.onSignal(callId).listen(_onSignal);
 
@@ -476,10 +492,14 @@ class CallSession extends ChangeNotifier {
         _service.updateStatus(callId, 'canceled');
         _finish(CallEndReason.missed);
       });
-      // Buat offer segera (callee sudah subscribe signal sejak layar
+      // Buat offer SEGERA (callee sudah subscribe signal sejak layar
       // incoming call terbuka) — jangan tunggu event 'answered' dari DB
-      // yang bisa tidak sampai ke caller.
-      Future.delayed(const Duration(milliseconds: 800), () {
+      // yang bisa tidak sampai ke caller. _createOffer idempoten (guard
+      // _offered): panggil langsung + fallback 150ms bila _pc belum siap
+      // tepat saat ini.
+      // ignore: discarded_futures
+      unawaited(_createOffer());
+      Future.delayed(const Duration(milliseconds: 150), () {
         if (!_closed && _pc != null) _createOffer();
       });
     } else {
@@ -521,11 +541,37 @@ class CallSession extends ChangeNotifier {
 
   Future<void> _setupMediaAndPeer() async {
     try {
+      // Constraint audio eksplisit (latency rendah + jernih):
+      // AEC/NS/AGC standar + perbaikan Google (highpass = low-rumble hilang,
+      // typing-noise = ketikan keyboard tidak bocor) + mono (hemat bandwidth).
+      // Tanpa constraint eksplisit, tiap device memakai default berbeda —
+      // di Xiaomi pernah mic jauh yang kepilih (suara pelan).
       _localStream = await navigator.mediaDevices.getUserMedia({
-        'audio': true,
+        'audio': {
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+          'googEchoCancellation': true,
+          'googAutoGainControl': true,
+          'googNoiseSuppression': true,
+          'googHighpassFilter': true,
+          'googTypingNoiseDetection': true,
+          'channelCount': 1,
+        },
         'video': callType == 'video' ? {'facingMode': 'user'} : false,
       });
       localRenderer.srcObject = _localStream;
+      // Pilih mic terbaik (audioinput pertama): di sebagian device (Xiaomi)
+      // default bisa jatuh ke mic jauh sehingga suara pelan. Best-effort.
+      try {
+        final devices = await navigator.mediaDevices.enumerateDevices();
+        for (final d in devices) {
+          if (d.kind == 'audioinput' && d.deviceId.isNotEmpty) {
+            await Helper.selectAudioInput(d.deviceId);
+            break;
+          }
+        }
+      } catch (_) {}
 
       _pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _pc!.onTrack = (event) async {
@@ -586,16 +632,16 @@ class CallSession extends ChangeNotifier {
                 return;
               if (cur == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
                   cur == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-                dlog('[ICE] grace-timeout still $cur -> bye + _finish');
-                try {
-                  await _service.sendSignal(callId, 'bye');
-                  await _service.updateStatus(callId, 'ended');
-                } catch (_) {}
-                _finish(
-                  _phase == CallPhase.inCall
-                      ? CallEndReason.ended
-                      : CallEndReason.error,
-                );
+                // Otomatis restart 1× dulu; kalau masih gagal → tombol manual
+                // (jangan auto-tutup; user pilih sambung-ulang/akhiri).
+                if (!_iceRestarted) {
+                  dlog('[ICE] grace-timeout still $cur -> restart otomatis');
+                  await _attemptIceRestart();
+                  return;
+                }
+                dlog('[ICE] grace-timeout still $cur -> tombol manual');
+                _iceReconnectFailed = true;
+                notifyListeners();
               }
             } catch (_) {
               if (!_closed) {
@@ -616,6 +662,9 @@ class CallSession extends ChangeNotifier {
       Future.delayed(const Duration(seconds: 15), () async {
         if (_closed) return;
         if (_phase == CallPhase.inCall) return;
+        // Restart/retry manual sedang berjalan → jangan auto-tutup di sini;
+        // user yang pegang kendali (tombol sambung-ulang / akhiri).
+        if (_iceRestarted || _iceReconnectFailed) return;
         final cur = _pc?.connectionState;
         if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected)
           return;
@@ -633,13 +682,39 @@ class CallSession extends ChangeNotifier {
         if (_closed) return;
         if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
             state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+          var changed = false;
+          if (_iceReconnectFailed) {
+            _iceReconnectFailed = false;
+            changed = true;
+          }
           if (_phase != CallPhase.inCall) {
             dlog('[ICE] iceConnected -> SET inCall');
             _phase = CallPhase.inCall;
             _connectedAt = _connectedAt ?? DateTime.now();
             _recordConnected('iceState');
-            notifyListeners();
+            changed = true;
           }
+          if (changed) notifyListeners();
+        }
+        if (state ==
+            RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+          // Putus sementara (pindah WiFi/data): tunggu 2 dtk, kalau belum
+          // pulih → restart otomatis 1×; masih gagal → tombol manual.
+          dlog('[ICE] iceDisconnected -> grace 2s');
+          Future.delayed(const Duration(seconds: 2), () async {
+            if (_closed) return;
+            final cur = _pc?.connectionState;
+            if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+              return;
+            }
+            if (!_iceRestarted) {
+              await _attemptIceRestart();
+            } else {
+              _iceReconnectFailed = true;
+              dlog('[ICE] still bad after restart -> tombol manual');
+              notifyListeners();
+            }
+          });
         }
       };
       _pc!.onIceGatheringState = (state) {
@@ -651,6 +726,13 @@ class CallSession extends ChangeNotifier {
       for (final track in _localStream!.getTracks()) {
         await _pc!.addTrack(track, _localStream!);
       }
+      // Paksa codec Opus untuk transceiver audio — HARUS setelah addTrack
+      // (transceiver baru ada) dan SEBELUM createOffer/createAnswer agar
+      // efektif. Default bisa jatuh ke PCMU/PCMA (boros + tanpa FEC).
+      // Best-effort: platform tak mendukung → pakai default.
+      try {
+        await _preferOpusCodec();
+      } catch (_) {}
       // Proses sinyal yang diterima sebelum screen terbuka (dari IncomingCallScreen).
       if (pendingSignals.isNotEmpty) {
         for (final msg in pendingSignals) {
@@ -674,17 +756,126 @@ class CallSession extends ChangeNotifier {
     }
   }
 
+  /// Paksa codec Opus untuk transceiver audio (latency rendah + FEC).
+  /// Dipanggil setelah addTrack (transceiver sudah ada) dan sebelum
+  /// createOffer/createAnswer. Best-effort: gagal → pakai default.
+  Future<void> _preferOpusCodec() async {
+    final pc = _pc;
+    if (pc == null || _closed) return;
+    try {
+      final transceivers = await pc.getTransceivers();
+      for (final t in transceivers) {
+        try {
+          final kind = t.receiver.track?.kind;
+          if (kind != null && kind != 'audio') continue;
+          await t.setCodecPreferences([
+            RTCRtpCodecCapability(
+              mimeType: 'audio/opus',
+              clockRate: 48000,
+              channels: 2,
+              sdpFmtpLine: 'minptime=10;useinbandfec=1',
+            ),
+          ]);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  /// Sampling RTT audio (getStats inbound-rtp) 3× tiap 5 dtk setelah connect.
+  /// Nilai terburuk dicatat sebagai `call.audioRttMs` — pembanding latency
+  /// suara sebelum/sesudah optimasi Opus. Best-effort, tanpa mengganggu call.
+  Future<void> _sampleAudioRtt() async {
+    double? worst;
+    for (var i = 0; i < 3; i++) {
+      await Future<void>.delayed(const Duration(seconds: 5));
+      if (_closed) return;
+      try {
+        final stats = await _pc?.getStats();
+        for (final r in stats ?? const []) {
+          if (r.type != 'inbound-rtp') continue;
+          final kind = '${r.values['kind'] ?? r.values['mediaType'] ?? ''}';
+          if (kind.isNotEmpty && kind != 'audio') continue;
+          final rtt = (r.values['roundTripTime'] as num?)?.toDouble();
+          if (rtt != null && rtt.isFinite && rtt >= 0) {
+            worst = worst == null || rtt > worst ? rtt : worst;
+          }
+        }
+      } catch (_) {}
+    }
+    if (worst != null) {
+      final ms = (worst * 1000).round();
+      PerfProbe.record('call.audioRttMs', Duration(milliseconds: ms));
+      dlog('[PERF] audio RTT worst=${ms}ms');
+    }
+  }
+
+  /// ICE restart: dipanggil otomatis 1× saat Disconnected/Failed menetap,
+  /// atau manual lewat tombol "Sambung ulang" ([reconnect]).
+  /// Caller men-drive re-negosiasi (restartIce + offer ulang); callee cukup
+  /// restartIce (offer ulang dari caller akan tiba via signaling).
+  Future<void> _attemptIceRestart() async {
+    final pc = _pc;
+    if (pc == null || _closed) return;
+    _iceRestarted = true;
+    dlog('[ICE] restart attempt (isCaller=$isCaller)');
+    try {
+      await pc.restartIce();
+    } catch (e) {
+      dlog('[ICE] restartIce failed: $e');
+    }
+    if (isCaller && !_closed && _pc != null) {
+      _offered = false;
+      await _createOffer();
+    }
+    // Recheck: masih buruk → serahkan ke tombol manual.
+    Future.delayed(const Duration(seconds: 5), () {
+      if (_closed) return;
+      if (_phase == CallPhase.inCall) {
+        if (_iceReconnectFailed) {
+          _iceReconnectFailed = false;
+          notifyListeners();
+        }
+        return;
+      }
+      final cur = _pc?.connectionState;
+      if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        return;
+      }
+      _iceReconnectFailed = true;
+      dlog('[ICE] still bad after restart -> tombol manual');
+      notifyListeners();
+    });
+  }
+
+  /// Tombol "Sambung ulang" manual: ulangi ICE restart (reset status
+  /// percobaan otomatis supaya bisa dicoba berkali-kali).
+  Future<void> reconnect() async {
+    if (_closed) return;
+    _iceReconnectFailed = false;
+    _iceRestarted = false;
+    notifyListeners();
+    await _attemptIceRestart();
+  }
+
   Future<void> _createOffer() async {
     if (_closed || _pc == null || _offered) return;
     _offered = true;
     _offerSentAt = DateTime.now();
     try {
       final offer = await _pc!.createOffer();
-      await _pc!.setLocalDescription(offer);
+      // Munge SDP lokal SEBELUM setLocalDescription: Opus low-latency + FEC.
+      // applyOpusLowLatencyPrefs idempoten & mengembalikan input utuh bila
+      // tak ada Opus → aman (fallback implisit, tak pernah string kosong).
+      final munged = applyOpusLowLatencyPrefs(offer.sdp ?? '');
+      final local = RTCSessionDescription(
+        munged.isEmpty ? (offer.sdp ?? '') : munged,
+        offer.type,
+      );
+      await _pc!.setLocalDescription(local);
       await _service.sendSignal(
         callId,
         'offer',
-        payload: {'sdp': offer.toMap()},
+        payload: {'sdp': local.toMap()},
       );
     } catch (e) {
       dlog('[CallSession] createOffer failed: $e');
@@ -693,6 +884,8 @@ class CallSession extends ChangeNotifier {
 
   /// Catat metrik connect (sekali per sesi): init→connected dan offer→connected.
   /// Dipakai `PerfProbe.report` untuk membandingkan sebelum/sesudah optimasi.
+  /// Plus sampling RTT audio (3× tiap 5 dtk setelah connect) sebagai metrik
+  /// latency suara (`call.audioRttMs`, diambil nilai terburuk).
   bool _connectedRecorded = false;
   void _recordConnected(String source) {
     if (_connectedRecorded) return;
@@ -707,6 +900,7 @@ class CallSession extends ChangeNotifier {
       PerfProbe.record('call.offerToConnected', now.difference(offerAt));
     }
     dlog('[PERF] call connected via $source');
+    unawaited(_sampleAudioRtt());
   }
 
   Future<void> _onSignal(Map<String, dynamic> msg) async {
@@ -752,8 +946,13 @@ class CallSession extends ChangeNotifier {
             dlog('[ICE] duplicate offer ignored');
             return;
           }
+          final remoteSdpRaw = sdp['sdp'] as String? ?? '';
+          final remoteSdpMunged = applyOpusLowLatencyPrefs(remoteSdpRaw);
           await _pc!.setRemoteDescription(
-            RTCSessionDescription(sdp['sdp'], sdp['type']),
+            RTCSessionDescription(
+              remoteSdpMunged.isEmpty ? remoteSdpRaw : remoteSdpMunged,
+              sdp['type'],
+            ),
           );
           // Flush candidate yang sudah antri sebelum offer diproses
           for (final cand in List<Map<String, dynamic>>.from(
@@ -771,18 +970,29 @@ class CallSession extends ChangeNotifier {
           }
           _pendingCandidates.clear();
           final answer = await _pc!.createAnswer();
-          await _pc!.setLocalDescription(answer);
+          final answerMunged =
+              applyOpusLowLatencyPrefs(answer.sdp ?? '');
+          final localAnswer = RTCSessionDescription(
+            answerMunged.isEmpty ? (answer.sdp ?? '') : answerMunged,
+            answer.type,
+          );
+          await _pc!.setLocalDescription(localAnswer);
           await _service.sendSignal(
             callId,
             'answer',
-            payload: {'sdp': answer.toMap()},
+            payload: {'sdp': localAnswer.toMap()},
           );
           await _syncAll();
         case 'answer':
           final sdp = msg['sdp'] as Map<String, dynamic>?;
           if (sdp == null) return;
+          final ansSdpRaw = sdp['sdp'] as String? ?? '';
+          final ansSdpMunged = applyOpusLowLatencyPrefs(ansSdpRaw);
           await _pc!.setRemoteDescription(
-            RTCSessionDescription(sdp['sdp'], sdp['type']),
+            RTCSessionDescription(
+              ansSdpMunged.isEmpty ? ansSdpRaw : ansSdpMunged,
+              sdp['type'],
+            ),
           );
           for (final cand in List<Map<String, dynamic>>.from(
             _pendingCandidates,
@@ -1087,6 +1297,16 @@ class CallSession extends ChangeNotifier {
     final tracks = _localStream?.getVideoTracks();
     if (tracks == null || tracks.isEmpty) return;
     await Helper.switchCamera(tracks.first);
+  }
+
+  /// Route audio awal sesi (dipanggil sekali di init()).
+  /// Audio call → earpiece (privasi + echo rendah); video call → speaker.
+  /// Tombol speaker di UI tetap bisa mengubah setelahnya. Best-effort.
+  Future<void> _initAudioRoute() async {
+    _speakerOn = callType == 'video';
+    try {
+      await Helper.setSpeakerphoneOn(_speakerOn);
+    } catch (_) {}
   }
 
   Future<void> toggleSpeaker() async {

@@ -1770,10 +1770,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       canPop: !inSelection && !_searching,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        if (_searching) {
-          _closeSearch();
-        } else if (inSelection) {
-          clearSelection();
+        // Jejak diagnosa "back mati": catat kenapa back di-veto.
+        debugPrint(
+            '[NAV] back veto private-chat searching=$_searching selection=${selectedIds.length}');
+        try {
+          if (_searching) {
+            _closeSearch();
+          } else if (inSelection) {
+            clearSelection();
+          }
+        } catch (e) {
+          // Handler back TIDAK BOLEH melempar — exception di sini merusak
+          // dispatcher back (back mati permanen sampai restart).
+          debugPrint('[NAV] back handler error private-chat: $e');
         }
       },
       child: Scaffold(

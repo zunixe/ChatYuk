@@ -1144,6 +1144,11 @@ void _openFromData(Map<String, dynamic> data) {
   if (data['type'] == 'call') {
     final callId = data['callId'] ?? '';
     if (callId.isNotEmpty && CallProvider.instance.activeCallId != callId) {
+      // Nama pemanggil dari payload push → dipakai langsung oleh ring sistem
+      // (tidak menunggu query nickname). Ring jadi muncul lebih cepat.
+      CallProvider.instance.setPendingIncomingName(
+        (data['callerName'] ?? data['otherName'] ?? '') as String,
+      );
       unawaited(
         _waitForSession().then((ready) async {
           if (!ready || navigatorKey.currentState == null) return;

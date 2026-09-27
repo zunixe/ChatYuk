@@ -1874,7 +1874,13 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     return PopScope(
       canPop: !inSelection,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && inSelection) clearSelection();
+        if (didPop) return;
+        debugPrint('[NAV] back veto room-chat selection=${selectedIds.length}');
+        try {
+          if (inSelection) clearSelection();
+        } catch (e) {
+          debugPrint('[NAV] back handler error room-chat: $e');
+        }
       },
       child: Scaffold(
       backgroundColor: AppTheme.bgCard,

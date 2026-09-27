@@ -290,6 +290,23 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
 
   Future<void> _loadPerson() async {
     _progress.stop();
+    try {
+      await _loadPersonInner();
+    } catch (e) {
+      // Jaring pengaman: exception TAK TERDUGA di jalur mana pun (provider
+      // hilang, parsing, dsb.) tidak boleh meninggalkan spinner selamanya —
+      // tampilkan retry. Return dini (ganti author/unmount) tidak lewat sini.
+      dlog('[StoryViewer] _loadPerson error: $e');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadPersonInner() async {
     // Ganti author → kirim slide yang sudah ditonton author sebelumnya
     // (bulk), lalu mulai kumpulan baru.
     _flushSeen();

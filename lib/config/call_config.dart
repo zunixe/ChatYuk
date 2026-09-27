@@ -149,6 +149,9 @@ class CallConfig {
       'iceServers': iceServers,
       if (relayOnly && cloudflare != null) 'iceTransportPolicy': 'relay',
       'iceCandidatePoolSize': 2,
+      // Negosiasi lebih cepat: 1 transport untuk audio+video (bukan 2×).
+      'rtcpMuxPolicy': 'require',
+      'bundlePolicy': 'max-bundle',
       'sdpSemantics': 'unified-plan',
     };
   }

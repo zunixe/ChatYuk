@@ -104,4 +104,33 @@ void main() {
     fake.emit([ConnectivityResult.none]);
     await Future<void>.delayed(Duration.zero);
   });
+
+  test('stuck offline sembuh via revalidate (tanpa event)', () async {
+    // Regresi: cek awal menangkap `none` sesaat lalu tak ada event lagi →
+    // banner offline nyangkut selamanya. revalidate() harus menyembuhkan.
+    fake.initial = [ConnectivityResult.none];
+    final p = ConnectivityProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(p.online, isFalse);
+
+    // Jaringan pulih tapi TIDAK ada event perubahan — hanya revalidate.
+    fake.initial = [ConnectivityResult.wifi];
+    p.revalidate();
+    await Future<void>.delayed(Duration.zero);
+    expect(p.online, isTrue);
+    p.dispose();
+  });
+
+  test('revalidate nilai sama → tidak notify', () async {
+    fake.initial = [ConnectivityResult.wifi];
+    final p = ConnectivityProvider();
+    await Future<void>.delayed(Duration.zero);
+    var notified = 0;
+    p.addListener(() => notified++);
+
+    p.revalidate();
+    await Future<void>.delayed(Duration.zero);
+    expect(notified, 0);
+    p.dispose();
+  });
 }

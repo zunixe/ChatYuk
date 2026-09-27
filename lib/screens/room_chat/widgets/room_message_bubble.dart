@@ -149,32 +149,48 @@ class RoomMessageBubble extends StatelessWidget {
       );
     }
     if (msg.type == 'view_once' || msg.type == 'view_once_expired') {
-      return Stack(
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ViewOnceImage(
-            imageData: msg.imageData,
-            chatKey: chatKey,
-            isMe: isMe,
-            messageId: msg.id,
-            viewSecs: msg.durationMs,
-            isExpired: msg.type == 'view_once_expired',
-            isRoom: true,
-          ),
-          Positioned(
-            right: 6,
-            bottom: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(8),
+          Stack(
+            children: [
+              ViewOnceImage(
+                imageData: msg.imageData,
+                chatKey: chatKey,
+                isMe: isMe,
+                messageId: msg.id,
+                viewSecs: msg.durationMs,
+                isExpired: msg.type == 'view_once_expired',
+                isRoom: true,
               ),
-              child: Text(
-                timeStr,
-                style: AppText.chatTime.copyWith(color: Colors.white),
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    timeStr,
+                    style: AppText.chatTime.copyWith(color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Caption foto sekali-lihat (dulu tidak dirender → teks hilang).
+          if (msg.text.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: MentionAwareText(
+                msg.text,
+                style: AppText.chatBody.copyWith(color: _textColor),
+                mentions: msg.mentions,
+                highlightAll: highlightMentionAll,
               ),
             ),
-          ),
         ],
       );
     }
