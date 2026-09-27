@@ -731,10 +731,18 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     final s = context.read<LocaleProvider>().s;
     // Soft gate anon: banner tipis di atas konten saat fitur anon OFF.
     final anonBanner = auth.anonBlocked;
+    // Tombol Admin Panel melayang (tab Online, admin sungguhan saja).
+    final showAdminFab =
+        AdminGate.panelBuilder != null &&
+        tab == 0 &&
+        auth.isRealAdmin &&
+        !auth.dummySessionActive;
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      body: Column(
+      body: Stack(
         children: [
+          Column(
+            children: [
           // Banner anon: cegah tertutup status bar pada edge-to-edge
           // Android 15. Banner jadi elemen teratas → ambil inset atas
           // sendiri; AppBar tab di bawahnya di-nol-kan inset atasnya
@@ -810,6 +818,44 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
               ),
             ),
           ),
+            ],
+          ),
+          // Tombol melayang Admin Panel — KIRI BAWAH, di atas menu nav.
+          // Hanya tab Online (0), admin sungguhan (bukan sesi dummy).
+          if (showAdminFab)
+            Positioned(
+              left: 14,
+              bottom: 14,
+              child: SafeArea(
+                child: Tooltip(
+                  message: 'Admin Panel',
+                  child: Material(
+                    color: AppTheme.bgCard,
+                    shape: const CircleBorder(),
+                    elevation: 4,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () {
+                        final b = AdminGate.panelBuilder;
+                        if (b == null) return;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: b),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Icon(
+                          Icons.admin_panel_settings_outlined,
+                          color: AppTheme.primary,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: SizedBox(
