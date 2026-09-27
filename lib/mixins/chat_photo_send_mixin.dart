@@ -205,7 +205,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// Return true bila preview siap. Pesan error sudah tampil bila gagal.
   Future<bool> videoPickToPreview() async {
     if (!videoSendEnabled) return false;
-    final s = context.read<LocaleProvider>().s;
     void toast(String msg) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -220,11 +219,46 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     }
     if (picked == null) return false;
     if (!mounted) return false;
+    return _processPickedVideo(picked.path, toast: toast);
+  }
 
+  /// Rekam video LANGSUNG dari kamera (tombol kamera ditahan) → proses →
+  /// preview. Batas rekam 60 dtk (dipaksakan kamera sistem + validasi ulang).
+  Future<bool> videoRecordFromCamera() async {
+    if (!videoSendEnabled) return false;
+    void toast(String msg) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+
+    XFile? picked;
+    try {
+      picked = await _photoPicker.pickVideo(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        // Batas keras 60 dtk — kamera sistem menghentikan rekaman otomatis.
+        maxDuration: const Duration(seconds: 60),
+      );
+    } catch (e) {
+      dlog('[Video] record error: $e');
+      return false;
+    }
+    if (picked == null) return false;
+    if (!mounted) return false;
+    return _processPickedVideo(picked.path, toast: toast);
+  }
+
+  /// Kompres + poster + preview dari path video (dipakai galeri & rekam).
+  /// Validasi durasi (>60 dtk ditolak) dan ukuran hasil.
+  Future<bool> _processPickedVideo(
+    String path, {
+    required void Function(String) toast,
+  }) async {
+    final s = context.read<LocaleProvider>().s;
+    final storage = context.read<StorageProvider>();
     // 1) Cek durasi ASLI sebelum kompres (tolak >60 dtk lebih awal —
     //    jangan buang waktu kompres video 5 menit).
-    final storage = context.read<StorageProvider>();
-    final rawMs = await storage.videoDurationMs(picked.path);
+    final rawMs = await storage.videoDurationMs(path);
     if (!mounted) return false;
     if (rawMs > 0 && rawMs > StoragePhotoService.chatVideoMaxMs) {
       toast(s.videoTooLong);
@@ -236,7 +270,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     File? out;
     try {
       out = await storage.compressChatVideo(
-        picked.path,
+        path,
         onProgress: (p) {
           if (mounted) setState(() => videoCompressProgress = p);
         },

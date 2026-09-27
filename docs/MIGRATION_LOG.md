@@ -1470,3 +1470,52 @@ prioritas lebih rendah.
   edge `fanout`). Untuk memindah fanout ke outbox nanti: samakan auth
   `fanout` agar menerima `x-app-secret` (perlu deploy multi-file `_shared`).
 - Versi tercatat: `20260927210000`, `20260927220000`.
+
+## 2026-09-27 — Outbox Fase F: fix penumpukan token FCM basi (worker v3 + RPC)
+
+- **Temuan saat verifikasi produksi:** outbox menumpuk ~97 baris (tidak
+  terkirim). Setelah investigasi: baris berasal dari **`profiles.fcm_token`**
+  yang **basi** (device lama / project Firebase lama `chatyuk-8470e`). FCM
+  menolak `404 NotRegistered` / `403 SenderIdMismatch`. Worker lama menandai
+  `failed` → retry selamanya → menumpuk.
+- **Fix 1 — `outbox-worker` v3:** kegagalan **4xx = PERMANEN** → tandai
+  `sent_at` (dibuang), jangan retry; 5xx/timeout = transient → retry. Terbukti
+  outbox 96 → 0 (30 drop di run pertama, sisanya menyusul; 2 nyata terkirim).
+- **Fix 2 — `send-push` auto-clean diperluas:** selain `NotRegistered` (404),
+  kini juga `SenderIdMismatch` (403) dibersihkan. **Ditemukan bug:** auto-clean
+  lama pakai PostgREST `.from('profiles').update().eq('fcm_token', token)`
+  → **0 baris** (PostgREST tak bisa filter kolom `fcm_token` karena SELECT
+  di-revoke). 
+- **Fix 3 — RPC `purge_fcm_token(text)` (`20260927230000`, SECURITY DEFINER,
+  service_role only):** hapus token dari `profiles` + `user_devices` dengan
+  andal. `send-push` kini memanggil `admin.rpc('purge_fcm_token', ...)`.
+  Terbukti: 199 → 198 profil (token uji terhapus).
+- **Efek:** token basi terbersihkan otomatis seiring waktu → outbox tidak
+  menumpuk. Bukan regresi (perilaku lama sama: kirim ke `profiles.fcm_token`
+  basi; dulu gagal diam-diam via http_post, kini terlihat & self-healing).
+- **Verifikasi:** outbox pending=0 (dikuras cron tiap menit), data uji bersih,
+  **SQL tests 20/20 lolos**, `check_migrations` file sesi bersih.
+- Versi/deploy: `send-push` v64, `outbox-worker` v3, migrasi `20260927230000`.
+- **CATATAN:** ada file `supabase/migrations/20260928000000_unified_yukcoin.sql`
+  (BUKAN dari sesi ini) yang membuat `check_migrations --all` DITOLAK (policy/
+  grant tanpa `-- SAFE:`). Perlu diperbaiki oleh pembuatnya.
+
+## 2026-09-27 — 20260928020000_purge_location_history_90d.sql (APPLY)
+
+- **Tujuan:** retensi `user_location_history` (tabel tumbuh tiap update
+  lokasi user). Di jutaan user, tanpa retensi tabel membengkak tanpa batas.
+- **Isi:** fungsi `purge_location_history_90d()` (buang baris `created_at <
+  now()-90d`, SECURITY DEFINER) + cron harian `purge-location-history-90d`
+  (`10 4 * * *`). Data ini hanya dibaca fitur admin untuk riwayat JANGKA
+  PENDEK → 90 hari cukup.
+- **Zero-impact:** semua baris saat ini < 30 hari → purge = 0 (tabel tetap
+  4687). Persiapan skala, bukan perubahan perilaku.
+- **Apply:** Management API. Versi tercatat `20260928020000`.
+- **Catatan timestamp:** awalnya `20260928010000` BENTROK dengan file lain
+  (`20260928010000_align_profiles_points_default.sql`, BUKAN sesi ini) →
+  di-rename ke `20260928020000` (guardrail timestamp unik). Versi
+  `schema_migrations` sudah dikoreksi.
+- **Verifikasi:** fungsi ada + cron active ✅; `purge_location_history_90d()`
+  → 0; tabel tetap 4687; **SQL tests 20/20 lolos**.
+- **Rollback:** `select cron.unschedule('purge-location-history-90d');
+  drop function public.purge_location_history_90d();`

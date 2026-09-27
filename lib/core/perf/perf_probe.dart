@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../utils.dart';
 
@@ -72,6 +74,20 @@ class PerfProbe {
   static void tabStart(int index) {
     if (!measuring) return;
     _tabWatch[index] = Stopwatch()..start();
+  }
+
+  /// Log sisa waktu tap→frame pada N frame berikutnya (untuk melihat apakah
+  /// kerja BERLANJUT setelah frame pertama — indikasi "berat" walau frame
+  /// pertama cepat).
+  static void tabTrace(int index) {
+    if (!measuring) return;
+    final w = _tabWatch[index];
+    if (w == null) return;
+    for (var k = 0; k < 6; k++) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _log('[PERF] tab$index +frame$k ${(w.elapsedMilliseconds)}ms');
+      });
+    }
   }
 
   /// Tandai tab [index] sudah ter-render di layar (panggil dari
@@ -148,18 +164,67 @@ class PerfProbe {
     (_fetchUs[key] ??= []).add(d.inMicroseconds);
   }
 
+  // ── Waktu frame nyata (build + raster) — deteksi jank saat pindah tab ──
+  static final List<int> _frameBuildUs = [];
+  static final List<int> _frameRasterUs = [];
+  static bool _timingsHooked = false;
+
+  /// Pasang hook timing frame (panggil sekali saat app start bila measuring).
+  /// Mengukur `buildDuration` (UI/CPU) & `rasterDuration` (GPU) tiap frame —
+  /// inilah "rasa berat" sebenarnya, bukan sekadar tap→frame pertama.
+  static void hookFrameTimings() {
+    if (!measuring || _timingsHooked) return;
+    _timingsHooked = true;
+    try {
+      SchedulerBinding.instance.addTimingsCallback((timings) {
+        for (final t in timings) {
+          _frameBuildUs.add(t.buildDuration.inMicroseconds);
+          _frameRasterUs.add(t.rasterDuration.inMicroseconds);
+          if (_frameBuildUs.length > 4000) _frameBuildUs.removeAt(0);
+          if (_frameRasterUs.length > 4000) _frameRasterUs.removeAt(0);
+        }
+      });
+    } catch (_) {}
+  }
+
+  /// Ringkasan jank frame sejak reset terakhir.
+  static String frameSummary() {
+    if (_frameBuildUs.isEmpty && _frameRasterUs.isEmpty) return 'no-frames';
+    final b = List<int>.of(_frameBuildUs)..sort();
+    final r = List<int>.of(_frameRasterUs)..sort();
+    int janky = 0;
+    for (final v in _frameBuildUs) {
+      if (v > 16000) janky++;
+    }
+    int jankyR = 0;
+    for (final v in _frameRasterUs) {
+      if (v > 16000) jankyR++;
+    }
+    return 'frames=${_frameBuildUs.length} '
+        'build[p50=${(_pct(b, 50) / 1000).toStringAsFixed(1)} '
+        'p90=${(_pct(b, 90) / 1000).toStringAsFixed(1)} '
+        'max=${(b.last / 1000).toStringAsFixed(1)}ms] '
+        'raster[p50=${(_pct(r, 50) / 1000).toStringAsFixed(1)} '
+        'p90=${(_pct(r, 90) / 1000).toStringAsFixed(1)} '
+        'max=${(r.last / 1000).toStringAsFixed(1)}ms] '
+        'janky(build)=$janky janky(raster)=$jankyR';
+  }
+
   /// Reset semua hitungan (untuk membandingkan periode tertentu).
   static void reset() {
     if (!measuring) return;
     _buildCounts.clear();
     _notifyCounts.clear();
     _fetchUs.clear();
+    _frameBuildUs.clear();
+    _frameRasterUs.clear();
   }
 
   /// Cetak ringkasan + reset hitungan build/notify.
   static void report(String label) {
     if (!measuring) return;
     _log('[PERF] ── $label ──');
+    _log('[PERF] ${frameSummary()}');
     for (int i = 0; i < 4; i++) {
       final list = _tabFramesUs[i];
       if (list == null || list.isEmpty) continue;

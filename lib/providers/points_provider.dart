@@ -56,6 +56,25 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// dihapus bersama fitur finansial.
   int get paidBalance => _earnedBalance;
 
+  // ── YukCoin v2 ──────────────────────────────────────────────
+  // Satu saldo terpadu untuk UI (total = bonus + earned). Fitur v2 aktif
+  // hanya bila server bilang true untuk user ini (flag global / admin).
+  bool _yukcoinV2Active = false;
+  bool get yukcoinV2Active => _yukcoinV2Active;
+
+  bool _ghostMode = false;
+  bool get ghostMode => _ghostMode;
+
+  int _extraPhotoSlots = 0;
+  int get extraPhotoSlots => _extraPhotoSlots;
+
+  // Biaya fitur YukCoin v2 (default sesuai migration; sumber kebenaran
+  // tetap server — nilai ini hanya untuk tampilan harga di UI).
+  final int costUndoMessage = 10;
+  final int costEditMessage = 15;
+  final int costExtraPhotoSlot = 60;
+  final int costGhostModeDaily = 50;
+
   // Biaya buka foto terkunci (dari app_settings; default sesuai server).
   int _photoUnlockOnce = 5;
   int _photoUnlockPerm = 20;
@@ -113,7 +132,37 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       dlog('[POINTS] getWallet error: $e');
     }
+    // Status fitur YukCoin v2 (flag server / admin) + ghost mode.
+    unawaited(refreshYukcoinV2());
   }
+
+  /// Ambil status & biaya fitur YukCoin v2 dari server.
+  Future<void> refreshYukcoinV2() async {
+    try {
+      final st = await _service.yukcoinV2Status();
+      _yukcoinV2Active = st['active'] == true;
+      _ghostMode = st['ghost'] == true;
+      _extraPhotoSlots = (st['extra_slots'] as num?)?.toInt() ?? 0;
+      if (!_disposed) notifyListeners();
+    } catch (e) {
+      dlog('[POINTS] refreshYukcoinV2 error: $e');
+    }
+  }
+
+  // ── Passthrough YukCoin v2 ──
+  Future<Map<String, dynamic>> spendYukcoin(
+    String feature,
+    int amount, {
+    String? ref,
+  }) => _service.spendYukcoin(feature, amount, ref: ref);
+  Future<Map<String, dynamic>> undoMessage(int messageId) =>
+      _service.undoMessage(messageId);
+  Future<Map<String, dynamic>> editMessage(int messageId, String newText) =>
+      _service.editMessage(messageId, newText);
+  Future<Map<String, dynamic>> buyExtraPhotoSlots({int slots = 5}) =>
+      _service.buyExtraPhotoSlots(slots: slots);
+  Future<Map<String, dynamic>> buyGhostMode({int days = 1}) =>
+      _service.buyGhostMode(days: days);
 
   // ── Passthrough (Fase 9b) ──
   Future<Map<String, dynamic>> quests(int tz) => _service.quests(tz);

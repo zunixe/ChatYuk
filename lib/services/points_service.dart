@@ -53,6 +53,124 @@ class PointsService {
     return {'bonus': 0, 'topup': 0, 'earned': 0, 'total': 0, 'withdrawable': 0};
   }
 
+  // ── YukCoin v2 ──────────────────────────────────────────────
+  // Satu saldo (total) untuk UI, dipotong earned→bonus lewat spend_yukcoin.
+
+  /// Saldo YukCoin terpadu: {total, bonus, earned}.
+  Future<Map<String, dynamic>> getYukcoin() async {
+    final res = await measuredRpc(_sb, 'get_yukcoin');
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'total': 0, 'bonus': 0, 'earned': 0};
+  }
+
+  /// Apakah fitur YukCoin v2 aktif untuk user ini (flag server / admin).
+  Future<bool> yukcoinV2For() async {
+    try {
+      final res = await measuredRpc(_sb, 'yukcoin_v2_enabled_for');
+      return res == true;
+    } catch (e) {
+      dlog('[PointsService] yukcoinV2For error: $e');
+      return false;
+    }
+  }
+
+  /// Status ringkas YukCoin v2: {active, total, bonus, earned, ghost, extra_slots}.
+  Future<Map<String, dynamic>> yukcoinV2Status() async {
+    try {
+      final res = await measuredRpc(_sb, 'yukcoin_v2_status');
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      dlog('[PointsService] yukcoinV2Status error: $e');
+    }
+    return {
+      'active': false,
+      'total': 0,
+      'bonus': 0,
+      'earned': 0,
+      'ghost': false,
+      'extra_slots': 0,
+    };
+  }
+
+  /// Slot foto tambahan milik user.
+  Future<int> myExtraPhotoSlots() async {
+    try {
+      final res = await measuredRpc(_sb, 'my_extra_photo_slots');
+      return (res as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Potong YukCoin (earned→bonus). Return {tier, remaining}.
+  Future<Map<String, dynamic>> spendYukcoin(
+    String feature,
+    int amount, {
+    String? ref,
+  }) async {
+    final res = await measuredRpc(
+      _sb,
+      'spend_yukcoin',
+      params: {
+        'p_user': uid,
+        'p_feature': feature,
+        'p_amount': amount,
+        'p_ref': ?ref,
+      },
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Undo pesan (soft delete). Return {ok, cost, remaining}.
+  Future<Map<String, dynamic>> undoMessage(int messageId) async {
+    final res = await measuredRpc(
+      _sb,
+      'undo_message_v2',
+      params: {'p_message_id': messageId},
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Edit pesan. Return {ok, cost, remaining}.
+  Future<Map<String, dynamic>> editMessage(int messageId, String newText) async {
+    final res = await measuredRpc(
+      _sb,
+      'edit_message_v2',
+      params: {'p_message_id': messageId, 'p_new_text': newText},
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Beli slot foto tambahan (default +5). Return {ok, cost, extra, remaining}.
+  Future<Map<String, dynamic>> buyExtraPhotoSlots({int slots = 5}) async {
+    final res = await measuredRpc(
+      _sb,
+      'buy_extra_photo_slots_v2',
+      params: {'p_slots': slots},
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Beli ghost mode (invisible). Return {ok, cost, expires_at, remaining}.
+  Future<Map<String, dynamic>> buyGhostMode({int days = 1}) async {
+    final res = await measuredRpc(
+      _sb,
+      'buy_ghost_mode_v2',
+      params: {'p_days': days},
+    );
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  /// Apakah ghost mode (invisible) aktif.
+  Future<bool> isGhostMode() async {
+    try {
+      final res = await measuredRpc(_sb, 'is_ghost_mode');
+      return res == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Riwayat ledger (terbaru dulu). Field:
   /// id, bucket, type, amount, ref_id, metadata, created_at.
   ///

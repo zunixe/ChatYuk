@@ -86,8 +86,8 @@ class S {
       isId ? 'Berlaku 7 hari · bisa diperpanjang' : 'Valid 7 days · extendable';
   String get errPasswordRequired =>
       isId ? 'Isi password grup dulu' : 'Enter a group password first';
-  String get labelYourCoins => isId ? 'Koin kamu' : 'Your coins';
-  String roomCreateCost(int c) => isId ? 'Biaya: $c koin' : 'Cost: $c coins';
+  String get labelYourCoins => isId ? 'YukCoin kamu' : 'Your YukCoin';
+  String roomCreateCost(int c) => isId ? 'Biaya: $c YukCoin' : 'Cost: $c YukCoin';
   String get errRoomNameLen => isId
       ? 'Nama room harus 3–30 karakter'
       : 'Room name must be 3–30 characters';
@@ -96,7 +96,7 @@ class S {
   String get groupCreated => isId ? 'Grup berhasil dibuat' : 'Group created';
   String get joinRoomTitle => isId ? 'Masuk Room' : 'Join Room';
   String joinRoomCost(int c) =>
-      isId ? 'Biaya masuk: $c koin' : 'Entry cost: $c coins';
+      isId ? 'Biaya masuk: $c YukCoin' : 'Entry cost: $c YukCoin';
   String get enterPassword => isId ? 'Masukkan password' : 'Enter password';
   String get errWrongPassword => isId ? 'Password salah' : 'Wrong password';
   String get btnJoin => isId ? 'Masuk' : 'Join';
@@ -111,7 +111,7 @@ class S {
   String get btnRemovePassword => isId ? 'Hapus Password' : 'Remove Password';
   String get roomByOwner => isId ? 'oleh' : 'by';
   String get btnExtendRoom =>
-      isId ? 'Perpanjang 7 hari (50 koin)' : 'Extend 7 days (50 coins)';
+      isId ? 'Perpanjang 7 hari (50 YukCoin)' : 'Extend 7 days (50 YukCoin)';
   String get btnDeleteRoom => isId ? 'Hapus Room' : 'Delete Room';
   String get deleteRoomConfirm => isId
       ? 'Hapus room ini? Semua pesan ikut terhapus.'
@@ -148,6 +148,9 @@ class S {
   // ── Send Coins ──
   String get menuSendPhoto => isId ? 'Kirim Foto' : 'Send Photo';
   String get menuTakePhoto => isId ? 'Ambil Foto' : 'Take Photo';
+  String get menuTakePhotoVideo => isId
+      ? 'Ketuk: foto · Tahan: video (maks 60 dtk)'
+      : 'Tap: photo · Hold: video (max 60s)';
   String get menuViewOnce => isId ? 'Foto Sekali Lihat' : 'View-once Photo';
 
   // ── Video chat (maks 60 dtk, hasil kompres ≤8 MB) ──
@@ -171,31 +174,31 @@ class S {
   String viewTimerSecs(int n) => isId ? '$n detik' : '$n seconds';
   String get viewTimerHint =>
       isId ? 'Foto hilang otomatis sesuai timer' : 'Photo disappears per timer';
-  String get menuSendCoin => isId ? 'Kirim Koin' : 'Send Coins';
-  String get sendCoinTitle => isId ? 'Kirim Koin' : 'Send Coins';
+  String get menuSendCoin => isId ? 'Kirim YukCoin' : 'Send YukCoin';
+  String get sendCoinTitle => isId ? 'Kirim YukCoin' : 'Send YukCoin';
   String sendCoinTo(String name) => isId ? 'Kirim ke $name' : 'Send to $name';
-  String get coinAmountLabel => isId ? 'Jumlah koin' : 'Coin amount';
+  String get coinAmountLabel => isId ? 'Jumlah YukCoin' : 'YukCoin amount';
   String get coinAmountHint =>
       isId ? 'Ketik jumlah sendiri' : 'Type your own amount';
   String get coinDialogHelper =>
       isId ? 'Minimal 5, maksimal saldo kamu' : 'Minimum 5, up to your balance';
-  String get errCoinMin => isId ? 'Minimal 5 koin' : 'Minimum 5 coins';
+  String get errCoinMin => isId ? 'Minimal 5 YukCoin' : 'Minimum 5 YukCoin';
   String get errCoinInsufficient =>
-      isId ? 'Koin kamu tidak cukup' : 'Not enough coins';
+      isId ? 'YukCoin kamu tidak cukup' : 'Not enough YukCoin';
   String get errCoinRegisterOnly => isId
-      ? 'Hanya akun terdaftar yang bisa kirim koin. Daftar email dulu (+100 koin)!'
-      : 'Only registered accounts can send coins. Register email first (+100 coins)!';
-  String coinSentToast(int n) => isId ? '-$n koin terkirim' : '-$n coins sent';
+      ? 'Hanya akun terdaftar yang bisa kirim YukCoin. Daftar email dulu (+100 YukCoin)!'
+      : 'Only registered accounts can send YukCoin. Register email first (+100 YukCoin)!';
+  String coinSentToast(int n) => isId ? '-$n YukCoin terkirim' : '-$n YukCoin sent';
   String coinBubbleSent(int n) =>
-      isId ? '🪙 Kamu mengirim $n koin' : '🪙 You sent $n coins';
+      isId ? '🪙 You sent $n YukCoin' : '🪙 You sent $n YukCoin';
   String coinBubbleReceived(int n) =>
-      isId ? '🪙 Menerima $n koin' : '🪙 Received $n coins';
-  String get errSendCoin => isId ? 'Gagal kirim koin' : 'Failed to send coins';
+      isId ? '🪙 Received $n YukCoin' : '🪙 Received $n YukCoin';
+  String get errSendCoin => isId ? 'Gagal kirim YukCoin' : 'Failed to send YukCoin';
   // ── Umum ──
   String get btnConfirm => isId ? 'Konfirmasi' : 'Confirm';
   String get errCoinDisabled => isId
-      ? 'Sistem koin sedang dinonaktifkan'
-      : 'Coin system is currently disabled';
+      ? 'Sistem YukCoin sedang dinonaktifkan'
+      : 'YukCoin system is currently disabled';
 
   /// Nama room berdasarkan id (fallback ke nama DB jika tidak ada translasi)
   String roomName(String id) {
@@ -304,7 +307,7 @@ class S {
   String get searchNoResult => isId ? 'Tidak ditemukan' : 'No results found';
   // ── Onboarding poin ──
   String get pointsOnboardTitle =>
-      isId ? 'Sistem Poin ChatYuk' : 'ChatYuk Points';
+      isId ? 'Sistem Poin ChatYuk' : 'YukCoin';
   String get pointsOnboardSub =>
       isId ? 'Cara dapat & pakai poin' : 'How to earn & spend';
   String get pointsOnboardEmail => isId
@@ -1188,7 +1191,7 @@ class S {
       : 'Push daily reminder at 19:00 to users offline 1-8 days (stops after 7 days)';
 
   // ── Points ──
-  String get pointsTitle => isId ? 'Poin ChatYuk' : 'ChatYuk Points';
+  String get pointsTitle => isId ? 'YukCoin' : 'YukCoin';
   String get pointsBalance => isId ? 'Poin' : 'Points';
   String onlineMilestone(int minutes) =>
       isId ? 'Online $minutes menit' : 'Online $minutes min';
@@ -1337,12 +1340,12 @@ class S {
   String get photoLockedHint =>
       isId ? 'Buka foto ini untuk melihatnya' : 'Unlock this photo to view it';
   String photoUnlockOnce(int c) =>
-      isId ? 'Lihat sekali · $c koin' : 'View once · $c coins';
+      isId ? 'Lihat sekali · $c YukCoin' : 'View once · $c YukCoin';
   String photoUnlockPerm(int c) =>
-      isId ? 'Buka permanen · $c koin' : 'Unlock forever · $c coins';
+      isId ? 'Buka permanen · $c YukCoin' : 'Unlock forever · $c YukCoin';
   String get photoUnlockNeedTopup => isId
-      ? 'Koin tidak cukup. Dapatkan koin dari bonus harian & aktivitas.'
-      : 'Not enough coins. Earn coins from daily bonuses & activities.';
+      ? 'YukCoin tidak cukup. Dapatkan dari bonus harian & aktivitas.'
+      : 'Not enough YukCoin. Earn from daily bonuses & activities.';
   String get photoUnlockFailed =>
       isId ? 'Gagal membuka foto' : 'Failed to unlock photo';
   String get photoUnlockedToast => isId ? 'Foto terbuka' : 'Photo unlocked';
@@ -1352,7 +1355,7 @@ class S {
       isId ? 'Belum ada transaksi' : 'No transactions yet';
   String get pointHistoryCredit => isId ? 'Masuk' : 'In';
   String get pointHistoryDebit => isId ? 'Keluar' : 'Out';
-  String get pointHistoryCoin => isId ? 'koin' : 'coins';
+  String get pointHistoryCoin => isId ? 'YukCoin' : 'YukCoin';
   String get pointHistoryDeductText =>
       isId ? 'Kirim pesan teks' : 'Send text message';
   String get pointHistoryDeductImage => isId ? 'Kirim foto' : 'Send photo';
@@ -1376,8 +1379,8 @@ class S {
       isId ? 'Online 120 menit' : 'Online 120 min';
   String get pointHistoryWeeklyQuest =>
       isId ? 'Misi mingguan' : 'Weekly mission';
-  String get pointHistoryCoinSent => isId ? 'Kirim koin' : 'Send coins';
-  String get pointHistoryCoinReceived => isId ? 'Terima koin' : 'Receive coins';
+  String get pointHistoryCoinSent => isId ? 'Kirim YukCoin' : 'Send YukCoin';
+  String get pointHistoryCoinReceived => isId ? 'Terima YukCoin' : 'Receive YukCoin';
   String get pointHistoryRoomCreate =>
       isId ? 'Buat room private' : 'Create private room';
   String get pointHistoryRoomJoin =>
@@ -1389,11 +1392,60 @@ class S {
   String get pointHistoryOther =>
       isId ? 'Transaksi poin' : 'Points transaction';
   // ── Wallet (saldo koin) ──
-  String get walletBucketBonus => isId ? 'Koin bonus' : 'Bonus coins';
-  String get walletBucketTopup => isId ? 'Koin pro' : 'Pro coins';
-  String get walletBucketEarned => isId ? 'Koin hadiah' : 'Gift coins';
-  String get walletTitle => isId ? 'Dompet Koin' : 'Coin Wallet';
-  String get walletTotal => isId ? 'Total koin' : 'Total coins';
+  String get walletBucketBonus => isId ? 'YukCoin bonus' : 'Bonus YukCoin';
+  String get walletBucketTopup => isId ? 'YukCoin' : 'YukCoin';
+  String get walletBucketEarned => isId ? 'YukCoin hadiah' : 'Gift YukCoin';
+  String get walletTitle => isId ? 'Dompet YukCoin' : 'YukCoin Wallet';
+  String get walletTotal => isId ? 'Total YukCoin' : 'Total YukCoin';
+
+  // ── YukCoin v2 (halaman & fitur berbayar) ──
+  String get yukcoinTitle => isId ? 'YukCoin' : 'YukCoin';
+  String get yukcoinMyBalance => isId ? 'Saldo kamu' : 'Your balance';
+  String get yukcoinHowToEarn => isId ? 'Cara dapat YukCoin' : 'How to earn YukCoin';
+  String get yukcoinHowToSpend =>
+      isId ? 'Cara pakai YukCoin' : 'How to spend YukCoin';
+  String get yukcoinTopup => isId ? 'Isi YukCoin' : 'Top up YukCoin';
+  String get yukcoinTopupSoon =>
+      isId ? 'Top-up segera hadir' : 'Top-up coming soon';
+  String get yukcoinEarnLogin => isId ? 'Login harian' : 'Daily login';
+  String get yukcoinEarnOnline => isId ? 'Online harian' : 'Daily online';
+  String get yukcoinEarnRoomRead => isId ? 'Baca room' : 'Read rooms';
+  String get yukcoinEarnNewChat => isId ? 'Chat orang baru' : 'Chat new people';
+  String get yukcoinEarnReferral => isId ? 'Ajak teman' : 'Invite friends';
+  String get yukcoinEarnQuest => isId ? 'Misi mingguan' : 'Weekly quests';
+  String get yukcoinFeatureUndo =>
+      isId ? 'Undo pesan' : 'Undo message';
+  String get yukcoinFeatureEdit =>
+      isId ? 'Edit pesan' : 'Edit message';
+  String get yukcoinFeatureExtraPhoto =>
+      isId ? 'Slot foto tambahan' : 'Extra photo slots';
+  String get yukcoinFeatureGhost =>
+      isId ? 'Mode hantu (invisible)' : 'Ghost mode (invisible)';
+  String get yukcoinPerUse => isId ? 'sekali pakai' : 'per use';
+  String get yukcoinPerDay => isId ? 'per hari' : 'per day';
+  String get yukcoinOnce => isId ? 'sekali beli' : 'one-time';
+  String get yukcoinNotEnough =>
+      isId ? 'YukCoin tidak cukup' : 'Not enough YukCoin';
+  String get yukcoinBought => isId ? 'Berhasil dibeli' : 'Purchased';
+  String get yukcoinFailed =>
+      isId ? 'Gagal, coba lagi' : 'Failed, try again';
+  String get yukcoinUseConfirm =>
+      isId ? 'Pakai YukCoin?' : 'Use YukCoin?';
+  String yukcoinUseConfirmBody(int cost) => isId
+      ? 'Aksi ini akan memakai $cost YukCoin.'
+      : 'This action will cost $cost YukCoin.';
+  String get yukcoinCancel => isId ? 'Batal' : 'Cancel';
+  String get yukcoinConfirm => isId ? 'Pakai' : 'Use';
+  String get ghostModeActive => isId ? 'Mode hantu aktif' : 'Ghost mode active';
+  String get ghostModeBuy => isId ? 'Beli mode hantu' : 'Buy ghost mode';
+  String get ghostModeDesc => isId
+      ? 'Sembunyikan status online-mu. Kamu tetap bisa chat.'
+      : 'Hide your online status. You can still chat.';
+  String get undoMessageDone => isId ? 'Pesan dibatalkan' : 'Message undone';
+  String get editMessageHint =>
+      isId ? 'Tulis pesan baru...' : 'Write new message...';
+  String get extraPhotoBuy => isId ? 'Beli +5 slot foto' : 'Buy +5 photo slots';
+
   // ── Gift (hadiah) ──
   String get giftTitle => isId ? 'Kirim Hadiah' : 'Send Gift';
   String get giftPick =>
@@ -1405,8 +1457,8 @@ class S {
   String giftSentToast(String name) =>
       isId ? 'Hadiah $name terkirim!' : 'Gift $name sent!';
   String get giftInsufficient => isId
-      ? 'Koin tidak cukup untuk hadiah ini'
-      : 'Not enough coins for this gift';
+      ? 'YukCoin tidak cukup untuk hadiah ini'
+      : 'Not enough YukCoin for this gift';
   String get menuSendGift => isId ? 'Hadiah' : 'Gift';
   // ── Leaderboard ──
   String get lbTitle => isId ? 'Papan Peringkat' : 'Leaderboard';
@@ -1632,16 +1684,16 @@ class S {
   String get subscriptionsTitle => isId ? 'Langganan' : 'Subscriptions';
   String get subscriptionsEmpty =>
       isId ? 'Belum ada langganan' : 'No subscriptions yet';
-  String subscribePrice(int c) => isId ? '$c koin / bulan' : '$c coins / month';
+  String subscribePrice(int c) => isId ? '$c YukCoin / bulan' : '$c YukCoin / month';
   String get subscribePriceSuffix => isId ? '🪙 / bulan' : '🪙 / month';
   String get subscribeConfirmTitle => isId ? 'Subscribe' : 'Subscribe';
   String subscribeConfirmBody(String name, int c, int periods) => isId
-      ? 'Berlangganan ke $name selama $periods bulan seharga ${c * periods} koin?'
-      : 'Subscribe to $name for $periods months at ${c * periods} coins?';
+      ? 'Berlangganan ke $name selama $periods bulan seharga ${c * periods} YukCoin?'
+      : 'Subscribe to $name for $periods months at ${c * periods} YukCoin?';
   String get subscribeSuccess => isId ? 'Berhasil berlangganan' : 'Subscribed';
   String get subscribeNeedPaid => isId
-      ? 'Koin pro tidak cukup. Top up dulu.'
-      : 'Not enough pro coins. Top up first.';
+      ? 'YukCoin tidak cukup. Top up dulu.'
+      : 'Not enough YukCoin. Top up first.';
   String get subscribeNeedRegister => isId
       ? 'Hanya akun terdaftar yang bisa subscribe'
       : 'Only registered accounts can subscribe';
@@ -1650,25 +1702,25 @@ class S {
   String get setSubPriceHint =>
       isId ? '0 = nonaktif (gratis diikuti)' : '0 = disabled (free to follow)';
   String get socialListEmpty => isId ? 'Belum ada data' : 'No data yet';
-  String get paidBalanceLabel => isId ? 'Koin pro' : 'Pro coins';
-  String get bonusBalanceLabel => isId ? 'Koin bonus' : 'Bonus coins';
+  String get paidBalanceLabel => isId ? 'YukCoin' : 'YukCoin';
+  String get bonusBalanceLabel => isId ? 'YukCoin bonus' : 'Bonus YukCoin';
   String paidOrBonus(int paid, int bonus) => isId
-      ? 'Koin pro $paid · atau bonus $bonus'
+      ? 'YukCoin $paid · atau bonus $bonus'
       : 'Pro $paid · or bonus $bonus';
   String get menuFollow => isId ? 'Ikuti' : 'Follow';
   String get menuAddFriend => isId ? 'Tambah Teman' : 'Add Friend';
   String get needRegisteredForPaid => isId
-      ? 'Fitur ini butuh akun terdaftar & koin pro'
-      : 'This feature needs a registered account & pro coins';
+      ? 'Fitur ini butuh akun terdaftar & YukCoin'
+      : 'This feature needs a registered account & YukCoin';
   // ── Subscribe: penjelasan buat fans & creator ──
   String get subscribeWhatIs =>
       isId ? 'Apa itu Subscribe?' : 'What is Subscribe?';
   String get subscribeExplain => isId
-      ? 'Dukung kreator favoritmu setiap bulan. Koin yang kamu bayar menjadi penghasilan kreator, dan platform mengambil potongan kecil untuk biaya operasional.'
-      : 'Support your favorite creator monthly. Your coins become the creator\'s income, and the platform takes a small cut for operating costs.';
+      ? 'Dukung kreator favoritmu setiap bulan. YukCoin yang kamu bayar menjadi penghasilan kreator, dan platform mengambil potongan kecil untuk biaya operasional.'
+      : 'Support your favorite creator monthly. Your YukCoin become the creator\'s income, and the platform takes a small cut for operating costs.';
   String get subscribeFansHint => isId
-      ? 'Berlangganan untuk mendukung kreator ini. Koin dibayar pakai koin pro.'
-      : 'Subscribe to support this creator. Paid with pro coins.';
+      ? 'Berlangganan untuk mendukung kreator ini. Dibayar pakai YukCoin.'
+      : 'Subscribe to support this creator. Paid with YukCoin.';
   String get subscribeCreatorHint => isId
       ? 'Jadilah kreator: pasang harga langganan bulanan. Fans yang subscribe memberimu penghasilan.'
       : 'Become a creator: set a monthly subscription price. Fans who subscribe become your income.';
@@ -1774,9 +1826,9 @@ class S {
       : 'Post must be at most 2000 characters';
   String get errPostLimit =>
       isId ? 'Batas posting harian tercapai' : 'Daily post limit reached';
-  String get boostPaidLabel => isId ? 'Boost (koin pro)' : 'Boost (pro coins)';
+  String get boostPaidLabel => isId ? 'Boost (YukCoin)' : 'Boost (YukCoin)';
   String get boostBonusLabel =>
-      isId ? 'Boost (koin bonus)' : 'Boost (bonus coins)';
+      isId ? 'Boost (bonus YukCoin)' : 'Boost (bonus YukCoin)';
   String get boostConfirm => isId
       ? 'Boost postingan ini supaya naik ke atas feed?'
       : 'Boost this post to the top of the feed?';

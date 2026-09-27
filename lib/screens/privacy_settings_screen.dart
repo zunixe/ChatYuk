@@ -4,6 +4,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../models/privacy_settings.dart';
 import '../providers/locale_provider.dart';
+import '../providers/points_provider.dart';
 import '../providers/privacy_provider.dart';
 
 /// Pengaturan Privasi — struktur & gaya sama dengan halaman Notifikasi
@@ -395,9 +396,64 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               ),
             ],
           ),
+          // Ghost mode (YukCoin v2) — beli sehari untuk sembunyikan presence.
+          if (context.watch<PointsProvider>().yukcoinV2Active) ...[
+            const SizedBox(height: 12),
+            _PrivacyCard(
+              children: [
+                _PrivacySwitchTile(
+                  icon: Icons.visibility_off_outlined,
+                  title: s.yukcoinFeatureGhost,
+                  subtitle: context.watch<PointsProvider>().ghostMode
+                      ? s.ghostModeActive
+                      : '${s.ghostModeDesc} (${context.read<PointsProvider>().costGhostModeDaily})',
+                  value: context.watch<PointsProvider>().ghostMode,
+                  onChanged: (v) => _buyGhost(v),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  /// Beli ghost mode 1 hari (YukCoin). Bila sudah aktif, tombol = perpanjang.
+  Future<void> _buyGhost(bool want) async {
+    if (!want) return; // tidak bisa mematikan lebih awal (habis sendiri)
+    final pp = context.read<PointsProvider>();
+    final s = context.read<LocaleProvider>().s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.ghostModeBuy),
+        content: Text(s.yukcoinUseConfirmBody(pp.costGhostModeDaily)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.yukcoinCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.yukcoinConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await pp.buyGhostMode(days: 1);
+      await pp.refreshYukcoinV2();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.ghostModeActive)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.yukcoinNotEnough)));
+    }
   }
 }
 

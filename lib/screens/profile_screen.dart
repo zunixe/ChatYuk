@@ -321,6 +321,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// Beli +5 slot foto tambahan (YukCoin v2). Refresh limit setelahnya.
+  Future<void> _buyExtraSlots() async {
+    final pp = context.read<PointsProvider>();
+    final s = context.read<LocaleProvider>().s;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.extraPhotoBuy),
+        content: Text(s.yukcoinUseConfirmBody(pp.costExtraPhotoSlot)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.yukcoinCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.yukcoinConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await pp.buyExtraPhotoSlots(slots: 5);
+      await pp.refreshYukcoinV2();
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.yukcoinBought)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.yukcoinNotEnough)));
+    }
+  }
+
   Future<void> _confirmDeletePhoto(UserPhoto photo) async {
     final s = context.read<LocaleProvider>().s;
     final ok = await showDialog<bool>(
@@ -1516,7 +1554,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ),
                                   ],
                                 ),
-                                if (_photos.length < 6)
+                                if (_photos.length <
+                                    6 + context.watch<PointsProvider>().extraPhotoSlots)
                                   TextButton.icon(
                                     onPressed: _uploading
                                         ? null
@@ -1533,6 +1572,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         : Icon(Icons.add, size: 16),
                                     label: Text(
                                       s.btnAddGallery,
+                                      style: AppText.bodySmall,
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: AppTheme.primary,
+                                      padding: EdgeInsets.zero,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ),
+                                if (_photos.length >=
+                                        6 +
+                                            context
+                                                .watch<PointsProvider>()
+                                                .extraPhotoSlots &&
+                                    context.watch<PointsProvider>().yukcoinV2Active)
+                                  TextButton.icon(
+                                    onPressed: _uploading ? null : _buyExtraSlots,
+                                    icon: Icon(Icons.add_circle_outline, size: 16),
+                                    label: Text(
+                                      '${s.extraPhotoBuy} · ${context.read<PointsProvider>().costExtraPhotoSlot}',
                                       style: AppText.bodySmall,
                                     ),
                                     style: TextButton.styleFrom(

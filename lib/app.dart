@@ -703,6 +703,11 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     }
     PerfProbe.tabStart(i);
     context.read<NavProvider>().goTo(i);
+    if (PerfProbe.measuring) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        PerfProbe.tabTrace(i);
+      });
+    }
   }
 
   @override
@@ -929,17 +934,19 @@ class _BottomNav extends StatelessWidget {
     final s = context.watch<LocaleProvider>().s;
     final uid = context.select<AuthProvider, String?>((a) => a.uid);
     final chat = context.read<ChatProvider>();
-    // Badge hijau = jumlah user berstatus online (di luar diri sendiri
-    // & yang diblokir) — cermin filter list tab Online tanpa filter
-    // negara/gender/search.
-    final onlineCount = context.select<OnlineUsersProvider, int>(
-      (p) => p.users
-          .where(
-            (u) =>
-                u.uid != uid && !chat.isBlocked(u.uid) && u.status == 'online',
-          )
-          .length,
-    );
+    // Badge hijau = jumlah user online (bukan diri sendiri, bukan diblokir).
+    // `select` mengembalikan ANGKA (bukan list) → _BottomNav hanya rebuild
+    // saat jumlahnya benar-benar berubah, bukan tiap kali list online
+    // berubah referensi (yang dulu memicu rebuild seluruh bottom nav).
+    final onlineCount = context.select<OnlineUsersProvider, int>((p) {
+      var n = 0;
+      for (final u in p.users) {
+        if (u.uid != uid && !chat.isBlocked(u.uid) && u.status == 'online') {
+          n++;
+        }
+      }
+      return n;
+    });
 
     return StreamBuilder<List<PrivateChatInfo>>(
       stream: uid != null ? chat.getMyPrivateChats(uid) : const Stream.empty(),

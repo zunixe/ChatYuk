@@ -79,15 +79,18 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // ok = terkirim/beres; permanent = jangan retry (mis. token mati 4xx).
       let ok = false;
+      let permanent = false;
       try {
         const p = row.payload ?? {};
         const endpoint = p.endpoint ?? (row.type === 'fanout' ? 'fanout' : 'send-push');
         // Buang field 'endpoint' dari body yang dikirim (bukan bagian kontrak edge).
         const { endpoint: _ignore, ...body } = p;
 
+        let res: Response;
         if (endpoint === 'fanout') {
-          const res = await fetch(`${supabaseUrl}/functions/v1/fanout`, {
+          res = await fetch(`${supabaseUrl}/functions/v1/fanout`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -96,25 +99,30 @@ Deno.serve(async (req) => {
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(8000),
           });
-          ok = res.ok;
         } else {
-          const res = await fetch(`${supabaseUrl}/functions/v1/send-push`, {
+          res = await fetch(`${supabaseUrl}/functions/v1/send-push`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-app-secret': secret },
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(8000),
           });
-          ok = res.ok;
+        }
+        ok = res.ok;
+        // 4xx = kegagalan PERMANEN (mis. token FCM mati: 404 NotRegistered /
+        // 403 SenderIdMismatch). Jangan retry → tandai terkirim agar antrean
+        // tidak menumpuk selamanya oleh token basi. 5xx/0 = transient → retry.
+        if (!res.ok && res.status >= 400 && res.status < 500) {
+          permanent = true;
         }
       } catch (_) {
-        ok = false;
+        ok = false; // timeout/network → retry (permanent tetap false)
       }
 
-      if (ok) {
+      if (ok || permanent) {
         await admin.from('outbox').update({ sent_at: new Date().toISOString() }).eq('id', row.id);
-        sent++;
+        if (ok) sent++; else dropped++; // permanent = dibuang (bukan terkirim)
       } else {
-        failed++; // biarkan sent_at null → dicoba lagi di invokasi berikutnya
+        failed++; // transient → biarkan sent_at null → dicoba lagi
       }
     }
 

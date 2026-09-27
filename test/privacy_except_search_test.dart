@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 
+import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/models/privacy_settings.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/points_provider.dart';
 import 'package:chatyuk/providers/privacy_provider.dart';
 import 'package:chatyuk/screens/privacy_settings_screen.dart';
+import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/services/privacy_service.dart';
 
+import 'test_helper.dart';
+
 class MockPrivacyService extends Mock implements PrivacyService {}
+class MockPointsService extends Mock implements PointsService {}
 
 /// Sheet "kecuali" punya kotak pencarian — daftar bisa ratusan nama.
 void main() {
@@ -24,6 +31,16 @@ void main() {
     {'uid': 'u3', 'nickname': 'Candra', 'is_friend': true},
     {'uid': 'u4', 'nickname': 'Dewi', 'is_friend': true},
   ];
+
+  setUpAll(() async {
+    // Font sistem (tanpa unduh Poppins dari jaringan) — menghindari
+    // 'google_fonts was unable to load font'.
+    GoogleFonts.config.allowRuntimeFetching = false;
+    AppFonts.setLocal(AppFonts.systemKey);
+    await initSupabaseForTest();
+  });
+
+  tearDownAll(resetFontForTest);
 
   setUp(() {
     service = MockPrivacyService();
@@ -53,6 +70,17 @@ void main() {
             create: (_) => LocaleProvider(),
           ),
           ChangeNotifierProvider<PrivacyProvider>.value(value: provider),
+          // Halaman privasi kini menampilkan opsi YukCoin (ghost mode) yang
+          // membaca PointsProvider.
+          ChangeNotifierProvider<PointsProvider>(
+            create: (_) {
+              final ps = MockPointsService();
+              when(() => ps.watchOwnPoints())
+                  .thenAnswer((_) => const Stream<int>.empty());
+              when(() => ps.fetchEnabled()).thenAnswer((_) async => false);
+              return PointsProvider(service: ps);
+            },
+          ),
         ],
         child: const MaterialApp(home: PrivacySettingsScreen()),
       );

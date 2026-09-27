@@ -2066,6 +2066,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
               setState(() => _showAttachRow = false);
               photoTakeToPreview();
             },
+            onRecordVideo: () {
+              setState(() => _showAttachRow = false);
+              videoRecordFromCamera();
+            },
             onSendPhoto: () {
               setState(() => _showAttachRow = false);
               photoPickFromGalleryToPreview();

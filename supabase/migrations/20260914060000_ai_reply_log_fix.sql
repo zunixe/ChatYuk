@@ -302,7 +302,8 @@ $$;
 revoke execute on function public.admin_get_ai_reply_log(text, int) from public, anon;
 grant execute on function public.admin_get_ai_reply_log(text, int) to authenticated, service_role;
 
--- ── 5. Catat versi (idempoten) ──
-insert into supabase_migrations.schema_migrations (version)
-values ('20260914060000')
-on conflict do nothing;
+-- ── 5. Catat versi ──
+-- Blok insert manual DIHAPUS: pencatatan versi dilakukan otomatis oleh
+-- Supabase CLI saat `db reset`/`db push` (menyisipkan versi sebelum file
+-- dijalankan → insert manual bertabrakan, "duplicate key schema_migrations_pkey").
+-- Versi tetap tercatat oleh CLI dengan benar.
