@@ -172,12 +172,27 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | Lapis | Lokasi |
 |---|---|
 | UI | `lib/main.dart` (background handler), `lib/services/call_notification.dart` |
-| Edge | `supabase/functions/send-push/`, `fanout/` (+ `_shared/fcm.ts`) |
-| SQL inti | `notify_private_message()`, `notify_call_ended()`, `call_push()` |
-| Test | `test/notification_prefs_service_test.dart`, `supabase/tests/notif_chat_test.sql`, `supabase/tests/contract_test.sql` |
+| Edge | `supabase/functions/send-push/`, `fanout/`, **`outbox-worker/`** (+ `_shared/fcm.ts`) |
+| SQL inti | `notify_private_message()`, `notify_call_ended()`, `call_push()`, **helper `user_fcm_tokens(uid)`** |
+| Cron | **`chatyuk-outbox-worker` (*/1m)** — menguras `public.outbox` → send-push |
+| Test | `test/notification_prefs_service_test.dart`, `supabase/tests/notif_chat_test.sql`, **`supabase/tests/outbox_notif_test.sql`**, `supabase/tests/contract_test.sql` |
 
 **Invariant:** string notif bilingual (via prefs `isId`); 1 notif per event;
 `to_uid` benar (fix `...13130001`).
+
+**ARsitektur OUTBOX (sejak 2026-09-27) — WAJIB diketahui:**
+- Trigger notif (`notify_private_message`, `notify_mention_room`, `call_push`
+  ×2 overload, `notify_call_ended`) **TIDAK** lagi `net.http_post` sinkron →
+  `insert into public.outbox (type, payload)` (cepat, transaksi tulis pesan
+  tidak menunggu HTTP). Pengiriman dilakukan edge **`outbox-worker`** via cron
+  `chatyuk-outbox-worker` (*/1m). **Kalau worker/cron mati → notif tidak
+  terkirim** (pesan tetap aman, bukan data loss).
+- Token notif DIAMBIL dari **`user_devices.fcm_token`** (helper
+  `user_fcm_tokens(uid)` = devices aktif + fallback `profiles.fcm_token`).
+  JANGAN kembali membaca `profiles.fcm_token` langsung — kolom itu sudah
+  dikosongkan (`20260827000000`) → notif ke device klien baru akan hilang.
+- Fungsi `net.http_post` sinkron tersisa (fanout topical & AI) sengaja belum
+  dipindah (prioritas lebih rendah). Jangan tambah pola http_post sinkron BARU.
 
 ---
 
@@ -308,7 +323,7 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 | `ai_internal_config.callback_secret` | ai_reply_post, semua AI |
 | `profiles.points` | poin, gift, chat bonus, leaderboard, admin |
 | `private_messages.*` | chat, notif, AI enqueue, admin monitor |
-| `messages.mentions`, `private_messages.mentions` | highlight mention + push terarah mention (room/grup); `@all` hanya grup/private room (owner/admin), mati di global room |
+| `messages.mentions`, `private_messages.mentions` | highlight mention + push terarah mention (room/grup); `@all` hanya grup/private room (owner/admin), mati di global room. **Notif mention (room) via OUTBOX:** trigger `notify_mention_room` menulis `public.outbox`; dikirim oleh edge `outbox-worker` + cron `chatyuk-outbox-worker` (*/1m). Kalau worker/cron mati → notif mention tidak terkirim (pesan tetap aman). Lihat `20260927140000` & `20260927150000`. |
 | `private_chats.last_read_at` (map uid→ts) | centang-2 di chat, unread badge, mark_chat_read, admin monitor |
 | Registrasi: 12 kolom `profiles` wajib tulis | `id,nickname,gender,age,country,city,status,avatar,is_registered,login_at,created_at,last_seen` harus tetap `INSERT`+`UPDATE` untuk `authenticated` — pola tulis **split-write** (`upsert ignoreDuplicates` + `PATCH`), JANGAN `merge-duplicates` (butuh SELECT → 42501 bila kolom di-revoke). Insiden: `docs/INCIDENT_ANON_REGISTER_42501.md`. Dikunci: `supabase/tests/auth_write_path_test.sql` + `scripts/smoke_anon_register.sh` |
 | `private_chats.last_message_at` | urutan list chat, pinned sort, cache warm |

@@ -1215,3 +1215,258 @@ frozen-functions guard + snapshot ada.
   walau versi sudah di-snooze. Tidak perlu app dibuka saat push.
 - **Apply:** Management API. Verifikasi (live): kolom `update_push_at`
   (timestamptz) + fungsi `admin_push_update` ada ✅.
+
+## 2026-09-27 — 20260927100000_profile_birthdate_phone.sql (APPLY)
+
+- **Fitur:** Pengaturan › Akun — simpan **tanggal lahir asli** (date picker) +
+  **nomor HP**.
+- **Isi:** `profiles.birth_date date` + `profiles.phone text` (nullable) +
+  constraint kewarasan (birth_date 1900..hari ini; phone `^\+?[0-9]{6,20}$`).
+- **Privasi:** TIDAK ditambahkan ke RPC publik mana pun — hanya pemilik baris
+  yang membaca (RLS). Tidak bocor ke user lain.
+- **Apply:** Management API. Verifikasi (live): kedua kolom ada ✅.
+
+## 2026-09-27 — 20260927120000_index_dedup_and_fix.sql (APPLY)
+
+- **Tujuan:** optimasi index (skala jutaan user) — tanpa menyentuh fungsi,
+  grant, RLS, atau semantik query apa pun.
+- **Dasar audit LIVE** (`pg_indexes`/`pg_index`/`pg_stat_user_indexes`,
+  stats_reset 2026-07-24 — jadi `idx_scan=0` valid, bukan index baru):
+  1. `private_chats`: `idx_private_chats_participants_gin` **DAN**
+     `private_chats_participants_gin_idx` → definisi **IDENTIK**
+     (`USING gin (participants)`) = duplikat persis.
+  2. `private_chats.idx_private_chats_last_message_at_desc` (btree) ADA di file
+     `20260829020000_perf_indexes.sql` tetapi **TIDAK ADA di live** (drift),
+     padahal `private_chats.idx_scan` = 1,7jt & urutan list chat pakai
+     `last_message_at desc` → index ini PERLU ditambahkan.
+- **Isi:** (a) ADD `idx_private_chats_last_message_at_desc` (additive, idempotent);
+  (b) DROP `private_chats_participants_gin_idx` (duplikat persis, penanda `-- SAFE:`).
+- **SENGAJA TIDAK di-drop:** `idx_story_views_story_viewer` — kolomnya = pkey,
+  TETAPI **dikunci** `supabase/tests/story_test.sql` ('index … ada') sebagai
+  kontrak. Sempat di-drop; test FAIL (19/20) → **di-recreate** & file migrasi
+  dikoreksi agar tidak menghapus index itu. Pelajaran: test suite menangkap
+  penghapusan yang terlihat "aman" — hormati kontrak test.
+- **Apply:** Management API `POST /v1/projects/{ref}/database/query`. Versi
+  dicatat di `supabase_migrations.schema_migrations` (20260927120000).
+- **Verifikasi live:**
+  - EXPLAIN list chat → `Index Scan using idx_private_chats_last_message_at_desc` ✅
+  - EXPLAIN RLS chat → `Bitmap Index Scan on idx_private_chats_participants_gin` ✅
+    (duplikat yang di-drop tidak dipakai planner)
+  - EXPLAIN story_views → `Index Only Scan using story_views_pkey` ✅
+  - Total index: 163 → 163 (add 1, drop 1, story index di-recreate).
+  - `bash scripts/run_sql_tests.sh` → **19/19 file lolos** (schema_sync 31/31,
+    story_test 20/20). `check_migrations.sh --all` → OK bersih.
+- **Rollback:** `drop index idx_private_chats_last_message_at_desc;` +
+  `create index private_chats_participants_gin_idx on public.private_chats using gin (participants);`
+- **Backup definisi index sebelum ubah:** `/tmp/chatyuk_idx_backup/indexes_before.json` (163 baris).
+
+## 2026-09-27 — 20260927130000_drop_useless_brin_index.sql (APPLY)
+
+- **Tujuan:** lanjutan dedup index. Hanya buang index yang TERBUKTI tidak berguna
+  & tidak dikontrak test. Tidak menyentuh fungsi/grant/RLS.
+- **Dasar audit LIVE** (`pg_index`/`pg_stat_user_indexes`, stats_reset 2026-07-24):
+  - `idx_private_chats_last_message_at_brin` (BRIN) `idx_scan=0`.
+  - Kolomnya sama dengan btree `idx_private_chats_last_message_at_desc` (baru
+    ditambahkan di `20260927120000`).
+  - BRIN berguna hanya bila data TERURUT FISIK; `last_message_at` terus di-update
+    ke `now()` → urutan acak → BRIN praktis tak pernah menang (scan=0). Tidak
+    dikunci `supabase/tests/*`, tidak disebut fungsi/RPC → drop aman.
+- **Isi:** DROP `idx_private_chats_last_message_at_brin` (penanda `-- SAFE:`).
+- **SENGAJA TIDAK di-drop** (meski terlihat "terliput" — semua idx_scan > 0,
+  jadi masih aktif dipakai planner): `user_devices_user_idx` (scan=30.602),
+  `idx_coin_ledger_bucket` (scan=18.618), `idx_coin_ledger_user` (94).
+  Juga tidak di-drop (scan=0 tapi dipakai fitur): `idx_private_chats_{pinned,
+  muted,archived}_by`, `idx_rooms_muted_by`, `idx_posts_country_boost_created`,
+  `idx_blocks_reverse`, `user_devices_fcm_idx`, `idx_*_need_migrate`,
+  `coin_ledger_pkey` (PRIMARY KEY).
+- **Apply:** Management API. Versi dicatat di `schema_migrations` (20260927130000).
+- **Verifikasi live:**
+  - `pg_indexes` → hanya `idx_private_chats_last_message_at_desc` tersisa ✅
+  - EXPLAIN list chat → `Index Scan using idx_private_chats_last_message_at_desc` ✅
+  - Total index: 163 → 162.
+  - `run_sql_tests.sh` → **19/19 file lolos**. `check_migrations.sh --all` → OK.
+- **Rollback:** `create index if not exists idx_private_chats_last_message_at_brin
+  on public.private_chats using brin (last_message_at);`
+
+## 2026-09-27 — Outbox Fase A: edge function `outbox-worker` (ADDITIVE, bukan migrasi)
+
+- **Latar:** 15 fungsi live masih pakai `net.http_post` SINKRON di trigger
+  (transaksi INSERT pesan menunggu HTTP round-trip). Tabel `public.outbox`
+  sudah ada sejak `20260901020000` tapi **mati** (tak ada worker/cron).
+- **Fase A (dilakukan sekarang — nol risiko):** deploy edge function
+  `outbox-worker` (self-contained, tanpa import `_shared` — deploy Management
+  API single-file tak sertakan folder itu). Worker: ambil batch `outbox`
+  (`sent_at is null`, order id), teruskan `type='push'` → `send-push`
+  (header `x-app-secret`), set `sent_at=now()`; gagal → biarkan null (retry);
+  baris >24 jam dibuang (anti-backlog). Guard: `x-app-secret` ATAU service_role.
+- **TIDAK mengubah perilaku apa pun:** tidak ada trigger yang menulis ke outbox,
+  jadi outbox tetap kosong → worker no-op. **Belum ada cron** yang memanggilnya.
+- **Deploy:** Management API `POST /v1/projects/{ref}/functions/deploy?slug=outbox-worker`
+  → **ACTIVE v1**.
+- **Verifikasi live:**
+  - invoke worker saat outbox kosong → `{"ok":true,"processed":0}` ✅
+  - insert 1 baris uji (token invalid) → `{"processed":1,"failed":1}`, `sent_at` tetap null ✅
+  - baris uji dibersihkan → `outbox count = 0` ✅
+- **Sisa (Fase B/C — BELUM dikerjakan, butuh uji E2E notif):** cron pemanggil
+  worker (*/1m) + pindahkan trigger `notify_*` dari `net.http_post` sinkron ke
+  `insert into outbox`. Sentuh fungsi FROZEN → butuh header `-- menyentuh:` +
+  regen snapshot + uji E2E dummy.
+
+## 2026-09-27 — Outbox Fase B: cron worker + notify_mention_room → outbox (APPLY)
+
+- **Tujuan:** mulai memindahkan trigger notifikasi dari `net.http_post` SINKRON
+  ke `insert into outbox` (transaksi tulis pesan tidak lagi menunggu HTTP).
+- **Migrasi 1 — `20260927150000_outbox_worker_cron.sql`:** cron
+  `chatyuk-outbox-worker` `* * * * *` memanggil edge `outbox-worker` via
+  `net.http_post` (x-app-secret). Saat outbox kosong → no-op.
+- **Migrasi 2 — `20260927140000_notify_mention_via_outbox.sql`:** ganti
+  `perform net.http_post(...)` → `insert into public.outbox (type, payload)`
+  di `notify_mention_room` (BUKAN FROZEN). **Logika lain 100% identik** (guard
+  mentions, sender_display/avatar, room_name, v_body, loop user_devices,
+  fallback profiles.fcm_token) — hanya cara kirim yang berubah. Dasar = definisi
+  LIVE terbaru (`pg_get_functiondef`).
+- **Apply:** Management API (cron dulu, baru trigger). Versi dicatat:
+  `20260927140000` + `20260927150000`.
+- **Verifikasi live:**
+  - cron run: `succeeded` (2× dalam 2 menit) ✅
+  - fungsi: `uses_outbox=true, uses_http=false` ✅
+  - **Uji E2E (dummy→dummy, semua [TEST]):** insert device dummy (token FCM
+    PALSU) + insert pesan room `Iran_general` dgn mention ke dummy target →
+    **outbox terisi 1 baris** (`data.type=mention`, title=General, token target) ✅
+    → jalankan worker → `{"processed":1,"failed":1}` (token palsu ditolak FCM,
+    tepat; token nyata akan `sent`) ✅
+  - data uji dibersihkan tuntas: msgs=0, devices=0, outbox=0 ✅
+  - `run_sql_tests.sh` → **19/19 lolos** (mention_test 6/6). `check_migrations` OK.
+- **Rollback:** re-apply `notify_mention_room` dari definisi lama
+  (`/tmp/notify_mention_room_BEFORE.sql` atau migrasi `20260921120000_mentions.sql`);
+  `select cron.unschedule('chatyuk-outbox-worker');`
+- **CATATAN PENTING:** mulai sekarang, notif mention BERGANTUNG pada cron +
+  edge `outbox-worker` aktif. Bila worker mati, mention tidak terkirim (tapi
+  pesan tetap tersimpan — bukan data loss, hanya notif). Trigger lain
+  (`notify_private_message`, `call_push`, dll) MASIH pakai `net.http_post`
+  sinkron (belum dipindah).
+
+## 2026-09-27 — Outbox Fase C: notify_private_message → outbox (APPLY)
+
+- **menyentuh: notify_private_message** (FROZEN).
+- **Tujuan:** pindahkan jalur notif pesan 1:1 (paling sering) dari
+  `net.http_post` sinkron ke `insert into outbox`.
+- **Migrasi `20260927160000_notify_private_via_outbox.sql`:** ganti **kedua**
+  `perform net.http_post(...)` (cabang `type='call'`/missed_call + cabang pesan
+  biasa) → `insert into public.outbox (type, payload) values ('push', ...)`.
+  Logika lain 100% IDENTIK (dedup call 30 dtk, resolusi receiver dari
+  participants, guard receiver_token, sender_display/avatar, v_body preview
+  tipe image/video/voice/coin/gift/teks-200). Dasar = definisi LIVE terbaru.
+- **Snapshot:** `scripts/snapshot_functions.sh` dijalankan (30/30 fungsi).
+  `git diff supabase/snapshots/functions.sql` = **hanya 2 blok http_post →
+  outbox + stamp @20260927160000**, 0 baris logika hilang (direview). Guardrail
+  `check_migrations.sh --all` → OK bersih.
+- **Apply:** Management API. Versi dicatat `schema_migrations` (20260927160000).
+- **Verifikasi live:**
+  - fungsi: `uses_outbox=true, uses_http=false` ✅
+  - **Uji E2E (dummy→dummy, semua [TEST]):** buat chat [TEST] dummy + isi
+    `profiles.fcm_token` target (token PALSU) + insert pesan 1:1 →
+    **outbox terisi** (`data.type=message`, title sender, token target) ✅ →
+    worker → `{"processed":1,"failed":1}` (token palsu, tepat) ✅
+  - data uji dibersihkan tuntas (msgs/chats/devices/outbox=0,
+    `profiles.fcm_token` dipulihkan ke '') ✅
+  - `run_sql_tests.sh` → **19/19 lolos** (notif_chat 10/10, mention 6/6). ✅
+- **Rollback:** re-apply definisi lama dari `/tmp/notify_private_message_LIVE.sql`
+  atau migrasi `20260926150000_notif_video_label.sql` + regen snapshot.
+- **⚠️ TEMUAN PENTING (belum diubah, butuh keputusan):** `notify_private_message`
+  membaca **`profiles.fcm_token`**, BUKAN `user_devices.fcm_token`. Padahal
+  `20260827000000` sudah mengosongkan `profiles.fcm_token`. Akibatnya notif
+  pesan 1:1 hanya terkirim bila `profiles.fcm_token` terisi (klien lama) —
+  device klien baru (`user_devices`) tidak menerima. BUKAN regresi dari
+  perubahan ini (perilaku lama sudah begitu), tapi titik lemah yang perlu
+  dirapikan (arahkan ke `user_devices` + fallback profiles) — KANDIDAT LANJUTAN.
+- **Fungsi live `net.http_post` sinkron: 14 → 13.**
+
+## 2026-09-27 — Outbox Fase D: fix token notif + pindah call ke outbox + test (APPLY)
+
+Tiga langkah sekaligus (semua terverifikasi, data uji dibersihkan).
+
+### D1 — helper `user_fcm_tokens` + notif baca `user_devices` (BUKAN profiles)
+- **Masalah nyata:** beberapa trigger baca **`profiles.fcm_token`** SAJA
+  (legacy, dikosongkan `20260827000000`) → notif TIDAK sampai ke device klien
+  baru (`user_devices`). Terbukti saat uji: panggilan masuk (`call_push` 6-arg)
+  & chat 1:1 tidak menghasilkan push karena token profil kosong.
+- **Migrasi `20260927170000_user_fcm_tokens_helper.sql`:** helper terpusat
+  `user_fcm_tokens(uid)` → token dari `user_devices` (aktif) + **fallback**
+  `profiles.fcm_token` HANYA bila tak ada device bertoken (kompat klien lama).
+  SECURITY DEFINER, read-only, additive.
+- **Migrasi `20260927180000_notif_use_user_devices_tokens.sql`:** `call_push`
+  (6-arg), `notify_contact_online`, `notify_broadcast_started` → pakai helper.
+- **Migrasi `20260927190000_notify_private_use_user_devices.sql`:**
+  `notify_private_message` (FROZEN, menyentuh) → token via helper + loop
+  (semua device). Payload & logika lain 100% IDENTIK.
+
+### D2 — `call_push` (2 overload) + `notify_call_ended` → outbox
+- **Migrasi `20260927200000_call_push_via_outbox.sql`** (keduanya FROZEN,
+  `-- menyentuh:`). Ganti `net.http_post` → `insert into outbox`. Logika &
+  payload identik; `notify_call_ended` tetap set `notif_sent_at` (idempoten).
+
+### D3 — test pgTAP (mengunci arsitektur)
+- **`supabase/tests/outbox_notif_test.sql` (BARU, 16 assert):** tabel outbox,
+  helper, cron `chatyuk-outbox-worker`, trigger notif memakai outbox & TIDAK
+  http_post sinkron, token via `user_fcm_tokens`, konsistensi
+  `posts.author_name == profiles.nickname`, index kunci skala.
+
+### Verifikasi
+- Snapshot `functions.sql` di-regen (30/30). Diff = hanya `net.http_post` →
+  `insert into outbox` + sumber token; 0 cabang logika hilang (direview).
+- Guardrail `check_migrations.sh --all` → OK bersih.
+- **Uji E2E (dummy, [TEST]):** `call_push` → outbox `type=call` token device ✅;
+  `notify_private_message` → outbox `type=message` ✅; worker proses ✅;
+  data uji dibersihkan (devices/outbox=0) ✅.
+- **SQL tests: 20/20 file lolos** (outbox_notif_test 16/16, call 18/18,
+  notif_chat 10/10, schema_sync 31/31).
+- **Fungsi live `net.http_post` sinkron: 13 → 10** (mention, private_message,
+  call_push×2, notify_call_ended sudah pindah).
+- Versi tercatat: `20260927170000..20260927200000`.
+
+### Sisa (belum dipindah ke outbox — masih `net.http_post` sinkron)
+`send_reengage_notifications`, `social_push`, `ai_reply_post`, `ai_proactive_tick`,
+`notify_online_fanout`, `notify_room_fanout`, `notify_timeline_*_fanout`,
+`notify_contact_online`, `notify_broadcast_started` (×2 = 10 fungsi).
+Fanout topical & AI sudah punya pola async sendiri (pg_net non-blocking),
+prioritas lebih rendah.
+
+### Rollback
+- D1/D2: re-apply definisi lama dari `20260926150000`/`20260913130001` +
+  `/tmp/notify_private_message_LIVE.sql`, lalu regen snapshot.
+- D1 helper: `drop function public.user_fcm_tokens(uuid);`
+
+## 2026-09-27 — Outbox Fase E: contact_online & broadcast → outbox (fanout DIREVERT)
+
+- **Tujuan:** lanjut pindahkan sisa trigger `net.http_post` (+ dukungan
+  endpoint majemuk di worker).
+- **Migrasi `20260927210000_fanout_and_online_via_outbox.sql`:** pindah 6 fungsi
+  ke outbox (4 fanout topical + `notify_contact_online` +
+  `notify_broadcast_started`). Worker diperluas (**v2**) mendukung
+  `payload.endpoint` = `send-push` (default, back-compat) / `fanout`.
+- **Migrasi `20260927220000_revert_fanout_to_http.sql` (REVERT fanout):**
+  ditemukan saat uji bahwa edge **`fanout`** mengautentikasi via **service_role
+  JWT** (`isServiceRoleJwt`), sedangkan worker memakai `fetch` dgn
+  `SUPABASE_SERVICE_ROLE_KEY` yang formatnya tidak dijamin JWT di runtime →
+  worker→fanout **gagal** (worker→send-push OK karena `send-push` terima
+  `x-app-secret`). Daripada mematikan fanout topical (notif online/room/
+  timeline), 4 fanout **dikembalikan** ke `net.http_post` (perilaku asli).
+  `notify_contact_online` + `notify_broadcast_started` **TETAP via outbox**
+  (pakai send-push + x-app-secret, terbukti jalan).
+- **Verifikasi:**
+  - `notify_contact_online` → outbox `type=online` (3 baris, 1 per kontak) ✅
+  - `notify_broadcast_started` → outbox (send-push) ✅
+  - fanout topical → `http_post` lagi (hp=true, ob=false) ✅
+  - snapshot regen (30/30) + `check_migrations` OK + **SQL tests 20/20 lolos**
+  - outbox & data uji bersih (0) ✅
+- **Status akhir `net.http_post` sinkron: 15 → 8** (7 pindah ke outbox:
+  mention, private_message, call_push×2, call_ended, contact_online,
+  broadcast_started).
+- **SISA 4 fungsi `net.http_post` (SENGAJA tidak dipindah — bukan trigger,
+  dipanggil cron/RPC, sudah punya pola async sendiri, prioritas rendah):**
+  `ai_proactive_tick`, `ai_reply_post`, `send_reengage_notifications`,
+  `social_push`, + 4 fanout topical (kembali sinkron karena keterbatasan auth
+  edge `fanout`). Untuk memindah fanout ke outbox nanti: samakan auth
+  `fanout` agar menerima `x-app-secret` (perlu deploy multi-file `_shared`).
+- Versi tercatat: `20260927210000`, `20260927220000`.

@@ -24,6 +24,10 @@ class UserModel {
   final int friendsCount;
   final String email;
   final String about;
+  /// Tanggal lahir asli (Pengaturan › Akun). null = belum diisi.
+  final DateTime? birthDate;
+  /// Nomor HP (Pengaturan › Akun). '' = belum diisi.
+  final String phone;
 
   UserModel({
     required this.uid,
@@ -49,6 +53,8 @@ class UserModel {
     this.friendsCount = 0,
     this.email = '',
     this.about = '',
+    this.birthDate,
+    this.phone = '',
   });
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -78,7 +84,21 @@ class UserModel {
       friendsCount: (map['friendsCount'] as num?)?.toInt() ?? 0,
       email: map['email'] ?? '',
       about: map['about'] ?? '',
+      birthDate: _parseBirthDate(map['birthDate'] ?? map['birth_date']),
+      phone: map['phone'] ?? '',
     );
+  }
+
+  /// Tanggal lahir dari server bisa String `YYYY-MM-DD` (kolom `date`) atau
+  /// ISO penuh. Toleran terhadap keduanya; null bila kosong/tdk valid.
+  static DateTime? _parseBirthDate(dynamic v) {
+    if (v == null) return null;
+    final s = '$v'.trim();
+    if (s.isEmpty) return null;
+    final d = DateTime.tryParse(s);
+    if (d == null) return null;
+    // Normalisasi ke tanggal (buang jam) — kolom `date`.
+    return DateTime(d.year, d.month, d.day);
   }
 
   Map<String, dynamic> toMap() {
@@ -99,6 +119,8 @@ class UserModel {
       'points': points,
       'email': email,
       'about': about,
+      'birthDate': birthDate?.toIso8601String(),
+      'phone': phone,
     };
   }
 
@@ -123,6 +145,8 @@ class UserModel {
     int? friendsCount,
     String? email,
     String? about,
+    DateTime? birthDate,
+    String? phone,
   }) {
     return UserModel(
       uid: uid,
@@ -148,6 +172,8 @@ class UserModel {
       friendsCount: friendsCount ?? this.friendsCount,
       email: email ?? this.email,
       about: about ?? this.about,
+      birthDate: birthDate ?? this.birthDate,
+      phone: phone ?? this.phone,
     );
   }
 

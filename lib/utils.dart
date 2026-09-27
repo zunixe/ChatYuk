@@ -277,3 +277,21 @@ bool matchesQuery(
   }
   return false;
 }
+
+/// Format tanggal `YYYY-MM-DD` (untuk kolom DB `date`, tanpa jam/zona).
+String dateOnly(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';
+
+/// Normalisasi nomor HP: buang spasi/tanda hubung/tanda kurung, sisakan
+/// digit + satu '+' di depan. Mengembalikan '' bila tidak ada digit.
+/// Contoh: "+62 812-3456-7890" → "+628123456789".
+String normalizePhone(String raw) {
+  final t = raw.trim();
+  if (t.isEmpty) return '';
+  final hasPlus = t.startsWith('+');
+  final digits = t.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digits.isEmpty) return '';
+  return hasPlus ? '+$digits' : digits;
+}

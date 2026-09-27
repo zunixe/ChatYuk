@@ -1137,6 +1137,8 @@ class AuthProvider extends ChangeNotifier {
     String? nickname,
     String? about,
     String? gender,
+    DateTime? birthDate,
+    String? phone,
   }) async {
     await _auth.updateProfile(
       age: age,
@@ -1145,6 +1147,8 @@ class AuthProvider extends ChangeNotifier {
       nickname: nickname,
       about: about,
       gender: gender,
+      birthDate: birthDate,
+      phone: phone,
     );
     final aboutText = about?.trim();
     final savedAbout = aboutText == null
@@ -1157,6 +1161,8 @@ class AuthProvider extends ChangeNotifier {
       nickname: nickname ?? _profile?.nickname,
       about: savedAbout,
       gender: gender ?? _profile?.gender,
+      birthDate: birthDate ?? _profile?.birthDate,
+      phone: phone != null ? normalizePhone(phone) : _profile?.phone,
     );
     if (!_disposed) notifyListeners();
   }

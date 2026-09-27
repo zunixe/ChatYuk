@@ -67,15 +67,17 @@ class PerfProbe {
   static final Map<String, int> _notifyCounts = {};
 
   /// Tandai mulai pindah ke tab [index] (dipanggil saat tap nav).
+  /// Aktif juga di build RILIS + PERF_PROBE (releaseMeasure) supaya
+  /// "tap tab → frame pertama" bisa diukur di HP kerja tanpa build debug.
   static void tabStart(int index) {
-    if (!enabled) return;
+    if (!measuring) return;
     _tabWatch[index] = Stopwatch()..start();
   }
 
   /// Tandai tab [index] sudah ter-render di layar (panggil dari
   /// addPostFrameCallback setelah IndexedStack berganti index).
   static void tabEnd(int index) {
-    if (!enabled) return;
+    if (!measuring) return;
     final w = _tabWatch[index];
     if (w == null) return;
     w.stop();
@@ -83,7 +85,7 @@ class PerfProbe {
     final us = w.elapsedMicroseconds;
     (_tabFramesUs[index] ??= []).add(us);
     final list = _tabFramesUs[index]!;
-    dlog('[PERF] tab$index tap→frame ${(us / 1000).toStringAsFixed(1)}ms '
+    _log('[PERF] tab$index tap→frame ${(us / 1000).toStringAsFixed(1)}ms '
         '(n=${list.length}, avg=${(_avg(list) / 1000).toStringAsFixed(1)}ms)');
   }
 

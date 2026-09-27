@@ -52,20 +52,38 @@ after update on public.messages
 for each row execute function public.scrub_reply_snapshot_room();
 
 -- 2. Backfill: snapshot yang menunjuk pesan sudah-terhapus (one-shot)
-update public.private_messages pm
-set replied_to_text = null,
-    replied_to_sender_name = null
-where pm.replied_to_id is not null
-  and exists (
-    select 1 from public.private_messages src
-    where src.id::text = pm.replied_to_id and src.is_deleted = true
-  );
+--    Kondisional: kolom is_deleted mungkin belum ada pada titik migration ini
+--    (private_messages.is_deleted ditambahkan 20260923). Trigger (bagian 1)
+--    tetap terpasang dan akan membersihkan saat pesan dihapus nanti.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'private_messages'
+      and column_name = 'is_deleted'
+  ) then
+    update public.private_messages pm
+    set replied_to_text = null,
+        replied_to_sender_name = null
+    where pm.replied_to_id is not null
+      and exists (
+        select 1 from public.private_messages src
+        where src.id = pm.replied_to_id and src.is_deleted = true
+      );
+  end if;
 
-update public.messages m
-set replied_to_text = null,
-    replied_to_sender_name = null
-where m.replied_to_id is not null
-  and exists (
-    select 1 from public.messages src
-    where src.id = m.replied_to_id and src.is_deleted = true
-  );
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'messages'
+      and column_name = 'is_deleted'
+  ) then
+    update public.messages m
+    set replied_to_text = null,
+        replied_to_sender_name = null
+    where m.replied_to_id is not null
+      and exists (
+        select 1 from public.messages src
+        where src.id = m.replied_to_id and src.is_deleted = true
+      );
+  end if;
+end $$;
