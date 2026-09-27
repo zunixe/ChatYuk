@@ -1415,8 +1415,11 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   // sampai ratusan MB (pernah 500MB → ngetik & buka halaman ngelag).
   // Bubble chat decode max 720–1080px (lihat private_chat_message.dart),
   // jadi 200 entri / 100MB lebih dari cukup.
-  PaintingBinding.instance.imageCache.maximumSize = 200;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 100 << 20;
+  // HP 4-6GB (Redmi) sering kehabisan RAM — swap penuh → app freeze/ANR.
+  // Turunkan ke 120 entri / 64MB: bitmap bubble tetap cukup (decode di-cap
+  // 1080px ≈ 4.4MB/entri), sisanya dibuang & di-decode ulang saat scroll.
+  PaintingBinding.instance.imageCache.maximumSize = 120;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 << 20;
   kFirebaseOptionsOverride = firebaseOptions;
   // Crashlytics butuh Firebase ter-init dulu — aktifkan pasca-init di bawah.
   // Handler di sini hanya dlog; setelah FlutterError.crashlytics disambung,

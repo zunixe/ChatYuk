@@ -131,9 +131,10 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
   // Batas unduhan poster paralel (lintas-instance). Tiap poster mengunduh
   // video PENUH lalu ambil 1 frame — kalau puluhan bubble video tampil saat
-  // cold start, tanpa batas mereka berebut bandwidth (gejala "ngeblink").
-  // 3 bersamaan cukup: poster pertama cepat, sisanya antri rapi.
-  static final _posterGate = _PosterGate(3);
+  // cold start, tanpa batas mereka berebut bandwidth + RAM decode sekaligus
+  // (gejala "ngeblink" / app freeze di HP RAM kecil).
+  // 2 bersamaan: cukup cepat, sisa antri — jaga puncak memori tetap rendah.
+  static final _posterGate = _PosterGate(2);
 
   // Terkunci: video sekali-lihat sudah ditonton & milik lawan. Admin monitor
   // DILARANG dikunci (harus bisa melihat semua).

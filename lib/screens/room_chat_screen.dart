@@ -180,6 +180,18 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   @override
   set sendReplyingTo(MessageModel? v) => replyingTo = v;
 
+  // Caption & balasan untuk view-once dari picker (kirim langsung tanpa
+  // preview) — dulu teks yang diketik diabaikan.
+  @override
+  String get photoComposerText => _msgCtrl.text;
+  @override
+  MessageModel? get photoReplyingTo => replyingTo;
+  @override
+  void photoClearComposerText() {
+    _msgCtrl.clear();
+    if (mounted) setState(() => replyingTo = null);
+  }
+
   @override
   String? get sendPendingPhotoBase64 => _pendingPhotoBase64;
 

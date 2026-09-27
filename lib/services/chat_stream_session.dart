@@ -524,56 +524,31 @@ class ChatStreamSession {
         column: filterKey,
         value: filterVal,
       ),
-      callback: (payload) async {
+      callback: (payload) {
         _hiddenCutoffCache.remove(filterVal);
         if (controller.isClosed) return;
         try {
           final row = payload.newRecord;
           if (row[filterKey]?.toString() != filterVal) return;
-          var msg = MessageModel.fromMap('${row['id']}', snakeToCamel(row));
+          final msg = MessageModel.fromMap('${row['id']}', snakeToCamel(row));
           if (_current.any((m) => m.id == msg.id)) return; // dedupe
           if (_hiddenCutoff != null && !msg.timestamp.isAfter(_hiddenCutoff!))
             return;
-          // Foto dari realtime: buat thumbnail DULU sebelum emit — bubble langsung
-          // pakai thumb (decode cepat, ala WhatsApp). Kalau thumb gagal dibuat,
-          // fallback ke imageData penuh supaya gambar tetap muncul (tidak spinner
-          // selamanya). Full-res tersimpan di PhotoCache untuk fullscreen.
-          // VOICE: jangan proses sebagai image — path m4a langsung dipakai VoiceBubble.
-          // VIDEO: jangan proses sebagai image — poster/frame dihasilkan
-          // ChatVideoBubble sendiri (poster diambil dari frame video, bukan
-          // image). Memproses path .mp4 di sini = unduh video penuh lalu gagal
-          // generate thumbnail (boros bandwidth + tunda emit).
-          final isVideoType = msg.type == 'video' ||
-              msg.type == 'video_once' ||
-              msg.type == 'video_once_expired';
-          if (msg.imageData.isNotEmpty &&
-              msg.type != 'voice' &&
-              !isVideoType) {
-            try {
-              var data = msg.imageData;
-              // PATH storage → download dari bucket sebelum dibuat thumbnail.
-              if (StoragePhotoService.instance.isPath(data)) {
-                data = await StoragePhotoService.instance.download(data) ?? '';
-              }
-              if (data.isNotEmpty) {
-                final thumb = await PhotoCache.instance.save(
-                  cacheKey,
-                  msg.id,
-                  data,
-                );
-                if (!controller.isClosed && thumb != null && thumb.isNotEmpty) {
-                  msg = msg.copyWith(imageData: thumb);
-                }
-              }
-            } catch (e) {
-              dlog('[photo save] ${msg.id} error: $e');
-            }
-          } else if (msg.type == 'image' ||
-              msg.type == 'view_once' ||
-              msg.type == 'view_once_expired') {
+          // PENTING (perf): JANGAN `await` unduh/thumbnail di jalur realtime —
+          // dulu pesan foto menunggu unduh full-res selesai SEBELUM ditampilkan
+          // (dan event berikutnya ikut ngantre), jadi pesan masuk terasa
+          // "lambat banget". Sekarang pesan DI-EMIT DULU (placeholder
+          // spinner), lalu foto diisi di latar oleh queuePhotoDownload —
+          // persis pola video (poster diurus ChatVideoBubble).
+          // VOICE: unduh audio di latar (tanpa thumbnail).
+          final needsPhotoFill = (msg.type == 'image' ||
+                  msg.type == 'view_once' ||
+                  msg.type == 'view_once_expired') &&
+              msg.imageData.isNotEmpty &&
+              _needsPhotoFill(msg);
+          if (needsPhotoFill) {
             queuePhotoDownload(msg);
-          } else if (msg.type == 'voice') {
-            // Voice: unduh audio ke cache lokal via PhotoCache (tanpa thumbnail)
+          } else if (msg.type == 'voice' && msg.imageData.isNotEmpty) {
             unawaited(_downloadVoiceToCache(cacheKey, msg));
           }
           // Sisipkan di posisi kronologis yang benar (ascending by timestamp),
