@@ -15,6 +15,42 @@ import '../providers/locale_provider.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
 
+/// Gate konkurensi sederhana (max N paralel) — dipakai membatasi unduhan
+/// poster video lintas-instance bubble. Mirip `_Semaphore` di
+/// chat_stream_session.dart (tidak diekspor lintas file).
+class _PosterGate {
+  final int max;
+  int _count = 0;
+  final _waiters = <Completer<void>>[];
+  _PosterGate(this.max);
+  Future<void> _acquire() async {
+    if (_count < max) {
+      _count++;
+      return;
+    }
+    final c = Completer<void>();
+    _waiters.add(c);
+    await c.future;
+  }
+
+  void _release() {
+    _count--;
+    if (_waiters.isNotEmpty) {
+      _waiters.removeAt(0).complete();
+      _count++;
+    }
+  }
+
+  Future<T> run<T>(Future<T> Function() fn) async {
+    await _acquire();
+    try {
+      return await fn();
+    } finally {
+      _release();
+    }
+  }
+}
+
 /// Label durasi video ringkas: "0:07" / "1:00". Murni & testable.
 String formatVideoDuration(int ms) {
   final total = (ms / 1000).round();
@@ -33,6 +69,10 @@ String formatVideoDuration(int ms) {
 /// byte diunduh ke cache disk dulu (MediaDiskCache = sumber kebenaran
 /// lokal, sama seperti foto/voice).
 class ChatVideoBubble extends StatefulWidget {
+  /// Lebar kartu video (poster + kartu terkunci sama) — dipakai bubble chat
+  /// untuk mengunci lebar kolom supaya kartu rapat (tidak melebar ke max).
+  static const double bubbleWidth = 200;
+
   /// Path storage (`chat/....mp4`) ATAU base64 (bubble optimistik sendiri).
   final String videoData;
   /// Durasi (ms) dari model pesan — label tanpa perlu buka video.
@@ -47,6 +87,17 @@ class ChatVideoBubble extends StatefulWidget {
   final String? messageId;
   /// Pesan milik sendiri.
   final bool isMe;
+  /// Admin monitor: boleh melihat video sekali-lihat walau sudah kadaluarsa
+  /// (akses istimewa; menonaktifkan kunci + tidak menandai server).
+  final bool isAdminView;
+  /// Jam kirim ("" = tidak tampil). Digabung dengan badge durasi di
+  /// kanan-bawah — SAMA posisi dengan overlay jam foto (kanan 6 bawah 6).
+  final String timeStr;
+  /// Tampilkan centang dibaca (pengirim / kedua sisi).
+  final bool showChecks;
+  final bool isPending;
+  final bool isQueued;
+  final bool isRead;
 
   const ChatVideoBubble({
     super.key,
@@ -57,6 +108,12 @@ class ChatVideoBubble extends StatefulWidget {
     this.isOnce = false,
     this.messageId,
     this.isMe = false,
+    this.isAdminView = false,
+    this.timeStr = '',
+    this.showChecks = false,
+    this.isPending = false,
+    this.isQueued = false,
+    this.isRead = false,
   });
 
   @override
@@ -72,7 +129,17 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
   // pengirim tetap boleh melihat videonya sendiri.
   bool _lockedLocal = false;
 
-  bool get _locked => widget.locked || (_lockedLocal && !widget.isMe);
+  // Batas unduhan poster paralel (lintas-instance). Tiap poster mengunduh
+  // video PENUH lalu ambil 1 frame — kalau puluhan bubble video tampil saat
+  // cold start, tanpa batas mereka berebut bandwidth (gejala "ngeblink").
+  // 3 bersamaan cukup: poster pertama cepat, sisanya antri rapi.
+  static final _posterGate = _PosterGate(3);
+
+  // Terkunci: video sekali-lihat sudah ditonton & milik lawan. Admin monitor
+  // DILARANG dikunci (harus bisa melihat semua).
+  bool get _locked =>
+      !widget.isAdminView &&
+      (widget.locked || (_lockedLocal && !widget.isMe));
 
   // Kunci cache poster di disk (anti-blink cold start): poster yang sudah
   // pernah dibuat dipakai ulang TANPA unduh video + generate frame lagi.
@@ -176,6 +243,14 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
       _loading = true;
       _failed = false;
     });
+    // Bungkus bagian yang MENGUNDUH video + generate frame dengan gate
+    // (bukan cache disk read di atas yang instan). Poster lalu disimpan ke
+    // disk — pemanggilan berikutnya tidak lewat gate lagi.
+    await _posterGate.run(() => _generatePoster());
+  }
+
+  Future<void> _generatePoster() async {
+    if (!mounted) return;
     // Bubble sendiri (belum ter-upload): videoData base64 → tulis ke file
     // dulu, lalu ambil poster frame-nya. Tanpa ini bubble hanya kotak hitam
     // (di latar gelap terlihat seperti "video hilang").
@@ -287,40 +362,65 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
 
   @override
   Widget build(BuildContext context) {
-    const double width = 200;
+    const double width = ChatVideoBubble.bubbleWidth;
     // Rasio 16:9 umum untuk video; bila poster ada, pakai rasionya.
     double height = width * 9 / 16;
     if (height > widget.maxHeight) height = widget.maxHeight;
 
     // Terkunci (sekali lihat, sudah ditonton): kartu status, bukan video.
+    // Design DISAMAKAN dengan foto sekali-lihat (ViewOnceLockedCard) supaya
+    // konsisten — dulu video memakai kotak polos tanpa judul/hint.
+    // Jam tetap overlay kanan-bawah di atas kartu (sama seperti foto
+    // view-once) supaya penerima tetap tahu waktunya.
     if (_locked) {
       final s = context.read<LocaleProvider>().s;
-      return Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: AppTheme.bgInput,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        alignment: Alignment.center,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.visibility_off_outlined,
-              color: Colors.white54,
-              size: 26,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              s.videoOnceExpired,
-              style: AppText.chatBodySmall.copyWith(
-                color: AppTheme.textSecondary,
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ViewOnceLockedCard(
+            title: s.videoOnceExpired,
+            hint: s.viewOnceExpiredHint,
+            icon: Icons.videocam_off_outlined,
+          ),
+          if (widget.timeStr.isNotEmpty)
+            Positioned(
+              right: 6,
+              bottom: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 5,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.timeStr,
+                      style: AppText.chatTime.copyWith(color: Colors.white),
+                    ),
+                    if (widget.showChecks) ...[
+                      const SizedBox(width: 3),
+                      Icon(
+                        (widget.isPending || widget.isQueued)
+                            ? Icons.done
+                            : Icons.done_all,
+                        size: 12,
+                        color: (widget.isRead &&
+                                !widget.isPending &&
+                                !widget.isQueued)
+                            ? const Color(0xFF7EC8FF)
+                            : Colors.white70,
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              textAlign: TextAlign.center,
             ),
-          ],
-        ),
+        ],
       );
     }
 
@@ -413,7 +513,10 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
                     ),
                   ),
                 ),
-              if (widget.durationMs > 0)
+              // Badge kanan-bawah: [durasi] [jam] [centang] dalam SATU
+              // badge — posisi SAMA dengan overlay jam foto (kanan 6
+              // bawah 6) supaya tidak dobel badge bertumpuk.
+              if (widget.durationMs > 0 || widget.timeStr.isNotEmpty)
                 Positioned(
                   right: 6,
                   bottom: 6,
@@ -426,9 +529,39 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
                       color: Colors.black.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      formatVideoDuration(widget.durationMs),
-                      style: AppText.chatTime.copyWith(color: Colors.white),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.durationMs > 0)
+                          Text(
+                            formatVideoDuration(widget.durationMs),
+                            style:
+                                AppText.chatTime.copyWith(color: Colors.white),
+                          ),
+                        if (widget.durationMs > 0 &&
+                            widget.timeStr.isNotEmpty)
+                          const SizedBox(width: 5),
+                        if (widget.timeStr.isNotEmpty)
+                          Text(
+                            widget.timeStr,
+                            style:
+                                AppText.chatTime.copyWith(color: Colors.white),
+                          ),
+                        if (widget.showChecks) ...[
+                          const SizedBox(width: 3),
+                          Icon(
+                            (widget.isPending || widget.isQueued)
+                                ? Icons.done
+                                : Icons.done_all,
+                            size: 12,
+                            color: (widget.isRead &&
+                                    !widget.isPending &&
+                                    !widget.isQueued)
+                                ? const Color(0xFF7EC8FF)
+                                : Colors.white70,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -537,6 +670,101 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   ),
                 ),
               ),
+        ),
+      ),
+    );
+  }
+}
+
+// Kartu "foto sudah kadaluarsa" — dipakai pengirim & penerima (design sama).
+class ViewOnceLockedCard extends StatelessWidget {
+  /// Lebar kartu terkunci — SAMA dengan lebar video supaya bubble rapat.
+  static const double cardWidth = 200;
+  final String title;
+  final String hint;
+  /// Ikon dalam lingkaran (default kunci-jam). Video memakai ikon video.
+  final IconData icon;
+  const ViewOnceLockedCard({
+    super.key,
+    required this.title,
+    required this.hint,
+    this.icon = Icons.lock_clock_outlined,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: cardWidth,
+        height: 140,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF37474F), Color(0xFF263238)],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.15),
+                      Colors.black.withValues(alpha: 0.72),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: AppText.chatName.copyWith(
+                      color: Colors.white,
+                      letterSpacing: 0,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hint,
+                    textAlign: TextAlign.center,
+                    style: AppText.chatTime.copyWith(
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -8,6 +8,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../core/chat/chat_location.dart';
 import '../providers/locale_provider.dart';
+import 'media_caption_time.dart';
 
 /// Bubble pesan LOKASI (ala WhatsApp): peta mini + label, tap → Google Maps.
 ///
@@ -29,6 +30,16 @@ class LocationBubble extends StatelessWidget {
 
   /// Override aksi tap — HANYA untuk test (null = buka Google Maps).
   final VoidCallback? onTapOverride;
+
+  /// Jam kirim ("8:35 PM", "" = tidak tampil). Overlay kanan-bawah di atas
+  /// peta — SAMA posisi dengan overlay jam foto/video (kanan 6 bawah 6).
+  final String timeStr;
+
+  /// Tampilkan centang dibaca (pengirim / monitor admin kedua sisi).
+  final bool showChecks;
+  final bool isPending;
+  final bool isQueued;
+  final bool isRead;
   const LocationBubble({
     super.key,
     required this.location,
@@ -36,7 +47,38 @@ class LocationBubble extends StatelessWidget {
     this.height = 160,
     this.interactive = false,
     this.onTapOverride,
+    this.timeStr = '',
+    this.showChecks = false,
+    this.isPending = false,
+    this.isQueued = false,
+    this.isRead = false,
   });
+
+  /// Baris jam (+ centang) untuk kasus tanpa caption.
+  Widget _timeRow() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          timeStr,
+          style: AppText.chatTime.copyWith(
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        if (showChecks) ...[
+          const SizedBox(width: 3),
+          Icon(
+            (isPending || isQueued) ? Icons.done : Icons.done_all,
+            size: 12,
+            color: (!isQueued && !isPending && isRead)
+                ? AppTheme.primary
+                : AppTheme.textSecondary,
+          ),
+        ],
+      ],
+    );
+  }
 
   /// Label badge lokasi live: sisa waktu ("berakhir 12 menit") atau
   /// "Lokasi live berakhir" bila kedaluwarsa.
@@ -177,10 +219,12 @@ class LocationBubble extends StatelessWidget {
                                 ),
                               ),
                             // Atribusi OSM: diwajibkan, tapi cukup teks mungil
-                            // di pojok (bukan badge RichAttribution yang
-                            // mencolok & menutupi peta).
+                            // di pojok KIRI bawah (bukan badge RichAttribution
+                            // yang mencolok & menutupi peta). Kiri supaya
+                            // tidak tertutup badge jam kanan-bawah di bubble
+                            // chat (lihat private_chat_message.dart).
                             Positioned(
-                              right: 2,
+                              left: 2,
                               bottom: 2,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
@@ -224,12 +268,34 @@ class LocationBubble extends StatelessWidget {
                   ],
                 ),
               ),
-              // Caption (diketik di kolom composer saat kirim) — di bawah peta,
-              // ala caption foto WhatsApp.
+              // Caption + jam ala chat teks; jam rata kanan sejajar tepi peta.
+              // Tanpa caption → jam di bawah peta, rata kanan.
               if (location.caption.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                  child: Text(location.caption, style: AppText.chatBodySmall),
+                  padding: const EdgeInsets.only(top: 4),
+                  child: MediaCaptionTime(
+                    text: location.caption,
+                    timeStr: timeStr,
+                    textStyle: AppText.chatBody.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
+                    timeStyle: AppText.chatTime.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                    showChecks: showChecks,
+                    isPending: isPending,
+                    isQueued: isQueued,
+                    isRead: isRead,
+                    leftInset: 8,
+                  ),
+                )
+              else if (timeStr.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 2, 0, 0),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _timeRow(),
+                  ),
                 ),
             ],
           ),

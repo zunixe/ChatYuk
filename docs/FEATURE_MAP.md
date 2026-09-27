@@ -272,6 +272,17 @@ ikon `reply` di kiri muncul & menguat seiring tarikan. Lepas ≥48 px → `_repl
 **Invariant:** admin list tidak bocor ke build rilis (tree-shake lewat
 `admin_gate.dart`); fitur admin 24/7 (`ai_always_online`) tetap utuh.
 
+**Kebijakan EXCLUDE (sejak 2026-09-27):** admin melihat **SEMUA** user di
+ringkasan/peta — user ter-exclude (device/uid) TETAP tampil dengan flag
+`'excluded': true` (UI kasih badge "EXCLUDED"), TIDAK lagi disembunyikan total.
+`admin_stats_detail` (FROZEN) & `admin_stats_users_page` mengembalikan flag itu;
+`admin_stats_compute` (kartu angka) tetap menghitung TANPA excluded (metrik
+tidak melonjak). **DUMMY tetap dibuang** dari ringkasan admin.
+JANGAN mengembalikan filter `not (id = any(v_excl))` ke dua fungsi itu.
+Jalur user nyata (`list_posts`, `nearby_users`, `create_private_room`) TETAP
+mengecualikan device/uid exclude — biarkan (akun test/dev tak boleh tampil
+ke user asli). Dikunci: `supabase/tests/schema_sync_test.sql`.
+
 ---
 
 ## 9. Privasi (visibilitas presence/photo/about/story) — RAWAN BYPASS

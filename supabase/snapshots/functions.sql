@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-27T03:34:42Z
+-- Timestamp: 2026-09-27T12:39:40Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -1770,7 +1770,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: admin_stats_detail @ 20260924110000_admin_stats_detail_gender_photo.sql
+-- snapshot-fn: admin_stats_detail @ 20260928070000_admin_show_excluded_with_flag.sql
 CREATE OR REPLACE FUNCTION public.admin_stats_detail()
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1799,10 +1799,10 @@ begin
         'country', country, 'city', city, 'ip_address', ip_address,
         'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
-        'lat', lat, 'lon', lon, 'loc_source', loc_source
+        'lat', lat, 'lon', lon, 'loc_source', loc_source,
+        'excluded', (id = any(v_excl))
       ) order by last_seen desc nulls last)
-      from profiles where not (id = any(v_excl))
-        and not (id = any(v_dummy))), '[]'::jsonb),
+      from profiles where not (id = any(v_dummy))), '[]'::jsonb),
     'users_active', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', id,
@@ -1810,11 +1810,11 @@ begin
         'country', country, 'city', city, 'ip_address', ip_address,
         'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
-        'lat', lat, 'lon', lon, 'loc_source', loc_source
+        'lat', lat, 'lon', lon, 'loc_source', loc_source,
+        'excluded', (id = any(v_excl))
       ) order by last_seen desc nulls last)
       from profiles
       where last_seen >= current_date at time zone 'Asia/Jakarta'
-        and not (id = any(v_excl))
         and not (id = any(v_dummy))), '[]'::jsonb),
     'users_registered', coalesce((
       select jsonb_agg(jsonb_build_object(
@@ -1823,10 +1823,10 @@ begin
         'country', country, 'city', city, 'ip_address', ip_address,
         'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
-        'lat', lat, 'lon', lon, 'loc_source', loc_source
+        'lat', lat, 'lon', lon, 'loc_source', loc_source,
+        'excluded', (id = any(v_excl))
       ) order by created_at desc nulls last)
       from profiles where is_registered = true
-        and not (id = any(v_excl))
         and not (id = any(v_dummy))), '[]'::jsonb),
     'users_anonymous', coalesce((
       select jsonb_agg(jsonb_build_object(
@@ -1835,10 +1835,10 @@ begin
         'country', country, 'city', city, 'ip_address', ip_address,
         'status', status, 'email', email,
         'is_registered', is_registered, 'last_seen', last_seen,
-        'lat', lat, 'lon', lon, 'loc_source', loc_source
+        'lat', lat, 'lon', lon, 'loc_source', loc_source,
+        'excluded', (id = any(v_excl))
       ) order by last_seen desc nulls last)
       from profiles where is_registered = false
-        and not (id = any(v_excl))
         and not (id = any(v_dummy))), '[]'::jsonb),
     'rooms_active', coalesce((
       select jsonb_agg(jsonb_build_object(

@@ -12,6 +12,7 @@ import 'providers/chat_provider.dart';
 import 'providers/storage_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/device_info_provider.dart';
+import 'services/device_info_service.dart';
 import 'providers/contact_provider.dart';
 import 'providers/avatar_provider.dart';
 import 'providers/notification_prefs_provider.dart';
@@ -666,6 +667,12 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
       // menimpa balik status admin yang sudah di-toggle invisible.
       auth.resyncInvisible();
       auth.goOnline();
+      // Catat ulang Device ID tiap resume — TIDAK tergantung guard goOnline
+      // (invisible/banned) supaya device selalu tercatat di admin. Fire-and-
+      // forget; idempoten (upsert).
+      if (auth.uid != null) {
+        safeUnawaited(DeviceInfoService.instance.syncToServer());
+      }
       // Sinkron profil lintas-device: selama sleep, event realtime profil
       // (ganti avatar dsb.) bisa terlewat → refresh dari server.
       auth.refreshProfile();

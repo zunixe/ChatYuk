@@ -7,6 +7,7 @@ import '../utils.dart';
 import '../utils/mention.dart';
 import 'mention_spans.dart';
 import 'chat_video_bubble.dart';
+import 'media_caption_time.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
@@ -900,6 +901,9 @@ class MessageBubble extends StatelessWidget {
   final bool highlightMentionAll;
   // Kata kunci search chat — diteruskan ke teks bubble (kosong = mati).
   final String searchQuery;
+  /// Admin monitor: tampilkan centang di KEDUA sisi (kiri & kanan), bukan
+  /// hanya milik pengirim. Tujuannya admin melihat status baca kedua orang.
+  final bool showChecksBothSides;
   const MessageBubble({
     super.key,
     required this.msg,
@@ -911,6 +915,7 @@ class MessageBubble extends StatelessWidget {
     this.isImageDeferred = false,
     this.onRetryImage,
     this.isAdminView = false,
+    this.showChecksBothSides = false,
     this.isRoom = false,
     this.onLongPressMenu,
     this.onSwipeReply,
@@ -1072,13 +1077,17 @@ class MessageBubble extends StatelessWidget {
                           isQueued: isQueued,
                           isRead: isRead,
                         )
-                      else if (msg.type == 'video_once_expired')
-                        // Video sekali-lihat yang SUDAH kadaluarsa: image_data
-                        // dikosongkan server (pola sama foto view-once). Dulu
-                        // syarat `imageData.isNotEmpty` membuat cabang ini
-                        // dilewati → bubble KOSONG tanpa teks. Sekarang selalu
-                        // tampil kartu "video sudah kadaluarsa".
-                        Column(
+                      else if (msg.type == 'video_once_expired' &&
+                          !isMe &&
+                          !isAdminView)
+                        // Video kadaluarsa sisi PENERIMA: kartu terkunci
+                        // "Video sudah kadaluarsa". Jam OVERLAY di DALAM card
+                        // (kanan 6 bawah 6) — SAMA seperti foto kadaluarsa
+                        // (ViewOnce), bukan di bawah. Tidak ada badge durasi
+                        // di card terkunci jadi tidak bertumpuk.
+                        SizedBox(
+                          width: ChatVideoBubble.bubbleWidth,
+                          child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             ChatVideoBubble(
@@ -1086,14 +1095,22 @@ class MessageBubble extends StatelessWidget {
                               durationMs: msg.durationMs ?? 0,
                               // Terkunci untuk PENERIMA. Pengirim tetap boleh
                               // melihat videonya sendiri (pola sama foto).
+                              // Admin monitor: tidak pernah terkunci.
                               locked: !isMe,
                               isOnce: true,
                               messageId: msg.id,
                               isMe: isMe,
+                              isAdminView: isAdminView,
+                              timeStr: timeStr,
+                              showChecks: isMe || showChecksBothSides,
+                              isPending: isPending,
+                              isQueued: isQueued,
+                              isRead: isRead,
                             ),
                             if (msg.text.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(top: 4),
+                                padding:
+                                    const EdgeInsets.fromLTRB(8, 4, 8, 0),
                                 child: MentionAwareText(
                                   msg.text,
                                   style: AppText.chatBody.copyWith(
@@ -1103,11 +1120,22 @@ class MessageBubble extends StatelessWidget {
                                 ),
                               ),
                           ],
+                          ),
                         )
-                      else if ((msg.type == 'video' ||
-                              msg.type == 'video_once') &&
-                          msg.imageData.isNotEmpty)
-                        Column(
+                      else if (((msg.type == 'video' ||
+                                  msg.type == 'video_once') &&
+                              msg.imageData.isNotEmpty) ||
+                          // Kadaluarsa sisi PENGIRIM/admin: videonya masih
+                          // bisa diputar (data tidak dihapus) → jam di BAWAH
+                          // seperti video biasa, bukan overlay.
+                          msg.type == 'video_once_expired')
+                        // Jam di BAWAH video dalam bubble (kanan) — TIDAK
+                        // overlay supaya tidak bertumpuk dengan badge durasi
+                        // di dalam video. Sama untuk pengirim & penerima.
+                        // Lebar dikunci selebar video (ala LocationBubble).
+                        SizedBox(
+                          width: ChatVideoBubble.bubbleWidth,
+                          child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             ChatVideoBubble(
@@ -1115,97 +1143,83 @@ class MessageBubble extends StatelessWidget {
                               durationMs: msg.durationMs ?? 0,
                               // Sekali lihat: sudah ditonton → terkunci.
                               locked: false,
-                              isOnce: msg.type == 'video_once',
+                              isOnce: msg.type == 'video_once' ||
+                                  msg.type == 'video_once_expired',
                               messageId: msg.id,
                               isMe: isMe,
+                              isAdminView: isAdminView,
                             ),
+                            // Caption + jam SEBARIS ala chat teks (nempel, hemat
+                            // tinggi): caption pendek → jam nempel di ujung
+                            // baris; caption panjang → jam di akhir baris
+                            // terakhir. Tanpa caption → jam di bawah (rapat).
                             if (msg.text.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
-                                child: MentionAwareText(
-                                  msg.text,
-                                  style: AppText.chatBody.copyWith(
+                                child: MediaCaptionTime(
+                                  text: msg.text,
+                                  timeStr: timeStr,
+                                  textStyle: AppText.chatBody.copyWith(
                                     color: AppTheme.textPrimary,
                                   ),
-                                  mentions: msg.mentions,
+                                  timeStyle: AppText.chatTime.copyWith(
+                                    color: AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                  showChecks: isMe || showChecksBothSides,
+                                  isPending: isPending,
+                                  isQueued: isQueued,
+                                  isRead: isRead,
+                                  leftInset: 8,
+                                ),
+                              )
+                            else
+                              Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(8, 2, 0, 0),
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        timeStr,
+                                        style: AppText.chatTime.copyWith(
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      if (isMe || showChecksBothSides) ...[
+                                        const SizedBox(width: 3),
+                                        Icon(
+                                          (isPending || isQueued)
+                                              ? Icons.done
+                                              : Icons.done_all,
+                                          size: 12,
+                                          color: (!isQueued &&
+                                                  !isPending &&
+                                                  isRead)
+                                              ? AppTheme.primary
+                                              : AppTheme.textSecondary,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
                               ),
                           ],
+                          ),
                         )
                       else if (msg.type == 'image' && msg.imageData.isNotEmpty)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  MessageImage(
-                                    imageData: msg.imageData,
-                                    chatKey: chatKey,
-                                    messageId: msg.id,
-                                  ),
-                                  Positioned(
-                                    right: 6,
-                                    bottom: 6,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withValues(alpha: 0.55),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            timeStr,
-                                            style: AppText.chatTime.copyWith(
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          if (isMe) ...[
-                                            const SizedBox(width: 3),
-                                            Tooltip(
-                                              message: isQueued
-                                                  ? s.msgWaitingConnection
-                                                  : '',
-                                              child: Icon(
-                                                (isPending || isQueued)
-                                                    ? Icons.done
-                                                    : Icons.done_all,
-                                                size: 12,
-                                                color: (isRead &&
-                                                        !isPending &&
-                                                        !isQueued)
-                                                    ? const Color(0xFF7EC8FF)
-                                                    : Colors.white70,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (msg.text.isNotEmpty && LinkPreviewService.instance.extractUrl(msg.text) != null)
-                              LinkPreview(text: msg.text),
-                            if (msg.text.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: MentionAwareText(
-                                  msg.text,
-                                  style: AppText.chatBody.copyWith(color: AppTheme.textPrimary),
-                                  mentions: msg.mentions,
-                                  highlightAll: highlightMentionAll,
-                                ),
-                              ),
-                          ],
+                        _PhotoBubble(
+                          msg: msg,
+                          chatKey: chatKey,
+                          timeStr: timeStr,
+                          isMe: isMe,
+                          isRead: isRead,
+                          isPending: isPending,
+                          isQueued: isQueued,
+                          showChecksBothSides: showChecksBothSides,
+                          highlightMentionAll: highlightMentionAll,
                         )
                       else if (msg.type == 'image' &&
                           msg.imageData.isEmpty &&
@@ -1215,7 +1229,14 @@ class MessageBubble extends StatelessWidget {
                         )
                       else if (msg.type == 'location' &&
                           parseLocation(msg.text) != null)
-                        LocationBubble(location: parseLocation(msg.text)!)
+                        LocationBubble(
+                          location: parseLocation(msg.text)!,
+                          timeStr: timeStr,
+                          showChecks: isMe || showChecksBothSides,
+                          isPending: isPending,
+                          isQueued: isQueued,
+                          isRead: isRead,
+                        )
                       else if (msg.type == 'view_once' ||
                           msg.type == 'view_once_expired')
                         Stack(
@@ -1251,7 +1272,7 @@ class MessageBubble extends StatelessWidget {
                                         color: Colors.white,
                                       ),
                                     ),
-                                    if (isMe) ...[
+                                    if (isMe || showChecksBothSides) ...[
                                       const SizedBox(width: 3),
                                       Tooltip(
                                         message: isQueued
@@ -1672,11 +1693,15 @@ class MessageImage extends StatefulWidget {
   final String imageData;
   final String chatKey;
   final String messageId;
+  /// Lapor lebar render foto (200 atau `tinggi*aspect` bila tinggi dibatasi
+  /// 280) agar caption+jam bisa rata kanan sejajar tepi foto.
+  final ValueChanged<double>? onRenderedWidth;
   const MessageImage({
     super.key,
     required this.imageData,
     required this.chatKey,
     required this.messageId,
+    this.onRenderedWidth,
   });
 
   @override
@@ -1694,6 +1719,8 @@ class _MessageImageState extends State<MessageImage> {
   final TransformationController _trans = TransformationController();
   double _scale = 1.0;
   Offset _doubleTapPos = Offset.zero;
+  // Lebar terakhir yang dilaporkan ke parent (hindari callback berulang).
+  double _reportedWidth = -1;
 
   @override
   void initState() {
@@ -1850,6 +1877,15 @@ class _MessageImageState extends State<MessageImage> {
     if (height > 280) {
       height = 280;
       width = height * aspect;
+    }
+    // Lapor lebar render ke parent (sekali / berubah) → caption+jam rata kanan
+    // sejajar tepi foto.
+    final cb = widget.onRenderedWidth;
+    if (cb != null && (width - _reportedWidth).abs() > 0.5) {
+      _reportedWidth = width;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) cb(width);
+      });
     }
     return GestureDetector(
       onTap: () => _openFullscreen(),
@@ -2866,92 +2902,148 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   }
 }
 
-// Kartu "foto sudah kadaluarsa" — dipakai pengirim & penerima (design sama).
-class ViewOnceLockedCard extends StatelessWidget {
-  final String title;
-  final String hint;
-  const ViewOnceLockedCard({
-    super.key,
-    required this.title,
-    required this.hint,
+/// Bubble FOTO private chat.
+///
+/// - Tanpa caption: jam di-overlay di sudut kanan-bawah gambar (seperti
+///   sebelumnya).
+/// - Ada caption: jam **tidak** overlay; caption di bawah + jam rata kanan
+///   sejajar tepi kanan foto (lebar render foto dilaporkan oleh MessageImage)
+///   — aturan jarak caption↔jam SAMA seperti bubble teks.
+class _PhotoBubble extends StatefulWidget {
+  final MessageModel msg;
+  final String chatKey;
+  final String timeStr;
+  final bool isMe;
+  final bool isRead;
+  final bool isPending;
+  final bool isQueued;
+  final bool showChecksBothSides;
+  final bool highlightMentionAll;
+
+  const _PhotoBubble({
+    required this.msg,
+    required this.chatKey,
+    required this.timeStr,
+    required this.isMe,
+    required this.isRead,
+    required this.isPending,
+    required this.isQueued,
+    required this.showChecksBothSides,
+    required this.highlightMentionAll,
   });
 
   @override
+  State<_PhotoBubble> createState() => _PhotoBubbleState();
+}
+
+class _PhotoBubbleState extends State<_PhotoBubble> {
+  // Lebar render foto (dilaporkan MessageImage); 200 = default sebelum tahu.
+  double _imgW = 200;
+
+  @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 200,
-        height: 140,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF37474F), Color(0xFF263238)],
-          ),
-        ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.15),
-                      Colors.black.withValues(alpha: 0.72),
-                    ],
+    final msg = widget.msg;
+    final isMe = widget.isMe;
+    final showChecks = isMe || widget.showChecksBothSides;
+    final hasCaption = msg.text.isNotEmpty;
+    final hasLink =
+        hasCaption && LinkPreviewService.instance.extractUrl(msg.text) != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              MessageImage(
+                imageData: msg.imageData,
+                chatKey: widget.chatKey,
+                messageId: msg.id,
+                onRenderedWidth: (w) {
+                  if (mounted && (w - _imgW).abs() > 0.5) {
+                    setState(() => _imgW = w);
+                  }
+                },
+              ),
+              // Overlay jam HANYA bila tanpa caption (ada caption → jam di
+              // bawah, rata kanan sejajar tepi foto).
+              if (!hasCaption)
+                Positioned(
+                  right: 6,
+                  bottom: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.timeStr,
+                          style: AppText.chatTime.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                        if (showChecks) ...[
+                          const SizedBox(width: 3),
+                          Icon(
+                            (widget.isPending || widget.isQueued)
+                                ? Icons.done
+                                : Icons.done_all,
+                            size: 12,
+                            color: (widget.isRead &&
+                                    !widget.isPending &&
+                                    !widget.isQueued)
+                                ? const Color(0xFF7EC8FF)
+                                : Colors.white70,
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-            Positioned.fill(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.14),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        width: 1,
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.lock_clock_outlined,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: AppText.chatName.copyWith(
-                      color: Colors.white,
-                      letterSpacing: 0,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    hint,
-                    textAlign: TextAlign.center,
-                    style: AppText.chatTime.copyWith(
-                      color: Colors.white.withValues(alpha: 0.75),
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        if (hasLink)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: SizedBox(
+              width: _imgW,
+              child: LinkPreview(text: msg.text),
+            ),
+          ),
+        if (hasCaption)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: SizedBox(
+              width: _imgW,
+              child: MediaCaptionTime(
+                text: msg.text,
+                timeStr: widget.timeStr,
+                textStyle: AppText.chatBody.copyWith(
+                  color: AppTheme.textPrimary,
+                ),
+                timeStyle: AppText.chatTime.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w400,
+                ),
+                showChecks: showChecks,
+                isPending: widget.isPending,
+                isQueued: widget.isQueued,
+                isRead: widget.isRead,
+                leftInset: 8,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

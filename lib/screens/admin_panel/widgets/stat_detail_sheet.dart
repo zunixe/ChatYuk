@@ -223,6 +223,28 @@ Future<void> showStatDetailSheet(
                             color: gColor,
                           ),
                         ],
+                        // Badge EXCLUDED: user tetap tampil (admin lihat semua)
+                        // tapi ditandai agar tidak bingung kenapa ter-exclude.
+                        if (u['excluded'] == true) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              s.adminExcludedBadge,
+                              style: AppText.micro.copyWith(
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     if (sub.isNotEmpty)
@@ -298,6 +320,36 @@ Future<void> showStatDetailSheet(
                           ),
                       ],
                     ),
+                    // Titik GPS terakhir user (koordinat presisi dari HP).
+                    // HANYA tampil bila loc_source='gps' — supaya koordinat
+                    // hasil resolve IP TIDAK salah diberi label "GPS"
+                    // (sumber inkonsistensi "GPS aneh"). Sumber IP sudah
+                    // tampil di baris lokasi di atas (ikon pin biru).
+                    if (hasCoord && '${u['loc_source'] ?? ''}' == 'gps')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.my_location,
+                              size: 12,
+                              color: Colors.teal,
+                            ),
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: Text(
+                                '${s.gpsLast}: $lat, $lon',
+                                style: AppText.caption.copyWith(
+                                  color: Colors.teal,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),

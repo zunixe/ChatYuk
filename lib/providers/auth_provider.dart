@@ -1400,6 +1400,12 @@ class AuthProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
     resetIdleTimer();
     safeUnawaited(_updateLocationOnOnline());
+    // Catat ulang Device ID tiap online/resume — self-healing: kalau sync
+    // saat login gagal sesaat (jaringan), device tetap terdeteksi di admin
+    // pada kesempatan berikutnya. Tanpa ini banyak device tak tercatat.
+    if (_profile != null) {
+      safeUnawaited(DeviceInfoService.instance.syncToServer());
+    }
     if (uid != null) {
       safeUnawaited(
         RealtimeHub.instance.trackOnline(uid!, _profile?.nickname ?? ''),

@@ -11,6 +11,8 @@ import '../core/admin_gate.dart';
 import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
+import '../widgets/profile_avatar.dart';
+import '../providers/avatar_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/cache/photo_cache.dart';
@@ -52,11 +54,15 @@ class AdminChatViewScreen extends StatefulWidget {
 
   /// Urutan peserta sesuai judul (nama pertama = bubble kiri, kedua = kanan).
   final List<String> participantOrder;
+
+  /// uid → nama peserta (untuk avatar 2 sisi di header monitor).
+  final Map<String, String> participantNames;
   const AdminChatViewScreen({
     super.key,
     required this.chatId,
     required this.chatLabel,
     this.participantOrder = const [],
+    this.participantNames = const {},
   });
 
   @override
@@ -435,6 +441,8 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
         m.type == 'image' ||
         m.type == 'view_once' ||
         m.type == 'view_once_expired';
+    // CATATAN: video TIDAK lewat jalur thumbnail ini. Path video diisi dari
+    // RPC (image_path) → ChatVideoBubble mengunduh & memutar sendiri.
     if (!_thumbBatchRunning) {
       _thumbBatchRunning = true;
       try {
@@ -637,9 +645,16 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       type: '${m['type'] ?? 'text'}',
       // Voice: RPC kirim voice_path → disimpan di imageData (dipakai
       // VoiceBubble dengan disk cache-nya sendiri).
+      // Foto/video: pakai `image_data` bila ada (view-once), kalau kosong
+      // fallback ke `image_path` (path storage) — supaya admin BISA melihat
+      // foto biasa & video di monitor (dulu kosong → tak tampil).
       imageData: m['type'] == 'voice'
           ? '${m['voice_path'] ?? ''}'
-          : '${m['image_data'] ?? ''}',
+          : (('${m['image_data'] ?? ''}').isNotEmpty
+                ? '${m['image_data']}'
+                : '${m['image_path'] ?? ''}'),
+      isDeleted: m['is_deleted'] == true,
+      edited: m['edited'] == true,
       durationMs: m['duration_ms'] is int
           ? m['duration_ms'] as int
           : int.tryParse('${m['duration_ms'] ?? ''}'),
@@ -651,6 +666,93 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
+
+  /// Avatar peserta ke-[i] di header monitor (kiri=0, kanan=1). Tap =
+  /// perbesar foto. Tidak ada peserta → SizedBox kosong.
+  Widget _headerAvatar(int i) {
+    final order = widget.participantOrder;
+    if (i >= order.length) return const SizedBox.shrink();
+    final uid = order[i];
+    if (uid.isEmpty) return const SizedBox.shrink();
+    final name = widget.participantNames[uid] ?? '';
+    return GestureDetector(
+      onTap: () => _zoomAvatar(uid, name),
+      child: ProfileAvatar(
+        uid: uid,
+        name: name,
+        size: 34,
+        borderRadius: 0,
+        borderColor: i == 0 ? AppTheme.male : AppTheme.accent,
+        bgColor: AppTheme.avatarBg,
+        textColor: AppTheme.textPrimary,
+      ),
+    );
+  }
+
+  /// Tap avatar → dialog perbesar (InteractiveViewer). Ambil base64 via
+  /// AvatarProvider (uid); fallback inisial.
+  Future<void> _zoomAvatar(String uid, String name) async {
+    if (!mounted) return;
+    String b64 = '';
+    try {
+      b64 = await context.read<AvatarProvider>().get(uid);
+    } catch (_) {}
+    if (!mounted) return;
+    Uint8List? bytes;
+    if (b64.isNotEmpty) {
+      try {
+        bytes = base64Decode(b64);
+      } catch (_) {}
+    }
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: bytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(
+                          bytes,
+                          fit: BoxFit.contain,
+                          cacheWidth: 1080,
+                        ),
+                      )
+                    : CircleAvatar(
+                        radius: 90,
+                        backgroundColor: AppTheme.primary,
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: AppGlyph.xl,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -665,13 +767,35 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
         backgroundColor: AppTheme.headerGradient.colors.first,
+        // titleSpacing 0: area judul mulai tepat di kanan tombol back →
+        // grup (avatar-nama-avatar) benar-benar di tengah antara tombol back
+        // dan tepi kanan layar (default 16dp menggeser ke kanan).
+        titleSpacing: 0,
         flexibleSpace: Container(
           decoration: BoxDecoration(gradient: AppTheme.headerGradient),
         ),
-        title: Text(
-          widget.chatLabel,
-          style: AppText.titleEmphasis.copyWith(color: Colors.white),
-          overflow: TextOverflow.ellipsis,
+        title: Center(
+          child: Row(
+            // Seluruh grup (avatar–padding–nama–padding–avatar) di tengah.
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Avatar peserta pertama (kiri) = nama pertama.
+              _headerAvatar(0),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  widget.chatLabel,
+                  textAlign: TextAlign.center,
+                  style: AppText.titleEmphasis.copyWith(color: Colors.white),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Avatar peserta kedua (kanan) = nama kedua.
+              _headerAvatar(1),
+            ],
+          ),
         ),
         iconTheme: IconThemeData(color: Colors.white),
       ),
@@ -764,6 +888,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                               isMe: isMe,
                               isRead: isRead,
                               isAdminView: true,
+                              // Admin melihat percakapan 2 orang → centang
+                              // muncul di KEDUA sisi (kiri & kanan), bukan
+                              // hanya milik pengirim.
+                              showChecksBothSides: true,
                               isImageDeferred: isImageDeferred,
                               onRetryImage: isImageDeferred
                                   ? _retryImage

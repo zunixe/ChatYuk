@@ -52,6 +52,50 @@ List<Map<String, dynamic>> groupByDevice(List<Map<String, dynamic>> rows) {
   return list;
 }
 
+/// Gabungkan daftar SEMUA user (profiles) dengan baris device.
+///
+/// [users]: baris `admin_stats_users_page` (punya `id` + `nickname`).
+/// [devices]: baris `user_devices` (punya `user_id` + info device).
+///
+/// Tiap user yang PUNYA device → map device (info lengkap, utk DeviceCard).
+/// User TANPA device → map ringkas dari data profil (ditandai `_hasDevice`
+/// false) supaya tetap TAMPIL di "Per User". Urutan mengikuti [users].
+List<Map<String, dynamic>> mergeUsersWithDevices(
+  List<Map<String, dynamic>> users,
+  List<Map<String, dynamic>> devices,
+) {
+  // userId → device terbaru (last_seen_at).
+  final byUser = <String, Map<String, dynamic>>{};
+  for (final d in devices) {
+    final uid = '${d['user_id'] ?? ''}';
+    if (uid.isEmpty) continue;
+    final cur = byUser[uid];
+    final curSeen = '${cur?['last_seen_at'] ?? ''}';
+    final seen = '${d['last_seen_at'] ?? ''}';
+    if (cur == null || seen.compareTo(curSeen) > 0) byUser[uid] = d;
+  }
+  final out = <Map<String, dynamic>>[];
+  final seen = <String>{};
+  for (final u in users) {
+    final uid = '${u['id'] ?? u['user_id'] ?? ''}';
+    if (uid.isEmpty || !seen.add(uid)) continue;
+    final dev = byUser[uid];
+    if (dev != null) {
+      out.add({...dev, '_nick': '${u['nickname'] ?? dev['nickname'] ?? '?'}', '_hasDevice': true});
+    } else {
+      out.add({
+        'user_id': uid,
+        'nickname': u['nickname'],
+        'is_registered': u['is_registered'] == true,
+        'last_seen_at': u['last_seen'],
+        '_nick': '${u['nickname'] ?? '?'}',
+        '_hasDevice': false,
+      });
+    }
+  }
+  return out;
+}
+
 /// Filter grup device: cocokkan device (brand/model/install_id) ATAU salah
 /// satu user-nya (nickname/user_id).
 List<Map<String, dynamic>> filterDeviceGroups(

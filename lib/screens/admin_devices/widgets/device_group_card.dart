@@ -36,6 +36,11 @@ class DeviceGroupCard extends StatelessWidget {
       if (osName.isNotEmpty) osName,
       if (osVersion.isNotEmpty) osVersion,
     ].join(' ').trim();
+    // Device ID (install_id = id perangkat) — bentuk ringkas untuk kartu.
+    final deviceId = '${group['install_id'] ?? ''}';
+    final shortId = deviceId.length > 24
+        ? '${deviceId.substring(0, 22)}…'
+        : deviceId;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
@@ -82,6 +87,15 @@ class DeviceGroupCard extends StatelessWidget {
                         style: AppText.caption.copyWith(
                           color: AppTheme.textSecondary,
                         ),
+                      ),
+                    if (shortId.isNotEmpty)
+                      Text(
+                        '${s.adminDeviceId}: $shortId',
+                        style: AppText.micro.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     // Nama user yang pernah login di device ini.
                     Wrap(

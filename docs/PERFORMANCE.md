@@ -605,6 +605,35 @@ kegagalan jaringan tidak boleh menahan user keluar.
 Perubahan ini belum diukur di perangkat fisik; ukur ulang `chat.listFetch`, jumlah
 rebuild `PrivateChatScreen`, dan memory saat chat berisi 100/500/1000 pesan.
 
+### 2.13 Video chat — lazy poster + anti "ngeblink" (2026-09-27)
+
+Fitur video upload & rekam kamera menambah bubble video baru. Audit lazy-load
+menemukan dua masalah (bukan render, tapi waktu DATA):
+
+1. **Realtime broadcast/insert memproses video sebagai image** — kondisi
+   `msg.imageData.isNotEmpty && msg.type != 'voice'` juga menangkap
+   `video`/`video_once`/`video_once_expired`. Akibatnya jalur realtime
+   **mengunduh file video PENUH** lalu coba `PhotoCache.save` (generate
+   thumbnail dari .mp4 → gagal), membuang bandwidth + menunda emit.
+   **Fix** (`chat_stream_session.dart`): kecualikan ketiga type video
+   (`!isVideoType` / `!bcIsVideo`) — poster diurus `ChatVideoBubble` sendiri
+   (ambil 1 frame dari video). Foto/voice tetap seperti semula.
+
+2. **Poster video tak dibatasi konkurensi** — tiap bubble video mengunduh
+   video penuh untuk 1 frame. Puluhan video terlihat saat cold start =
+   berebut bandwidth (gejala "ngeblink"). **Fix** (`chat_video_bubble.dart`):
+   tambah gate konkurensi statis (`_PosterGate(3)`) — maks 3 unduhan poster
+   bersamaan; sisanya antri. Cache disk (`video_poster:<path>`) tetap dicek
+   lebih dulu tanpa gate (instan).
+
+Yang **sudah** benar & dipertahankan: `ListView.builder` (hanya item tampil
+yang dibangun), `ChatVideoBubble` menunda `_loadPoster()` 1 frame via
+`addPostFrameCallback`, poster disimpan ke `MediaDiskCache` (anti-blink),
+`ChatVideoBubble` skip render saat `_locked` (sekali-lihat kadaluarsa).
+
+Catatan: `_autoLoadMissingImages` sengaja hanya untuk `image` — video punya
+alur poster sendiri di bubble, tidak lewat antrean foto.
+
 ---
 
 ## 3. Alat ukur (opsional, untuk pengembangan)
