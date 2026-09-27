@@ -1155,7 +1155,10 @@ class MessageBubble extends StatelessWidget {
                             // terakhir. Tanpa caption → jam di bawah (rapat).
                             if (msg.text.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.only(
+                                  top: 4,
+                                  bottom: 4,
+                                ),
                                 child: MediaCaptionTime(
                                   text: msg.text,
                                   timeStr: timeStr,
@@ -3022,7 +3025,7 @@ class _PhotoBubbleState extends State<_PhotoBubble> {
           ),
         if (hasCaption)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
             child: SizedBox(
               width: _imgW,
               child: MediaCaptionTime(

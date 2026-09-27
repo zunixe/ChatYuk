@@ -47,6 +47,9 @@ void main() {
     final timeBR = tester.getBottomRight(find.text(timeStr).first);
     // Rata kanan: tepi kanan jam ≈ tepi kanan peta (toleransi kecil).
     expect((bubbleBR.dx - timeBR.dx).abs(), lessThan(2.0));
+    // Jam TIDAK kepotong: tepi bawah jam masih di dalam bubble (ada sisa).
+    expect(timeBR.dy, lessThanOrEqualTo(bubbleBR.dy));
+    expect(bubbleBR.dy - timeBR.dy, greaterThan(0.5));
     // Sebaris: jam nempel di bawah peta, bukan baris jauh.
     final bubbleTR = tester.getTopRight(find.byType(LocationBubble).first);
     expect(timeBR.dy - bubbleTR.dy, lessThan(bubbleBR.dy - bubbleTR.dy + 30));

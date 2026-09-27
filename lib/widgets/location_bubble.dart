@@ -126,15 +126,17 @@ class LocationBubble extends StatelessWidget {
         }
         _open(context);
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: SizedBox(
-          width: width,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
+      child: SizedBox(
+        width: width,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Clip HANYA peta (sudut membulat) — caption/jam di bawah TIDAK
+            // ikut terpotong radius bawah.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
                 width: width,
                 height: height,
                 child: Stack(
@@ -268,11 +270,12 @@ class LocationBubble extends StatelessWidget {
                   ],
                 ),
               ),
+            ),
               // Caption + jam ala chat teks; jam rata kanan sejajar tepi peta.
               // Tanpa caption → jam di bawah peta, rata kanan.
               if (location.caption.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 4, bottom: 4),
                   child: MediaCaptionTime(
                     text: location.caption,
                     timeStr: timeStr,
@@ -291,7 +294,7 @@ class LocationBubble extends StatelessWidget {
                 )
               else if (timeStr.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 2, 0, 0),
+                  padding: const EdgeInsets.fromLTRB(8, 2, 0, 2),
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: _timeRow(),
@@ -300,7 +303,6 @@ class LocationBubble extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }
