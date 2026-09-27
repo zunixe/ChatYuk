@@ -1,5 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
+import 'package:chatyuk/config/theme.dart';
+import 'package:chatyuk/providers/locale_provider.dart';
 import 'package:chatyuk/services/storage_photo_service.dart';
 import 'package:chatyuk/widgets/chat_video_bubble.dart';
 
@@ -61,6 +65,28 @@ void main() {
     });
   });
 
+  group('Pengenalan type foto/view-once (dipakai dedupe pending ↔ server)', () {
+    // Kontrak: pending foto optimistik dibuat dengan type 'image'/'view_once';
+    // versi server bisa tiba sebagai 'view_once_expired' (foto sekali-lihat
+    // sudah dilihat penerima → server ubah type). Cabang dedupe WAJIB
+    // mengenali ketiganya, kalau tidak pending menggantung → muncul DUA
+    // bubble (regresi "foto sekali lihat dobel").
+    bool isPhotoType(String t) =>
+        t == 'image' || t == 'view_once' || t == 'view_once_expired';
+
+    test('ketiga type foto dikenali', () {
+      expect(isPhotoType('image'), isTrue);
+      expect(isPhotoType('view_once'), isTrue);
+      expect(isPhotoType('view_once_expired'), isTrue);
+    });
+
+    test('type lain BUKAN foto', () {
+      for (final t in ['text', 'voice', 'video', 'video_once', 'coin']) {
+        expect(isPhotoType(t), isFalse, reason: t);
+      }
+    });
+  });
+
   group('isChatVideoPath', () {
     final svc = StoragePhotoService.instance;
 
@@ -96,6 +122,39 @@ void main() {
     test('base64 TIDAK dianggap path', () {
       expect(svc.isPath('/9j/4AAQSkZJRgABAQAAAQ=='), isFalse);
       expect(svc.isPath(''), isFalse);
+    });
+  });
+
+  group('Video sekali-lihat kadaluarsa (regresi bubble KOSONG)', () {
+    // Bug: `video_once_expired` dengan image_data kosong (dikosongkan server
+    // saat ditonton, pola sama foto) tidak dirender apa pun → bubble kosong
+    // tanpa teks. Kartu terkunci WAJIB tetap muncul + tulisannya "video".
+    Widget host(ChatVideoBubble b) => ChangeNotifierProvider(
+      create: (_) => LocaleProvider(),
+      child: MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(body: Center(child: b)),
+      ),
+    );
+
+    testWidgets('locked + data kosong → kartu "Video sudah kadaluarsa"', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        host(
+          const ChatVideoBubble(
+            videoData: '',
+            durationMs: 5000,
+            locked: true,
+            isOnce: true,
+            isMe: false,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      // Kartu terkunci menampilkan teks VIDEO (bukan "Foto", bukan kosong).
+      expect(find.text('Video sudah kadaluarsa'), findsOneWidget);
     });
   });
 }

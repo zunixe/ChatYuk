@@ -283,10 +283,16 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    // Salin id LEBIH DULU (defensif): stream refetch dari hapus pertama bisa
+    // membangun ulang daftar & state seleksi. Iterasi daftar id lokal ini
+    // menjamin SEMUA pesan terpilih benar-benar diproses (dulu ada kasus
+    // hanya 1 terhapus).
+    final ids = mine.map((m) => m.id).toList();
     var failCount = 0;
-    for (final m in mine) {
-      if (!await chatDeleteMessage(m.id)) failCount++;
-    }
+    // Hapus PARALEL (dulu berurutan): server menerima semuanya sekaligus,
+    // tidak saling menunggu round-trip.
+    final results = await Future.wait(ids.map(chatDeleteMessage));
+    failCount = results.where((ok) => !ok).length;
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

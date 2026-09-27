@@ -870,11 +870,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         }
         for (final m in msgs) {
           if (m.senderId == myId &&
-              (m.type == 'image' || m.type == 'view_once') &&
+              (m.type == 'image' ||
+                  m.type == 'view_once' ||
+                  m.type == 'view_once_expired') &&
               m.timestamp.isAfter(_openedAt) &&
               _confirmedPhotoIds.add(m.id)) {
             final idx = _pending.indexWhere(
-              (p) => p.type == 'image' || p.type == 'view_once',
+              (p) =>
+                  p.type == 'image' ||
+                  p.type == 'view_once' ||
+                  p.type == 'view_once_expired',
             );
             if (idx != -1) {
               _queuedIds.remove(_pending[idx].id);
@@ -2065,10 +2070,6 @@ class _RoomChatScreenState extends State<RoomChatScreen>
             onTakePhoto: () {
               setState(() => _showAttachRow = false);
               photoTakeToPreview();
-            },
-            onRecordVideo: () {
-              setState(() => _showAttachRow = false);
-              videoRecordFromCamera();
             },
             onSendPhoto: () {
               setState(() => _showAttachRow = false);

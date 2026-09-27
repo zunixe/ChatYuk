@@ -27,8 +27,6 @@ class ChatComposerInput extends StatefulWidget {
   final bool showAttachRow;
   final VoidCallback onToggleAttach;
   final VoidCallback onTakePhoto;
-  /// Tekan-tahan tombol kamera → rekam video (maks 60 dtk). null = tidak ada.
-  final VoidCallback? onRecordVideo;
   final VoidCallback onSendPhoto;
   final VoidCallback onSendViewOnce;
   final String? pendingPhotoBase64;
@@ -82,7 +80,6 @@ class ChatComposerInput extends StatefulWidget {
     required this.showAttachRow,
     required this.onToggleAttach,
     required this.onTakePhoto,
-    this.onRecordVideo,
     required this.onSendPhoto,
     required this.onSendViewOnce,
     this.pendingPhotoBase64,
@@ -762,11 +759,12 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                                   icon: Icons.card_giftcard_outlined,
                                 ),
                               ],
+                              // Tombol kamera → layar kamera in-app (sama
+                              // seperti Story) — toggle Foto/Video ada DI
+                              // DALAM kamera, bukan di composer.
                               ChatIconButton(
                                 open: false,
                                 onTap: widget.onTakePhoto,
-                                // Tekan-tahan → rekam video (maks 60 dtk).
-                                onLongPress: widget.onRecordVideo,
                                 tooltip: s.menuTakePhotoVideo,
                                 icon: Icons.photo_camera_outlined,
                               ),

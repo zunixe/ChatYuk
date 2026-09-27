@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
+import 'app_gesture.dart';
 
 // ── Shared chat UI: satu sumber untuk PrivateChatScreen & RoomChatScreen ──
 // Dulu: duplikat di kedua screen (76 cluster ≥5 baris identik/mirip) —
@@ -29,43 +30,56 @@ class ChatIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Isi tombol (lingkaran ikon) — sama untuk tap maupun tahan.
+    final core = Center(
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
+        ),
+        child: AnimatedRotation(
+          // Rotasi saja (+ → ✕), TANPA crossfade ikon: crossfade
+          // menumpuk dua glif 180ms sehingga terlihat seperti ikon
+          // rusak/glitch di tengah transisi.
+          turns: open ? 0.125 : 0,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          child: Icon(
+            icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
+            color: AppTheme.primary,
+            size: 20,
+          ),
+        ),
+      ),
+    );
     return Tooltip(
       message: tooltip,
-      // InkWell + Material transparan: hit test meliputi area 32x44 —
-      // lingkaran 30dp hampir nempel (jeda ~2px), ikon tetap mudah
-      // ditap. Dipakai private + room chat (desain rapat yang sama).
+      // Bila ada aksi tekan-tahan (mis. kamera → rekam video), Tooltip
+      // TIDAK boleh merebut long-press (default tooltip mobile muncul saat
+      // ditahan → long-press tak sampai). Pakai trigger manual + AppGesture.
+      triggerMode: onLongPress != null
+          ? TooltipTriggerMode.manual
+          : TooltipTriggerMode.longPress,
       child: SizedBox(
         width: 32,
         height: 44,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          customBorder: const CircleBorder(),
-          child: Center(
-            child: Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color:
-                    AppTheme.primary.withValues(alpha: open ? 0.16 : 0.12),
+        // Bila ada aksi tahan: pakai AppGestureDetector (long-press 320ms,
+        // lebih cepat & andal daripada InkWell default 500ms yang sering
+        // terasa "tidak merekam"). Tanpa aksi tahan: InkWell biasa.
+        child: onLongPress == null
+            ? InkWell(
+                onTap: onTap,
+                customBorder: const CircleBorder(),
+                child: core,
+              )
+            : AppGestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onTap,
+                onLongPress: onLongPress,
+                child: core,
               ),
-              child: AnimatedRotation(
-                // Rotasi saja (+ → ✕), TANPA crossfade ikon: crossfade
-                // menumpuk dua glif 180ms sehingga terlihat seperti ikon
-                // rusak/glitch di tengah transisi.
-                turns: open ? 0.125 : 0,
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                child: Icon(
-                  icon ?? (open ? Icons.close_rounded : Icons.add_rounded),
-                  color: AppTheme.primary,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

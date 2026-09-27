@@ -256,15 +256,7 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                         (admin.devicesHasMore ? 1 : 0),
                     itemBuilder: (_, i) {
                       if (i >= filteredDevices.length) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.primary,
-                            ),
-                          ),
-                        );
+                        return _loadMoreSentinel(admin);
                       }
                       final d = filteredDevices[i];
                       return DeviceCard(
@@ -372,6 +364,11 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
         ),
       );
     }
+    // Sentinel "muat lebih" di akhir: 1) pemicu saat konten PENDEK (tidak
+    // bisa di-scroll → ScrollPagination tak pernah menyala), 2) indikator.
+    // Tanpa ini, grouping bisa memadatkan 100 baris → list < viewport →
+    // sisa device TIDAK PERNAH termuat ("slide bawah ga ngeload").
+    final hasMore = admin.devicesHasMore;
     return RefreshIndicator(
       onRefresh: () => admin.fetchDevices(),
       child: ListView.builder(
@@ -382,8 +379,9 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
           12,
           MediaQuery.of(context).padding.bottom + 12,
         ),
-        itemCount: groups.length,
+        itemCount: groups.length + (hasMore ? 1 : 0),
         itemBuilder: (_, i) {
+          if (i >= groups.length) return _loadMoreSentinel(admin);
           final g = groups[i];
           return DeviceGroupCard(
             group: g,
@@ -391,6 +389,23 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
             onTap: () => _showDeviceDetail(context, g),
           );
         },
+      ),
+    );
+  }
+
+  /// Item akhir "load more": memicu fetch halaman berikutnya lewat panggilan
+  /// post-frame (aman dipanggil saat build), lalu menampilkan spinner.
+  Widget _loadMoreSentinel(AdminProvider admin) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) admin.fetchMoreDevices();
+    });
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: AppTheme.primary,
+        ),
       ),
     );
   }

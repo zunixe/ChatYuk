@@ -24,7 +24,12 @@ class StoryCaptureResult {
 /// Preview live (depan/belakang), flash, shutter. Return [StoryCaptureResult]
 /// (foto atau video), atau null kalau batal.
 class StoryCameraCaptureScreen extends StatefulWidget {
-  const StoryCameraCaptureScreen({super.key});
+  /// Batas durasi rekam (detik). Story = 15 (batas server story); chat = 60.
+  final int maxRecordSecs;
+  /// Diisi true bila kamera GAGAL init (mis. MIUI menutup pipeline kamera
+  /// pihak-ketiga) — supaya pemanggil bisa fallback ke kamera sistem.
+  static bool lastInitFailed = false;
+  const StoryCameraCaptureScreen({super.key, this.maxRecordSecs = 15});
 
   @override
   State<StoryCameraCaptureScreen> createState() =>
@@ -55,8 +60,8 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
   int _recordSecs = 0;
   Timer? _recordTimer;
 
-  /// Batas durasi video story — sama dengan validasi server (1-15 dtk).
-  static const int kMaxRecordSecs = 15;
+  /// Batas durasi rekam — dari widget (story 15 dtk, chat 60 dtk).
+  int get kMaxRecordSecs => widget.maxRecordSecs;
 
   @override
   void initState() {
@@ -86,6 +91,7 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
   }
 
   Future<void> _setup() async {
+    StoryCameraCaptureScreen.lastInitFailed = false;
     dlog('[StoryCam] setup start');
     try {
       final st = await Permission.camera.request();
@@ -109,12 +115,13 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
     } catch (e) {
       dlog('[StoryCam] permission request error: $e');
     }
-    try {
-      _cameras = await availableCameras();
-    } catch (e) {
-      dlog('[StoryCam] availableCameras error: $e');
-    }
+    // `availableCameras()` bisa MENGGANTUNG di sebagian perangkat MIUI
+    // (camera service lambat/terkunci) → layar kamera jadi hitam selamanya.
+    // Timeout + retry supaya tidak nyangkut; gagal total → fallback ke
+    // kamera sistem (image_picker) di layar pemanggil.
+    _cameras = await _availableCamerasSafe();
     if (_cameras.isEmpty) {
+      StoryCameraCaptureScreen.lastInitFailed = true;
       if (mounted) Navigator.pop(context);
       return;
     }
@@ -122,6 +129,25 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
         .indexWhere((c) => c.lensDirection == CameraLensDirection.back);
     if (_camIndex < 0) _camIndex = 0;
     await _initCamera();
+  }
+
+  /// `availableCameras()` dengan timeout + beberapa retry (MIUI kadang
+  /// menggantung/balik kosong pada panggilan awal karena camera service
+  /// masih sibuk). Total ~3 percobaan. Kosong = gagal.
+  Future<List<CameraDescription>> _availableCamerasSafe() async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final cams = await availableCameras().timeout(
+          const Duration(seconds: 4),
+        );
+        if (cams.isNotEmpty) return cams;
+      } catch (e) {
+        dlog('[StoryCam] availableCameras attempt$attempt error: $e');
+      }
+      // Beri jeda singkat agar camera service sempat melepas lock.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+    return const <CameraDescription>[];
   }
 
   Future<void> _initCamera({bool audio = false}) async {
@@ -145,6 +171,7 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
       await ctrl.dispose();
       if (identical(_ctrl, ctrl)) {
         _ctrl = null;
+        StoryCameraCaptureScreen.lastInitFailed = true;
         if (mounted) Navigator.pop(context);
       }
       return;
@@ -396,7 +423,9 @@ class _StoryCameraCaptureScreenState extends State<StoryCameraCaptureScreen>
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Text(
-                                  '● 0:${_recordSecs.toString().padLeft(2, '0')} / 0:15',
+                                  '● 0:${_recordSecs.toString().padLeft(2, '0')} '
+                                  '/ ${kMaxRecordSecs ~/ 60}:'
+                                  '${(kMaxRecordSecs % 60).toString().padLeft(2, '0')}',
                                   style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700),

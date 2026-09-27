@@ -35,6 +35,12 @@ import 'chat_outbox_mixin.dart';
 /// Satu dispatch per kirim dijamin pemanggil ([_sendImageLike] satu jalur).
 String resolvePhotoSendKind(String kind, int? viewSecs) =>
     viewSecs != null ? 'view_once' : kind;
+
+/// Type pesan video: 'video_once' bila "sekali lihat" dipilih, else 'video'.
+/// Murni & testable — dipakai optimistic bubble DAN dispatch server supaya
+/// keduanya konsisten (dulu optimistic selalu 'video' & dispatch membaca
+/// flag setelah preview dibersihkan → video sekali-lihat terkirim biasa).
+String videoSendType(bool isOnce) => isOnce ? 'video_once' : 'video';
 mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   // ── Kontrak ──
   /// Kirim pesan gambar (private: sendPrivateMessage; room: sendRoomMessage).
@@ -222,8 +228,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     return _processPickedVideo(picked.path, toast: toast);
   }
 
-  /// Rekam video LANGSUNG dari kamera (tombol kamera ditahan) → proses →
-  /// preview. Batas rekam 60 dtk (dipaksakan kamera sistem + validasi ulang).
+  /// Rekam video via KAMERA SISTEM (image_picker) → proses → preview.
+  /// Batas 60 dtk (kamera sistem menghentikan otomatis + validasi ulang).
+  /// Dipilih dari toggle FOTO|VIDEO di composer.
   Future<bool> videoRecordFromCamera() async {
     if (!videoSendEnabled) return false;
     void toast(String msg) {
@@ -236,7 +243,6 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       picked = await _photoPicker.pickVideo(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
-        // Batas keras 60 dtk — kamera sistem menghentikan rekaman otomatis.
         maxDuration: const Duration(seconds: 60),
       );
     } catch (e) {
@@ -246,6 +252,25 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     if (picked == null) return false;
     if (!mounted) return false;
     return _processPickedVideo(picked.path, toast: toast);
+  }
+
+  /// Proses FOTO dari file (hasil jepret kamera in-app) → resize → preview.
+  Future<void> photoFromFileToPreview(Uint8List bytes) async {
+    final processed = await photoProcess(bytes);
+    if (!mounted) return;
+    await _openPreview(bytes, processed);
+  }
+
+  /// Proses video dari FILE (hasil rekam kamera in-app) → kompres → preview.
+  Future<bool> videoFromFileToPreview(String path) async {
+    if (!videoSendEnabled) return false;
+    if (!mounted) return false;
+    void toast(String msg) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+
+    return _processPickedVideo(path, toast: toast);
   }
 
   /// Kompres + poster + preview dari path video (dipakai galeri & rekam).
@@ -330,6 +355,10 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     final profile = auth.profile;
     if (uid == null || profile == null) return;
     final durationMs = pendingVideoMs;
+    // Tangkap "sekali lihat" SEBELUM clear preview: videoClearPreview()
+    // me-reset _pendingVideoOnce=false → kalau dibaca setelah clear, video
+    // sekali-lihat selalu terkirim sebagai video biasa (bug: type='video').
+    final isOnce = videoOnceSelected;
     videoClearPreview();
 
     final file = File(path);
@@ -347,6 +376,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       durationMs: durationMs,
       text: text,
       reply: reply,
+      isOnce: isOnce,
     );
   }
 
@@ -362,6 +392,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     required int durationMs,
     String text = '',
     MessageModel? reply,
+    bool isOnce = false,
   }) async {
     final auth = context.read<AuthProvider>();
     final uid = auth.uid;
@@ -378,7 +409,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       senderGender: profile.gender,
       isRegistered: profile.isRegistered,
       text: text,
-      type: 'video',
+      type: videoSendType(isOnce),
       imageData: base64Encode(bytes),
       timestamp: DateTime.now(),
       durationMs: durationMs,
@@ -460,11 +491,11 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         return;
       }
       // "Sekali lihat" video ditandai lewat TYPE (video_once) — bukan
-      // durationMs yang sudah dipakai untuk panjang video.
-      final isOnce = videoOnceSelected;
+      // durationMs yang sudah dipakai untuk panjang video. Nilai `isOnce`
+      // ditangkap pemanggil SEBELUM preview dibersihkan.
       await photoDispatch(
         imageData: path,
-        type: isOnce ? 'video_once' : 'video',
+        type: videoSendType(isOnce),
         senderId: uid,
         senderName: profile.nickname,
         senderGender: profile.gender,

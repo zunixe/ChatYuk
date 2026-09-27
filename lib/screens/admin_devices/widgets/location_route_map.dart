@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../config/theme.dart';
 import '../../../config/strings.dart';
 import '../../../config/strings_admin.dart';
@@ -74,6 +75,11 @@ LatLngBounds routeBounds(List<RoutePoint> pts) {
   return LatLngBounds(LatLng(minLat, minLon), LatLng(maxLat, maxLon));
 }
 
+/// URL Google Maps untuk satu titik (tautan universal — membuka app Google
+/// Maps bila terpasang, else browser). Murni (testable).
+String googleMapsUrl(RoutePoint p) =>
+    'https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}';
+
 /// Layar peta rute pergerakan user (admin only): garis perjalanan
 /// kronologis + penanda awal/akhir + titik langsiran.
 class LocationRouteMapScreen extends StatefulWidget {
@@ -93,10 +99,21 @@ class LocationRouteMapScreen extends StatefulWidget {
 
 class _LocationRouteMapScreenState extends State<LocationRouteMapScreen> {
   final MapController _mapCtrl = MapController();
+  // Mode tile: peta jalan (OSM) atau satelit (Esri World Imagery, gratis
+  // tanpa API key). Default peta jalan.
+  bool _satellite = false;
 
   String _timeLabel(DateTime? at) {
     if (at == null) return '-';
     return formatRelativeTime(at, isId: widget.s.isId);
+  }
+
+  /// Buka titik (awal/akhir) di Google Maps — app bila ada, else browser.
+  Future<void> _openInGoogleMaps(RoutePoint p) async {
+    final url = Uri.parse(googleMapsUrl(p));
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   @override
@@ -113,6 +130,18 @@ class _LocationRouteMapScreenState extends State<LocationRouteMapScreen> {
       backgroundColor: AppTheme.bgScreen,
       appBar: AppBar(
         title: Text('${s.adminMapRouteTitle} — ${widget.titleName}'),
+        actions: [
+          // Toggle peta jalan ↔ satelit (Esri World Imagery, gratis tanpa key).
+          IconButton(
+            tooltip: _satellite ? s.adminMapStreets : s.adminMapSatellite,
+            icon: Icon(
+              _satellite
+                  ? Icons.map_outlined
+                  : Icons.satellite_alt_outlined,
+            ),
+            onPressed: () => setState(() => _satellite = !_satellite),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -132,8 +161,11 @@ class _LocationRouteMapScreenState extends State<LocationRouteMapScreen> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  // Satelit: Esri World Imagery (gratis, tanpa API key,
+                  // urutan tile z/y/x). Default: peta jalan OSM.
+                  urlTemplate: _satellite
+                      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.chatyuk.chatyuk',
                 ),
                 PolylineLayer(
@@ -180,14 +212,17 @@ class _LocationRouteMapScreenState extends State<LocationRouteMapScreen> {
                       point: pts.first.latLng,
                       width: 44,
                       height: 44,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            color: Colors.green,
-                            size: 40,
-                          ),
+                      child: GestureDetector(
+                        onTap: () => _openInGoogleMaps(pts.first),
+                        behavior: HitTestBehavior.opaque,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            const Icon(
+                              Icons.location_on,
+                              color: Colors.green,
+                              size: 40,
+                            ),
                             Positioned(
                               top: 5,
                               child: Text(
@@ -198,7 +233,8 @@ class _LocationRouteMapScreenState extends State<LocationRouteMapScreen> {
                                 ),
                               ),
                             ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                     if (pts.length > 1)
@@ -206,25 +242,29 @@ class _LocationRouteMapScreenState extends State<LocationRouteMapScreen> {
                         point: pts.last.latLng,
                         width: 44,
                         height: 44,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            const Icon(
-                              Icons.location_on,
-                              color: Colors.red,
-                              size: 40,
-                            ),
-                            Positioned(
-                              top: 5,
-                              child: Text(
-                                '${pts.length}',
-                                style: AppText.label.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
+                        child: GestureDetector(
+                          onTap: () => _openInGoogleMaps(pts.last),
+                          behavior: HitTestBehavior.opaque,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              const Icon(
+                                Icons.location_on,
+                                color: Colors.red,
+                                size: 40,
+                              ),
+                              Positioned(
+                                top: 5,
+                                child: Text(
+                                  '${pts.length}',
+                                  style: AppText.label.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                   ],

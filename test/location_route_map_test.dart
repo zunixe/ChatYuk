@@ -75,4 +75,21 @@ void main() {
       expect(b.east - b.west, greaterThan(0));
     });
   });
+
+  group('googleMapsUrl', () {
+    test('menyusun tautan Google Maps dengan lat,lon titik', () {
+      expect(
+        googleMapsUrl(const RoutePoint(lat: -6.7, lon: 108.4)),
+        'https://www.google.com/maps/search/?api=1&query=-6.7,108.4',
+      );
+    });
+
+    test('titik awal & akhir menghasilkan URL berbeda', () {
+      final a = googleMapsUrl(const RoutePoint(lat: -6.8, lon: 108.4));
+      final b = googleMapsUrl(const RoutePoint(lat: -6.7, lon: 108.5));
+      expect(a, isNot(b));
+      expect(a, contains('-6.8,108.4'));
+      expect(b, contains('-6.7,108.5'));
+    });
+  });
 }

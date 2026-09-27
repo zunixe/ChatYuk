@@ -148,9 +148,12 @@ class S {
   // ── Send Coins ──
   String get menuSendPhoto => isId ? 'Kirim Foto' : 'Send Photo';
   String get menuTakePhoto => isId ? 'Ambil Foto' : 'Take Photo';
-  String get menuTakePhotoVideo => isId
-      ? 'Ketuk: foto · Tahan: video (maks 60 dtk)'
-      : 'Tap: photo · Hold: video (max 60s)';
+  String get menuTakePhotoVideo => isId ? 'Kamera' : 'Camera';
+  String get menuRecordVideo => isId ? 'Rekam Video' : 'Record Video';
+  String get menuRecordVideoHint =>
+      isId ? 'Maksimal 60 detik' : 'Up to 60 seconds';
+  String get labelPhoto => isId ? 'FOTO' : 'PHOTO';
+  String get labelVideo => isId ? 'VIDEO' : 'VIDEO';
   String get menuViewOnce => isId ? 'Foto Sekali Lihat' : 'View-once Photo';
 
   // ── Video chat (maks 60 dtk, hasil kompres ≤8 MB) ──
@@ -305,23 +308,26 @@ class S {
   String nearbyCount(int n) =>
       isId ? '$n orang di sekitar' : '$n people nearby';
   String get searchNoResult => isId ? 'Tidak ditemukan' : 'No results found';
-  // ── Onboarding poin ──
+  // ── Onboarding YukCoin ──
   String get pointsOnboardTitle =>
-      isId ? 'Sistem Poin ChatYuk' : 'YukCoin';
+      isId ? 'YukCoin' : 'YukCoin';
   String get pointsOnboardSub =>
-      isId ? 'Cara dapat & pakai poin' : 'How to earn & spend';
+      isId ? 'Cara dapat & pakai YukCoin' : 'How to earn & spend';
   String get pointsOnboardEmail => isId
       ? 'Daftar email = +100, dan data aman!'
       : 'Register email = +100, fully safe!';
   String get pointsOnboardChat => isId
-      ? 'Chat = pakai poin (-1 per pesan)'
-      : 'Chat = uses points (-1 per msg)';
+      ? 'Chat = pakai YukCoin (-1 per pesan)'
+      : 'Chat = uses YukCoin (-1 per msg)';
   String get pointsOnboardDaily =>
-      isId ? 'Login tiap hari = +25 poin' : 'Daily login = +25 points';
+      isId ? 'Login tiap hari = +25 YukCoin' : 'Daily login = +25 YukCoin';
   String get pointsOnboardOnline =>
       isId ? 'Online 60 menit = +45 bonus' : 'Online 60 min = +45 bonus';
+  String get pointsOnboardSpend => isId
+      ? 'Fitur berbayar: undo, edit, mode hantu, slot foto'
+      : 'Paid features: undo, edit, ghost mode, photo slots';
   String get pointsOnboardStart =>
-      isId ? 'Mulai dengan 50 poin gratis' : 'Start with 50 free points';
+      isId ? 'Mulai dengan 50 YukCoin gratis' : 'Start with 50 free YukCoin';
   String get pointsOnboardOk => isId ? 'OK, Paham!' : 'OK, Got it!';
   String get statusOnline => isId ? 'Online' : 'Online';
   String get statusIdle => isId ? 'Idle' : 'Idle';
@@ -422,6 +428,8 @@ class S {
   String get btnView => isId ? 'Lihat' : 'View';
   String get viewOnceExpired =>
       isId ? 'Foto sudah kadaluarsa' : 'Photo expired';
+  String get videoOnceExpired =>
+      isId ? 'Video sudah kadaluarsa' : 'Video expired';
   String get viewOnceExpiredHint =>
       isId ? 'Hanya bisa dilihat sekali' : 'Viewable only once';
   String get viewOnceViewing => isId ? 'Menutup dalam' : 'Closing in';
