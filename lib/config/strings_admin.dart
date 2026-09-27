@@ -35,12 +35,15 @@ extension SAdminX on S {
       isId ? 'Belum ada device terdeteksi' : 'No devices detected yet';
   String get adminDeviceNoResult =>
       isId ? 'Tidak ada yang cocok' : 'No match found';
+  String get adminDeviceNoDevice =>
+      isId ? 'Tanpa perangkat terdeteksi' : 'No device detected';
   String get adminDeviceActive => isId ? 'aktif' : 'active';
   String get adminDeviceInactive => isId ? 'lama' : 'inactive';
   String get adminDeviceModel => isId ? 'Device' : 'Device';
   String get adminDeviceOs => isId ? 'OS' : 'OS';
   String get adminDeviceLastSeen => isId ? 'Terakhir aktif' : 'Last seen';
-  String get adminDeviceInstallId => isId ? 'Install ID' : 'Install ID';
+  String get adminDeviceInstallId => isId ? 'Device ID' : 'Device ID';
+  String get adminDeviceId => isId ? 'Device ID' : 'Device ID';
   String get adminDeviceIp => isId ? 'IP' : 'IP';
   String get adminDeviceDetail => isId ? 'Detail User' : 'User Detail';
   String get adminDeviceProfile => isId ? 'Profil' : 'Profile';
@@ -465,6 +468,29 @@ extension SAdminX on S {
 
   String get mapTapHint =>
       isId ? 'Ketuk pin untuk detail' : 'Tap a pin for details';
+
+  /// Label titik GPS terakhir user (ringkasan → users).
+  String get gpsLast => isId ? 'GPS terakhir' : 'Last GPS';
+
+  // ── Penjelasan legenda peta (GPS / IP / IP online) ──
+  String get mapLegendTitle =>
+      isId ? 'Keterangan titik lokasi' : 'Location point legend';
+
+  String get mapLegendGpsDesc => isId
+      ? 'Koordinat GPS asli dari HP user (paling akurat).'
+      : 'Real GPS coordinates from the user device (most accurate).';
+
+  String get mapLegendIpDesc => isId
+      ? 'Perkiraan dari alamat IP saat user login (kasar, bisa meleset jauh / terkena VPN).'
+      : 'Approximate from the IP address at login (coarse, may be off / affected by VPN).';
+
+  String get mapLegendResolvedDesc => isId
+      ? 'Perkiraan IP yang dihitung admin saat peta dibuka, untuk user yang belum punya koordinat.'
+      : 'IP lookup computed by admin when the map opens, for users with no coordinates yet.';
+
+  String get mapLegendNote => isId
+      ? 'GPS tidak pernah tertimpa IP. Bila user pernah buka GPS, titik tetap akurat.'
+      : 'GPS is never overwritten by IP. Once a user shares GPS, the point stays accurate.';
 
   String get mapResolveFailed =>
       isId ? 'IP gagal di-resolve' : 'IPs failed to resolve';

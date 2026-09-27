@@ -626,7 +626,19 @@ class TimelineProvider extends ChangeNotifier {
       final fresh = _prepareVisible(scope);
       if (skipIfFresh && fresh) return;
     }
-    await _fetchScope(scope, refresh: refresh);
+    final fut = _fetchScope(scope, refresh: refresh);
+    if (refresh) {
+      // Pull-refresh: JANGAN tahan spinner sampai RPC (timeout 10s) selesai.
+      // Beri jendela singkat; kalau RPC belum balik, spinner berhenti dan
+      // fetch tetap lanjut di latar (feed ter-update saat data tiba). Ini
+      // menghilangkan gejala "icon muter kelamaan" di Timeline.
+      await Future.any([
+        fut,
+        Future<void>.delayed(const Duration(seconds: 3)),
+      ]);
+      return;
+    }
+    await fut;
   }
 
   Future<void> _fetchScopeInner(String scope, {required bool refresh}) async {

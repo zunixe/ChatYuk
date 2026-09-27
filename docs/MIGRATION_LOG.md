@@ -1534,3 +1534,43 @@ prioritas lebih rendah.
   Qual siapa-yang-boleh TIDAK diubah.
 - **Apply:** Management API. Verifikasi (live): kedua policy memuat
   `video_once_expired` ✅.
+
+## 2026-09-27 — 20260927120000_admin_chat_messages_media.sql (APPLY)
+
+- **Fitur:** monitor admin bisa MELIHAT semua media di chat: foto biasa,
+  video, dan view-once foto/video; call/video-call (teks) juga tampil.
+- **Masalah:** `admin_get_chat_messages_page` lama hanya mengisi `image_data`
+  untuk view_once; TIDAK mengirim `image_path` → foto biasa & video kosong
+  di monitor (FotoCache tak punya path).
+- **Isi:** tambah key `image_path`, `is_deleted`, `edited`; `image_data`
+  tetap utuh untuk view_once/video_once (+expired). Guard admin TIDAK berubah.
+- **Apply:** Management API. Verifikasi (live): fungsi baru terpasang.
+
+## 2026-09-27 — Admin lihat SEMUA user (excluded diberi badge) (APPLY)
+
+- **Masalah (user):** "SimpleMe ga muncul di admin padahal online". Ternyata
+  SimpleMe **ter-exclude** karena device `drm-10b31...` ada di
+  `excluded_devices` (exclude berbasis perangkat menyeret semua akun yang
+  login di device itu) + uid-nya juga di `excluded_uids` manual. BUKAN bug
+  kode — tapi kebijakan menyembunyikan total bikin user asli "hilang".
+- **Keputusan user:** admin harus bisa lihat SEMUA (excluded/enggak), cukup
+  diberi badge `EXCLUDED`.
+- **Migrasi:**
+  - `20260928070000_admin_show_excluded_with_flag.sql` — `admin_stats_detail`
+    (FROZEN, menyentuh): keempat `users_*` **tidak lagi membuang** excluded,
+    tambah field `'excluded'`. DUMMY tetap dibuang.
+  - `20260928080000_admin_users_page_show_excluded.sql` — `admin_stats_users_page`
+    (dipakai sheet Users di ringkasan): sama — biarkan excluded, tambah flag.
+- **SENGAJA TIDAK diubah** (jalur user nyata — exclude device = akun test/dev
+  TIDAK boleh tampil ke user asli): `list_posts`, `nearby_users`,
+  `create_private_room`, `_anon_write_ok`, `_social_registered_guard`,
+  `admin_stats_compute` (kartu angka tetap seperti semula).
+- **Client:** `usermap_card.dart` — buang filter `isHiddenUid` (peta tampil
+  semua), tambah badge di detail. `stat_detail_sheet.dart` — badge EXCLUDED
+  di baris user.
+- **Verifikasi live:** `admin_stats_users_page('all',500,0)` mengembalikan
+  SimpleMe/AntoSusanto/halo dengan `excluded=true`; snapshot regen (30/30);
+  `check_migrations` file sesi bersih; test admin 96/96 lolos.
+- **Catatan:** file `20260927120000_index_dedup_and_fix.sql` (sesi lebih awal)
+  di-rename → `20260927125000_index_dedup_and_fix.sql` karena bentrok timestamp
+  dengan `20260927120000_admin_chat_messages_media.sql` (file paralel).

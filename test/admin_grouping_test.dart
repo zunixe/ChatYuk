@@ -85,6 +85,54 @@ void main() {
     });
   });
 
+  group('mergeUsersWithDevices', () {
+    Map<String, dynamic> row(String uid, String install, String seen) => {
+          'user_id': uid,
+          'install_id': install,
+          'brand': 'Xiaomi',
+          'model': 'M1',
+          'last_seen_at': seen,
+        };
+
+    test('user TANPA device tetap tampil (regresi: anggi hilang)', () {
+      final users = [
+        {'id': 'u-with-dev', 'nickname': 'Punya HP'},
+        {'id': 'anggi-id', 'nickname': 'anggi', 'is_registered': true},
+      ];
+      final devices = [row('u-with-dev', 'd1', '2026-01-01T00:00:00Z')];
+      final out = mergeUsersWithDevices(users, devices);
+      expect(out.length, 2);
+      final anggi = out.firstWhere((e) => e['user_id'] == 'anggi-id');
+      expect(anggi['_hasDevice'], isFalse);
+      expect(anggi['_nick'], 'anggi');
+      final withDev = out.firstWhere((e) => e['user_id'] == 'u-with-dev');
+      expect(withDev['_hasDevice'], isTrue);
+      expect(withDev['brand'], 'Xiaomi');
+    });
+
+    test('device terbaru dipakai bila user punya >1 device', () {
+      final users = [
+        {'id': 'u1', 'nickname': 'Budi'},
+      ];
+      final devices = [
+        row('u1', 'old', '2020-01-01T00:00:00Z'),
+        row('u1', 'new', '2026-01-01T00:00:00Z'),
+      ];
+      final out = mergeUsersWithDevices(users, devices);
+      expect(out.length, 1);
+      expect(out.first['install_id'], 'new');
+    });
+
+    test('urutan mengikuti daftar users', () {
+      final users = [
+        {'id': 'b', 'nickname': 'B'},
+        {'id': 'a', 'nickname': 'A'},
+      ];
+      final out = mergeUsersWithDevices(users, const []);
+      expect(out.map((e) => e['user_id']).toList(), ['b', 'a']);
+    });
+  });
+
   group('matchesQuery', () {
     final m = {'nickname': 'Budi Santoso', 'email': 'Budi@Mail.com', 'n': 7};
 

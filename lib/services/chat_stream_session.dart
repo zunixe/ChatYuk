@@ -539,7 +539,16 @@ class ChatStreamSession {
           // fallback ke imageData penuh supaya gambar tetap muncul (tidak spinner
           // selamanya). Full-res tersimpan di PhotoCache untuk fullscreen.
           // VOICE: jangan proses sebagai image — path m4a langsung dipakai VoiceBubble.
-          if (msg.imageData.isNotEmpty && msg.type != 'voice') {
+          // VIDEO: jangan proses sebagai image — poster/frame dihasilkan
+          // ChatVideoBubble sendiri (poster diambil dari frame video, bukan
+          // image). Memproses path .mp4 di sini = unduh video penuh lalu gagal
+          // generate thumbnail (boros bandwidth + tunda emit).
+          final isVideoType = msg.type == 'video' ||
+              msg.type == 'video_once' ||
+              msg.type == 'video_once_expired';
+          if (msg.imageData.isNotEmpty &&
+              msg.type != 'voice' &&
+              !isVideoType) {
             try {
               var data = msg.imageData;
               // PATH storage → download dari bucket sebelum dibuat thumbnail.
@@ -589,7 +598,12 @@ class ChatStreamSession {
           dlog(
             '[DEBUG-READ] realtime INSERT table=$table msg=${msg.id} filter=$filterVal',
           );
-          if (msg.type == 'image' || msg.type == 'view_once' || msg.type == 'voice') {
+          if (msg.type == 'image' ||
+              msg.type == 'view_once' ||
+              msg.type == 'view_once_expired' ||
+              msg.type == 'video' ||
+              msg.type == 'video_once' ||
+              msg.type == 'video_once_expired') {
             dlog('[PHOTO-DBG] rt-insert ${msg.id} type=${msg.type} imgLen=${msg.imageData.length} head=${msg.imageData.isEmpty ? '' : msg.imageData.substring(0, msg.imageData.length > 30 ? 30 : msg.imageData.length)}');
           }
           controller.add(List.unmodifiable(_current));
@@ -648,7 +662,11 @@ class ChatStreamSession {
         if (data['chat_id']?.toString() != filterVal && data['room_id']?.toString() != filterVal) return;
         var msg = MessageModel.fromMap(data['id']?.toString() ?? 'bc-${DateTime.now().microsecondsSinceEpoch}', snakeToCamel(data));
         if (_current.any((m) => m.id == msg.id)) return;
-        if (msg.imageData.isNotEmpty) {
+        // Video: JANGAN proses sebagai image (poster diurus ChatVideoBubble).
+        final bcIsVideo = msg.type == 'video' ||
+            msg.type == 'video_once' ||
+            msg.type == 'video_once_expired';
+        if (msg.imageData.isNotEmpty && msg.type != 'voice' && !bcIsVideo) {
           try {
             var d = msg.imageData;
             if (StoragePhotoService.instance.isPath(d) || StoragePhotoService.instance.isVoicePath(d)) {

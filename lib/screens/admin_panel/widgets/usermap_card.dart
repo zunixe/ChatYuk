@@ -99,17 +99,6 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
       return;
     }
     final id = '${rec['id'] ?? ''}';
-    // Dummy + user device-ter-exclude jangan masuk peta via realtime
-    // (jalur load sudah bersih dari server — users_all terfilter).
-    if (id.isNotEmpty && mounted) {
-      try {
-        if (context.read<AdminProvider>().isHiddenUid(id)) {
-          _users.removeWhere((u) => '${u['id'] ?? ''}' == id);
-          _notify();
-          return;
-        }
-      } catch (_) {}
-    }
     Map<String, dynamic>? existing;
     for (final u in _users) {
       if (id.isNotEmpty && '${u['id'] ?? ''}' == id) {
@@ -180,11 +169,11 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
           const [];
       if (!mounted) return;
       setState(() {
-        // Sabuk pengaman ganda: buang hidden uid yang lolos (data cache lama
-        // tanpa 'id' tetap tampil — '' tidak pernah ada di hidden set).
-        _users = list
-            .where((u) => !admin.isHiddenUid('${u['id'] ?? ''}'))
-            .toList();
+        // Admin melihat SEMUA user (excluded/dummy pun ikut) — dulu baris ini
+        // membuang hidden uid sehingga user asli yang ter-exclude device
+        // tampak "hilang" dari admin. Sekarang tampil semua; badge 'excluded'
+        // ditandai dari data server bila perlu.
+        _users = list.toList();
         _loading = false;
       });
       await _resolveIps();
@@ -311,6 +300,26 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (u['excluded'] == true) ...[
+                        SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            s.adminExcludedBadge,
+                            style: AppText.micro.copyWith(
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                       if (lastSeen.isNotEmpty)
                         Text(
                           s.adminLastUpdate + ' ' + lastSeen,
@@ -355,6 +364,26 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
                 style: AppText.bodySmall.copyWith(
                   color: AppTheme.textSecondary,
                 ),
+              ),
+            ],
+            // Titik GPS terakhir (koordinat presisi) — hanya bila sumbernya
+            // GPS asli, agar tidak salah label untuk koordinat hasil IP.
+            if (lat != null && lon != null && u['loc_source'] == 'gps') ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.my_location, size: 14, color: Colors.teal),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      '${s.gpsLast}: $lat, $lon',
+                      style: AppText.caption.copyWith(
+                        color: Colors.teal,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 14),
@@ -425,9 +454,37 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
     final withPos = _users
         .where((u) => (u['lat'] as num?) != null && (u['lon'] as num?) != null)
         .length;
-    final gpsCount = _users.where((u) => u['loc_source'] == 'gps').length;
-    final resolvedCount = _users.where((u) => u['resolved_ip'] == true).length;
-    final ipLoginCount = withPos - gpsCount - resolvedCount;
+    // Hitungan legenda HARUS sama persis dengan logika warna marker (_marker):
+    // GPS (hijau) → IP ter-resolve admin (ungu) → IP login (oranye).
+    // Kategori eksklusif (else-if) supaya tidak ada user terhitung dobel →
+    // dulu `ipLoginCount = withPos - gps - resolved` bisa NEGATIF kalau ada
+    // user GPS yang juga ter-resolve. Sekarang dihitung langsung per kategori.
+    final gpsCount = _users
+        .where(
+          (u) =>
+              (u['lat'] as num?) != null &&
+              (u['lon'] as num?) != null &&
+              u['loc_source'] == 'gps',
+        )
+        .length;
+    final resolvedCount = _users
+        .where(
+          (u) =>
+              (u['lat'] as num?) != null &&
+              (u['lon'] as num?) != null &&
+              u['loc_source'] != 'gps' &&
+              u['resolved_ip'] == true,
+        )
+        .length;
+    final ipLoginCount = _users
+        .where(
+          (u) =>
+              (u['lat'] as num?) != null &&
+              (u['lon'] as num?) != null &&
+              u['loc_source'] != 'gps' &&
+              u['resolved_ip'] != true,
+        )
+        .length;
     final noLoc = _users.length - withPos;
 
     Widget legendChip(Color color, String label, int count) {
@@ -653,8 +710,91 @@ class AdminUserMapCardState extends State<AdminUserMapCard> {
                     ),
             ),
           ),
+          SizedBox(height: 10),
+          _LegendExplanations(s: s),
         ],
       ),
+    );
+  }
+}
+
+/// Penjelasan tiap warna titik peta (GPS / IP / IP online) + catatan
+/// prioritas GPS. Ditampilkan di bawah peta admin supaya admin paham
+/// bedanya sebelum mengambil kesimpulan dari titik yang tampak "aneh".
+class _LegendExplanations extends StatelessWidget {
+  const _LegendExplanations({required this.s});
+  final S s;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget row(Color color, String label, String desc) {
+      return Padding(
+        padding: EdgeInsets.only(top: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              margin: EdgeInsets.only(top: 4),
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: RichText(
+                text: TextSpan(
+                  style: AppText.micro.copyWith(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: '$label · ',
+                      style: AppText.micro.copyWith(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    TextSpan(text: desc),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
+            SizedBox(width: 6),
+            Text(
+              s.mapLegendTitle,
+              style: AppText.caption.copyWith(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        row(Colors.green, s.mapSourceGps, s.mapLegendGpsDesc),
+        row(Colors.orange, s.mapSourceIp, s.mapLegendIpDesc),
+        row(Colors.deepPurple, s.mapSourceResolved, s.mapLegendResolvedDesc),
+        Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text(
+            s.mapLegendNote,
+            style: AppText.micro.copyWith(
+              color: AppTheme.textSecondary,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

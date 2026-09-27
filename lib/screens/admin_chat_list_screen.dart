@@ -873,6 +873,10 @@ class _AdminChatCard extends StatelessWidget {
                 chatId: chat['chat_id'] as String? ?? '',
                 chatLabel: label,
                 participantOrder: orderUids,
+                participantNames: {
+                  for (final e in names.entries)
+                    '${e.key}': '${e.value ?? ''}',
+                },
               ),
             ),
           ),

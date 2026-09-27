@@ -95,15 +95,9 @@ class RoomMessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _replyQuote(context),
-          LocationBubble(location: parseLocation(msg.text)!),
-          Padding(
-            padding: const EdgeInsets.only(top: 3),
-            child: Text(
-              timeStr,
-              style: AppText.chatTime.copyWith(
-                color: _textColor.withValues(alpha: 0.45),
-              ),
-            ),
+          LocationBubble(
+            location: parseLocation(msg.text)!,
+            timeStr: timeStr,
           ),
         ],
       );

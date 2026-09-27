@@ -160,42 +160,77 @@ class DeviceInfoService {
     );
   }
 
-  /// Kirim identitas device ke server (fire-and-forget, gagal diam).
+  // Identitas BRAND/MODEL/OS/VERSI + install id + legacy — MAHAL (native
+  // MediaDrm + plugin) tapi KONSTAN selama sesi → cache. Supaya resume
+  // berkala hanya melakukan upsert (murah), bukan menghitung ulang tiap kali.
+  String? _cachedInstallId;
+  String? _cachedLegacy;
+  ({
+    String brand,
+    String model,
+    String osName,
+    String osVersion,
+    String appVersion,
+    String buildNumber,
+  })? _cachedInfo;
+
+  /// Kirim identitas device ke server (device id + info) — dengan RETRY.
+  /// Idempoten (upsert). Dipanggil saat login & tiap online/resume supaya
+  /// kegagalan sesaat tidak membuat device "tak terdeteksi" selamanya.
   Future<void> syncToServer({String ipAddress = ''}) async {
+    final user = _sb.auth.currentUser;
+    if (user == null) return; // perlu auth.uid untuk upsert
+    // Hitung identitas sekali per sesi (native mahal) lalu pakai cache.
     try {
-      final id = await installId();
-      final legacy = await _legacyAndroidId();
-      final info = await collectDeviceInfo();
-      final user = _sb.auth.currentUser;
-      // Snapshot nickname dipakai untuk melacak device milik user yang
-      // sudah dihapus (user_id di-SET NULL, nickname tetap tersimpan).
-      String nickname = '';
-      if (user != null) {
-        try {
-          final row = await _sb
-              .from('profiles')
-              .select('nickname')
-              .eq('id', user.id)
-              .maybeSingle();
-          nickname = '${row?['nickname'] ?? ''}';
-        } catch (_) {}
-      }
-      await _sb.rpc('upsert_device', params: {
-        'p_install_id': id,
-        'p_brand': info.brand,
-        'p_model': info.model,
-        'p_os_name': info.osName,
-        'p_os_version': info.osVersion,
-        'p_app_version': info.appVersion,
-        'p_ip': ipAddress,
-        'p_nickname': nickname,
-        // Baris device lama (`android-<id>`) dimigrasi in-place ke `id`
-        // sekarang bila berbeda (mis. baru pindah ke MediaDrm).
-        if (legacy.isNotEmpty && legacy != id)
-          'p_legacy_install_id': legacy,
-      });
+      _cachedInstallId ??= await installId();
+      _cachedLegacy ??= await _legacyAndroidId();
+      _cachedInfo ??= await collectDeviceInfo();
     } catch (e) {
-      dlog('[DEVICE] syncToServer error: $e');
+      dlog('[DEVICE] collect error: $e');
+      return;
     }
+    final id = _cachedInstallId!;
+    final legacy = _cachedLegacy!;
+    final info = _cachedInfo!;
+    // Snapshot nickname (best-effort).
+    String nickname = '';
+    try {
+      final row = await _sb
+          .from('profiles')
+          .select('nickname')
+          .eq('id', user.id)
+          .maybeSingle();
+      nickname = '${row?['nickname'] ?? ''}';
+    } catch (_) {}
+    final params = <String, dynamic>{
+      'p_install_id': id,
+      'p_brand': info.brand,
+      'p_model': info.model,
+      'p_os_name': info.osName,
+      'p_os_version': info.osVersion,
+      'p_app_version': info.appVersion,
+      'p_ip': ipAddress,
+      'p_nickname': nickname,
+      // Baris device lama (`android-<id>`) dimigrasi in-place ke `id`
+      // sekarang bila berbeda (mis. baru pindah ke MediaDrm).
+      if (legacy.isNotEmpty && legacy != id) 'p_legacy_install_id': legacy,
+    };
+    // Uji coba 3× dengan jeda singkat — jaringan HP sering gagal sesaat.
+    Object? lastErr;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        await _sb.rpc('upsert_device', params: params);
+        dlog('[DEVICE] syncToServer OK id=$id uid=${user.id}');
+        return;
+      } catch (e) {
+        lastErr = e;
+        dlog('[DEVICE] syncToServer attempt$attempt error: $e');
+        await Future<void>.delayed(Duration(milliseconds: 400 * (attempt + 1)));
+      }
+    }
+    // Terlihat juga di RILIS (print → logcat) — kegagalan senyap membuat
+    // device tak terdeteksi di admin tanpa jejak yang bisa didiagnosis.
+    // ignore: avoid_print
+    print('[DEVICE] syncToServer FAIL id=$id uid=${user.id}: $lastErr');
   }
 }

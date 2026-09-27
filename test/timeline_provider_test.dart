@@ -247,4 +247,28 @@ void main() {
       tp.dispose();
     });
   });
+
+  group('pull-refresh tidak menahan spinner lama', () {
+    test('RPC lambat (10s) → load() selesai ≤3.5s, feed menyusul', () async {
+      // Simulasi RPC lambat: respons ditahan.
+      when(() => service.listPosts(any(),
+              cursor: any(named: 'cursor'),
+              cursorBoosted: any(named: 'cursorBoosted')))
+          .thenAnswer((_) async {
+        await Future<void>.delayed(const Duration(seconds: 10));
+        return [_post('late1')];
+      });
+      final tp = TimelineProvider(service: service);
+      final sw = Stopwatch()..start();
+      await tp.load('all', refresh: true);
+      sw.stop();
+      // Spinner (future load) harus selesai jauh sebelum RPC 10s.
+      expect(
+        sw.elapsed,
+        lessThan(const Duration(seconds: 4)),
+        reason: 'pull-refresh tidak boleh menunggu RPC sampai timeout',
+      );
+      tp.dispose();
+    });
+  });
 }

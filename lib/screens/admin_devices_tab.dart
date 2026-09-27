@@ -36,6 +36,12 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   Timer? _refreshTimer;
   Timer? _searchDebounce;
   bool _byDevice = true;
+  // Per-User: daftar SEMUA user (dari profiles) — termasuk yang TIDAK punya
+  // baris user_devices (mis. anggi). Tanpa ini, user tanpa device tak pernah
+  // muncul di "Per User".
+  List<Map<String, dynamic>>? _allUsers;
+  bool _usersLoading = false;
+  static const int _usersPageSize = 500;
 
   @override
   void initState() {
@@ -54,10 +60,60 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
       controller: _scrollCtrl,
       onLoadMore: () {
         if (!mounted) return;
-        context.read<AdminProvider>().fetchMoreDevices();
+        if (_byDevice) {
+          context.read<AdminProvider>().fetchMoreDevices();
+        } else {
+          _loadAllUsers();
+        }
       },
     );
   }
+
+  /// Muat SEMUA user (profiles) untuk tampilan "Per User" — agar user tanpa
+  /// baris device tetap muncul. Paginasi 500/halaman sampai habis.
+  Future<void> _loadAllUsers() async {
+    if (_usersLoading) return;
+    _usersLoading = true;
+    final admin = context.read<AdminProvider>();
+    var offset = 0;
+    final acc = <Map<String, dynamic>>[...?_allUsers];
+    try {
+      while (true) {
+        final res = await admin.listStatsUsers(
+          'all',
+          limit: _usersPageSize,
+          offset: offset,
+        );
+        final items = (res['items'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        if (items.isEmpty) break;
+        acc.addAll(items);
+        offset += items.length;
+        final total = (res['total'] as num?)?.toInt() ?? 0;
+        if (offset >= total) break;
+      }
+    } catch (e) {
+      dlog('[ADMIN] loadAllUsers error: $e');
+    }
+    _allUsers = _mergeById(acc);
+    _usersLoading = false;
+    if (mounted) setState(() {});
+  }
+
+  /// Buang duplikat by id (jaga urutan pertama).
+  List<Map<String, dynamic>> _mergeById(List<Map<String, dynamic>> list) {
+    final seen = <String>{};
+    final out = <Map<String, dynamic>>[];
+    for (final e in list) {
+      final id = '${e['id'] ?? e['user_id'] ?? ''}';
+      if (id.isEmpty || seen.add(id)) out.add(e);
+    }
+    return out;
+  }
+
+
 
   /// App di-background → stop polling.
   @override
@@ -100,19 +156,6 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
   }
 
 
-  List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> devices) {
-    if (_query.trim().isEmpty) return devices;
-    return devices
-        .where((d) => matchesQuery(d, _query, const [
-              'nickname',
-              'model',
-              'brand',
-              'install_id',
-              'user_id',
-            ]))
-        .toList();
-  }
-
   /// Grouping per device (install_id). Setiap device punya daftar user yang
   /// pernah login memakainya.
   List<Map<String, dynamic>> _groupByDevice(List<Map<String, dynamic>> rows) =>
@@ -130,10 +173,8 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
     context.watch<ThemeProvider>();
     final admin = context.watch<AdminProvider>();
     final s = context.watch<LocaleProvider>().s;
-    // Hitung SEKALI per build: dulu `_filtered()` dipanggil di itemCount +
-    // di dalam itemBuilder per baris (O(n²) saat scroll), dan grouping+sort
-    // diulang tiap frame. Sekarang hasilnya dipakai ulang di bawah.
-    final filteredDevices = _filtered(admin.devices);
+    // Hitung SEKALI per build: grouping+sort diulang tiap frame dulu.
+    // Per-User TIDAK lagi berbasis device rows (lihat `_usersView`).
     final deviceGroups = _filterGroups(_groupByDevice(admin.devices), _query);
 
     return Column(
@@ -161,6 +202,8 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                       }),
                       _seg(s.adminDeviceByUser, !_byDevice, () {
                         setState(() => _byDevice = false);
+                        // Muat semua user sekali (termasuk yang tanpa device).
+                        if (_allUsers == null) _loadAllUsers();
                       }),
                     ],
                   ),
@@ -220,58 +263,155 @@ class _AdminDevicesTabState extends State<AdminDevicesTab>
                       ),
                     Expanded(
                       child: _byDevice
-              ? _deviceGroupsView(admin, s, deviceGroups)
-              : filteredDevices.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.phone_android_outlined,
-                        size: 48,
-                        color: AppTheme.textSecondary,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _query.isEmpty
-                            ? s.adminDeviceNoData
-                            : s.adminDeviceNoResult,
-                        style: TextStyle(color: AppTheme.textSecondary),
-                      ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () => admin.fetchDevices(),
-                  child: ListView.builder(
-                    controller: _scrollCtrl,
-                    padding: EdgeInsets.fromLTRB(
-                      12,
-                      0,
-                      12,
-                      MediaQuery.of(context).padding.bottom + 12,
-                    ),
-                    itemCount:
-                        filteredDevices.length +
-                        (admin.devicesHasMore ? 1 : 0),
-                    itemBuilder: (_, i) {
-                      if (i >= filteredDevices.length) {
-                        return _loadMoreSentinel(admin);
-                      }
-                      final d = filteredDevices[i];
-                      return DeviceCard(
-                        device: d,
-                        s: s,
-                        onTap: () => _showUserDetail(context, d),
-                      );
-                    },
-                  ),
-                ),
+                          ? _deviceGroupsView(admin, s, deviceGroups)
+                          : _usersView(admin, s),
                     ),
                   ],
                 ),
         ),
       ],
+    );
+  }
+
+  /// Tampilan "Per User": SEMUA user dari `profiles` (termasuk yang tanpa
+  /// baris device). Info device di-join dari [deviceRows] bila ada.
+  Widget _usersView(AdminProvider admin, S s) {
+    final allUsers = _allUsers;
+    if (allUsers == null) {
+      // Belum termuat → mulai muat + spinner.
+      if (!_usersLoading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _allUsers == null) _loadAllUsers();
+        });
+      }
+      return Center(
+        child: CircularProgressIndicator(color: AppTheme.primary),
+      );
+    }
+    // Gabungkan semua user + device (user tanpa device tetap tampil).
+    var users = mergeUsersWithDevices(allUsers, admin.devices);
+    // Filter pencarian.
+    final q = _query.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      users = users.where((u) {
+        final hay = '${u['_nick'] ?? ''} ${u['email'] ?? ''} ${u['city'] ?? ''} '
+                '${u['brand'] ?? ''} ${u['model'] ?? ''} ${u['user_id'] ?? ''}'
+            .toLowerCase();
+        return hay.contains(q);
+      }).toList();
+    }
+    if (users.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.person_outline,
+              size: 48,
+              color: AppTheme.textSecondary,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _query.isEmpty ? s.adminDeviceNoData : s.adminDeviceNoResult,
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: () async {
+        await admin.fetchDevices();
+        await _loadAllUsers();
+      },
+      child: ListView.builder(
+        controller: _scrollCtrl,
+        padding: EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          MediaQuery.of(context).padding.bottom + 12,
+        ),
+        itemCount: users.length,
+        itemBuilder: (_, i) {
+          final u = users[i];
+          final onTap = () => _showUserDetail(context, u);
+          // Punya device → kartu device biasa (info device lengkap).
+          if (u['_hasDevice'] == true) {
+            return DeviceCard(device: u, s: s, onTap: onTap);
+          }
+          // Tanpa device → kartu user ringkas (nickname + "tanpa perangkat").
+          return _userOnlyCard(s, u, onTap);
+        },
+      ),
+    );
+  }
+
+  /// Kartu user yang TIDAK punya baris device (mis. belum pernah buka app
+  /// sejak fitur tracking) — tetap tampil di "Per User".
+  Widget _userOnlyCard(S s, Map<String, dynamic> u, VoidCallback onTap) {
+    final nick = '${u['_nick'] ?? u['nickname'] ?? '?'}';
+    final uid = '${u['user_id'] ?? ''}';
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+      color: AppTheme.bgCard,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: AppTheme.divider),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.person_outline,
+                  color: AppTheme.textSecondary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nick,
+                      style: AppText.bodyStrong,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      s.adminDeviceNoDevice,
+                      style: AppText.caption.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (uid.isNotEmpty)
+                Text(
+                  uid.length >= 8 ? uid.substring(0, 8) : uid,
+                  style: AppText.micro.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

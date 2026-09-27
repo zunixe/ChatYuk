@@ -890,7 +890,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 2),
         itemCount: 1 + items.length + (showAdd ? 1 : 0),
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
           // Slot 0 = avatar sendiri (ikut scroll seperti IG).
           if (i == 0) {
