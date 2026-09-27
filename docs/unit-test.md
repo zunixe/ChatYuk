@@ -178,6 +178,27 @@ complete" — buat provider di `create:` agar Provider men-dispose-nya.
 models 75% · mixins 14%. Terukur saat penetapan: 26.3 / 16.3 / 78.2 / 15.5.
 `screens/` masih 0.2% (13.780 baris) — target terbesar berikutnya.
 
+**Review + tambahan test (2026-09-27):** audit "test obsolete" → **tidak ada**
+yang obsolete (assertion post_card/view_once/chat_filter/room_broadcast cocok
+dengan kode live). Yang DITAMBAH (34 test baru; total suite 1392):
+- `core_utils_extra_test.dart` (8): `measuredRpc` (fn/params/label),
+  `ScrollPagination`, `PhotoQualityPref`.
+- `shared_widgets_test.dart` (11): `DetailRow`, `SheetDragHandle`,
+  `InitialAvatarBox/Circle`, `AdminErrorView`, `ToggleTile`, `SearchField`,
+  `FilterChipPill` — widget hasil konsolidasi Fase C.
+- `models_test.dart` +3: `RoomModel` field lengkap + `toMap` roundtrip,
+  koersi string→int, `copyWith`.
+- Sudah ada sebelumnya (dari sesi paralel, terverifikasi): `chat_location_test`
+  (live + expiresAt), `room_voice_session_test` (state + generasi sesi +
+  routing ICE), `app_update_test` push manual (8 assertion `pushAt`),
+  `chat_video_bubble_test`, `image_cache_pure_test` (regresi dedupe `thumb`),
+  `image_cache_hygiene_test`, `admin_grouping_test`.
+
+**Belum ber-test (sadar):** `chat_photo_send_mixin` (0.4% — logika kirim foto
+terikat widget/provider; hanya `processChatImage*`/`resolvePhotoSendKind` yang
+murni & sudah diuji). `screens/` tetap 2%. Tidak ada test yang mengunci
+`AdminGate.panelBuilder`/tombol Admin melayang (perilaku build-flavor).
+
 Belum ada test (butuh refactor ringan agar testable — service memakai `http.get`
 top-level / plugin native secara langsung):
 - `geo_service.dart` — parsing provider IP & mapping `_countryNames` butuh
