@@ -397,6 +397,28 @@ extension SAdminX on S {
 
   String get adminChatMonitor => isId ? 'Monitor Chat' : 'Chat Monitor';
 
+  // ── Organisasi monitor chat: pin + kategori (folder) ──
+  String get adminChatPin => isId ? 'Sematkan' : 'Pin';
+  String get adminChatUnpin => isId ? 'Lepas Sematan' : 'Unpin';
+  String get adminChatPinned => isId ? 'Chat disematkan' : 'Chat pinned';
+  String get adminChatUnpinned => isId ? 'Sematan dilepas' : 'Chat unpinned';
+  String get adminChatCatAll => isId ? 'Semua' : 'All';
+  String get adminChatCatNone => isId ? 'Tanpa kategori' : 'Uncategorized';
+  String get adminChatMoveToCategory =>
+      isId ? 'Pindahkan ke kategori' : 'Move to category';
+  String get adminChatChangeCategory =>
+      isId ? 'Ganti kategori' : 'Change category';
+  String get adminChatRemoveFromCategory =>
+      isId ? 'Keluarkan dari kategori' : 'Remove from category';
+  String get adminChatNewCategory => isId ? 'Kategori baru' : 'New category';
+  String get adminChatRenameCategory =>
+      isId ? 'Ganti nama kategori' : 'Rename category';
+  String get adminChatDeleteCategory =>
+      isId ? 'Hapus kategori' : 'Delete category';
+  String get adminChatCategoryNameHint =>
+      isId ? 'Nama kategori...' : 'Category name...';
+  String get adminChatDelete => isId ? 'Hapus percakapan' : 'Delete conversation';
+
   String get adminChatNoChats =>
       isId ? 'Belum ada percakapan' : 'No conversations yet';
 

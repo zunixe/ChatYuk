@@ -16,12 +16,14 @@ class ChatIconButton extends StatelessWidget {
   final IconData? icon;
   final bool open;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final String tooltip;
   const ChatIconButton({
     super.key,
     this.icon,
     required this.open,
     required this.onTap,
+    this.onLongPress,
     required this.tooltip,
   });
 
@@ -37,6 +39,7 @@ class ChatIconButton extends StatelessWidget {
         height: 44,
         child: InkWell(
           onTap: onTap,
+          onLongPress: onLongPress,
           customBorder: const CircleBorder(),
           child: Center(
             child: Container(

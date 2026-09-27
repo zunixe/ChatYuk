@@ -125,6 +125,14 @@ class HistoryTile extends StatelessWidget {
       case 'admin_reset_all':
       case 'admin_adjust':
         return s.pointHistoryAdminReset;
+      case 'undo_message':
+        return s.yukcoinFeatureUndo;
+      case 'edit_message':
+        return s.yukcoinFeatureEdit;
+      case 'extra_photo_slots':
+        return s.yukcoinFeatureExtraPhoto;
+      case 'ghost_mode':
+        return s.yukcoinFeatureGhost;
       case 'migrate':
         return s.pointHistoryOther;
       default:

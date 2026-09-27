@@ -25,4 +25,9 @@ class AppFlavor {
   static bool get isPlay => _flavor == 'play';
   static bool get isApkpure => _flavor == 'apkpure';
   static bool get isAdmin => _flavor == 'admin';
+
+  /// Top-up YukCoin via Google Play Billing — hanya untuk build `play`
+  /// (kebijakan Google Play: digital goods wajib Play Billing). Build
+  /// apkpure/admin tidak menampilkan tombol top-up.
+  static bool get topupEnabled => isPlay;
 }

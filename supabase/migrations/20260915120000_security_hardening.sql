@@ -21,6 +21,10 @@ revoke execute on function public.ledger_spend(uuid, text, integer, text) from p
 -- ── 2. app_settings.app_shared_secret: cabut dari anon/auth ──
 -- Ada GRANT SELECT level TABEL → revoke kolom saja tidak cukup. Pola:
 -- revoke SELECT tabel, lalu grant SELECT kolom AMAN (tanpa secret).
+-- Pastikan kolom yang di-grant ada (app_font_family ditambahkan di
+-- 20260915151626; pada urutan fresh-replay belum ada → grant gagal).
+alter table public.app_settings
+  add column if not exists app_font_family text;
 revoke select on table public.app_settings from anon, authenticated;
 grant select (
   id, screenshot_enabled, watermark_enabled, points_enabled, invisible_enabled,

@@ -38,6 +38,7 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     WidgetsBinding.instance.addObserver(this);
     final admin = context.read<AdminProvider>();
     Future.microtask(() {
+      admin.loadChatOrg();
       admin.fetchChats();
       admin.fetchActiveCalls();
     });
@@ -126,27 +127,42 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
 
   List<Map<String, dynamic>> _sortedFiltered(
     List<Map<String, dynamic>> chats,
-    Map<String, ActiveCallInfo> activeByChat,
-  ) {
-    final filtered = _filtered(chats);
-    if (filtered.isEmpty || activeByChat.isEmpty) return filtered;
+    Map<String, ActiveCallInfo> activeByChat, {
+    required bool Function(String) isPinned,
+    required String? Function(String) categoryOf,
+    required String? activeCategory,
+  }) {
+    var filtered = _filtered(chats);
+    // Filter kategori (folder): 'all' = semua; '' = tanpa kategori;
+    // selain itu = nama kategori.
+    if (activeCategory != null) {
+      filtered = filtered.where((c) {
+        final cat = categoryOf('${c['chat_id'] ?? ''}');
+        if (activeCategory.isEmpty) return cat == null || cat.isEmpty;
+        return cat == activeCategory;
+      }).toList();
+    }
+    if (filtered.isEmpty) return filtered;
+    // Urutan: (1) pin admin paling atas, (2) call aktif, (3) sisanya.
     final pinned = <Map<String, dynamic>>[];
+    final calling = <Map<String, dynamic>>[];
     final rest = <Map<String, dynamic>>[];
     for (final c in filtered) {
       final chatId = '${c['chat_id'] ?? ''}';
-      if (activeByChat.containsKey(chatId)) {
+      if (isPinned(chatId)) {
         pinned.add(c);
+      } else if (activeByChat.containsKey(chatId)) {
+        calling.add(c);
       } else {
         rest.add(c);
       }
     }
-    if (pinned.isEmpty) return filtered;
-    pinned.sort((a, b) {
+    calling.sort((a, b) {
       final ca = activeByChat['${a['chat_id']}']!;
       final cb = activeByChat['${b['chat_id']}']!;
       return cb.createdAt.compareTo(ca.createdAt);
     });
-    return [...pinned, ...rest];
+    return [...pinned, ...calling, ...rest];
   }
 
   @override
@@ -157,7 +173,13 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
     // Hitung SEKALI per build: dulu `_sortedFiltered()` (filter+sort)
     // dipanggil di empty-check + itemCount + di dalam itemBuilder per baris
     // (O(n²) saat scroll). Hasilnya dipakai ulang di bawah.
-    final visibleChats = _sortedFiltered(admin.chats, admin.activeCallsByChat);
+    final visibleChats = _sortedFiltered(
+      admin.chats,
+      admin.activeCallsByChat,
+      isPinned: admin.isChatPinned,
+      categoryOf: admin.chatCategoryOf,
+      activeCategory: admin.activeChatCategory,
+    );
 
     return Column(
       children: [
@@ -262,6 +284,62 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                           ],
                         ),
                       ),
+                    // Baris chip kategori (folder). SELALU tampil: "Semua" +
+                    // "Tanpa kategori" + tiap folder + tombol "+ Kategori".
+                    // Tap chip = filter; tahan chip = kelola (rename/hapus).
+                    SizedBox(
+                      height: 40,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        children: [
+                          _catChip(
+                            label: s.adminChatCatAll,
+                            selected: admin.activeChatCategory == null,
+                            onTap: () => admin.setActiveChatCategory(null),
+                          ),
+                          if (admin.chatCategories.isNotEmpty)
+                            _catChip(
+                              label: s.adminChatCatNone,
+                              selected: admin.activeChatCategory == '',
+                              onTap: () => admin.setActiveChatCategory(''),
+                            ),
+                          for (final cat in admin.chatCategories)
+                            _catChip(
+                              label: cat,
+                              selected: admin.activeChatCategory == cat,
+                              onTap: () => admin.setActiveChatCategory(cat),
+                              onLongPress: () => _manageCategory(context, cat),
+                            ),
+                          // Tombol buat kategori baru (tanpa perlu pin chat dulu).
+                          ActionChip(
+                            avatar: Icon(
+                              Icons.add,
+                              size: 16,
+                              color: AppTheme.primary,
+                            ),
+                            label: Text(s.adminChatNewCategory),
+                            onPressed: () async {
+                              final name =
+                                  await _promptCategoryName(context, s);
+                              if (name.isEmpty) return;
+                              await admin.addChatCategory(name);
+                              if (context.mounted) {
+                                admin.setActiveChatCategory(name);
+                              }
+                            },
+                            labelStyle: AppText.bodySmall.copyWith(
+                              color: AppTheme.primary,
+                            ),
+                            backgroundColor: AppTheme.bgInput,
+                            side: BorderSide(color: AppTheme.primary),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ],
+                      ),
+                    ),
                     Expanded(
                       child: RefreshIndicator(
                   onRefresh: () => admin.fetchChats(),
@@ -289,11 +367,16 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                         );
                       }
                       final chat = visibleChats[i];
+                      final chatId = '${chat['chat_id'] ?? ''}';
                       return _AdminChatCard(
                         chat: chat,
                         s: s,
                         adminUids: admin.adminUids,
                         activeCall: admin.activeCallsByChat[chat['chat_id']],
+                        pinned: admin.isChatPinned(chatId),
+                        category: admin.chatCategoryOf(chatId),
+                        onLongPressMenu: () =>
+                            _chatActions(context, chat, label: _chatLabel(chat, s)),
                       );
                     },
                   ),
@@ -305,6 +388,330 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
       ],
     );
   }
+
+  /// Label chat (nama peserta / jumlah user) — dipakai sheet & header.
+  String _chatLabel(Map<String, dynamic> chat, S s) {
+    final names = (chat['participant_names'] as Map<dynamic, dynamic>?) ?? {};
+    final participants = (chat['participants'] as List<dynamic>?) ?? const [];
+    final nameList = names.values
+        .where((e) => e != null && '$e'.isNotEmpty)
+        .toList();
+    if (nameList.isNotEmpty) return nameList.join(' & ');
+    return participants.length == 1
+        ? '${participants.length} ${s.adminUserSingular}'
+        : '${participants.length} ${s.adminUsersPlural}';
+  }
+
+  Widget _catChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    VoidCallback? onLongPress,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: ChoiceChip(
+          label: Text(label),
+          selected: selected,
+          onSelected: (_) => onTap(),
+          labelStyle: AppText.bodySmall.copyWith(
+            color: selected ? Colors.white : AppTheme.textPrimary,
+          ),
+          selectedColor: AppTheme.primary,
+          backgroundColor: AppTheme.bgInput,
+          side: BorderSide(color: AppTheme.divider),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ),
+    );
+  }
+
+  /// Sheet aksi gaya WhatsApp (muncul dari bawah saat kartu ditahan):
+  /// Pin/Unpin, pindah/hapus kategori, dan hapus percakapan.
+  Future<void> _chatActions(
+    BuildContext context,
+    Map<String, dynamic> chat, {
+    required String label,
+  }) async {
+    final s = context.read<LocaleProvider>().s;
+    final admin = context.read<AdminProvider>();
+    final chatId = '${chat['chat_id'] ?? ''}';
+    if (chatId.isEmpty) return;
+    final pinned = admin.isChatPinned(chatId);
+    final currentCat = admin.chatCategoryOf(chatId);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.forum_outlined,
+                    size: 18,
+                    color: AppTheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: AppText.bodyStrong,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: AppTheme.divider),
+            ListTile(
+              leading: Icon(
+                pinned ? Icons.push_pin_outlined : Icons.push_pin,
+                color: AppTheme.primary,
+              ),
+              title: Text(pinned ? s.adminChatUnpin : s.adminChatPin),
+              onTap: () async {
+                final nowPinned = await admin.toggleChatPin(chatId);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        nowPinned ? s.adminChatPinned : s.adminChatUnpinned,
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.folder_outlined,
+                color: Color(0xFF7E57C2),
+              ),
+              title: Text(
+                currentCat == null
+                    ? s.adminChatMoveToCategory
+                    : s.adminChatChangeCategory,
+              ),
+              onTap: () => _pickCategory(ctx, chatId, currentCat),
+            ),
+            if (currentCat != null)
+              ListTile(
+                leading: Icon(Icons.folder_off_outlined,
+                    color: AppTheme.textSecondary),
+                title: Text(s.adminChatRemoveFromCategory),
+                onTap: () async {
+                  await admin.setChatCategory(chatId, null);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                },
+              ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Pilih kategori (atau buat baru) untuk sebuah chat.
+  Future<void> _pickCategory(
+    BuildContext sheetCtx,
+    String chatId,
+    String? current,
+  ) async {
+    final s = context.read<LocaleProvider>().s;
+    final admin = context.read<AdminProvider>();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.folder_outlined,
+                      size: 18, color: Color(0xFF7E57C2)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(s.adminChatMoveToCategory,
+                        style: AppText.bodyStrong),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final name = await _promptCategoryName(context, s);
+                      if (name.isEmpty || !ctx.mounted) return;
+                      await admin.setChatCategory(chatId, name);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                    label: Text(s.adminChatNewCategory),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: AppTheme.divider),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final cat in admin.chatCategories)
+                    ListTile(
+                      leading: Icon(
+                        Icons.folder,
+                        color: cat == current
+                            ? AppTheme.primary
+                            : AppTheme.textSecondary,
+                      ),
+                      title: Text(cat, style: AppText.body),
+                      trailing: cat == current
+                          ? Icon(Icons.check, color: AppTheme.primary, size: 20)
+                          : null,
+                      onTap: () async {
+                        await admin.setChatCategory(chatId, cat);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                      },
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Dialog input nama kategori.
+  Future<String> _promptCategoryName(BuildContext context, S s) async {
+    final ctrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(s.adminChatNewCategory, style: AppText.title),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: AppText.body.copyWith(color: AppTheme.textPrimary),
+          decoration: InputDecoration(hintText: s.adminChatCategoryNameHint),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: Text(s.btnSave),
+          ),
+        ],
+      ),
+    );
+    return (name ?? '').trim();
+  }
+
+  /// Kelola kategori (rename / hapus) — dari long-press chip kategori.
+  Future<void> _manageCategory(BuildContext context, String cat) async {
+    final s = context.read<LocaleProvider>().s;
+    final admin = context.read<AdminProvider>();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: Row(
+                children: [
+                  const Icon(Icons.folder, size: 18, color: Color(0xFF7E57C2)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(cat, style: AppText.bodyStrong)),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: AppTheme.divider),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined, color: AppTheme.primary),
+              title: Text(s.adminChatRenameCategory),
+              onTap: () async {
+                final ctrl = TextEditingController(text: cat);
+                final newName = await showDialog<String>(
+                  context: context,
+                  builder: (dctx) => AlertDialog(
+                    backgroundColor: AppTheme.bgCard,
+                    title: Text(s.adminChatRenameCategory,
+                        style: AppText.title),
+                    content: TextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      style:
+                          AppText.body.copyWith(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        hintText: s.adminChatCategoryNameHint,
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dctx),
+                        child: Text(s.btnCancel),
+                      ),
+                      FilledButton(
+                        onPressed: () =>
+                            Navigator.pop(dctx, ctrl.text.trim()),
+                        child: Text(s.btnSave),
+                      ),
+                    ],
+                  ),
+                );
+                if ((newName ?? '').isNotEmpty) {
+                  await admin.renameChatCategory(cat, newName!);
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.delete_outline, color: AppTheme.danger),
+              title: Text(
+                s.adminChatDeleteCategory,
+                style: AppText.body.copyWith(color: AppTheme.danger),
+              ),
+              onTap: () async {
+                await admin.removeChatCategory(cat);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AdminChatCard extends StatelessWidget {
@@ -314,11 +721,20 @@ class _AdminChatCard extends StatelessWidget {
 
   /// Call aktif di chat ini (null = tidak sedang call).
   final ActiveCallInfo? activeCall;
+  /// Disematkan admin (ikon pin + border).
+  final bool pinned;
+  /// Kategori (folder) chat ini (null = tanpa kategori).
+  final String? category;
+  /// Tahan kartu → buka sheet aksi (pin/kategori).
+  final VoidCallback? onLongPressMenu;
   const _AdminChatCard({
     required this.chat,
     required this.s,
     required this.adminUids,
     this.activeCall,
+    this.pinned = false,
+    this.category,
+    this.onLongPressMenu,
   });
 
   @override
@@ -354,6 +770,8 @@ class _AdminChatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: activeCall != null
             ? Border.all(color: const Color(0xFF2E9E5B), width: 1.2)
+            : pinned
+            ? Border.all(color: AppTheme.primary, width: 1.2)
             : null,
         boxShadow: [
           BoxShadow(
@@ -367,6 +785,7 @@ class _AdminChatCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
+          onLongPress: onLongPressMenu,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -418,6 +837,52 @@ class _AdminChatCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (pinned || (category != null && category!.isNotEmpty))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Row(
+                            children: [
+                              if (pinned) ...[
+                                Icon(
+                                  Icons.push_pin,
+                                  size: 12,
+                                  color: AppTheme.primary,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  s.adminChatPin,
+                                  style: AppText.micro.copyWith(
+                                    color: AppTheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                              if (pinned &&
+                                  category != null &&
+                                  category!.isNotEmpty)
+                                const SizedBox(width: 8),
+                              if (category != null && category!.isNotEmpty) ...[
+                                Icon(
+                                  Icons.folder,
+                                  size: 12,
+                                  color: const Color(0xFF7E57C2),
+                                ),
+                                const SizedBox(width: 3),
+                                Flexible(
+                                  child: Text(
+                                    category!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppText.micro.copyWith(
+                                      color: const Color(0xFF7E57C2),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       SizedBox(height: 3),
                       Text(
                         lastMsg.isEmpty

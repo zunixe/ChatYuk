@@ -102,16 +102,17 @@ Deno.serve(async (req) => {
           signal: AbortSignal.timeout(5000),
         });
         const resBody = await res.text();
-        // Auto-clean token mati: FCM 404 NotRegistered / 410 = token tidak
-        // terdaftar lagi (app di-install ulang, dsb). Bersihkan supaya
-        // tidak dipukul berulang (boros kuota + notif tidak pernah sampai).
-        if (token && !res.ok && /NotRegistered|UNREGISTERED/.test(resBody)) {
+        // Auto-clean token mati: FCM 404 NotRegistered / 410 UNREGISTERED =
+        // token tidak terdaftar (app di-install ulang, dsb). SenderIdMismatch
+        // (403) = token milik project Firebase LAIN (device lama sebelum
+        // migrasi ke chatyuk-7c9e4) — juga permanen & wajib dibuang supaya
+        // tidak menumpuk. Bersihkan dari KEDUA sumber token.
+        if (token && !res.ok &&
+            /NotRegistered|UNREGISTERED|SenderId mismatch|SENDER_ID_MISMATCH/i.test(resBody)) {
           try {
-            await admin
-              .from('profiles')
-              .update({ fcm_token: null })
-              .eq('fcm_token', token);
-            await admin.from('user_devices').delete().eq('fcm_token', token);
+            // WAJIB via RPC: PostgREST tak bisa filter kolom fcm_token
+            // (SELECT di-revoke) → update via .eq() mengembalikan 0 baris.
+            await admin.rpc('purge_fcm_token', { p_token: token });
           } catch (_) {}
         }
         if (res.ok) {

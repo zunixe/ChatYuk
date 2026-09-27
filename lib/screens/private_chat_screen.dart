@@ -220,6 +220,28 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   @override
   String chatDeletedLabel(S s) => s.messageDeleted;
 
+  // ── YukCoin v2 (berbayar) ──
+  @override
+  bool get chatYukcoinV2Active => context.read<PointsProvider>().yukcoinV2Active;
+
+  @override
+  Future<bool> chatChargeYukcoin(String feature, int cost, String ref) async {
+    try {
+      await context.read<PointsProvider>().spendYukcoin(feature, cost, ref: ref);
+      return true;
+    } catch (e) {
+      dlog('[PRIVATE] chargeYukcoin error: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> chatUndoMessage(String id) async {
+    final n = int.tryParse(id);
+    if (n == null) return {};
+    return context.read<PointsProvider>().undoMessage(n);
+  }
+
   @override
   Map<String, String> get chatReactionKnownNames =>
       {widget.otherUid: widget.otherName};
@@ -2395,6 +2417,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           onTakePhoto: () {
                             setState(() => _showAttachRow = false);
                             photoTakeToPreview();
+                          },
+                          onRecordVideo: () {
+                            setState(() => _showAttachRow = false);
+                            videoRecordFromCamera();
                           },
                           onSendPhoto: () {
                             setState(() => _showAttachRow = false);

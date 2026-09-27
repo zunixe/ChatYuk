@@ -1,0 +1,23 @@
+-- ============================================================
+-- LOKAL-ONLY — JANGAN dijalankan/push ke PROD.
+--
+-- Masalah: PostgREST versi LOKAL (bundled Supabase CLI) MENOLAK pemanggilan
+-- fungsi ber-overload yang param-nya tumpang-tindih karena DEFAULT (error
+-- 203 "Could not choose the best candidate"). PROD memakai PostgREST yang
+-- tidak mempermasalahkannya (produksi punya overload yang SAMA dan jalan).
+--
+-- get_online_users: prod punya (integer) + (text,integer) dan app prod JALAN.
+--   → JANGAN drop di prod. Hanya di lokal agar UI daftar-online berfungsi.
+--
+-- list_posts(4-arg) sudah DIBUANG di prod (prod hanya punya 5-arg) → drop-nya
+-- dilakukan lewat migration permanen terpisah, bukan di file ini.
+--
+-- File ini ada di supabase/ (BUKAN supabase/migrations/) sehingga TIDAK ikut
+-- `supabase db push`. Jalankan manual setelah `db reset`:
+--   docker exec -i supabase_db_ChatYuk psql -U postgres -d postgres \
+--     < supabase/local_only_fix_overloads.sql
+-- ============================================================
+
+-- PostgREST lokal: sisakan hanya overload 2-arg (+p_country DEFAULT NULL)
+-- sehingga `p_limit:=N` hanya cocok ke satu fungsi.
+drop function if exists public.get_online_users(integer);

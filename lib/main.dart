@@ -40,6 +40,7 @@ import 'core/cache/media_disk_cache.dart';
 import 'core/cache/photo_cache.dart';
 import 'core/cache/post_photo_cache.dart';
 import 'core/media/chat_background.dart';
+import 'core/perf/perf_probe.dart';
 import 'services/meta_analytics_service.dart';
 import 'services/notification_prefs_service.dart';
 import 'services/storage_photo_service.dart';
@@ -1515,6 +1516,8 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
+  // Probe frame (no-op bila PERF_PROBE off) — ukur build/raster per frame.
+  PerfProbe.hookFrameTimings();
   runApp(const ChatYukApp());
   // Token FCM lambat (5s) - lazy setelah UI tampil, tidak block TTI
   unawaited(_initFcmTokenLazy());

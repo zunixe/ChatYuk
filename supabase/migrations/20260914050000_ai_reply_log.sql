@@ -54,6 +54,9 @@ revoke execute on function public.ai_log_reply(text, bigint, uuid, uuid, boolean
 grant execute on function public.ai_log_reply(text, bigint, uuid, uuid, boolean, text, text, jsonb) to authenticated, service_role;
 
 -- ai_reply_post: versi ber-log (kontrak & URL sama dengan 13130000).
+-- Drop dulu: versi sebelumnya (13130000/13140000) return boolean, versi ini
+-- return void → create or replace menolak ganti return type. Idempotent.
+drop function if exists public.ai_reply_post(text, bigint, uuid, uuid, boolean);
 create or replace function public.ai_reply_post(
   p_chat_id text,
   p_trigger_msg_id bigint,

@@ -1,25 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 
+import 'package:chatyuk/config/fonts.dart';
 import 'package:chatyuk/config/strings.dart';
 import 'package:chatyuk/models/privacy_settings.dart';
 import 'package:chatyuk/providers/locale_provider.dart';
+import 'package:chatyuk/providers/points_provider.dart';
 import 'package:chatyuk/providers/privacy_provider.dart';
 import 'package:chatyuk/screens/privacy_settings_screen.dart';
+import 'package:chatyuk/services/points_service.dart';
 import 'package:chatyuk/services/privacy_service.dart';
+
+import 'test_helper.dart';
 
 /// Widget hermetic `PrivacySettingsScreen`: memastikan layar memakai string
 /// bilingual (`s.`) dan meneruskannya ke `PrivacyProvider` → `PrivacyService`
 /// dengan argumen yang benar (bukan cuma "tidak crash").
 class MockPrivacyService extends Mock implements PrivacyService {}
+class MockPointsService extends Mock implements PointsService {}
 
 void main() {
   final s = S(isId: true);
 
   late MockPrivacyService service;
   late PrivacyProvider provider;
+
+  setUpAll(() async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    AppFonts.setLocal(AppFonts.systemKey);
+    await initSupabaseForTest();
+  });
+
+  tearDownAll(resetFontForTest);
 
   setUp(() {
     service = MockPrivacyService();
@@ -50,6 +65,16 @@ void main() {
             create: (_) => LocaleProvider(),
           ),
           ChangeNotifierProvider<PrivacyProvider>.value(value: provider),
+          // Halaman privasi menampilkan opsi YukCoin (ghost mode).
+          ChangeNotifierProvider<PointsProvider>(
+            create: (_) {
+              final ps = MockPointsService();
+              when(() => ps.watchOwnPoints())
+                  .thenAnswer((_) => const Stream<int>.empty());
+              when(() => ps.fetchEnabled()).thenAnswer((_) async => false);
+              return PointsProvider(service: ps);
+            },
+          ),
         ],
         child: const MaterialApp(home: PrivacySettingsScreen()),
       );

@@ -156,5 +156,12 @@ select supabase_tests.check('presence_for() kirim about + hormati about_visibili
          where n.nspname='public' and p.proname='presence_for'
            and pg_get_functiondef(p.oid) like '%about%'));
 
+-- Retensi user_location_history (anti-drift skala).
+select supabase_tests.check('purge_location_history_90d() ada',
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='purge_location_history_90d'));
+select supabase_tests.check('cron purge-location-history-90d terjadwal',
+  exists(select 1 from cron.job where jobname='purge-location-history-90d'));
+
 select supabase_tests.report() as result;
 rollback;

@@ -55,8 +55,10 @@ class TimelineProvider extends ChangeNotifier {
   // Cache per scope — emit instant saat tab switch, server menyusul.
   final Map<String, _ScopeCache> _scopeCache = {};
   // Kapan terakhir scope ini sukses fetch dari server — tab yang masih
-  // fresh (<30s) TIDAK di-fetch ulang saat diswitch (klik terasa instan,
-  // pola sama dengan list chat).
+  // fresh TIDAK di-fetch ulang saat diswitch (klik terasa instan).
+  // 30s → 90s: pindah-pindah tab (Semua/Mengikuti/Postinganku) dalam sesi
+  // singkat tidak menembak RPC (~150ms–2s) yang bikin terasa berat.
+  static const _scopeFreshTtl = Duration(seconds: 90);
   final Map<String, DateTime> _lastLoadedAt = {};
   // Cache komentar per postId — buka comment instant, server menyusul.
   final Map<String, List<Map<String, dynamic>>> _commentCache = {};
@@ -563,8 +565,7 @@ class TimelineProvider extends ChangeNotifier {
     final fresh = cached != null &&
         cached.posts.isNotEmpty &&
         _lastLoadedAt[scope] != null &&
-        DateTime.now().difference(_lastLoadedAt[scope]!) <
-            const Duration(seconds: 30);
+        DateTime.now().difference(_lastLoadedAt[scope]!) < _scopeFreshTtl;
     if (fresh) {
       _posts
         ..clear()

@@ -20,6 +20,7 @@ part 'admin/admin_stats.dart';
 part 'admin/admin_devices.dart';
 part 'admin/admin_deleted.dart';
 part 'admin/admin_chats.dart';
+part 'admin/admin_chat_org.dart';
 
 /// AdminProvider: state global panel admin (statistik, devices, deleted,
 /// chats, calls, contact, notifikasi) + passthrough RPC AdminService.
@@ -35,8 +36,14 @@ class AdminProvider extends AdminBase
         AdminStatsMx,
         AdminDevicesMx,
         AdminDeletedMx,
-        AdminChatsMx {
-  AdminProvider({super.service, super.sb});
+        AdminChatsMx,
+        AdminChatOrgMx {
+  AdminProvider({super.service, super.sb}) {
+    // Muat organisasi monitor chat (pin/kategori) begitu provider dibuat —
+    // supaya chip kategori siap walau layar monitor belum sempat initState
+    // (TabBarView bisa membuang/membangun ulang layar).
+    loadChatOrg();
+  }
 
   /// Hapus SEMUA cache data admin di perangkat ini (tombol di tab Global
   /// Setting). Dipakai bila HP bergantian dipakai orang lain — data admin
