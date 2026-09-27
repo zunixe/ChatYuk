@@ -15,6 +15,7 @@ import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/location_provider.dart';
 import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../core/cache/message_cache.dart';
@@ -254,26 +255,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     );
   }
 
-  /// Izinkan → ambil posisi → sheet peta → TARUH di preview composer
-  /// (kirim terjadi dari tombol send, bisa + caption).
+  /// Izinkan → ambil posisi → sheet pilihan (lokasi saat ini / live / tempat
+  /// sekitar) → LANGSUNG terkirim ke chat (tanpa preview/caption).
   Future<void> _sendLocation() async {
     setState(() => _showAttachRow = false);
-    dlog('[LOC] _sendLocation start');
     final picked = await pickChatLocation(
       context,
       messenger: ScaffoldMessenger.of(context),
     );
-    dlog('[LOC] picked=${picked == null ? "null" : "${picked.lat},${picked.lng}"}');
     if (picked == null || !mounted) return;
-    setState(() {
-      _pendingLocation = picked;
-      // Lokasi bukan foto/video: buang preview lain.
-      _pendingPhotoBase64 = null;
-      _viewTimerSecs = null;
-      photoClearPreviewState();
-    });
-    dlog('[LOC] preview set');
-    _inputFocus.requestFocus();
+    await sendLocationFromPreviewAt(picked);
   }
 
   ChatLocation? _pendingLocation;
@@ -293,17 +284,22 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     final auth = context.read<AuthProvider>();
     final uid = auth.uid;
     final profile = auth.profile;
-    dlog('[LOC] sendLocationFromPreviewAt loc=${loc.lat},${loc.lng} uid=${uid != null} prof=${profile != null}');
     if (uid == null || profile == null) return;
-    // Caption ikut terkirim di dalam payload (bukan pesan terpisah).
+    // Caption ikut terkirim di dalam payload (bukan pesan terpisah);
+    // place/live/expiresAt dibawa apa adanya (lokasi & lokasi live).
     final payload = ChatLocation(
       lat: loc.lat,
       lng: loc.lng,
       label: loc.label,
       caption: text.trim(),
+      place: loc.place,
+      live: loc.live,
+      expiresAt: loc.expiresAt,
+      accuracyM: loc.accuracyM,
     );
+    String? sentId;
     try {
-      await context.read<ChatProvider>().sendPrivateMessage(
+      sentId = await context.read<ChatProvider>().sendPrivateMessage(
         chatId: widget.chatId,
         senderId: uid,
         senderName: profile.nickname,
@@ -325,6 +321,33 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       setState(() => _pendingLocation = null);
       _scrollToBottom();
     }
+    // Lokasi LIVE → mulai kirim pembaruan posisi berkala sampai kedaluwarsa.
+    if (payload.live && sentId != null && payload.expiresAt != null) {
+      _startLiveLocationUpdates(sentId, payload);
+    }
+  }
+
+  Timer? _liveTimer;
+
+  /// Kirim pembaruan koordinat lokasi live tiap 30 detik sampai kedaluwarsa.
+  /// Berhenti otomatis saat waktu habis; update gagal diabaikan (best-effort).
+  void _startLiveLocationUpdates(String messageId, ChatLocation initial) {
+    _liveTimer?.cancel();
+    final lp = context.read<LocationProvider>();
+    _liveTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
+      final exp = initial.expiresAt;
+      if (exp == null || DateTime.now().toUtc().isAfter(exp)) {
+        t.cancel();
+        return;
+      }
+      final pos = await lp.precisePosition();
+      if (pos == null) return;
+      if (!mounted) return;
+      final updated = initial.copyWith(lat: pos.$1, lng: pos.$2);
+      await context
+          .read<ChatProvider>()
+          .updateLocationMessage(messageId, updated.encode());
+    });
   }
 
   int? _viewTimerSecs;
@@ -940,6 +963,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     _statusSub?.cancel();
     _typingSub?.cancel();
     _typingClearTimer?.cancel();
+    _liveTimer?.cancel();
     _imgQueue.clear();
     _imgQueued.clear();
     // Voice recording: hentikan timer + native recorder — tanpa ini keluar

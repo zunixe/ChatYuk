@@ -55,6 +55,22 @@ mixin ChatServicePrivateMx on ChatBase {
     }
   }
 
+  /// Perbarui payload lokasi LIVE (koordinat bergerak) TANPA menandai
+  /// "edited" — hanya kolom `text` (payload JSON) yang diganti. Dipanggil
+  /// berkala oleh pengirim selama lokasi live aktif.
+  Future<bool> updateLocationMessage(String messageId, String newPayload) async {
+    try {
+      await _sb
+          .from('private_messages')
+          .update({'text': newPayload})
+          .eq('id', messageId);
+      return true;
+    } catch (e) {
+      dlog('[ChatService] updateLocationMessage error: $e');
+      return false;
+    }
+  }
+
   /// Hapus pesan sendiri (soft delete) — tandai is_deleted = true.
   /// RLS menjamin hanya sender_id (auth.uid) yang boleh mengubah pesannya.
   /// Pakai `.select('id')` supaya blokir RLS (0 baris ter-update) terdeteksi
@@ -125,7 +141,7 @@ mixin ChatServicePrivateMx on ChatBase {
     }
   }
 
-  Future<void> sendPrivateMessage({
+  Future<String?> sendPrivateMessage({
     required String chatId,
     required String senderId,
     required String senderName,
@@ -236,6 +252,7 @@ mixin ChatServicePrivateMx on ChatBase {
         if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
       });
     } catch (_) {}
+    return insertedId?.toString();
   }
 
   /// Panggil edge function ai-reply langsung seusai kirim (fire-and-forget).

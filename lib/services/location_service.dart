@@ -1,7 +1,24 @@
+import 'dart:convert';
 import '../utils.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'geo_service.dart';
+
+/// Satu tempat terdekat (hasil reverse-geocode alamat atau POI Overpass).
+class NearbyPlace {
+  final String name;
+  final double lat;
+  final double lng;
+  final String address;
+  const NearbyPlace({
+    required this.name,
+    required this.lat,
+    required this.lng,
+    this.address = '',
+  });
+}
 
 /// Ambil & simpan lokasi user dengan strategi dua sumber (Opsi B):
 /// - Kalau izin lokasi SUDAH diberikan → koordinat presisi dari device
@@ -186,5 +203,100 @@ class LocationService {
     );
     final list = res is List ? res : <dynamic>[];
     return list.cast<Map<String, dynamic>>();
+  }
+
+  /// Posisi presisi terbaru (untuk berbagi lokasi & lokasi live).
+  /// Return (lat, lng, accuracyM) atau null bila gagal/tanpa izin.
+  Future<(double, double, int)?> precisePosition() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      final perm = await Geolocator.checkPermission();
+      if (perm != LocationPermission.always &&
+          perm != LocationPermission.whileInUse) {
+        return null;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+      return (pos.latitude, pos.longitude, pos.accuracy.round());
+    } catch (e) {
+      dlog('[location] precisePosition error: $e');
+      return null;
+    }
+  }
+
+  /// Alamat/label dari koordinat (reverse geocode) — ala WhatsApp
+  /// "Jl. Mukodar Tengah, Cimahi, 40535". '' bila gagal.
+  Future<String> addressLabel(double lat, double lng) async {
+    try {
+      final places = await placemarkFromCoordinates(lat, lng);
+      if (places.isEmpty) return '';
+      final p = places.first;
+      final parts = <String>[
+        if ((p.street ?? '').isNotEmpty) p.street!,
+        if ((p.subLocality ?? '').isNotEmpty) p.subLocality!,
+        if ((p.locality ?? '').isNotEmpty) p.locality!,
+        if ((p.postalCode ?? '').isNotEmpty) p.postalCode!,
+      ];
+      return parts.isNotEmpty ? parts.join(', ') : (p.name ?? '');
+    } catch (e) {
+      dlog('[location] addressLabel error: $e');
+      return '';
+    }
+  }
+
+  /// Tempat terdekat (POI) via Overpass API (OpenStreetMap) — gratis,
+  /// tanpa API key. Menampilkan alamat titik + beberapa tempat sekitar
+  /// (masjid, kafe, sekolah, dll) dalam radius [radiusM].
+  Future<List<NearbyPlace>> nearbyPlaces(
+    double lat,
+    double lng, {
+    int radiusM = 400,
+    int limit = 8,
+  }) async {
+    final out = <NearbyPlace>[];
+    // 1. Titik saat ini = alamat (paling atas, ala "Your current location").
+    final addr = await addressLabel(lat, lng);
+    out.add(NearbyPlace(
+      name: addr.isNotEmpty ? addr : '$lat, $lng',
+      lat: lat,
+      lng: lng,
+      address: addr,
+    ));
+    // 2. POI sekitar via Overpass.
+    final query =
+        '[out:json][timeout:15];'
+        '(node(around:$radiusM,$lat,$lng)["name"]["amenity"];'
+        'node(around:$radiusM,$lat,$lng)["name"]["shop"];'
+        'node(around:$radiusM,$lat,$lng)["name"]["tourism"];'
+        ');'
+        'out center $limit;';
+    try {
+      final res = await http
+          .post(
+            Uri.parse('https://overpass-api.de/api/interpreter'),
+            body: {'data': query},
+          )
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final elems = (data['elements'] as List?) ?? const [];
+        for (final e in elems) {
+          final name = (e['tags']?['name']) as String?;
+          if (name == null || name.isEmpty) continue;
+          final elat = (e['lat'] as num?)?.toDouble();
+          final elng = (e['lon'] as num?)?.toDouble();
+          if (elat == null || elng == null) continue;
+          out.add(NearbyPlace(name: name, lat: elat, lng: elng));
+          if (out.length >= limit) break;
+        }
+      }
+    } catch (e) {
+      dlog('[location] nearbyPlaces error: $e');
+    }
+    return out;
   }
 }

@@ -16,7 +16,7 @@ void main() {
 
   test('kirim room message ber-mention → payload mentions benar', () async {
     final handler = FakeSupabaseHandler();
-    handler.on('/rest/v1/messages', (_) => []);
+    handler.on('/rest/v1/messages', (_) => {'id': 'm-new'});
     final provider = ChatProvider(
       service: ChatService(fakeSupabaseClient(handler: handler)),
     );
@@ -76,7 +76,7 @@ void main() {
   test('tanpa mention → kolom mentions tidak dikirim (hemat payload)',
       () async {
     final handler = FakeSupabaseHandler();
-    handler.on('/rest/v1/messages', (_) => []);
+    handler.on('/rest/v1/messages', (_) => {'id': 'm-new'});
     final provider = ChatProvider(
       service: ChatService(fakeSupabaseClient(handler: handler)),
     );

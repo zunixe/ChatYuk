@@ -22,6 +22,8 @@ class LocationProvider extends ChangeNotifier {
   Future<void> setShareLocation(bool value) => location.setShareLocation(value);
   Future<List<Map<String, dynamic>>> nearbyUsers(double radiusKm) =>
       location.nearbyUsers(radiusKm);
+  Future<(double, double, int)?> precisePosition() =>
+      location.precisePosition();
 
   Future<GeoInfo?> detect() => geo.detect();
   Future<GeoInfo?> detectByCoordinates(double lat, double lon) =>

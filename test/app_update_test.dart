@@ -518,6 +518,72 @@ void main() {
       expect(p.phase, UpdatePhase.idle);
     });
 
+    test('push manual admin → popup walau versi sudah di-snooze', () async {
+      // Skenario: user sudah menekan "Nanti" (snooze 24 jam), lalu admin
+      // menekan "Kirim Popup Update" (update_push_at berubah) → saat app
+      // dibuka, popup HARUS muncul lagi.
+      final pushAt = DateTime.now().toUtc();
+      UpdateProvider mk() => providerWith(
+        local: '1.2.47',
+        policy: UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.48',
+          minVersion: '',
+          notes: '',
+          pushAt: pushAt,
+        ),
+      );
+      // 1) Pertama: popup muncul + tandai push sudah dilihat.
+      final p1 = mk();
+      await p1.check();
+      expect(p1.phase, UpdatePhase.available, reason: 'push → popup');
+
+      // 2) Push BERIKUTNYA (stempel lebih baru) → tetap muncul meski
+      //    versi sama sudah di-snooze.
+      final p2 = providerWith(
+        local: '1.2.47',
+        policy: UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.48',
+          minVersion: '',
+          notes: '',
+          pushAt: pushAt.add(const Duration(minutes: 5)),
+        ),
+      );
+      await p2.snoozeForTest(version: '1.2.48'); // user "Nanti" di versi ini
+      expect(p2.phase, UpdatePhase.idle);
+      await p2.check();
+      expect(
+        p2.phase,
+        UpdatePhase.available,
+        reason: 'push manual mengalahkan snooze',
+      );
+    });
+
+    test('push manual sudah dilihat → check berikutnya idle (tidak nag)', () async {
+      final pushAt = DateTime.now().toUtc();
+      UpdateProvider mk() => providerWith(
+        local: '1.2.47',
+        policy: UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.48',
+          minVersion: '',
+          notes: '',
+          pushAt: pushAt,
+        ),
+      );
+      final p = mk();
+      await p.check();
+      expect(p.phase, UpdatePhase.available);
+      await p.snoozeForTest(version: '1.2.48'); // tandai versi + push dilihat
+      await p.check();
+      expect(
+        p.phase,
+        UpdatePhase.idle,
+        reason: 'push yang sama tidak boleh muncul berulang',
+      );
+    });
+
     test('unduhan Play tertunda → auto-complete tanpa popup', () async {
       final client = _FakeClient()
         ..info = AppUpdateInfo(

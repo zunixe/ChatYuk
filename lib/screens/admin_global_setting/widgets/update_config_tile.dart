@@ -5,6 +5,7 @@ import '../../../config/strings_admin.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../core/admin_err.dart';
+import '../../../utils.dart' show formatRelativeTime;
 
 /// Konfigurasi popup update aplikasi (app_settings). Admin mengisi versi
 /// terbaru/minimum + catatan; klien menampilkan popup saat masuk app.
@@ -22,6 +23,7 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
   bool _enabled = false;
   bool _loading = true;
   bool _busy = false;
+  DateTime? _lastPushAt;
 
   @override
   void initState() {
@@ -39,12 +41,14 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
 
   Future<void> _load() async {
     final cfg = await context.read<AdminProvider>().getUpdateConfig();
+    final lastPush = await context.read<AdminProvider>().getUpdatePushAt();
     if (!mounted) return;
     setState(() {
       _enabled = cfg?['update_enabled'] == true;
       _latestCtrl.text = '${cfg?['latest_version'] ?? ''}';
       _minCtrl.text = '${cfg?['min_version'] ?? ''}';
       _notesCtrl.text = '${cfg?['update_notes'] ?? ''}';
+      _lastPushAt = lastPush;
       _loading = false;
     });
   }
@@ -63,6 +67,55 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.adminUpdateSaved)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.adminSaveFailed('$e'))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Push popup update manual: konfirmasi → RPC admin_push_update → refresh
+  /// label waktu. Popup tampil di app user saat mereka membuka app.
+  Future<void> _push() async {
+    final s = context.read<LocaleProvider>().s;
+    if (guardOfflineCtx(
+      context,
+      s.adminNeedsConnection,
+      (m) =>
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m))),
+    )) {
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: Text(s.adminUpdatePushConfirmTitle),
+        content: Text(s.adminUpdatePushConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(s.btnCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: Text(s.adminUpdatePushBtn),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await context.read<AdminProvider>().pushUpdate();
+      final at = await context.read<AdminProvider>().getUpdatePushAt();
+      if (!mounted) return;
+      setState(() => _lastPushAt = at ?? DateTime.now());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.adminUpdatePushDone)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -166,12 +219,37 @@ class _UpdateConfigTileState extends State<UpdateConfigTile> {
               minLines: 2,
             ),
             const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: _busy ? null : _save,
-                child: Text(s.btnSave),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _busy || _loading ? null : _push,
+                    icon: const Icon(Icons.campaign_rounded, size: 18),
+                    label: Text(
+                      s.adminUpdatePushBtn,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton(
+                  onPressed: _busy ? null : _save,
+                  child: Text(s.btnSave),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              s.adminUpdatePushDesc,
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              _lastPushAt == null
+                  ? '${s.adminUpdatePushLastAt}: ${s.adminUpdatePushNever}'
+                  : '${s.adminUpdatePushLastAt}: ${formatRelativeTime(_lastPushAt!, isId: s.isId)}',
+              style: AppText.caption.copyWith(color: AppTheme.textSecondary),
             ),
           ],
         ],

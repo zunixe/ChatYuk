@@ -28,6 +28,15 @@
 - ⚠️ `supabase functions list` / `projects list` kadang lambat tapi selesai — beri timeout ≥120s.
 - ⚠️ Output `db query` berupa JSON `{"rows": [...]}` — grep `"rows"` untuk hasil.
 
+## 2026-09-27 — 20260927010000_posts_image_dims_backfill.sql
+
+- **Status:** SUDAH TERAPPLIED via Management API pada 2026-09-27.
+- **Isi:** backfill `posts.image_w/image_h/image_dims` untuk 7 post LAMA
+  berfoto yang dibuat sebelum 20260927000000 (dimensi dibaca dari file
+  Storage bucket `chat-photos` via skrip Python). Idempoten (`where
+  image_w=0`). Versi dicatat di `schema_migrations`.
+- **Verifikasi:** `sisa_kosong=0` (tidak ada post berfoto dengan image_w=0).
+
 ## 2026-09-27 — 20260927000000_posts_image_dims.sql
 
 - **Status:** SUDAH TERAPPLIED di remote DB `fohcucyyejdryryoxitm` pada 2026-09-27.

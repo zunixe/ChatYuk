@@ -8,7 +8,7 @@ mixin ChatServiceRoomMx on ChatBase {
     return _cachedMessagesStream(cacheKey: 'room_$roomId');
   }
 
-  Future<void> sendRoomMessage({
+  Future<String?> sendRoomMessage({
     required String roomId,
     required String senderId,
     required String senderName,
@@ -44,11 +44,11 @@ mixin ChatServiceRoomMx on ChatBase {
         !StoragePhotoService.instance.isVoicePath(imageData)) {
       throw Exception('Invalid image data');
     }
-    if (type == 'text' && text.isEmpty) return;
+    if (type == 'text' && text.isEmpty) return null;
     if (text.length > 2000) {
       throw Exception('Message too long (max 2000 chars)');
     }
-    await _sb.from('messages').insert({
+    final inserted = await _sb.from('messages').insert({
       'room_id': roomId,
       'sender_id': senderId,
       'sender_name': senderName,
@@ -78,7 +78,22 @@ mixin ChatServiceRoomMx on ChatBase {
       if (repliedToSenderName != null) 'replied_to_sender_name': repliedToSenderName,
       if (isForwarded) 'is_forwarded': true,
       if (mentions.isNotEmpty) 'mentions': Mention.listTo(mentions),
-    });
+    }).select('id').maybeSingle();
+    return (inserted as Map?)?['id']?.toString();
+  }
+
+  /// Perbarui payload lokasi LIVE di room (koordinat bergerak) — hanya `text`.
+  Future<bool> updateLocationMessage(String messageId, String newPayload) async {
+    try {
+      await _sb
+          .from('messages')
+          .update({'text': newPayload})
+          .eq('id', messageId);
+      return true;
+    } catch (e) {
+      dlog('[ChatService] updateRoomLocationMessage error: $e');
+      return false;
+    }
   }
 
   Future<bool> deleteRoomMessage(String messageId) async {

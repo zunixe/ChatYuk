@@ -731,10 +731,10 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     final s = context.read<LocaleProvider>().s;
     // Soft gate anon: banner tipis di atas konten saat fitur anon OFF.
     final anonBanner = auth.anonBlocked;
-    // Tombol Admin Panel melayang (tab Online, admin sungguhan saja).
+    // Tombol Admin Panel melayang (admin sungguhan saja) — tampil di SEMUA
+    // tab supaya tidak "hilang" saat pindah tab. Hanya ikon, tanpa bulatan.
     final showAdminFab =
         AdminGate.panelBuilder != null &&
-        tab == 0 &&
         auth.isRealAdmin &&
         !auth.dummySessionActive;
     return Scaffold(
@@ -821,7 +821,7 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
             ],
           ),
           // Tombol melayang Admin Panel — KIRI BAWAH, di atas menu nav.
-          // Hanya tab Online (0), admin sungguhan (bukan sesi dummy).
+          // Admin sungguhan saja (bukan sesi dummy). Ikon saja, tanpa bulatan.
           if (showAdminFab)
             Positioned(
               left: 14,
@@ -829,10 +829,10 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
               child: SafeArea(
                 child: Tooltip(
                   message: 'Admin Panel',
+                  // Transparan — hanya ikon, tanpa bulatan/background.
                   child: Material(
-                    color: AppTheme.bgCard,
+                    color: Colors.transparent,
                     shape: const CircleBorder(),
-                    elevation: 4,
                     child: InkWell(
                       customBorder: const CircleBorder(),
                       onTap: () {
@@ -847,8 +847,8 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
                         padding: const EdgeInsets.all(10),
                         child: Icon(
                           Icons.admin_panel_settings_outlined,
-                          color: AppTheme.primary,
-                          size: 24,
+                          color: AppTheme.textPrimary,
+                          size: 26,
                         ),
                       ),
                     ),

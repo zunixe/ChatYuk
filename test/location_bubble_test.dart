@@ -47,4 +47,25 @@ void main() {
     expect(find.byType(LocationBubble), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'tap bubble non-interaktif MEMICU aksi (regresi FlutterMap serap gesture)',
+    (tester) async {
+      // Dulu FlutterMap menyerap pointer walau InteractiveFlag.none →
+      // GestureDetector luar tak dapat tap → Maps tak pernah terbuka.
+      var taps = 0;
+      await tester.pumpWidget(
+        host(
+          LocationBubble(
+            location: const ChatLocation(lat: -6.9, lng: 107.6),
+            onTapOverride: () => taps++,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.byType(LocationBubble));
+      await tester.pump();
+      expect(taps, 1, reason: 'tap harus sampai ke pembungkus');
+    },
+  );
 }

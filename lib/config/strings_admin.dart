@@ -975,6 +975,22 @@ extension SAdminExcludeX on S {
       isId ? 'Catatan rilis (Yang baru)' : 'Release notes (What\'s new)';
   String get adminUpdateSaved =>
       isId ? 'Konfigurasi update tersimpan' : 'Update config saved';
+  String get adminUpdatePushBtn =>
+      isId ? 'Kirim Popup Update' : 'Push Update Popup';
+  String get adminUpdatePushDesc => isId
+      ? 'Paksa popup update muncul di aplikasi user saat mereka membuka app — walau sebelumnya sudah menekan "Nanti".'
+      : 'Force the update popup to appear in user apps when they open the app — even if they tapped "Later" before.';
+  String get adminUpdatePushConfirmTitle =>
+      isId ? 'Kirim popup update?' : 'Push update popup?';
+  String get adminUpdatePushConfirmBody => isId
+      ? 'Semua user akan melihat popup update saat membuka aplikasi. Pastikan versi terbaru sudah benar.'
+      : 'All users will see the update popup when they open the app. Make sure the latest version is correct.';
+  String get adminUpdatePushDone =>
+      isId ? 'Popup update dikirim' : 'Update popup pushed';
+  String get adminUpdatePushNever =>
+      isId ? 'Belum pernah dikirim' : 'Never pushed';
+  String get adminUpdatePushLastAt =>
+      isId ? 'Terakhir dikirim' : 'Last pushed';
 
   // ── Pesan error ramah (offline) ──
   // Detail exception mentah TIDAK ditampilkan ke layar (bocorkan URL Supabase

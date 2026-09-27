@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:chatyuk/core/cache/photo_cache.dart';
 import 'package:chatyuk/core/cache/post_photo_cache.dart';
 import 'package:chatyuk/core/cache/media_disk_cache.dart';
+import 'test_helper.dart';
 
 /// Fase 2 — image/cache yang tadinya 0% coverage.
 /// Logic-only: fungsi murni (thumbnail generator, LRU cap, hash nama file)
@@ -18,6 +19,7 @@ Uint8List _jpeg(int w, int h) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('PhotoCache.genThumb — thumbnail chat 512px', () {
     test('base64 gambar besar → thumb 512px JPEG valid', () async {
       final b64 = base64Encode(_jpeg(1600, 1200));
@@ -127,6 +129,46 @@ void main() {
 
     test('cap MediaDiskCache = 250MB', () {
       expect(MediaDiskCache.maxBytes, 250 * 1024 * 1024);
+    });
+  });
+
+  group('PostPhotoCache.thumb — dedupe panggilan paralel (regresi)', () {
+    test('dua panggilan bersamaan path sama → KEDUANYA dapat bytes', () async {
+      mockPathProvider();
+      final cache = PostPhotoCache.instance;
+      var downloads = 0;
+      PostPhotoCache.downloader = (path) async {
+        downloads++;
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        return _jpeg(1200, 800);
+      };
+      addTearDown(() => PostPhotoCache.downloader = null);
+
+      const path = 'posts/regresi_paralel/unique_x.jpg';
+      final f1 = cache.thumb(path);
+      final f2 = cache.thumb(path);
+      final r1 = await f1;
+      final r2 = await f2;
+
+      // Inti bug lama: penelepon kedua dapat null (dianggap gagal) → gambar
+      // tak pernah muncul. Sekarang keduanya menunggu job yang sama.
+      expect(r1, isNotNull, reason: 'penelepon pertama dapat thumb');
+      expect(r2, isNotNull, reason: 'penelepon kedua HARUS dapat thumb juga');
+      expect(downloads, 1, reason: 'hanya 1 download (dedupe)');
+    });
+
+    test('loadMany paralel tidak melewatkan path (semua terisi)', () async {
+      mockPathProvider();
+      final cache = PostPhotoCache.instance;
+      PostPhotoCache.downloader = (path) async => _jpeg(900, 600);
+      addTearDown(() => PostPhotoCache.downloader = null);
+
+      final paths = List.generate(6, (i) => 'posts/regresi_many/img_$i.jpg');
+      final map = await cache.loadMany(paths);
+      expect(map.length, 6, reason: 'semua path harus dapat thumb');
+      for (final p in paths) {
+        expect(map[p], isNotNull);
+      }
     });
   });
 }
