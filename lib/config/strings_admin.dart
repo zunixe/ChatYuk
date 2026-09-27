@@ -64,6 +64,9 @@ extension SAdminX on S {
   String get adminMapStart => isId ? 'Awal' : 'Start';
   String get adminMapEnd => isId ? 'Akhir' : 'End';
   String adminMapPoints(int n) => isId ? '$n titik' : '$n points';
+  String get adminMapSatellite => isId ? 'Satelit' : 'Satellite';
+  String get adminMapStreets => isId ? 'Peta' : 'Map';
+  String get adminMapOpenGoogle => isId ? 'Buka di Google Maps' : 'Open in Google Maps';
   String get adminDeviceNoDevices =>
       isId ? 'Belum ada perangkat tercatat' : 'No devices recorded';
   String get adminDeviceNoChats => isId ? 'Belum ada chat' : 'No chats yet';

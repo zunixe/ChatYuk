@@ -85,7 +85,9 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
     // viewport) tidak memicu unduh video + generate frame. Cegah puluhan
     // video berebut bandwidth saat cold start (gejala "ngeblink").
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_loadPoster());
+      if (mounted && !_locked && widget.videoData.isNotEmpty) {
+        unawaited(_loadPoster());
+      }
     });
   }
 
@@ -311,7 +313,7 @@ class _ChatVideoBubbleState extends State<ChatVideoBubble> {
             ),
             const SizedBox(height: 6),
             Text(
-              s.viewOnceExpired,
+              s.videoOnceExpired,
               style: AppText.chatBodySmall.copyWith(
                 color: AppTheme.textSecondary,
               ),

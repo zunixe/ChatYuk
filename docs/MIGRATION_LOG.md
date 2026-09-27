@@ -1519,3 +1519,18 @@ prioritas lebih rendah.
   → 0; tabel tetap 4687; **SQL tests 20/20 lolos**.
 - **Rollback:** `select cron.unschedule('purge-location-history-90d');
   drop function public.purge_location_history_90d();`
+
+## 2026-09-27 — 20260927110000_view_once_video_expire_policy.sql (APPLY)
+
+- **Masalah:** video "sekali lihat" (type='video_once') di private chat TIDAK
+  terkunci di penerima — bisa diputar ulang selamanya (beda dari foto yang
+  terkunci setelah ditonton). Penyebab: policy
+  `private_messages_update_view_once` hanya mengizinkan `type =
+  'view_once_expired'` (foto) → update penerima ke `video_once_expired`
+  DITOLAK RLS (0 baris). Room bahkan belum punya policy expire sama sekali.
+- **Isi:** perluas WITH CHECK jadi `type in ('view_once_expired',
+  'video_once_expired')` untuk `private_messages` & tambah policy setara
+  untuk `messages` (room; global room = semua login, private room = member).
+  Qual siapa-yang-boleh TIDAK diubah.
+- **Apply:** Management API. Verifikasi (live): kedua policy memuat
+  `video_once_expired` ✅.

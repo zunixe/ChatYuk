@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31+) data extraction rules.
+  Token sesi Supabase disimpan di flutter_secure_storage / SharedPreferences —
+  JANGAN di-backup/restore, supaya reinstall TIDAK mengembalikan sesi lama
+  yang bisa menunjuk user yang sudah tidak ada (mis. setelah db reset lokal).
+  Backup & device transfer dimatikan sepenuhnya.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

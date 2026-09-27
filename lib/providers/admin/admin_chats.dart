@@ -65,9 +65,12 @@ mixin AdminChatsMx on AdminBase {
   }
 
   /// Muat halaman berikutnya (infinite scroll list chat).
-  Future<void> fetchMoreChats() async {
-    if (_chatsFetchingMore || !_chatsHasMore || _chatsLoading) return;
+  /// Return true bila berhasil (halaman termuat) — dipakai auto-load
+  /// kategori untuk berhenti saat jaringan gagal (cegah "muter-muter").
+  Future<bool> fetchMoreChats() async {
+    if (_chatsFetchingMore || !_chatsHasMore || _chatsLoading) return false;
     _chatsFetchingMore = true;
+    var ok = false;
     try {
       final res = await _service.listChats(
         limit: chatPageSize,
@@ -75,16 +78,23 @@ mixin AdminChatsMx on AdminBase {
       );
       final more = List<Map<String, dynamic>>.from(res['items'] ?? const []);
       _chatsTotal = (res['total'] as num?)?.toInt() ?? _chatsTotal;
-      _chats = [..._chats, ...more];
-      _chatsHasMore = _chats.length < _chatsTotal;
+      // Kembar & halaman kosong → hentikan (jangan ulang offset sama).
+      if (more.isEmpty) {
+        _chatsHasMore = false;
+      } else {
+        _chats = [..._chats, ...more];
+        _chatsHasMore = _chats.length < _chatsTotal;
+      }
       _adminUids = (res['admin_uids'] as List<dynamic>? ?? const [])
           .map((e) => '$e')
           .toList();
+      ok = true;
     } catch (e) {
       dlog('[ADMIN] fetchMoreChats error: $e');
     }
     _chatsFetchingMore = false;
     if (!_disposed) notifyListeners();
+    return ok;
   }
 
   /// Refresh daftar chat tanpa loading spinner (untuk polling berkala).

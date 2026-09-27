@@ -354,6 +354,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
                   _onboardItem('💬', s.pointsOnboardChat),
                   _onboardItem('📅', s.pointsOnboardDaily),
                   _onboardItem('⏱️', s.pointsOnboardOnline),
+                  if (_yukcoinV2Active)
+                    _onboardItem('✨', s.pointsOnboardSpend),
                   const SizedBox(height: 6),
                   Row(
                     children: [

@@ -242,6 +242,19 @@ void main() {
     });
   });
 
+  group('tipe kirim video (sekali lihat)', () {
+    // Regresi: video "sekali lihat" terkirim sebagai video BIASA karena
+    // `videoClearPreview()` (yang me-reset flag isOnce) dipanggil SEBELUM
+    // type dibaca. Type harus ditentukan dari nilai yang ditangkap dulu.
+    test('videoSendType: sekali lihat → video_once', () {
+      expect(videoSendType(true), 'video_once');
+    });
+
+    test('videoSendType: biasa → video', () {
+      expect(videoSendType(false), 'video');
+    });
+  });
+
   group('pending + error jaringan', () {
     test('pending id ber-prefix pending- (ditolak reaksi)', () {
       final id = 'pending-${DateTime.now().microsecondsSinceEpoch}';

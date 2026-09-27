@@ -1072,9 +1072,40 @@ class MessageBubble extends StatelessWidget {
                           isQueued: isQueued,
                           isRead: isRead,
                         )
+                      else if (msg.type == 'video_once_expired')
+                        // Video sekali-lihat yang SUDAH kadaluarsa: image_data
+                        // dikosongkan server (pola sama foto view-once). Dulu
+                        // syarat `imageData.isNotEmpty` membuat cabang ini
+                        // dilewati → bubble KOSONG tanpa teks. Sekarang selalu
+                        // tampil kartu "video sudah kadaluarsa".
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ChatVideoBubble(
+                              videoData: msg.imageData,
+                              durationMs: msg.durationMs ?? 0,
+                              // Terkunci untuk PENERIMA. Pengirim tetap boleh
+                              // melihat videonya sendiri (pola sama foto).
+                              locked: !isMe,
+                              isOnce: true,
+                              messageId: msg.id,
+                              isMe: isMe,
+                            ),
+                            if (msg.text.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: MentionAwareText(
+                                  msg.text,
+                                  style: AppText.chatBody.copyWith(
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                  mentions: msg.mentions,
+                                ),
+                              ),
+                          ],
+                        )
                       else if ((msg.type == 'video' ||
-                              msg.type == 'video_once' ||
-                              msg.type == 'video_once_expired') &&
+                              msg.type == 'video_once') &&
                           msg.imageData.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1083,8 +1114,8 @@ class MessageBubble extends StatelessWidget {
                               videoData: msg.imageData,
                               durationMs: msg.durationMs ?? 0,
                               // Sekali lihat: sudah ditonton → terkunci.
-                              locked: msg.type == 'video_once_expired',
-                              isOnce: msg.type != 'video',
+                              locked: false,
+                              isOnce: msg.type == 'video_once',
                               messageId: msg.id,
                               isMe: isMe,
                             ),

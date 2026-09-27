@@ -17,6 +17,7 @@ import '../providers/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/points_provider.dart';
+import 'story_camera_capture_screen.dart';
 import '../providers/social_provider.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
@@ -214,8 +215,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   void chatScrollToBottom() => _scrollToBottom();
 
   @override
-  Future<bool> chatDeleteMessage(String id) =>
-      context.read<ChatProvider>().deletePrivateMessage(id);
+  Future<bool> chatDeleteMessage(String id) async {
+    final ok = await context.read<ChatProvider>().deletePrivateMessage(id);
+    // Optimistic lokal: tandai terhapus SEGERA supaya UI tidak menunggu
+    // realtime/refetch. DB sudah menyimpan semua id, tapi tampilan bisa
+    // tertinggal (gejala "pilih beberapa, hanya 1 yang kelihatan terhapus").
+    if (ok && mounted) {
+      setState(() => _localDeletedIds.add(id));
+    }
+    return ok;
+  }
+
+  /// Id pesan yang baru dihapus secara lokal — jaring supaya UI langsung
+  /// menyembunyikannya walau stream realtime belum sempat memperbarui.
+  final Set<String> _localDeletedIds = {};
 
   @override
   String chatDeletedLabel(S s) => s.messageDeleted;
@@ -275,6 +288,35 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       repliedToText: repliedToText,
       repliedToSenderName: repliedToSenderName,
     );
+  }
+
+  /// Tombol kamera → layar kamera in-app (SAMA seperti Story): preview live +
+  /// toggle Foto/Video DI DALAM kamera. Foto → preview composer; video
+  /// (maks 60 dtk) → kompres → preview.
+  ///
+  /// Bila kamera in-app GAGAL init (sebagian MIUI menutup pipeline kamera
+  /// pihak-ketiga) → fallback ke kamera SISTEM (foto) supaya tombol tetap
+  /// berfungsi.
+  Future<void> _openCameraCapture() async {
+    final result = await Navigator.of(context).push<StoryCaptureResult>(
+      MaterialPageRoute(
+        builder: (_) => const StoryCameraCaptureScreen(maxRecordSecs: 60),
+      ),
+    );
+    if (!mounted) return;
+    if (result == null) {
+      if (StoryCameraCaptureScreen.lastInitFailed) {
+        await photoTakeToPreview();
+      }
+      return;
+    }
+    if (result.isVideo) {
+      await videoFromFileToPreview(result.file.path);
+    } else {
+      final bytes = await result.file.readAsBytes();
+      if (!mounted) return;
+      await photoFromFileToPreview(bytes);
+    }
   }
 
   /// Izinkan → ambil posisi → sheet pilihan (lokasi saat ini / live / tempat
@@ -762,13 +804,25 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       // cocokkan konten — setiap pesan foto terkonfirmasi menghapus satu
       // pending foto tertua (urutan kirim). Hanya pesan yang tiba setelah
       // screen dibuka yang diproses (history lama di-skip via _openedAt).
+      //
+      // PENTING: sertakan 'view_once_expired' — foto sekali-lihat yang sudah
+      // dilihat penerima ditandai server jadi type ini. Pending optimistik
+      // dibuat dengan type 'view_once'; bila versi server datang sebagai
+      // 'view_once_expired' dan TIDAK dicocokkan, pending tidak pernah dibuang
+      // → muncul DUA bubble (bug "foto sekali lihat dobel"). Video sudah
+      // menangani 'video_once_expired'; foto kini disamakan.
       for (final m in msgs) {
         if (mySenderIds.contains(m.senderId) &&
-            (m.type == 'image' || m.type == 'view_once') &&
+            (m.type == 'image' ||
+                m.type == 'view_once' ||
+                m.type == 'view_once_expired') &&
             m.timestamp.isAfter(_openedAt) &&
             _confirmedPhotoIds.add(m.id)) {
           final idx = _pending.indexWhere(
-            (p) => (p.type == 'image' || p.type == 'view_once'),
+            (p) =>
+                (p.type == 'image' ||
+                    p.type == 'view_once' ||
+                    p.type == 'view_once_expired'),
           );
           if (idx != -1) {
             _pending.removeAt(idx);
@@ -2416,11 +2470,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                           onToggleAttach: _toggleAttachRow,
                           onTakePhoto: () {
                             setState(() => _showAttachRow = false);
-                            photoTakeToPreview();
-                          },
-                          onRecordVideo: () {
-                            setState(() => _showAttachRow = false);
-                            videoRecordFromCamera();
+                            _openCameraCapture();
                           },
                           onSendPhoto: () {
                             setState(() => _showAttachRow = false);
