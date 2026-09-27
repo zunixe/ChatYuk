@@ -287,13 +287,13 @@ class _NearbyScreenState extends State<NearbyScreen> {
     if (_loading) {
       return _RadarLoading(caption: s.nearbySearching);
     }
-    if (!_shareOn) {
-      return _emptyState(Icons.location_off, s.nearbyNeedShare, null, s);
-    }
-    // Server menolak karena share_location=false (server = sumber kebenaran;
-    // mis. switch lokal sempat ON padahal update gagal). Arahkan user
-    // mengaktifkan berbagi — simetris: tak berbagi = tak boleh melihat.
+    // Catatan: TIDAK lagi memblokir saat `_shareOn == false`. Keputusan produk
+    // (migrasi 20260928100000): Orang Sekitar menampilkan semua user yang
+    // PUNYA koordinat lat/lon (online/idle) tanpa wajib menekan "bagikan
+    // lokasi". Yang wajib hanya viewer punya lokasi sendiri (GPS) — kalau
+    // tidak, server mengembalikan 'no_location' (ditangani di bawah).
     if (_error == 'share_required') {
+      // Fallback lama: server versi lama masih menolak bila belum share.
       return _emptyState(
         Icons.location_off,
         s.nearbyNeedShare,

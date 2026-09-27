@@ -424,6 +424,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     if (mounted) setState(() => _pendingPhotoBase64 = null);
   }
 
+  // Caption & balasan untuk view-once dari picker (kirim langsung tanpa
+  // preview) — dulu teks yang diketik diabaikan.
+  @override
+  String get photoComposerText => sendMsgCtrl.text;
+  @override
+  MessageModel? get photoReplyingTo => sendReplyingTo;
+  @override
+  void photoClearComposerText() {
+    sendMsgCtrl.clear();
+    if (mounted) setState(() => sendReplyingTo = null);
+  }
+
   @override
   String get photoUploadChatId => widget.chatId;
 

@@ -58,7 +58,35 @@ class CallService {
     final patch = <String, dynamic>{'status': status};
     if (status == 'answered') patch['answered_at'] = now;
     if (status == 'ended' || status == 'canceled') patch['ended_at'] = now;
+    // Status TERMINAL (ended/canceled) pakai retry: kalau penelepon menekan
+    // akhiri di jaringan jelek dan update sekali gagal, lawan TIDAK pernah
+    // tahu → tetap "menghubungkan…" padahal penelepon sudah gagal/keluar.
+    // Status lain (answered/ringing) tidak diulang: berulang bisa menimpa
+    // status yang lebih baru (mis. race terima vs tolak).
+    if (status == 'ended' || status == 'canceled') {
+      await _updateStatusWithRetry(callId, patch);
+      return;
+    }
     await _sb.from('calls').update(patch).eq('id', callId);
+  }
+
+  /// Update status terminal dengan retry singkat (≤3 percobaan, jeda pendek).
+  /// Best-effort: menyerah tanpa melempar — UI sudah ditutup optimistis.
+  Future<void> _updateStatusWithRetry(
+    String callId,
+    Map<String, dynamic> patch,
+  ) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        await _sb.from('calls').update(patch).eq('id', callId);
+        return;
+      } catch (e) {
+        dlog('[CallService] updateStatus retry $attempt gagal: $e');
+        if (attempt < 2) {
+          await Future<void>.delayed(Duration(milliseconds: 400 * (attempt + 1)));
+        }
+      }
+    }
   }
 
   Future<Map<String, dynamic>?> getCall(String callId) async {
@@ -457,12 +485,38 @@ class CallSession extends ChangeNotifier {
     } else {
       _phase = CallPhase.connecting;
       dlog('[SESSION] init#${hashCode} tail -> connecting (callee)');
+      // RACE: penelepon bisa menekan akhiri SETELAH cek status awal di atas
+      // tapi SEBELUM langganan realtime benar-benar aktif — Realtime tidak
+      // me-replay event lama → penerima nyangkut "menghubungkan…" padahal
+      // penelepon sudah gagal. Poll pendek menutup celah itu.
+      unawaited(_watchCallerAlive());
     }
     notifyListeners();
     // Re-sync berkala sebagai jaring pengaman bila realtime signal terlewat.
     // 12 dtk (dulu 2 dtk) — realtime onSignal/onCallStatus jalur utama;
     // _syncAll skip sendiri saat sudah connected & ICE stabil.
     _syncTimer = Timer.periodic(const Duration(seconds: 12), (_) => _syncAll());
+  }
+
+  /// Pengaman sisi PENERIMA: selama masih `connecting` (belum tersambung),
+  /// cek status call berkala. Kalau penelepon sudah membatalkan/mengakhiri
+  /// tapi event realtime-nya terlewat (race langganan), tutup di sini supaya
+  /// layar tidak nyangkut "menghubungkan…". Berhenti otomatis saat tersambung
+  /// atau sesi ditutup.
+  Future<void> _watchCallerAlive() async {
+    for (var i = 0; i < 8; i++) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (_closed || _phase == CallPhase.inCall) return;
+      try {
+        final row = await _service.getCall(callId);
+        final st = row?['status'] as String?;
+        if (st == 'canceled' || st == 'ended') {
+          dlog('[SESSION] callee: caller sudah $st (poll) -> tutup');
+          _finish(CallEndReason.canceled);
+          return;
+        }
+      } catch (_) {}
+    }
   }
 
   Future<void> _setupMediaAndPeer() async {

@@ -108,6 +108,16 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
   /// Set status sekali-lihat video. Room: no-op.
   void videoSetOnce(bool value) {}
 
+  /// Teks caption yang sedang diketik di composer (view-once picker mengirim
+  /// langsung, jadi harus menangkap teks SAAT INI). Default kosong.
+  String get photoComposerText => '';
+
+  /// Balasan yang sedang aktif (untuk view-once). Default null.
+  MessageModel? get photoReplyingTo => null;
+
+  /// Bersihkan composer + status balas setelah view-once terkirim.
+  void photoClearComposerText() {}
+
   final ImagePicker _photoPicker = ImagePicker();
 
   ImagePicker get photoPicker => _photoPicker;
@@ -180,16 +190,38 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     return base64;
   }
 
-  /// Kirim view-once (watermark bila aktif).
-  Future<void> sendViewOnceFromPicker() async {
+  /// Ambil bytes gambar untuk view-once (default: galeri). Di-override di
+  /// test supaya alur caption bisa diuji tanpa plugin image_picker.
+  Future<Uint8List?> pickViewOnceImage() async {
     final picked = await _photoPicker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    if (!mounted) return;
+    if (picked == null) return null;
+    return picked.readAsBytes();
+  }
+
+  /// Proses bytes → base64 (watermark view-once bila aktif). Di-override di
+  /// test supaya alur caption diuji tanpa `compute()` (isolate di test-fake
+  /// bisa menggantung).
+  Future<String?> processViewOnceBytes(Uint8List bytes) async {
     final auth = context.read<AuthProvider>();
-    final base64 = await (auth.watermarkEnabled
+    return auth.watermarkEnabled
         ? compute(processViewOnceImage, (bytes, photoSeed))
-        : compute(processChatPhoto, bytes));
+        : compute(processChatPhoto, bytes);
+  }
+
+  /// Kirim view-once (watermark bila aktif).
+  ///
+  /// View-once dari picker mengirim LANGSUNG (tanpa preview), jadi caption
+  /// harus ditangkap dari composer SAAT INI (dulu caption diabaikan → teks
+  /// yang diketik hilang saat kirim foto sekali-lihat).
+  Future<void> sendViewOnceFromPicker() async {
+    // Tangkap caption & balasan SEBELUM buka galeri (picker async; teks user
+    // saat menekan "sekali lihat" yang dipakai).
+    final caption = capitalizeFirst(photoComposerText.trim());
+    final reply = photoReplyingTo;
+    final bytes = await pickViewOnceImage();
+    if (bytes == null) return;
+    if (!mounted) return;
+    final base64 = await processViewOnceBytes(bytes);
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
@@ -200,7 +232,15 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       return;
     }
     if (!mounted) return;
-    await _sendImageLike(base64: base64, kind: 'view_once', type: 'view_once');
+    // Bersihkan composer lebih dulu supaya teks tidak tertinggal/dobel.
+    if (caption.isNotEmpty || reply != null) photoClearComposerText();
+    await _sendImageLike(
+      base64: base64,
+      kind: 'view_once',
+      type: 'view_once',
+      text: caption,
+      reply: reply,
+    );
   }
 
   // ── VIDEO (private chat) ──

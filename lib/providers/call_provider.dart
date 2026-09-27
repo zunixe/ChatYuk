@@ -223,7 +223,7 @@ class CallProvider extends ChangeNotifier {
     dlog('[CallProvider] listening incoming calls (uid=${_service.uid})');
   }
 
-  void _onIncoming(Map<String, dynamic> row) async {
+  void _onIncoming(Map<String, dynamic> row) {
     final callId = row['id'] as String?;
     if (callId == null) return;
     final callerUid = row['caller_id'] as String? ?? '';
@@ -231,9 +231,11 @@ class CallProvider extends ChangeNotifier {
 
     if (_activeCallId != null) {
       // Sedang di call → tandai busy (caller melihat status busy).
-      try {
-        await _service.updateStatus(callId, 'busy');
-      } catch (_) {}
+      // Fire-and-forget: JANGAN tahan callback realtime — dulu `await` di
+      // sini menunda semua event panggilan berikutnya.
+      if (_activeCallId != callId) {
+        unawaited(_service.updateStatus(callId, 'busy').catchError((_) {}));
+      }
       return;
     }
     if (_activeCallId == callId) return;
