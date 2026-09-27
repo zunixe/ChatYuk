@@ -75,7 +75,7 @@ void main() {
             repliedToSenderName: any(named: 'repliedToSenderName'),
             isForwarded: any(named: 'isForwarded'),
             mentions: any(named: 'mentions'),
-          )).thenAnswer((_) async {});
+          )).thenAnswer((_) async => '');
       await provider.sendRoomMessage(
         roomId: 'r1',
         senderId: 'u1',
@@ -116,7 +116,7 @@ void main() {
             repliedToSenderName: any(named: 'repliedToSenderName'),
             isForwarded: any(named: 'isForwarded'),
             mentions: any(named: 'mentions'),
-          )).thenAnswer((_) async {});
+          )).thenAnswer((_) async => '');
       await provider.sendPrivateMessage(
         chatId: 'c1',
         senderId: 'u1',

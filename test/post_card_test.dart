@@ -161,24 +161,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('foto 1:1 → lebar ~83% area konten (ala Threads), tanpa error',
-      (tester) async {
+  testWidgets('foto single 1:1 → lebar PENUH area konten (736)', (tester) async {
     await pump(
       tester,
       _post(images: [_pngBase64], imageW: 1000, imageH: 1000),
     );
     expect(tester.takeException(), isNull);
-    // Lebar ~83% area konten (layar 800 − pad 48 − 16 = 736; 83% ≈ 611).
+    // Area konten = layar 800 − pad 48 − 16 = 736.
     final f = find.byKey(const ValueKey('photo_placeholder'));
     expect(f, findsOneWidget, reason: 'ada kotak foto placeholder');
     final size = tester.getSize(f);
     // ignore: avoid_print
     print('DEBUG lebar foto single = ${size.width} (area konten 736)');
-    expect(size.width, closeTo(611, 3),
-        reason: 'foto single harus ~83% area konten (ala Threads)');
+    expect(size.width, closeTo(736, 3),
+        reason: 'foto single harus selebar area konten (sampai padding)');
+    expect(size.height, closeTo(736, 3), reason: 'rasio 1:1 → tinggi = lebar');
   });
 
-  testWidgets('foto 9:16 portrait → lebar menyempit (tinggi dicap), tanpa error',
+  testWidgets('foto single 9:16 portrait → lebar penuh, tinggi sesuai rasio',
       (tester) async {
     await pump(
       tester,
@@ -188,28 +188,31 @@ void main() {
     final f = find.byKey(const ValueKey('photo_placeholder'));
     expect(f, findsOneWidget);
     final s = tester.getSize(f);
-    // Portrait ekstrem: tinggi dicap 1.25× lebar area → lebar menyempit,
-    // tidak lebih besar dari 83%.
-    expect(s.width, lessThanOrEqualTo(611));
-    expect(s.height, closeTo(736 * 1.25, 3));
+    expect(s.width, closeTo(736, 3));
+    expect(s.height, closeTo(736 * 1920 / 1080, 3),
+        reason: 'tinggi mengikuti rasio asli 9:16');
   });
 
-  testWidgets('foto 16:9 landscape → tinggi ter-clamp min 0.5×lebar',
+  testWidgets('multi-foto → baris horizontal, beberapa foto sekaligus',
       (tester) async {
+    // 3 foto 9:16 (1200x2670) seperti post SimpleMe.
     await pump(
       tester,
-      _post(images: [_pngBase64], imageW: 1920, imageH: 1080),
+      _post(
+        images: [_pngBase64, _pngBase64, _pngBase64],
+        imageW: 1200,
+        imageH: 2670,
+      ),
     );
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('multi-foto (carousel 4:5) tanpa dimensi → tanpa error',
-      (tester) async {
-    await pump(
-      tester,
-      _post(images: [_pngBase64, _pngBase64]),
-    );
-    expect(tester.takeException(), isNull);
+    // Placeholder multi = 1 item (lebar ±48% area). 736 × 0.48 ≈ 353.
+    final f = find.byKey(const ValueKey('photo_placeholder'));
+    expect(f, findsOneWidget);
+    final s = tester.getSize(f);
+    expect(s.width, closeTo(353, 4),
+        reason: 'tiap foto multi ±48% area → 2 foto terlihat sekaligus');
+    expect(s.height, lessThan(736 * 1.4 + 1),
+        reason: 'tinggi dicap agar tidak terlalu tinggi');
   });
 
   testWidgets('post foto tanpa imageW/H (post lama) → fallback aman',

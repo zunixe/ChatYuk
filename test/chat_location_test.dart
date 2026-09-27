@@ -32,6 +32,61 @@ void main() {
       const loc = ChatLocation(lat: 1.5, lng: 2.5);
       expect(loc.mapsUrl, contains('query=1.5,2.5'));
     });
+
+    test('roundtrip tempat + akurasi', () {
+      const loc = ChatLocation(
+        lat: -6.2,
+        lng: 106.8,
+        label: 'Jl. Mukodar Tengah, Cimahi',
+        place: 'Masjid Al Ikhlas',
+        accuracyM: 4,
+      );
+      final p = parseLocation(loc.encode())!;
+      expect(p.place, 'Masjid Al Ikhlas');
+      expect(p.accuracyM, 4);
+      expect(p.live, isFalse);
+      expect(p.expiresAt, isNull);
+    });
+
+    test('roundtrip lokasi live + expiresAt', () {
+      final exp = DateTime.utc(2026, 1, 1, 10, 0);
+      final loc = ChatLocation(
+        lat: -6.2,
+        lng: 106.8,
+        live: true,
+        expiresAt: exp,
+      );
+      final p = parseLocation(loc.encode())!;
+      expect(p.live, isTrue);
+      expect(p.expiresAt, exp);
+      expect(p.isLiveActive, isFalse, reason: 'exp sudah lewat');
+    });
+
+    test('isLiveActive true bila belum kedaluwarsa', () {
+      final loc = ChatLocation(
+        lat: 1,
+        lng: 2,
+        live: true,
+        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 15)),
+      );
+      expect(loc.isLiveActive, isTrue);
+    });
+
+    test('copyWith pertahankan live/expiresAt', () {
+      final loc = ChatLocation(
+        lat: 1,
+        lng: 2,
+        live: true,
+        place: 'Kafe',
+        expiresAt: DateTime.utc(2027),
+      );
+      final u = loc.copyWith(lat: 5, lng: 6);
+      expect(u.lat, 5);
+      expect(u.lng, 6);
+      expect(u.live, isTrue);
+      expect(u.place, 'Kafe');
+      expect(u.expiresAt, DateTime.utc(2027));
+    });
   });
 
   group('parseLocation — input tidak valid', () {

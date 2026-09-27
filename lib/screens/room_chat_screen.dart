@@ -21,6 +21,7 @@ import '../providers/storage_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/location_provider.dart';
 import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../utils.dart';
@@ -1501,6 +1502,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     _presenceTimer?.cancel();
     _roomUsersEmptyTimer?.cancel();
     _livePoll?.cancel();
+    _liveTimer?.cancel();
     _giftFly.dispose();
     unawaited(_msgsSub?.cancel());
     _msgsSub = null;
@@ -1608,8 +1610,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   }
 
 
-  /// Izinkan → ambil posisi → sheet peta → TARUH di preview composer.
-  /// Konfirmasi (room banyak orang) + kirim terjadi di tombol send.
+  /// Izinkan → ambil posisi → sheet pilihan → konfirmasi (room) → LANGSUNG
+  /// terkirim ke chat (tanpa preview/caption).
   Future<void> _sendLocation() async {
     setState(() => _showAttachRow = false);
     final picked = await pickChatLocation(
@@ -1617,11 +1619,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       messenger: ScaffoldMessenger.of(context),
     );
     if (picked == null || !mounted) return;
-    setState(() {
-      _pendingLocation = picked;
-      _pendingPhotoBase64 = null;
-      photoClearPreviewState();
-    });
+    await sendLocationFromPreviewAt(picked);
   }
 
   ChatLocation? _pendingLocation;
@@ -1662,15 +1660,21 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       ),
     );
     if (ok != true || !mounted) return;
-    // Caption ikut terkirim di dalam payload (bukan pesan terpisah).
+    // Caption ikut terkirim di dalam payload (bukan pesan terpisah);
+    // place/live/expiresAt dibawa apa adanya (lokasi & lokasi live).
     final payload = ChatLocation(
       lat: loc.lat,
       lng: loc.lng,
       label: loc.label,
       caption: text.trim(),
+      place: loc.place,
+      live: loc.live,
+      expiresAt: loc.expiresAt,
+      accuracyM: loc.accuracyM,
     );
+    String? sentId;
     try {
-      await context.read<ChatProvider>().sendRoomMessage(
+      sentId = await context.read<ChatProvider>().sendRoomMessage(
         roomId: widget.room.id,
         senderId: uid,
         senderName: profile.nickname,
@@ -1692,6 +1696,31 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       setState(() => _pendingLocation = null);
       _scrollToBottom();
     }
+    // Lokasi LIVE → mulai kirim pembaruan posisi berkala sampai kedaluwarsa.
+    if (payload.live && sentId != null && payload.expiresAt != null) {
+      _startLiveLocationUpdates(sentId, payload);
+    }
+  }
+
+  Timer? _liveTimer;
+
+  /// Kirim pembaruan koordinat lokasi live (room) tiap 30 detik.
+  void _startLiveLocationUpdates(String messageId, ChatLocation initial) {
+    _liveTimer?.cancel();
+    final lp = context.read<LocationProvider>();
+    _liveTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
+      final exp = initial.expiresAt;
+      if (exp == null || DateTime.now().toUtc().isAfter(exp)) {
+        t.cancel();
+        return;
+      }
+      final pos = await lp.precisePosition();
+      if (pos == null || !mounted) return;
+      final updated = initial.copyWith(lat: pos.$1, lng: pos.$2);
+      await context
+          .read<ChatProvider>()
+          .updateRoomLocationMessage(messageId, updated.encode());
+    });
   }
 
   Future<void> _sendVoiceMessage(String filePath, int durationMs) async {

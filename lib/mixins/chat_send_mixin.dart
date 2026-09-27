@@ -7,7 +7,7 @@ import '../providers/locale_provider.dart';
 import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/chat_location.dart';
-import '../utils.dart' show capitalizeFirst, dlog;
+import '../utils.dart' show capitalizeFirst;
 import '../utils/mention.dart';
 import '../widgets/anon_prompt_dialog.dart';
 import 'chat_outbox_mixin.dart';
@@ -103,7 +103,6 @@ mixin ChatSendMixin<T extends StatefulWidget>
 
   /// Alur kirim tunggal.
   Future<void> sendMessage() async {
-    dlog('[SEND] start text="${sendMsgCtrl.text}" photo=${sendPendingPhotoBase64 != null} video=$sendPendingVideoPath loc=${sendPendingLocation != null}');
     final raw = sendMsgCtrl.text.trim();
     // Kapitalkan huruf pertama saat kirim PESAN BARU (gaya WhatsApp).
     final text = capitalizeFirst(raw);

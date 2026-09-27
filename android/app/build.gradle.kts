@@ -163,6 +163,16 @@ flutter {
     source = "../.."
 }
 
+// Plugin facebook_app_events memakai versi DINAMIS `[18.0,19.0)` yang harus
+// resolve metadata Maven tiap build → rawan gagal ("Repository MavenRepo is
+// disabled due to earlier error") saat jaringan lambat. Pin ke versi stabil
+// yang sudah ter-cache (18.3.0).
+configurations.configureEach {
+    resolutionStrategy {
+        force("com.facebook.android:facebook-android-sdk:18.3.0")
+    }
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // Firebase Messaging di classpath APLIKASI — dibutuhkan agar

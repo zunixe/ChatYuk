@@ -399,6 +399,19 @@ class S {
       ? 'Kirim lokasi ini ke semua anggota room?'
       : 'Send this location to everyone in the room?';
   String get locSendRoomTitle => isId ? 'Kirim Lokasi' : 'Send Location';
+  String get locSendCurrent =>
+      isId ? 'Kirim lokasi saat ini' : 'Send your current location';
+  String get locLiveTitle =>
+      isId ? 'Bagikan lokasi live' : 'Share live location';
+  String get locNearbyTitle => isId ? 'Tempat sekitar' : 'Nearby places';
+  String locAccuracyTo(int m) =>
+      isId ? 'Akurasi ±$m meter' : 'Accurate to $m meters';
+  String locLiveMin(int m) => isId ? '$m menit' : '$m min';
+  String locLiveHour(int h) => isId ? '$h jam' : '$h hr';
+  String get locLiveEnded =>
+      isId ? 'Lokasi live berakhir' : 'Live location ended';
+  String get locLiveActive => isId ? 'Lokasi live' : 'Live location';
+  String locLiveRemaining(int m) => isId ? 'berakhir $m menit' : '$m min left';
   String get msgViewOnce => isId ? '[Foto Sekali Lihat]' : '[View Once Photo]';
   String get viewOnceTap =>
       isId ? 'Tekan untuk melihat (10 detik)' : 'Tap to view (10 seconds)';

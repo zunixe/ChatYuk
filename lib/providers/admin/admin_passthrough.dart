@@ -48,6 +48,12 @@ mixin AdminPassthroughMx on AdminBase {
         notes: notes,
       );
 
+  /// Push popup update manual ke semua app user (saat mereka membuka app).
+  Future<void> pushUpdate() => _service.pushUpdate();
+
+  /// Waktu push manual terakhir (untuk label status di UI admin).
+  Future<DateTime?> getUpdatePushAt() => _service.getUpdatePushAt();
+
   Future<Map<String, dynamic>> getPointSettings() => _service.getPointSettings();
   Future<Map<String, dynamic>> updatePointSettings(Map<String, dynamic> p) =>
       _service.updatePointSettings(p);

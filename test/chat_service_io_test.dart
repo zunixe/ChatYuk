@@ -13,7 +13,7 @@ void main() {
   group('sendRoomMessage (I/O palsu)', () {
     test('teks: insert ke tabel messages + kolom wajib', () async {
       final handler = FakeSupabaseHandler();
-      handler.on('/rest/v1/messages', (_) => []);
+      handler.on('/rest/v1/messages', (_) => {'id': 'm-new'});
       final svc = ChatService(fakeSupabaseClient(handler: handler));
 
       await svc.sendRoomMessage(
@@ -38,7 +38,7 @@ void main() {
 
     test('mention: kolom mentions terkirim', () async {
       final handler = FakeSupabaseHandler();
-      handler.on('/rest/v1/messages', (_) => []);
+      handler.on('/rest/v1/messages', (_) => {'id': 'm-new'});
       final svc = ChatService(fakeSupabaseClient(handler: handler));
 
       await svc.sendRoomMessage(

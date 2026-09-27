@@ -57,8 +57,12 @@ class PostPhotoCache {
   static const _memMaxBytes = 30 * 1024 * 1024;
   int _memBytes = 0;
 
-  // Path yang sedang di-download (dedupe panggilan paralel).
-  final Set<String> _inflight = {};
+  // Job yang sedang berjalan per path — penelepon kedua MENUNGGU hasil yang
+  // sama, bukan "dilewati lalu dianggap gagal". Dulu pakai Set<String> +
+  // `return null` untuk path in-flight → saat dua kartu/rebuild meminta path
+  // yang sama bersamaan, penelepon kedua dapat null → ditandai GAGAL
+  // permanen → gambar tidak pernah muncul ("tidak semua gambar keload").
+  final Map<String, Future<Uint8List?>> _jobs = {};
 
   void _memPut(String path, Uint8List bytes) {
     _mem.remove(path);
@@ -90,12 +94,22 @@ class PostPhotoCache {
       File('${folder.path}/${path.hashCode}.full.jpg');
 
   /// Ambil thumbnail foto post. [path] adalah path storage (mis. `posts/uid/ts.jpg`).
-  Future<Uint8List?> thumb(String path) async {
-    if (path.isEmpty) return null;
+  /// Penelepon paralel untuk path sama menunggu job yang sama (bukan gagal).
+  Future<Uint8List?> thumb(String path) {
+    if (path.isEmpty) return Future.value(null);
     final mem = _memGet(path);
-    if (mem != null) return mem;
-    if (_inflight.contains(path)) return null;
-    _inflight.add(path);
+    if (mem != null) return Future.value(mem);
+    final existing = _jobs[path];
+    if (existing != null) return existing;
+    final job = _fetchThumb(path);
+    _jobs[path] = job;
+    return job.whenComplete(() {
+      // Hapus HANYA job ini (job pengganti tak boleh ikut terhapus).
+      if (identical(_jobs[path], job)) _jobs.remove(path);
+    });
+  }
+
+  Future<Uint8List?> _fetchThumb(String path) async {
     try {
       final folder = await _folder();
       final f = _fileFor(folder, path);
@@ -115,8 +129,6 @@ class PostPhotoCache {
     } catch (e) {
       dlog('[PostPhotoCache] thumb error: $e');
       return null;
-    } finally {
-      _inflight.remove(path);
     }
   }
 
@@ -136,58 +148,24 @@ class PostPhotoCache {
     }
     if (missing.isEmpty) return result;
 
-    // Tandai semua path yang akan dikerjakan sebagai in-flight (dedupe),
-    // dan pastikan SELALU dibersihkan di finally — kalau tidak, path yang
-    // gagal akan stuck in-flight dan tidak pernah ditampilkan lagi.
-    final claimed = <String>[];
-    for (final p in missing) {
-      if (!_inflight.contains(p)) {
-        _inflight.add(p);
-        claimed.add(p);
+    // Paralel maks 4. `thumb()` men-dedupe via `_jobs`, jadi miss yang sama
+    // dari kartu lain menunggu job yang sama (tidak ada path yang dilewati).
+    var next = 0;
+    Future<void> worker() async {
+      while (true) {
+        final idx = next++;
+        if (idx >= missing.length) return;
+        final p = missing[idx];
+        try {
+          final t = await thumb(p);
+          if (t != null) result[p] = t;
+        } catch (_) {}
       }
     }
-    try {
-      // Batch: cek disk dulu untuk semua, sisanya download.
-      final folder = await _folder();
-      final toFetch = <String>[];
-      for (final p in claimed) {
-        final f = _fileFor(folder, p);
-        if (await f.exists()) {
-          final bytes = await f.readAsBytes();
-          _memPut(p, bytes);
-          result[p] = bytes;
-        } else {
-          toFetch.add(p);
-        }
-      }
-      var next = 0;
-      Future<void> worker() async {
-        while (true) {
-          final idx = next++;
-          if (idx >= toFetch.length) return;
-          final p = toFetch[idx];
-          try {
-            final full = await (downloader?.call(p) ?? Future<Uint8List?>.value());
-            if (full == null) continue;
-            final thumb = await compute(genPostThumb, full);
-            if (thumb == null) continue;
-            _memPut(p, thumb);
-            _writeFileAsync(folder, _fileFor(folder, p), thumb);
-            result[p] = thumb;
-          } catch (_) {}
-        }
-      }
 
-      await Future.wait(
-        List.generate(toFetch.length.clamp(0, 4), (_) => worker()),
-      );
-    } catch (e) {
-      dlog('[PostPhotoCache] loadMany error: $e');
-    } finally {
-      for (final p in claimed) {
-        _inflight.remove(p);
-      }
-    }
+    await Future.wait(
+      List.generate(missing.length.clamp(0, 4), (_) => worker()),
+    );
     return result;
   }
 

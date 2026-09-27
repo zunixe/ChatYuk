@@ -1202,3 +1202,16 @@ frozen-functions guard + snapshot ada.
   dipertahankan; idempotent drop+add).
 - **Apply:** Management API. Verifikasi (live): kedua constraint kini memuat
   `'location'` ✅ (query `pg_constraint`).
+
+## 2026-09-27 — 20260927090000_update_manual_push.sql (APPLY)
+
+- **Fitur:** tombol "Kirim Popup Update" di admin panel — admin memicu popup
+  update manual (mis. user menekan "Nanti"/snooze, atau catatan penting baru).
+- **Isi:** `app_settings.update_push_at timestamptz` (stempel push terakhir)
+  + RPC `admin_push_update()` (SECURITY DEFINER, guard `is_admin_request()`,
+  set `update_push_at = now()`). Grants: authenticated + service_role.
+- **Alur klien:** saat app DIBUKA, klien banding `update_push_at` server vs
+  waktu push terakhir yang dilihat (prefs). Lebih baru → tampilkan popup
+  walau versi sudah di-snooze. Tidak perlu app dibuka saat push.
+- **Apply:** Management API. Verifikasi (live): kolom `update_push_at`
+  (timestamptz) + fungsi `admin_push_update` ada ✅.

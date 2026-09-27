@@ -690,4 +690,27 @@ class AdminService {
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     }, onConflict: 'id');
   }
+
+  /// Push popup update MANUAL: set `app_settings.update_push_at = now()`.
+  /// Klien menampilkan popup saat app dibuka bila stempel ini lebih baru
+  /// dari push terakhir yang dilihat user. RPC guard admin.
+  Future<void> pushUpdate() async {
+    await _rpc('admin_push_update');
+  }
+
+  /// Waktu push manual terakhir (null bila belum pernah). Dipakai UI admin
+  /// untuk menampilkan status "terakhir dikirim ...".
+  Future<DateTime?> getUpdatePushAt() async {
+    try {
+      final row = await _sb
+          .from('app_settings')
+          .select('update_push_at')
+          .eq('id', 'global')
+          .maybeSingle();
+      final raw = row?['update_push_at'];
+      return raw is String ? DateTime.tryParse(raw)?.toLocal() : null;
+    } catch (_) {
+      return null;
+    }
+  }
 }

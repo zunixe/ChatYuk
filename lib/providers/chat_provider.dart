@@ -30,7 +30,7 @@ class ChatProvider extends ChangeNotifier {
     return _service.getRoomMessages(roomId);
   }
 
-  Future<void> sendRoomMessage({
+  Future<String?> sendRoomMessage({
     required String roomId,
     required String senderId,
     required String senderName,
@@ -44,23 +44,26 @@ class ChatProvider extends ChangeNotifier {
     String? repliedToSenderName,
     bool isForwarded = false,
     List<Mention> mentions = const [],
-  }) async {
-    await _service.sendRoomMessage(
-      roomId: roomId,
-      senderId: senderId,
-      senderName: senderName,
-      senderGender: senderGender,
-      text: text,
-      type: type,
-      imageData: imageData,
-      durationMs: durationMs,
-      repliedToId: repliedToId,
-      repliedToText: repliedToText,
-      repliedToSenderName: repliedToSenderName,
-      isForwarded: isForwarded,
-      mentions: mentions,
-    );
-  }
+  }) =>
+      _service.sendRoomMessage(
+        roomId: roomId,
+        senderId: senderId,
+        senderName: senderName,
+        senderGender: senderGender,
+        text: text,
+        type: type,
+        imageData: imageData,
+        durationMs: durationMs,
+        repliedToId: repliedToId,
+        repliedToText: repliedToText,
+        repliedToSenderName: repliedToSenderName,
+        isForwarded: isForwarded,
+        mentions: mentions,
+      );
+
+  /// Perbarui payload lokasi live di room.
+  Future<bool> updateRoomLocationMessage(String id, String payload) =>
+      _service.updateLocationMessage(id, payload);
 
   Future<bool> deleteRoomMessage(String messageId) async {
     return _service.deleteRoomMessage(messageId);
@@ -152,7 +155,7 @@ class ChatProvider extends ChangeNotifier {
   void sendTyping(String chatId, {String kind = 'typing'}) =>
       _service.sendTyping(chatId, kind: kind);
 
-  Future<void> sendPrivateMessage({
+  Future<String?> sendPrivateMessage({
     required String chatId,
     required String senderId,
     required String senderName,
@@ -166,23 +169,22 @@ class ChatProvider extends ChangeNotifier {
     String? repliedToSenderName,
     bool isForwarded = false,
     List<Mention> mentions = const [],
-  }) async {
-    await _service.sendPrivateMessage(
-      chatId: chatId,
-      senderId: senderId,
-      senderName: senderName,
-      senderGender: senderGender,
-      text: text,
-      type: type,
-      imageData: imageData,
-      durationMs: durationMs,
-      repliedToId: repliedToId,
-      repliedToText: repliedToText,
-      repliedToSenderName: repliedToSenderName,
-      isForwarded: isForwarded,
-      mentions: mentions,
-    );
-  }
+  }) =>
+      _service.sendPrivateMessage(
+        chatId: chatId,
+        senderId: senderId,
+        senderName: senderName,
+        senderGender: senderGender,
+        text: text,
+        type: type,
+        imageData: imageData,
+        durationMs: durationMs,
+        repliedToId: repliedToId,
+        repliedToText: repliedToText,
+        repliedToSenderName: repliedToSenderName,
+        isForwarded: isForwarded,
+        mentions: mentions,
+      );
 
   Future<void> markAsRead(String chatId, String uid) async {
     await _service.markAsRead(chatId, uid);
@@ -311,6 +313,10 @@ class ChatProvider extends ChangeNotifier {
   // ── Passthrough agar screen tidak import ChatService (Fase 9b) ──
   Future<bool> editPrivateMessage(String id, String text) =>
       _service.editPrivateMessage(id, text);
+
+  /// Perbarui payload lokasi live (koordinat bergerak) — hanya `text`.
+  Future<bool> updateLocationMessage(String id, String payload) =>
+      _service.updateLocationMessage(id, payload);
   Future<bool> editRoomMessage(String id, String text) =>
       _service.editRoomMessage(id, text);
   void prefetchPrivateChat(String chatId) => _service.prefetchPrivateChat(chatId);

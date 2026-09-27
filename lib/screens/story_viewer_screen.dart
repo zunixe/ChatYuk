@@ -19,6 +19,7 @@ import '../../../providers/story_provider.dart';
 import '../../../core/cache/media_disk_cache.dart';
 import '../../../utils.dart';
 import '../../../widgets/story_text_overlay.dart';
+import '../../../widgets/story_viewer_avatar.dart';
 import '../../../core/perf/perf_probe.dart';
 
 /// Cache RAM bytes slide (path → image) — bertahan antar slide/penonton
@@ -672,7 +673,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     final v = list[i];
                     return ListTile(
                       dense: true,
-                      leading: _viewerAvatar(v.avatar, v.nickname),
+                      leading: StoryViewerAvatar(
+                        viewerId: v.viewerId,
+                        avatar: v.avatar,
+                        nickname: v.nickname,
+                      ),
                       title: Text(v.nickname, style: AppText.bodyStrong),
                       subtitle: Text(
                         formatRelativeTime(v.viewedAt.toLocal(), isId: s.isId),
@@ -698,34 +703,6 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     } finally {
       _viewersOpen = false;
     }
-  }
-
-  Widget _viewerAvatar(String avatar, String nickname) {
-    Uint8List? bytes;
-    if (avatar.isNotEmpty &&
-        !context.read<StorageProvider>().isAvatarPath(avatar)) {
-      try {
-        bytes = base64Decode(avatar);
-      } catch (_) {}
-    }
-    return CircleAvatar(
-      radius: 16,
-      backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
-      // Avatar mungil (radius 16) — cap decode.
-      backgroundImage: bytes != null
-          ? ResizeImage(MemoryImage(bytes), width: 64)
-          : null,
-      child: bytes != null
-          ? null
-          : Text(
-              nickname.isNotEmpty ? nickname[0].toUpperCase() : '?',
-              style: TextStyle(
-                color: AppTheme.primary,
-                fontSize: AppGlyph.avatarInitial(32),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-    );
   }
 
   @override

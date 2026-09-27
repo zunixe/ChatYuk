@@ -20,11 +20,17 @@ class UpdatePolicy {
   final String minVersion;
   final String notes;
 
+  /// Waktu admin menekan "Kirim Popup Update" (push manual) — null bila
+  /// belum pernah. Klien membandingkan dengan push terakhir yang dilihat
+  /// (prefs) untuk menampilkan popup walau versi sudah di-snooze.
+  final DateTime? pushAt;
+
   const UpdatePolicy({
     required this.enabled,
     required this.latestVersion,
     required this.minVersion,
     required this.notes,
+    this.pushAt,
   });
 
   /// Tidak ada kebijakan / fitur dimatikan / latest kosong.
@@ -99,16 +105,21 @@ class AppUpdateService {
       // batas → fase check stuck di checking selamanya (fitur mati total).
       final row = await _sb
           .from('app_settings')
-          .select('update_enabled,latest_version,min_version,update_notes')
+          .select(
+            'update_enabled,latest_version,min_version,update_notes,'
+            'update_push_at',
+          )
           .eq('id', 'global')
           .maybeSingle()
           .timeout(const Duration(seconds: 15));
       if (row == null) return null;
+      final rawPush = row['update_push_at'];
       return UpdatePolicy(
         enabled: row['update_enabled'] == true,
         latestVersion: '${row['latest_version'] ?? ''}',
         minVersion: '${row['min_version'] ?? ''}',
         notes: '${row['update_notes'] ?? ''}',
+        pushAt: rawPush is String ? DateTime.tryParse(rawPush)?.toUtc() : null,
       );
     } catch (e) {
       dlog('[UPDATE] fetchPolicy error (abaikan): $e');

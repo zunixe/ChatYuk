@@ -12,7 +12,6 @@ import '../core/chat/chat_location.dart';
 import '../mixins/voice_recorder_mixin.dart';
 import '../providers/locale_provider.dart';
 import '../utils/mention.dart';
-import '../utils.dart' show dlog;
 import 'chat_video_bubble.dart';
 import 'mic_record_button.dart';
 import 'mention_autocomplete.dart';
@@ -847,10 +846,7 @@ class _ChatComposerInputState extends State<ChatComposerInput>
                         )
                           : GestureDetector(
                               key: const ValueKey('send'),
-                              onTap: () {
-                                dlog('[LOC] SEND TAP pendingLoc=${widget.pendingLocation != null}');
-                                widget.onSend();
-                              },
+                              onTap: widget.onSend,
                               child: Container(
                                 width: 40,
                                 height: 40,

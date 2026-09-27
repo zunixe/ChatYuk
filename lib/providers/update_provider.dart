@@ -78,6 +78,11 @@ class UpdateProvider extends ChangeNotifier {
   static const String _snoozeKey = 'update_snooze_v1';
   static const Duration _snoozeWindow = Duration(hours: 24);
 
+  /// Kunci push manual terakhir yang sudah ditampilkan (ISO-8601 UTC).
+  /// Bila server `update_push_at` lebih baru dari ini → popup ditampilkan
+  /// walau versi sudah di-snooze (admin memaksa notifikasi).
+  static const String _lastPushKey = 'update_push_seen_v1';
+
   /// Dipanggil dari bootstrap (fire-and-forget) — silent, tidak menahan TTI.
   ///
   /// [navigatorKey] dipakai untuk menampilkan dialog tanpa BuildContext.
@@ -137,6 +142,13 @@ class UpdateProvider extends ChangeNotifier {
       _notes = policy?.notes ?? '';
       _force = forceReq;
 
+      // ── PUSH MANUAL admin ──
+      // Admin menekan "Kirim Popup Update" → update_push_at berubah. Bila
+      // stempel server LEBIH BARU dari yang terakhir kita tampilkan, popup
+      // harus muncul walau versi ini sudah di-snooze (permintaan eksplisit
+      // admin). User cukup MEMBUKA app — tidak perlu app hidup saat push.
+      final pushedNow = await _hasFreshManualPush(policy?.pushAt);
+
       // Play sudah selesai mengunduh tapi install belum jalan (mis. app
       // terbunuh sebelum complete) → selesaikan diam-diam tanpa popup,
       // walau versi ini sempat di-snooze/ditandai.
@@ -155,13 +167,18 @@ class UpdateProvider extends ChangeNotifier {
         }
       }
 
-      // Snooze: jangan popup versi yang sama dalam 24 jam — kecuali force.
-      if (!forceReq && await _isSnoozed(_latestVersion)) {
+      // Snooze: jangan popup versi yang sama dalam 24 jam — kecuali force
+      // atau admin baru melakukan push manual.
+      if (!forceReq && !pushedNow && await _isSnoozed(_latestVersion)) {
         dlog('[UPDATE] di-snooze: $_latestVersion');
         _phase = UpdatePhase.idle;
         _notify();
         return;
       }
+
+      // Tandai push manual sudah dilihat (agar popup tidak muncul terus tiap
+      // buka app setelah admin push). Dilakukan SETELAH lolos guard snooze.
+      if (pushedNow) await _markManualPushSeen(policy?.pushAt);
 
       _phase = UpdatePhase.available;
       _notify();
@@ -171,6 +188,31 @@ class UpdateProvider extends ChangeNotifier {
       _phase = UpdatePhase.idle;
       _notify();
     }
+  }
+
+  /// True bila server punya `update_push_at` yang LEBIH BARU dari push
+  /// manual terakhir yang sudah ditampilkan di perangkat ini.
+  Future<bool> _hasFreshManualPush(DateTime? serverPush) async {
+    if (serverPush == null) return false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seen = prefs.getString(_lastPushKey);
+      if (seen == null || seen.isEmpty) return true; // belum pernah lihat
+      final seenAt = DateTime.tryParse(seen)?.toUtc();
+      if (seenAt == null) return true;
+      return serverPush.isAfter(seenAt);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Catat stempel push manual yang baru saja ditampilkan.
+  Future<void> _markManualPushSeen(DateTime? serverPush) async {
+    if (serverPush == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastPushKey, serverPush.toUtc().toIso8601String());
+    } catch (_) {}
   }
 
   /// Tandai user menekan "Nanti" → snooze versi ini 24 jam.
