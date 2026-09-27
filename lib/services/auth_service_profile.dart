@@ -203,6 +203,8 @@ mixin AuthServiceProfileMx on AuthBase {
     String? nickname,
     String? about,
     String? gender,
+    DateTime? birthDate,
+    String? phone,
   }) async {
     final id = uid;
     if (id == null) return;
@@ -227,6 +229,10 @@ mixin AuthServiceProfileMx on AuthBase {
         'about': aboutText.length > 150
             ? aboutText.substring(0, 150)
             : aboutText,
+      // Tanggal lahir: kolom `date` → kirim 'YYYY-MM-DD' (bukan ISO penuh).
+      if (birthDate != null) 'birth_date': dateOnly(birthDate),
+      // Nomor HP: normalisasi ke '+' opsional + digit saja; '' = kosongkan.
+      if (phone != null) 'phone': normalizePhone(phone),
     };
     if (data.isEmpty) return;
     await _sb.from('profiles').update(data).eq('id', id);

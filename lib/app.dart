@@ -722,21 +722,32 @@ class _MainNavState extends State<_MainNav> with WidgetsBindingObserver {
     if (!_visitedTabs.contains(tab)) _visitedTabs.add(tab);
     PerfProbe.buildCount('MainNav');
     // Ukur "tap → frame pertama tab ini ter-render" (probe off = no-op).
-    if (PerfProbe.enabled) {
+    // measuring (bukan enabled) supaya ikut terukur di build RILIS+PERF_PROBE.
+    if (PerfProbe.measuring) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         PerfProbe.tabEnd(tab);
       });
     }
-    final auth = context.watch<AuthProvider>();
+    // Rebuild _MainNav HANYA saat nilai yang benar-benar dipakai berubah —
+    // BUKAN setiap AuthProvider.notifyListeners (presence/idle/ping tiap
+    // beberapa detik). Sebelumnya `watch<AuthProvider>()` membuat seluruh
+    // IndexedStack (termasuk feed Timeline) di-layout ulang terus-menerus →
+    // pindah tab terasa berat. `select` granular = nol rebuild saat notify
+    // yang tidak relevan.
+    final anonBanner = context.select<AuthProvider, bool>(
+      (a) => a.anonBlocked,
+    );
+    final isRealAdmin = context.select<AuthProvider, bool>(
+      (a) => a.isRealAdmin,
+    );
+    final dummySession = context.select<AuthProvider, bool>(
+      (a) => a.dummySessionActive,
+    );
     final s = context.read<LocaleProvider>().s;
-    // Soft gate anon: banner tipis di atas konten saat fitur anon OFF.
-    final anonBanner = auth.anonBlocked;
     // Tombol Admin Panel melayang (admin sungguhan saja) — tampil di SEMUA
     // tab supaya tidak "hilang" saat pindah tab. Hanya ikon, tanpa bulatan.
     final showAdminFab =
-        AdminGate.panelBuilder != null &&
-        auth.isRealAdmin &&
-        !auth.dummySessionActive;
+        AdminGate.panelBuilder != null && isRealAdmin && !dummySession;
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(

@@ -1,6 +1,6 @@
 -- SNAPSHOT fungsi FROZEN (auto-generate). JANGAN edit manual.
 -- Regenerate: scripts/snapshot_functions.sh
--- Timestamp: 2026-09-26T16:45:33Z
+-- Timestamp: 2026-09-27T03:34:42Z
 
 -- snapshot-fn: ai_presence_tick @ 20260914020000_admin_chatyuk_always_online_restore.sql
 CREATE OR REPLACE FUNCTION public.ai_presence_tick()
@@ -501,7 +501,7 @@ begin
 end;
 $function$
 
--- snapshot-fn: notify_private_message @ 20260926150000_notif_video_label.sql
+-- snapshot-fn: notify_private_message @ 20260927190000_notify_private_use_user_devices.sql
 CREATE OR REPLACE FUNCTION public.notify_private_message()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -530,14 +530,11 @@ begin
         select unnest(pc.participants) as p from public.private_chats pc where pc.chat_id = new.chat_id
       ) x where x.p <> new.sender_id limit 1;
       if receiver_id is null then return new; end if;
-      select fcm_token into receiver_token from public.profiles where id = receiver_id;
-      if receiver_token is null or receiver_token = '' then return new; end if;
       select nickname, avatar into sender_display, sender_avatar from public.profiles where id = new.sender_id;
       sender_display := coalesce(nullif(sender_display,''), nullif(new.sender_name,''), 'User');
-      perform net.http_post(
-        url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-        headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
-        body := jsonb_build_object(
+      for receiver_token in select public.user_fcm_tokens(receiver_id) loop
+        insert into public.outbox (type, payload)
+        values ('push', jsonb_build_object(
           'token', receiver_token,
           'title', sender_display,
           'body', coalesce(nullif(new.text,''), 'Panggilan tak terjawab'),
@@ -552,8 +549,8 @@ begin
             'message', coalesce(nullif(new.text,''), 'Panggilan tak terjawab'),
             'body', coalesce(nullif(new.text,''), 'Panggilan tak terjawab')
           )
-        )
-      );
+        ));
+      end loop;
       return new;
     end if;
 
@@ -561,8 +558,6 @@ begin
       select unnest(pc.participants) as p from public.private_chats pc where pc.chat_id = new.chat_id
     ) x where x.p <> new.sender_id limit 1;
     if receiver_id is null then return new; end if;
-    select fcm_token into receiver_token from public.profiles where id = receiver_id;
-    if receiver_token is null or receiver_token = '' then return new; end if;
     select nickname, avatar into sender_display, sender_avatar from public.profiles where id = new.sender_id;
     sender_display := coalesce(nullif(sender_display,''), nullif(new.sender_name,''), 'User');
     -- Preview isi: teks (200 char) atau label tipe non-teks.
@@ -573,10 +568,9 @@ begin
                    when new.type = 'coin' then '[Koin]'
                    when new.type = 'gift' then '[Hadiah]'
                    else left(coalesce(new.text,''), 200) end;
-    perform net.http_post(
-      url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-      headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
-      body := jsonb_build_object(
+    for receiver_token in select public.user_fcm_tokens(receiver_id) loop
+      insert into public.outbox (type, payload)
+      values ('push', jsonb_build_object(
         'token', receiver_token,
         'title', sender_display,
         'body', v_body,
@@ -590,14 +584,14 @@ begin
           'message', v_body,
           'body', v_body
         )
-      )
-    );
+      ));
+    end loop;
   exception when others then null;
   end;
   return new;
 end; $function$
 
--- snapshot-fn: notify_call_ended @ 20260913130001_notif_touid.sql
+-- snapshot-fn: notify_call_ended @ 20260927200000_call_push_via_outbox.sql
 CREATE OR REPLACE FUNCTION public.notify_call_ended()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -609,7 +603,6 @@ declare
   v_chat_id text;
   v_name text;
   v_body text;
-  sent boolean := false;
 begin
   -- Hanya transisi pertama dari ringing/answered ke terminal
   if old.status not in ('ringing','answered') then return new; end if;
@@ -628,59 +621,22 @@ begin
     else 'Call ended'
   end;
 
-  for rec in
-    select fcm_token from public.user_devices
-    where user_id = new.callee_id and is_active = true and coalesce(fcm_token,'') <> ''
-  loop
-    sent := true;
-    begin
-      perform net.http_post(
-        url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-        headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
-        body := jsonb_build_object(
-          'token', rec.fcm_token,
-          'title', v_name,
-          'body', v_body,
-          'data', jsonb_build_object(
-            'type', 'call_ended',
-            'toUid', new.callee_id,
-            'callId', new.id,
-            'chatId', v_chat_id,
-            'callerUid', new.caller_id,
-            'otherName', v_name
-          )
-        )
-      );
-    exception when others then null;
-    end;
+  for rec in select public.user_fcm_tokens(new.callee_id) as fcm_token loop
+    insert into public.outbox (type, payload)
+    values ('push', jsonb_build_object(
+      'token', rec.fcm_token,
+      'title', v_name,
+      'body', v_body,
+      'data', jsonb_build_object(
+        'type', 'call_ended',
+        'toUid', new.callee_id,
+        'callId', new.id,
+        'chatId', v_chat_id,
+        'callerUid', new.caller_id,
+        'otherName', v_name
+      )
+    ));
   end loop;
-
-  if not sent then
-    declare t text;
-    begin
-      select fcm_token into t from public.profiles where id = new.callee_id;
-      if t is not null and t <> '' then
-        perform net.http_post(
-          url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-          headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
-          body := jsonb_build_object(
-            'token', t,
-            'title', v_name,
-            'body', v_body,
-            'data', jsonb_build_object(
-              'type', 'call_ended',
-              'toUid', new.callee_id,
-              'callId', new.id,
-              'chatId', v_chat_id,
-              'callerUid', new.caller_id,
-              'otherName', v_name
-            )
-          )
-        );
-      end if;
-    exception when others then null;
-    end;
-  end if;
 
   -- Tandai sudah dikirim supaya update berikutnya tidak kirim lagi
   new.notif_sent_at := now();
@@ -688,7 +644,7 @@ begin
 exception when others then return new;
 end; $function$
 
--- snapshot-fn: call_push @ 20260913130001_notif_touid.sql
+-- snapshot-fn: call_push @ 20260927200000_call_push_via_outbox.sql
 CREATE OR REPLACE FUNCTION public.call_push(p_callee uuid, p_call uuid, p_caller uuid, p_caller_name text, p_call_type text)
  RETURNS void
  LANGUAGE plpgsql
@@ -697,67 +653,28 @@ CREATE OR REPLACE FUNCTION public.call_push(p_callee uuid, p_call uuid, p_caller
 AS $function$
 declare
   rec record;
-  sent boolean := false;
   v_chat_id text;
   p_name text := coalesce(nullif(p_caller_name,''), 'User');
 begin
   v_chat_id := least(p_caller::text, p_callee::text) || '_' || greatest(p_caller::text, p_callee::text);
-  -- fan-out ke semua device aktif
-  for rec in
-    select fcm_token from public.user_devices
-    where user_id = p_callee and is_active = true and coalesce(fcm_token,'') <> ''
-  loop
-    sent := true;
-    begin
-      perform net.http_post(
-        url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-        headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
-        body := jsonb_build_object(
-          'token', rec.fcm_token,
-          'title', p_name,
-          'body', p_call_type,
-          'data', jsonb_build_object(
-            'type', 'call',
-            'callId', p_call,
-            'callerUid', p_caller,
-            'fromName', p_name,
-            'otherName', p_name,
-            'callType', p_call_type,
-            'chatId', v_chat_id
-          )
-        )
-      );
-    exception when others then null;
-    end;
+  -- fan-out ke semua token aktif (user_devices + fallback profiles)
+  for rec in select public.user_fcm_tokens(p_callee) as fcm_token loop
+    insert into public.outbox (type, payload)
+    values ('push', jsonb_build_object(
+      'token', rec.fcm_token,
+      'title', p_name,
+      'body', p_call_type,
+      'data', jsonb_build_object(
+        'type', 'call',
+        'callId', p_call,
+        'callerUid', p_caller,
+        'fromName', p_name,
+        'otherName', p_name,
+        'callType', p_call_type,
+        'chatId', v_chat_id
+      )
+    ));
   end loop;
-
-  if not sent then
-    declare t text;
-    begin
-      select fcm_token into t from public.profiles where id = p_callee;
-      if t is not null and t <> '' then
-        perform net.http_post(
-          url := 'https://fohcucyyejdryryoxitm.supabase.co/functions/v1/send-push',
-          headers := jsonb_build_object('Content-Type', 'application/json', 'x-app-secret', (select app_shared_secret from app_settings where id = 'global')),
-          body := jsonb_build_object(
-            'token', t,
-            'title', p_name,
-            'body', p_call_type,
-            'data', jsonb_build_object(
-              'type', 'call',
-              'callId', p_call,
-              'callerUid', p_caller,
-              'fromName', p_name,
-              'otherName', p_name,
-              'callType', p_call_type,
-              'chatId', v_chat_id
-            )
-          )
-        );
-      end if;
-    exception when others then null;
-    end;
-  end if;
 end;
 $function$
 

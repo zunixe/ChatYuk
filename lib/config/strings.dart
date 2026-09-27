@@ -952,6 +952,26 @@ class S {
       isId ? 'Gagal mengubah password: ' : 'Failed to change password: ';
   String get btnSetPassword => isId ? 'Set Password' : 'Set Password';
   String get btnChangePassword => isId ? 'Ganti Password' : 'Change Password';
+  // ── Tanggal lahir & Nomor HP (Pengaturan › Akun) ──
+  String get labelBirthDate => isId ? 'Tanggal Lahir' : 'Date of Birth';
+  String get descBirthDate =>
+      isId ? 'Tanggal lahir asli kamu' : 'Your real date of birth';
+  String get hintBirthDateNotSet => isId ? 'Belum diisi' : 'Not set';
+  String get titlePickBirthDate =>
+      isId ? 'Pilih Tanggal Lahir' : 'Select Date of Birth';
+  String get msgBirthDateSaved =>
+      isId ? 'Tanggal lahir tersimpan' : 'Date of birth saved';
+  String get labelPhone => isId ? 'Nomor HP' : 'Phone Number';
+  String get descPhone =>
+      isId ? 'Nomor HP aktif kamu' : 'Your active phone number';
+  String get hintPhoneNotSet => isId ? 'Belum diisi' : 'Not set';
+  String get hintPhoneInput => isId ? 'Contoh: +6281234567890' : 'e.g. +6281234567890';
+  String get msgPhoneSaved => isId ? 'Nomor HP tersimpan' : 'Phone number saved';
+  String get errPhoneInvalid => isId
+      ? 'Nomor HP tidak valid (6–20 digit, boleh diawali +)'
+      : 'Invalid phone number (6–20 digits, may start with +)';
+  String get errBirthDateFuture =>
+      isId ? 'Tanggal lahir tidak boleh di masa depan' : 'Date of birth cannot be in the future';
   String get descSetPassword => isId
       ? 'Akun Google kamu belum punya password. Buat sekarang agar bisa login pakai email + password.'
       : 'Your Google account has no password yet. Set one to log in with email + password.';

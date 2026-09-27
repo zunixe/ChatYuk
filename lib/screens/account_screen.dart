@@ -202,8 +202,27 @@ class _AccountScreenState extends State<AccountScreen> {
                     },
                   ),
                   const Divider(height: 1, indent: 52),
+                  // Tanggal lahir (date picker).
+                  SettingsMenuTile(
+                    icon: Icons.cake_outlined,
+                    title: s.labelBirthDate,
+                    desc: auth.profile?.birthDate != null
+                        ? _formatDate(auth.profile!.birthDate!, s.isId)
+                        : s.hintBirthDateNotSet,
+                    onTap: () => _pickBirthDate(context),
+                  ),
+                  const Divider(height: 1, indent: 52),
+                  // Nomor HP.
+                  SettingsMenuTile(
+                    icon: Icons.phone_iphone_rounded,
+                    title: s.labelPhone,
+                    desc: (auth.profile?.phone ?? '').isNotEmpty
+                        ? auth.profile!.phone
+                        : s.hintPhoneNotSet,
+                    onTap: () => _editPhone(context),
+                  ),
+                  const Divider(height: 1, indent: 52),
                 ],
-                // Keluar.
                 SettingsMenuTile(
                   icon: Icons.power_settings_new,
                   iconColor: AppTheme.danger,
@@ -381,6 +400,132 @@ class _AccountScreenState extends State<AccountScreen> {
             content: Text(isSet ? s.msgPasswordSet : s.msgPasswordChanged),
           ),
         );
+    }
+  }
+
+  /// Format tanggal lahir ramah bahasa (mis. "17 Agustus 1998").
+  String _formatDate(DateTime d, bool isId) {
+    const idMonths = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+    ];
+    const enMonths = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    final months = isId ? idMonths : enMonths;
+    final m = months[(d.month - 1).clamp(0, 11)];
+    return isId ? '${d.day} $m ${d.year}' : '$m ${d.day}, ${d.year}';
+  }
+
+  /// Dialog pemilih tanggal lahir. Menyimpan via AuthProvider.updateProfile.
+  Future<void> _pickBirthDate(BuildContext context) async {
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final now = DateTime.now();
+    final current = auth.profile?.birthDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime(now.year - 20, now.month, now.day),
+      firstDate: DateTime(1900),
+      lastDate: now,
+      helpText: s.titlePickBirthDate,
+    );
+    if (picked == null || !mounted) return;
+    try {
+      await context.read<AuthProvider>().updateProfile(birthDate: picked);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.msgBirthDateSaved)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.errGeneric)),
+      );
+    }
+  }
+
+  /// Dialog input nomor HP + validasi (6–20 digit, '+' opsional).
+  Future<void> _editPhone(BuildContext context) async {
+    final s = context.read<LocaleProvider>().s;
+    final auth = context.read<AuthProvider>();
+    final ctrl = TextEditingController(text: auth.profile?.phone ?? '');
+    String? errorText;
+    var saving = false;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          backgroundColor: AppTheme.bgCard,
+          title: Text(s.labelPhone, style: AppText.title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                s.descPhone,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                keyboardType: TextInputType.phone,
+                style: AppText.body.copyWith(color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  hintText: s.hintPhoneInput,
+                  errorText: errorText,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx, false),
+              child: Text(s.btnCancel),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final normalized = normalizePhone(ctrl.text);
+                      // Kosong = boleh (menghapus nomor). Kalau diisi, wajib valid.
+                      if (ctrl.text.trim().isNotEmpty &&
+                          (normalized.length < 7 ||
+                              normalized.replaceAll('+', '').length < 6)) {
+                        setDlg(() => errorText = s.errPhoneInvalid);
+                        return;
+                      }
+                      setDlg(() {
+                        saving = true;
+                        errorText = null;
+                      });
+                      try {
+                        await context
+                            .read<AuthProvider>()
+                            .updateProfile(phone: ctrl.text);
+                        if (ctx.mounted) Navigator.pop(ctx, true);
+                      } catch (e) {
+                        setDlg(() {
+                          saving = false;
+                          errorText = s.errGeneric;
+                        });
+                      }
+                    },
+              child: Text(s.btnSave),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.msgPhoneSaved)),
+      );
     }
   }
 

@@ -1,0 +1,36 @@
+-- ============================================================
+-- Optimasi index lanjutan (Langkah 2): buang index yang TERBUKTI
+-- tidak berguna & tidak dikontrak test. Tidak menyentuh fungsi/grant/RLS.
+--
+-- Dasar audit LIVE (pg_index + pg_indexes + pg_stat_user_indexes,
+-- stats_reset 2026-07-24 → idx_scan=0 valid, bukan index baru):
+--
+--   idx_private_chats_last_message_at_brin (BRIN) idx_scan=0.
+--   - Kolomnya sama dengan idx_private_chats_last_message_at_desc (btree)
+--     yang baru ditambahkan di 20260927120000.
+--   - BRIN hanya berguna bila data TERURUT FISIK; last_message_at terus
+--     di-update ke now() oleh chat baru → urutan acak → BRIN ~tidak pernah
+--     menang. Terbukti idx_scan=0.
+--   - Bukan FROZEN, tidak dikunci supabase/tests/*, tidak disebut fungsi/RPC.
+--     Planner memilih index lewat kolom, bukan nama → drop aman.
+--
+-- SENGAJA TIDAK DI-DROP (meski kolomnya terlihat "terliput" index lain):
+--   - user_devices_user_idx (user_id)      → scan=30602 (SANGAT aktif).
+--   - idx_coin_ledger_bucket (user_id,bucket) → scan=18618 (sangat aktif).
+--   - idx_private_chats_{pinned,muted,archived}_by, idx_rooms_muted_by,
+--     idx_posts_country_boost_created, idx_blocks_reverse, user_devices_fcm_idx
+--     → scan=0 tapi dipakai fitur (pin/mute/arsip/filter-negara/blokir);
+--       dibiarkan demi kehati-hatian (fitur bisa aktif kapan saja).
+--   - coin_ledger_pkey → PRIMARY KEY, jangan disentuh.
+--   - idx_*_need_migrate → index one-off migrasi foto; dibiarkan (kecil).
+--
+-- Rollback: create index if not exists idx_private_chats_last_message_at_brin
+--             on public.private_chats using brin (last_message_at);
+-- ============================================================
+
+drop index if exists public.idx_private_chats_last_message_at_brin; -- SAFE: BRIN last_message_at tidak berguna (kolom selalu now(), idx_scan=0); btree idx_private_chats_last_message_at_desc sudah menggantikan (fungsi urutan list chat).
+
+-- Verifikasi:
+--   select indexname from pg_indexes where schemaname='public'
+--     and indexname like 'idx_private_chats_last_message%';
+--   → harus TINGGAL idx_private_chats_last_message_at_desc (btree) saja.
