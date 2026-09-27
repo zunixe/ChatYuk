@@ -21,7 +21,6 @@ import '../providers/online_users_provider.dart';
 import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
 import '../core/cache/media_disk_cache.dart';
-import '../core/admin_gate.dart';
 import '../models/story_model.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
@@ -1293,14 +1292,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     final myRegistered = context.select<AuthProvider, bool>(
       (a) => a.profile?.isRegistered ?? false,
     );
-    final isRealAdmin = context.select<AuthProvider, bool>(
-      (a) => a.isRealAdmin,
-    );
-    final dummySession = context.select<AuthProvider, bool>(
-      (a) => a.dummySessionActive,
-    );
     final anonymous = context.select<AuthProvider, bool>((a) => a.isAnonymous);
-    final isAdmin = isRealAdmin && !dummySession;
     super.build(context);
     final s = context.watch<LocaleProvider>().s;
     return Scaffold(
@@ -1454,43 +1446,13 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
         // rapat (tanpa padding). IconButton tidak dipakai: minimumSize M3
         // selalu memaksa 48px walau constraints 32 diberikan.
         actions: [
-          Builder(
-            builder: (_) {
-              dlog(
-                '[ADMINICON] panelBuilder=${AdminGate.panelBuilder != null} '
-                'isRealAdmin=$isRealAdmin '
-                'dummySession=$dummySession '
-                '',
-              );
-              return const SizedBox.shrink();
-            },
-          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Jalan pintas Admin Panel — hanya untuk admin sungguhan
-                // (bukan sesi dummy). User biasa tidak melihat ikon ini.
-                if (AdminGate.panelBuilder != null && isAdmin)
-                  Tooltip(
-                    message: 'Admin Panel',
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        final builder = AdminGate.panelBuilder;
-                        if (builder == null) return;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: builder),
-                        );
-                      },
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 3),
-                        child: Icon(Icons.admin_panel_settings_outlined),
-                      ),
-                    ),
-                  ),
+                // Tombol Admin Panel dipindah ke tombol melayang kiri-bawah
+                // (lihat _MainNav di app.dart) — tidak lagi di AppBar.
                 Tooltip(
                   message: s.storyAddTooltip,
                   child: GestureDetector(
