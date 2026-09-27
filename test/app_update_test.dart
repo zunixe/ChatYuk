@@ -584,6 +584,58 @@ void main() {
       );
     });
 
+    test('push manual TIDAK muncul bila user sudah versi terbaru', () async {
+      // Permintaan: push manual hanya untuk user yang BELUM update. User
+      // yang sudah di versi terbaru (local == latest) tidak boleh lihat
+      // popup walau admin baru melakukan push.
+      final p = providerWith(
+        local: '1.2.48',
+        policy: UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.48', // sama → tidak ada update
+          minVersion: '',
+          notes: '',
+          pushAt: DateTime.now().toUtc(),
+        ),
+      );
+      await p.check();
+      expect(
+        p.phase,
+        UpdatePhase.idle,
+        reason: 'sudah versi terbaru → push manual tetap tidak memunculkan popup',
+      );
+    });
+
+    test('push manual TIDAK muncul bila user lebih baru dari latest', () async {
+      final p = providerWith(
+        local: '1.2.50',
+        policy: UpdatePolicy(
+          enabled: true,
+          latestVersion: '1.2.49',
+          minVersion: '',
+          notes: '',
+          pushAt: DateTime.now().toUtc(),
+        ),
+      );
+      await p.check();
+      expect(p.phase, UpdatePhase.idle);
+    });
+
+    test('push manual TIDAK muncul bila fitur update dimatikan', () async {
+      final p = providerWith(
+        local: '1.2.47',
+        policy: UpdatePolicy(
+          enabled: false,
+          latestVersion: '1.2.48',
+          minVersion: '',
+          notes: '',
+          pushAt: DateTime.now().toUtc(),
+        ),
+      );
+      await p.check();
+      expect(p.phase, UpdatePhase.idle);
+    });
+
     test('unduhan Play tertunda → auto-complete tanpa popup', () async {
       final client = _FakeClient()
         ..info = AppUpdateInfo(
