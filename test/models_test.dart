@@ -138,6 +138,63 @@ void main() {
       expect(r.icon, '💬');
       expect(r.expiresAt, isNull);
     });
+
+    test('fromMap field lengkap (camel + snake) + toMap roundtrip', () {
+      final r = RoomModel.fromMap('r1', {
+        'name': 'Curhat',
+        'description': 'd',
+        'icon': '🎤',
+        'country': 'Indonesia',
+        'category': 'curhat',
+        'order': 3,
+        'memberCount': 5,
+        'lastSenderName': 'Budi',
+        'lastText': 'hai',
+        'lastType': 'image',
+        'lastAt': '2026-01-02T03:04:05.000Z',
+        'unread': 4,
+        'isLive': true,
+        'expires_at': '2026-02-01T00:00:00.000Z',
+      });
+      expect(r.category, 'curhat');
+      expect(r.memberCount, 5);
+      expect(r.lastSenderName, 'Budi');
+      expect(r.lastType, 'image');
+      expect(r.lastAt, isNotNull);
+      expect(r.unread, 4);
+      expect(r.isLive, isTrue);
+      expect(r.expiresAt, isNotNull);
+
+      final m = r.toMap();
+      expect(m['id'], 'r1');
+      expect(m['name'], 'Curhat');
+      expect(m['is_private'], isFalse);
+      expect(m['lastSenderName'], 'Budi');
+      expect(m['unread'], 4);
+      expect(m['isLive'], isTrue);
+      expect(m['expires_at'], isNotNull);
+    });
+
+    test('fromMap tahan nilai string utk angka', () {
+      final r = RoomModel.fromMap('r2', {
+        'name': 'X',
+        'memberCount': '7',
+        'unread': '2',
+        'onlineCount': '9',
+      });
+      expect(r.memberCount, 7);
+      expect(r.unread, 2);
+      expect(r.onlineCount, 9);
+    });
+
+    test('copyWith ganti onlineCount, sisanya tetap', () {
+      final r = RoomModel.fromMap('r3', {'name': 'Y', 'memberCount': 2});
+      final c = r.copyWith(onlineCount: 42);
+      expect(c.onlineCount, 42);
+      expect(c.name, 'Y');
+      expect(c.memberCount, 2);
+      expect(c.id, 'r3');
+    });
   });
 
   group('StorySlide', () {
