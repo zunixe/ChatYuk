@@ -128,12 +128,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       _isAdminCached = false;
     }
     WidgetsBinding.instance.addObserver(this);
-    // Nav bar Android opaque hitam selama viewer aktif — foto fullscreen
-    // tidak tembus/transparan di area menu bawah.
+    // Android 15: setStatusBarColor/setNavigationBarColor DEPRECATED
+    // (Play menolak). Jangan isi systemNavigationBarColor — Scaffold hitam
+    // + edge-to-edge transparan memberi visual yang sama tanpa API lama.
+    // Hanya ikon terang + matikan scrim kontras bawaan sistem.
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
-        systemNavigationBarColor: Colors.black,
         systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarContrastEnforced: false,
       ),
     );
     _person = widget.initialIndex;
@@ -224,8 +226,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     unawaited(_dropVideo());
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
-        systemNavigationBarColor: Colors.transparent,
         systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarContrastEnforced: false,
       ),
     );
     _progress.dispose();

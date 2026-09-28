@@ -533,6 +533,9 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
             backgroundColor: Colors.black,
             activeControlsWidgetColor: AppTheme.primary,
             lockAspectRatio: true,
+            // Edge-to-edge Android 15+: ikon status bar ikut terang/gelap
+            // toolbar (jangan isi warna bar — API deprecated, ditolak Play).
+            statusBarLight: !AppTheme.isDark,
           ),
           IOSUiSettings(title: s.avatarCamera, aspectRatioLockEnabled: true),
         ],

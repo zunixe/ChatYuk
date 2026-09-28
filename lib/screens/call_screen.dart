@@ -489,6 +489,7 @@ class _CallScreenState extends State<CallScreen> {
                         if (_session.iceReconnectFailed) ...[
                           CallControlButton(
                             icon: Icons.refresh_rounded,
+                            size: 72,
                             onTap: () =>
                                 unawaited(_session.reconnect()),
                           ),
@@ -497,6 +498,9 @@ class _CallScreenState extends State<CallScreen> {
                         CallControlButton(
                           icon: Icons.call_end_rounded,
                           danger: true,
+                          // Samakan dengan tombol terima/tolak layar
+                          // incoming (72) — dulu 44, terlihat kecil.
+                          size: 72,
                           onTap: _endCall,
                         ),
                       ],

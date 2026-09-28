@@ -49,7 +49,6 @@
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
-            android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
@@ -81,11 +80,11 @@
             </intent-filter>
         </activity>
         <!-- Crop UCropActivity (image_cropper) — pilih area foto profil.
-             Tema UcropTheme: opt-out edge-to-edge + fitsSystemWindows agar
-             toolbar atas & tombol bawah TIDAK tertutup system bar Android 15. -->
+             UcropTheme TANPA opt-out edge-to-edge: UCrop 2.2.11 menangani
+             inset sendiri (Play menolak opt-out & kunci ukuran di
+             Android 15/16). -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
-            android:screenOrientation="portrait"
             android:theme="@style/UcropTheme"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

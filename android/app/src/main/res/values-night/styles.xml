@@ -18,9 +18,5 @@
     <style name="UcropTheme" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
-        <item name="android:fitsSystemWindows">true</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
-        <item name="android:statusBarColor">@color/ucrop_status_bar</item>
-        <item name="android:navigationBarColor">@color/ucrop_nav_bar</item>
     </style>
 </resources>

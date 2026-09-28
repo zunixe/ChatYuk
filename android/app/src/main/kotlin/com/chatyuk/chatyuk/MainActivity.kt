@@ -28,6 +28,8 @@ class MainActivity : FlutterActivity() {
         // Android 15 (SDK 35+) memaksa edge-to-edge; targetSdk 36 tidak bisa
         // opt-out. Mode eksplisit + kompat-mundur: setDecorFitsSystemWindows
         // (false) membuat konten menggambar di bawah status/nav bar.
+        // Ini padanan backward-compatible dari enableEdgeToEdge() yang
+        // disarankan Play (berlaku mundur ke API lama via androidx.core).
         // Flutter menangani inset via Scaffold/SafeArea/MediaQuery.
         // (enableEdgeToEdge() androidx.activity setara — dipakai WindowCompat
         //  agar tidak bergantung versi runtime androidx.activity.)

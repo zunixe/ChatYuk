@@ -239,6 +239,9 @@ class _ViewerPageState extends State<_ViewerPage> {
       bytes,
       fit: BoxFit.contain,
       gaplessPlayback: true,
+      // Cap 1600px seperti PhotoViewerScreen: full-res 12MP = ~48MB bitmap
+      // native; 1600px cukup tajam untuk layar HP + zoom.
+      cacheWidth: 1600,
     );
     // Rasio thumbnail diketahui → batasi area gambar supaya proporsi saat
     // dibuka = proporsi yang dilihat di feed (tidak "melebar" di layar).

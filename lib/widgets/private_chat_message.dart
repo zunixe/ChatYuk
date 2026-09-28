@@ -2776,6 +2776,11 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                       bytes,
                       fit: BoxFit.contain,
                       gaplessPlayback: true,
+                      // Cap 1600px: layar HP ~1080px, zoom 6x tetap cukup
+                      // tajam; full-res 12MP = ~48MB bitmap native vs
+                      // ~8MB di 1600px. Tanpa cap, viewer fullscreen adalah
+                      // decode bitmap terbesar di aplikasi.
+                      cacheWidth: 1600,
                     ),
                   ),
                 ),

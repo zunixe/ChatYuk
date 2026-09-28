@@ -981,6 +981,15 @@ class S {
   String get errPhoneInvalid => isId
       ? 'Nomor HP tidak valid (6–20 digit, boleh diawali +)'
       : 'Invalid phone number (6–20 digits, may start with +)';
+  String get labelCountryCode => isId ? 'Kode negara' : 'Country code';
+  String get titleChooseCountryCode =>
+      isId ? 'Pilih kode negara' : 'Choose country code';
+  String get hintSearchCountryCode =>
+      isId ? 'Cari negara / kode...' : 'Search country / code...';
+  String get hintPhoneNumber =>
+      isId ? 'Nomor HP tanpa 0 depan' : 'Number without leading 0';
+  String get labelPhoneFull =>
+      isId ? 'Nomor lengkap' : 'Full number';
   String get errBirthDateFuture =>
       isId ? 'Tanggal lahir tidak boleh di masa depan' : 'Date of birth cannot be in the future';
   String get descSetPassword => isId
