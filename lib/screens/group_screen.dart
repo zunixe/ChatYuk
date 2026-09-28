@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
+import '../core/nav_guard.dart';
 import '../models/room_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
@@ -528,10 +529,12 @@ class _GroupCard extends StatelessWidget {
         roomProvider.memberRoomIds.contains(room.id) ||
         room.ownerId == auth.uid;
     if (isMember) {
+      final navKey = navKeyRoom(room.id);
+      if (!tryClaimNav(navKey)) return;
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
-      );
+      ).then((_) => releaseNav(navKey));
       return;
     }
 
@@ -620,10 +623,13 @@ class _GroupCard extends StatelessWidget {
         if (charged > 0 && context.mounted)
           points.showPointsToast(context, s.coinSentToast(charged));
         if (context.mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
-          );
+          final navKey = navKeyRoom(room.id);
+          if (tryClaimNav(navKey)) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
+            ).then((_) => releaseNav(navKey));
+          }
         }
       }
     } catch (e) {

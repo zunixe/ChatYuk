@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/perf/perf_probe.dart';
+import '../core/nav_guard.dart';
 
 import 'private_chat_screen.dart';
 import '../providers/theme_provider.dart';
@@ -189,6 +190,8 @@ class _NearbyScreenState extends State<NearbyScreen> {
         otherAge: (u['age'] as num?)?.toInt() ?? 0,
       );
       if (!mounted) return;
+      final navKey = navKeyChat(chatId);
+      if (!tryClaimNav(navKey)) return;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -203,7 +206,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
             otherRegistered: u['is_registered'] == true,
           ),
         ),
-      );
+      ).then((_) => releaseNav(navKey));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

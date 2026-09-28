@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
+import '../core/nav_guard.dart';
 import '../main.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
@@ -85,6 +86,8 @@ class _CallBannerState extends State<CallBanner> {
         nav.popUntil((r) => r.isFirst || r.settings.name == target);
         return;
       }
+      final navKey = navKeyChat(chatId);
+      if (!tryClaimNav(navKey)) return;
       nav.push(
         MaterialPageRoute(
           settings: RouteSettings(name: target),
@@ -94,7 +97,7 @@ class _CallBannerState extends State<CallBanner> {
             otherName: sess.remoteName,
           ),
         ),
-      );
+      ).then((_) => releaseNav(navKey));
     } else if (!routeTracker.contains(kCallScreenRoute)) {
       nav.push(
         MaterialPageRoute(

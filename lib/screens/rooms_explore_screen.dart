@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/strings.dart';
 import '../config/theme.dart';
 import '../models/room_model.dart';
+import '../core/nav_guard.dart';
 import '../providers/locale_provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/theme_provider.dart';
@@ -54,10 +55,12 @@ class _RoomsExploreScreenState extends State<RoomsExploreScreen> {
     final room = rooms[index];
     unawaited(rp.markRoomRead(roomId));
     if (!mounted) return;
+    final navKey = navKeyRoom(room.id);
+    if (!tryClaimNav(navKey)) return;
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
-    );
+    ).then((_) => releaseNav(navKey));
     if (mounted) context.read<RoomProvider>().fetchExplore();
   }
 
