@@ -10,7 +10,7 @@ sudah punya mitigasi internal — hanya beberapa yang perlu tindakan.
 
 ## Status (sesudah perbaikan 2026-09-28)
 
-**Total 467 → 326** (semua sisa = WARN/INFO yang punya mitigasi/by-design).
+**Total 467 → 288** (semua sisa = WARN/INFO yang punya mitigasi/by-design).
 
 | # | Lint | Level | Sebelum | Sesudah | Risiko | Status |
 |---|---|---|---|---|---|---|
@@ -18,10 +18,10 @@ sudah punya mitigasi internal — hanya beberapa yang perlu tindakan.
 | 3 | `anon_security_definer_function_executable` | WARN | 88 | **32** | Sedang→Rendah | ✅ DONE (`20260928120000`) — sisa 32 = publik by-design |
 | 4 | `function_search_path_mutable` | WARN | 28 | **0** | Sedang | ✅ DONE (`20260928130000`) |
 | 7 | `auth_leaked_password_protection` | WARN | 1 | **0** | Sedang | ✅ DONE (HIBP enabled) |
+| 2 | `authenticated_security_definer_function_executable` | WARN | 277 | **183** | **Rendah** | ✅ DONE sebagian (`20260928140000`) — sisa = fungsi klien |
 | 1 | `auth_allow_anonymous_sign_ins` | WARN | 54 | 54 | **Rendah** (by-design) | Tidak perlu — RLS per-baris (`id = auth.uid()`) |
-| 2 | `authenticated_security_definer_function_executable` | WARN | 277 | 221 | **Rendah** | Fungsi klien memang butuh (authenticated) |
 | 5 | `rls_enabled_no_policy` | INFO | 16 | 16 | **Rendah** | OK (deny-all by design) |
-| 6 | `extension_in_public` | WARN | 3 | 3 | **Rendah** | Opsional (jangan pindah `cube`/`earthdistance` tanpa uji) |
+| 6 | `extension_in_public` | WARN | 3 | 3 | **Rendah** | ⛔ SENGAJA TIDAK DIUBAH (lihat §6) |
 
 ---
 
@@ -128,12 +128,22 @@ eksplisit. (Sudah benar kalau memang internal-only.)
 
 ---
 
-## 6. `extension_in_public` (3) — rendah
+## 6. `extension_in_public` (3) — SENGAJA TIDAK DIUBAH
 
-`pg_net`, `cube`, `earthdistance` terpasang di schema `public`. Rekomendasi
-Supabase: pindah ke schema `extensions`. **Risiko rendah** — jangan pindah
-`cube`/`earthdistance` tanpa uji (dipakai fitur "Orang Sekitar"; pindah schema
-bisa mengubah resolusi tipe/operator). `pg_net` dipakai trigger notif.
+`pg_net`, `cube`, `earthdistance` terpasang di schema `public`.
+
+**Keputusan: JANGAN dipindah** (risiko > manfaat):
+- **`cube` + `earthdistance`** dipakai fitur **"Orang Sekitar"**
+  (`nearby_users`, `update_my_location`) — bergantung pada **tipe & operator**
+  (`<@>`, `ll_to_earth`). Pindah schema = drop+create ulang → risiko kolom
+  bertipe `cube`/`earth` & operator resolusi pecah. Manfaat hanya hilangkan
+  1 lint WARN.
+- **`pg_net`** dipakai 8 fungsi (`net.http_post` — trigger notif, ai_reply,
+  fanout). Qualified (`net.`), tapi tetap: project ini menaruh `pg_net` di
+  public secara default; drop+create berisiko memutus notifikasi.
+- Kalau SUATU SAAT ingin dipindah: harus `CREATE EXTENSION ... SCHEMA extensions`
+  + reindex + uji menyeluruh fitur lokasi & notifikasi. **Bukan pekerjaan cepat.**
+  Tidak ada eksploit konkret dari extension di schema public (hanya best-practice).
 
 ---
 
@@ -153,7 +163,10 @@ Dashboard → Auth → Passwords → **Leaked password protection**. Di API:
 3. ✅ **`function_search_path_mutable`** — SET search_path (`20260928130000`);
    28 → 0.
 4. ✅ **`auth_leaked_password_protection`** — HIBP diaktifkan; 1 → 0.
-5. Opsional: `extension_in_public`, revoke `authenticated_*` yang tak perlu.
+5. ✅ **`authenticated_*` internal/legacy** — REVOKE 38 fungsi
+   (`20260928140000`); 221 → 183. Sisa 183 = fungsi klien (harus `authenticated`).
+6. **`extension_in_public`** — ⛔ SENGAJA DIBIARKAN (lihat §6; risiko fitur
+   lokasi/notifikasi > manfaat).
 
 > **Perhatian untuk ke depan:** `REVOKE EXECUTE ... FROM anon` SENDIRIAN tidak
 > cukup — Postgres memberi EXECUTE ke `PUBLIC` secara default, dan anon
