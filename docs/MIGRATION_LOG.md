@@ -1575,16 +1575,16 @@ prioritas lebih rendah.
   di-rename â†’ `20260927125000_index_dedup_and_fix.sql` karena bentrok timestamp
   dengan `20260927120000_admin_chat_messages_media.sql` (file paralel).
 
-## 2026-09-28 — 20260928110000_drop_profiles_public_view.sql (APPLY)
+## 2026-09-28 ï¿½ 20260928110000_drop_profiles_public_view.sql (APPLY)
 
-- **Sumber:** temuan Security Advisor Supabase — *"View public.profiles_public
+- **Sumber:** temuan Security Advisor Supabase ï¿½ *"View public.profiles_public
   is defined with the SECURITY DEFINER property"*.
 - **Akar masalah:** view milik `postgres` (SECURITY DEFINER = hak OWNER,
   menembus RLS `profiles`), di-GRANT SELECT/INSERT/UPDATE/DELETE/TRUNCATE ke
   `anon` + `authenticated`. Siapa pun bisa `select * from profiles_public` ?
   bocor `avatar`/`last_seen`/`status` SEMUA user (membatalkan hardening yang
   mencabut SELECT profiles.avatar).
-- **Isi:** `drop view if exists public.profiles_public;` — view LEGACY, 0
+- **Isi:** `drop view if exists public.profiles_public;` ï¿½ view LEGACY, 0
   referensi di kode (lib/ & supabase/), 0 dependen (view/fungsi lain).
 - **Verifikasi live:** `count(*) profiles_public = 0`; kolom sensitif `profiles`
   (`avatar/last_seen/fcm_token/status`) tetap TANPA SELECT untuk anon/auth
@@ -1594,37 +1594,37 @@ prioritas lebih rendah.
 - **Catatan:** audit lengkap 467 temuan advisor ? `docs/SECURITY_AUDIT.md`
   (profiles_public selesai; berikutnya anon SECURITY DEFINER & search_path).
 
-## 2026-09-28 — Security hardening lanjutan (3 migrasi, APPLY)
+## 2026-09-28 ï¿½ Security hardening lanjutan (3 migrasi, APPLY)
 
 Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 (hanya REVOKE/ALTER SET), jadi fungsi FROZEN tidak tersentuh.
 
-- **`20260928120000_revoke_anon_internal_functions.sql`** — REVOKE EXECUTE
+- **`20260928120000_revoke_anon_internal_functions.sql`** ï¿½ REVOKE EXECUTE
   56 fungsi internal/trigger/admin (notify_*, *_count_sync, sync_*, admin_*,
   dll.) dari **PUBLIC, anon, authenticated**. Temuan
   `anon_security_definer_function_executable` **88 ? 32**.
-  - **Temuan kunci:** `revoke ... from anon` SENDIRIAN tidak cukup — Postgres
+  - **Temuan kunci:** `revoke ... from anon` SENDIRIAN tidak cukup ï¿½ Postgres
     memberi EXECUTE ke `PUBLIC` default & anon mewarisinya. Wajib `from public`.
     Terverifikasi `has_function_privilege('anon',...)` baru false setelah ini.
   - Fungsi klien (get_online_users, avatar_for, deduct_chat_point, dst.) TIDAK
-    di-revoke — diverifikasi tak ada yang putus (`authenticated=true` tetap).
+    di-revoke ï¿½ diverifikasi tak ada yang putus (`authenticated=true` tetap).
   - Helper lintas-fungsi/policy (is_admin_request, fn_room_role,
     _privacy_are_friends, storage_object_owner_ok, dst.) SENGAJA dibiarkan.
-- **`20260928130000_set_function_search_path.sql`** — ALTER FUNCTION SET
+- **`20260928130000_set_function_search_path.sql`** ï¿½ ALTER FUNCTION SET
   `search_path = public, pg_temp` untuk 28 fungsi. Temuan
   `function_search_path_mutable` **28 ? 0**.
-- **HIBP** (`password_hibp_enabled=true` via Auth config API) —
+- **HIBP** (`password_hibp_enabled=true` via Auth config API) ï¿½
   `auth_leaked_password_protection` **1 ? 0**.
 - Verifikasi: `flutter analyze`-0 (tak ada perubahan Dart); advisor re-scan;
   `has_function_privilege`/`proconfig` dicek langsung. Detail: `docs/SECURITY_AUDIT.md`.
 
-## 2026-09-28 — 20260928140000_revoke_authenticated_internal_legacy.sql (APPLY)
+## 2026-09-28 ï¿½ 20260928140000_revoke_authenticated_internal_legacy.sql (APPLY)
 
-- **Tujuan:** lanjut audit advisor — cabut EXECUTE 38 fungsi internal/legacy
+- **Tujuan:** lanjut audit advisor ï¿½ cabut EXECUTE 38 fungsi internal/legacy
   dari `authenticated` (+PUBLIC+anon). Temuan `authenticated_security_definer_
   function_executable` **221 ? 183**. Total advisor **326 ? 288**.
 - **Isi:** REVOKE untuk `admin_*` legacy (register_dummy/renew_dummy_token/
-  list_dummies/dummy_uids/…), `ai_*` tick/cleanup/claim, `ledger_*`,
+  list_dummies/dummy_uids/ï¿½), `ai_*` tick/cleanup/claim, `ledger_*`,
   `call_push`, `friend_request_inbox/outbox`, `presence_idle_tick`,
   `room_voice_sweep`, `purge_inactive_accounts`, `send_reengage_notifications`,
   `social_push`, `yukcoin_total`, dll. + GRANT balik ke `service_role`.
@@ -1639,4 +1639,41 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
   & semua RPC klien (diverifikasi `has_function_privilege` tetap true).
 - **`extension_in_public` SENGAJA DIBIARKAN** (cube/earthdistance ? fitur
   "Orang Sekitar"; pg_net ? notif; pindah schema = risiko tinggi, manfaat 1 lint).
-  Alasan lengkap: `docs/SECURITY_AUDIT.md` §6.
+  Alasan lengkap: `docs/SECURITY_AUDIT.md` ï¿½6.
+
+## 2026-09-28 â€” 20260928150000_restore_admin_storage_stats_grant.sql (SUDAH APPLY)
+
+- **Tujuan:** kembalikan EXECUTE `admin_storage_stats()` ke `authenticated`.
+  Efek samping hardening `20260928120000` (cabut dari authenticated, sisa
+  service_role) â†’ kartu "Penggunaan Data Supabase" di panel admin 403/loading
+  terus (app admin login via JWT = role authenticated).
+- **Isi:** 1 baris GRANT saja (body fungsi TIDAK disentuh â€” bukan FROZEN).
+- **Bukti aman:** guard admin internal di body (`auth.email()='zunixe@gmail.com'`
+  atau service_role, selain itu `raise 'Unauthorized'`); preseden
+  `admin_table_sizes` memang di-grant ke authenticated.
+- **Client:** `getStorageStats`/`getTableSizes`/`getCfUsage` kini timeout 30 dtk
+  + kartu tampil error + tombol retry (tidak spinner selamanya).
+- **Apply:** via Management API 2026-09-28; versi dicatat di `schema_migrations`.
+- **Verifikasi live:** `auth_can_exec=true`, `anon_can_exec=false` (hardening tetap).
+
+## 2026-09-28 â€” 20260928160000_admin_storage_stats_pro_quota.sql (SUDAH APPLY)
+
+- **Tujuan:** kuota kartu admin ikut paket PRO (sebelumnya hardcode FREE tier
+  â†’ progress bar penuh padahal pemakaian kecil). DB 512 MB â†’ 8 GB
+  (8589934592), storage 1 GB â†’ 100 GB (107374182400) sesuai supabase.com/pricing.
+- **Isi:** body disalin utuh dari 20260825170000 (tak ada migrasi lain yang
+  menyentuh body); hanya 2 angka kuota + komentar yang berubah. Bukan FROZEN.
+- **Apply:** via Management API 2026-09-28; versi dicatat di `schema_migrations`.
+- **Verifikasi live:** `qdb=8589934592`, `qstor=107374182400`.
+
+## 2026-09-28 â€” 20260928170000_admin_storage_stats_bandwidth.sql (SUDAH APPLY)
+
+- **Tujuan:** tampilkan batas bandwidth di kartu admin (Pro = 250 GB egress).
+  Pemakaian live TIDAK diekspos API mana pun (hanya dashboard Supabase â†’
+  Usage), jadi yang ditampilkan = kuota + hint.
+- **Isi:** body disalin utuh dari 20260928160000; tambah 2 key output
+  (`quota_bandwidth_bytes=268435456000`, `plan='pro'`). Bukan FROZEN.
+- **Apply:** via Management API 2026-09-28; versi dicatat di `schema_migrations`.
+- **Verifikasi live:** `bw=268435456000`, `plan=pro`.
+- **Client:** baris "Bandwidth (egress) â€” Kuota: 250 GB" + hint di kartu
+  (string `adminStorageBandwidth`/`adminBandwidthHint`, bilingual).

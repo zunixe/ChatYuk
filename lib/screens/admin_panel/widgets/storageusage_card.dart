@@ -31,18 +31,28 @@ class AdminStorageUsageCardState extends State<AdminStorageUsageCard> {
     });
   }
 
+  Future<void> _retry() async {
+    if (!mounted) return;
+    final a = context.read<AdminProvider>();
+    await a.fetchStorageStats(force: true);
+    if (!mounted) return;
+    await a.fetchCfUsage();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleProvider>().s;
     final admin = context.watch<AdminProvider>();
     final st = admin.storageStats;
     final loading = admin.storageStatsLoading && st == null;
+    final failed = !loading && st == null && admin.storageStatsError;
 
     final dbBytes = ((st?['db_bytes'] ?? 0) as num).toInt();
     final storBytes = ((st?['storage_bytes'] ?? 0) as num).toInt();
     final files = ((st?['storage_files'] ?? 0) as num).toInt();
     final total = ((st?['total_bytes'] ?? 0) as num).toInt();
     final quotaDb = ((st?['quota_db_bytes'] ?? 1) as num).toInt();
+    final quotaBw = ((st?['quota_bandwidth_bytes'] ?? 0) as num).toInt();
     final quotaStor = ((st?['quota_storage_bytes'] ?? 1) as num).toInt();
 
     final growth = (st?['growth'] as Map<String, dynamic>?) ?? const {};
@@ -60,7 +70,37 @@ class AdminStorageUsageCardState extends State<AdminStorageUsageCard> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             )
-          : Column(
+          : failed
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.cloud_off_outlined,
+                          size: 32,
+                          color: AppTheme.textSecondary,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          s.adminStorageError,
+                          textAlign: TextAlign.center,
+                          style: AppText.bodySmall.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: _retry,
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: Text(s.adminRetry),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
@@ -139,6 +179,18 @@ class AdminStorageUsageCardState extends State<AdminStorageUsageCard> {
                               '${formatBytes(storBytes)} / ${formatBytes(quotaStor)}'),
                           _progress(storPct.clamp(0.0, 1.0), AppTheme.accent),
                           _kv(s.adminStorageFiles, '$files'),
+                          if (quotaBw > 0) ...[
+                            _kv(
+                              '${s.adminStorageBandwidth} (${s.adminQuotaLabel})',
+                              formatBytes(quotaBw),
+                            ),
+                            Text(
+                              s.adminBandwidthHint,
+                              style: AppText.micro.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
                         ],
                       );
                     })),

@@ -815,6 +815,18 @@ class S {
   String get msgCallMissed => isId ? 'Panggilan tidak dijawab' : 'Missed call';
   String get msgCallError =>
       isId ? 'Panggilan gagal terhubung' : 'Call failed to connect';
+  String get errCallPermission =>
+      isId ? 'Izin kamera & mikrofon diperlukan untuk panggilan' : 'Camera & microphone permission needed for calls';
+  String get errCallPermissionVideo =>
+      isId ? 'Izin kamera diperlukan untuk panggilan video' : 'Camera permission needed for video calls';
+  String get errCallMediaInUse =>
+      isId ? 'Kamera/mikrofon sedang dipakai aplikasi lain' : 'Camera/microphone is used by another app';
+  String get errCallMediaNotFound =>
+      isId ? 'Kamera/mikrofon tidak ditemukan' : 'Camera/microphone not found';
+  String get btnOpenSettings =>
+      isId ? 'Buka Pengaturan' : 'Open Settings';
+  String get btnTryAgain => isId ? 'Coba lagi' : 'Try again';
+  String get btnReconnect => isId ? 'Sambung ulang' : 'Reconnect';
   String get msgCallRegisterOnly => isId
       ? 'Hanya akun terdaftar yang bisa melakukan panggilan.'
       : 'Only registered accounts can make calls.';
@@ -1887,6 +1899,31 @@ class S {
   String get msgLiked => isId ? 'Disukai' : 'Liked';
   String get msgUnliked => isId ? 'Batal suka' : 'Unliked';
   String get msgShared => isId ? 'Dibagikan' : 'Shared';
+  String postShareMsg(String author, String text) {
+    const link =
+        'https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
+    if (text.isEmpty) {
+      return isId
+          ? 'Lihat postingan $author di ChatYuk!\n$link'
+          : 'Check out $author\'s post on ChatYuk!\n$link';
+    }
+    return isId
+        ? 'Lihat postingan $author di ChatYuk:\n$text\n$link'
+        : 'Check out $author\'s post on ChatYuk:\n$text\n$link';
+  }
+
+  String commentShareMsg(String author, String text) {
+    const link =
+        'https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
+    if (text.isEmpty) {
+      return isId
+          ? 'Lihat komentar $author di ChatYuk!\n$link'
+          : 'Check out $author\'s comment on ChatYuk!\n$link';
+    }
+    return isId
+        ? 'Lihat komentar $author di ChatYuk:\n$text\n$link'
+        : 'Check out $author\'s comment on ChatYuk:\n$text\n$link';
+  }
   String get badgeBoosted => isId ? 'Boost' : 'Boost';
   String get badgeFriend => isId ? 'Teman' : 'Friend';
   String get badgeSubscriber => isId ? 'Subscriber' : 'Subscriber';

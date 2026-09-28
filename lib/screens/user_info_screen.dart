@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../core/nav_guard.dart';
 import '../utils.dart';
 import '../models/user_model.dart';
 import '../models/user_photo.dart';
@@ -14,6 +15,8 @@ import '../providers/points_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/async_photo.dart';
+import '../widgets/call_permission_dialog.dart';
+import '../core/call/call_permissions.dart';
 import '../providers/theme_provider.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
@@ -253,6 +256,18 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       return;
     }
     final messenger = ScaffoldMessenger.of(ctx);
+    // Izin kamera/mikrofon WAJIB sebelum getUserMedia — tanpa ini video call
+    // pertama (izin belum ada) langsung gagal senyap (CallPhase.error).
+    final perm = await ensureCallPermissions(video: callType == 'video');
+    if (perm != CallPermissionResult.granted) {
+      if (!mounted) return;
+      showCallPermissionDialog(
+        context,
+        video: callType == 'video',
+        permanentlyDenied: perm == CallPermissionResult.permanentlyDenied,
+      );
+      return;
+    }
     try {
       // Chat dibuat/diambil dulu supaya overlay & banner punya rumah.
       final chatId = await context.read<ChatProvider>().startPrivateChat(
@@ -280,6 +295,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         chatId: chatId,
       );
       if (!mounted) return;
+      final navKey = navKeyChat(chatId);
+      if (!tryClaimNav(navKey)) return;
       if (callType == 'video') {
         Navigator.of(ctx).push(
           MaterialPageRoute(
@@ -290,7 +307,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               otherUid: widget.userId,
             ),
           ),
-        );
+        ).then((_) => releaseNav(navKey));
       } else {
         Navigator.of(ctx).push(
           MaterialPageRoute(
@@ -345,6 +362,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         otherAge: profile?.age ?? 0,
       );
       if (!mounted) return;
+      final navKey = navKeyChat(chatId);
+      if (!tryClaimNav(navKey)) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PrivateChatScreen(
@@ -358,7 +377,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             otherRegistered: profile?.isRegistered ?? false,
           ),
         ),
-      );
+      ).then((_) => releaseNav(navKey));
       // Refresh status sosial setelah balik dari chat (bisa follow dari sana).
       if (mounted) _loadSocial();
     } catch (e) {
@@ -513,8 +532,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final s = context.watch<LocaleProvider>().s;
     final profile = _profile;
     final pointsEnabled = context.watch<PointsProvider>().enabled;
-    // Viewer anon: card sosial (pengikut/mengikuti/subscriber + tombol
-    // ikuti/tambah teman) disembunyikan — fitur butuh akun terdaftar.
+    // Tombol sosial (pengikut/mengikuti/subscriber + ikuti/tambah teman)
+    // SELALU tampil — viewer anon yang mengetuk diberi snackbar daftar
+    // (guard di _toggleFollow/_addFriend). Jangan disembunyikan.
     final auth = context.watch<AuthProvider>();
     final isAnonViewer = auth.isAnonymous;
 
@@ -727,8 +747,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   SizedBox(height: 16),
 
                   // Sosial kompak: stat mini + tombol ikon kecil, langsung
-                  // terlihat tanpa scroll. Sembunyi bagi viewer anon.
-                  if (profile != null && !isAnonViewer) ...[
+                  // terlihat tanpa scroll. Selalu tampil (termasuk viewer
+                  // anon) — guard daftar ada di tiap aksi.
+                  if (profile != null) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [

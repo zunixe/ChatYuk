@@ -207,13 +207,17 @@ mixin AdminStatsMx on AdminBase {
   // ── Statistik penggunaan data Supabase ──
   Map<String, dynamic>? _storageStats;
   bool _storageStatsLoading = false;
+  bool _storageStatsError = false;
   DateTime? _storageStatsAt;
   static const _storageTtl = Duration(minutes: 10);
 
   Map<String, dynamic>? get storageStats => _storageStats;
   bool get storageStatsLoading => _storageStatsLoading;
+  bool get storageStatsError => _storageStatsError;
 
   /// TTL 10 menit — kartu Overview remount tidak menembak RPC berulang.
+  /// Gagal = data lama dipertahankan + flag error (UI tampil retry,
+  /// bukan spinner/0 diam).
   Future<void> fetchStorageStats({bool force = false}) async {
     if (!force &&
         _storageStats != null &&
@@ -222,12 +226,20 @@ mixin AdminStatsMx on AdminBase {
       return;
     }
     _storageStatsLoading = true;
+    _storageStatsError = false;
     if (!_disposed) notifyListeners();
     try {
-      _storageStats = await _service.getStorageStats();
-      _storageStatsAt = DateTime.now();
+      final fresh = await _service.getStorageStats();
+      if (fresh.isEmpty) {
+        // Kosong = RPC gagal diam-diam — jangan timpa data baik.
+        if (_storageStats == null) _storageStatsError = true;
+      } else {
+        _storageStats = fresh;
+        _storageStatsAt = DateTime.now();
+      }
     } catch (e) {
       dlog('[ADMIN] fetchStorageStats error: $e');
+      if (_storageStats == null) _storageStatsError = true;
     }
     _storageStatsLoading = false;
     if (!_disposed) notifyListeners();
@@ -236,21 +248,31 @@ mixin AdminStatsMx on AdminBase {
   // ── Breakdown ukuran tabel (sheet dari kartu Database) ──
   List<Map<String, dynamic>> _tableSizes = [];
   bool _tableSizesLoading = false;
+  bool _tableSizesError = false;
 
   List<Map<String, dynamic>> get tableSizes => _tableSizes;
   bool get tableSizesLoading => _tableSizesLoading;
+  bool get tableSizesError => _tableSizesError;
 
   /// Selalu fetch fresh saat sheet dibuka (tanpa TTL — angka ukuran
   /// berubah tiap ada tulis; RPC hanya baca katalog, murah).
+  /// Gagal = data lama dipertahankan + flag error (UI tampil retry).
   Future<void> fetchTableSizes() async {
     _tableSizesLoading = true;
+    _tableSizesError = false;
     if (!_disposed) notifyListeners();
     try {
       final res = await _service.getTableSizes();
-      _tableSizes =
+      final rows =
           List<Map<String, dynamic>>.from(res['tables'] ?? const []);
+      if (rows.isEmpty && _tableSizes.isEmpty) {
+        _tableSizesError = true;
+      } else if (rows.isNotEmpty) {
+        _tableSizes = rows;
+      }
     } catch (e) {
       dlog('[ADMIN] fetchTableSizes error: $e');
+      if (_tableSizes.isEmpty) _tableSizesError = true;
     }
     _tableSizesLoading = false;
     if (!_disposed) notifyListeners();

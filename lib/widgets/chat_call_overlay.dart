@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -7,6 +9,7 @@ import '../config/strings.dart';
 import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../services/call_service.dart';
+import '../core/call/call_permissions.dart';
 import '../core/perf/perf_probe.dart';
 import 'call_control_button.dart';
 import 'profile_avatar.dart';
@@ -93,9 +96,24 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
         return s.callRinging;
       case CallPhase.connecting:
         return s.callConnecting;
+      case CallPhase.error:
+        // Dulu tidak ada case ini → overlay menampilkan status KOSONG saat
+        // gagal, user bingung "kenapa video call gagal".
+        return callMediaErrorMessage(s, sess.mediaError);
       case CallPhase.ended:
-        return s.msgCallEnded;
-      default:
+        switch (sess.endReason) {
+          case CallEndReason.error:
+            return s.msgCallError;
+          case CallEndReason.declined:
+            return s.msgCallDeclined;
+          case CallEndReason.busy:
+            return s.msgCallBusy;
+          case CallEndReason.missed:
+            return s.msgCallMissed;
+          default:
+            return s.msgCallEnded;
+        }
+      case CallPhase.inCall:
         return '';
     }
   }
@@ -351,6 +369,14 @@ class _ChatCallOverlayState extends State<ChatCallOverlay> {
           off: !sess.speakerOn,
           onTap: sess.toggleSpeaker,
         ),
+        // Sambung ulang saat koneksi bermasalah / gagal terhubung — dulu
+        // tombol ini hanya ada di CallScreen, overlay tidak punya jalan pulih.
+        if (sess.canReconnect &&
+            (sess.iceReconnectFailed || sess.phase == CallPhase.error))
+          CallControlButton(
+            icon: Icons.refresh_rounded,
+            onTap: () => unawaited(sess.reconnect()),
+          ),
         CallControlButton(
           icon: Icons.aspect_ratio_rounded,
           onTap: widget.onExpand,

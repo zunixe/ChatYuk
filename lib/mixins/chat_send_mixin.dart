@@ -10,6 +10,7 @@ import '../core/chat/chat_location.dart';
 import '../utils.dart' show capitalizeFirst;
 import '../utils/mention.dart';
 import '../widgets/anon_prompt_dialog.dart';
+import '../widgets/chat_info_snack.dart';
 import 'chat_outbox_mixin.dart';
 import 'chat_photo_send_mixin.dart';
 
@@ -149,9 +150,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
         final ok = await sendEditPersist(editing, raw);
         if (mounted) {
           final s = context.read<LocaleProvider>().s;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(ok ? s.msgEdited : s.errSendFailed)),
-          );
+          showChatSnack(context, ok ? s.msgEdited : s.errSendFailed);
         }
       } finally {
         sendIsSending = false;
@@ -291,9 +290,7 @@ mixin ChatSendMixin<T extends StatefulWidget>
       if (remaining == -1) {
         pp.showOutOfPointsDialog(context, ss.isId);
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(ss.errSendFailed)));
+        showChatSnack(context, ss.errSendFailed);
       }
       return;
     }
@@ -322,12 +319,9 @@ mixin ChatSendMixin<T extends StatefulWidget>
               e.toString().contains('42501') ||
               e.toString().toLowerCase().contains('insufficient_privilege') ||
               e.toString().toLowerCase().contains('policy');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                blockedByOther ? s.msgBlockedByOther : s.errSendFailed,
-              ),
-            ),
+          showChatSnack(
+            context,
+            blockedByOther ? s.msgBlockedByOther : s.errSendFailed,
           );
         }
       }

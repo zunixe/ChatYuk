@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -13,6 +15,7 @@ import '../providers/locale_provider.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
 import '../core/cache/post_photo_cache.dart';
+import '../core/nav_guard.dart';
 import '../services/avatar_service.dart';
 import '../core/cache/media_disk_cache.dart';
 import '../services/storage_photo_service.dart';
@@ -546,28 +549,62 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
+  /// Tulis foto post ke file temp untuk shareXFiles. Ambil dari thumb
+  /// yang sudah tampil dulu (instan), fallback download via cache.
+  Future<List<XFile>> _shareFilesFor(List<String> paths, String postId) async {
+    final safeId = postId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+    try {
+      final dir = await getTemporaryDirectory();
+      final files = <XFile>[];
+      final cache = PostPhotoCache.instance;
+      for (var i = 0; i < paths.length; i++) {
+        try {
+          Uint8List? bytes;
+          if (i < _imageThumbs.length) bytes = _imageThumbs[i];
+          bytes ??= await cache.thumb(paths[i]);
+          if (bytes == null || bytes.isEmpty) continue;
+          final f = File('${dir.path}/chatyuk_post_${safeId}_$i.jpg');
+          await f.writeAsBytes(bytes, flush: true);
+          files.add(XFile(f.path, mimeType: 'image/jpeg'));
+        } catch (_) {}
+      }
+      return files;
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<void> _share() async {
     final s = context.read<LocaleProvider>().s;
+    final tp = context.read<TimelineProvider>();
     final author = _p['authorName'] as String? ?? 'Anon';
     final text = (_p['text'] as String? ?? '').trim();
-    // Link post → Play Store (identitas post via id) + teks author.
-    final link =
-        'https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
-    final content = text.isEmpty
-        ? '$author\n\n$link'
-        : '$author: $text\n\n$link';
+    // Teks = konten post + link ChatYuk (bilingual via strings).
+    final content = s.postShareMsg(author, text);
+    // Foto ikut dibagikan bila ada — pola sama seperti story (tulis thumb
+    // ke file temp lalu shareXFiles). Tanpa ini penerima cuma dapat teks
+    // + link Play Store.
+    ShareResult result;
+    final paths = _imagePaths();
+    if (paths.isEmpty) {
+      result = await Share.share(content, subject: author);
+    } else {
+      final files = await _shareFilesFor(paths, _id);
+      if (files.isEmpty) {
+        result = await Share.share(content, subject: author);
+      } else {
+        result = await Share.shareXFiles(files, text: content, subject: author);
+      }
+    }
     // Counter HANYA bertambah saat user benar-benar menyelesaikan share
     // (status success) — tap icon lalu batal tidak dihitung.
-    final result = await Share.share(
-      content,
-      subject: author,
-    );
     if (result.status != ShareResultStatus.success) return;
+    if (!mounted) return;
     try {
-      await context.read<TimelineProvider>().sharePost(_id);
+      await tp.sharePost(_id);
       if (!mounted) return;
       final c = ((_p['shareCount'] as num?)?.toInt() ?? 0) + 1;
-      context.read<TimelineProvider>().updatePost(_id, {'shareCount': c});
+      tp.updatePost(_id, {'shareCount': c});
     } catch (_) {}
     if (mounted) {
       ScaffoldMessenger.of(
@@ -1116,10 +1153,12 @@ class _PostCardState extends State<PostCard> {
     final uid = _p['authorId'] as String? ?? '';
     if (uid.isEmpty) return;
     final name = _p['authorName'] as String? ?? 'Anon';
+    final navKey = navKeyUser(uid);
+    if (!tryClaimNav(navKey)) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => UserInfoScreen(userId: uid, fallbackName: name)),
-    );
+    ).then((_) => releaseNav(navKey));
   }
 
   /// Zoom foto avatar author (InteractiveViewer ala menu online) — tap
@@ -1356,17 +1395,18 @@ class _CommentsListState extends State<_CommentsList> {
   Future<void> _share(Map<String, dynamic> c) async {
     final id = (c['id'] as num?)?.toInt() ?? 0;
     final s = context.read<LocaleProvider>().s;
+    final tp = context.read<TimelineProvider>();
     final author = c['authorName'] as String? ?? 'Anon';
     final text = (c['text'] as String? ?? '').trim();
+    // Komentar = teks komentar + link ChatYuk (bilingual via strings).
     // Sama seperti share post: sheet sistem dulu, counter + snackbar
     // hanya bila user benar-benar menyelesaikan share.
-    final link =
-        'https://play.google.com/store/apps/details?id=com.chatyuk.chatyuk';
-    final content = text.isEmpty ? '$author\n\n$link' : '$author: $text\n\n$link';
+    final content = s.commentShareMsg(author, text);
     final result = await Share.share(content, subject: author);
     if (result.status != ShareResultStatus.success) return;
+    if (!mounted) return;
     try {
-      final res = await context.read<TimelineProvider>().shareComment(id);
+      final res = await tp.shareComment(id);
       final count = (res['share_count'] as num?)?.toInt();
       if (!mounted) return;
       if (count != null) {

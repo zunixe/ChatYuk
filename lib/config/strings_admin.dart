@@ -122,6 +122,14 @@ extension SAdminX on S {
   String get adminTableColRows => isId ? 'Baris' : 'Rows';
   String get adminTableSizesEmpty =>
       isId ? 'Belum ada data ukuran' : 'No size data yet';
+  String get adminStorageError => isId
+      ? 'Gagal memuat penggunaan data — periksa koneksi lalu coba lagi'
+      : 'Failed to load data usage — check connection and retry';
+  String get adminRetry => isId ? 'Coba lagi' : 'Retry';
+  String get adminStorageBandwidth => isId ? 'Bandwidth (egress)' : 'Bandwidth (egress)';
+  String get adminBandwidthHint => isId
+      ? 'Pemakaian live hanya terlihat di dashboard Supabase → Usage'
+      : 'Live usage is only visible in the Supabase dashboard → Usage';
 
   String get adminDeletedTab => isId ? 'Terhapus' : 'Deleted';
   String get adminDeletedTitle => isId ? 'User Terhapus' : 'Deleted Users';

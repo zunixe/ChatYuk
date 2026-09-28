@@ -106,6 +106,15 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   late Timer _pollTimer;
   RealtimeChannel? _channel;
   final _photoLoading = <String>{};
+  // Antrean foto: maks 3 unduhan bersamaan + cooldown 10 dtk per id
+  // (pola sama seperti private chat). Tanpa ini tiap foto menembak RPC +
+  // download + isolate thumbnail SEKALIGUS → berebut bandwidth/CPU dan
+  // semua spinner foto muter lama.
+  final List<String> _photoQueue = [];
+  final Set<String> _photoQueued = {};
+  final Map<String, DateTime> _photoLastAttempt = {};
+  int _photoActive = 0;
+  static const int _maxPhotoLoads = 3;
   final _scrollCtrl = ScrollController();
   final Map<String, LayerLink> _msgLinks = {};
   LayerLink _linkFor(String id) => _msgLinks.putIfAbsent(id, () => LayerLink());
@@ -309,18 +318,18 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     for (final m in _msgs) {
       if (m.imageData.isNotEmpty) oldMap[m.id] = m.imageData;
     }
-    for (final m in list) {
+    for (var i = 0; i < list.length; i++) {
+      final m = list[i];
       final kept = oldMap[m.id];
       if (kept != null && kept.isNotEmpty && m.imageData.isEmpty) {
-        list[list.indexOf(m)] = m.copyWith(imageData: kept);
+        list[i] = m.copyWith(imageData: kept);
       }
     }
-    final senders = <String>[];
+    final senderSet = <String>{};
     for (final m in list) {
-      if (m.senderId.isNotEmpty && !senders.contains(m.senderId)) {
-        senders.add(m.senderId);
-      }
+      if (m.senderId.isNotEmpty) senderSet.add(m.senderId);
     }
+    final senders = senderSet.toList();
     setState(() {
       _msgs = list;
       _invalidateItems();
@@ -526,12 +535,44 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       }
     }
     if (!mounted) return;
+    final now = DateTime.now();
     for (final m in _msgs) {
-      if (isPhoto(m) &&
-          m.imageData.isEmpty &&
-          !_photoLoading.contains(m.id)) {
-        _loadOnePhoto(m);
+      if (!isPhoto(m) || m.imageData.isNotEmpty || m.isDeleted) continue;
+      if (_photoLoading.contains(m.id) || _photoQueued.contains(m.id)) {
+        continue;
       }
+      final last = _photoLastAttempt[m.id];
+      if (last != null && now.difference(last) < const Duration(seconds: 10)) {
+        continue;
+      }
+      _photoLastAttempt[m.id] = now;
+      _photoQueue.add(m.id);
+      _photoQueued.add(m.id);
+    }
+    _drainPhotoQueue();
+  }
+
+  /// Jalankan antrean foto maksimal [_maxPhotoLoads] bersamaan.
+  /// Selesai satu (sukses/gagal) → lanjutkan berikutnya.
+  void _drainPhotoQueue() {
+    if (!mounted) return;
+    while (_photoActive < _maxPhotoLoads && _photoQueue.isNotEmpty) {
+      final id = _photoQueue.removeAt(0);
+      _photoQueued.remove(id);
+      MessageModel? msg;
+      for (final m in _msgs) {
+        if (m.id == id) {
+          msg = m;
+          break;
+        }
+      }
+      if (msg == null || msg.imageData.isNotEmpty || msg.isDeleted) continue;
+      final target = msg;
+      _photoActive++;
+      _loadOnePhoto(target).whenComplete(() {
+        _photoActive--;
+        _drainPhotoQueue();
+      });
     }
   }
 

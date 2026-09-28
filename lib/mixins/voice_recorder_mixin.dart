@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import '../widgets/chat_info_snack.dart';
+
 /// Modul BERSAMA perekam voice note (private ↔ room).
 ///
 /// State + timer + gesture lock/pause/resume identik di kedua screen (dulu
@@ -68,9 +70,7 @@ mixin VoiceRecorderMixin<T extends StatefulWidget> on State<T> {
     final hasPerm = await Permission.microphone.request();
     if (!hasPerm.isGranted) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(voicePermissionMessage())),
-        );
+        showChatSnack(context, voicePermissionMessage());
       }
       return;
     }
@@ -116,9 +116,7 @@ mixin VoiceRecorderMixin<T extends StatefulWidget> on State<T> {
     final recordedMs = voiceSeconds * 1000;
     if (bytes.length < 2000) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(voiceTooShortMessage())),
-        );
+        showChatSnack(context, voiceTooShortMessage());
       }
       return;
     }

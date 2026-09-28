@@ -18,6 +18,7 @@ import '../providers/theme_provider.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/app_gesture.dart';
 import '../core/perf/perf_probe.dart';
+import '../core/nav_guard.dart';
 import '../core/chat/chat_filter.dart';
 import '../core/chat/chat_location.dart';
 import '../widgets/filter_chip_pill.dart';
@@ -948,30 +949,37 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                 color: Colors.transparent,
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(14),
-                                  onTap: _selectionMode
-                                      ? () => _toggleSelect(chat.chatId)
-                                      : () {
-                                          // Prefetch pesan ke memori sebelum push →
-                                          // buka chat instant (tanpa loading pesan).
-                                          context
-                                              .read<ChatProvider>()
-                                              .prefetchPrivateChat(chat.chatId);
-                                          Navigator.push(
-                                            context,
-                                            PageRouteBuilder(
-                                              transitionDuration:
-                                                  const Duration(
-                                                    milliseconds: 150,
-                                                  ),
-                                              reverseTransitionDuration:
-                                                  const Duration(
-                                                    milliseconds: 120,
-                                                  ),
-                                              settings: RouteSettings(
-                                                name: privateChatRoute(
-                                                  chat.chatId,
-                                                ),
-                                              ),
+                                   onTap: _selectionMode
+                                       ? () => _toggleSelect(chat.chatId)
+                                       : () {
+                                           // Guard double-push: tap 2× cepat saat
+                                           // transisi push menumpuk 2 route identik
+                                           // → 1× back tampak "tidak bereaksi"
+                                           // (scroll jalan). docs/PERFORMANCE.md §18.
+                                           final navKey =
+                                               navKeyChat(chat.chatId);
+                                           if (!tryClaimNav(navKey)) return;
+                                           // Prefetch pesan ke memori sebelum push →
+                                           // buka chat instant (tanpa loading pesan).
+                                           context
+                                               .read<ChatProvider>()
+                                               .prefetchPrivateChat(chat.chatId);
+                                           Navigator.push(
+                                             context,
+                                             PageRouteBuilder(
+                                               transitionDuration:
+                                                   const Duration(
+                                                     milliseconds: 150,
+                                                   ),
+                                               reverseTransitionDuration:
+                                                   const Duration(
+                                                     milliseconds: 120,
+                                                   ),
+                                               settings: RouteSettings(
+                                                 name: privateChatRoute(
+                                                   chat.chatId,
+                                                 ),
+                                               ),
                                               pageBuilder: (_, __, ___) => PrivateChatScreen(
                                                 chatId: chat.chatId,
                                                 otherName: otherName,
@@ -1009,12 +1017,12 @@ class _PrivateChatsScreenState extends State<PrivateChatsScreen> {
                                                         ),
                                                         end: Offset.zero,
                                                       ).animate(curved),
-                                                      child: child,
-                                                    );
-                                                  },
-                                            ),
-                                          );
-                                        },
+                                                       child: child,
+                                                     );
+                                                   },
+                                             ),
+                                           ).then((_) => releaseNav(navKey));
+                                         },
                                   child: Padding(
                                     padding: EdgeInsets.symmetric(
                                       horizontal: 12,

@@ -22,6 +22,8 @@ import '../providers/social_provider.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/offline_outbox.dart';
 import '../core/chat/read_receipt.dart';
+import '../core/chat/pending_confirm.dart';
+import '../core/nav_guard.dart';
 import '../core/chat/chat_location.dart';
 import '../core/media/chat_background.dart';
 import '../widgets/private_chat_message.dart';
@@ -35,12 +37,15 @@ import 'call_screen.dart';
 import 'user_info_screen.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/anon_prompt_dialog.dart';
+import '../widgets/call_permission_dialog.dart';
+import '../core/call/call_permissions.dart';
 import '../utils.dart';
 import '../mixins/chat_selection_mixin.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../mixins/chat_photo_send_mixin.dart';
 import '../mixins/chat_send_mixin.dart';
 import '../widgets/chat_composer_input.dart';
+import '../widgets/chat_info_snack.dart';
 import '../widgets/location_picker_sheet.dart';
 import '../mixins/chat_outbox_mixin.dart';
 import '../core/perf/perf_probe.dart';
@@ -376,9 +381,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)),
-      );
+      showChatSnack(context, context.read<LocaleProvider>().s.errSendFailed);
       return;
     }
     if (mounted) {
@@ -568,9 +571,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     if (context.read<ChatProvider>().isBlocked(widget.otherUid)) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.msgBlocked)));
+        showChatSnack(context, s.msgBlocked);
       }
       return false;
     }
@@ -705,6 +706,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   final Set<String> _confirmedPhotoIds = {};
   final Set<String> _confirmedVoiceIds = {};
   final Set<String> _confirmedVideoIds = {};
+  // Gema teks yang sudah memakai satu pending (lihat consumeConfirmedText).
+  final Set<String> _confirmedTextIds = {};
   late final DateTime _openedAt;
 
   @override
@@ -783,16 +786,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       }
       if (_pending.isEmpty || !mounted) return;
       final mySenderIds = _pending.map((p) => p.senderId).toSet();
-      final confirmedTexts = msgs
-          .where((m) => mySenderIds.contains(m.senderId) && m.type == 'text')
-          .map((m) => m.text)
-          .toList();
       var changed = false;
-      for (final text in confirmedTexts) {
-        final idx = _pending.indexWhere(
-          (p) => p.type == 'text' && p.text == text,
+      // Teks: cocokkan via consumeConfirmedText (recency + sekali pakai +
+      // FIFO). JANGAN cocokkan mentah via isi (pesan lama yang sama isinya
+      // membuang pending baru → "kirim lalu hilang, muncul telat").
+      for (final m in msgs) {
+        if (!mySenderIds.contains(m.senderId)) continue;
+        final idx = consumeConfirmedText(
+          server: m,
+          openedAt: _openedAt,
+          consumedIds: _confirmedTextIds,
+          pendings: _pending,
         );
         if (idx != -1) {
+          _queuedIds.remove(_pending[idx].id);
           _pending.removeAt(idx);
           changed = true;
         }
@@ -1483,7 +1490,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         );
         return;
       }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errVoiceUploadFailed)));
+      if (mounted) showChatSnack(context, context.read<LocaleProvider>().s.errVoiceUploadFailed);
       return;
     }
     // Optimistic: tampilkan bubble voice langsung
@@ -1516,7 +1523,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         );
       } else if (mounted) {
         setState(() => _pending.remove(optimistic));
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)));
+        showChatSnack(context, context.read<LocaleProvider>().s.errSendFailed);
       }
     }
   }
@@ -1540,14 +1547,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     final points = context.read<PointsProvider>();
 
     if (!auth.canUsePaid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            auth.profile?.isRegistered != true
-                ? s.errCoinRegisterOnly
-                : s.msgVerifyToUsePaid,
-          ),
-        ),
+      showChatSnack(
+        context,
+        auth.profile?.isRegistered != true
+            ? s.errCoinRegisterOnly
+            : s.msgVerifyToUsePaid,
       );
       return;
     }
@@ -1583,7 +1587,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           : msg.contains('registered')
           ? s.errCoinRegisterOnly
           : s.errSendCoin;
-      messenger.showSnackBar(SnackBar(content: Text(show)));
+      showChatSnackVia(messenger, context, show);
     }
   }
 
@@ -1608,7 +1612,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           : msg.contains('registered')
           ? s.errCoinRegisterOnly
           : s.errSendCoin;
-      messenger.showSnackBar(SnackBar(content: Text(show)));
+      showChatSnackVia(messenger, context, show);
     }
   }
 
@@ -1618,14 +1622,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     final auth = context.read<AuthProvider>();
 
     if (!auth.canUsePaid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            auth.profile?.isRegistered != true
-                ? s.errCoinRegisterOnly
-                : s.msgVerifyToUsePaid,
-          ),
-        ),
+      showChatSnack(
+        context,
+        auth.profile?.isRegistered != true
+            ? s.errCoinRegisterOnly
+            : s.msgVerifyToUsePaid,
       );
       return;
     }
@@ -1819,15 +1820,19 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         title: Row(
           children: [
             GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => UserInfoScreen(
-                    userId: widget.otherUid,
-                    fallbackName: widget.otherName,
+              onTap: () {
+                final navKey = navKeyUser(widget.otherUid);
+                if (!tryClaimNav(navKey)) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UserInfoScreen(
+                      userId: widget.otherUid,
+                      fallbackName: widget.otherName,
+                    ),
                   ),
-                ),
-              ),
+                ).then((_) => releaseNav(navKey));
+              },
               child: ProfileAvatar(
                 uid: widget.otherUid,
                 name: widget.otherName,
@@ -2030,20 +2035,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
               } else if (val == 'follow') {
                 final social = context.read<SocialProvider>();
                 social.follow(widget.otherUid);
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(s.btnFollow)));
+                showChatSnack(context, s.btnFollow);
               } else if (val == 'friend') {
                 final social = context.read<SocialProvider>();
                 social.sendFriendRequest(widget.otherUid);
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(s.friendRequestSent)));
+                showChatSnack(context, s.friendRequestSent);
               } else if (val == 'block') {
                 chat.blockUser(myUid!, widget.otherUid);
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(s.blockSuccess)));
+                showChatSnack(context, s.blockSuccess);
               } else if (val == 'report') {
                 _showReportDialog();
               }
@@ -2607,9 +2606,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   ) async {
     final s = context.read<LocaleProvider>().s;
     if (CallProvider.instance.inCall) {
-      ScaffoldMessenger.of(
-        ctx,
-      ).showSnackBar(SnackBar(content: Text(s.msgCallInProgress)));
+      showChatSnack(ctx, s.msgCallInProgress);
       return;
     }
     final messenger = ScaffoldMessenger.of(ctx);
@@ -2627,6 +2624,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         title: ls.promptCompleteEmailCallTitle,
         message: ls.promptCompleteEmailCallMsg,
         icon: Icons.call_outlined,
+      );
+      return;
+    }
+    // Izin kamera/mikrofon WAJIB sebelum getUserMedia — tanpa ini video call
+    // pertama (izin belum ada) langsung gagal senyap (CallPhase.error).
+    final perm = await ensureCallPermissions(video: callType == 'video');
+    if (perm != CallPermissionResult.granted) {
+      if (!mounted) return;
+      showCallPermissionDialog(
+        context,
+        video: callType == 'video',
+        permanentlyDenied: perm == CallPermissionResult.permanentlyDenied,
       );
       return;
     }
@@ -2671,7 +2680,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       }
       // Mode chat: overlay muncul otomatis dari provider.activeSession.
     } catch (_) {
-      messenger.showSnackBar(SnackBar(content: Text(s.errGeneric)));
+      showChatSnackVia(messenger, ctx, s.errGeneric);
     }
   }
 
