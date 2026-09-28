@@ -53,7 +53,10 @@ class WatchSession extends ChangeNotifier {
     }
     // Sinyal call ini — semua sinyal peserta diterima admin karena
     // from_uid != uid admin.
-    _sub = _service.onSignal(call.id).listen(_onSignal);
+    _sub = _service.onSignal(call.id).listen(
+      _onSignal,
+      onError: (e) => dlog('[AdminCallWatch] signal stream error: $e'),
+    );
     _requestAll();
     // Ulangi permintaan sampai tiap peserta menjawab (callee belum accept
     // belum punya media/session → baru merespon setelah call diterima).

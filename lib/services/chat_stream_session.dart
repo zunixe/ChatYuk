@@ -660,7 +660,9 @@ class ChatStreamSession {
         scheduleCacheSave();
       } catch (_) {}
     });
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[ChatStream] realtime error: $err');
+    });
     reload();
 
     // Fallback polling: hanya jalan kalau realtime diam > 25s.

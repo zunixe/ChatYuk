@@ -112,7 +112,9 @@ mixin ChatServicePresenceMx on ChatBase {
         }
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[Presence] status realtime error: $err');
+    });
     if (initialStatus == null) fetchStatus();
 
     controller.onCancel = () => _sb.removeChannel(channel);
@@ -462,6 +464,9 @@ mixin ChatServicePresenceMx on ChatBase {
     final sub = RealtimeHub.instance.onlinePresence.listen((_) {
       debounce?.cancel();
       debounce = Timer(const Duration(milliseconds: 1200), syncFromPresence);
+    }, onError: (e) {
+      // OFFLINE: presence stream error → jangan tak tertangkap.
+      dlog('[getOnlineUsers] presence stream error: $e');
     });
     // Realtime profiles UPDATE: user lain yang baru online (termasuk dummy
     // yang di-set dari admin panel — tanpa device/presence) harus langsung
@@ -510,7 +515,9 @@ mixin ChatServicePresenceMx on ChatBase {
             debounce = Timer(const Duration(milliseconds: 1200), syncFromPresence);
           },
         )
-        .subscribe();
+        .subscribe((status, err) {
+          if (err != null) dlog('[Presence] online realtime error: $err');
+        });
     // initial sync
     syncFromPresence();
     // also periodic fallback if presence empty (cold start before track)

@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
+import '../core/cache/message_cache.dart';
 import '../widgets/admin_error_view.dart';
+import '../widgets/private_chat_message.dart';
 import '../models/active_call_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/locale_provider.dart';
@@ -866,20 +868,27 @@ class _AdminChatCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onLongPress: onLongPressMenu,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AdminChatViewScreen(
-                chatId: chat['chat_id'] as String? ?? '',
-                chatLabel: label,
-                participantOrder: orderUids,
-                participantNames: {
-                  for (final e in names.entries)
-                    '${e.key}': '${e.value ?? ''}',
-                },
+          onTap: () {
+            final id = chat['chat_id'] as String? ?? '';
+            // Tap 2× cepat menumpuk 2 route identik → 1× back terlihat mati.
+            if (!tryClaimChatPush(id)) return;
+            // Panaskan cache pesan selagi animasi transisi jalan.
+            unawaited(MessageCache.instance.preloadMessages(cacheKeyFor(id)));
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdminChatViewScreen(
+                  chatId: id,
+                  chatLabel: label,
+                  participantOrder: orderUids,
+                  participantNames: {
+                    for (final e in names.entries)
+                      '${e.key}': '${e.value ?? ''}',
+                  },
+                ),
               ),
-            ),
-          ),
+            ).then((_) => releaseChatPush(id));
+          },
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(

@@ -38,14 +38,40 @@ String? computeMonitorLeftUid({
   required String chatId,
   required List<String> senders,
 }) {
-  if (participantOrder.length >= 2) return participantOrder.first;
-  final parts = chatId.split('_');
+  final order = participantOrder.where((e) => e.isNotEmpty).toList();
+  if (order.length >= 2) return order.first;
+  final parts = chatId.split('_').where((e) => e.isNotEmpty).toList();
   if (parts.length == 2) return parts.first;
   if (senders.isNotEmpty) {
-    final sorted = List<String>.of(senders)..sort();
-    return sorted.first;
+    final sorted = senders.where((e) => e.isNotEmpty).toList()..sort();
+    if (sorted.isNotEmpty) return sorted.first;
   }
   return null;
+}
+
+/// Guard anti double-push kartu monitor chat (diuji
+/// `test/admin_chat_back_button_test.dart`).
+///
+/// Tap 2× cepat saat transisi push belum selesai menumpuk 2 route chat
+/// identik — 1× back lalu terlihat "tidak ada reaksi" (kasus nyata chat
+/// "Anggi & Jaky"). Klaim dilepas saat route di-pop ([releaseChatPush]).
+final Map<String, DateTime> _chatPushClaim = {};
+
+/// True bila navigasi boleh jalan. [now] hanya untuk test.
+bool tryClaimChatPush(String chatId, {DateTime? now}) {
+  if (chatId.isEmpty) return true;
+  final at = (now ?? DateTime.now()).toUtc();
+  final prev = _chatPushClaim[chatId];
+  if (prev != null && at.difference(prev) < const Duration(seconds: 2)) {
+    return false;
+  }
+  _chatPushClaim[chatId] = at;
+  return true;
+}
+
+/// Lepas klaim [tryClaimChatPush] — dipanggil saat route chat di-pop.
+void releaseChatPush(String chatId) {
+  _chatPushClaim.remove(chatId);
 }
 
 class AdminChatViewScreen extends StatefulWidget {
@@ -98,6 +124,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   Timer? _callTimer;
   WatchSession? _watch;
   bool _startingWatch = false;
+  // Poll 5 dtk bisa tumpang tindih saat RPC lambat.
+  bool _polling = false;
+  int _pollCount = 0;
 
   void _onWatchChanged() {
     if (!mounted) return;
@@ -296,12 +325,20 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     }
     final senders = <String>[];
     for (final m in list) {
-      if (!senders.contains(m.senderId)) senders.add(m.senderId);
+      if (m.senderId.isNotEmpty && !senders.contains(m.senderId)) {
+        senders.add(m.senderId);
+      }
     }
     setState(() {
       _msgs = list;
       _invalidateItems();
-      _leftUid = _computeLeftUid(senders);
+      // Sisi kiri STABIL: hanya diisi bila masih kosong. Menimpa tiap poll
+      // dengan hasil hitung-ulang (yang bisa null/kosong saat data sesaat
+      // kosong) membuat SEMUA bubble pindah ke kanan.
+      if (_leftUid == null || _leftUid!.isEmpty) {
+        final computed = _computeLeftUid(senders);
+        if (computed != null && computed.isNotEmpty) _leftUid = computed;
+      }
       _error = false;
     });
     _loadPhotos();
@@ -355,7 +392,11 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
-  Future<void> _fetch() async {
+  /// [force] = true memaksa load ulang dari server (pull-to-refresh).
+  /// Tanpa [force], kalau pesan sudah ada di cache lokal (memori/SQLite),
+  /// layar TIDAK menembak server — pesan lama dari lokal, yang baru lewat
+  /// poll/realtime. Inilah yang bikin buka ulang chat terasa instan.
+  Future<void> _fetch({bool force = false}) async {
     final admin = context.read<AdminProvider>();
     // 1) SINKRON dari memori (jika sudah panas) — tampil seketika, no skeleton.
     final mem = MessageCache.instance.peekMessages(_chatKey);
@@ -390,8 +431,15 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     } catch (_) {}
     // SQLite sudah dicek → boleh tentukan kosong/isi (hindari empty-state blink).
     if (mounted && !_firstResolved) setState(() => _firstResolved = true);
+    // PERSISTEN: sudah ada pesan lokal & tidak dipaksa → cukup. Pesan BARU
+    // ditangani poll 5 dtk + realtime (tidak menembak server di sini).
+    if (!force && _msgs.isNotEmpty) {
+      _hasMore = admin.chatMessagesHasMore;
+      unawaited(_refreshRead());
+      return;
+    }
     try {
-      final ok = await admin.fetchChatMessages(widget.chatId);
+      final ok = await admin.fetchChatMessages(widget.chatId, force: force);
       if (!mounted) return;
       if (!ok) {
         setState(() {
@@ -416,12 +464,22 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   }
 
   Future<void> _poll() async {
-    final admin = context.read<AdminProvider>();
-    await admin.refreshChatMessages(widget.chatId);
-    if (!mounted) return;
-    _applyMessages();
-    _hasMore = admin.chatMessagesHasMore;
-    unawaited(_refreshRead());
+    // Tumpukan poll saat jaringan lambat = RPC bertubi + rebuild
+    // beruntun. Satu poll jalan dalam satu waktu.
+    if (_polling) return;
+    _polling = true;
+    try {
+      final admin = context.read<AdminProvider>();
+      // Poll hanya butuh pesan BARU (15 cukup) — bukan 1 halaman penuh.
+      await admin.refreshChatMessages(widget.chatId, limit: 15);
+      if (!mounted) return;
+      _applyMessages();
+      _hasMore = admin.chatMessagesHasMore;
+      // last-read jarang berubah — cek tiap ~15 dtk, bukan tiap 5 dtk.
+      if (++_pollCount % 3 == 0) unawaited(_refreshRead());
+    } finally {
+      _polling = false;
+    }
   }
 
   List<MessageModel> _mapMessages(List<Map<String, dynamic>> raw) {
@@ -510,7 +568,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
           final admin = context.read<AdminProvider>();
           var raw = await admin
               .fetchMessageImage(msgId)
-              .timeout(const Duration(seconds: 30));
+              .timeout(const Duration(seconds: 15));
           // image_data berupa PATH storage (foto baru) → download dari bucket.
           if (raw.isNotEmpty &&
               mounted &&
@@ -519,7 +577,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                 await context
                     .read<StorageProvider>()
                     .download(raw)
-                    .timeout(const Duration(seconds: 30)) ??
+                    .timeout(const Duration(seconds: 15)) ??
                 '';
           }
           data = raw;
@@ -599,7 +657,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   // ── Realtime ──────────────────────────────────────────────────────────────
 
   void _subscribeRealtime() {
-    final sb = Supabase.instance.client;
+    // Lewat provider (bukan Supabase.instance langsung) supaya test bisa
+    // menyuntik client mock — perilaku produksi identik.
+    final sb = context.read<AdminProvider>().realtimeClient;
     _channel = sb.channel('admin-${widget.chatId.hashCode}');
     // FILTER chat_id — tanpa ini SETIAP pesan di seluruh app memicu _poll
     // (fetch+setState) → blink/berat. Hanya perubahan chat INI yang reaksi.
@@ -629,7 +689,11 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       filter: filter,
       callback: (_) => _poll(),
     );
-    _channel!.subscribe();
+    _channel!.subscribe((status, err) {
+      // Realtime error (mis. offline) → catat; timer _pollTimer 5 dtk tetap
+      // jadi fallback sehingga monitor tidak mati diam-diam.
+      if (err != null) debugPrint('[ADMIN] chat-monitor realtime error: $err');
+    });
   }
 
   // ── Mapping ───────────────────────────────────────────────────────────────
@@ -839,7 +903,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                         ),
                       )
                     : RefreshIndicator(
-                        onRefresh: _fetch,
+                        onRefresh: () => _fetch(force: true),
                         child: ListView.builder(
                           controller: _scrollCtrl,
                           reverse: true,

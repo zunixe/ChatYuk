@@ -1258,7 +1258,9 @@ class _CommentsListState extends State<_CommentsList> {
           if (mounted) _load();
         },
       );
-      ch.subscribe();
+      ch.subscribe((status, err) {
+        if (err != null) debugPrint('[POST] comments realtime error: $err');
+      });
       _channel = ch;
     } catch (_) {}
   }

@@ -11,6 +11,12 @@ class AvatarProvider extends ChangeNotifier {
 
   Future<String> get(String uid) => service.get(uid);
   Future<String> getByPath(String path) => service.getByPath(path);
+  /// Peek sinkron dari RAM (tanpa network) — foto tampil instan anti-kedip.
+  String? cachedSync(String uid) => service.cachedSync(uid);
+  /// RAM lalu disk (baca file) — untuk halaman profil tunggal.
+  String? cachedSyncIncludeDisk(String uid) =>
+      service.cachedSyncIncludeDisk(uid);
+  String? cachedByPathSync(String path) => service.cachedByPathSync(path);
   Future<void> prefetch(List<String> uids) => service.prefetch(uids);
   void clearForUid(String uid) => service.clearForUid(uid);
   void clearForPath(String path) => service.clearForPath(path);

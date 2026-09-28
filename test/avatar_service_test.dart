@@ -108,4 +108,30 @@ void main() {
     expect(calls, 1,
         reason: 'caller kedua menunggu job sama, bukan RPC kedua');
   });
+
+  test('uidFromAvatarPath: versi lama & versioned → uid sama', () {
+    expect(AvatarB64Service.uidFromAvatarPath('avatars/u1.jpg'), 'u1');
+    expect(
+        AvatarB64Service.uidFromAvatarPath('avatars/u1_1729000000000.jpg'), 'u1');
+    expect(AvatarB64Service.uidFromAvatarPath('gallery/x.jpg'), '');
+    expect(AvatarB64Service.uidFromAvatarPath(''), '');
+  });
+
+  test('getByPath memakai cache uid — tanpa fetch ulang (anti-kedip)', () async {
+    // Foto sudah dimuat lewat daftar chat (by uid).
+    svc.setForUid('u5', 'QUJD');
+    // Halaman profil membacanya via path versioned yang berbeda.
+    final out = await svc.getByPath('avatars/u5_1729000000000.jpg');
+    expect(out, 'QUJD');
+    expect(handler.captured.isEmpty, isTrue,
+        reason: 'tidak boleh fetch network karena sudah ada di cache uid');
+  });
+
+  test('getByPath mengisi cache uid supaya get(uid) instan', () async {
+    // RPC balas path versioned, download di-guard (StoragePhoto di-fake empty),
+    // jadi uji lewat setForPath yang meniru hasil download.
+    svc.setForPath('avatars/u6_1729000000000.jpg', 'SGVsbG8=');
+    expect(await svc.get('u6'), 'SGVsbG8=');
+    expect(handler.captured.isEmpty, isTrue);
+  });
 }

@@ -14,6 +14,25 @@ class StoryService {
 
   String? get uid => _sb.auth.currentUser?.id;
 
+  /// Tray mentah (List<Map>) — `null` bila GAGAL (offline), `[]` bila server
+  /// benar-benar kosong. Provider memakai ini supaya bisa membedakan
+  /// "offline" (pertahankan cache) vs "kosong" (timpa cache).
+  Future<List<Map<String, dynamic>>?> fetchTrayRaw() async {
+    try {
+      final res = await PerfProbe.timed(
+        'story.tray',
+        () => _sb.rpc('story_tray'),
+      );
+      if (res is List) {
+        return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return const [];
+    } catch (e) {
+      dlog('[Story] fetchTrayRaw error: $e');
+      return null;
+    }
+  }
+
   /// Tray story untuk halaman pengguna online (agregat per author).
   Future<List<StoryTrayItem>> fetchTray() async {
     try {
@@ -251,7 +270,9 @@ class StoryService {
         if (!controller.isClosed) controller.add(payload.eventType.name);
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[Story] stories realtime error: $err');
+    });
     controller.onCancel = () {
       _sb.removeChannel(channel);
     };
@@ -270,7 +291,9 @@ class StoryService {
         if (!controller.isClosed) controller.add('insert');
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[Story] views realtime error: $err');
+    });
     controller.onCancel = () {
       _sb.removeChannel(channel);
     };

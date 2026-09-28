@@ -188,7 +188,13 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
   // Gate ANON: bikin grup khusus terdaftar (server juga menolak).
   // Sesi dummy (admin jadi anon) diizinkan — server bypass dummy.
   if (auth.isAnonymous && !auth.dummySessionActive) {
-    showAnonPromptDialog(context);
+    final ls = context.read<LocaleProvider>().s;
+    showAnonPromptDialog(
+      context,
+      title: ls.promptCompleteEmailGroupTitle,
+      message: ls.promptCompleteEmailGroupMsg,
+      icon: Icons.groups_outlined,
+    );
     return;
   }
   final nameCtrl = TextEditingController();

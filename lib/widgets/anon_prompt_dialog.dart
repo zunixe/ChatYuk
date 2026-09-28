@@ -4,10 +4,19 @@ import '../config/theme.dart';
 import '../providers/locale_provider.dart';
 import '../providers/nav_provider.dart';
 
-/// Dialog "lengkapi email" untuk user anon yang mencoba membuat postingan —
-/// dipakai FAB "+" (app.dart) dan CTA timeline tab Postinganku.
-/// Tampilan mengikuti empty state timeline: ikon di atas, teks rata tengah.
-void showAnonPromptDialog(BuildContext context) {
+/// Dialog "lengkapi email" untuk user anon yang mencoba aksi terbatas —
+/// dipakai FAB "+" (app.dart), CTA timeline tab Postinganku, dan ikon
+/// Orang Sekitar (online_users_screen). Tampilan mengikuti empty state
+/// timeline: ikon di atas, teks rata tengah.
+///
+/// [title]/[message] opsional supaya konteksnya pas (posting vs Orang
+/// Sekitar dsb) tanpa menduplikasi form/dialog. Default = konteks posting.
+void showAnonPromptDialog(
+  BuildContext context, {
+  String? title,
+  String? message,
+  IconData icon = Icons.edit_rounded,
+}) {
   final s = context.read<LocaleProvider>().s;
   showDialog<void>(
     context: context,
@@ -29,7 +38,7 @@ void showAnonPromptDialog(BuildContext context) {
                     shape: BoxShape.circle,
                   ),
                 ),
-                Icon(Icons.edit_rounded, size: 48, color: AppTheme.primary),
+                Icon(icon, size: 48, color: AppTheme.primary),
                 Positioned(
                   right: 4,
                   bottom: 4,
@@ -48,13 +57,13 @@ void showAnonPromptDialog(BuildContext context) {
             ),
             SizedBox(height: 16),
             Text(
-              s.promptCompleteEmailTitle,
+              title ?? s.promptCompleteEmailTitle,
               style: AppText.bodyStrong,
               textAlign: TextAlign.center,
             ),
             SizedBox(height: 6),
             Text(
-              s.promptCompleteEmailMsg,
+              message ?? s.promptCompleteEmailMsg,
               style: AppText.bodySmall.copyWith(color: AppTheme.textSecondary),
               textAlign: TextAlign.center,
             ),

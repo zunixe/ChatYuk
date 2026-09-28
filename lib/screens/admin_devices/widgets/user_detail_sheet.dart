@@ -338,19 +338,20 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: chatId.isEmpty
-            ? null
-            : () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => AdminChatViewScreen(
-                      chatId: chatId,
-                      chatLabel: otherName.isEmpty ? 'Chat' : otherName,
-                      participantOrder: orderUids,
+          onTap: chatId.isEmpty
+              ? null
+              : () {
+                  if (!tryClaimChatPush(chatId)) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => AdminChatViewScreen(
+                        chatId: chatId,
+                        chatLabel: otherName.isEmpty ? 'Chat' : otherName,
+                        participantOrder: orderUids,
+                      ),
                     ),
-                  ),
-                );
-              },
+                  ).then((_) => releaseChatPush(chatId));
+                },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(

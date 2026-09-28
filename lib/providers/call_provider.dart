@@ -229,13 +229,16 @@ class CallProvider extends ChangeNotifier {
     // ter-emit saat swap dummy (setSession) maupun login ulang.
     _authSub ??= SupabaseConfig.client.auth.onAuthStateChange.listen((_) {
       _subscribeIncoming();
-    });
+    }, onError: (e) => dlog('[CallProvider] auth stream error: $e'));
   }
 
   void _subscribeIncoming() {
     _incomingSub?.cancel();
     _incomingSub = null;
-    _incomingSub = _service.onIncomingCall().listen(_onIncoming);
+    _incomingSub = _service.onIncomingCall().listen(
+      _onIncoming,
+      onError: (e) => dlog('[CallProvider] incoming stream error: $e'),
+    );
     dlog('[CallProvider] listening incoming calls (uid=${_service.uid})');
   }
 

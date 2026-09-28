@@ -16,7 +16,16 @@ import 'rooms_explore_screen.dart';
 class LobbyScreen extends StatefulWidget {
   final bool embedded;
   final String? externalQuery;
-  const LobbyScreen({super.key, this.embedded = false, this.externalQuery});
+
+  /// Kategori awal untuk RoomsExploreScreen (mis. 'general' saat dibuka dari
+  /// kapsul Global Room di halaman Online). null = default.
+  final String? initialCategory;
+  const LobbyScreen({
+    super.key,
+    this.embedded = false,
+    this.externalQuery,
+    this.initialCategory,
+  });
 
   @override
   State<LobbyScreen> createState() => _LobbyScreenState();
@@ -132,6 +141,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
           Expanded(
             child: RoomsExploreScreen(
               externalQuery: widget.externalQuery,
+              initialCategory: widget.initialCategory,
             ),
           ),
         ],

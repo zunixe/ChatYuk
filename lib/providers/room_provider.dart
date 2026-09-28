@@ -290,7 +290,7 @@ class RoomProvider extends ChangeNotifier {
       _counts = {..._counts, roomId: total};
       _applyCounts();
       if (!_disposed) notifyListeners();
-    });
+    }, onError: (e) => dlog('[RoomProvider] presence stream error: $e'));
     _subscribeCounts();
     _subscribePrivateRooms();
     _subscribeMembership();

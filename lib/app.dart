@@ -252,7 +252,7 @@ class _AuthGateState extends State<_AuthGate> {
           );
         });
       }
-    });
+    }, onError: (e) => dlog('[GATE] auth stream error: $e'));
   }
 
   void _onAuthChanged() {

@@ -1277,8 +1277,14 @@ Future<void> _initNotificationsFast() async {
     final perm = await messaging.requestPermission(alert: true, badge: true, sound: true);
     if (perm.authorizationStatus != AuthorizationStatus.authorized) dlog('FCM permission denied');
   }
-  FirebaseMessaging.onMessage.listen(_showLocalNotification);
-  FirebaseMessaging.onMessageOpenedApp.listen(_openFromMessage);
+  FirebaseMessaging.onMessage.listen(
+    _showLocalNotification,
+    onError: (e) => dlog('FCM onMessage stream error: $e'),
+  );
+  FirebaseMessaging.onMessageOpenedApp.listen(
+    _openFromMessage,
+    onError: (e) => dlog('FCM onMessageOpened app stream error: $e'),
+  );
   final initial = await messaging.getInitialMessage();
   if (initial != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openFromMessage(initial));
   _initDeepLinks();
@@ -1513,7 +1519,7 @@ Future<void> bootstrap({FirebaseOptions? firebaseOptions}) async {
           p.remove('current_uid');
         }
       });
-    });
+    }, onError: (e) => dlog('uid-persist auth stream error: $e'));
   } catch (_) {}
   // Fire-and-forget yang tidak block TTI
   unawaited(AdminGate.postInit?.call());

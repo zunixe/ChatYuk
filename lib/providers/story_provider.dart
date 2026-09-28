@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils.dart';
 
 import '../core/cache/media_disk_cache.dart';
+import '../core/cache/message_cache.dart';
 import '../models/story_model.dart';
 import '../services/rt_resilient.dart';
 import '../services/storage_photo_service.dart';
@@ -20,6 +21,9 @@ class StoryProvider extends ChangeNotifier {
   List<StoryTrayItem> _tray = [];
   bool _loading = false;
   String? _error;
+
+  /// Kunci cache disk tray story (offline tetap tampil).
+  static const String _kTrayKey = 'story_tray';
 
   /// Slide per author — di-cache supaya buka penonton berikutnya instan.
   final Map<String, List<StorySlide>> _slidesByAuthor = {};
@@ -82,12 +86,32 @@ class StoryProvider extends ChangeNotifier {
       _loading = true;
       if (!_disposed) notifyListeners();
     }
+    // Cold start: tampilkan cache disk DULU (biar offline tetap ada isinya,
+    // tidak "hilang" seperti dulu saat jaringan mati).
+    if (_tray.isEmpty) {
+      try {
+        final cached = await MessageCache.instance.loadRawList(_kTrayKey);
+        if (cached.isNotEmpty && _tray.isEmpty) {
+          _tray = cached.map(StoryTrayItem.fromMap).toList();
+          if (!_disposed) notifyListeners();
+        }
+      } catch (_) {}
+    }
     try {
-      _tray = await _service.fetchTray();
-      _error = null;
-      // Prewarm thumbnail sinkron dari disk (bila prewarm disk sudah siap)
-      // supaya tile pertama langsung terisi — tidak "hilang dulu" lalu tampil.
-      warmTrayThumbs();
+      final fresh = await _service.fetchTrayRaw();
+      // Kosong bisa berarti offline (fetchTray menelan error → []) ATAU
+      // server memang tak ada story. Hanya timpa cache bila ada server
+      // menyatakan ada story; kalau kosong & kita punya cache → pertahankan
+      // (perilaku sama seperti daftar online yang tetap tampil offline).
+      if (fresh != null) {
+        _tray = fresh.map(StoryTrayItem.fromMap).toList();
+        _error = null;
+        MessageCache.instance.saveRawList(
+          _kTrayKey,
+          fresh.map((e) => e).toList(),
+        );
+        warmTrayThumbs();
+      }
     } catch (e) {
       dlog('[StoryProvider] refresh error: $e');
       _error = e.toString();

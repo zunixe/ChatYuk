@@ -389,7 +389,7 @@ class DummySession {
             d.event == AuthChangeEvent.signedIn) {
           persistAdminTokensIfAdmin();
         }
-      });
+      }, onError: (e) => dlog('[DUMMY] auth stream error: $e'));
       await persistAdminTokensIfAdmin();
     } catch (e) {
       dlog('[DUMMY] installTokenPersistence error: $e');

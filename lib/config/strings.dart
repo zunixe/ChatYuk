@@ -48,6 +48,8 @@ class S {
 
   // ── Lobby / Rooms ──
   String get titleRooms => isId ? 'Global Room' : 'Global Room';
+  /// Sub-label kapsul samping → pintasan masuk Global Room (General).
+  String get roomEnterHint => isId ? 'Masuk ke' : 'Enter';
   String get searchRoom => isId ? 'Cari Room' : 'Search Room';
   String get roomOnlineCount => isId ? 'online' : 'online';
   String get noRooms => isId ? 'Belum ada room tersedia' : 'No rooms available';
@@ -1799,6 +1801,30 @@ class S {
   String get promptCompleteEmailTimelineMsg => isId
       ? 'Kamu belum melengkapi email. Lengkapi email di halaman Profil agar bisa melihat timeline.'
       : 'You have not completed your email. Complete your email on the Profile page to view the timeline.';
+  String get promptCompleteEmailNearbyTitle => isId
+      ? 'Lengkapi email untuk mencari orang sekitar'
+      : 'Complete email to find people nearby';
+  String get promptCompleteEmailNearbyMsg => isId
+      ? 'Kamu belum melengkapi email. Lengkapi email di halaman Profil agar bisa mencari orang di sekitarmu.'
+      : 'You have not completed your email. Complete your email on the Profile page to search for people nearby.';
+  String get promptCompleteEmailChatTitle => isId
+      ? 'Lengkapi email untuk mengirim pesan'
+      : 'Complete email to send messages';
+  String get promptCompleteEmailChatMsg => isId
+      ? 'Kamu belum melengkapi email. Lengkapi email di halaman Profil agar bisa mengirim pesan.'
+      : 'You have not completed your email. Complete your email on the Profile page to send messages.';
+  String get promptCompleteEmailGroupTitle => isId
+      ? 'Lengkapi email untuk membuat grup'
+      : 'Complete email to create groups';
+  String get promptCompleteEmailGroupMsg => isId
+      ? 'Kamu belum melengkapi email. Lengkapi email di halaman Profil agar bisa membuat grup.'
+      : 'You have not completed your email. Complete your email on the Profile page to create groups.';
+  String get promptCompleteEmailCallTitle => isId
+      ? 'Lengkapi email untuk menelepon'
+      : 'Complete email to make calls';
+  String get promptCompleteEmailCallMsg => isId
+      ? 'Kamu belum melengkapi email. Lengkapi email di halaman Profil agar bisa menelepon.'
+      : 'You have not completed your email. Complete your email on the Profile page to make calls.';
   String get btnGoProfile => isId ? 'Ke Profil' : 'Go to Profile';
   String get photoCountLabel => isId ? 'foto' : 'photos';
   String get btnBoost => isId ? 'Boost' : 'Boost';

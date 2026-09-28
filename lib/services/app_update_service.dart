@@ -216,7 +216,10 @@ class AppUpdateService {
   }) async {
     await _playCore.checkForUpdate();
     _coreSub?.cancel();
-    _coreSub = _playCore.installStatusStream.listen(onStatus);
+    _coreSub = _playCore.installStatusStream.listen(
+      onStatus,
+      onError: (e) => dlog('[Update] installStatus stream error: $e'),
+    );
     return _playCore.startFlexibleUpdate();
   }
 

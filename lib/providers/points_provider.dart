@@ -208,6 +208,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
           _enabledSub = null;
           subscribeEnabled();
         }
+      }, onError: (e) {
+        dlog('[POINTS] auth stream error: $e');
       });
     } catch (e) {
       dlog('[POINTS] auth listener error: $e');
@@ -235,6 +237,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
             refreshWallet();
           });
         }
+      }, onError: (e) {
+        dlog('[POINTS] points stream error: $e');
       });
       // Ambil rincian awal saat subscribe
       refreshWallet();
@@ -260,6 +264,8 @@ class PointsProvider extends ChangeNotifier with WidgetsBindingObserver {
         _enabledConfirmed = true;
         _enabled = value;
         notifyListeners();
+      }, onError: (e) {
+        dlog('[POINTS] enabled stream error: $e');
       });
     } catch (e) {
       dlog('[POINTS] watchEnabled error: $e');

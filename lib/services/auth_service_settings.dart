@@ -343,7 +343,9 @@ mixin AuthServiceSettingsMx on AuthBase {
         controller.add(Map<String, dynamic>.from(payload.newRecord));
       },
     );
-    channel.subscribe();
+    channel.subscribe((status, err) {
+      if (err != null) dlog('[Auth] settings realtime error: $err');
+    });
     controller.onCancel = () => _sb.removeChannel(channel);
     return controller.stream;
   }

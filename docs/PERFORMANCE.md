@@ -870,6 +870,8 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-18 | **Probe: statistik persentil** (`min/p50/p90/max`) + `report()` otomatis saat app di-background | 8 sesi cold: `chat.listFetch` **254-434ms (avg 345)**, sebaran kontinu = **noise jaringan**, bukan pola. `online.rpc` p50 143-247ms dengan lonjakan tunggal 526-534ms (jitter). **Tidak ada pola tersisa untuk diperbaiki.** |
 | 2026-09-19 | **Call/video call — instrumentasi + optimasi** (`PerfProbe.record`/`buildCount` di rilis): cache TURN 12 jam, timer durasi `ValueNotifier`, `RepaintBoundary` video, gate `dlog` overlay, timer `CallBanner` on-demand, tombol kontrol rata | `call.turnFetch` **1760→0.1ms** (cache), `call.setupMedia` **5509→40ms**, `initToConnected` 12735–18105→**avg 5104ms**; `build CallScreen` berhenti dipicu timer |
 | 2026-09-19 | **Cron `chatyuk-call-sweep` */5m** — retensi call zombie + `call_signals` >1 jam (dulu hanya saat admin buka panel) | Mencegah `call_signals` membengkak (2.160 kB / 81 baris saat diukur) |
+| 2026-09-27 | **Avatar: satu kunci cache per uid** (§16) — `getByPath` cek `_cache[uid]` dulu + peta path→uid + seed sinkron RAM/disk di `UserInfoScreen`/`ProfileAvatar` | Halaman profil tak lagi "nge-blink" saat dibuka dari private chat (foto dari disk/daftar chat dipakai instan) |
+| 2026-09-27 | **Admin monitor chat: lokal-first** (§17) — `fetchChatMessages({force})` & `_fetch({force})` skip RPC saat pesan sudah ada di cache; server hanya saat kosong / pull-to-refresh | Buka-ulang chat di monitor tidak load ulang dari server; pesan baru tetap via poll 5 dtk + realtime |
 
 ### 8. Target tersisa
 
@@ -1159,3 +1161,182 @@ halaman, `adb logcat | grep '\[PERF\]'`. Titik ukur kini mencakup RPC user
 
 Pengecualian sah: jalur yang butuh `.timeout()` chaining tetap pakai
 `PerfProbe.timed` langsung (mis. `story.tray`, `story.slides`).
+
+---
+
+## 16. Persistensi avatar — anti-kedip & kunci cache (2026-09-27)
+
+**Keluhan:** di private chat, klik avatar → halaman profil "nge-blink"
+(foto keload ulang) padahal foto sudah tampil di daftar/header chat. Minta
+disimpan ke lokal seperti yang lain (biar sekali load, seterusnya instan).
+
+### 16.1 Akar masalah — DUA kunci cache untuk gambar yang SAMA
+
+`AvatarB64Service` dulu meng-cache dengan **dua key berbeda** tergantung jalur:
+
+| Jalur | API | RAM key | DISK key |
+|---|---|---|---|
+| Daftar chat / header chat | `get(uid)` | `_cache[uid]` | `avatars/<uid>.jpg` |
+| Halaman profil | `getByPath(path)` | `_pathCache[path]` | `<path>` (versioned) |
+
+Padahal upload avatar menyimpan path **versioned**
+(`avatars/<uid>_<millis>.jpg`, lihat `StoragePhotoService.avatarPathVersioned`),
+sedangkan jalur uid memakai path **canonical** `avatars/<uid>.jpg`. Karena
+key-nya beda, foto yang sudah ada di disk (dari daftar chat) **dianggap miss**
+saat halaman profil membacanya lewat path → fetch network ulang → kedip.
+
+### 16.2 Rumus persistensi (SATU kunci per user)
+
+> **Avatar di-cache per `<uid>`. Path apapun (canonical / versioned) dipetakan
+> ke uid yang sama, sehingga foto yang pernah dimuat di satu tempat instan di
+> tempat lain.**
+
+Aturan yang diterapkan di `lib/services/avatar_service.dart`:
+
+1. **`uidFromAvatarPath(path)`** — `avatars/<uid>.jpg` dan
+   `avatars/<uid>_<millis>.jpg` → `<uid>` (buang ekstensi lalu potong di `_`;
+   uid adalah UUID, tidak mengandung `_`). Return `''` bila bukan avatar path.
+2. **`getByPath(path)`** cek `_cache[uid]` DULU (bukan `_pathCache[path]`):
+   hit → isi `_pathCache[path]` + `_uidPath[uid]` → **return instan**.
+3. **Ram→disk→network** dipertahankan: `get(uid)` baca `readSync('avatars/<uid>.jpg')`
+   (anti-blink cold start); `getByPath` jatuh ke `_downloadWithDisk` (RAM→disk→net).
+4. **Tulis DUA key disk** saat download via path: `<path>` **dan** canonical
+   `avatars/<uid>.jpg` → pemanggil by-uid berikutnya instan.
+5. **Versi path dilacak** (`_uidPath[uid]`): kalau `getByPath` dipanggil dengan
+   path versioned BARU (`!=` yang terakhir), cache lama dibuang (`clearForUid`)
+   → foto baru tidak tertukar dengan lama, tapi foto sama tetap anti-kedip.
+6. **Background refresh** per path (`_bgPathRefreshed` + `_refreshPathInBackground`
+   → `_downloadNetwork`): server dicek di latar tanpa menahan UI (sama pola
+   `get(uid)` → `_refreshInBackground`).
+7. **Seed SINKRON di UI** (frame pertama, tanpa fase inisial→foto):
+   - `AvatarB64Service.cachedSync(uid)` — RAM saja (murah; UI list, dipakai
+     `ProfileAvatar.initState`).
+   - `AvatarB64Service.cachedSyncIncludeDisk(uid)` — RAM lalu disk (dipakai
+     `UserInfoScreen.initState` untuk cold start instan).
+   - `cachedByPathSync(path)` — RAM/disk by path (via peta `_pathToUid`).
+8. **Jangan hafal hasil kosong.** `''` (gagal sesaat/offline) TIDAK disimpan
+   permanen → begitu online lagi foto muncul sendiri (pola sama tray story:
+   null = gagal → pertahankan cache; hanya timpa saat ada data).
+
+### 16.3 Titik yang DIUBAH
+
+| File | Perubahan |
+|---|---|
+| `lib/services/avatar_service.dart` | `uidFromAvatarPath`, `_pathToUid`, `_uidPath`, `_bgPathRefreshed`, `cachedSync`/`cachedSyncIncludeDisk`/`cachedByPathSync`, `getByPath` cek uid dulu + refresh latar, `_downloadPath({uid, forceNetwork})`, `_downloadNetwork`, `clearForUid`/`clearForPath` bersihkan lintas-key |
+| `lib/providers/avatar_provider.dart` | teruskan `cachedSync` / `cachedSyncIncludeDisk` / `cachedByPathSync` |
+| `lib/providers/auth_provider.dart` | `cachedAvatarSync(uid)`, `cachedAvatarSyncDeep(uid)` |
+| `lib/screens/user_info_screen.dart` | seed `_avatarB64` SINKRON di `initState` (RAM→disk) |
+| `lib/widgets/profile_avatar.dart` | fast-path sinkron di `initState` (RAM saja; jaga list tetap murah) |
+
+### 16.4 Aturan lanjutan (JANGAN dibalik)
+
+- **Satu key per uid.** Semua jalur avatar (daftar, header, profil, timeline)
+  WAJIB lewat `AvatarB64Service` agar berbagi RAM+disk. Jangan bikin cache
+  lokal baru yang memakai key path mentah (`avatars/<uid>_...jpg`) — itu
+  mengembalikan bug kedip.
+- `getByPath` **selalu** cek `_cache[uid]` lebih dulu sebelum `_pathCache[path]`.
+- Jangan simpan hasil `''` ke cache RAM/disk (avatar bisa "hilang" sampai restart).
+- `cachedSync` (RAM) untuk list; `cachedSyncIncludeDisk` (baca file) HANYA untuk
+  halaman tunggal — baca file per-item di list panjang = jank frame pertama.
+
+Test: `test/avatar_service_test.dart` (14) — termasuk
+`uidFromAvatarPath` (canonical & versioned → uid sama),
+`getByPath memakai cache uid — tanpa fetch ulang (anti-kedip)`,
+dan `getByPath mengisi cache uid supaya get(uid) instan`.
+
+---
+
+## 17. Admin monitor chat — persistent, tak load ulang dari server (2026-09-27)
+
+**Keluhan:** di admin panel → monitor chat, saat chat dibuka terasa "ngeload
+lagi" (pesan lama di-fetch ulang dari server) padahal sudah ada di lokal.
+Minta: kalau sudah pernah dibuka → pakai lokal saja, **kecuali pesan baru**.
+
+### 17.1 Akar masalah
+
+`AdminChatViewScreen._fetch()` memang menampilkan cache lokal dulu (memori →
+SQLite), TAPI **selalu** memanggil `admin.fetchChatMessages(chatId)`
+(RPC `offset:0`) di akhir — jadi tiap buka layar = 1 round-trip server untuk
+data yang sudah ada. Bila jaringan lambat → terasa load ulang.
+
+### 17.2 Rumus persistensi (lokal-first, server hanya kalau perlu)
+
+> **Kalau pesan chat sudah ada di cache (RAM sesi ini / SQLite sesi sebelumnya),
+> JANGAN fetch server saat buka. Pesan BARU datang dari poll 5 dtk + realtime.
+> Server hanya dipanggil saat cache kosong atau dipaksa (pull-to-refresh).**
+
+1. `AdminChatsMx.fetchChatMessages(chatId, {bool force = false})` — early
+   return (tanpa RPC) bila `_chatMessages.isNotEmpty && !force`. `force:true`
+   memaksa load ulang (dipakai pull-to-refresh).
+2. `AdminChatViewScreen._fetch({bool force = false})` — setelah memuat
+   memori/SQLite, bila `_msgs.isNotEmpty && !force` → **return**, cukup
+   `_hasMore` + `_refreshRead()`. Pull-to-refresh → `_fetch(force: true)`.
+3. **Pesan baru** tetap masuk lewat: `_pollTimer` 5 dtk → `refreshChatMessages`
+   (merge: hanya menyisipkan id yang belum ada) + realtime `private_messages`
+   (insert/update/delete, terfilter `chat_id`) → `_poll()`.
+
+### 17.3 Titik yang DIUBAH
+
+| File | Perubahan |
+|---|---|
+| `lib/providers/admin/admin_chats.dart` | `fetchChatMessages({force})` — skip RPC bila cache lokal terisi & tak dipaksa (pertahankan pagination & cache disk) |
+| `lib/screens/admin_chat_view_screen.dart` | `_fetch({force})` skip server bila `_msgs` sudah ada; `RefreshIndicator.onRefresh` → `_fetch(force: true)` |
+
+### 17.4 Aturan lanjutan (JANGAN dibalik)
+
+- `_fetch()` TANPA `force` **tidak boleh** menembak server kalau sudah ada pesan
+  lokal — inilah yang menjaga buka-ulang tetap instan.
+- Jalur "pesan baru" WAJIB tetap via poll + realtime (`refreshChatMessages`
+  merge by id, bukan replace) — jangan hapus, kalau tidak chat tak update live.
+- Aksi yang MEMANG butuh server tetap `force:true` (pull-to-refresh, hapus chat).
+- `fetchMoreChatMessages` (paginasi scroll ke atas) tak terpengaruh — tetap
+  RPC karena memang memuat pesan lama yang belum ada di cache.
+
+### 17.5 Hemat poll + cache per-chat (2026-09-28)
+
+Keluhan lanjutan: buka chat masih terasa load (poll 5 dtk menembak 40 pesan +
+last-read + active-calls + foto tiap buka), buka-tutup-buka chat lain memuat
+ulang, dan daftar di belakang layar rebuild tiap poll.
+
+- `refreshChatMessages(chatId, {limit})` - poll kirim `limit: 15` (cukup untuk
+  pesan baru); halaman penuh hanya untuk refresh manual. Diam (tanpa notify)
+  bila tak ada id baru + abaikan hasil basi saat sudah pindah chat.
+- `_fetch`/`_poll` view: `_refreshRead()` (last-read) hanya tiap poll ke-3
+  (~15 dtk); guard `_polling` cegah poll tumpuk saat RPC lambat.
+- Provider: mem-cache per-chat `_chatMsgMem` (LRU 20) - A->B->A tanpa baca
+  disk ulang; dihapus saat chat dihapus.
+- `fetchActiveCalls`: skip `notifyListeners` bila sidik id+status+chat sama -
+  daftar monitor tidak rebuild tiap 5-10 dtk.
+- Timeout foto monitor 30 dtk -> 15 dtk (gagal-cepat, retry via tap).
+- Prefetch saat tap kartu (`preloadMessages`) selagi animasi transisi jalan.
+
+### 17.6 Sisi bubble dikunci stabil (2026-09-28)
+
+Gejala "kadang semua pesan pindah ke kanan": `_applyMessages` menimpa
+`_leftUid` tiap poll dengan hasil hitung-ulang yang bisa null/kosong
+(senderId kosong ikut dihitung). Rumus: `_leftUid` hanya diisi bila masih
+kosong (tidak pernah ditimpa); `computeMonitorLeftUid` mengabaikan string
+kosong di participantOrder/chatId/senders. Test:
+`test/admin_chat_back_button_test.dart` (grup computeMonitorLeftUid).
+
+---
+
+## 18. Guard anti double-push kartu monitor chat (2026-09-28)
+
+**Keluhan:** buka chat "Anggi & Jaky" -> panah back (kiri atas) ditekan tidak
+ada reaksi (scroll jalan = bukan freeze).
+
+**Akar:** tap 2x cepat saat transisi push belum selesai (frame pertama berat
+di chat foto) menumpuk 2 route chat identik. 1x back hanya menutup route
+atas -> layar terlihat sama -> "back mati". Widget test membuktikan back
+pop normal saat hanya 1 route.
+
+**Rumus:** `tryClaimChatPush(chatId)` (di `admin_chat_view_screen.dart`) -
+tap kedua dalam 2 dtk untuk chat yang sama ditolak; klaim dilepas
+(`releaseChatPush`) saat route di-pop. Jendela 2 dtk + lepas-saat-pop
+artinya buka-ulang setelah back tetap langsung bisa. Dipakai di 2 pintu
+masuk: kartu daftar monitor + kartu chat di lembar detail user.
+
+**Aturan (JANGAN dibalik):** setiap `Navigator.push` ke `AdminChatViewScreen`
+WAJIB lewat guard ini + `.then((_) => releaseChatPush(id))`. Test:
+`test/admin_chat_back_button_test.dart` (back pop + 4 kasus guard).

@@ -148,7 +148,7 @@ class TimelineProvider extends ChangeNotifier {
         _listenRealtime();
         _refreshVisibilitySets();
       }
-    });
+    }, onError: (e) => dlog('[TimelineProvider] auth stream error: $e'));
   }
 
   /// Follow/unfollow terjadi → buang TTL cache, fetch berikutnya segar.
