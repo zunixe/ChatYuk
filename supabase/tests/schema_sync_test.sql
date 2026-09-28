@@ -175,5 +175,45 @@ select supabase_tests.check('purge_location_history_90d() ada',
 select supabase_tests.check('cron purge-location-history-90d terjadwal',
   exists(select 1 from cron.job where jobname='purge-location-history-90d'));
 
+-- ── REGRESI 2026-09-28: hardening REVOKE menyapu fungsi admin yang MASIH
+-- dipanggil app admin → 42501 permission denied (admin_sweep_calls,
+-- admin_registrations_daily, admin_contact_*, admin_set_privacy_bypass).
+-- Fungsi ini WAJIB tetap EXECUTE-able oleh `authenticated` (guard
+-- zunixe@gmail.com ada DI DALAM fungsi). anon tetap dilarang.
+select supabase_tests.check('authenticated boleh EXECUTE admin_sweep_calls',
+  has_function_privilege('authenticated', 'public.admin_sweep_calls()', 'EXECUTE'));
+select supabase_tests.check('anon TIDAK boleh EXECUTE admin_sweep_calls',
+  not has_function_privilege('anon', 'public.admin_sweep_calls()', 'EXECUTE'));
+select supabase_tests.check('authenticated boleh EXECUTE admin_registrations_daily',
+  has_function_privilege('authenticated', 'public.admin_registrations_daily(integer,integer)', 'EXECUTE'));
+select supabase_tests.check('authenticated boleh EXECUTE admin_contact_messages_page',
+  has_function_privilege('authenticated', 'public.admin_contact_messages_page(integer,integer)', 'EXECUTE'));
+select supabase_tests.check('authenticated boleh EXECUTE admin_contact_set_read',
+  has_function_privilege('authenticated', 'public.admin_contact_set_read(uuid,boolean)', 'EXECUTE'));
+select supabase_tests.check('authenticated boleh EXECUTE admin_contact_delete',
+  has_function_privilege('authenticated', 'public.admin_contact_delete(uuid)', 'EXECUTE'));
+select supabase_tests.check('authenticated boleh EXECUTE admin_set_privacy_bypass',
+  has_function_privilege('authenticated', 'public.admin_set_privacy_bypass(boolean)', 'EXECUTE'));
+select supabase_tests.check('authenticated boleh EXECUTE admin_storage_stats',
+  has_function_privilege('authenticated', 'public.admin_storage_stats()', 'EXECUTE'));
+
+
+-- ── REGRESI 2026-09-29: cleanup_stale_anonymous gagal total (1.597 akun anon
+-- stale menumpuk) karena (a) hapus coin_ledger/point_events wajib matikan
+-- trigger append-only sebelum delete auth.users, dan (b) user_devices /
+-- user_location_history wajib dihapus SEBELUM profiles (FK SET NULL vs kolom
+-- NOT NULL → 23503). Loop juga WAJIB punya exception per-user.
+select supabase_tests.check('cleanup_stale_anonymous tangani coin_ledger (append-only)',
+  (select pg_get_functiondef(p.oid) like '%coin_ledger_no_delete%'
+     and pg_get_functiondef(p.oid) like '%disable trigger coin_ledger_no_delete%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='cleanup_stale_anonymous' limit 1));
+select supabase_tests.check('cleanup_stale_anonymous hapus devices sebelum profiles',
+  (select pg_get_functiondef(p.oid) like '%delete from public.user_devices%'
+     and pg_get_functiondef(p.oid) like '%delete from public.user_location_history%'
+     and pg_get_functiondef(p.oid) like '%exception when others%'
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='cleanup_stale_anonymous' limit 1));
+
 select supabase_tests.report() as result;
 rollback;
