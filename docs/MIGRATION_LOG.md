@@ -1677,3 +1677,112 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - **Verifikasi live:** `bw=268435456000`, `plan=pro`.
 - **Client:** baris "Bandwidth (egress) — Kuota: 250 GB" + hint di kartu
   (string `adminStorageBandwidth`/`adminBandwidthHint`, bilingual).
+
+## 2026-09-28 — 20260928180000_restore_admin_dummy_uids_policy_grant.sql (SUDAH APPLY) ⚠️ INSIDEN
+
+- **GEJALA (laporan user):** SEMUA panggilan (audio & video) gagal — pesan
+  "Hanya akun terdaftar yang bisa melakukan panggilan" walau
+  `app_settings.call_anon_enabled = true`. Timeline juga rusak. Error asli
+  dari logcat: `PostgrestException ... permission denied for function
+  admin_dummy_uids, code: 42501`.
+- **AKAR:** hardening `20260928140000` mencabut EXECUTE `admin_dummy_uids()`
+  dari `authenticated`. Tapi fungsi itu dipanggil **DI DALAM policy RLS**
+  `calls.calls_insert` (with check) & `posts.posts_select` (qual) — dan policy
+  RLS dievaluasi sebagai **role pemanggil**, bukan definer. Jadi setiap
+  INSERT calls & SELECT posts oleh user login kena 42501 SEBELUM logika toggle
+  anon tercapai. (Asumsi "hanya dipanggil trigger/cron/definer" salah untuk
+  fungsi ini.)
+- **Isi:** 1 baris `grant execute on function public.admin_dummy_uids() to
+  authenticated;` (body TIDAK disentuh). `anon` tetap dicabut.
+- **Apply:** via Management API 2026-09-28; versi dicatat di `schema_migrations`.
+- **Verifikasi live:** `auth_can=true, anon_can=false`; simulasi role
+  `authenticated` → `admin_dummy_uids()=14`, `select posts=19` (0 error 42501).
+- **⚠️ PELAJARAN (untuk audit berikutnya):** fungsi yang dipanggil di
+  `qual`/`with_check` policy, VIEW, atau kolom DEFAULT dijalankan sebagai
+  caller — **TIDAK BOLEH** di-revoke dari role yang memakai policy itu, walau
+  fungsinya SECURITY DEFINER. Sebelum REVOKE, scan dulu:
+  `select policyname from pg_policies where (qual||with_check) ~ '<fn>';`
+  Lihat `docs/SECURITY_AUDIT.md`.
+
+## 2026-09-28 — 20260928190000_restore_calls_insert_anon_branch.sql (SUDAH APPLY) ⚠️ INSIDEN KEDUA
+
+- **GEJALA lanjutan:** setelah 20260928180000 (grant), panggilan MASIH gagal
+  "Hanya akun terdaftar yang bisa melakukan panggilan" walau toggle anon ON.
+- **AKAR:** policy live `calls_insert` ternyata versi LAMA 20260912000050
+  (registered-only absolut, TANPA cabang `call_anon_enabled`), padahal
+  `20260912090000_call_anon_toggle.sql` **tercatat applied** di
+  `schema_migrations`. Pola "recorded but not actually applied / tertimpa"
+  (lihat APPLIED_VIA_API.md). Jadi anon/dummy tetap ditolak RLS.
+- **Isi:** re-apply definisi policy versi benar (identik 20260912090000,
+  idempoten) — tambah cabang `call_anon_enabled` untuk anon & dummy.
+- **Apply:** via Management API 2026-09-28; versi dicatat di `schema_migrations`.
+- **Verifikasi live:** `has_anon_branch=true`; simulasi INSERT `calls` sebagai
+  role authenticated + uid anon (toggle ON) → **berhasil** (return inserted id,
+  tanpa 42501). Rollback → data produksi tak tersentuh.
+- **CATATAN:** dua insiden berurutan (grant + policy basi) sama-sama membuat
+  SEMUA panggilan gagal. Sebelum menyalahkan client, SELALU tarik error asli
+  (`debugPrint('[CALL-START] ...')` di logcat) + verifikasi `pg_policies` live,
+  bukan hanya `schema_migrations`.
+
+## 2026-09-28 — 20260928203000_admin_chat_org_sync.sql (SUDAH APPLY)
+
+- **Masalah (laporan user):** kategori folder monitor chat (mis. "Huha") dibuat
+  di HP Xiaomi tidak muncul di HP Redmi. Akar: `admin_chat_org.dart` menyimpan
+  PIN + kategori HANYA di SharedPreferences lokal per HP (murni sisi klien).
+- **Isi:** tabel `public.admin_chat_org` (1 baris global: `pinned_chat_ids`,
+  `category_list`, `category_map` jsonb) — RLS enabled TANPA policy (deny
+  semua), hanya service_role & RPC security-definer (guard email admin) yang
+  akses. RPC `admin_get_chat_org()` + `admin_set_chat_org(text[], text[], jsonb)`.
+- **Apply:** via Management API 2026-09-28; versi dicatat di `schema_migrations`.
+- **Verifikasi live:** round-trip `admin_set_chat_org` → `admin_get_chat_org`
+  mengembalikan `category_list=['Huha']` + map yang benar.
+- **Klien:** provider `orgGet`/`orgSet` bridge; load = lokal dulu (instan) lalu
+  server (sumber kebenaran); setiap mutasi push ke server. **Seed upgrade:**
+  server kosong + lokal ada → dorong lokal ke atas (jangan hapus).
+- **⚠️ Pelajaran:** fitur "alat kerja admin" yang dulu sengaja lokal (prefs)
+  tetap berisiko saat admin pakai >1 HP. Bila ada keluhan "ada di HP A tidak di
+  HP B", cek dulu apakah state-nya server atau lokal.
+
+## 2026-09-28 — 20260928200000_stagger_cron_schedules.sql (SUDAH APPLY)
+
+- **TUJUAN (stabilitas, bukan fitur):** cron per-menit kehabisan worker pg_cron
+  di instance Micro → banyak run gagal `job startup timeout`.
+- **BUKTI (live, 24 jam):** `cron.job_run_details` → 414/8956 run gagal (4.6%);
+  menit kelipatan 5 pernah 11 job gagal serentak. `SHOW max_worker_processes`
+  = 6 (dipakai autovacuum 3 + realtime 2 walsender + pg_net). Ada 5 job
+  `* * * * *` TERPISAH + 4 job `*/5` yang menabrak di menit sama.
+- **ISI:**
+  1. Fungsi BARU `housekeeping_tick()` (wrapper; bukan FROZEN) yang memanggil
+     berurutan `presence_idle_tick()`, `room_voice_sweep()`, + 2 DELETE
+     cleanup room (sinyal/broadcaster basi). Tiap blok `exception when others`.
+  2. Job BARU `chatyuk-housekeeping` (`* * * * *`) → 1 worker, bukan 5.
+  3. Lepas 4 job lama per-menit: `cleanup-room-signals`,
+     `cleanup-stale-broadcasters`, `chatyuk-presence-idle`, `sweep_room_voice`.
+  4. `chatyuk-outbox-worker` → `*/2` (http_post bisa tahan lama; jangan ikut
+     tiap menit).
+  5. Job `*/5` disebar menitnya (`1-59/5`, `2-59/5`, `3-59/5`).
+     `chatyuk-call-sweep` TIDAK diubah — dikunci `call_test.sql` (`*/5 * * * *`).
+- **CATATAN pg_cron:** format 6-field (detik) TIDAK didukung di instance ini —
+  job dengan jadwal `0 * * * * *` berhenti total (tidak jalan). Percobaan
+  awal pakai detik sudah di-REVERT.
+- **Verifikasi live:** maks 5 job/menit (dulu 10-11), **0 gagal** setelah
+  perubahan; `housekeeping_tick()` → `{voice_sweep:0, presence_idle:0}`;
+  `room_signals`/`room_broadcasters` basi = 0.
+- **Test:** `outbox_notif_test.sql` 16/16, `ai_test.sql` 16/16,
+  `call_test.sql` 20/20 hijau.
+- **Rollback:** `/tmp/chatyuk_cron_backup/jobs_before.json` (definisi awal);
+  `cron.unschedule('chatyuk-housekeeping')` + `cron.schedule(...)` job lama.
+- **Bukan** fungsi FROZEN → snapshot tidak berubah (revert setelah regenerate
+  karena drift `nearby_users` dari sesi lain bukan bagian perubahan ini).
+
+## 2026-09-28 — 20260928210000_disable_ai_daily_life_cron.sql (SUDAH APPLY)
+
+- **Tujuan:** hentikan cron `chatyuk-ai-daily-life` (jobid 15, `0 22 * * *`)
+  karena belum dipakai — mengurangi beban/worker pg_cron.
+- **Isi:** `cron.unschedule('chatyuk-ai-daily-life')` (hapus dari scheduler,
+  bukan sekadar `active=false`).
+- **Verifikasi live:** `count(*) from cron.job where jobname='chatyuk-ai-daily-life'`
+  → 0. Total job aktif 17 → 16.
+- **Tidak ada test** yang mengunci job ini; tidak menyentuh FROZEN/GRANT/RLS.
+- **Aktifkan lagi:** jalankan ulang blok `cron.schedule('chatyuk-ai-daily-life',
+  '0 22 * * *', ...)` dari `20260912010000_audit_cleanup_batch.sql`.

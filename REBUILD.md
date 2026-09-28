@@ -78,6 +78,32 @@ status hash. Selesai.
 Gotcha MIUI: file APK kadang lenyap dibersihkan cleaner/security MIUI.
 Kalau user bilang "belum ada", push ulang + verifikasi `ls -l`.
 
+## APK DIAGNOSTIK (kerja harian — log lengkap + login tetap jalan)
+
+**Kesepakatan: pasang APK `--profile` ke HP untuk kerja harian supaya error
+langsung terbaca dari log. APK rilis baru dipakai kalau sudah bagus.**
+
+Kenapa profil: buildType `profile` di `android/app/build.gradle.kts` sudah
+di-sign keystore RILIS (SHA-1 `8ccc42e3...`) → Google Sign-In jalan, tapi
+`kProfileMode=true` → `dlog()` AKTIF → `[PHOTO-DBG]`/`[AVATAR]`/`[NAV]`/
+`[CALL-START]`/`[CACHE-TIME]` dll. muncul di logcat. Rilis (obfuscate) tidak:
+`kDebugMode=false` → dlog di-strip.
+
+```bash
+cd /Users/zunixe/Documents/ChatYuk
+rm -rf build/app/outputs build/app/intermediates build/app/tmp .dart_tool/flutter_build
+KEYSTORE_PASS="chatyuk2024secure" KEY_PASS="chatyuk2024secure" \
+  flutter build apk --profile --flavor apkpureProd --dart-define=APP_FLAVOR=apkpure
+cp build/app/outputs/flutter-apk/app-apkpureprod-profile.apk ~/Downloads/chatyuk_profile.apk
+```
+
+- JANGAN tambah `--obfuscate` di build profil (bikin stack trace susah dibaca).
+- Signature sama rilis → bisa menimpa install rilis tanpa uninstall.
+- Baca log: `adb logcat -c` → reproduksi → `adb logcat -d -v time | grep -E
+  "PHOTO-DBG|AVATAR|NAV|CALL-START|CACHE-TIME|POINTS|flutter" | tail -80`.
+- Verifikasi SHA-1 sebelum pasang (harus `8ccc42e3...`): lihat
+  `docs/troubleshoot-build-miui.md`.
+
 ## Kapan pakai rebuild PENUH
 
 Kalau sudah build + install tapi **tampilan/teks tidak berubah** di device,

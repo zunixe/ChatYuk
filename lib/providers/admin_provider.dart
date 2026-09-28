@@ -39,6 +39,14 @@ class AdminProvider extends AdminBase
         AdminChatsMx,
         AdminChatOrgMx {
   AdminProvider({super.service, super.sb}) {
+    // Bridge sync organisasi monitor (pin/kategori) ke server — agar
+    // kategori yang dibuat di 1 HP admin muncul di HP admin lain.
+    orgGet = _service.getChatOrg;
+    orgSet = (pinned, categories, map) => _service.setChatOrg(
+      pinned: pinned,
+      categories: categories,
+      map: map,
+    );
     // Muat organisasi monitor chat (pin/kategori) begitu provider dibuat —
     // supaya chip kategori siap walau layar monitor belum sempat initState
     // (TabBarView bisa membuang/membangun ulang layar).
@@ -57,21 +65,14 @@ class AdminProvider extends AdminBase
         await MessageCache.instance.removeRawObj(k);
       } catch (_) {}
     }
-    // Pesan monitor per-chat: kunci dinamis, bersihkan yang sedang terbuka.
-    final cur = _chatMsgCacheFor;
-    if (cur != null) {
-      try {
-        await MessageCache.instance.removeRawList(AdminBase.adminChatMsgKey(cur));
-      } catch (_) {}
-    }
     // Kosongkan state memori supaya UI tidak menampilkan data basi.
     _stats = null;
     _chats = const [];
     _devices = const [];
     _deleted = const [];
     _contactMessages = const [];
-    _chatMessages = const [];
-    _chatMsgCacheFor = null;
+    _chatMsgMem.clear();
+    _chatMsgHasMore.clear();
     if (!_disposed) notifyListeners();
   }
 

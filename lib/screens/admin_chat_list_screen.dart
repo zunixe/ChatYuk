@@ -167,14 +167,35 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
 
   // Guard agar auto-load kategori tidak menembak berulang tiap build.
   bool _autoLoadingCategory = false;
+  // True HANYA saat benar-benar sedang memuat halaman untuk kategori aktif.
+  // Dipakai menggantikan cek `chatsHasMore` (global) yang bikin spinner
+  // selamanya pada kategori KOSONG (mis. folder tanpa chat) — dulu dianggap
+  // "masih memuat" padahal tak ada yang sedang dimuat.
+  bool _categorySearching = false;
   // Setelah auto-load GAGAL (jaringan) → berhenti mencoba; tampilkan
   // empty-state + tombol coba lagi, bukan spinner tanpa akhir.
   bool _categoryLoadFailed = false;
   // Kategori terakhir yang dipantau — reset flag gagal saat kategori GANTI.
   String? _lastCategory;
 
-  /// Muat halaman berikutnya otomatis saat filter kategori aktif & hasil
-  /// sementara kosong tapi server masih punya lebih banyak chat.
+  /// True bila SEMUA chat kategori [cat] sudah ada di daftar yang termuat →
+  /// chip bisa tampil instan tanpa fetch/pindai lagi.
+  bool _categoryFullyLoaded(String cat) {
+    final admin = context.read<AdminProvider>();
+    final want = admin.categoryChatIds(cat);
+    if (want.isEmpty) return true;
+    final have = admin.chats.map((c) => '${c['chat_id']}').toSet();
+    for (final id in want) {
+      if (!have.contains(id)) return false;
+    }
+    return true;
+  }
+
+  /// Muat halaman sampai SEMUA chat kategori aktif termuat — SATU operasi
+  /// (loop internal di provider), bukan satu-halaman-per-frame.
+  ///
+  /// LAZY: berhenti begitu kategori sudah lengkap; klik ulang chip yang sama
+  /// tidak memicu apa pun (tak "muter" berulang).
   void _maybeAutoLoadForCategory({
     required String? activeCategory,
     required bool loading,
@@ -184,27 +205,49 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
       _lastCategory = activeCategory;
       _categoryLoadFailed = false; // kategori ganti → reset status gagal
     }
-    if (activeCategory == null) {
-      return; // 'Semua' → tidak perlu.
+    if (activeCategory == null || activeCategory.isEmpty) {
+      _categorySearching = false;
+      return; // 'Semua' / tanpa kategori → tidak perlu auto-load.
     }
-    // PENTING: terus muat SELURUH halaman selama filter kategori aktif &
-    // masih ada halaman — walau sudah ada baris tampil. Kategori bisa punya
-    // >1 chat; berhenti saat baris pertama ketemu = chat lain di halaman
-    // berikutnya HILANG. (Inilah gejala "harusnya 2 chat tapi cuma 1".)
+    // Kategori KOSONG (belum ada chat dipetakan) → tak ada yang dicari.
+    // Tampilkan empty-state, JANGAN spinner.
+    final wants = context.read<AdminProvider>().categoryChatIds(activeCategory);
+    if (wants.isEmpty) {
+      _categorySearching = false;
+      return;
+    }
+    // Sudah lengkap → tampil langsung, JANGAN muat/pindai lagi.
+    if (_categoryFullyLoaded(activeCategory)) {
+      _categorySearching = false;
+      return;
+    }
     if (loading || !hasMore || _autoLoadingCategory) return;
     if (_categoryLoadFailed) return; // sudah gagal → jangan ulang terus.
     _autoLoadingCategory = true;
+    _categorySearching = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) {
         _autoLoadingCategory = false;
+        _categorySearching = false;
         return;
       }
       final admin = context.read<AdminProvider>();
-      // Satu halaman per siklus — build berikutnya melanjutkan (guard
-      // mencegah tembakan berulang). Gagal jaringan → stop.
-      final ok = await admin.fetchMoreChats();
+      final cat = admin.activeChatCategory;
+      if (cat == null || cat.isEmpty) {
+        _autoLoadingCategory = false;
+        _categorySearching = false;
+        return;
+      }
+      // SATU operasi: provider memuat halaman berulang sampai semua chat
+      // kategori ini ketemu / halaman habis / batas halaman.
+      await admin.ensureChatsContain(admin.categoryChatIds(cat));
       _autoLoadingCategory = false;
-      _categoryLoadFailed = !ok && admin.chatsHasMore;
+      _categorySearching = false;
+      if (!_categoryFullyLoaded(cat) && admin.chatsHasMore && !admin.chatsLoading) {
+        // Masih belum lengkap padahal halaman belum habis → anggap gagal
+        // jaringan (jangan spinner tanpa akhir; tampilkan tombol retry).
+        _categoryLoadFailed = true;
+      }
       if (mounted) setState(() {});
     });
   }
@@ -290,12 +333,11 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                   error: admin.chatsError!,
                   onRetry: () => admin.fetchChats(),
                 )
-              // Filter kategori aktif & belum ketemu tapi masih banyak
-              // halaman → spinner (sedang memuat otomatis), bukan empty-state.
-              // Bila auto-load GAGAL → janji spinner, tampilkan empty-state.
+              // Spinner HANYA saat benar-benar sedang mencari chat kategori
+              // (bukan sekadar `chatsHasMore` global — kategori kosong dulu
+              // jadi spinner selamanya). Gagal → empty-state + tombol retry.
               : (visibleChats.isEmpty &&
-                    admin.activeChatCategory != null &&
-                    admin.chatsHasMore &&
+                    _categorySearching &&
                     !_categoryLoadFailed)
               ? Center(
                   child: CircularProgressIndicator(color: AppTheme.primary),
@@ -426,12 +468,14 @@ class _AdminChatListScreenState extends State<AdminChatListScreen>
                       12,
                       MediaQuery.of(context).padding.bottom + 12,
                     ),
-                    // Spinner "muat lebih" HANYA saat sudah ada baris tampil.
-                    // Daftar kosong (mis. filter kategori belum ketemu) →
-                    // tampilkan empty-state, bukan spinner menggantung.
+                    // Spinner "muat lebih" HANYA saat halaman berikutnya
+                    // BENAR-BENAR sedang dimuat (`chatsFetchingMore`) — dulu
+                    // pakai `chatsHasMore` (masih ada halaman) sehingga footer
+                    // spinner MUTER TERUS saat idle. Plus hanya bila ada baris
+                    // tampil (daftar kosong → empty-state, bukan spinner).
                     itemCount:
                         visibleChats.length +
-                        (admin.chatsHasMore && visibleChats.isNotEmpty
+                        (admin.chatsFetchingMore && visibleChats.isNotEmpty
                             ? 1
                             : 0),
                     itemBuilder: (_, i) {

@@ -120,6 +120,10 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   // Masih ada pesan lama untuk dimuat (pagination) — state lokal supaya
   // build tak perlu watch AdminProvider.
   bool _hasMore = false;
+  // True HANYA saat load-more benar-benar berjalan. Footer spinner dulu
+  // muncul selama `_hasMore` true (bahkan saat idle) → terlihat "muter" terus
+  // tiap buka chat. Sekarang spinner hanya saat fetch halaman lama jalan.
+  bool _loadingMore = false;
   /// True bila pemuatan pesan gagal. UI memakai teks ramah `s.adminChatError`
   /// — detail exception hanya ke dlog, tidak pernah ke layar.
   bool _error = false;
@@ -283,17 +287,23 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     final admin = context.read<AdminProvider>();
     if (!_scrollCtrl.hasClients) return;
     // ListView( reverse:true → "atas" (pesan lebih lama) = maxScrollExtent.
-    if (_scrollCtrl.position.pixels >=
+    if (_scrollCtrl.position.pixels <
         _scrollCtrl.position.maxScrollExtent - 300) {
-      if (admin.chatMessagesHasMore && !admin.chatsLoading) {
-        admin.fetchMoreChatMessages(widget.chatId).then((_) {
-          if (mounted) {
-            _applyMessages();
-            _hasMore = admin.chatMessagesHasMore;
-          }
-        });
-      }
+      return;
     }
+    // GUARD: tanpa ini scroll memicu RPC bertubi-tubi (tiap pixel) →
+    // "muter lama". Satu load-more dalam satu waktu.
+    if (_loadingMore) return;
+    if (!_hasMore) return;
+    _loadingMore = true;
+    if (mounted) setState(() {});
+    admin.fetchMoreChatMessages(widget.chatId).then((_) {
+      if (!mounted) return;
+      _applyMessages();
+      _hasMore = admin.chatMessagesHasMoreFor(widget.chatId);
+      _loadingMore = false;
+      setState(() {});
+    });
   }
 
   /// Pastikan _leftUid tidak null — dipanggil dari jalur cache maupun
@@ -315,46 +325,63 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   }
 
   /// Re-map dari provider ke _msgs (dipakai setelah load-more / fetch).
+  /// WAJIB memakai pesan chat INI (`chatMessagesFor`) — dulu `admin.chatMessages`
+  /// (buffer bersama) sehingga saat dua layar monitor hidup pesan chat lain
+  /// ikut tampil di layar ini ("pesan kecampur", semua bubble ke kanan).
   void _applyMessages() {
     if (!mounted) return;
     final admin = context.read<AdminProvider>();
-    _applyRawMessages(admin.chatMessages);
+    _applyRawMessages(admin.chatMessagesFor(widget.chatId));
   }
 
   /// Pasang daftar pesan mentah (dari cache prefetch monitor / provider) ke
   /// layar. Dipakai jalur SINKRON supaya frame pertama langsung terisi.
+  ///
+  /// MERGE by id — bukan replace. Alasannya:
+  ///  - poll/realtime hanya membawa puluhan pesan terbaru (limit 15/40);
+  ///    replace akan MEMANGKAS riwayat yang sudah dimuat via scroll.
+  ///  - dua sumber (provider map vs SQLite view) bisa punya window beda.
+  /// Hasil selalu: union(incoming, existing) urut terbaru dulu.
   void _applyRawMessages(List<Map<String, dynamic>> raw) {
     if (!mounted || raw.isEmpty) return;
-    final list = _mapMessages(raw);
-    // Anti-blink: bila server mengembalikan KOSONG tapi kita sudah punya
-    // pesan (mis. poll sementara gagal/slow), pertahankan yang lama —
-    // jangan kosongkan layar. Tetap pastikan sisi kiri benar.
-    if (list.isEmpty && _msgs.isNotEmpty) {
+    final incoming = _mapMessages(raw);
+    if (incoming.isEmpty) {
       _ensureLeftUid();
       return;
     }
-    // Anti-rebuild: bila id + isi terakhir sama persis (poll tanpa perubahan),
-    // tak perlu setState → layar tak berkedip/repaint tiap 5 dtk.
-    // Tetap pastikan sisi kiri benar (kasus cache == server).
-    if (list.isNotEmpty &&
-        _msgs.isNotEmpty &&
-        list.length == _msgs.length &&
-        list.first.id == _msgs.first.id &&
-        list.last.id == _msgs.last.id &&
-        list.last.text == _msgs.last.text) {
-      _ensureLeftUid();
-      return;
+    // Union by id: incoming menang untuk id yang sama (data lebih segar).
+    final byId = <String, MessageModel>{};
+    for (final m in incoming) {
+      byId[m.id] = m;
     }
-    // Pertahankan imageData yang sudah di-load
-    final oldMap = <String, String>{};
     for (final m in _msgs) {
-      if (m.imageData.isNotEmpty) oldMap[m.id] = m.imageData;
+      byId.putIfAbsent(m.id, () => m);
+    }
+    final list = byId.values.toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    // Pertahankan imageData yang sudah di-load (jangan hilang setelah merge).
+    final oldImg = <String, String>{};
+    for (final m in _msgs) {
+      if (m.imageData.isNotEmpty) oldImg[m.id] = m.imageData;
     }
     for (var i = 0; i < list.length; i++) {
-      final m = list[i];
-      final kept = oldMap[m.id];
-      if (kept != null && kept.isNotEmpty && m.imageData.isEmpty) {
-        list[i] = m.copyWith(imageData: kept);
+      final kept = oldImg[list[i].id];
+      if (kept != null && kept.isNotEmpty && list[i].imageData.isEmpty) {
+        list[i] = list[i].copyWith(imageData: kept);
+      }
+    }
+    // Anti-rebuild: isi identik (id + jumlah) → tak perlu setState.
+    if (list.length == _msgs.length) {
+      var same = true;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id != _msgs[i].id || list[i].text != _msgs[i].text) {
+          same = false;
+          break;
+        }
+      }
+      if (same) {
+        _ensureLeftUid();
+        return;
       }
     }
     final senderSet = <String>{};
@@ -475,7 +502,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     // PERSISTEN: sudah ada pesan lokal & tidak dipaksa → cukup. Pesan BARU
     // ditangani poll 5 dtk + realtime (tidak menembak server di sini).
     if (!force && _msgs.isNotEmpty) {
-      _hasMore = admin.chatMessagesHasMore;
+      _hasMore = admin.chatMessagesHasMoreFor(widget.chatId);
       unawaited(_refreshRead());
       return;
     }
@@ -490,11 +517,12 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       }
       _applyMessages();
       unawaited(_refreshRead());
-      _hasMore = admin.chatMessagesHasMore;
+      _hasMore = admin.chatMessagesHasMoreFor(widget.chatId);
       // Simpan ke cache untuk buka berikutnya (instant).
       if (_msgs.isNotEmpty) {
         unawaited(MessageCache.instance.saveMessages(_chatKey, _msgs));
       }
+      dlog('[ADMIN-TIME] _fetch selesai msgs=${_msgs.length} hasMore=$_hasMore force=$force');
     } catch (e) {
       if (!mounted) return;
       dlog('[ADMIN] chat view load error: $e');
@@ -515,7 +543,7 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
       await admin.refreshChatMessages(widget.chatId, limit: 15);
       if (!mounted) return;
       _applyMessages();
-      _hasMore = admin.chatMessagesHasMore;
+      _hasMore = admin.chatMessagesHasMoreFor(widget.chatId);
       // last-read jarang berubah — cek tiap ~15 dtk, bukan tiap 5 dtk.
       if (++_pollCount % 3 == 0) unawaited(_refreshRead());
     } finally {
@@ -987,8 +1015,11 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
                             MediaQuery.of(context).padding.bottom + 16,
                           ),
                           itemCount:
-                              _items.length + (_hasMore ? 1 : 0),
+                              _items.length + (_loadingMore ? 1 : 0),
                           itemBuilder: (_, i) {
+                            // Spinner footer HANYA saat load-more benar-benar
+                            // berjalan (dulu selalu tampil selama _hasMore →
+                            // terlihat "muter" terus tiap buka chat).
                             if (i >= _items.length) {
                               return const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16),

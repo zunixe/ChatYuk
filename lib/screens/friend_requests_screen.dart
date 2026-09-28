@@ -18,10 +18,14 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
   bool _loading = true;
   List<Map<String, dynamic>> _inbox = [];
   List<Map<String, dynamic>> _outbox = [];
+  // Jumlah terakhir yang terlihat layar ini — berubah (request masuk /
+  // direspons dari device lain) → muat ulang otomatis.
+  int? _knownCount;
 
   @override
   void initState() {
     super.initState();
+    _knownCount = context.read<SocialProvider>().friendRequestCount;
     _load();
   }
 
@@ -58,6 +62,17 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
   Widget build(BuildContext context) {
     context.watch<ThemeProvider>();
     final s = context.watch<LocaleProvider>().s;
+    // Request masuk selagi layar terbuka → muat ulang (realtime provider
+    // sudah update count; daftar lokal ikut segar tanpa pull-to-refresh).
+    final count = context.select<SocialProvider, int>(
+      (sp) => sp.friendRequestCount,
+    );
+    if (!_loading && _knownCount != count) {
+      _knownCount = count;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    }
     return Scaffold(
       appBar: AppBar(title: Text(s.friendRequestTitle)),
       body: _loading
@@ -80,7 +95,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
                   if (_inbox.isNotEmpty) {
                     rows.add(
                       Text(
-                        s.socialFollowers,
+                        s.friendRequestInbox,
                         style: AppText.label.copyWith(
                           color: AppTheme.textSecondary,
                         ),

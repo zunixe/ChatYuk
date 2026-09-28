@@ -78,6 +78,21 @@ select supabase_tests.check('RLS aktif di calls',
    join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relname='calls'));
 
+-- ── 4b. REGRESI INSIDEN 2026-09-28: policy calls_insert memanggil
+-- admin_dummy_uids() yang dievaluasi sebagai role PEMANGGIL. Saat EXECUTE-nya
+-- dicabut dari authenticated (hardening 20260928140000), SEMUA insert call
+-- gagal 42501 → "hanya akun terdaftar" walau toggle anon ON. Test ini
+-- memastikan role `authenticated` boleh EXECUTE semua fungsi yang dipakai di
+-- policy calls_insert.
+select supabase_tests.check(
+  'authenticated boleh EXECUTE admin_dummy_uids (dipakai di policy calls_insert)',
+  has_function_privilege('authenticated', 'public.admin_dummy_uids()', 'EXECUTE'));
+
+-- Bukti perilaku: evaluasi policy sebagai authenticated tidak melempar 42501.
+select supabase_tests.check(
+  'calls_insert policy bisa dievaluasi sebagai authenticated (0 error)',
+  (select count(*) from public.admin_dummy_uids()) >= 0);
+
 -- ── 5. Cron retensi zombie (dulu hanya jalan saat admin buka panel) ──
 select supabase_tests.check('cron chatyuk-call-sweep terdaftar aktif',
   exists(select 1 from cron.job

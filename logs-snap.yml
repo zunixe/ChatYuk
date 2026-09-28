@@ -1,0 +1,643 @@
+- generic [active] [ref=f13e1]:
+  - generic [ref=f13e3]:
+    - generic [ref=f13e426]:
+      - link "Skip to content" [ref=f13e428] [cursor=pointer]:
+        - /url: "#main"
+      - banner [ref=f13e431]:
+        - generic [ref=f13e432]:
+          - generic [ref=f13e433]:
+            - link "Supabase Back to organization home" [ref=f13e434] [cursor=pointer]:
+              - /url: /dashboard/org/gbgcwrvpfhytetlfpqza
+              - img "Supabase" [ref=f13e435]
+              - generic [ref=f13e436]: Back to organization home
+            - generic [ref=f13e437]:
+              - generic [ref=f13e441]:
+                - link "zymanq Org Pro" [ref=f13e442] [cursor=pointer]:
+                  - /url: /dashboard/org/gbgcwrvpfhytetlfpqza
+                  - generic [ref=f13e453]: zymanq Org
+                  - generic [ref=f13e454]: Pro
+                - button "Show organizations" [ref=f13e455] [cursor=pointer]
+              - generic [ref=f13e460]:
+                - generic [ref=f13e464]:
+                  - link "ChatYuk" [ref=f13e465] [cursor=pointer]:
+                    - /url: /dashboard/project/fohcucyyejdryryoxitm
+                  - button "Show organization projects" [ref=f13e470] [cursor=pointer]
+                - generic [ref=f13e478]:
+                  - link "main Production" [ref=f13e479] [cursor=pointer]:
+                    - /url: /dashboard/project/fohcucyyejdryryoxitm
+                    - generic "main" [ref=f13e480]
+                    - generic [ref=f13e481]: Production
+                  - button "Show project branches" [ref=f13e482] [cursor=pointer]
+            - button "Connect" [ref=f13e488] [cursor=pointer]
+          - generic [ref=f13e493]:
+            - button "Feedback" [ref=f13e494] [cursor=pointer]
+            - generic [ref=f13e496]:
+              - button [ref=f13e497] [cursor=pointer]:
+                - paragraph [ref=f13e502]: Search...
+                - generic [ref=f13e504]: ⌘K
+              - button "Help" [ref=f13e505] [cursor=pointer]
+              - button "Advisor Center" [ref=f13e512] [cursor=pointer]
+              - button "SQL Editor" [ref=f13e518] [cursor=pointer]
+              - button "AI Assistant" [ref=f13e523] [cursor=pointer]
+            - button [ref=f13e531] [cursor=pointer]:
+              - figure [ref=f13e533]
+      - generic [ref=f13e536]:
+        - generic [ref=f13e540]:
+          - navigation [ref=f13e542]:
+            - list [ref=f13e544]:
+              - listitem [ref=f13e545]:
+                - link "Project Overview" [ref=f13e546] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm
+              - listitem [ref=f13e549]:
+                - link "Table Editor" [ref=f13e550] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/editor
+              - listitem [ref=f13e553]:
+                - link "SQL Editor" [ref=f13e554] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/sql
+            - list [ref=f13e558]:
+              - listitem [ref=f13e559]:
+                - link "Database" [ref=f13e560] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/database/schemas
+              - listitem [ref=f13e565]:
+                - link "Authentication" [ref=f13e566] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/auth/users
+              - listitem [ref=f13e569]:
+                - link "Storage" [ref=f13e570] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/storage/files
+              - listitem [ref=f13e573]:
+                - link "Edge Functions" [ref=f13e574] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/functions
+              - listitem [ref=f13e580]:
+                - link "Realtime" [ref=f13e581] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/realtime/inspector
+            - list [ref=f13e585]:
+              - listitem [ref=f13e586]:
+                - link "Advisors" [ref=f13e587] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/advisors/security
+              - listitem [ref=f13e591]:
+                - link "Observability" [ref=f13e592] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/observability
+              - listitem [ref=f13e601]:
+                - link "Logs" [ref=f13e602] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/logs
+              - listitem [ref=f13e604]:
+                - link "Integrations" [ref=f13e605] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/integrations
+            - list [ref=f13e610]:
+              - listitem [ref=f13e611]:
+                - link "Project Settings" [ref=f13e612] [cursor=pointer]:
+                  - /url: /dashboard/project/fohcucyyejdryryoxitm/settings/general
+          - button "Sidebar control" [ref=f13e618] [cursor=pointer]
+        - main [ref=f13e625]:
+          - main [ref=f13e630]:
+            - generic [ref=f13e632]:
+              - generic [ref=f13e634]:
+                - generic [ref=f13e636]:
+                  - generic [ref=f13e637]:
+                    - paragraph [ref=f13e638]: Logs
+                    - generic [ref=f13e639]: Beta
+                  - button "Reset" [ref=f13e640] [cursor=pointer]
+                - generic [ref=f13e646]:
+                  - generic [ref=f13e647]:
+                    - generic [ref=f13e648]: New
+                    - button "Dismiss banner" [ref=f13e649] [cursor=pointer]
+                  - heading "Introducing unified logs" [level=3] [ref=f13e654]
+                  - button "More information" [ref=f13e656] [cursor=pointer]
+                - generic [ref=f13e662]:
+                  - generic [ref=f13e663]:
+                    - generic [ref=f13e664]:
+                      - button [expanded] [ref=f13e667] [cursor=pointer]:
+                        - paragraph [ref=f13e669]: Time Range
+                      - region "Time Range" [ref=f13e672]:
+                        - button "Last 60 minutes" [ref=f13e675] [cursor=pointer]
+                    - generic [ref=f13e681]:
+                      - generic [ref=f13e682]:
+                        - button [expanded] [ref=f13e684] [cursor=pointer]:
+                          - paragraph [ref=f13e686]: Log Type
+                        - button "1" [ref=f13e689] [cursor=pointer]
+                      - region "Log Type" [ref=f13e695]:
+                        - generic [ref=f13e698]:
+                          - textbox "Search" [ref=f13e704]
+                          - generic [ref=f13e705]:
+                            - generic [ref=f13e707]:
+                              - checkbox "API Gateway Expand" [ref=f13e708] [cursor=pointer]
+                              - generic [ref=f13e709]:
+                                - generic [ref=f13e710]: API Gateway
+                                - button "Expand" [ref=f13e713]
+                            - generic [ref=f13e718]:
+                              - checkbox "Postgres Expand" [checked] [ref=f13e719] [cursor=pointer]
+                              - generic [ref=f13e720]:
+                                - generic [ref=f13e721]: Postgres
+                                - button "Expand" [ref=f13e724]
+                            - generic [ref=f13e729]:
+                              - checkbox "PostgREST" [ref=f13e730] [cursor=pointer]
+                              - generic [ref=f13e731]: PostgREST
+                            - generic [ref=f13e738]:
+                              - checkbox "Auth" [ref=f13e739] [cursor=pointer]
+                              - generic [ref=f13e740]: Auth
+                            - generic [ref=f13e747]:
+                              - checkbox "Storage" [ref=f13e748] [cursor=pointer]
+                              - generic [ref=f13e749]: Storage
+                            - generic [ref=f13e756]:
+                              - checkbox "Edge Function" [ref=f13e757] [cursor=pointer]
+                              - generic [ref=f13e758]: Edge Function
+                            - generic [ref=f13e765]:
+                              - checkbox "Realtime" [ref=f13e766] [cursor=pointer]
+                              - generic [ref=f13e767]: Realtime
+                            - generic [ref=f13e774]:
+                              - checkbox "Supavisor" [ref=f13e775] [cursor=pointer]
+                              - generic [ref=f13e776]: Supavisor
+                            - generic [ref=f13e783]:
+                              - checkbox "PgBouncer" [ref=f13e784] [cursor=pointer]
+                              - generic [ref=f13e785]: PgBouncer
+                    - generic [ref=f13e791]:
+                      - button [expanded] [ref=f13e794] [cursor=pointer]:
+                        - paragraph [ref=f13e796]: Level
+                      - region "Level" [ref=f13e799]:
+                        - generic [ref=f13e803]:
+                          - generic [ref=f13e805]:
+                            - checkbox "success 2xx" [ref=f13e806] [cursor=pointer]
+                            - generic [ref=f13e809]:
+                              - generic [ref=f13e810]: success
+                              - generic [ref=f13e811]: 2xx
+                          - generic [ref=f13e817]:
+                            - checkbox "warning 4xx" [ref=f13e818] [cursor=pointer]
+                            - generic [ref=f13e821]:
+                              - generic [ref=f13e822]: warning
+                              - generic [ref=f13e823]: 4xx
+                          - generic [ref=f13e829]:
+                            - checkbox "error 5xx" [ref=f13e830] [cursor=pointer]
+                            - generic [ref=f13e833]:
+                              - generic [ref=f13e834]: error
+                              - generic [ref=f13e835]: 5xx
+                    - button [ref=f13e843] [cursor=pointer]:
+                      - paragraph [ref=f13e845]: User
+                    - button [ref=f13e851] [cursor=pointer]:
+                      - paragraph [ref=f13e853]: Status
+                    - button [ref=f13e859] [cursor=pointer]:
+                      - paragraph [ref=f13e861]: Method
+                    - button [ref=f13e867] [cursor=pointer]:
+                      - paragraph [ref=f13e869]: Pathname
+                  - generic [ref=f13e872]:
+                    - generic [ref=f13e884]:
+                      - heading "Capture your logs" [level=3] [ref=f13e885]
+                      - paragraph [ref=f13e886]: Send logs to your preferred observability or storage platform.
+                    - link "Go to Log Drains" [ref=f13e888] [cursor=pointer]:
+                      - /url: /dashboard/project/fohcucyyejdryryoxitm/settings/log-drains
+              - separator [ref=f13e890]
+              - generic [ref=f13e900]:
+                - generic [ref=f13e902]:
+                  - button "Hide filters" [ref=f13e903] [cursor=pointer]
+                  - generic [ref=f13e912]:
+                    - generic [ref=f13e913] [cursor=pointer]
+                    - generic [ref=f13e923]:
+                      - generic [ref=f13e924]:
+                        - button "Change property from Log Type" [ref=f13e926] [cursor=pointer]: Log Type
+                        - textbox "Operator for Log Type" [ref=f13e928]: =
+                        - textbox "Value for Log Type" [ref=f13e930]: postgres
+                        - button "Remove Log Type filter" [ref=f13e931] [cursor=pointer]
+                      - textbox "Add more filters..." [ref=f13e936]
+                  - generic [ref=f13e937]:
+                    - button "Refresh logs" [disabled]
+                    - combobox [ref=f13e938] [cursor=pointer]
+                    - button "Download logs" [ref=f13e943] [cursor=pointer]
+                    - button "Live" [ref=f13e948] [cursor=pointer]
+                - table [ref=f13e963]:
+                  - rowgroup [ref=f13e964]:
+                    - row [ref=f13e965]:
+                      - columnheader [ref=f13e966]
+                      - columnheader "Date" [ref=f13e967]
+                      - columnheader [ref=f13e968]
+                      - columnheader [ref=f13e969]
+                      - columnheader "Method" [ref=f13e970]
+                      - columnheader "Pathname" [ref=f13e971]
+                      - columnheader "Event message" [ref=f13e972]
+                  - rowgroup [ref=f13e974]:
+                    - row [ref=f13e975]:
+                      - cell [ref=f13e976]
+                      - cell [ref=f13e978]
+                      - cell [ref=f13e980]
+                      - cell [ref=f13e981]
+                      - cell [ref=f13e982]
+                      - cell [ref=f13e984]
+                      - cell [ref=f13e986]
+                    - row [ref=f13e988]:
+                      - cell [ref=f13e989]
+                      - cell [ref=f13e991]
+                      - cell [ref=f13e993]
+                      - cell [ref=f13e994]
+                      - cell [ref=f13e995]
+                      - cell [ref=f13e997]
+                      - cell [ref=f13e999]
+                    - row [ref=f13e1001]:
+                      - cell [ref=f13e1002]
+                      - cell [ref=f13e1004]
+                      - cell [ref=f13e1006]
+                      - cell [ref=f13e1007]
+                      - cell [ref=f13e1008]
+                      - cell [ref=f13e1010]
+                      - cell [ref=f13e1012]
+                    - row [ref=f13e1014]:
+                      - cell [ref=f13e1015]
+                      - cell [ref=f13e1017]
+                      - cell [ref=f13e1019]
+                      - cell [ref=f13e1020]
+                      - cell [ref=f13e1021]
+                      - cell [ref=f13e1023]
+                      - cell [ref=f13e1025]
+                    - row [ref=f13e1027]:
+                      - cell [ref=f13e1028]
+                      - cell [ref=f13e1030]
+                      - cell [ref=f13e1032]
+                      - cell [ref=f13e1033]
+                      - cell [ref=f13e1034]
+                      - cell [ref=f13e1036]
+                      - cell [ref=f13e1038]
+                    - row [ref=f13e1040]:
+                      - cell [ref=f13e1041]
+                      - cell [ref=f13e1043]
+                      - cell [ref=f13e1045]
+                      - cell [ref=f13e1046]
+                      - cell [ref=f13e1047]
+                      - cell [ref=f13e1049]
+                      - cell [ref=f13e1051]
+                    - row [ref=f13e1053]:
+                      - cell [ref=f13e1054]
+                      - cell [ref=f13e1056]
+                      - cell [ref=f13e1058]
+                      - cell [ref=f13e1059]
+                      - cell [ref=f13e1060]
+                      - cell [ref=f13e1062]
+                      - cell [ref=f13e1064]
+                    - row [ref=f13e1066]:
+                      - cell [ref=f13e1067]
+                      - cell [ref=f13e1069]
+                      - cell [ref=f13e1071]
+                      - cell [ref=f13e1072]
+                      - cell [ref=f13e1073]
+                      - cell [ref=f13e1075]
+                      - cell [ref=f13e1077]
+                    - row [ref=f13e1079]:
+                      - cell [ref=f13e1080]
+                      - cell [ref=f13e1082]
+                      - cell [ref=f13e1084]
+                      - cell [ref=f13e1085]
+                      - cell [ref=f13e1086]
+                      - cell [ref=f13e1088]
+                      - cell [ref=f13e1090]
+                    - row [ref=f13e1092]:
+                      - cell [ref=f13e1093]
+                      - cell [ref=f13e1095]
+                      - cell [ref=f13e1097]
+                      - cell [ref=f13e1098]
+                      - cell [ref=f13e1099]
+                      - cell [ref=f13e1101]
+                      - cell [ref=f13e1103]
+                    - row [ref=f13e1105]:
+                      - cell [ref=f13e1106]
+                      - cell [ref=f13e1108]
+                      - cell [ref=f13e1110]
+                      - cell [ref=f13e1111]
+                      - cell [ref=f13e1112]
+                      - cell [ref=f13e1114]
+                      - cell [ref=f13e1116]
+                    - row [ref=f13e1118]:
+                      - cell [ref=f13e1119]
+                      - cell [ref=f13e1121]
+                      - cell [ref=f13e1123]
+                      - cell [ref=f13e1124]
+                      - cell [ref=f13e1125]
+                      - cell [ref=f13e1127]
+                      - cell [ref=f13e1129]
+                    - row [ref=f13e1131]:
+                      - cell [ref=f13e1132]
+                      - cell [ref=f13e1134]
+                      - cell [ref=f13e1136]
+                      - cell [ref=f13e1137]
+                      - cell [ref=f13e1138]
+                      - cell [ref=f13e1140]
+                      - cell [ref=f13e1142]
+                    - row [ref=f13e1144]:
+                      - cell [ref=f13e1145]
+                      - cell [ref=f13e1147]
+                      - cell [ref=f13e1149]
+                      - cell [ref=f13e1150]
+                      - cell [ref=f13e1151]
+                      - cell [ref=f13e1153]
+                      - cell [ref=f13e1155]
+                    - row [ref=f13e1157]:
+                      - cell [ref=f13e1158]
+                      - cell [ref=f13e1160]
+                      - cell [ref=f13e1162]
+                      - cell [ref=f13e1163]
+                      - cell [ref=f13e1164]
+                      - cell [ref=f13e1166]
+                      - cell [ref=f13e1168]
+    - generic [ref=f13e1173]:
+      - generic [aria-hidden]:
+        - generic:
+          - generic: "{"
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: "{"
+          - generic: ‹
+          - generic: ›
+          - generic: "}"
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "}"
+        - generic:
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+        - generic:
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+        - generic:
+          - generic: "["
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "["
+          - generic: "{"
+          - generic: "}"
+          - generic: "]"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: "]"
+        - generic:
+          - generic: ‹
+          - generic: (
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: (
+          - generic: )
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: )
+          - generic: ›
+        - generic:
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: (
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: )
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+        - generic:
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+        - generic:
+          - generic: "{"
+          - generic: ‹
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: ‹
+          - generic: (
+          - generic: "["
+          - generic: "{"
+          - generic: ‹
+          - generic: ‹
+          - generic: ›
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: ›
+          - generic: "}"
+          - generic: "]"
+          - generic: )
+          - generic: ›
+          - generic: ›
+          - generic: "}"
+      - generic [ref=f13e1174]:
+        - button "Close banner" [ref=f13e1176] [cursor=pointer]
+        - generic [ref=f13e1181]:
+          - generic [ref=f13e1183]:
+            - paragraph [ref=f13e1184]: Supabase Select 2026
+            - paragraph [ref=f13e1185]: A curated day of talks by the industry’s best builders. Join us on October 2nd in San Francisco.
+          - link "Apply to attend" [ref=f13e1186] [cursor=pointer]:
+            - /url: https://select.supabase.com/
+  - alert [ref=f13e424]: Unified Logs | Supabase
+  - generic [aria-hidden] [ref=f13e425]: "0"

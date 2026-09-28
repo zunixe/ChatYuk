@@ -1,0 +1,20 @@
+-- Restore EXECUTE admin_dummy_uids() untuk role `authenticated`.
+--
+-- KRITIS: `admin_dummy_uids()` dipanggil DI DALAM policy RLS
+--   - public.calls.calls_insert   (with check)
+--   - public.posts.posts_select   (qual)
+-- Policy RLS dievaluasi sebagai ROLE PEMANGGIL. Saat 20260928140000 mencabut
+-- EXECUTE dari `authenticated`, setiap INSERT calls dan SELECT posts oleh
+-- user login melempar:
+--   "permission denied for function admin_dummy_uids" (SQLSTATE 42501)
+-- → SEMUA panggilan (audio/video) gagal "hanya akun terdaftar..." dan
+--   timeline kosong/error, walau app_settings.call_anon_enabled = true.
+--
+-- Fungsi ini SECURITY DEFINER + STABLE (hanya `select uid from
+-- dummy_accounts`) — tidak membocorkan apa pun lebih dari yang sudah
+-- dibaca policy. Aman dikembalikan ke authenticated.
+--
+-- CATATAN untuk audit ke depan: fungsi yang dipakai di qual/with_check policy
+-- atau view/kolom default TIDAK boleh di-revoke dari role yang memakai policy
+-- itu. Lihat docs/SECURITY_AUDIT.md.
+grant execute on function public.admin_dummy_uids() to authenticated; -- SAFE: dipakai di policy calls_insert + posts_select (dijalankan as authenticated); tubuhnya hanya select uid dari dummy_accounts; mencabutnya mematahkan call & timeline

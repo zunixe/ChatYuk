@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/call_config.dart';
 import '../config/supabase_config.dart';
 import '../core/call/opus_sdp.dart';
+import '../core/call/watch_policy.dart';
 import '../core/call/call_permissions.dart' show CallMediaError;
 import '../core/perf/perf_probe.dart';
 
@@ -417,7 +418,11 @@ class CallSession extends ChangeNotifier {
   final Map<String, List<Map<String, dynamic>>> _watchPendingCands = {};
   final Map<String, DateTime> _lastWatchReply = {};
   final Map<String, Future<bool>> _watcherAdminChecks = {};
-
+  /// Waktu pc watch dibuat per watcher — kunci anti-deadlock: pc yang belum
+  /// `connected` lebih dari [_watchPcStale] dianggap mati → boleh rebuild
+  /// (mis. offer hilang / ICE nyangkut di `connecting`).
+  final Map<String, DateTime> _watchPcCreatedAt = {};
+  static const _watchPcStale = Duration(seconds: 20);
   CallPhase _phase = CallPhase.connecting;
   CallEndReason _endReason = CallEndReason.ended;
   bool _micOn = true;
@@ -1233,6 +1238,12 @@ class CallSession extends ChangeNotifier {
 
   /// Admin minta menonton/mendengar call ini. Hanya admin terverifikasi
   /// yang dilayani — uid lain diabaikan (anti intip).
+  ///
+  /// ANTI PUTUS-AUDIO: bila pc watch untuk watcher ini MASIH ADA & sehat
+  /// (connecting/connected/disconnected), JANGAN tutup-buat-ulang —
+  /// cukup kirim ulang status mic/kamera. Dulu tiap `watch_request` yang
+  /// lolos throttle 8 dtk menutup pc lama → audio peserta putus sesaat
+  /// ("suara sempat hilang, muncul lagi"). Lihat `watch_policy.dart`.
   Future<void> _handleWatchRequest(Map<String, dynamic> msg) async {
     final watcher = msg['from'] as String?;
     final me = _service.uid;
@@ -1241,17 +1252,43 @@ class CallSession extends ChangeNotifier {
     // Throttle: request ulang <8s diabaikan agar pc tidak dibuat-ulang
     // tiap polling; request setelah itu dianggap retry negosiasi mati.
     final last = _lastWatchReply[watcher];
-    if (last != null &&
-        DateTime.now().difference(last) < const Duration(seconds: 8)) {
-      return;
-    }
-    _lastWatchReply[watcher] = DateTime.now();
+    final repliedRecently =
+        last != null && DateTime.now().difference(last) < const Duration(seconds: 8);
     try {
       final isAdmin = await (_watcherAdminChecks.putIfAbsent(
         watcher,
         () => _service.isAdminUid(watcher),
       ));
-      if (!isAdmin) return;
+      final existing = _watchPcs[watcher];
+      final state = existing?.connectionState;
+      final connected =
+          state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
+      // Sehat = ada pc dan bukan failed/closed. Tapi pc yang BELUM connected
+      // dan sudah berumur > _watchPcStale dianggap mati (offer hilang / ICE
+      // nyangkut) → boleh rebuild supaya tidak deadlock.
+      final createdAt = _watchPcCreatedAt[watcher];
+      final stale = !connected &&
+          createdAt != null &&
+          DateTime.now().difference(createdAt) > _watchPcStale;
+      final healthy = existing != null &&
+          !stale &&
+          state != RTCPeerConnectionState.RTCPeerConnectionStateFailed &&
+          state != RTCPeerConnectionState.RTCPeerConnectionStateClosed;
+      final action = decideWatchReply(
+        isForMe: watcher != me,
+        hasLocalMedia: _localStream != null && _pc != null,
+        isAdminWatcher: isAdmin,
+        alreadyRepliedRecently: repliedRecently,
+        hasHealthyPc: healthy,
+      );
+      if (action == WatchReplyAction.ignore) return;
+      _lastWatchReply[watcher] = DateTime.now();
+      // pc sehat → cukup kabari status; negosiasi/media TIDAK disentuh.
+      if (action == WatchReplyAction.sendState) {
+        _sendWatchState(watcher);
+        dlog('[WATCH] pc healthy for watcher=$watcher → state only');
+        return;
+      }
       final old = _watchPcs.remove(watcher);
       if (old != null) {
         try {
@@ -1261,6 +1298,7 @@ class CallSession extends ChangeNotifier {
       _watchPendingCands.remove(watcher);
       final pc = await createPeerConnection(await CallConfig.getPeerConfig());
       _watchPcs[watcher] = pc;
+      _watchPcCreatedAt[watcher] = DateTime.now();
       PerfProbe.buildCount('call.watchPc');
       pc.onIceCandidate = (c) {
         _service.sendSignal(
@@ -1289,10 +1327,25 @@ class CallSession extends ChangeNotifier {
     } catch (e) {
       dlog('[WATCH] handle watch_request failed: $e');
       final broken = _watchPcs.remove(watcher);
+      _watchPcCreatedAt.remove(watcher);
       try {
         await broken?.close();
       } catch (_) {}
     }
+  }
+
+  /// Kirim ulang status mic/kamera ke satu watcher (tanpa rebuild pc).
+  void _sendWatchState(String watcher) {
+    _service.sendSignal(
+      callId,
+      'watch_state',
+      payload: {
+        'micOn': _micOn,
+        'cameraOn': callType == 'video' ? _cameraOn : false,
+        'to': watcher,
+        'from': _service.uid,
+      },
+    );
   }
 
   Future<void> _handleWatchAnswer(Map<String, dynamic> msg) async {
@@ -1530,6 +1583,7 @@ class CallSession extends ChangeNotifier {
     _watchPendingCands.clear();
     _lastWatchReply.clear();
     _watcherAdminChecks.clear();
+    _watchPcCreatedAt.clear();
     await _signalSub?.cancel();
     await _statusSub?.cancel();
     _service.disposeSignal(callId);

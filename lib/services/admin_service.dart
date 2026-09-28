@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/active_call_model.dart';
 import '../core/perf/rpc_probe.dart';
+import '../utils.dart';
 
 class AdminService {
   final SupabaseClient _sb;
@@ -173,11 +174,16 @@ class AdminService {
     int limit = 100,
     int offset = 0,
   }) async {
+    final sw = Stopwatch()..start();
     final res = await _rpc(
       'admin_get_chat_messages_page',
       params: {'p_chat_id': chatId, 'p_limit': limit, 'p_offset': offset},
     ).timeout(_openTimeout);
     final list = res is List ? res : <dynamic>[];
+    dlog(
+      '[ADMIN-TIME] getChatMessages ${list.length} rows in ${sw.elapsedMilliseconds}ms '
+      '(limit=$limit offset=$offset)',
+    );
     return list.cast<Map<String, dynamic>>();
   }
 
@@ -333,6 +339,39 @@ class AdminService {
       params: {'p_limit': limit},
     ).timeout(_openTimeout);
     return (res as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Organisasi monitor chat (PIN + kategori) — agar tersinkron antar HP
+  /// admin. Return {'pinned_chat_ids': [...], 'category_list': [...],
+  /// 'category_map': {...}}. {} bila gagal.
+  Future<Map<String, dynamic>> getChatOrg() async {
+    try {
+      final res = await _rpc('admin_get_chat_org').timeout(_openTimeout);
+      return (res as Map<String, dynamic>?) ?? {};
+    } catch (e) {
+      dlog('[ADMIN] getChatOrg error: $e');
+      return {};
+    }
+  }
+
+  /// Simpan organisasi monitor chat ke server (sync antar HP admin).
+  /// Field null = tidak diubah (partial update).
+  Future<bool> setChatOrg({
+    List<String>? pinned,
+    List<String>? categories,
+    Map<String, String>? map,
+  }) async {
+    try {
+      final res = await _rpc('admin_set_chat_org', params: {
+        'p_pinned': pinned,
+        'p_categories': categories,
+        'p_map': map,
+      }).timeout(_openTimeout);
+      return res is Map<String, dynamic>;
+    } catch (e) {
+      dlog('[ADMIN] setChatOrg error: $e');
+      return false;
+    }
   }
 
   /// Daftar user terdaftar (registrasi email) — nickname + email + tgl.
