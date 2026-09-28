@@ -8,6 +8,7 @@ import '../config/theme.dart';
 import '../config/strings.dart';
 import '../config/strings_admin.dart';
 import '../models/room_model.dart';
+import '../core/nav_guard.dart';
 import '../providers/auth_provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/locale_provider.dart';
@@ -139,12 +140,14 @@ class _PrivateRoomsScreenState extends State<PrivateRoomsScreen> {
   }
 
   Future<void> _openRoom(BuildContext context, Map<String, dynamic> room) async {
+    final navKey = navKeyRoom('${room['id']}');
+    if (!tryClaimNav(navKey)) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>
             RoomChatScreen(room: RoomModel.fromMap('${room['id']}', room)),
       ),
-    );
+    ).then((_) => releaseNav(navKey));
     unawaited(_load());
   }
 

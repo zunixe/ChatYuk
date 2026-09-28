@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../config/theme.dart';
 import '../core/admin_gate.dart';
+import '../core/nav_guard.dart';
 import '../models/active_call_model.dart';
 import '../models/message_model.dart';
 import '../providers/admin_provider.dart';
@@ -55,24 +56,15 @@ String? computeMonitorLeftUid({
 /// Tap 2× cepat saat transisi push belum selesai menumpuk 2 route chat
 /// identik — 1× back lalu terlihat "tidak ada reaksi" (kasus nyata chat
 /// "Anggi & Jaky"). Klaim dilepas saat route di-pop ([releaseChatPush]).
-final Map<String, DateTime> _chatPushClaim = {};
-
-/// True bila navigasi boleh jalan. [now] hanya untuk test.
-bool tryClaimChatPush(String chatId, {DateTime? now}) {
-  if (chatId.isEmpty) return true;
-  final at = (now ?? DateTime.now()).toUtc();
-  final prev = _chatPushClaim[chatId];
-  if (prev != null && at.difference(prev) < const Duration(seconds: 2)) {
-    return false;
-  }
-  _chatPushClaim[chatId] = at;
-  return true;
-}
+///
+/// Implementasi DIPINDAH ke `lib/core/nav_guard.dart` supaya jalur user &
+/// admin memakai satu sumber yang sama. Nama lama dipertahankan sebagai
+/// pembungkus agar pemanggil + test lama tidak berubah.
+bool tryClaimChatPush(String chatId, {DateTime? now}) =>
+    tryClaimNav(navKeyChat(chatId), now: now);
 
 /// Lepas klaim [tryClaimChatPush] — dipanggil saat route chat di-pop.
-void releaseChatPush(String chatId) {
-  _chatPushClaim.remove(chatId);
-}
+void releaseChatPush(String chatId) => releaseNav(navKeyChat(chatId));
 
 class AdminChatViewScreen extends StatefulWidget {
   final String chatId;

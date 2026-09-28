@@ -7,6 +7,7 @@ import '../widgets/profile_avatar.dart';
 import '../providers/theme_provider.dart';
 import 'user_info_screen.dart';
 import '../core/perf/perf_probe.dart';
+import '../core/nav_guard.dart';
 
 /// Daftar sosial (followers / following / friends / subscribers).
 /// `kind` menentukan tipe; `userId` menentukan user yang diambil (diri sendiri
@@ -121,10 +122,14 @@ class _SocialTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           onTap: uid.isEmpty
               ? null
-              : () => Navigator.push(
+              : () {
+                  final navKey = navKeyUser(uid);
+                  if (!tryClaimNav(navKey)) return;
+                  Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => UserInfoScreen(userId: uid, fallbackName: name)),
-                  ),
+                  ).then((_) => releaseNav(navKey));
+                },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
