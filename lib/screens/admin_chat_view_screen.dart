@@ -29,25 +29,50 @@ import '../config/strings_admin.dart';
 /// Sisi kiri (lawan bicara) monitor chat — fungsi MURNI agar prioritas
 /// terkunci test (`test/admin_chat_leftuid_test.dart`). Harus STABIL
 /// (tidak ikut urutan kedatangan) supaya bubble tidak berpindah sisi.
-/// Urutan sumber:
-/// 1) participantOrder (dari list screen, urut kiri→kanan)
-/// 2) chatId split 'uid1_uid2' (format 1:1)
+///
+/// Urutan sumber (PENTING — jangan dibalik):
+/// 1) chatId split 'uid1_uid2' (format 1:1, uid SORTED → abadi, tidak
+///    berubah saat nama di-rename / cache vs server beda urutan map).
+/// 2) participantOrder (dari list screen) — hanya cadangan.
 /// 3) senders terurut — supaya tidak semua kanan (null) bila dua sumber
 ///    di atas gagal.
+///
+/// Dulu participantOrder menang; itu yang membuat `order.first`
+/// bergantung urutan key `participant_names` (JSONB) — ikut berubah saat
+/// nickname berubah / beda antara snapshot cache & fetch baru → SEMUA
+/// bubble lawan pindah ke kanan. chatId deterministik, jadi sekarang jadi
+/// jangkar utama.
 String? computeMonitorLeftUid({
   required List<String> participantOrder,
   required String chatId,
   required List<String> senders,
 }) {
-  final order = participantOrder.where((e) => e.isNotEmpty).toList();
-  if (order.length >= 2) return order.first;
   final parts = chatId.split('_').where((e) => e.isNotEmpty).toList();
   if (parts.length == 2) return parts.first;
+  final order = participantOrder.where((e) => e.isNotEmpty).toList();
+  if (order.length >= 2) return order.first;
   if (senders.isNotEmpty) {
     final sorted = senders.where((e) => e.isNotEmpty).toList()..sort();
     if (sorted.isNotEmpty) return sorted.first;
   }
   return null;
+}
+
+/// Urutan uid peserta yang DETERMINISTIK dari chatId (uid SORTED, sama
+/// dengan `privateChatId`). Dipakai agar label judul + avatar header +
+/// sisi bubble admin selalu konsisten & tidak pernah bergeser. Bila
+/// chatId tidak berformat 1:1 → urutkan uid unik agar tetap stabil.
+List<String> stableChatParticipantOrder({
+  required String chatId,
+  required List<String> participants,
+}) {
+  final parts = chatId.split('_').where((e) => e.isNotEmpty).toList();
+  if (parts.length == 2) return parts;
+  final uniq = <String>{};
+  for (final p in participants) {
+    if (p.isNotEmpty) uniq.add(p);
+  }
+  return uniq.toList()..sort();
 }
 
 /// Guard anti double-push kartu monitor chat (diuji
@@ -293,7 +318,14 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   void _applyMessages() {
     if (!mounted) return;
     final admin = context.read<AdminProvider>();
-    final list = _mapMessages(admin.chatMessages);
+    _applyRawMessages(admin.chatMessages);
+  }
+
+  /// Pasang daftar pesan mentah (dari cache prefetch monitor / provider) ke
+  /// layar. Dipakai jalur SINKRON supaya frame pertama langsung terisi.
+  void _applyRawMessages(List<Map<String, dynamic>> raw) {
+    if (!mounted || raw.isEmpty) return;
+    final list = _mapMessages(raw);
     // Anti-blink: bila server mengembalikan KOSONG tapi kita sudah punya
     // pesan (mis. poll sementara gagal/slow), pertahankan yang lama —
     // jangan kosongkan layar. Tetap pastikan sisi kiri benar.
@@ -399,7 +431,15 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   /// poll/realtime. Inilah yang bikin buka ulang chat terasa instan.
   Future<void> _fetch({bool force = false}) async {
     final admin = context.read<AdminProvider>();
-    // 1) SINKRON dari memori (jika sudah panas) — tampil seketika, no skeleton.
+    // 0) SINKRON dari cache pesan monitor (hasil prefetch tap) — paling
+    //    cepat, tanpa await: frame pertama langsung terisi seperti private
+    //    chat. Dulu jalur ini tak ada (hanya cache stream `private_<id>`
+    //    yang beda dari yang dipakai monitor) → selalu spinner → RPC.
+    final adminMem = admin.peekChatMessages(widget.chatId);
+    if (adminMem.isNotEmpty && _msgs.isEmpty) {
+      _applyRawMessages(adminMem);
+    }
+    // 1) SINKRON dari memori stream (bila chat pernah dibuka sebagai user).
     final mem = MessageCache.instance.peekMessages(_chatKey);
     if (mem != null && mem.isNotEmpty && _msgs.isEmpty) {
       final senders = <String>{};

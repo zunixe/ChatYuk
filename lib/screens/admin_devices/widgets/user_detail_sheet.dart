@@ -327,7 +327,10 @@ class _UserDetailSheetState extends State<UserDetailSheet> {
           )
         : '';
     final chatId = '${c['chat_id'] ?? ''}';
-    final orderUids = participants.map((p) => '$p').toList();
+    final orderUids = stableChatParticipantOrder(
+      chatId: chatId,
+      participants: participants.map((p) => '$p').toList(),
+    );
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 3),
       color: AppTheme.bgCard,
