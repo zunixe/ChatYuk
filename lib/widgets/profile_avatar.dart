@@ -53,33 +53,53 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
   @override
   void initState() {
     super.initState();
-    // Fast-path SINKRON: kalau base64 sudah ada di RAM (mis. dibuka dari
-    // daftar chat lalu masuk profil), tampilkan pada frame pertama tanpa
-    // menunggu compute/get async — anti-kedip.
-    final ram = AvatarB64Service.instance.cachedSync(widget.uid);
-    if (ram != null) {
-      final cached = _bytesCache[ram];
-      if (cached != null) {
-        _bytes = cached;
-      } else {
-        final decoded = _decodeAvatarB64(ram);
-        if (decoded != null) {
-          if (_bytesCache.length < 60) _bytesCache[ram] = decoded;
-          _bytes = decoded;
-        }
-      }
-    }
+    _applySyncCache();
     _load();
   }
 
+  /// Fast-path SINKRON: kalau base64 sudah ada di RAM (mis. dibuka dari
+  /// daftar chat lalu masuk profil), tampilkan pada frame pertama tanpa
+  /// menunggu compute/get async — anti-kedip.
+  void _applySyncCache() {
+    final ram = AvatarB64Service.instance.cachedSync(widget.uid);
+    if (ram == null) return;
+    final cached = _bytesCache[ram];
+    if (cached != null) {
+      _bytes = cached;
+      return;
+    }
+    final decoded = _decodeAvatarB64(ram);
+    if (decoded != null) {
+      if (_bytesCache.length < 60) _bytesCache[ram] = decoded;
+      _bytes = decoded;
+    }
+  }
+
+  @override
+  void didUpdateWidget(ProfileAvatar old) {
+    super.didUpdateWidget(old);
+    // PENTING (anti "foto user sebelumnya"): ListView mendaur-ulang element
+    // yang sama untuk uid BERBEDA tanpa memanggil initState. Tanpa cabang ini,
+    // `_bytes` masih foto uid LAMA → sempat tampil foto salah (mis. user lain)
+    // sampai _load() selesai.
+    if (old.uid != widget.uid) {
+      _bytes = null;
+      _applySyncCache();
+      _load();
+    }
+  }
+
   Future<void> _load() async {
+    // Kunci uid saat mulai — hasil async hanya boleh dipakai bila uid belum
+    // berubah (element didaur-ulang), supaya tidak menimpa dengan foto lama.
+    final uid = widget.uid;
     // Retry bila hasil kosong — fetch serentak untuk uid yang sama
     // mengembalikan '' (inflight) dan widget ini tidak boleh menyerah
     // (kalau tidak, avatar stuck inisial sampai rebuild = kedip).
     // 3× (dulu 10×) — cukup untuk inflight race tanpa membebani list.
     for (var attempt = 0; attempt < 3; attempt++) {
-      final b64 = await AvatarB64Service.instance.get(widget.uid);
-      if (!mounted) return;
+      final b64 = await AvatarB64Service.instance.get(uid);
+      if (!mounted || widget.uid != uid) return;
       if (b64.isNotEmpty) {
         final cached = _bytesCache[b64];
         if (cached != null) {
@@ -87,7 +107,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
           return;
         }
         final bytes = await compute(_decodeAvatarB64, b64);
-        if (!mounted || bytes == null) return;
+        if (!mounted || widget.uid != uid || bytes == null) return;
         if (_bytesCache.length < 60) _bytesCache[b64] = bytes;
         setState(() => _bytes = bytes);
         return;

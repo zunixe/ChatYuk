@@ -83,4 +83,36 @@ void main() {
     expect(border!.top.color, Colors.transparent,
         reason: 'foto tidak boleh kena ring warna');
   });
+
+  testWidgets('ganti uid → foto uid lama TIDAK tertinggal', (tester) async {
+    const pngA =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    AvatarB64Service.instance.setForUid('u-aaa', pngA);
+    AvatarB64Service.instance.clearForUid('u-bbb');
+
+    Widget wrap(String uid) => MaterialApp(
+          home: Scaffold(
+            body: ProfileAvatar(uid: uid, name: uid, size: 44),
+          ),
+        );
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(wrap('u-aaa'));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+    expect(find.byType(Image), findsOneWidget, reason: 'uid A punya foto');
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(wrap('u-bbb'));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+    expect(find.byType(Image), findsNothing,
+        reason: 'foto uid lama tidak boleh tertinggal di uid baru');
+
+    AvatarB64Service.instance.clearForUid('u-aaa');
+  });
 }
