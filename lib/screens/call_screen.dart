@@ -9,6 +9,7 @@ import '../providers/auth_provider.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../core/perf/perf_probe.dart';
+import '../core/call/call_permissions.dart';
 import '../utils.dart';
 import '../widgets/call_control_button.dart';
 import '../widgets/profile_avatar.dart';
@@ -165,7 +166,7 @@ class _CallScreenState extends State<CallScreen> {
       case CallPhase.connecting:
         return s.callConnecting;
       case CallPhase.error:
-        return s.msgCallError;
+        return callMediaErrorMessage(s, _session.mediaError);
       case CallPhase.ended:
         switch (_session.endReason) {
           case CallEndReason.declined:
@@ -456,7 +457,9 @@ class _CallScreenState extends State<CallScreen> {
                           ),
                         ],
                         // ICE gagal menetap saat call → sambung-ulang manual.
-                        if (_session.iceReconnectFailed)
+                        if (_session.canReconnect &&
+                            (_session.iceReconnectFailed ||
+                                _session.phase == CallPhase.error))
                           CallControlButton(
                             icon: Icons.refresh_rounded,
                             onTap: () =>
@@ -473,7 +476,8 @@ class _CallScreenState extends State<CallScreen> {
                 ),
               )
             else if (_session.phase == CallPhase.ringing ||
-                _session.phase == CallPhase.connecting)
+                _session.phase == CallPhase.connecting ||
+                _session.phase == CallPhase.error)
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -481,12 +485,14 @@ class _CallScreenState extends State<CallScreen> {
                 child: SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 24, top: 12),
-                    // ICE gagal menetap → tombol sambung-ulang manual di
-                    // samping akhiri (restart otomatis 1× sudah dicoba).
+                    // ICE gagal menetap / setup media gagal → tombol
+                    // sambung-ulang manual di samping akhiri.
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (_session.iceReconnectFailed) ...[
+                        if (_session.canReconnect &&
+                            (_session.iceReconnectFailed ||
+                                _session.phase == CallPhase.error)) ...[
                           CallControlButton(
                             icon: Icons.refresh_rounded,
                             size: 72,

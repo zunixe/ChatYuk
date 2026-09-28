@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../config/strings.dart';
 import '../config/gifts.dart';
 import '../models/message_model.dart';
 import '../providers/chat_provider.dart';
@@ -27,6 +28,7 @@ import 'voice_bubble.dart';
 import 'link_preview.dart';
 import '../core/media/link_preview_service.dart';
 import '../core/media/image_cache_hygiene.dart';
+import '../core/media/chat_photo_helper.dart';
 
 // cacheKey untuk PhotoCache = cacheKey yang dipakai chat_service
 // ('private_$chatId' untuk private chat). Dipakai private chat & admin monitor.
@@ -149,6 +151,16 @@ void _putDecodedCache(int key, DecodedImage img) {
     decodedImageCache.remove(decodedImageCache.keys.first);
   }
   decodedImageCache[key] = img;
+}
+
+// Daftarkan hasil decode milik [base64] agar path storage yang isinya SAMA
+// langsung hit cache — pengirim tidak perlu download ulang fotonya sendiri
+// saat versi server tiba via stream (anti kedip kotak → foto). Dipanggil
+// setelah upload berhasil, sebelum pesan server masuk. Murni (map) & testable.
+void warmPhotoCacheForPath(String path, String base64) {
+  if (path.isEmpty || base64.isEmpty) return;
+  final cached = decodedImageCache[base64.hashCode];
+  if (cached != null) _putDecodedCache(path.hashCode, cached);
 }
 
 // Satu blok isi bubble berpoin: teks biasa, jeda paragraf, atau satu poin
@@ -1737,6 +1749,18 @@ class _MessageImageState extends State<MessageImage> {
   // "belum keload / gagal", bukan "kedaluwarsa". Selama download tampil
   // spinner; gagal tampil "ketuk untuk memuat", bukan tulisan expired.
   bool _loading = true;
+  // Ukuran placeholder loading — langsung dicadangkan sesuai aspek foto
+  // (header JPEG/PNG dibaca sinkron) supaya TIDAK mulai dari kotak 200×200
+  // lalu loncat bentuk (nge-blink). Sama persis dengan ukuran gambar final.
+  double _phW = 200;
+  double _phH = 200;
+  // Generasi decode: cegah hasil basi menimpa yang baru bila imageData
+  // berubah cepat (path → thumbnail) sementara decode lama belum selesai.
+  int _gen = 0;
+  // Fade-in hanya untuk konten yang BARU dimuat elemen ini (dari placeholder
+  // / pergantian gambar). Scroll-back (cache hit di initState) langsung
+  // tampil tanpa animasi ulang — daftar foto tetap persistence.
+  bool _fadeNext = false;
   // Zoom inline di dalam bubble — gambar tetap kecil di chat, tapi bisa
   // di-pinch 2 jari / ketuk 2x per kotak (mis. baca teks diagram).
   final TransformationController _trans = TransformationController();
@@ -1752,9 +1776,14 @@ class _MessageImageState extends State<MessageImage> {
     _decoded = decodedImageCache[key];
     if (_decoded == null) {
       _loading = true;
-      _decode(key);
+      _fadeNext = true;
+      _reservePlaceholder(widget.imageData);
+      _decode(key, ++_gen);
     } else {
       _loading = false;
+      final s = photoViewSize(_decoded!.width, _decoded!.height);
+      _phW = s.width;
+      _phH = s.height;
     }
   }
 
@@ -1794,40 +1823,132 @@ class _MessageImageState extends State<MessageImage> {
     if (widget.imageData != oldWidget.imageData &&
         widget.imageData.isNotEmpty) {
       _resetZoom();
+      // Cadangkan aspek baru segera (sinkron) bila base64; path → ukuran lama
+      // dipertahankan (gapless) sampai download memberi aspek sebenarnya.
+      _reservePlaceholder(widget.imageData);
       final key = widget.imageData.hashCode;
-      _decoded = decodedImageCache[key];
-      if (_decoded == null) {
-        if (mounted) setState(() {
-          _loading = true;
-        });
-        _decode(key);
+      final hit = decodedImageCache[key];
+      if (hit != null) {
+        _gen++;
+        _fadeNext = true;
+        if (mounted) {
+          setState(() {
+            _decoded = hit;
+            _loading = false;
+            final s = photoViewSize(hit.width, hit.height);
+            _phW = s.width;
+            _phH = s.height;
+          });
+        }
       } else {
-        if (mounted) setState(() {
-          _loading = false;
-        });
+        // JANGAN kosongkan _decoded — foto lama tetap tampil sampai yang baru
+        // siap (persistence, anti kedip). Hanya tandai loading untuk spinner
+        // bila memang belum ada gambar sama sekali (lihat build).
+        _fadeNext = true;
+        if (mounted) {
+          setState(() {
+            _loading = true;
+          });
+        }
+        _decode(key, ++_gen);
       }
     }
   }
 
-  Future<void> _decode(int key) async {
+  // Cadangkan ukuran placeholder dari header gambar (sinkron, tanpa isolate).
+  // Base64 → baca dimensi JPEG/PNG langsung; path storage / tak dikenal →
+  // biarkan ukuran lama (gapless, jangan kembali ke kotak).
+  void _reservePlaceholder(String data) {
+    if (data.isEmpty || StoragePhotoService.instance.isPath(data)) return;
+    try {
+      final dims = parseImageDimensions(base64Decode(data));
+      if (dims == null) return;
+      final s = photoViewSize(dims.width, dims.height);
+      _phW = s.width;
+      _phH = s.height;
+    } catch (_) {}
+  }
+
+  Future<void> _decode(int key, int gen) async {
     var data = widget.imageData;
     dlog('[PHOTO-DBG] MessageImage ${widget.messageId} inLen=${data.length} isPath=${StoragePhotoService.instance.isPath(data)}');
     // PATH storage (belum base64) → download dulu. decodeImageB64 melempar
     // null untuk input non-base64, jadi jangan memanggilnya dengan path.
     if (data.isNotEmpty && StoragePhotoService.instance.isPath(data)) {
+      // Prefetch background (list pesan) biasanya sudah menyimpan thumb di
+      // disk → tampilkan instan tanpa menunggu download + drain. Versi full
+      // menyusul via drain (aspek sama, swap gapless).
+      try {
+        final thumbB64 = await PhotoCache.instance.loadThumb(
+          widget.chatKey,
+          widget.messageId,
+        );
+        if (thumbB64 != null &&
+            thumbB64.isNotEmpty &&
+            mounted &&
+            gen == _gen) {
+          final thumbBytes = base64Decode(thumbB64);
+          final thumbDims = parseImageDimensions(thumbBytes);
+          if (thumbDims != null) {
+            final td = DecodedImage(
+              thumbBytes,
+              thumbDims.width,
+              thumbDims.height,
+            );
+            _putDecodedCache(key, td);
+            _fadeNext = true;
+            setState(() {
+              _decoded = td;
+              _loading = false;
+              final s = photoViewSize(thumbDims.width, thumbDims.height);
+              _phW = s.width;
+              _phH = s.height;
+            });
+            return;
+          }
+        }
+      } catch (_) {}
       data = await StoragePhotoService.instance.download(data) ?? '';
       dlog('[PHOTO-DBG] MessageImage ${widget.messageId} downloaded len=${data.length}');
     }
-    if (!mounted) return;
+    if (!mounted || gen != _gen) return;
     if (data.isEmpty) {
       setState(() {
         _loading = false;
       });
       return;
     }
+    // Pakai ulang hasil decode bila isinya SAMA (pending base64 vs download
+    // path hasil upload sendiri) — tanpa compute ulang, tanpa kedip.
+    final contentHit = decodedImageCache[data.hashCode];
+    if (contentHit != null && contentHit.width > 0 && contentHit.height > 0) {
+      _putDecodedCache(key, contentHit);
+      if (!mounted || gen != _gen) return;
+      setState(() {
+        _decoded = contentHit;
+        _loading = false;
+        final s = photoViewSize(contentHit.width, contentHit.height);
+        _phW = s.width;
+        _phH = s.height;
+      });
+      return;
+    }
+    // Aspek sudah bisa dicadangkan dari data yang baru diunduh (sebelum
+    // decode penuh) — placeholder menyesuaikan sekali ke bentuk benar,
+    // piksel menyusul fade-in tanpa lompatan lagi.
+    try {
+      final dims = parseImageDimensions(base64Decode(data));
+      if (dims != null && mounted && gen == _gen) {
+        final s = photoViewSize(dims.width, dims.height);
+        setState(() {
+          _phW = s.width;
+          _phH = s.height;
+        });
+      }
+    } catch (_) {}
     final decoded = await compute(decodeImageB64, data);
     dlog('[PHOTO-DBG] MessageImage ${widget.messageId} decoded=${decoded != null && decoded.width > 0}');
-    if (!mounted) return;
+    if (!mounted || gen != _gen) return;
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       // Decode gagal — jangan cache null (dipaksa `!` dulu bikin crash).
       setState(() {
@@ -1835,20 +1956,38 @@ class _MessageImageState extends State<MessageImage> {
       });
       return;
     }
+    _putDecodedCache(data.hashCode, decoded);
     _putDecodedCache(key, decoded);
-    if (!mounted) return;
+    if (!mounted || gen != _gen) return;
     setState(() {
       _decoded = decoded;
       _loading = false;
+      final s = photoViewSize(decoded.width, decoded.height);
+      _phW = s.width;
+      _phH = s.height;
     });
   }
 
   void _retry() {
     final key = widget.imageData.hashCode;
+    _fadeNext = true;
     setState(() {
       _loading = true;
     });
-    _decode(key);
+    _decode(key, ++_gen);
+  }
+
+  // Lapor lebar render ke parent (sekali / berubah) → caption+jam rata kanan
+  // sejajar tepi foto. Dipakai gambar final DAN placeholder supaya caption
+  // langsung selebar foto dari frame pertama (tidak ikut loncat).
+  void _reportWidth(double w) {
+    final cb = widget.onRenderedWidth;
+    if (cb != null && (w - _reportedWidth).abs() > 0.5) {
+      _reportedWidth = w;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) cb(w);
+      });
+    }
   }
 
   @override
@@ -1858,11 +1997,14 @@ class _MessageImageState extends State<MessageImage> {
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       // Foto biasa: belum keload = spinner; gagal = "ketuk untuk memuat".
       // JANGAN pakai tulisan expired di sini — itu hanya untuk view-once.
+      // Ukuran = cadangan aspek foto (bukan kotak 200×200) + lebar dilaporkan
+      // ke parent supaya caption langsung pas dari frame pertama.
+      _reportWidth(_phW);
       return GestureDetector(
         onTap: _loading ? null : _retry,
         child: Container(
-          width: 200,
-          height: 200,
+          width: _phW,
+          height: _phH,
           color: AppTheme.bgInput,
           alignment: Alignment.center,
           child: _loading
@@ -1894,22 +2036,12 @@ class _MessageImageState extends State<MessageImage> {
         ),
       );
     }
-    final aspect = decoded.width / decoded.height;
-    var width = 200.0;
-    var height = width / aspect;
-    if (height > 280) {
-      height = 280;
-      width = height * aspect;
-    }
+    final size = photoViewSize(decoded.width, decoded.height);
+    final width = size.width;
+    final height = size.height;
     // Lapor lebar render ke parent (sekali / berubah) → caption+jam rata kanan
     // sejajar tepi foto.
-    final cb = widget.onRenderedWidth;
-    if (cb != null && (width - _reportedWidth).abs() > 0.5) {
-      _reportedWidth = width;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) cb(width);
-      });
-    }
+    _reportWidth(width);
     return GestureDetector(
       onTap: () => _openFullscreen(),
       onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
@@ -1932,49 +2064,77 @@ class _MessageImageState extends State<MessageImage> {
           onInteractionEnd: (_) => setState(
             () => _scale = _trans.value.getMaxScaleOnAxis(),
           ),
-          child: Image.memory(
-            decoded.bytes,
-            width: width,
-            height: height,
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
-            // Decode max 1080px (bukan full-res 12MP): bubble max 280px,
-            // zoom inline 6x tetap tajam; hemat ~6x RAM bitmap.
-            cacheWidth: 1080,
-            errorBuilder: (_, _, _) => GestureDetector(
-              onTap: _retry,
-              child: Container(
-                width: 200,
-                height: 200,
-                color: AppTheme.bgInput,
-                alignment: Alignment.center,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.refresh,
-                      color: AppTheme.textSecondary,
-                      size: 22,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      s.msgPhotoTapToLoad,
-                      style: AppText.chatBodySmall.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
+          child: _fadeNext
+              // Fade-in tiap KONTEN baru. Scroll-back / cache hit di initState
+              // (_fadeNext=false) langsung tampil — tidak animasi ulang.
+              ? TweenAnimationBuilder<double>(
+                  key: ValueKey(decoded),
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 180),
+                  onEnd: () => _fadeNext = false,
+                  builder: (_, opacity, child) =>
+                      Opacity(opacity: opacity, child: child),
+                  child: _bubbleImage(
+                    context,
+                    decoded,
+                    width,
+                    height,
+                    s,
+                  ),
+                )
+              : _bubbleImage(context, decoded, width, height, s),
+        ),
+      ),
+    );
+  }
+
+  // Gambar bubble (dipakai langsung / sebagai child fade-in).
+  Widget _bubbleImage(
+    BuildContext context,
+    DecodedImage decoded,
+    double width,
+    double height,
+    S s,
+  ) {
+    return Image.memory(
+      decoded.bytes,
+      width: width,
+      height: height,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
+      // Decode max 1080px (bukan full-res 12MP): bubble max 280px,
+      // zoom inline 6x tetap tajam; hemat ~6x RAM bitmap.
+      cacheWidth: 1080,
+      errorBuilder: (_, _, _) => GestureDetector(
+        onTap: _retry,
+        child: Container(
+          width: width,
+          height: height,
+          color: AppTheme.bgInput,
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.refresh,
+                color: AppTheme.textSecondary,
+                size: 22,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                s.msgPhotoTapToLoad,
+                style: AppText.chatBodySmall.copyWith(
+                  color: AppTheme.textSecondary,
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  void _openFullscreen() {
-    final decoded = _decoded;
+  void _openFullscreen() {    final decoded = _decoded;
     if (decoded == null || !mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(

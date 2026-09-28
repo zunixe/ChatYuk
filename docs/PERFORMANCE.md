@@ -414,7 +414,10 @@ swap video), lalu app di-background agar `PerfProbe.report` mencetak ringkasan.
 
 **Aturan lanjutan:** jangan kembalikan `_fetchCloudflare` tanpa cache, jangan
 pakai `setState` untuk update durasi call, dan pertahankan `RepaintBoundary`
-di sekitar `RTCVideoView`.
+di sekitar `RTCVideoView`. Gate izin (`ensureCallPermissions` di
+`lib/core/call/`) dipanggil SEBELUM `startCall` agar `getUserMedia` tidak
+gagal senyap; fallback all-candidates (`_retryWithAllCandidates`, sekali per
+sesi) hanya jalan saat `lastConfigWasRelayOnly` true — jangan dihapus.
 
 ### 1l. UI panggilan sistem — ConnectionService (2026-09-19)
 
@@ -633,6 +636,32 @@ yang dibangun), `ChatVideoBubble` menunda `_loadPoster()` 1 frame via
 
 Catatan: `_autoLoadMissingImages` sengaja hanya untuk `image` — video punya
 alur poster sendiri di bubble, tidak lewat antrean foto.
+
+### 2.14 Monitor chat admin — spinner lama saat buka chat (2026-09-28)
+
+Keluhan: klik chat di monitor admin kadang muter lama. Akar masalahnya tiga,
+semuanya di jalur DATA (bukan render):
+
+1. **RPC tanpa timeout** — `AdminService.getChatMessages` (dan
+   `getChatLastRead`) satu-satunya RPC buka-chat TANPA `.timeout()`. Saat
+   koneksi stall, future tak pernah selesai → spinner (satu-satunya item
+   list saat `_msgs` kosong & `_hasMore=true`) muter selamanya. Fix: tambah
+   `.timeout(_openTimeout)` 30 dtk seperti RPC buka-panel lain; gagal-timeout
+   ditangkap provider → layar tampil banner error + bisa pull-to-refresh,
+   bukan blank/spinner abadi.
+2. **Foto berebut tanpa batas** — `_loadPhotos` menembak `_loadOnePhoto`
+   untuk SEMUA foto sekaligus (tiap foto = cek disk + RPC
+   `fetchMessageImage` + download storage + isolate thumbnail). Chat berisi
+   banyak foto = N RPC + N download + N isolate berebut → semua spinner foto
+   muter lama. Fix: antrean maks **3** bersamaan + cooldown 10 dtk per id
+   (pola sama seperti `_autoLoadMissingImages` private chat, §2.12);
+   pesan terhapus (`isDeleted`) tidak ikut antre.
+3. **O(n²) di `_applyMessages`** — `list.indexOf(m)` di dalam loop +
+   `senders.contains` di dalam loop. Fix: loop berindeks + `Set`.
+
+Belum diukur di perangkat (butuh chat berisi banyak foto + jaringan buruk);
+klaim "lebih cepat" di sini bersifat konstruksi (konkurensi dibatasi +
+timeout), bukan angka. Ukur ulang bila keluhan muncul lagi.
 
 ---
 
@@ -872,6 +901,7 @@ mengukur**; centang kalau selesai dan pindahkan ke bagian 2.
 | 2026-09-19 | **Cron `chatyuk-call-sweep` */5m** — retensi call zombie + `call_signals` >1 jam (dulu hanya saat admin buka panel) | Mencegah `call_signals` membengkak (2.160 kB / 81 baris saat diukur) |
 | 2026-09-27 | **Avatar: satu kunci cache per uid** (§16) — `getByPath` cek `_cache[uid]` dulu + peta path→uid + seed sinkron RAM/disk di `UserInfoScreen`/`ProfileAvatar` | Halaman profil tak lagi "nge-blink" saat dibuka dari private chat (foto dari disk/daftar chat dipakai instan) |
 | 2026-09-27 | **Admin monitor chat: lokal-first** (§17) — `fetchChatMessages({force})` & `_fetch({force})` skip RPC saat pesan sudah ada di cache; server hanya saat kosong / pull-to-refresh | Buka-ulang chat di monitor tidak load ulang dari server; pesan baru tetap via poll 5 dtk + realtime |
+| 2026-09-28 | **Monitor chat: timeout RPC + antre foto** (§2.14) — `getChatMessages`/`getChatLastRead` + `.timeout(30s)`; load foto admin dibatasi 3 bersamaan + cooldown 10 dtk; `_applyMessages` O(n²)→O(n) | Konstruksi (belum diukur di HP); spinner abadi hilang, foto tak berebut |
 
 ### 8. Target tersisa
 

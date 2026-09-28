@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/call_config.dart';
 import '../config/supabase_config.dart';
 import '../core/call/opus_sdp.dart';
+import '../core/call/call_permissions.dart' show CallMediaError;
 import '../core/perf/perf_probe.dart';
 
 /// Fase panggilan.
@@ -366,9 +367,40 @@ class CallSession extends ChangeNotifier {
   bool _iceRestarted = false;
   bool _iceReconnectFailed = false;
 
+  /// True bila peer config saat ini memaksa `iceTransportPolicy: 'relay'`
+  /// (Cloudflare OK). Dipakai sebagai sinyal untuk fallback sekali ke
+  /// "semua tipe kandidat" saat relay tak terjangkau & ICE gagal — supaya
+  /// P2P di jaringan sama masih bisa connect tanpa TURN.
+  /// Default **true** = perilaku lama (relay-only bila Cloudflare tersedia).
+  bool _relayOnly = true;
+
+  /// True bila fallback "all candidates" (tanpa relay-only) sudah dicoba —
+  /// hindari loop; cukup sekali per sesi.
+  bool _iceAllCandidatesTried = false;
+
   /// True bila ICE sudah dicoba restart tapi masih buruk — UI menampilkan
   /// tombol sambung-ulang manual di samping tombol akhiri.
   bool get iceReconnectFailed => _iceReconnectFailed;
+
+  /// True bila sesi masih hidup (belum `_finish`) dan tombol "Sambung ulang"
+  /// manual masih bisa memulihkan koneksi. Setelah `_finish` (ended/timeout)
+  /// `_closed` = true → `reconnect()` no-op, jadi UI jangan menampilkannya.
+  bool get canReconnect => !_closed;
+
+  /// Alasan spesifik kegagalan setup media — dipakai UI supaya user tahu
+  /// apakah masalahnya izin (buka Pengaturan) atau kamera dipakai app lain.
+  /// Null bila bukan kegagalan media (mis. ICE timeout).
+  CallMediaError? _mediaError;
+  CallMediaError? get mediaError => _mediaError;
+
+  /// Test-only: paksa fase & alasan kegagalan media untuk memverifikasi UI
+  /// (mis. overlay menampilkan pesan error + tombol sambung ulang).
+  @visibleForTesting
+  void debugSetPhase(CallPhase phase, {CallMediaError? mediaError}) {
+    _phase = phase;
+    _mediaError = mediaError;
+    notifyListeners();
+  }
   // Sinyal yang datang sebelum peer connection siap (offer bisa sampai
   // sebelum getUserMedia selesai di callee) — diproses setelah setup.
   final List<Map<String, dynamic>> _pendingSignals = [];
@@ -550,6 +582,15 @@ class CallSession extends ChangeNotifier {
 
   Future<void> _setupMediaAndPeer() async {
     try {
+      _mediaError = null;
+      // Relay-only saat Cloudflare OK (deterministik & cepat). Fallback ke
+      // semua tipe kandidat terjadi lewat `_retryWithAllCandidates()` bila
+      // ICE gagal menetap — di sini cukup pakai default.
+      final peerConfig = await CallConfig.getPeerConfig(relayOnly: _relayOnly);
+      // Sinkronkan flag dengan kebijakan yang BENAR-BENAR diterapkan —
+      // relay-only hanya aktif bila Cloudflare tersedia. Kalau tidak,
+      // kandidat host/srflx sudah dipakai → fallback tak perlu.
+      _relayOnly = CallConfig.lastConfigWasRelayOnly;
       // Constraint audio eksplisit (latency rendah + jernih):
       // AEC/NS/AGC standar + perbaikan Google (highpass = low-rumble hilang,
       // typing-noise = ketikan keyboard tidak bocor) + mono (hemat bandwidth).
@@ -582,7 +623,7 @@ class CallSession extends ChangeNotifier {
         }
       } catch (_) {}
 
-      _pc = await createPeerConnection(await CallConfig.getPeerConfig());
+      _pc = await createPeerConnection(peerConfig);
       _pc!.onTrack = (event) async {
         dlog('[ICE] onTrack kind=${event.track.kind}');
         // Sender menaruh audio + video dalam satu stream lokal yang sama,
@@ -641,6 +682,13 @@ class CallSession extends ChangeNotifier {
                 return;
               if (cur == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
                   cur == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+                // Relay-only gagal menetap → coba all-candidates (P2P) dulu;
+                // ini menyelamatkan call saat relay TURN tak terjangkau.
+                if (_relayOnly && !_iceAllCandidatesTried) {
+                  dlog('[ICE] grace-timeout still $cur -> fallback all-candidates');
+                  await _retryWithAllCandidates();
+                  return;
+                }
                 // Otomatis restart 1× dulu; kalau masih gagal → tombol manual
                 // (jangan auto-tutup; user pilih sambung-ulang/akhiri).
                 if (!_iceRestarted) {
@@ -677,6 +725,13 @@ class CallSession extends ChangeNotifier {
         final cur = _pc?.connectionState;
         if (cur == RTCPeerConnectionState.RTCPeerConnectionStateConnected)
           return;
+        // Relay-only belum tersambung & fallback belum dicoba → jangan
+        // menyerah; coba all-candidates (P2P) dulu sebelum menyatakan gagal.
+        if (_relayOnly && !_iceAllCandidatesTried) {
+          dlog('[ICE] 15s timeout still $cur -> fallback all-candidates');
+          await _retryWithAllCandidates();
+          return;
+        }
         dlog(
           '[ICE] 15s timeout still $cur phase=$_phase -> bye + _finish error',
         );
@@ -759,10 +814,34 @@ class CallSession extends ChangeNotifier {
     } catch (e) {
       dlog('[CallSession] media/peer setup failed: $e');
       if (!_closed) {
+        _mediaError = _classifyMediaError(e);
         _phase = CallPhase.error;
         notifyListeners();
       }
     }
+  }
+
+  /// Terjemahkan error getUserMedia/createPeerConnection ke [CallMediaError]
+  /// supaya UI bisa menampilkan alasan yang benar (izin vs kamera terpakai).
+  CallMediaError _classifyMediaError(Object e) {
+    final m = e.toString().toLowerCase();
+    if (m.contains('notallowederror') ||
+        m.contains('permission') ||
+        m.contains('securityerror')) {
+      return CallMediaError.permission;
+    }
+    if (m.contains('notreadableerror') ||
+        m.contains('trackstarterror') ||
+        m.contains('could not start') ||
+        m.contains('in use')) {
+      return CallMediaError.inUse;
+    }
+    if (m.contains('notfounderror') ||
+        m.contains('devicesnotfound') ||
+        m.contains('overconstrained')) {
+      return CallMediaError.notFound;
+    }
+    return CallMediaError.other;
   }
 
   /// Paksa codec Opus untuk transceiver audio (latency rendah + FEC).
@@ -857,13 +936,92 @@ class CallSession extends ChangeNotifier {
   }
 
   /// Tombol "Sambung ulang" manual: ulangi ICE restart (reset status
-  /// percobaan otomatis supaya bisa dicoba berkali-kali).
+  /// percobaan otomatis supaya bisa dicoba berkali-kali). Bila setup media
+  /// sebelumnya gagal (phase `error`, pc belum ada) → ulangi setup penuh,
+  /// supaya panggilan bisa pulih tanpa harus menutup & menelepon ulang.
   Future<void> reconnect() async {
     if (_closed) return;
     _iceReconnectFailed = false;
     _iceRestarted = false;
+    _offered = false;
     notifyListeners();
+    // pc tidak pernah terbentuk (gagal getUserMedia dsb) → setup ulang.
+    if (_pc == null) {
+      _phase = CallPhase.connecting;
+      notifyListeners();
+      await _setupMediaAndPeer();
+      if (_pc != null && isCaller && !_closed) {
+        await _createOffer();
+      }
+      return;
+    }
+    // Relay-only & belum pernah coba all-candidates → fallback P2P dulu
+    // (relay bisa tak terjangkau), baru ICE restart biasa.
+    if (_relayOnly && !_iceAllCandidatesTried) {
+      await _retryWithAllCandidates();
+      return;
+    }
     await _attemptIceRestart();
+  }
+
+  /// Fallback saat relay-only tidak connect: buat ulang peer connection
+  /// TANPA `iceTransportPolicy: 'relay'` sehingga kandidat host/srflx ikut
+  /// dinegosiasikan — P2P di jaringan sama (WiFi/hotspot) bisa tersambung
+  /// walau TURN tak terjangkau. Cukup SEKALI per sesi (guard
+  /// `_iceAllCandidatesTried`).
+  Future<void> _retryWithAllCandidates() async {
+    if (_closed) return;
+    _iceAllCandidatesTried = true;
+    dlog('[ICE] fallback relay-only -> all candidates (P2P)');
+    // Tutup pc lama & sinyal stale supaya negosiasi bersih.
+    final old = _pc;
+    _pc = null;
+    try {
+      await old?.close();
+    } catch (_) {}
+    // Lepas stream lokal lama agar kamera/mik tidak bocor (setup ulang
+    // di bawah membuka track baru; izin sudah ada jadi cepat).
+    try {
+      await _localStream?.dispose();
+    } catch (_) {}
+    _localStream = null;
+    await _signalSub?.cancel();
+    _signalSub = null;
+    _service.disposeSignal(callId);
+    _pendingSignals.clear();
+    _pendingCandidates.clear();
+    _processedSignalIds.clear();
+    _offered = false;
+    _relayOnly = false;
+    _phase = CallPhase.connecting;
+    notifyListeners();
+    // Bangun ulang peer connection + media.
+    await _setupMediaAndPeer();
+    if (_closed) return;
+    // Langganan sinyal WAJIB dipasang ulang (dibatalkan di atas) — tanpa ini
+    // answer/offer balasan tidak pernah tiba & call gantung selamanya.
+    _signalSub = _service.onSignal(callId).listen(
+      _onSignal,
+      onError: (e) => dlog('[CallService] signal stream error: $e'),
+    );
+    if (_pc == null) {
+      _iceReconnectFailed = true;
+      notifyListeners();
+      return;
+    }
+    // Caller men-drive offer ulang; callee menunggu offer baru tiba.
+    if (isCaller && !_closed) {
+      await _createOffer();
+    }
+    // Recheck: kalau masih tak connect setelah jendela fallback → tombol manual.
+    Future.delayed(const Duration(seconds: 8), () {
+      if (_closed || _phase == CallPhase.inCall) return;
+      final st = _pc?.connectionState;
+      if (st == RTCPeerConnectionState.RTCPeerConnectionStateConnected) return;
+      _iceReconnectFailed = true;
+      dlog('[ICE] still bad after all-candidates fallback -> tombol manual');
+      notifyListeners();
+    });
   }
 
   Future<void> _createOffer() async {

@@ -10,6 +10,7 @@ import 'realtime_hub.dart';
 import '../config/gifts.dart';
 import '../core/cache/message_cache.dart';
 import '../core/cache/photo_cache.dart';
+import '../core/media/chat_photo_helper.dart';
 import '../services/storage_photo_service.dart';
 import '../utils.dart';
 import '../utils/mention.dart';

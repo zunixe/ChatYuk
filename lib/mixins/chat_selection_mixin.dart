@@ -12,6 +12,7 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/message_reaction_service.dart';
+import '../widgets/chat_info_snack.dart';
 import '../widgets/forward_picker_sheet.dart';
 import '../widgets/message_reaction_bar.dart';
 import '../widgets/reaction_detail_sheet.dart';
@@ -93,6 +94,11 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     actionBar = null;
   }
 
+  /// Dipanggil dari `dispose()` screen pemakai mixin — pastikan overlay
+  /// seleksi TIDAK tersisa (penghalang transparan full-screen yang bikin
+  /// tap/back tertelan). Defensif: aman dipanggil berulang.
+  void disposeSelectionLayer() => hideActionBar();
+
   void clearSelection() {
     hideActionBar();
     if (selectedIds.isEmpty) return;
@@ -143,7 +149,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     // Multi-seleksi: hanya toolbar atas, tanpa bar emoji (sama seperti WA).
     if (selectedIds.length != 1) return;
     final link = linkFor(anchor.id);
-    actionBar = OverlayEntry(
+    final entry = OverlayEntry(
       builder: (_) => Stack(
         children: [
           Positioned.fill(
@@ -166,7 +172,18 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
         ],
       ),
     );
-    Overlay.of(context).insert(actionBar!);
+    actionBar = entry;
+    // Overlay bisa sudah di-unmount (rute di-pop paksa) → insert melempar.
+    // Bungkus supaya exception TIDAK merusak dispose/dispatcher navigator
+    // (gejala "back mati"). Bila gagal, bersihkan state agar tidak yatim.
+    try {
+      Overlay.of(context).insert(entry);
+    } catch (_) {
+      try {
+        entry.remove();
+      } catch (_) {}
+      actionBar = null;
+    }
   }
 
   Future<void> reactToSelected(String emoji) async {
@@ -200,9 +217,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     });
     if (res == ToggleResult.failed && mounted) {
       final s = context.read<LocaleProvider>().s;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.msgReactionFailed)),
-      );
+      showChatSnack(context, s.msgReactionFailed);
     }
     clearSelection();
   }
@@ -229,16 +244,13 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     }
     if (!mounted) return;
     final s = context.read<LocaleProvider>().s;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          res == ToggleResult.added
-              ? s.msgStarred
-              : res == ToggleResult.removed
-              ? s.msgUnstarred
-              : s.msgStarFailed,
-        ),
-      ),
+    showChatSnack(
+      context,
+      res == ToggleResult.added
+          ? s.msgStarred
+          : res == ToggleResult.removed
+          ? s.msgUnstarred
+          : s.msgStarFailed,
     );
     clearSelection();
   }
@@ -248,9 +260,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     if (msg == null || msg.text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: msg.text));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.read<LocaleProvider>().s.msgMessageCopied)),
-    );
+    showChatSnack(context, context.read<LocaleProvider>().s.msgMessageCopied);
     clearSelection();
   }
 
@@ -294,12 +304,9 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     final results = await Future.wait(ids.map(chatDeleteMessage));
     failCount = results.where((ok) => !ok).length;
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            failCount == 0 ? chatDeletedLabel(s) : s.msgDeleteFailed,
-          ),
-        ),
+      showChatSnack(
+        context,
+        failCount == 0 ? chatDeletedLabel(s) : s.msgDeleteFailed,
       );
     }
     clearSelection();
@@ -325,17 +332,13 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     );
     if (!mounted) return;
     if (!charged) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.yukcoinNotEnough)),
-      );
+      showChatSnack(context, s.yukcoinNotEnough);
       clearSelection();
       return;
     }
     await chatUndoMessage(msg.id);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s.undoMessageDone)),
-    );
+    showChatSnack(context, s.undoMessageDone);
     clearSelection();
   }
 
@@ -373,9 +376,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
     );
     if (!mounted) return false;
     if (!charged) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.yukcoinNotEnough)),
-      );
+      showChatSnack(context, s.yukcoinNotEnough);
       return false;
     }
     return true;
@@ -422,9 +423,7 @@ mixin ChatSelectionMixin<T extends StatefulWidget> on State<T> {
       } catch (_) {}
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.read<LocaleProvider>().s.msgForwarded)),
-    );
+    showChatSnack(context, context.read<LocaleProvider>().s.msgForwarded);
     clearSelection();
   }
 

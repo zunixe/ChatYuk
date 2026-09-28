@@ -166,6 +166,8 @@ class AdminService {
 
   /// Ambil pesan chat dengan pagination (desc dari terbaru) — image_data
   /// kosong kecuali view-once. Foto biasa di-load lazy via PhotoCache.
+  /// Timeout 30 dtk (seperti RPC buka-panel lain): tanpa ini koneksi stall
+  /// membuat future tak pernah selesai → spinner monitor selamanya.
   Future<List<Map<String, dynamic>>> getChatMessages(
     String chatId, {
     int limit = 100,
@@ -174,7 +176,7 @@ class AdminService {
     final res = await _rpc(
       'admin_get_chat_messages_page',
       params: {'p_chat_id': chatId, 'p_limit': limit, 'p_offset': offset},
-    );
+    ).timeout(_openTimeout);
     final list = res is List ? res : <dynamic>[];
     return list.cast<Map<String, dynamic>>();
   }
@@ -186,7 +188,7 @@ class AdminService {
       final res = await _rpc(
         'admin_get_chat_last_read',
         params: {'p_chat_id': chatId},
-      );
+      ).timeout(_openTimeout);
       final map = res as Map<String, dynamic>?;
       if (map == null) return {};
       return map.map((k, v) => MapEntry(k.toString(), v.toString()));
@@ -316,8 +318,9 @@ class AdminService {
   }
 
   /// Statistik penggunaan data Supabase (DB/storage/kuota + pertumbuhan).
+  /// WAJIB timeout (kasus nyata: tanpa ini koneksi stall = spinner selamanya).
   Future<Map<String, dynamic>> getStorageStats() async {
-    final res = await _rpc('admin_storage_stats');
+    final res = await _rpc('admin_storage_stats').timeout(_openTimeout);
     return (res as Map<String, dynamic>?) ?? {};
   }
 
@@ -328,7 +331,7 @@ class AdminService {
     final res = await _rpc(
       'admin_table_sizes',
       params: {'p_limit': limit},
-    );
+    ).timeout(_openTimeout);
     return (res as Map<String, dynamic>?) ?? {};
   }
 
@@ -361,8 +364,11 @@ class AdminService {
   /// Pemakaian Cloudflare Realtime TURN (kuota 1 TB/bulan free tier).
   /// Return {configured: bool, day_bytes, week_bytes, month_bytes,
   /// quota_bytes} atau {configured:false} bila secrets belum diset.
+  /// WAJIB timeout — edge function stall = bagian CF "..." selamanya.
   Future<Map<String, dynamic>> getCfUsage() async {
-    final res = await _sb.functions.invoke('admin-cf-usage');
+    final res = await _sb.functions
+        .invoke('admin-cf-usage')
+        .timeout(_openTimeout);
     return res.data is Map ? Map<String, dynamic>.from(res.data as Map) : {};
   }
 

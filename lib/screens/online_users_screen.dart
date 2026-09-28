@@ -22,6 +22,7 @@ import '../providers/room_provider.dart';
 import '../widgets/search_dropdown.dart';
 import '../widgets/skeleton_card.dart';
 import '../core/cache/media_disk_cache.dart';
+import '../core/nav_guard.dart';
 import '../models/story_model.dart';
 import '../providers/social_provider.dart';
 import '../providers/timeline_provider.dart';
@@ -982,9 +983,17 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
     // Hitung chatId lokal (deterministik, tanpa network) → navigate instant.
     final ids = [myUid, user.uid]..sort();
     final chatId = '${ids[0]}_${ids[1]}';
+    // Guard double-push: tap 2× cepat saat transisi push menumpuk 2 route
+    // identik → 1× back tampak "tidak bereaksi" (scroll jalan). Lihat
+    // docs/PERFORMANCE.md §18.
+    final navKey = navKeyChat(chatId);
+    if (!tryClaimNav(navKey)) return;
     // Prefetch pesan ke memori sebelum push → buka chat instant.
     context.read<ChatProvider>().prefetchPrivateChat(chatId);
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      releaseNav(navKey);
+      return;
+    }
     Navigator.push(
       context,
       PageRouteBuilder(
@@ -1280,8 +1289,14 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       },
     );
     overlay.insert(entry);
+    // Auto-tutup 4 dtk. `remove()` dibungkus try/catch + cek `mounted`:
+    // overlay yang sudah di-unmount (pindah rute) bisa melempar saat
+    // remove() → kalau tak tertangkap, jadi penghalang transparan sisa
+    // (tap/back tertelan padahal scroll jalan).
     Future.delayed(const Duration(seconds: 4), () {
-      if (entry.mounted) entry.remove();
+      try {
+        if (entry.mounted) entry.remove();
+      } catch (_) {}
     });
   }
 
@@ -1755,10 +1770,12 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen>
       final room = rooms.first;
       unawaited(rp.markRoomRead(room.id));
       if (!context.mounted) return;
+      final navKey = navKeyRoom(room.id);
+      if (!tryClaimNav(navKey)) return;
       await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => RoomChatScreen(room: room)),
-      );
+      ).then((_) => releaseNav(navKey));
       return;
     }
     // Belum ada room general termuat/tersedia → buka HALAMAN Global Room

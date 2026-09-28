@@ -24,6 +24,7 @@ import '../providers/locale_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
+import '../core/nav_guard.dart';
 import '../utils.dart';
 import '../main.dart';
 import 'room_members_sheet.dart';
@@ -38,8 +39,10 @@ import 'room_chat/widgets/voice_stage_strip.dart';
 import '../services/room_voice_service.dart';
 import 'private_chat/widgets/coin_gift_dialogs.dart';
 import '../widgets/chat_composer_input.dart';
+import '../widgets/chat_info_snack.dart';
 import '../widgets/location_picker_sheet.dart';
 import '../core/chat/chat_location.dart';
+import '../core/chat/pending_confirm.dart';
 import '../utils/mention.dart';
 import '../widgets/gift_fly_overlay.dart';
 import '../widgets/room_gift_panel.dart';
@@ -211,12 +214,9 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       if (!mounted) return false;
       setState(() {});
       if (_myRole == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.read<LocaleProvider>().s.privateRoomNeedApproval,
-            ),
-          ),
+        showChatSnack(
+          context,
+          context.read<LocaleProvider>().s.privateRoomNeedApproval,
         );
         return false;
       }
@@ -293,6 +293,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
   final Set<String> _queuedIds = {};
   final Set<String> _confirmedPhotoIds = {};
   final Set<String> _confirmedVoiceIds = {};
+  // Gema teks yang sudah memakai satu pending (lihat consumeConfirmedText).
+  final Set<String> _confirmedTextIds = {};
   late final DateTime _openedAt;
   ConnectivityProvider? _connProv;
   VoidCallback? _connListener;
@@ -387,15 +389,11 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           myUid: myUid,
           onStageFull: () {
             if (!mounted) return;
-            messenger.showSnackBar(
-              SnackBar(content: Text(s.roomVoiceStageFull)),
-            );
+            showChatSnackVia(messenger, context, s.roomVoiceStageFull);
           },
           onMutedByAdmin: () {
             if (!mounted) return;
-            messenger.showSnackBar(
-              SnackBar(content: Text(s.roomVoiceMutedByAdmin)),
-            );
+            showChatSnackVia(messenger, context, s.roomVoiceMutedByAdmin);
           },
         );
         _attachVoiceSession(session);
@@ -403,9 +401,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         if (!mounted) return;
         if (!ok && !session.joined) {
           // Gagal total (mic ditolak/timeout/jaringan): buang sesi + kasih tahu.
-          messenger.showSnackBar(
-            SnackBar(content: Text(s.roomVoiceConnectFail)),
-          );
+          showChatSnackVia(messenger, context, s.roomVoiceConnectFail);
           session.removeListener(_onVoiceChanged);
           await session.stop();
           _voiceSession = null;
@@ -423,7 +419,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (!session.onStage) {
       final ok = await session.startSpeaking();
       if (!ok && mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(s.roomVoiceStageFull)));
+        showChatSnackVia(messenger, context, s.roomVoiceStageFull);
       }
       return;
     }
@@ -877,13 +873,16 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       var changed = false;
       final myId = _auth.uid;
       if (myId != null) {
-        final confirmedTexts = msgs
-            .where((m) => m.senderId == myId && m.type == 'text')
-            .map((m) => m.text)
-            .toList();
-        for (final text in confirmedTexts) {
-          final idx = _pending.indexWhere(
-            (p) => p.type == 'text' && p.text == text,
+        // Teks: recency + sekali pakai + FIFO (lihat consumeConfirmedText).
+        // Pencocokan mentah via isi membuat pesan lama yang sama isinya
+        // membuang pending baru → "kirim lalu hilang, muncul telat".
+        for (final m in msgs) {
+          if (m.senderId != myId) continue;
+          final idx = consumeConfirmedText(
+            server: m,
+            openedAt: _openedAt,
+            consumedIds: _confirmedTextIds,
+            pendings: _pending,
           );
           if (idx != -1) {
             _queuedIds.remove(_pending[idx].id);
@@ -940,11 +939,12 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     final s = context.read<LocaleProvider>().s;
     final auth = context.read<AuthProvider>();
     if (!auth.canUsePaid) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(auth.profile?.isRegistered != true
+      showChatSnack(
+        context,
+        auth.profile?.isRegistered != true
             ? s.errCoinRegisterOnly
-            : s.msgVerifyToUsePaid),
-      ));
+            : s.msgVerifyToUsePaid,
+      );
       return;
     }
     final pick = await RoomGiftPanel.show(context);
@@ -969,13 +969,15 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       }
     } catch (e) {
       final msg = e.toString();
-      messenger.showSnackBar(SnackBar(
-        content: Text(msg.contains('Not enough')
+      showChatSnackVia(
+        messenger,
+        context,
+        msg.contains('Not enough')
             ? s.giftInsufficient
             : msg.contains('registered')
                 ? s.errCoinRegisterOnly
-                : s.errSendCoin),
-      ));
+                : s.errSendCoin,
+      );
     }
   }
 
@@ -1035,9 +1037,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       if (cnt >= 4) {
         if (!mounted) return;
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.roomBroadcastFull), backgroundColor: AppTheme.danger),
-        );
+        showChatSnack(context, s.roomBroadcastFull, backgroundColor: AppTheme.danger);
         return;
       }
     } catch (_) {}
@@ -1066,7 +1066,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().contains('Broadcast full') ? context.read<LocaleProvider>().s.roomBroadcastFull : '$e';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      showChatSnack(context, msg);
       _broadcastSession = null;
     }
     if (mounted) setState(() {});
@@ -1105,12 +1105,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     );
     if (!mounted) return;
     final s = context.read<LocaleProvider>().s;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(s.roomHandRaised),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    showChatSnack(context, s.roomHandRaised, duration: const Duration(seconds: 2));
   }
 
   /// Menu ⋮ grup ala WA: tambah anggota, info, media, cari, bisu, lainnya.
@@ -1182,9 +1177,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       await _chat.muteRoom(widget.room.id, next);
       if (!mounted) return;
       setState(() => _muted = next);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(next ? s.roomMutedOn : s.roomMutedOff)),
-      );
+      showChatSnack(context, next ? s.roomMutedOn : s.roomMutedOff);
     } catch (_) {}
   }
 
@@ -1411,8 +1404,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric), backgroundColor: AppTheme.danger),
+      showChatSnack(
+        context,
+        context.read<LocaleProvider>().s.errGeneric,
+        backgroundColor: AppTheme.danger,
       );
     }
   }
@@ -1424,8 +1419,10 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.read<LocaleProvider>().s.errGeneric), backgroundColor: AppTheme.danger),
+      showChatSnack(
+        context,
+        context.read<LocaleProvider>().s.errGeneric,
+        backgroundColor: AppTheme.danger,
       );
     }
   }
@@ -1715,9 +1712,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.errSendFailed)));
+      showChatSnack(context, s.errSendFailed);
       return;
     }
     if (mounted) {
@@ -1806,9 +1801,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
           return;
         }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.read<LocaleProvider>().s.errVoiceUploadFailed)),
-          );
+          showChatSnack(context, context.read<LocaleProvider>().s.errVoiceUploadFailed);
         }
         return;
       }
@@ -1851,9 +1844,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
         } catch (_) {}
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.read<LocaleProvider>().s.errSendFailed)),
-        );
+        showChatSnack(context, context.read<LocaleProvider>().s.errSendFailed);
       }
     }
   }
@@ -2723,9 +2714,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
     if (_sheetOpen) return;
     if (context.read<ChatProvider>().isBlocked(msg.senderId)) {
       final s = context.read<LocaleProvider>().s;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.msgBlocked)));
+      showChatSnack(context, s.msgBlocked);
       return;
     }
     _sheetOpen = true;
@@ -2747,6 +2736,8 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 borderRadius: BorderRadius.circular(12),
                 onTap: () {
                   // Tutup sheet lalu buka halaman profil user.
+                  final navKey = navKeyUser(msg.senderId);
+                  if (!tryClaimNav(navKey)) return;
                   Navigator.of(context).pop();
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -2755,7 +2746,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                         fallbackName: msg.senderName,
                       ),
                     ),
-                  );
+                  ).then((_) => releaseNav(navKey));
                 },
                 child: Row(
                   children: [
@@ -2819,9 +2810,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                 final active = await chat.isUserActive(msg.senderId);
                 if (!context.mounted) return;
                 if (!active) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(locale.s.errUserNotFound)),
-                  );
+                  showChatSnack(context, locale.s.errUserNotFound);
                   return;
                 }
                 // Pakai context screen (bukan context sheet) — context sheet
@@ -2841,25 +2830,26 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                     myAge: auth.profile!.age,
                   );
                   if (mounted && screenContext.mounted) {
-                    Navigator.of(screenContext).push(
-                      MaterialPageRoute(
-                        builder: (_) => PrivateChatScreen(
-                          chatId: chatId,
-                          otherName: msg.senderName,
-                          otherUid: msg.senderId,
-                          otherGender: msg.senderGender,
-                          otherCountry: '',
-                          otherRegistered: msg.isRegistered,
+                    final navKey = navKeyChat(chatId);
+                    if (tryClaimNav(navKey)) {
+                      Navigator.of(screenContext).push(
+                        MaterialPageRoute(
+                          builder: (_) => PrivateChatScreen(
+                            chatId: chatId,
+                            otherName: msg.senderName,
+                            otherUid: msg.senderId,
+                            otherGender: msg.senderGender,
+                            otherCountry: '',
+                            otherRegistered: msg.isRegistered,
+                          ),
                         ),
-                      ),
-                    );
+                      ).then((_) => releaseNav(navKey));
+                    }
                   }
                 } catch (e) {
                   if (mounted) {
                     final s = context.read<LocaleProvider>().s;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(s.errGeneric)),
-                    );
+                    showChatSnack(context, s.errGeneric);
                   }
                 }
               },
@@ -2880,9 +2870,7 @@ class _RoomChatScreenState extends State<RoomChatScreen>
                   msg.senderId,
                 );
                 if (mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(s.blockSuccess)));
+                  showChatSnack(context, s.blockSuccess);
                 }
               },
             ),

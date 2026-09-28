@@ -11,6 +11,8 @@ import '../providers/locale_provider.dart';
 import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
 import 'private_chat_screen.dart';
+import '../widgets/call_permission_dialog.dart';
+import '../core/call/call_permissions.dart';
 import '../utils.dart';
 
 /// Layar panggilan masuk — muncul saat ada call realtime atau push FCM.
@@ -138,6 +140,20 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     if (_busy) return;
     _busy = true;
     dlog('[ACCEPT] tap mode=$mode callId=${widget.callId}');
+    // Izin kamera/mikrofon WAJIB sebelum menerima — men-jawab video call juga
+    // butuh kamera. Tanpa ini jawab dari layar sistem (killed state) langsung
+    // gagal senyap karena getUserMedia melempar (CallPhase.error).
+    final perm = await ensureCallPermissions(video: widget.callType == 'video');
+    if (perm != CallPermissionResult.granted) {
+      _busy = false;
+      if (!mounted) return;
+      showCallPermissionDialog(
+        context,
+        video: widget.callType == 'video',
+        permanentlyDenied: perm == CallPermissionResult.permanentlyDenied,
+      );
+      return;
+    }
     await _stopRingtone();
     try {
       await _service.updateCallStatus(widget.callId, 'answered');

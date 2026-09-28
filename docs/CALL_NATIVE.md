@@ -134,6 +134,10 @@ CallKit iOS = pekerjaan + backend terpisah.
 
 - **Unit** (`test/call_ui_test.dart`): routing method channel, buffer aksi
   dingin, integrasi provider (accept id cocok/lain, unbind, end tanpa sesi).
+- **Unit** (`test/call_overlay_error_test.dart`): overlay menampilkan pesan
+  error spesifik + tombol sambung-ulang saat `CallPhase.error`.
+- **Unit** (`test/config_core_test.dart`): `CallConfig.lastConfigWasRelayOnly`
+  akurat (true saat Cloudflare OK, false saat fallback/gagal).
 - **Device** (manual, wajib karena Telecom tidak bisa di-emulator penuh):
   1. App hidup: panggil → ring sistem muncul → jawab dari layar kunci.
   2. App hidup: tolak dari sistem → status `declined` di DB.

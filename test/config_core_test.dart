@@ -261,5 +261,54 @@ void main() {
 
       expect(requests, 1);
     });
+
+    test('lastConfigWasRelayOnly true saat Cloudflare OK + relayOnly default',
+        () async {
+      CallConfig.accessTokenOverride = 'test-user-token';
+      CallConfig.httpClientOverride = MockClient((request) async {
+        return http.Response(
+          '{"iceServers":{"urls":"turn:cloudflare.example","username":"u","credential":"c"}}',
+          200,
+          request: request,
+        );
+      });
+
+      await CallConfig.getPeerConfig();
+      expect(CallConfig.lastConfigWasRelayOnly, isTrue);
+    });
+
+    test('relayOnly:false → JANGAN policy relay & flag false (fallback P2P)',
+        () async {
+      CallConfig.accessTokenOverride = 'test-user-token';
+      CallConfig.httpClientOverride = MockClient((request) async {
+        return http.Response(
+          '{"iceServers":{"urls":"turn:cloudflare.example","username":"u","credential":"c"}}',
+          200,
+          request: request,
+        );
+      });
+
+      // Fallback all-candidates: Cloudflare tetap dipakai sebagai relay
+      // cadangan, tapi host/srflx TIDAK diblokir → policy relay tidak dipaksa.
+      final cfg = await CallConfig.getPeerConfig(relayOnly: false);
+      expect(cfg.containsKey('iceTransportPolicy'), isFalse);
+      expect(CallConfig.lastConfigWasRelayOnly, isFalse);
+      expect(
+        (cfg['iceServers'] as List).any(
+          (s) => '${s['urls']}'.contains('turn:cloudflare.example'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('Cloudflare gagal → lastConfigWasRelayOnly false', () async {
+      CallConfig.accessTokenOverride = 'test-user-token';
+      CallConfig.httpClientOverride = MockClient((request) async {
+        return http.Response('{"error":"expired"}', 401, request: request);
+      });
+
+      await CallConfig.getPeerConfig();
+      expect(CallConfig.lastConfigWasRelayOnly, isFalse);
+    });
   });
 }

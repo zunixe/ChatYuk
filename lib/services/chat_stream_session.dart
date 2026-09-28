@@ -214,11 +214,19 @@ class ChatStreamSession {
           // membuka banyak koneksi sekaligus.
           for (var i = 0; i < batch.length; i += 4) {
             final chunk = batch.skip(i).take(4).toList();
+            // Id pesan yang full-res-nya sudah di PhotoCache (prefetch list /
+            // buka sebelumnya) — lewati download + tulis ulang di bawah.
+            final cacheHitIds = <String>{};
             final results = await Future.wait(
               chunk.map((m) async {
                 var data = byId[m.id] ?? '';
                 if (data.isNotEmpty &&
                     StoragePhotoService.instance.isPath(data)) {
+                  final mem = await PhotoCache.instance.load(cacheKey, m.id);
+                  if (mem != null && mem.isNotEmpty) {
+                    cacheHitIds.add(m.id);
+                    return mem;
+                  }
                   data =
                       await StoragePhotoService.instance.download(data) ?? '';
                 }
@@ -232,11 +240,15 @@ class ChatStreamSession {
               if (data.isEmpty) continue;
               // save() menyimpan full-res + membuat thumbnail (dikembalikan).
               // Bubble pakai thumbnail supaya decode cepat; full-res di PhotoCache.
-              final thumb = await PhotoCache.instance.save(
-                cacheKey,
-                m.id,
-                data,
-              );
+              // Cache-hit (prefetch) → full+thumb sudah di disk: ambil thumb
+              // saja, jangan tulis ulang + compute ulang.
+              final thumb = cacheHitIds.contains(m.id)
+                  ? await PhotoCache.instance.loadThumb(cacheKey, m.id)
+                  : await PhotoCache.instance.save(
+                      cacheKey,
+                      m.id,
+                      data,
+                    );
               if (controller.isClosed) return;
               final idx = _current.indexWhere((x) => x.id == m.id);
               if (idx >= 0 && _needsPhotoFill(_current[idx])) {

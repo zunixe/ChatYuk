@@ -17,6 +17,8 @@ import '../core/media/chat_photo_helper.dart';
 import '../core/photo_quality_pref.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
+import '../widgets/chat_info_snack.dart';
+import '../widgets/private_chat_message.dart' show warmPhotoCacheForPath;
 import 'chat_outbox_mixin.dart';
 
 /// Modul BERSAMA kirim foto & view-once (private ↔ room).
@@ -174,18 +176,14 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     if (bytes.length > 10 * 1024 * 1024) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.msgFileTooLarge)));
+        showChatSnack(context, s.msgFileTooLarge);
       }
       return null;
     }
     final base64 = await compute(processChatImage, bytes);
     if (base64 == null && mounted) {
       final s = context.read<LocaleProvider>().s;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
+      showChatSnack(context, s.errPhotoRead);
     }
     return base64;
   }
@@ -225,9 +223,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     if (base64 == null) {
       if (mounted) {
         final s = context.read<LocaleProvider>().s;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errPhotoRead)));
+        showChatSnack(context, s.errPhotoRead);
       }
       return;
     }
@@ -253,7 +249,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     if (!videoSendEnabled) return false;
     void toast(String msg) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      showChatSnack(context, msg);
     }
 
     XFile? picked;
@@ -275,7 +271,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     if (!videoSendEnabled) return false;
     void toast(String msg) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      showChatSnack(context, msg);
     }
 
     XFile? picked;
@@ -307,7 +303,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     if (!mounted) return false;
     void toast(String msg) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      showChatSnack(context, msg);
     }
 
     return _processPickedVideo(path, toast: toast);
@@ -405,9 +401,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
     final bytes = await file.exists() ? await file.readAsBytes() : null;
     if (bytes == null || bytes.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.videoCompressFail)));
+        showChatSnack(context, s.videoCompressFail);
       }
       return;
     }
@@ -503,9 +497,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       if (r == -1) {
         pp.showOutOfPointsDialog(context, s.isId);
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+        showChatSnack(context, s.errSendPhoto);
       }
       return;
     }
@@ -521,9 +513,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         }
         safeUnawaited(pp.refundChatPoint('image'));
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+          showChatSnack(context, s.errSendPhoto);
           setState(
             () => outboxPending.removeWhere((m) => m.id == pendingVideo.id),
           );
@@ -569,9 +559,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
           setState(
             () => outboxPending.removeWhere((m) => m.id == pendingVideo.id),
           );
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+          showChatSnack(context, s.errSendPhoto);
         }
       }
     }
@@ -678,9 +666,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
       if (r == -1) {
         pp.showOutOfPointsDialog(context, s.isId);
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+        showChatSnack(context, s.errSendPhoto);
       }
       return;
     }
@@ -695,9 +681,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         safeUnawaited(pp.refundChatPoint(effKind));
         if (mounted) {
           final s = context.read<LocaleProvider>().s;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+          showChatSnack(context, s.errSendPhoto);
           setState(
             () => outboxPending.removeWhere((m) => m.id == pendingPhoto.id),
           );
@@ -705,6 +689,9 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
         photoClearViewTimer();
         return;
       }
+      // Isi path == base64 yang baru di-upload → daftarkan decode-nya supaya
+      // bubble versi server langsung tampil (tidak download + kotak dulu).
+      warmPhotoCacheForPath(path, base64);
       await photoDispatch(
         imageData: path,
         type: effType,
@@ -743,9 +730,7 @@ mixin ChatPhotoSendMixin<T extends StatefulWidget> on ChatOutboxMixin<T> {
             () => outboxPending.removeWhere((m) => m.id == pendingPhoto.id),
           );
           final s = context.read<LocaleProvider>().s;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(s.errSendPhoto)));
+          showChatSnack(context, s.errSendPhoto);
         }
       }
       photoClearViewTimer();

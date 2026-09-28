@@ -62,11 +62,30 @@ class _TableSizeBody extends StatelessWidget {
     }
     final rows = admin.tableSizes;
     if (rows.isEmpty) {
+      final failed = admin.tableSizesError;
       return Center(
-        child: Text(
-          s.adminTableSizesEmpty,
-          style: AppText.bodySmall.copyWith(
-            color: AppTheme.textSecondary,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                failed ? s.adminStorageError : s.adminTableSizesEmpty,
+                textAlign: TextAlign.center,
+                style: AppText.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              if (failed) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () =>
+                      context.read<AdminProvider>().fetchTableSizes(),
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: Text(s.adminRetry),
+                ),
+              ],
+            ],
           ),
         ),
       );

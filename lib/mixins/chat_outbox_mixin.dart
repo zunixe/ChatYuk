@@ -11,6 +11,8 @@ import '../providers/points_provider.dart';
 import '../core/cache/offline_outbox.dart';
 import '../services/storage_photo_service.dart';
 import '../utils/mention.dart';
+import '../widgets/chat_info_snack.dart';
+import '../widgets/private_chat_message.dart' show warmPhotoCacheForPath;
 
 /// Modul BERSAMA antrean pesan offline (private ↔ room).
 ///
@@ -126,9 +128,6 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
     );
     if (!mounted) return;
     setState(() => outboxQueuedIds.add(pending.id));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.read<LocaleProvider>().s.msgQueuedOffline)),
-    );
   }
 
   /// Kirim semua antrean chat ini (dipanggil saat koneksi pulih).
@@ -192,6 +191,9 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
               if (path == null || path.isEmpty) {
                 throw const SocketException('photo upload failed');
               }
+              // Sama seperti jalur online: daftarkan decode agar bubble versi
+              // server langsung tampil tanpa kotak dulu.
+              warmPhotoCacheForPath(path, imageData);
               imageData = path;
             }
           }
@@ -214,11 +216,7 @@ mixin ChatOutboxMixin<T extends StatefulWidget> on State<T> {
         }
       }
       if (sent > 0 && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.read<LocaleProvider>().s.msgQueueSent(sent)),
-          ),
-        );
+        showChatSnack(context, context.read<LocaleProvider>().s.msgQueueSent(sent));
         outboxScrollToBottom();
       }
     } finally {

@@ -30,6 +30,13 @@ class CallConfig {
     'sdpSemantics': 'unified-plan',
   };
 
+  /// True bila `getPeerConfig` terakhir benar-benar memaksa relay-only
+  /// (Cloudflare tersedia & `relayOnly` diminta). Dipakai `CallSession`
+  /// untuk tahu apakah fallback "all candidates" masih berguna saat ICE
+  /// gagal — kalau Cloudflare tak tersedia, kandidat host/srflx sudah
+  /// dipakai sehingga fallback tak perlu.
+  static bool lastConfigWasRelayOnly = false;
+
   /// Cache kredensial Cloudflare di memori. Cloudflare menerbitkan credential
   /// dengan TTL 24 jam, tapi `_fetchCloudflare` dulu dipanggil SETIAP call dan
   /// SETIAP watch PC → round-trip edge function berulang (terukur 1760ms cold,
@@ -145,9 +152,11 @@ class CallConfig {
       'username': 'openrelayproject',
       'credential': 'openrelayproject',
     });
+    final forceRelayOnly = relayOnly && cloudflare != null;
+    lastConfigWasRelayOnly = forceRelayOnly;
     return {
       'iceServers': iceServers,
-      if (relayOnly && cloudflare != null) 'iceTransportPolicy': 'relay',
+      if (forceRelayOnly) 'iceTransportPolicy': 'relay',
       'iceCandidatePoolSize': 2,
       // Negosiasi lebih cepat: 1 transport untuk audio+video (bukan 2×).
       'rtcpMuxPolicy': 'require',

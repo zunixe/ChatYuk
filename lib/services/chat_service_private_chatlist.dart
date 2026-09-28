@@ -124,6 +124,65 @@ mixin ChatServicePrivateChatListMx on ChatBase {
     _scheduleChatListSave(myUid);
     final controller = _privateChatsStreams[myUid];
     if (controller != null && !controller.isClosed) controller.add(list);
+    // Pesan baru dari lawan → prefetch fotonya di background (best-effort).
+    // Saat chat dibuka, foto sudah di PhotoCache → bubble langsung tampil.
+    _prefetchLatestPhoto(myUid, chat);
+  }
+
+  // ── Prefetch foto pesan baru (background, ringan) ─────────────────────────
+  // Pemicu: event realtime list chat (tanpa query tambahan per event).
+  // Batasan hemat kuota/baterai: hanya 1 pesan terbaru per chat, hanya foto
+  // biasa (bukan view-once/video/voice), maks 3 download paralel, dedupe per
+  // messageId, dan tidak pernah melempar (jangan rusak stream list).
+  final Map<String, DateTime> _prefetchSeenAt = {};
+  final Set<String> _prefetchedPhotoIds = {};
+  int _prefetchInflight = 0;
+
+  void _prefetchLatestPhoto(String myUid, PrivateChatInfo chat) {
+    try {
+      if (!shouldPrefetchChatPhoto(
+        lastSenderId: chat.lastSenderId,
+        myUid: myUid,
+        lastMessageAt: chat.lastMessageAt,
+        seenAt: _prefetchSeenAt[chat.chatId],
+      )) {
+        return;
+      }
+      _prefetchSeenAt[chat.chatId] = chat.lastMessageAt;
+      if (_prefetchInflight >= 3) return;
+      _prefetchInflight++;
+      unawaited(
+        _fetchAndCachePhoto(chat.chatId).whenComplete(
+          () => _prefetchInflight--,
+        ),
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _fetchAndCachePhoto(String chatId) async {
+    try {
+      final rows = await _sb
+          .from('private_messages')
+          .select('id,type,image_data,image_path')
+          .eq('chat_id', chatId)
+          .order('created_at', ascending: false)
+          .limit(1);
+      if (rows.isEmpty) return;
+      final r = rows.first;
+      if (r['type'] != 'image') return;
+      final data = (r['image_data'] as String? ?? '').isNotEmpty
+          ? (r['image_data'] as String? ?? '')
+          : (r['image_path'] as String? ?? '');
+      if (data.isEmpty || !StoragePhotoService.instance.isPath(data)) return;
+      final id = '${r['id']}';
+      if (id.isEmpty || _prefetchedPhotoIds.contains(id)) return;
+      if (_prefetchedPhotoIds.length >= 200) _prefetchedPhotoIds.clear();
+      _prefetchedPhotoIds.add(id);
+      final b64 = await StoragePhotoService.instance.download(data);
+      if (b64 == null || b64.isEmpty) return;
+      await PhotoCache.instance.save('private_$chatId', id, b64);
+      dlog('[prefetch] photo $id cached for $chatId');
+    } catch (_) {}
   }
 
   void _removeLocalChat(String myUid, String chatId) {
