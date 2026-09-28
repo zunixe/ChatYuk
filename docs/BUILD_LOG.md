@@ -5,6 +5,8 @@ Format: tanggal | branch | flavor | isi | hasil install.
 
 | Tanggal | Branch | Flavor | Isi | Install |
 |---|---|---|---|---|
+| 2026-09-28 08:20 | develop | playProd (AAB) | Upload 1.2.59+81 ke production (boot anti-stuck logo + Play compliance edge-to-edge + no-portrait + input no HP sedunia). Ganti vc 80 yang sudah terpakai | Success: AAB upload track production, vc 81 / 1.2.59 completed; latest_version app_settings=1.2.59 |
+| 2026-09-28 08:06 | develop | adminProd | Fix stuck di logo: boot guard timeout per-init (supabase/msgdb/mediadisk/firebase/notif/chatbg/theme) + fix build cepat kehilangan assets/flutter_assets (ikon tofu) — wajib `flutter clean`, bukan rm intermediates | Success (install 240+72, frames 18/65, [BOOT] runApp) |
 | 2026-09-24 12:30 | develop | adminProd | Perf monitor: batch thumbnail lokal dulu, unduh hanya yang baru | Success (stream install 192.168.137.99:33689, v1.2.52-admin) |
 | 2026-09-24 11:42 | develop | apkpureProd | ChatYuk user (reguler) + timer view-once; sign beda → uninstall lama lalu fresh install | Success (stream install 192.168.137.99:43121, v1.2.52) |
 | 2026-09-24 11:09 | develop | adminProd | Timer view-once 1x/3s/10s saat preview foto kamera private | Success (stream install 192.168.137.99:43121, v1.2.52-admin) |
