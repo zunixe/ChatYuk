@@ -1786,3 +1786,58 @@ Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
 - **Tidak ada test** yang mengunci job ini; tidak menyentuh FROZEN/GRANT/RLS.
 - **Aktifkan lagi:** jalankan ulang blok `cron.schedule('chatyuk-ai-daily-life',
   '0 22 * * *', ...)` dari `20260912010000_audit_cleanup_batch.sql`.
+
+## 2026-09-28 — 20260928220000_restore_admin_rpcs_execute.sql (SUDAH APPLY) ⚠️ INSIDEN KETIGA
+
+- **GEJALA (log Postgres):** `42501 permission denied for function
+  admin_sweep_calls` & `admin_registrations_daily` berulang. Chart registrasi
+  admin + sweep zombie call rusak.
+- **AKAR:** hardening `20260928120000` + `20260928140000` memakai daftar
+  revoke yang terverifikasi "0 referensi di lib/ sebagai .rpc()" — tetapi
+  deteksi berbasis grep itu **melewatkan RPC multi-baris** (mis.
+  `await _rpc(\n 'admin_registrations_daily', ...)`). Akibatnya 6 fungsi
+  admin yang MASIH dipanggil app admin ikut dicabut:
+  `admin_sweep_calls`, `admin_registrations_daily`,
+  `admin_contact_messages_page`, `admin_contact_set_read`,
+  `admin_contact_delete`, `admin_set_privacy_bypass`.
+- **KENAPA AMAN dikembalikan:** ke-6 fungsi punya guard internal
+  `if coalesce(auth.email(),'') != 'zunixe@gmail.com' then raise`. EXECUTE
+  bukan bypass — hanya pintu masuk ke guard. Preseden sah:
+  `admin_storage_stats` memang authenticated=true + guard sama.
+- **Isi:** 6 baris `grant execute ... to authenticated` (body tidak disentuh).
+- **Apply:** Management API. Versi dicatat di `schema_migrations`.
+- **Verifikasi live:** authoritative `has_function_privilege('authenticated',…)`
+  = true untuk ke-6 fungsi; `anon` = false. Simulasi
+  `set local role authenticated` → `admin_sweep_calls()` jalan (bukan 42501).
+  Cron `chatyuk-call-sweep` kembali `succeeded 1 row`.
+- **GUARD BARU:** 8 assert di `supabase/tests/schema_sync_test.sql`
+  mengunci: authenticated boleh EXECUTE 7 fungsi admin tsb, anon DILARANG.
+- **⚠️ PELAJARAN:** audit "0 referensi di lib/" WAJIB pakai parser/pola yang
+  menangkap pemanggilan **multi-baris** — grep satu baris tidak cukup.
+  Scan: `scripts/audit_revoked_rpcs.py` (lihat SECURITY_AUDIT.md).
+
+## 2026-09-29 — 20260929000000_fix_cleanup_stale_anonymous.sql (SUDAH APPLY)
+
+- **GEJALA:** log Postgres `P0001 coin_ledger is append-only` berulang +
+  `23503` FK `user_devices`/`user_location_history`; **1.597 akun anon stale
+  MENUMPUK** (cleanup tak pernah berhasil membersihkan).
+- **REPRODUKSI (aman, rollback):**
+  `begin; select public.cleanup_stale_anonymous(0); rollback;`
+  → `ERROR P0001 coin_ledger is append-only ... delete from auth.users`.
+- **AKAR (3 defect di fungsi lama):**
+  1. `delete from auth.users` cascade ke `coin_ledger` (FK ON DELETE CASCADE)
+     tapi trigger append-only `coin_ledger_no_delete` menolak cascade →
+     error. (`delete_my_account`/`admin_delete_anon_user` sudah benar.)
+  2. `delete from public.profiles` dijalankan SEBELUM user_devices/
+     user_location_history dihapus → FK SET NULL vs kolom NOT NULL → 23503.
+  3. Loop TANPA `exception` per-user → SATU user gagal membatalkan SELURUH
+     cleanup → akun stale menumpuk.
+- **Isi:** redefine fungsi mengikuti pola `delete_my_account` yang terverifikasi
+  (hapus device/location lebih dulu; hapus coin_ledger + point_events dengan
+  trigger dimatikan; `exception when others` per user).
+- **Verifikasi live (rollback):** `would_delete=1683`, TANPA error append-only.
+- **GUARD BARU:** 2 assert `schema_sync_test.sql` (fungsi wajib menyebut
+  disable trigger coin_ledger + hapus devices/location + `exception when others`).
+- **⚠️ PELAJARAN:** setiap loop hapus-user WAJIB bungkus `exception` per user —
+  satu baris bermasalah (mis. ledger) tidak boleh menggagalkan migrasi data
+  massal, kalau tidak akun stale diam-diam menumpuk berbulan-bulan.
