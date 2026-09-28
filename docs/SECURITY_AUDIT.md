@@ -8,18 +8,20 @@ sudah punya mitigasi internal — hanya beberapa yang perlu tindakan.
 > `GET https://api.supabase.com/v1/projects/{ref}/advisors/security`
 > (header `Authorization: Bearer <SUPABASE_ACCESS_TOKEN>`).
 
-## Ringkasan per jenis
+## Status (sesudah perbaikan 2026-09-28)
 
-| # | Lint | Level | Jumlah | Risiko | Tindakan |
-|---|---|---|---|---|---|
-| 1 | `auth_allow_anonymous_sign_ins` | WARN | 54 | **Rendah** (by-design) | Tidak — app memang anon-first + RLS per-baris |
-| 2 | `authenticated_security_definer_function_executable` | WARN | 277 | **Rendah** | Opsional: revoke untuk yang tak perlu |
-| 3 | `anon_security_definer_function_executable` | WARN | 88 | **Sedang** | Audit + revoke untuk fungsi non-publik |
-| 4 | `function_search_path_mutable` | WARN | 28 | **Sedang** | Set `search_path` di fungsi |
-| 5 | `rls_enabled_no_policy` | INFO | 16 | **Rendah** | OK (deny-all by design) |
-| 6 | `extension_in_public` | WARN | 3 | **Rendah** | Opsional: pindah schema |
-| 7 | `auth_leaked_password_protection` | WARN | 1 | **Sedang** | Aktifkan HIBP di Auth settings |
-| — | ~~`security_definer_view` (profiles_public)~~ | — | **0** | **SELESAI** | ✅ Sudah di-DROP (migrasi `20260928110000`) |
+**Total 467 → 326** (semua sisa = WARN/INFO yang punya mitigasi/by-design).
+
+| # | Lint | Level | Sebelum | Sesudah | Risiko | Status |
+|---|---|---|---|---|---|---|
+| 0 | `security_definer_view` (`profiles_public`) | — | 1 | **0** | — | ✅ DONE (`20260928110000`) |
+| 3 | `anon_security_definer_function_executable` | WARN | 88 | **32** | Sedang→Rendah | ✅ DONE (`20260928120000`) — sisa 32 = publik by-design |
+| 4 | `function_search_path_mutable` | WARN | 28 | **0** | Sedang | ✅ DONE (`20260928130000`) |
+| 7 | `auth_leaked_password_protection` | WARN | 1 | **0** | Sedang | ✅ DONE (HIBP enabled) |
+| 1 | `auth_allow_anonymous_sign_ins` | WARN | 54 | 54 | **Rendah** (by-design) | Tidak perlu — RLS per-baris (`id = auth.uid()`) |
+| 2 | `authenticated_security_definer_function_executable` | WARN | 277 | 221 | **Rendah** | Fungsi klien memang butuh (authenticated) |
+| 5 | `rls_enabled_no_policy` | INFO | 16 | 16 | **Rendah** | OK (deny-all by design) |
+| 6 | `extension_in_public` | WARN | 3 | 3 | **Rendah** | Opsional (jangan pindah `cube`/`earthdistance` tanpa uji) |
 
 ---
 
@@ -145,12 +147,19 @@ Dashboard → Auth → Passwords → **Leaked password protection**. Di API:
 
 ## Urutan kerja yang disarankan
 
-1. ✅ **profiles_public** — SELESAI.
-2. **`anon_security_definer_function_executable`** — audit & revoke bertahap
-   (fungsi admin/internal dulu), uji app tiap kelompok.
-3. **`function_search_path_mutable`** — set `search_path` (khusus definer).
-4. **`auth_leaked_password_protection`** — enable HIBP.
+1. ✅ **profiles_public** — DONE (`20260928110000`).
+2. ✅ **86 fungsi `SECURITY DEFINER` internal/trigger/admin** — REVOKE EXECUTE
+   dari PUBLIC/anon/authenticated (`20260928120000`); 88 → 32 temuan anon.
+3. ✅ **`function_search_path_mutable`** — SET search_path (`20260928130000`);
+   28 → 0.
+4. ✅ **`auth_leaked_password_protection`** — HIBP diaktifkan; 1 → 0.
 5. Opsional: `extension_in_public`, revoke `authenticated_*` yang tak perlu.
+
+> **Perhatian untuk ke depan:** `REVOKE EXECUTE ... FROM anon` SENDIRIAN tidak
+> cukup — Postgres memberi EXECUTE ke `PUBLIC` secara default, dan anon
+> mewarisinya. Selalu `REVOKE ... FROM PUBLIC, anon, authenticated` (lihat
+> `20260928120000`). Pola ini terverifikasi: `has_function_privilege('anon',...)`
+> baru `false` setelah revoke dari PUBLIC.
 
 ## Guardrail
 - Setiap `REVOKE`/policy perlu penanda `-- SAFE:` (dicek `check_migrations.sh`).

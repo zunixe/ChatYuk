@@ -1593,3 +1593,27 @@ prioritas lebih rendah.
   RLS pemanggil (lihat header migrasi).
 - **Catatan:** audit lengkap 467 temuan advisor ? `docs/SECURITY_AUDIT.md`
   (profiles_public selesai; berikutnya anon SECURITY DEFINER & search_path).
+
+## 2026-09-28 — Security hardening lanjutan (3 migrasi, APPLY)
+
+Lanjutan audit advisor (467 ? 326 temuan). Semua **0 perubahan body** fungsi
+(hanya REVOKE/ALTER SET), jadi fungsi FROZEN tidak tersentuh.
+
+- **`20260928120000_revoke_anon_internal_functions.sql`** — REVOKE EXECUTE
+  56 fungsi internal/trigger/admin (notify_*, *_count_sync, sync_*, admin_*,
+  dll.) dari **PUBLIC, anon, authenticated**. Temuan
+  `anon_security_definer_function_executable` **88 ? 32**.
+  - **Temuan kunci:** `revoke ... from anon` SENDIRIAN tidak cukup — Postgres
+    memberi EXECUTE ke `PUBLIC` default & anon mewarisinya. Wajib `from public`.
+    Terverifikasi `has_function_privilege('anon',...)` baru false setelah ini.
+  - Fungsi klien (get_online_users, avatar_for, deduct_chat_point, dst.) TIDAK
+    di-revoke — diverifikasi tak ada yang putus (`authenticated=true` tetap).
+  - Helper lintas-fungsi/policy (is_admin_request, fn_room_role,
+    _privacy_are_friends, storage_object_owner_ok, dst.) SENGAJA dibiarkan.
+- **`20260928130000_set_function_search_path.sql`** — ALTER FUNCTION SET
+  `search_path = public, pg_temp` untuk 28 fungsi. Temuan
+  `function_search_path_mutable` **28 ? 0**.
+- **HIBP** (`password_hibp_enabled=true` via Auth config API) —
+  `auth_leaked_password_protection` **1 ? 0**.
+- Verifikasi: `flutter analyze`-0 (tak ada perubahan Dart); advisor re-scan;
+  `has_function_privilege`/`proconfig` dicek langsung. Detail: `docs/SECURITY_AUDIT.md`.
