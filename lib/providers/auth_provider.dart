@@ -523,6 +523,17 @@ class AuthProvider extends ChangeNotifier {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         final token = await FirebaseMessaging.instance.getToken();
+        // JANGAN tulis token kosong! getToken() bisa mengembalikan null
+        // sesaat (FCM belum siap / jaringan flaky). Dulu null → `''` ditulis
+        // ke DB → token yang tadinya VALID terhapus → SEMUA push (pesan,
+        // call, online) mati diam-diam untuk device itu sampai app restart
+        // berhasil dapat token lagi. Ini penyebab utama "notif online mati"
+        // (banyak device aktif tapi fcm_token kosong).
+        if (token == null || token.isEmpty) {
+          // Coba lagi sebentar — maybe FCM belum siap.
+          await Future<void>.delayed(Duration(seconds: 5 * (attempt + 1)));
+          continue;
+        }
         await _auth.updateFcmToken(token);
         return;
       } catch (_) {
